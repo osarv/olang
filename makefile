@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Werror -Wextra
+CFLAGS = -Wall -Werror -Wextra -g
 
 bin/%.o: %.c bin
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -13,7 +13,7 @@ run:
 	bin/out
 
 clean:
-	rm -r bin
+	rm -rf bin
 
 bin:
 	mkdir bin

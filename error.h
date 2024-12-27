@@ -1,7 +1,12 @@
 #ifndef ERROR_H
 #define ERROR_H
 
-void ErrFatal(char* errMsg);
-void CheckPtr(char* ptr);
+#include "token.h"
+
+void FinishCompilation();
+void CheckAllocPtr(void* ptr);
+void ErrorBugFound();
+void ErrorUnableToOpenFile(char* fileName);
+void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg);
 
 #endif //ERROR_H
