@@ -57,8 +57,9 @@ struct token {
 TokenCtx TokenizeFile(char* fileName);
 int TokenGetCharCursor(TokenCtx tc);
 char TokenGetChar(TokenCtx tc, int index);
-char* TokenGetCharArray(TokenCtx tc);
-int GetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
-int GetNextNewline(TokenCtx tc, int cursor); //returns last index on none found
+char* TokenGetFileName(TokenCtx tc);
+int TokenGetLineNrLastFedChar(TokenCtx tc);
+int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
+int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
 
 #endif //TOKEN_H

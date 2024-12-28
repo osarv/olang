@@ -9,16 +9,16 @@ static int nErrors = 0;
 
 void FinishCompilation() {
     if (nErrors) {
-        printf(COLOR_RED "compilation failed with %d error(s)\n" COLOR_RESET, nErrors);
+        printf(COLOR_FG_RED "compilation failed with %d error(s)\n" COLOR_RESET, nErrors);
         exit(EXIT_FAILURE);
     }
-    puts(COLOR_GREEN "compilation succeeded" COLOR_RESET);
+    puts(COLOR_FG_GREEN "compilation succeeded" COLOR_RESET);
     exit(EXIT_SUCCESS);
 }
 
 void errorFatal(char* errMsg) {
     nErrors++;
-    fputs(COLOR_RED "error: " COLOR_YELLOW, stdout);
+    fputs(COLOR_FG_RED "fatal error: " COLOR_FG_YELLOW, stdout);
     fputs(errMsg, stdout);
     puts(COLOR_RESET);
     FinishCompilation();
@@ -33,8 +33,8 @@ void ErrorBugFound() {
 }
 
 void ErrorUnableToOpenFile(char* fileName) {
-    char* errMsgStart = COLOR_YELLOW "unable to open file \"" COLOR_RED;
-    char* errMsgEnd = COLOR_YELLOW "\"" COLOR_RESET "\n";
+    char* errMsgStart = COLOR_FG_YELLOW "unable to open file \"" COLOR_FG_RED;
+    char* errMsgEnd = COLOR_FG_YELLOW "\"" COLOR_RESET "\n";
     char errMsg[strlen(errMsgStart) + strlen(fileName) + strlen(errMsgEnd)];
 
     strcpy(errMsg, errMsgStart);
@@ -46,40 +46,40 @@ void ErrorUnableToOpenFile(char* fileName) {
     FinishCompilation();
 }
 
-void printCharNewlinesEOFSilent(char c) {
-    if (c == '\n');
-    else if (c == EOF);
-    else putchar(c);
-}
-
-#define MAX_CHARS_PER_LINE 80
-void printLine(TokenCtx tc, int errStart, int errEnd) {
-    fputs(COLOR_BLUE, stdout);
-    int start = GetPrevNewline(tc, errStart) +1;
-    int end = GetNextNewline(tc, errEnd);
-    for (int i = start; i < end; i++) {
-        printCharNewlinesEOFSilent(TokenGetCharArray(tc)[i]);
-    }
-    fputs(COLOR_RESET, stdout);
-}
-
-void printCharExpanded(char c) {
-    if (c == '\n') fputs("NEWLINE", stdout);
+void printCharExpandSilent(char c) {
+    if (c == ' ') fputs(COLOR_BG_RED " " COLOR_BG_RESET, stdout);
+    else if (c == '\n') fputs("\\n", stdout);
     else if (c == EOF) fputs("EOF", stdout);
     else putchar(c);
 }
 
+#define MAX_CHARS_PER_LINE 80
+void printErrorLines(TokenCtx tc, int errStart, int errEnd) {
+    int linesStart = TokenGetPrevNewline(tc, errStart) +1;
+    int linesEnd = TokenGetNextOrThisNewline(tc, errEnd);
+
+    fputs(COLOR_FG_BLUE, stdout);
+    for (int i = linesStart; i < errStart; i++) putchar(TokenGetChar(tc, i));
+    fputs(COLOR_FG_RED, stdout);
+    for (int i = errStart; i <= errEnd; i++) printCharExpandSilent(TokenGetChar(tc, i));
+    fputs(COLOR_FG_BLUE, stdout);
+    for (int i = errEnd +1; i < linesEnd; i++) putchar(TokenGetChar(tc, i));
+    puts("\n" COLOR_RESET);
+}
+
 void printLastFedCharExpanded(TokenCtx tc) {
-    printCharExpanded(TokenGetCharArray(tc)[TokenGetCharCursor(tc) -1]);
+    printCharExpandSilent(TokenGetChar(tc, TokenGetCharCursor(tc) -1));
+}
+
+void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) {
+    nErrors++;
+    printf(COLOR_FG_GREEN "%d %s ", lineNr, fileName);
+    fputs(COLOR_FG_RED "error: " COLOR_FG_YELLOW, stdout);
+    fputs(errMsg, stdout);
+    puts(COLOR_RESET);
 }
 
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) {
-    nErrors++;
-    fputs(COLOR_RED "error: \"", stdout);
-    printLastFedCharExpanded(tc);
-    puts("\"" COLOR_YELLOW);
-    puts(errMsg);
-    fputs(COLOR_RED, stdout);
-    printLine(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1);
-    puts("\n" COLOR_RESET);
+    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), errMsg);
+    printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1);
 }

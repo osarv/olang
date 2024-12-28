@@ -6,6 +6,8 @@
 #include "error.h"
 
 struct tokenContext {
+    char* fileName;
+
     char* chars;
     int charLen;
     int charCap;
@@ -29,7 +31,6 @@ bool isValidChar(char c) {
 char feedChar(TokenCtx tc) {
     char c = tc->chars[tc->charCursor];
     tc->charCursor++;
-    if (c == '\0') SyntaxErrorLastFedChar(tc, "unexpected end of file");
     return c;
 }
 
@@ -58,21 +59,21 @@ void addChar(TokenCtx tc, char c) {
     tc->charLen++;
 }
 
-TokenCtx readChars(char* fileName) {
-    FILE* fp = fopen(fileName, "r");
-    if (!fp) ErrorUnableToOpenFile(fileName);
-
-    TokenCtx tc = calloc(sizeof(*tc), 1);
-    CheckAllocPtr(tc);
+void readChars(TokenCtx tc) {
+    FILE* fp = fopen(tc->fileName, "r");
+    if (!fp) ErrorUnableToOpenFile(tc->fileName);
 
     int c;
-    while ((c = fgetc(fp)) != EOF) addChar(tc, (char)c);
+    while ((c = fgetc(fp)) != EOF) {
+        addChar(tc, (char)c);
+        if (c == '\n') tc->charLineNr++;
+    }
     addChar(tc, '\0');
     for (int i = 0; i < tc->charLen -1; i++) {
         if (!isValidChar(feedChar(tc))) SyntaxErrorLastFedChar(tc, "unknown symbol");
     }
     tc->charCursor = 0;
-    return tc;
+    tc->charLineNr = 1;
 }
 
 bool isLetter(char c) {
@@ -113,7 +114,7 @@ void parseEscapeChar(TokenCtx tc, bool inString) {
     char c = feedChar(tc);
     if (c == 'n');
     else if (c == 't');
-    else if (c != '\\');
+    else if (c == '\\');
     else if (inString && c == '\"');
     else if (!inString && c == '\'');
     else SyntaxErrorLastFedChar(tc, "invalid escape character");
@@ -289,7 +290,12 @@ void parseTokensFromChars(TokenCtx tc) {
 }
 
 TokenCtx TokenizeFile(char* fileName) {
-    TokenCtx tc = readChars(fileName);
+    TokenCtx tc = calloc(sizeof(*tc), 1);
+    CheckAllocPtr(tc);
+    tc->charLineNr = 1;
+    tc->fileName = fileName;
+
+    readChars(tc);
     parseTokensFromChars(tc);
     return tc;
 }
@@ -303,19 +309,24 @@ char TokenGetChar(TokenCtx tc, int index) {
     return tc->chars[index];
 }
 
-char* TokenGetCharArray(TokenCtx tc) {
-    return tc->chars;
+char* TokenGetFileName(TokenCtx tc) {
+    return tc->fileName;
 }
 
-int GetPrevNewline(TokenCtx tc, int cursor) { //returns first index on none found
+int TokenGetLineNrLastFedChar(TokenCtx tc) {
+    if (tc->chars[tc->charCursor] == '\n') return tc->charLineNr -1;
+    return tc->charLineNr;
+}
+
+int TokenGetPrevNewline(TokenCtx tc, int cursor) { //returns first index on none found
     for (int i = cursor -1 ; i >= 0; i--) {
         if (tc->chars[i] == '\n') return i;
     }
     return 0;
 }
 
-int GetNextNewline(TokenCtx tc, int cursor) { //returns last index on none found
-    for (int i = cursor +1; i < tc->charLen; i++) {
+int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on none found
+    for (int i = cursor; i < tc->charLen; i++) {
         if (tc->chars[i] == '\n') return i;
     }
     return tc->charLen -1;
