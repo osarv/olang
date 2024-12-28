@@ -13,6 +13,7 @@ enum tokenType {
     TOKEN_IF,
     TOKEN_ELSE,
     TOKEN_FOR,
+    TOKEN_TYPE,
     TOKEN_ADD,
     TOKEN_SUB,
     TOKEN_MUL,
@@ -48,10 +49,11 @@ enum tokenType {
 
 struct token {
     enum tokenType type;
-    char* ptr;
-    int len;
+    int startIdx;
+    int endIdx;
     int lineNr;
-    int index; //filled in when added into the ctx
+    int tokListIdx; //filled in when added into the ctx
+    TokenCtx owner; //filled in when added into the ctx
 };
 
 TokenCtx TokenizeFile(char* fileName);
@@ -61,5 +63,8 @@ char* TokenGetFileName(TokenCtx tc);
 int TokenGetLineNrLastFedChar(TokenCtx tc);
 int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
+struct token TokenPeek(TokenCtx);
+struct token TokenFeed(TokenCtx tc);
+void TokenUnfeed(TokenCtx tc);
 
 #endif //TOKEN_H

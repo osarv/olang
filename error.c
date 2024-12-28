@@ -58,11 +58,11 @@ void printErrorLines(TokenCtx tc, int errStart, int errEnd) {
     int linesStart = TokenGetPrevNewline(tc, errStart) +1;
     int linesEnd = TokenGetNextOrThisNewline(tc, errEnd);
 
-    fputs(COLOR_FG_BLUE, stdout);
+    fputs(COLOR_FG_CYAN, stdout);
     for (int i = linesStart; i < errStart; i++) putchar(TokenGetChar(tc, i));
     fputs(COLOR_FG_RED, stdout);
     for (int i = errStart; i <= errEnd; i++) printCharExpandSilent(TokenGetChar(tc, i));
-    fputs(COLOR_FG_BLUE, stdout);
+    fputs(COLOR_FG_CYAN, stdout);
     for (int i = errEnd +1; i < linesEnd; i++) putchar(TokenGetChar(tc, i));
     puts("\n" COLOR_RESET);
 }
@@ -71,15 +71,20 @@ void printLastFedCharExpanded(TokenCtx tc) {
     printCharExpandSilent(TokenGetChar(tc, TokenGetCharCursor(tc) -1));
 }
 
-void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) {
+void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) { //NULL errMsg is defined
     nErrors++;
     printf(COLOR_FG_GREEN "%d %s ", lineNr, fileName);
     fputs(COLOR_FG_RED "error: " COLOR_FG_YELLOW, stdout);
-    fputs(errMsg, stdout);
+    if (errMsg) fputs(errMsg, stdout);
     puts(COLOR_RESET);
 }
 
-void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) {
+void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is defined
     syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), errMsg);
     printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1);
+}
+
+void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
+    syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
+    printErrorLines(tok.owner, tok.startIdx, tok.endIdx);
 }

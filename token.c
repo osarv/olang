@@ -215,9 +215,9 @@ enum tokenType parseIdentifier(TokenCtx tc) {
     unfeedChar(tc);
 
     if (strcmp(start, "if")) return TOKEN_IF;
-    else if (strcmp(start, "if")) return TOKEN_IF;
     else if (strcmp(start, "else")) return TOKEN_ELSE;
     else if (strcmp(start, "for")) return TOKEN_FOR;
+    else if (strcmp(start, "type")) return TOKEN_TYPE;
     return TOKEN_IDENTIFIER;
 }
 
@@ -235,8 +235,7 @@ enum tokenType parseNumberLiteral(TokenCtx tc) {
 
 struct token parseToken(TokenCtx tc) {
     struct token tok;
-    tok.ptr = tc->chars + tc->charCursor;
-    int startLen = tc->charCursor;
+    tok.startIdx = tc->charCursor;
     tok.lineNr = tc->charLineNr;
     enum tokenType type;
 
@@ -265,7 +264,7 @@ struct token parseToken(TokenCtx tc) {
         default: SyntaxErrorLastFedChar(tc, "unexpected symbol");
     }
     tok.type = type;
-    tok.len = tc->charCursor - startLen;
+    tok.endIdx = tc->charCursor;
     return tok;
 }
 
@@ -276,7 +275,8 @@ void tokenContextAdd(TokenCtx tc, struct token tok) {
         tc->tokens = realloc(tc->tokens, sizeof(struct token) * tc->tokCap);
         CheckAllocPtr(tc->tokens);
     }
-    tok.index = tc->tokLen;
+    tok.tokListIdx = tc->tokLen;
+    tok.owner = tc;
     tc->tokens[tc->tokLen] = tok;
     tc->tokLen++;
 }
@@ -289,6 +289,13 @@ void parseTokensFromChars(TokenCtx tc) {
     }
 }
 
+struct token TokenEOF(TokenCtx tc) {
+    struct token tok = (struct token){0};
+    tok.type = TOKEN_EOF;
+    tok.lineNr = tc->charLineNr;
+    return tok;
+}
+
 TokenCtx TokenizeFile(char* fileName) {
     TokenCtx tc = calloc(sizeof(*tc), 1);
     CheckAllocPtr(tc);
@@ -297,6 +304,7 @@ TokenCtx TokenizeFile(char* fileName) {
 
     readChars(tc);
     parseTokensFromChars(tc);
+    tokenContextAdd(tc, TokenEOF(tc));
     return tc;
 }
 
@@ -305,7 +313,7 @@ int TokenGetCharCursor(TokenCtx tc) {
 }
 
 char TokenGetChar(TokenCtx tc, int index) {
-    if (index < 0 || index >= tc->charLen) ErrorBugFound("index out of bounds");
+    if (index < 0 || index >= tc->charLen) ErrorBugFound();
     return tc->chars[index];
 }
 
@@ -322,7 +330,7 @@ int TokenGetPrevNewline(TokenCtx tc, int cursor) { //returns first index on none
     for (int i = cursor -1 ; i >= 0; i--) {
         if (tc->chars[i] == '\n') return i;
     }
-    return 0;
+    return -1;
 }
 
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on none found
@@ -330,4 +338,20 @@ int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on
         if (tc->chars[i] == '\n') return i;
     }
     return tc->charLen -1;
+}
+
+struct token TokenPeek(TokenCtx tc)  {
+    if (tc->tokCursor >= tc->tokLen) ErrorBugFound();
+    return tc->tokens[tc->tokCursor];
+}
+
+struct token TokenFeed(TokenCtx tc) {
+    struct token tok = TokenPeek(tc);
+    tc->tokCursor++;
+    return tok;
+}
+
+void TokenUnfeed(TokenCtx tc) {
+    if (tc->tokCursor <= 0) ErrorBugFound();
+    tc->tokCursor--;
 }
