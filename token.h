@@ -1,9 +1,12 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
+#include "strslice.h"
+
 typedef struct tokenContext* TokenCtx;
 
 enum tokenType {
+    TOKEN_MERGE, //merge tokens have no type and can not be produced by the context
     TOKEN_EOF,
     TOKEN_INT_LITERAL,
     TOKEN_FLOAT_LITERAL,
@@ -47,10 +50,10 @@ enum tokenType {
     TOKEN_CURLY_BRACKET_CLOSE
 };
 
+#define NO_IDX -1
 struct token {
     enum tokenType type;
-    int startIdx;
-    int endIdx;
+    struct strSlice str;
     int lineNr;
     int tokListIdx; //filled in when added into the ctx
     TokenCtx owner; //filled in when added into the ctx
@@ -63,8 +66,10 @@ char* TokenGetFileName(TokenCtx tc);
 int TokenGetLineNrLastFedChar(TokenCtx tc);
 int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
+int TokenGetStrSliceStart(TokenCtx tc, struct strSlice slice);
 struct token TokenPeek(TokenCtx);
 struct token TokenFeed(TokenCtx tc);
 void TokenUnfeed(TokenCtx tc);
+struct token TokenMerge(struct token head, struct token tail);
 
 #endif //TOKEN_H

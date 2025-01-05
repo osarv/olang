@@ -110,7 +110,7 @@ bool findNextTokStart(TokenCtx tc) {
     return true;
 }
 
-void parseEscapeChar(TokenCtx tc, bool inString) {
+void tokenizeEscapeChar(TokenCtx tc, bool inString) {
     char c = feedChar(tc);
     if (c == 'n');
     else if (c == 't');
@@ -120,10 +120,10 @@ void parseEscapeChar(TokenCtx tc, bool inString) {
     else SyntaxErrorLastFedChar(tc, "invalid escape character");
 }
 
-bool parseCharInCharLiteral(TokenCtx tc) {
+bool tokenizeCharInCharLiteral(TokenCtx tc) {
     char c = feedChar(tc);
     if (c == '\\') {
-        parseEscapeChar(tc, false);
+        tokenizeEscapeChar(tc, false);
         return true;
     }
     else if (c == '\n') {
@@ -137,9 +137,9 @@ bool parseCharInCharLiteral(TokenCtx tc) {
     return true;
 }
 
-bool parseCharInStringLiteral(TokenCtx tc) {
+bool tokenizeCharInStringLiteral(TokenCtx tc) {
     char c = feedChar(tc);
-    if (c == '\\') parseEscapeChar(tc, true);
+    if (c == '\\') tokenizeEscapeChar(tc, true);
     else if (c == '\n') {
         SyntaxErrorLastFedChar(tc, "newline before closing of character literal");
         return true;
@@ -149,79 +149,85 @@ bool parseCharInStringLiteral(TokenCtx tc) {
 }
 
 
-void parseCharLiteral(TokenCtx tc) {
-    if (!parseCharInCharLiteral(tc)) return;
+void tokenizeCharLiteral(TokenCtx tc) {
+    if (!tokenizeCharInCharLiteral(tc)) return;
     if (feedChar(tc) != '\'') {
         SyntaxErrorLastFedChar(tc, "expected closing of character literal");
     }
 }
 
-void parseStringLiteral(TokenCtx tc) {
-    while (!parseCharInStringLiteral(tc));
+void tokenizeStringLiteral(TokenCtx tc) {
+    while (!tokenizeCharInStringLiteral(tc));
 }
 
-enum tokenType parsePlus(TokenCtx tc) {
+enum tokenType tokenizePlus(TokenCtx tc) {
     if (tryFeedChar(tc, '+')) return TOKEN_INCREMENT;
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_ADD;
     return TOKEN_ADD;
 }
 
-enum tokenType parseHyphen(TokenCtx tc) {
+enum tokenType tokenizeHyphen(TokenCtx tc) {
     if (tryFeedChar(tc, '-')) return TOKEN_DECREMENT;
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_SUB;
     return TOKEN_SUB;
 }
 
-enum tokenType parseAsterisk(TokenCtx tc) {
+enum tokenType tokenizeAsterisk(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_MUL;
     return TOKEN_MUL;
 }
 
-enum tokenType parseSlash(TokenCtx tc) {
+enum tokenType tokenizeSlash(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_DIV;
     return TOKEN_DIV;
 }
 
-enum tokenType parseExclamation(TokenCtx tc) {
+enum tokenType tokenizeExclamation(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_NOT_EQUAL;
     return TOKEN_NOT;
 }
 
-enum tokenType parseLessThan(TokenCtx tc) {
+enum tokenType tokenizeLessThan(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_LESS_THAN_OR_EQUAL;
     if (tryFeedChar(tc, '<')) return TOKEN_BITSHIFT_LEFT;
     return TOKEN_LESS_THAN;
 }
 
-enum tokenType parseGreaterThan(TokenCtx tc) {
+enum tokenType tokenizeGreaterThan(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_GREATER_THAN_OR_EQUAL;
     if (tryFeedChar(tc, '>')) return TOKEN_BITSHIFT_RIGHT;
     return TOKEN_GREATER_THAN;
 }
 
-enum tokenType parseAmpersand(TokenCtx tc) {
+enum tokenType tokenizeAmpersand(TokenCtx tc) {
     if (tryFeedChar(tc, '&')) return TOKEN_AND;
     return TOKEN_BITWISE_AND;
 }
 
-enum tokenType parseVBar(TokenCtx tc) {
+enum tokenType tokenizeVBar(TokenCtx tc) {
     if (tryFeedChar(tc, '|')) return TOKEN_OR;
     return TOKEN_BITWISE_OR;
 }
 
-enum tokenType parseIdentifier(TokenCtx tc) {
+bool isSubIdentifer(char* start, char* subId) {
+    int subIdLen = strlen(subId);
+    if (!strncmp(start, subId, subIdLen)) return true;
+    return false;
+}
+
+enum tokenType tokenizeIdentifier(TokenCtx tc) {
     char* start = tc->chars + tc->charCursor -1;
     while (isIdentifierBodyChar(feedChar(tc)));
     unfeedChar(tc);
 
-    if (strcmp(start, "if")) return TOKEN_IF;
-    else if (strcmp(start, "else")) return TOKEN_ELSE;
-    else if (strcmp(start, "for")) return TOKEN_FOR;
-    else if (strcmp(start, "type")) return TOKEN_TYPE;
+    if (isSubIdentifer(start, "if")) return TOKEN_IF;
+    else if (isSubIdentifer(start, "else")) return TOKEN_ELSE;
+    else if (isSubIdentifer(start, "for")) return TOKEN_FOR;
+    else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     return TOKEN_IDENTIFIER;
 }
 
-enum tokenType parseNumberLiteral(TokenCtx tc) {
+enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     int nDots = 0;
     char c = feedChar(tc);
     while (isDigit(c) || c == '.') {
@@ -233,27 +239,27 @@ enum tokenType parseNumberLiteral(TokenCtx tc) {
     return TOKEN_FLOAT_LITERAL;
 }
 
-struct token parseToken(TokenCtx tc) {
+struct token tokenizeToken(TokenCtx tc) {
     struct token tok;
-    tok.startIdx = tc->charCursor;
+    tok.str.ptr = tc->chars + tc->charCursor;
     tok.lineNr = tc->charLineNr;
     enum tokenType type;
 
     char c = feedChar(tc);
-    if (isLetter(c) || c == '_') type = parseIdentifier(tc);
-    else if (isDigit(c)) type = parseNumberLiteral(tc);
+    if (isLetter(c) || c == '_') type = tokenizeIdentifier(tc);
+    else if (isDigit(c)) type = tokenizeNumberLiteral(tc);
     else switch (c) {
-        case '\'': type = TOKEN_CHAR_LITERAL; parseCharLiteral(tc); break;
-        case '"': type = TOKEN_STRING_LITERAL; parseStringLiteral(tc); break;
-        case '+': type = parsePlus(tc); break;
-        case '-': type = parseHyphen(tc); break;
-        case '*': type = parseAsterisk(tc); break;
-        case '/': type = parseSlash(tc); break;
-        case '!': type = parseExclamation(tc); break;
-        case '<': type = parseLessThan(tc); break;
-        case '>': type = parseGreaterThan(tc); break;
-        case '&': type = parseAmpersand(tc); break;
-        case '|': type = parseVBar(tc); break;
+        case '\'': type = TOKEN_CHAR_LITERAL; tokenizeCharLiteral(tc); break;
+        case '"': type = TOKEN_STRING_LITERAL; tokenizeStringLiteral(tc); break;
+        case '+': type = tokenizePlus(tc); break;
+        case '-': type = tokenizeHyphen(tc); break;
+        case '*': type = tokenizeAsterisk(tc); break;
+        case '/': type = tokenizeSlash(tc); break;
+        case '!': type = tokenizeExclamation(tc); break;
+        case '<': type = tokenizeLessThan(tc); break;
+        case '>': type = tokenizeGreaterThan(tc); break;
+        case '&': type = tokenizeAmpersand(tc); break;
+        case '|': type = tokenizeVBar(tc); break;
         case '~': type = TOKEN_BITWISE_COMPLEMENT; break;
         case '(': type = TOKEN_PAREN_OPEN; break;
         case ')': type = TOKEN_PAREN_OPEN; break;
@@ -264,7 +270,7 @@ struct token parseToken(TokenCtx tc) {
         default: SyntaxErrorLastFedChar(tc, "unexpected symbol");
     }
     tok.type = type;
-    tok.endIdx = tc->charCursor;
+    tok.str.len = tc->chars + tc->charCursor - tok.str.ptr;
     return tok;
 }
 
@@ -281,10 +287,10 @@ void tokenContextAdd(TokenCtx tc, struct token tok) {
     tc->tokLen++;
 }
 
-void parseTokensFromChars(TokenCtx tc) {
+void tokenizeTokensFromChars(TokenCtx tc) {
     while (tc->chars[tc->charCursor] != '\0') {
         if (!findNextTokStart(tc)) break;
-        struct token tok = parseToken(tc);
+        struct token tok = tokenizeToken(tc);
         tokenContextAdd(tc, tok);
     }
 }
@@ -303,7 +309,7 @@ TokenCtx TokenizeFile(char* fileName) {
     tc->fileName = fileName;
 
     readChars(tc);
-    parseTokensFromChars(tc);
+    tokenizeTokensFromChars(tc);
     tokenContextAdd(tc, TokenEOF(tc));
     return tc;
 }
@@ -340,6 +346,10 @@ int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on
     return tc->charLen -1;
 }
 
+int TokenGetStrSliceStart(TokenCtx tc, struct strSlice slice) {
+    return slice.ptr - tc->chars;
+}
+
 struct token TokenPeek(TokenCtx tc)  {
     if (tc->tokCursor >= tc->tokLen) ErrorBugFound();
     return tc->tokens[tc->tokCursor];
@@ -354,4 +364,12 @@ struct token TokenFeed(TokenCtx tc) {
 void TokenUnfeed(TokenCtx tc) {
     if (tc->tokCursor <= 0) ErrorBugFound();
     tc->tokCursor--;
+}
+
+struct token TokenMerge(struct token head, struct token tail) {
+    if (head.owner != tail.owner) ErrorBugFound();
+    head.type = TOKEN_MERGE;
+    head.str = StrSliceMerge(head.str, tail.str);
+    head.tokListIdx = NO_IDX;
+    return head;
 }

@@ -86,5 +86,6 @@ void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is define
 
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
     syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
-    printErrorLines(tok.owner, tok.startIdx, tok.endIdx);
+    int startIndex =  TokenGetStrSliceStart(tok.owner, tok.str);
+    printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1);
 }

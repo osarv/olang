@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include "token.h"
+#include "parser.h"
 #include "error.h"
 
 int main() {
-    TokenizeFile("test1.olang");
+    ParseFile("test1.olang");
     FinishCompilation();
     return 0;
 }
