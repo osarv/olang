@@ -2,7 +2,8 @@
 #define TYPE_H
 
 #include "token.h"
-#include "strslice.h"
+#include "str.h"
+#include "var.h"
 
 typedef struct typeList* TypeList;
 
@@ -22,6 +23,9 @@ enum baseTypeVariant {
 //type base, only one exists for a type and its aliases
 struct baseType {
     enum baseTypeVariant bTypeVariant;
+    VarList args; //for struct and func types
+    VarList rets; //for func types
+    StrList words; //for vocabulary types
 };
 
 #define ARRAY_REF -1 //for array dimensions that hold references
@@ -29,17 +33,17 @@ struct baseType {
 //types may never be without tDef defined
 struct type {
     struct baseType* bType;
-    struct strSlice name;
+    struct str name;
     struct token tok;
     int nArrLvls;
-    int* arrLens;
+    long long* arrLens;
 };
 
 struct baseType* BaseTypeEmpty();
-struct type VanillaType(char* name, enum baseTypeVariant bTypeVariant);
-struct type Type(struct strSlice name, struct token tok, struct baseType* bType);
+struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant);
+struct type TypeFromBaseType(struct str name, struct token tok, struct baseType* bType);
 TypeList TypeListCreate();
 void TypeListAdd(TypeList vl, struct type v);
-bool TypeListGet(TypeList vl, struct strSlice name, struct type* v);
+bool TypeListGet(TypeList vl, struct str name, struct type* v);
 
 #endif //TYPE_H

@@ -1,1 +1,4 @@
-type sdfs int32
+type sdfs int32[23][3]
+type sdfd sdfs[22][2]
+type myVocab1 vocab {THIS, THAT}
+type myVocab2 vocab {THIS, THAT}

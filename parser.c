@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "parser.h"
 #include "error.h"
 #include "token.h"
@@ -14,92 +15,167 @@ struct parserContext {
     TypeList privTypes;
 };
 
-bool isPublic(struct strSlice name) {
+bool isPublic(struct str name) {
     if (name.len <= 0) ErrorBugFound();
     char c = name.ptr[0];
     if (c >= 'A' && c <= 'Z') return true;
     return false;
 }
 
+bool pcGetType(ParserCtx pc, struct str name, struct type* t) {
+    if (isPublic(name)) {
+        if (!TypeListGet(pc->publTypes, name, t)) return false;
+    }
+    else if (!TypeListGet(pc->privTypes, name, t)) return false;
+    return true;
+}
+
 void pcAddType(ParserCtx pc, struct type t) {
+    struct type tmpType;
+    if (pcGetType(pc, t.name, &tmpType)) SyntaxErrorInvalidToken(t.tok, "type name already in use");
     if (isPublic(t.name)) TypeListAdd(pc->publTypes, t);
     else TypeListAdd(pc->privTypes, t);
 }
 
 void addVanillaTypes(ParserCtx pc) {
-    pcAddType(pc, VanillaType("int32", BASETYPE_INT32));
-    pcAddType(pc, VanillaType("int64", BASETYPE_INT64));
-    pcAddType(pc, VanillaType("float32", BASETYPE_FLOAT32));
-    pcAddType(pc, VanillaType("float64", BASETYPE_FLOAT64));
-    pcAddType(pc, VanillaType("bit32", BASETYPE_BIT32));
-    pcAddType(pc, VanillaType("bit32", BASETYPE_BIT64));
-    pcAddType(pc, VanillaType("byte", BASETYPE_BYTE));
+    pcAddType(pc, TypeVanilla("int32", BASETYPE_INT32));
+    pcAddType(pc, TypeVanilla("int64", BASETYPE_INT64));
+    pcAddType(pc, TypeVanilla("float32", BASETYPE_FLOAT32));
+    pcAddType(pc, TypeVanilla("float64", BASETYPE_FLOAT64));
+    pcAddType(pc, TypeVanilla("bit32", BASETYPE_BIT32));
+    pcAddType(pc, TypeVanilla("bit64", BASETYPE_BIT64));
+    pcAddType(pc, TypeVanilla("byte", BASETYPE_BYTE));
 }
 
-enum parseStatus pcGetType(ParserCtx pc, struct strSlice name, struct type* t) {
-    if (isPublic(name)) {
-        if (!TypeListGet(pc->publTypes, name, t)) return PARSE_FAILURE;
+//generates a generic error message base on the requested token type upon no error message
+bool parseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr, char* errMsg) {
+    char errMsgBuffer[100];
+    *tokPtr = TokenFeed(pc->tc);
+    if (tokPtr->type == type) return true;
+    if (!errMsg) {
+        errMsg = errMsgBuffer;
+        errMsg[0] = '\0';
+        strcat(errMsg, "expected ");
+        strcat(errMsg, TokenTypeToString(type));
     }
-    else if (!TypeListGet(pc->privTypes, name, t)) return PARSE_FAILURE;
-    return PARSE_SUCCESS;
-}
-
-enum parseStatus parseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr, char* errMsg) {
-    *tokPtr = TokenFeed(pc->tc);
-    if (tokPtr->type == type) return PARSE_SUCCESS;
     SyntaxErrorInvalidToken(*tokPtr, errMsg);
-    return PARSE_FAILURE;
+    return false;
 }
 
-enum parseStatus tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
+bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
     *tokPtr = TokenFeed(pc->tc);
-    if (tokPtr->type == type) return PARSE_SUCCESS;
+    if (tokPtr->type == type) return true;
     TokenUnfeed(pc->tc);
-    return PARSE_FAILURE;
+    return false;
 }
 
-enum parseStatus tryParseTypeArrayDefinition(ParserCtx pc, struct type* t) {
+void tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
     struct token tok;
-    if (TokenPeek(pc->tc).type != TOKEN_SQUARE_BRACKET_OPEN) return PARSE_SUCCESS;
+    if (TokenPeek(pc->tc).type != TOKEN_SQUARE_BRACKET_OPEN) return;
     t->nArrLvls = 0;
     t->arrLens = malloc(sizeof(*(t->arrLens)) * 20);
     CheckAllocPtr(t->arrLens);
 
     while (tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
-        if (tryParseToken(pc, TOKEN_INT_LITERAL, &tok)) t->arrLens[t->nArrLvls] = 0; //TODO
-        else t->arrLens[t->nArrLvls] = ARRAY_REF;
-        t->nArrLvls++;
-
-        if (!parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, "expected closing square bracket")) {
-            return PARSE_FAILURE;
+        tok = TokenFeed(pc->tc);
+        if (tok.type == TOKEN_SQUARE_BRACKET_CLOSE) {
+            t->arrLens[t->nArrLvls] = ARRAY_REF;
+            t->nArrLvls++;
+        }
+        else if (tok.type == TOKEN_INT_LITERAL) {
+            t->arrLens[t->nArrLvls] = LongLongFromStr(tok.str);
+            t->nArrLvls++;
+            parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
+        }
+        else {
+            SyntaxErrorInvalidToken(tok, "array length must be empty or an integer literal");
+            parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
         }
     }
-    return PARSE_SUCCESS;
 }
 
-enum parseStatus parseType(ParserCtx pc, struct type* t) {
-    enum parseStatus status = PARSE_SUCCESS;
+struct baseType* parseBaseTypeIdentifier(ParserCtx pc) {
     struct token tok;
-    status |= parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected type name");
-    if ((status |= pcGetType(pc, tok.str, t)) != PARSE_SUCCESS) SyntaxErrorInvalidToken(tok, "expected type");
-    status |= tryParseTypeArrayDefinition(pc, t);
-    return status;
+    struct type t;
+    if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected type name")) return NULL;
+    if (!pcGetType(pc, tok.str, &t)) {
+        SyntaxErrorInvalidToken(tok, "unknown type");
+        return NULL;
+    }
+    return t.bType;
 }
 
-enum parseStatus parseTypeDef(ParserCtx pc) {
+struct baseType* parseBaseTypeStructDefinition(ParserCtx pc) {
     struct token tok;
-    struct type refType;
-    enum parseStatus status = parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected type name");
-    status |= parseType(pc, &refType);
-    pcAddType(pc, Type(tok.str, tok, refType.bType));
-    return status;
+    struct baseType* bt = BaseTypeEmpty();
+    bt->bTypeVariant = BASETYPE_STRUCT;
+    parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
+    //TODO
+    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, NULL);
+    return bt;
+}
+
+StrList parseVocabWords(ParserCtx pc) {
+    StrList words = StrListCreate();
+    struct token tok;
+    if (TokenPeek(pc->tc).type == TOKEN_CURLY_BRACKET_CLOSE) return words;
+    parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected vocabulary word");
+    StrListAdd(words, tok.str);
+    while(TokenPeek(pc->tc).type == TOKEN_COMMA) {
+        TokenFeed(pc->tc);
+        parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected vocabulary word");
+        StrListAdd(words, tok.str);
+    }
+    return words;
+}
+
+struct baseType* parseBaseTypeVocabDefinition(ParserCtx pc) {
+    struct token tok;
+    struct baseType* bt = BaseTypeEmpty();
+    bt->bTypeVariant = BASETYPE_VOCAB;
+    parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
+    bt->words = parseVocabWords(pc);
+    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, NULL);
+    return bt;
+}
+
+struct baseType* parseBaseTypeFuncDefinition(ParserCtx pc) {
+    struct token tok;
+    struct baseType* bt = BaseTypeEmpty();
+    bt->bTypeVariant = BASETYPE_FUNC;
+    parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
+    //TODO
+    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, NULL);
+    return bt;
+}
+
+struct baseType* parseBaseType(ParserCtx pc) {
+    struct token tok = TokenFeed(pc->tc);
+    struct baseType* bt;
+    switch (tok.type) {
+        case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); bt = parseBaseTypeIdentifier(pc); break;
+        case TOKEN_STRUCT: bt = parseBaseTypeStructDefinition(pc); break;
+        case TOKEN_VOCAB: bt = parseBaseTypeVocabDefinition(pc); break;
+        case TOKEN_FUNC: bt = parseBaseTypeFuncDefinition(pc); break;
+        default: SyntaxErrorInvalidToken(tok, "expected type");
+    }
+    return bt;
+}
+
+void parseTypeDef(ParserCtx pc) {
+    struct token tok;
+    parseToken(pc, TOKEN_IDENTIFIER, &tok, "expected type name");
+    struct baseType* bt = parseBaseType(pc);
+    struct type t = TypeFromBaseType(tok.str, tok, bt);
+    tryParseTypeArrayDeclaration(pc, &t);
+    if (bt) pcAddType(pc, t);
 }
 
 void parseGlobalLevelSwitch(ParserCtx pc) {
     struct token tok = TokenFeed(pc->tc);
     switch (tok.type) {
         case TOKEN_TYPE: parseTypeDef(pc); break;
-        default: SyntaxErrorInvalidToken(tok, NULL);
+        default: ErrorBugFound();
     }
 }
 

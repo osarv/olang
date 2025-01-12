@@ -224,6 +224,9 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "else")) return TOKEN_ELSE;
     else if (isSubIdentifer(start, "for")) return TOKEN_FOR;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
+    else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
+    else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
+    else if (isSubIdentifer(start, "func")) return TOKEN_FUNC;
     return TOKEN_IDENTIFIER;
 }
 
@@ -233,6 +236,7 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     while (isDigit(c) || c == '.') {
         if (c == '.') nDots++;
         if (nDots > 1) SyntaxErrorLastFedChar(tc, "multiple decimal points");
+        c = feedChar(tc);
     }
     unfeedChar(tc);
     if (nDots == 0) return TOKEN_INT_LITERAL;
@@ -260,6 +264,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '>': type = tokenizeGreaterThan(tc); break;
         case '&': type = tokenizeAmpersand(tc); break;
         case '|': type = tokenizeVBar(tc); break;
+        case ',': type = TOKEN_COMMA; break;
         case '~': type = TOKEN_BITWISE_COMPLEMENT; break;
         case '(': type = TOKEN_PAREN_OPEN; break;
         case ')': type = TOKEN_PAREN_OPEN; break;
@@ -346,8 +351,8 @@ int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on
     return tc->charLen -1;
 }
 
-int TokenGetStrSliceStart(TokenCtx tc, struct strSlice slice) {
-    return slice.ptr - tc->chars;
+int TokenGetStrStart(TokenCtx tc, struct str str) {
+    return str.ptr - tc->chars;
 }
 
 struct token TokenPeek(TokenCtx tc)  {
@@ -369,7 +374,60 @@ void TokenUnfeed(TokenCtx tc) {
 struct token TokenMerge(struct token head, struct token tail) {
     if (head.owner != tail.owner) ErrorBugFound();
     head.type = TOKEN_MERGE;
-    head.str = StrSliceMerge(head.str, tail.str);
+    head.str = StrMerge(head.str, tail.str);
     head.tokListIdx = NO_IDX;
     return head;
+}
+
+char* TokenTypeToString(enum tokenType type) {
+    switch(type) {
+        case TOKEN_MERGE: ErrorBugFound(); break;
+        case TOKEN_EOF: return "end of file";
+        case TOKEN_INT_LITERAL: return "int literal";
+        case TOKEN_FLOAT_LITERAL: return "float literal";
+        case TOKEN_CHAR_LITERAL: return "character literal";
+        case TOKEN_STRING_LITERAL: return "string literal";
+        case TOKEN_IDENTIFIER: return "identifier";
+        case TOKEN_IF: return "if";
+        case TOKEN_ELSE: return "else";
+        case TOKEN_FOR: return "for";
+        case TOKEN_TYPE: return "type";
+        case TOKEN_STRUCT: return "struct";
+        case TOKEN_VOCAB: return "vocab";
+        case TOKEN_FUNC: return "func";
+        case TOKEN_ADD: return "+";
+        case TOKEN_SUB: return "-";
+        case TOKEN_MUL: return "/";
+        case TOKEN_DIV: return "*";
+        case TOKEN_COMMA: return ",";
+        case TOKEN_INCREMENT: return "++";
+        case TOKEN_DECREMENT: return "--";
+        case TOKEN_ASSIGNMENT_ADD: return "+=";
+        case TOKEN_ASSIGNMENT_SUB: return "-=";
+        case TOKEN_ASSIGNMENT_MUL: return "*=";
+        case TOKEN_ASSIGNMENT_DIV: return "/=";
+        case TOKEN_ASSIGNMENT_EQUAL: return "=";
+        case TOKEN_EQUAL: return "==";
+        case TOKEN_NOT: return "!";
+        case TOKEN_NOT_EQUAL: return "!=";
+        case TOKEN_AND: return "&&";
+        case TOKEN_OR: return "||";
+        case TOKEN_LESS_THAN: return "<";
+        case TOKEN_LESS_THAN_OR_EQUAL: return "<=";
+        case TOKEN_GREATER_THAN: return ">";
+        case TOKEN_GREATER_THAN_OR_EQUAL: return ">=";
+        case TOKEN_BITWISE_AND: return "&";
+        case TOKEN_BITWISE_OR: return "|";
+        case TOKEN_BITWISE_XOR: return "^";
+        case TOKEN_BITWISE_COMPLEMENT: return "~";
+        case TOKEN_BITSHIFT_LEFT: return "<<";
+        case TOKEN_BITSHIFT_RIGHT: return ">>";
+        case TOKEN_PAREN_OPEN: return "(";
+        case TOKEN_PAREN_CLOSE: return ")";
+        case TOKEN_SQUARE_BRACKET_OPEN: return "[";
+        case TOKEN_SQUARE_BRACKET_CLOSE: return "]";
+        case TOKEN_CURLY_BRACKET_OPEN: return "{";
+        case TOKEN_CURLY_BRACKET_CLOSE: return "}";
+    }
+    return "";
 }

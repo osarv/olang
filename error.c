@@ -33,14 +33,12 @@ void ErrorBugFound() {
 }
 
 void ErrorUnableToOpenFile(char* fileName) {
-    char* errMsgStart = COLOR_FG_YELLOW "unable to open file \"" COLOR_FG_RED;
-    char* errMsgEnd = COLOR_FG_YELLOW "\"" COLOR_RESET "\n";
-    char errMsg[strlen(errMsgStart) + strlen(fileName) + strlen(errMsgEnd)];
+    char errMsg[strlen(fileName) + 100];
+    errMsg[0] = '\0';
 
-    strcpy(errMsg, errMsgStart);
-    strcpy(errMsg + strlen(errMsgStart), fileName);
-    strcpy(errMsg + strlen(errMsgStart) + strlen(fileName), errMsgEnd);
-    errMsg[strlen(errMsgStart) + strlen(fileName) + strlen(errMsgEnd) + 1] = '\0';
+    strcat(errMsg, COLOR_FG_YELLOW "unable to open file \"" COLOR_FG_RED);
+    strcat(errMsg, fileName);
+    strcat(errMsg, COLOR_FG_YELLOW "\"" COLOR_RESET "\n");
 
     errorFatal(errMsg);
     FinishCompilation();
@@ -86,6 +84,6 @@ void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is define
 
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
     syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
-    int startIndex =  TokenGetStrSliceStart(tok.owner, tok.str);
+    int startIndex =  TokenGetStrStart(tok.owner, tok.str);
     printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1);
 }

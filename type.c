@@ -17,8 +17,8 @@ struct baseType* BaseTypeEmpty() {
     return bType;
 }
 
-struct type VanillaType(char* name, enum baseTypeVariant bTypeVariant) {
-    struct strSlice str;
+struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant) {
+    struct str str;
     str.ptr = strdup(name);
     CheckAllocPtr(str.ptr);
     str.len = strlen(str.ptr);
@@ -30,7 +30,7 @@ struct type VanillaType(char* name, enum baseTypeVariant bTypeVariant) {
     return t;
 }
 
-struct type Type(struct strSlice name, struct token tok, struct baseType* bType) {
+struct type TypeFromBaseType(struct str name, struct token tok, struct baseType* bType) {
     struct type t;
     t.name = name;
     t.tok = tok;
@@ -39,25 +39,25 @@ struct type Type(struct strSlice name, struct token tok, struct baseType* bType)
 }
 
 TypeList TypeListCreate() {
-    TypeList vl = calloc(sizeof(*vl), 1);
-    CheckAllocPtr(vl);
-    return vl;
+    TypeList tl = calloc(sizeof(*tl), 1);
+    CheckAllocPtr(tl);
+    return tl;
 }
 
 #define TYPE_ALLOC_STEP_SIZE 100
-void TypeListAdd(TypeList vl, struct type v) {
-    if (vl->len >= vl->cap) {
-        vl->cap += TYPE_ALLOC_STEP_SIZE;
-        vl->ptr = realloc(vl->ptr, sizeof(&(vl->ptr)) * vl->cap);
+void TypeListAdd(TypeList tl, struct type t) {
+    if (tl->len >= tl->cap) {
+        tl->cap += TYPE_ALLOC_STEP_SIZE;
+        tl->ptr = realloc(tl->ptr, sizeof(&(tl->ptr)) * tl->cap);
     }
-    vl->ptr[vl->len] = v;
-    vl->len++;
+    tl->ptr[tl->len] = t;
+    tl->len++;
 }
 
-bool TypeListGet(TypeList vl, struct strSlice name, struct type* v) {
-    for (int i = 0; i < vl->len; i++) {
-        if (StrSliceCmp(vl->ptr[i].name, name)) {
-            *v = vl->ptr[i];
+bool TypeListGet(TypeList tl, struct str name, struct type* t) {
+    for (int i = 0; i < tl->len; i++) {
+        if (StrCmp(tl->ptr[i].name, name)) {
+            *t = tl->ptr[i];
             return true;
         }
     }
