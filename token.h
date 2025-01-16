@@ -20,6 +20,7 @@ enum tokenType {
     TOKEN_STRUCT,
     TOKEN_VOCAB,
     TOKEN_FUNC,
+    TOKEN_MUT,
     TOKEN_ADD,
     TOKEN_SUB,
     TOKEN_MUL,

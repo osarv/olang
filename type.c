@@ -31,7 +31,7 @@ struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant) {
 }
 
 struct type TypeFromBaseType(struct str name, struct token tok, struct baseType* bType) {
-    struct type t;
+    struct type t = (struct type){0};
     t.name = name;
     t.tok = tok;
     t.bType = bType;
@@ -48,7 +48,7 @@ TypeList TypeListCreate() {
 void TypeListAdd(TypeList tl, struct type t) {
     if (tl->len >= tl->cap) {
         tl->cap += TYPE_ALLOC_STEP_SIZE;
-        tl->ptr = realloc(tl->ptr, sizeof(&(tl->ptr)) * tl->cap);
+        tl->ptr = realloc(tl->ptr, sizeof(*(tl->ptr)) * tl->cap);
     }
     tl->ptr[tl->len] = t;
     tl->len++;

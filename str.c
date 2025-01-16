@@ -10,13 +10,6 @@ struct strList {
     struct str* ptr;
 };
 
-struct str Str(char* str, int start, int end) {
-    struct str slice;
-    slice.ptr = str + start;
-    slice.len = end - start;
-    return slice;
-}
-
 struct str StrMerge(struct str head, struct str tail) {
     head.len = (tail.ptr - head.ptr) + tail.len;
     return head;
@@ -49,7 +42,7 @@ StrList StrListCreate() {
 void StrListAdd(StrList sl, struct str s) {
     if (sl->len >= sl->cap) {
         sl->cap += STR_ALLOC_STEP_SIZE;
-        sl->ptr = realloc(sl->ptr, sizeof(&(sl->ptr)) * sl->cap);
+        sl->ptr = realloc(sl->ptr, sizeof(*(sl->ptr)) * sl->cap);
     }
     sl->ptr[sl->len] = s;
     sl->len++;

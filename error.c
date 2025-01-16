@@ -44,7 +44,13 @@ void ErrorUnableToOpenFile(char* fileName) {
     FinishCompilation();
 }
 
-void printCharExpandSilent(char c) {
+void printCharExpandNewLineEOF(char c) {
+    if (c == '\n') fputs("\\n", stdout);
+    else if (c == EOF) fputs("EOF", stdout);
+    else putchar(c);
+}
+
+void printCharExpandSpaceNewLineEOF(char c) {
     if (c == ' ') fputs(COLOR_BG_RED " " COLOR_BG_RESET, stdout);
     else if (c == '\n') fputs("\\n", stdout);
     else if (c == EOF) fputs("EOF", stdout);
@@ -52,21 +58,17 @@ void printCharExpandSilent(char c) {
 }
 
 #define MAX_CHARS_PER_LINE 80
-void printErrorLines(TokenCtx tc, int errStart, int errEnd) {
+void printErrorLines(TokenCtx tc, int errStart, int errEnd, void(*pErrChars)(char c)) {
     int linesStart = TokenGetPrevNewline(tc, errStart) +1;
     int linesEnd = TokenGetNextOrThisNewline(tc, errEnd);
 
     fputs(COLOR_FG_CYAN, stdout);
     for (int i = linesStart; i < errStart; i++) putchar(TokenGetChar(tc, i));
     fputs(COLOR_FG_RED, stdout);
-    for (int i = errStart; i <= errEnd; i++) printCharExpandSilent(TokenGetChar(tc, i));
+    for (int i = errStart; i <= errEnd; i++) pErrChars(TokenGetChar(tc, i));
     fputs(COLOR_FG_CYAN, stdout);
     for (int i = errEnd +1; i < linesEnd; i++) putchar(TokenGetChar(tc, i));
     puts("\n" COLOR_RESET);
-}
-
-void printLastFedCharExpanded(TokenCtx tc) {
-    printCharExpandSilent(TokenGetChar(tc, TokenGetCharCursor(tc) -1));
 }
 
 void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) { //NULL errMsg is defined
@@ -79,11 +81,20 @@ void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) { //NULL errMsg
 
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is defined
     syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), errMsg);
-    printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1);
+    printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1, printCharExpandSpaceNewLineEOF);
 }
 
+static TokenCtx lastTokenErrorContext = NULL;
+static int lastTokenErrorIndex = 0;
+
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
+    if (lastTokenErrorContext != NULL && lastTokenErrorContext == tok.owner &&
+            lastTokenErrorIndex == tok.tokListIdx) return;
+
     syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
+    if (tok.type == TOKEN_EOF) return;
     int startIndex =  TokenGetStrStart(tok.owner, tok.str);
-    printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1);
+    printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
+    lastTokenErrorContext = tok.owner;
+    lastTokenErrorIndex = tok.tokListIdx;
 }

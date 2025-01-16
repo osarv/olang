@@ -11,6 +11,14 @@ struct varList {
     struct var* ptr;
 };
 
+struct var VarInit(struct str name, struct type t, struct token tok) {
+    struct var v = (struct var){0};
+    v.name = name;
+    v.type = t;
+    v.tok = tok;
+    return v;
+}
+
 VarList VarListCreate() {
     VarList vl = calloc(sizeof(*vl), 1);
     CheckAllocPtr(vl);
@@ -21,15 +29,15 @@ VarList VarListCreate() {
 void VarListAdd(VarList vl, struct var v) {
     if (vl->len >= vl->cap) {
         vl->cap += VAR_ALLOC_STEP_SIZE;
-        vl->ptr = realloc(vl->ptr, sizeof(&(vl->ptr)) * vl->cap);
+        vl->ptr = realloc(vl->ptr, sizeof(*(vl->ptr)) * vl->cap);
     }
     vl->ptr[vl->len] = v;
     vl->len++;
 }
 
-bool VarListGet(VarList vl, char* name, struct var* v) {
+bool VarListGet(VarList vl, struct str name, struct var* v) {
     for (int i = 0; i < vl->len; i++) {
-        if (strcmp(vl->ptr[i].name, name)) {
+        if (StrCmp(vl->ptr[i].name, name)) {
             *v = vl->ptr[i];
             return true;
         }

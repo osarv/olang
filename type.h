@@ -3,9 +3,22 @@
 
 #include "token.h"
 #include "str.h"
-#include "var.h"
 
 typedef struct typeList* TypeList;
+
+#define ARRAY_REF -1 //for array dimensions that hold references
+//type instance, one for every occourance of the type
+//types may never be without a baseType
+struct type {
+    struct baseType* bType;
+    struct str name;
+    struct token tok;
+    int nArrLvls;
+    long long* arrLens;
+    bool structMAlloc;
+};
+
+#include "var.h"
 
 enum baseTypeVariant {
     BASETYPE_INT32,
@@ -20,23 +33,12 @@ enum baseTypeVariant {
     BASETYPE_FUNC
 };
 
-//type base, only one exists for a type and its aliases
+//base type, only one exists for a type and its aliases
 struct baseType {
     enum baseTypeVariant bTypeVariant;
-    VarList args; //for struct and func types
-    VarList rets; //for func types
+    VarList vars; //for struct members and function arguments
+    TypeList rets; //for function return types
     StrList words; //for vocabulary types
-};
-
-#define ARRAY_REF -1 //for array dimensions that hold references
-//type instance, one for every occourance of the type
-//types may never be without tDef defined
-struct type {
-    struct baseType* bType;
-    struct str name;
-    struct token tok;
-    int nArrLvls;
-    long long* arrLens;
 };
 
 struct baseType* BaseTypeEmpty();

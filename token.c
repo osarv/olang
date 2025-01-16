@@ -30,6 +30,7 @@ bool isValidChar(char c) {
 
 char feedChar(TokenCtx tc) {
     char c = tc->chars[tc->charCursor];
+    if (c == '\n') tc->charLineNr++;
     tc->charCursor++;
     return c;
 }
@@ -37,6 +38,7 @@ char feedChar(TokenCtx tc) {
 void unfeedChar(TokenCtx tc) {
     if (tc->charCursor <= 0) ErrorBugFound();
     tc->charCursor--;
+    if (tc->chars[tc->charCursor] == '\n') tc->charLineNr--;
 }
 
 bool tryFeedChar(TokenCtx tc, char c) {
@@ -70,7 +72,7 @@ void readChars(TokenCtx tc) {
     }
     addChar(tc, '\0');
     for (int i = 0; i < tc->charLen -1; i++) {
-        if (!isValidChar(feedChar(tc))) SyntaxErrorLastFedChar(tc, "unknown symbol");
+        if (!isValidChar(feedChar(tc))) SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
     }
     tc->charCursor = 0;
     tc->charLineNr = 1;
@@ -94,20 +96,33 @@ bool isIdentifierBodyChar(char c) {
     return false;
 }
 
+void feedUntilIncludingOneOfCharsOrEOF(TokenCtx tc, char* toFind) {
+    char c;
+    bool run = true;
+    while (run && (c = feedChar(tc)) != '\0') {
+        for (int i = 0; i < (int)strlen(toFind); i++) {
+            if (c == toFind[i]) run = false;
+        }
+    }
+}
+
 void discardComment(TokenCtx tc) {
-    while (feedChar(tc) != '\n');
+    char* str = "\n";
+    feedUntilIncludingOneOfCharsOrEOF(tc, str);
 }
 
 bool findNextTokStart(TokenCtx tc) {
-    char c = feedChar(tc);
-    while (c == ' ' || c == '\t' || c == '\n' || c == '#') {
-        if (c == '#') discardComment(tc);
-        if (c == '\n') tc->charLineNr++;
-        c = feedChar(tc);
-        if (c == '\0') return false;
+    while (true) {
+        char c = feedChar(tc);
+        switch (c) {
+            case '#': discardComment(tc); break;
+            case '\n': break;
+            case '\t': break;
+            case ' ': break;
+            case '\0': return false;
+            default: unfeedChar(tc); return true;
+        }
     }
-    unfeedChar(tc);
-    return true;
 }
 
 void tokenizeEscapeChar(TokenCtx tc, bool inString) {
@@ -117,31 +132,14 @@ void tokenizeEscapeChar(TokenCtx tc, bool inString) {
     else if (c == '\\');
     else if (inString && c == '\"');
     else if (!inString && c == '\'');
-    else SyntaxErrorLastFedChar(tc, "invalid escape character");
-}
-
-bool tokenizeCharInCharLiteral(TokenCtx tc) {
-    char c = feedChar(tc);
-    if (c == '\\') {
-        tokenizeEscapeChar(tc, false);
-        return true;
-    }
-    else if (c == '\n') {
-        SyntaxErrorLastFedChar(tc, "newline before closing of character literal");
-        return false;
-    }
-    else if (c == '\'') {
-        SyntaxErrorLastFedChar(tc, "empty character literal");
-        return false;
-    }
-    return true;
+    else SyntaxErrorLastFedChar(tc, INVALID_ESCAPE_CHAR);
 }
 
 bool tokenizeCharInStringLiteral(TokenCtx tc) {
     char c = feedChar(tc);
     if (c == '\\') tokenizeEscapeChar(tc, true);
     else if (c == '\n') {
-        SyntaxErrorLastFedChar(tc, "newline before closing of character literal");
+        SyntaxErrorLastFedChar(tc, NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL);
         return true;
     }
     else if (c == '"') return true;
@@ -150,10 +148,16 @@ bool tokenizeCharInStringLiteral(TokenCtx tc) {
 
 
 void tokenizeCharLiteral(TokenCtx tc) {
-    if (!tokenizeCharInCharLiteral(tc)) return;
-    if (feedChar(tc) != '\'') {
-        SyntaxErrorLastFedChar(tc, "expected closing of character literal");
+    char c = feedChar(tc);
+    switch (c) {
+        case '\n': SyntaxErrorLastFedChar(tc, NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL); return;
+        case '\'': SyntaxErrorLastFedChar(tc, EMPTY_CHAR_LITERAL); return;
+        case '\\': tokenizeEscapeChar(tc, false); break;
+        default: break;
     }
+    if (feedChar(tc) != '\'') SyntaxErrorLastFedChar(tc, EXPECTED_CLOSING_CHAR_LITERAL);
+    char* str = "'\n";
+    feedUntilIncludingOneOfCharsOrEOF(tc, str);
 }
 
 void tokenizeStringLiteral(TokenCtx tc) {
@@ -227,6 +231,7 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
     else if (isSubIdentifer(start, "func")) return TOKEN_FUNC;
+    else if (isSubIdentifer(start, "mut")) return TOKEN_MUT;
     return TOKEN_IDENTIFIER;
 }
 
@@ -235,7 +240,7 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     char c = feedChar(tc);
     while (isDigit(c) || c == '.') {
         if (c == '.') nDots++;
-        if (nDots > 1) SyntaxErrorLastFedChar(tc, "multiple decimal points");
+        if (nDots > 1) SyntaxErrorLastFedChar(tc, MULTIPLE_DECIMAL_POINTS);
         c = feedChar(tc);
     }
     unfeedChar(tc);
@@ -247,34 +252,32 @@ struct token tokenizeToken(TokenCtx tc) {
     struct token tok;
     tok.str.ptr = tc->chars + tc->charCursor;
     tok.lineNr = tc->charLineNr;
-    enum tokenType type;
 
     char c = feedChar(tc);
-    if (isLetter(c) || c == '_') type = tokenizeIdentifier(tc);
-    else if (isDigit(c)) type = tokenizeNumberLiteral(tc);
+    if (isLetter(c) || c == '_') tok.type = tokenizeIdentifier(tc);
+    else if (isDigit(c)) tok.type = tokenizeNumberLiteral(tc);
     else switch (c) {
-        case '\'': type = TOKEN_CHAR_LITERAL; tokenizeCharLiteral(tc); break;
-        case '"': type = TOKEN_STRING_LITERAL; tokenizeStringLiteral(tc); break;
-        case '+': type = tokenizePlus(tc); break;
-        case '-': type = tokenizeHyphen(tc); break;
-        case '*': type = tokenizeAsterisk(tc); break;
-        case '/': type = tokenizeSlash(tc); break;
-        case '!': type = tokenizeExclamation(tc); break;
-        case '<': type = tokenizeLessThan(tc); break;
-        case '>': type = tokenizeGreaterThan(tc); break;
-        case '&': type = tokenizeAmpersand(tc); break;
-        case '|': type = tokenizeVBar(tc); break;
-        case ',': type = TOKEN_COMMA; break;
-        case '~': type = TOKEN_BITWISE_COMPLEMENT; break;
-        case '(': type = TOKEN_PAREN_OPEN; break;
-        case ')': type = TOKEN_PAREN_OPEN; break;
-        case '[': type = TOKEN_SQUARE_BRACKET_OPEN; break;
-        case ']': type = TOKEN_SQUARE_BRACKET_CLOSE; break;
-        case '{': type = TOKEN_CURLY_BRACKET_OPEN; break;
-        case '}': type = TOKEN_CURLY_BRACKET_CLOSE; break;
-        default: SyntaxErrorLastFedChar(tc, "unexpected symbol");
+        case '\'': tok.type = TOKEN_CHAR_LITERAL; tokenizeCharLiteral(tc); break;
+        case '"': tok.type = TOKEN_STRING_LITERAL; tokenizeStringLiteral(tc); break;
+        case '+': tok.type = tokenizePlus(tc); break;
+        case '-': tok.type = tokenizeHyphen(tc); break;
+        case '*': tok.type = tokenizeAsterisk(tc); break;
+        case '/': tok.type = tokenizeSlash(tc); break;
+        case '!': tok.type = tokenizeExclamation(tc); break;
+        case '<': tok.type = tokenizeLessThan(tc); break;
+        case '>': tok.type = tokenizeGreaterThan(tc); break;
+        case '&': tok.type = tokenizeAmpersand(tc); break;
+        case '|': tok.type = tokenizeVBar(tc); break;
+        case ',': tok.type = TOKEN_COMMA; break;
+        case '~': tok.type = TOKEN_BITWISE_COMPLEMENT; break;
+        case '(': tok.type = TOKEN_PAREN_OPEN; break;
+        case ')': tok.type = TOKEN_PAREN_CLOSE; break;
+        case '[': tok.type = TOKEN_SQUARE_BRACKET_OPEN; break;
+        case ']': tok.type = TOKEN_SQUARE_BRACKET_CLOSE; break;
+        case '{': tok.type = TOKEN_CURLY_BRACKET_OPEN; break;
+        case '}': tok.type = TOKEN_CURLY_BRACKET_CLOSE; break;
+        default: SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
     }
-    tok.type = type;
     tok.str.len = tc->chars + tc->charCursor - tok.str.ptr;
     return tok;
 }
@@ -304,6 +307,7 @@ struct token TokenEOF(TokenCtx tc) {
     struct token tok = (struct token){0};
     tok.type = TOKEN_EOF;
     tok.lineNr = tc->charLineNr;
+    tok.owner = tc;
     return tok;
 }
 
@@ -315,7 +319,6 @@ TokenCtx TokenizeFile(char* fileName) {
 
     readChars(tc);
     tokenizeTokensFromChars(tc);
-    tokenContextAdd(tc, TokenEOF(tc));
     return tc;
 }
 
@@ -333,7 +336,8 @@ char* TokenGetFileName(TokenCtx tc) {
 }
 
 int TokenGetLineNrLastFedChar(TokenCtx tc) {
-    if (tc->chars[tc->charCursor] == '\n') return tc->charLineNr -1;
+    if (tc->charCursor -1 < 0) return 1;
+    if (tc->chars[tc->charCursor -1] == '\n') return tc->charLineNr -1;
     return tc->charLineNr;
 }
 
@@ -356,7 +360,7 @@ int TokenGetStrStart(TokenCtx tc, struct str str) {
 }
 
 struct token TokenPeek(TokenCtx tc)  {
-    if (tc->tokCursor >= tc->tokLen) ErrorBugFound();
+    if (tc->tokCursor >= tc->tokLen) return TokenEOF(tc);
     return tc->tokens[tc->tokCursor];
 }
 
@@ -395,6 +399,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_STRUCT: return "struct";
         case TOKEN_VOCAB: return "vocab";
         case TOKEN_FUNC: return "func";
+        case TOKEN_MUT: return "mut";
         case TOKEN_ADD: return "+";
         case TOKEN_SUB: return "-";
         case TOKEN_MUL: return "/";
