@@ -73,6 +73,7 @@ int TokenGetLineNrLastFedChar(TokenCtx tc);
 int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
 int TokenGetStrStart(TokenCtx tc, struct str str);
+int TokenGetEOFIndex(TokenCtx tc);
 struct token TokenPeek(TokenCtx);
 struct token TokenFeed(TokenCtx tc);
 void TokenUnfeed(TokenCtx tc);

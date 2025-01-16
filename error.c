@@ -46,14 +46,14 @@ void ErrorUnableToOpenFile(char* fileName) {
 
 void printCharExpandNewLineEOF(char c) {
     if (c == '\n') fputs("\\n", stdout);
-    else if (c == EOF) fputs("EOF", stdout);
+    else if (c == '\0') fputs("EOF", stdout);
     else putchar(c);
 }
 
 void printCharExpandSpaceNewLineEOF(char c) {
     if (c == ' ') fputs(COLOR_BG_RED " " COLOR_BG_RESET, stdout);
     else if (c == '\n') fputs("\\n", stdout);
-    else if (c == EOF) fputs("EOF", stdout);
+    else if (c == '\0') fputs("EOF", stdout);
     else putchar(c);
 }
 
@@ -68,6 +68,18 @@ void printErrorLines(TokenCtx tc, int errStart, int errEnd, void(*pErrChars)(cha
     for (int i = errStart; i <= errEnd; i++) pErrChars(TokenGetChar(tc, i));
     fputs(COLOR_FG_CYAN, stdout);
     for (int i = errEnd +1; i < linesEnd; i++) putchar(TokenGetChar(tc, i));
+    puts("\n" COLOR_RESET);
+}
+
+void printLastLineEOFError(TokenCtx tc) {
+    int idx = TokenGetEOFIndex(tc);
+    if (idx > 0) idx--;
+    int lineStart = TokenGetPrevNewline(tc, idx) +1;
+
+    fputs(COLOR_FG_CYAN, stdout);
+    for (int i = lineStart; i < idx; i++) putchar(TokenGetChar(tc, i));
+    fputs(COLOR_FG_RED, stdout);
+    fputs("EOF", stdout);
     puts("\n" COLOR_RESET);
 }
 
@@ -90,9 +102,11 @@ static int lastTokenErrorIndex = 0;
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
     if (lastTokenErrorContext != NULL && lastTokenErrorContext == tok.owner &&
             lastTokenErrorIndex == tok.tokListIdx) return;
-
     syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
-    if (tok.type == TOKEN_EOF) return;
+    if (tok.type == TOKEN_EOF) {
+        printLastLineEOFError(tok.owner);
+        return;
+    }
     int startIndex =  TokenGetStrStart(tok.owner, tok.str);
     printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
     lastTokenErrorContext = tok.owner;

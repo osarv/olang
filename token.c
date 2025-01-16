@@ -359,6 +359,10 @@ int TokenGetStrStart(TokenCtx tc, struct str str) {
     return str.ptr - tc->chars;
 }
 
+int TokenGetEOFIndex(TokenCtx tc) {
+    return tc->charLen -1;
+}
+
 struct token TokenPeek(TokenCtx tc)  {
     if (tc->tokCursor >= tc->tokLen) return TokenEOF(tc);
     return tc->tokens[tc->tokCursor];
