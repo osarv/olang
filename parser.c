@@ -13,7 +13,39 @@ struct parserContext {
     TokenCtx tc; //contains fileName
     TypeList publTypes;
     TypeList privTypes;
+    struct pcList* ctxs;
 };
+
+struct pcList {
+    int cap;
+    int len;
+    ParserCtx* ptr;
+};
+
+struct pcList* pcListNew() {
+    struct pcList* list = malloc(sizeof(*list));
+    *list = (struct pcList){0};
+    CheckAllocPtr(list);
+    return list;
+}
+
+#define PC_LIST_ALLOC_STEP 100
+void pcListAdd(struct pcList* list, ParserCtx pc) {
+    if (list->len >= list->cap) {
+        list->cap += PC_LIST_ALLOC_STEP;
+        list->ptr = realloc(list->ptr, sizeof(*(list->ptr)) * list->cap);
+        CheckAllocPtr(list->ptr);
+    }
+    list->ptr[list->len] = pc;
+    list->len++;
+}
+
+ParserCtx pcListGet(struct pcList* list, struct str fileName) {
+    for (int i = 0; i < list->len; i++) {
+        if (StrCmp(fileName, TokenGetFileName(list->ptr[i]->tc))) return list->ptr[i];
+    }
+    return NULL;
+}
 
 bool isPublic(struct str name) {
     if (name.len <= 0) ErrorBugFound();
@@ -23,11 +55,13 @@ bool isPublic(struct str name) {
 }
 
 bool pcGetType(ParserCtx pc, struct str name, struct type* t) {
-    if (isPublic(name)) {
-        if (!TypeListGet(pc->publTypes, name, t)) return false;
-    }
-    else if (!TypeListGet(pc->privTypes, name, t)) return false;
-    return true;
+    if (isPublic(name)) return TypeListGet(pc->publTypes, name, t);
+    else return TypeListGet(pc->privTypes, name, t);
+}
+
+struct type* pcGetTypeAsPtr(ParserCtx pc, struct str name) {
+    if (isPublic(name)) return TypeListGetAsPtr(pc->publTypes, name);
+    else return TypeListGetAsPtr(pc->privTypes, name);
 }
 
 void pcAddType(ParserCtx pc, struct type t) {
@@ -35,6 +69,11 @@ void pcAddType(ParserCtx pc, struct type t) {
     if (pcGetType(pc, t.name, &tmpType)) SyntaxErrorInvalidToken(t.tok, DUPLICATE_IDENTIFIER);
     if (isPublic(t.name)) TypeListAdd(pc->publTypes, t);
     else TypeListAdd(pc->privTypes, t);
+}
+
+void pcUpdateType(ParserCtx pc, struct type t) {
+    if (isPublic(t.name)) TypeListUpdate(pc->publTypes, t);
+    else TypeListUpdate(pc->privTypes, t);
 }
 
 void addVanillaTypes(ParserCtx pc) {
@@ -146,15 +185,17 @@ void tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
     }
 }
 
-struct baseType* parseTypeDefBaseTypeAlias(ParserCtx pc) {
+struct baseType* parseTypeDefSecondPassGetBTypeAlias(ParserCtx pc, struct type* dependant) {
     struct token tok;
-    struct type t;
+    struct type* t;
     if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_TYPE_NAME)) return NULL;
-    if (!pcGetType(pc, tok.str, &t)) {
+    if (!(t = pcGetTypeAsPtr(pc, tok.str))) {
         SyntaxErrorInvalidToken(tok, EXPECTED_TYPE_NAME);
         return NULL;
     }
-    return t.bType;
+    if (t->bType) return t->bType;
+    PtrListAdd(&(t->dependants), dependant);
+    return NULL;
 }
 
 bool parseType(ParserCtx pc, struct type* t) {
@@ -181,7 +222,7 @@ bool parseTypeDeclaration(ParserCtx pc, struct type* t) {
 }
 
 bool parseVarDeclaration(ParserCtx pc, struct var* v) {
-    struct type t = (struct type){0};
+    struct type t;
     struct token tok;
     if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_VAR_NAME)) return false;
     if (!parseTypeDeclaration(pc, &t)) return false;
@@ -312,47 +353,108 @@ struct baseType* parseTypeDefBaseTypeFuncDefinition(ParserCtx pc) {
     return bt;
 }
 
-struct baseType* parseTypeDefBaseType(ParserCtx pc) {
+struct baseType* parseTypeDefSecondPassGetBtype(ParserCtx pc, struct type* dependant) {
     struct token tok = TokenFeed(pc->tc);
     struct baseType* bt;
     switch (tok.type) {
-        case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); bt = parseTypeDefBaseTypeAlias(pc); break;
-        case TOKEN_STRUCT: bt = parseTypeDefBaseTypeStructDefinition(pc); break;
-        case TOKEN_VOCAB: bt = parseTypeDefBaseTypeVocabDefinition(pc); break;
-        case TOKEN_FUNC: bt = parseTypeDefBaseTypeFuncDefinition(pc); break;
+        case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); bt = parseTypeDefSecondPassGetBTypeAlias(pc, dependant);
+                               break;
+        case TOKEN_STRUCT: bt = BaseTypeEmpty(); bt->bTypeVariant = BASETYPE_STRUCT; break;
+        case TOKEN_VOCAB: bt = BaseTypeEmpty(); bt->bTypeVariant = BASETYPE_VOCAB; break;
+        case TOKEN_FUNC: bt = BaseTypeEmpty(); bt->bTypeVariant = BASETYPE_FUNC; break;
         default: TokenUnfeed(pc->tc); SyntaxErrorInvalidToken(tok, EXPECTED_TYPE_NAME);
     }
     return bt;
 }
 
-void parseTypeDef(ParserCtx pc) {
+void parseTypeDefSecondPass(ParserCtx pc) {
     struct token tok;
     parseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_TYPE_NAME);
-    struct baseType* bt = parseTypeDefBaseType(pc);
-    struct type t = TypeFromBaseType(tok.str, tok, bt);
-    tryParseTypeArrayDeclaration(pc, &t);
-    if (bt) pcAddType(pc, t);
+    struct type* tPtr = pcGetTypeAsPtr(pc, tok.str);
+    if (!tPtr) ErrorBugFound();
+
+    struct type t = Type(tok.str, tok, parseTypeDefSecondPassGetBtype(pc, tPtr));
+    tryParseTypeArrayDeclarationRefsOnly(pc, &t);
+    //TODO distribute base type if dependants is not empty
+    pcUpdateType(pc, t);
 }
 
-void parseGlobalLevelSwitch(ParserCtx pc) {
-    struct token tok = TokenFeed(pc->tc);
-    switch (tok.type) {
-        case TOKEN_TYPE: parseTypeDef(pc); break;
-        default: break;
+ParserCtx parserCtxNew(struct str fileName, struct pcList* ctxs) {
+    ParserCtx pc = malloc(sizeof(*pc));
+    CheckAllocPtr(pc);
+    *pc = (struct parserContext){0};
+    pc->publTypes = TypeListCreate();
+    pc->privTypes = TypeListCreate();
+    pc->tc = TokenizeFile(fileName);
+    pc->ctxs = ctxs;
+    addVanillaTypes(pc);
+    return pc;
+}
+
+ParserCtx parseImport(ParserCtx parentCtx) {
+    //TODO
+   
+    struct token tok;
+    parseToken(parentCtx, TOKEN_STRING_LITERAL, &tok, EXPECTED_FILE_NAME);
+    ParserCtx childCtx = parserCtxNew(StrSlice(tok.str, 1, tok.str.len -2), parentCtx->ctxs);
+    return childCtx;
+}
+
+void parseTypePlaceholder(ParserCtx pc) {
+    struct token tok;
+    parseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_TYPE_NAME);
+    struct type t = Type(tok.str, tok, NULL);
+    pcAddType(pc, t);
+}
+
+void parseFileFirstPass(ParserCtx pc) {
+    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
+        struct token tok = TokenFeed(pc->tc);
+        switch (tok.type) {
+            case TOKEN_TYPE: parseTypePlaceholder(pc); break;
+            default: break;
+        }
+    }
+}
+
+void parseFileSecondPass(ParserCtx pc) {
+    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
+        struct token tok = TokenFeed(pc->tc);
+        switch (tok.type) {
+            case TOKEN_TYPE: parseTypeDefSecondPass(pc); break;
+            case TOKEN_IMPORT: parseImport(pc); break;
+            default: break;
+        }
+    }
+}
+
+void parseFileThirdPass(ParserCtx pc) {
+    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
+        struct token tok = TokenFeed(pc->tc);
+        switch (tok.type) {
+            default: break;
+        }
+    }
+}
+
+void parseFileFourthPass(ParserCtx pc) {
+    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
+        struct token tok = TokenFeed(pc->tc);
+        switch (tok.type) {
+            default: break;
+        }
     }
 }
 
 ParserCtx ParseFile(char* fileName) {
-    ParserCtx pc = calloc(sizeof(*pc), 1);
-    CheckAllocPtr(pc);
-    pc->publTypes = TypeListCreate();
-    pc->privTypes = TypeListCreate();
-    pc->tc = TokenizeFile(fileName);
-    addVanillaTypes(pc);
-
-    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
-        parseGlobalLevelSwitch(pc);
-    }
-
+    struct pcList* ctxs = pcListNew();
+    ParserCtx pc = parserCtxNew(StrFromStackCStr(fileName), ctxs);
+    parseFileFirstPass(pc);
+    TokenReset(pc->tc);
+    parseFileSecondPass(pc);
+    TokenReset(pc->tc);
+    parseFileThirdPass(pc);
+    TokenReset(pc->tc);
+    parseFileFourthPass(pc);
     return pc;
 }

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "str.h"
 #include "error.h"
 
@@ -9,6 +10,26 @@ struct strList {
     int cap;
     struct str* ptr;
 };
+
+struct str StrFromStackCStr(char* str) {
+    struct str s;
+    s.ptr = strdup(str);
+    CheckAllocPtr(s.ptr);
+    s.len = strlen(str);
+    return s;
+}
+
+char* StrGetAsCStr(struct str s) {
+    return s.ptr;
+}
+
+struct str StrSlice(struct str s, int start, int end) {
+    if (end > s.len) ErrorBugFound();
+    if (start > end) ErrorBugFound();
+    s.ptr += start;
+    s.len = end - start;
+    return s;
+}
 
 struct str StrMerge(struct str head, struct str tail) {
     head.len = (tail.ptr - head.ptr) + tail.len;
@@ -33,8 +54,9 @@ long long LongLongFromStr(struct str str) {
 }
 
 StrList StrListCreate() {
-    StrList sl = calloc(sizeof(*sl), 1);
+    StrList sl = malloc(sizeof(*sl));
     CheckAllocPtr(sl);
+    *sl = (struct strList){0};
     return sl;
 }
 

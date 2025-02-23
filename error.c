@@ -92,23 +92,20 @@ void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) { //NULL errMsg
 }
 
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is defined
-    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), errMsg);
+    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileNameAsCStr(tc), errMsg);
     printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1, printCharExpandSpaceNewLineEOF);
 }
 
-static TokenCtx lastTokenErrorContext = NULL;
-static int lastTokenErrorIndex = 0;
+static int lastErrTokenId = -1;
 
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
-    if (lastTokenErrorContext != NULL && lastTokenErrorContext == tok.owner &&
-            lastTokenErrorIndex == tok.tokListIdx) return;
-    syntaxErrorHeader(tok.lineNr, TokenGetFileName(tok.owner), errMsg);
+    if (lastErrTokenId == tok.tokId) return;
+    syntaxErrorHeader(tok.lineNr, TokenGetFileNameAsCStr(tok.owner), errMsg);
     if (tok.type == TOKEN_EOF) {
         printLastLineEOFError(tok.owner);
         return;
     }
     int startIndex =  TokenGetStrStart(tok.owner, tok.str);
     printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
-    lastTokenErrorContext = tok.owner;
-    lastTokenErrorIndex = tok.tokListIdx;
+    lastErrTokenId = tok.tokId;
 }

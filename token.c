@@ -5,8 +5,14 @@
 #include "token.h"
 #include "error.h"
 
+static int tokIdCtr = 0;
+
+int tokIdCtrCount() {
+    return tokIdCtr++;
+}
+
 struct tokenContext {
-    char* fileName;
+    struct str fileName;
 
     char* chars;
     int charLen;
@@ -62,8 +68,8 @@ void addChar(TokenCtx tc, char c) {
 }
 
 void readChars(TokenCtx tc) {
-    FILE* fp = fopen(tc->fileName, "r");
-    if (!fp) ErrorUnableToOpenFile(tc->fileName);
+    FILE* fp = fopen(StrGetAsCStr(tc->fileName), "r");
+    if (!fp) ErrorUnableToOpenFile(StrGetAsCStr(tc->fileName));
 
     int c;
     while ((c = fgetc(fp)) != EOF) {
@@ -232,6 +238,7 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
     else if (isSubIdentifer(start, "func")) return TOKEN_FUNC;
     else if (isSubIdentifer(start, "mut")) return TOKEN_MUT;
+    else if (isSubIdentifer(start, "import")) return TOKEN_IMPORT;
     return TOKEN_IDENTIFIER;
 }
 
@@ -289,7 +296,7 @@ void tokenContextAdd(TokenCtx tc, struct token tok) {
         tc->tokens = realloc(tc->tokens, sizeof(struct token) * tc->tokCap);
         CheckAllocPtr(tc->tokens);
     }
-    tok.tokListIdx = tc->tokLen;
+    tok.tokId = tokIdCtrCount();
     tok.owner = tc;
     tc->tokens[tc->tokLen] = tok;
     tc->tokLen++;
@@ -311,9 +318,10 @@ struct token TokenEOF(TokenCtx tc) {
     return tok;
 }
 
-TokenCtx TokenizeFile(char* fileName) {
-    TokenCtx tc = calloc(sizeof(*tc), 1);
+TokenCtx TokenizeFile(struct str fileName) {
+    TokenCtx tc = malloc(sizeof(*tc));
     CheckAllocPtr(tc);
+    *tc = (struct tokenContext){0};
     tc->charLineNr = 1;
     tc->fileName = fileName;
 
@@ -331,8 +339,12 @@ char TokenGetChar(TokenCtx tc, int index) {
     return tc->chars[index];
 }
 
-char* TokenGetFileName(TokenCtx tc) {
+struct str TokenGetFileName(TokenCtx tc) {
     return tc->fileName;
+}
+
+char *TokenGetFileNameAsCStr(TokenCtx tc) {
+    return StrGetAsCStr(tc->fileName);
 }
 
 int TokenGetLineNrLastFedChar(TokenCtx tc) {
@@ -379,11 +391,15 @@ void TokenUnfeed(TokenCtx tc) {
     tc->tokCursor--;
 }
 
+void TokenReset(TokenCtx tc) {
+    tc->tokCursor = 0;
+}
+
 struct token TokenMerge(struct token head, struct token tail) {
     if (head.owner != tail.owner) ErrorBugFound();
     head.type = TOKEN_MERGE;
     head.str = StrMerge(head.str, tail.str);
-    head.tokListIdx = NO_IDX;
+    head.tokId = tokIdCtrCount();
     return head;
 }
 
@@ -404,6 +420,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_VOCAB: return "vocab";
         case TOKEN_FUNC: return "func";
         case TOKEN_MUT: return "mut";
+        case TOKEN_IMPORT: return "import";
         case TOKEN_ADD: return "+";
         case TOKEN_SUB: return "-";
         case TOKEN_MUL: return "/";

@@ -20,8 +20,9 @@ struct var VarInit(struct str name, struct type t, struct token tok) {
 }
 
 VarList VarListCreate() {
-    VarList vl = calloc(sizeof(*vl), 1);
+    VarList vl = malloc(sizeof(*vl));
     CheckAllocPtr(vl);
+    *vl = (struct varList){0};
     return vl;
 }
 

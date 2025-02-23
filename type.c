@@ -23,14 +23,14 @@ struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant) {
     CheckAllocPtr(str.ptr);
     str.len = strlen(str.ptr);
 
-    struct type t = (struct type){};
+    struct type t = (struct type){0};
     t.name = str;
     t.bType = BaseTypeEmpty();
     t.bType->bTypeVariant = bTypeVariant;
     return t;
 }
 
-struct type TypeFromBaseType(struct str name, struct token tok, struct baseType* bType) {
+struct type Type(struct str name, struct token tok, struct baseType* bType) {
     struct type t = (struct type){0};
     t.name = name;
     t.tok = tok;
@@ -39,8 +39,9 @@ struct type TypeFromBaseType(struct str name, struct token tok, struct baseType*
 }
 
 TypeList TypeListCreate() {
-    TypeList tl = calloc(sizeof(*tl), 1);
+    TypeList tl = malloc(sizeof(*tl));
     CheckAllocPtr(tl);
+    *tl = (struct typeList){0};
     return tl;
 }
 
@@ -62,4 +63,20 @@ bool TypeListGet(TypeList tl, struct str name, struct type* t) {
         }
     }
     return false;
+}
+
+struct type* TypeListGetAsPtr(TypeList tl, struct str name) {
+    for (int i = 0; i < tl->len; i++) {
+        if (StrCmp(tl->ptr[i].name, name)) {
+            return tl->ptr + i;
+        }
+    }
+    return NULL;
+}
+
+
+void TypeListUpdate(TypeList tl, struct type t) {
+    for (int i = 0; i < tl->len; i++) {
+        if (StrCmp(tl->ptr[i].name, t.name)) tl->ptr[i] = t;
+    }
 }

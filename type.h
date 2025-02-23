@@ -3,6 +3,7 @@
 
 #include "token.h"
 #include "str.h"
+#include "ptrlist.h"
 
 typedef struct typeList* TypeList;
 
@@ -16,6 +17,7 @@ struct type {
     int nArrLvls;
     long long* arrLens;
     bool structMAlloc;
+    struct ptrList dependants; //updated upon completion of the type
 };
 
 #include "var.h"
@@ -43,9 +45,11 @@ struct baseType {
 
 struct baseType* BaseTypeEmpty();
 struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant);
-struct type TypeFromBaseType(struct str name, struct token tok, struct baseType* bType);
+struct type Type(struct str name, struct token tok, struct baseType* bType);
 TypeList TypeListCreate();
 void TypeListAdd(TypeList vl, struct type v);
 bool TypeListGet(TypeList vl, struct str name, struct type* v);
+struct type* TypeListGetAsPtr(TypeList tl, struct str name);
+void TypeListUpdate(TypeList tl, struct type t);
 
 #endif //TYPE_H

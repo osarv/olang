@@ -21,6 +21,7 @@ enum tokenType {
     TOKEN_VOCAB,
     TOKEN_FUNC,
     TOKEN_MUT,
+    TOKEN_IMPORT,
     TOKEN_ADD,
     TOKEN_SUB,
     TOKEN_MUL,
@@ -56,19 +57,19 @@ enum tokenType {
     TOKEN_CURLY_BRACKET_CLOSE
 };
 
-#define NO_IDX -1
 struct token {
     enum tokenType type;
     struct str str;
     int lineNr;
-    int tokListIdx; //filled in when added into the ctx
+    int tokId;
     TokenCtx owner; //filled in when added into the ctx
 };
 
-TokenCtx TokenizeFile(char* fileName);
+TokenCtx TokenizeFile(struct str fileName);
 int TokenGetCharCursor(TokenCtx tc);
 char TokenGetChar(TokenCtx tc, int index);
-char* TokenGetFileName(TokenCtx tc);
+struct str TokenGetFileName(TokenCtx tc);
+char* TokenGetFileNameAsCStr(TokenCtx tc);
 int TokenGetLineNrLastFedChar(TokenCtx tc);
 int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
@@ -77,6 +78,7 @@ int TokenGetEOFIndex(TokenCtx tc);
 struct token TokenPeek(TokenCtx);
 struct token TokenFeed(TokenCtx tc);
 void TokenUnfeed(TokenCtx tc);
+void TokenReset(TokenCtx tc);
 struct token TokenMerge(struct token head, struct token tail);
 char* TokenTypeToString(enum tokenType type);
 

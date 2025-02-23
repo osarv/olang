@@ -10,6 +10,7 @@
 #define EXPECTED_CLOSING_SQUARE_BRACKET "expected \"]\""
 #define EXPECTED_CLOSING_CURLY_OR_COMMA "expected \"}\" or \",\""
 #define EXPECTED_CLOSING_PAREN_OR_COMMA "expected \")\" or \",\""
+#define EXPECTED_FILE_NAME "expected file name"
 #define EXPECTED_VOCAB_WORD "expected vocabulary word"
 #define DUPLICATE_IDENTIFIER "duplicate identifier"
 #define INVALID_ARRAY_SIZE "invalid array size"
