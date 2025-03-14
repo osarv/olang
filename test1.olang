@@ -1,14 +1,18 @@
-type myTestArr sdfs[][]
-type sdfs myTestArr #this is a problem chief
+type myTestArr int32[][]
+type sdfs myTestArr
 type myVocab1 vocab {THIS, THAT}
 type myVocab2 vocab {THIS, THEN, NOW, WHAT}
+
 type myStruct struct {
-    this int32[2],
+    sfs int32[2],
     that int64,
-    dfs myStruct{} #chief this is a problem too
+    sdsdfs myTestArr,
+    dfs myStruct
 }
-type sdfsdfs myStruct
+
+type myStruct2 struct {
+    dfsfs myStruct{}
+}
 
 type MyFunc func(in mut int32[][])(int32, myStruct{}[][24])
-type MyFunc2 func(in byte[][], in2 mut myVocab1)(int32, myStruct{}[][24])
-type MyFunc3 func(in byte[][], in2 myStruct)(int32, myStruct{}[][24])
+type MyFunc2 func(in byte[], in2 mut myVocab1)(int32, int32, myStruct{}[][24])

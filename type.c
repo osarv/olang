@@ -11,13 +11,7 @@ struct typeList {
     struct type* ptr;
 };
 
-struct baseType* BaseTypeEmpty() {
-    struct baseType* bType = malloc(sizeof(*bType));
-    CheckAllocPtr(bType);
-    return bType;
-}
-
-struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant) {
+struct type TypeVanilla(char* name, enum baseType bType) {
     struct str str;
     str.ptr = strdup(name);
     CheckAllocPtr(str.ptr);
@@ -25,17 +19,14 @@ struct type TypeVanilla(char* name, enum baseTypeVariant bTypeVariant) {
 
     struct type t = (struct type){0};
     t.name = str;
-    t.bType = BaseTypeEmpty();
-    t.bType->bTypeVariant = bTypeVariant;
+    t.bType = bType;
     return t;
 }
 
-struct type Type(struct str name, struct token tok, struct baseType* bType) {
-    struct type t = (struct type){0};
-    t.name = name;
-    t.tok = tok;
-    t.bType = bType;
-    return t;
+struct type TypeFromType(struct str name, struct token tok, struct type tFrom) {
+    tFrom.name = name;
+    tFrom.tok = tok;
+    return tFrom;
 }
 
 TypeList TypeListCreate() {

@@ -5,6 +5,7 @@
 #include "parser.h"
 
 //error message strings
+#define EXPECTED_TYPE_DEFINITION "expected type definition"
 #define EXPECTED_TYPE_NAME "expected type name"
 #define EXPECTED_VAR_NAME "expected variable name"
 #define EXPECTED_CLOSING_SQUARE_BRACKET "expected \"]\""
@@ -12,7 +13,9 @@
 #define EXPECTED_CLOSING_PAREN_OR_COMMA "expected \")\" or \",\""
 #define EXPECTED_FILE_NAME "expected file name"
 #define EXPECTED_VOCAB_WORD "expected vocabulary word"
-#define DUPLICATE_IDENTIFIER "duplicate identifier"
+#define TYPE_NAME_IN_USE "type already name in use"
+#define VAR_NAME_IN_USE "variable already name in use"
+#define WORD_ALREADY_IN_USE "word already in use"
 #define INVALID_ARRAY_SIZE "invalid array size"
 #define UNKNOWN_SYMBOL "unknown symbol"
 #define INVALID_ESCAPE_CHAR "invalid escape character"
