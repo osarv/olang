@@ -12,7 +12,7 @@ void FinishCompilation() {
         printf(COLOR_FG_RED "compilation failed with %d error(s)\n" COLOR_RESET, nErrors);
         exit(EXIT_FAILURE);
     }
-    puts(COLOR_FG_GREEN "compilation succeeded" COLOR_RESET);
+    puts(COLOR_FG_GREEN "compilation successful" COLOR_RESET);
     exit(EXIT_SUCCESS);
 }
 
@@ -29,7 +29,7 @@ void CheckAllocPtr(void* ptr) {
 }
 
 void ErrorBugFound() {
-    errorFatal("bug found");
+    errorFatal("compiler bug found");
 }
 
 void ErrorUnableToOpenFile(char* fileName) {
@@ -92,7 +92,10 @@ void syntaxErrorHeader(int lineNr, char* fileName, char* errMsg) { //NULL errMsg
 }
 
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) { //NULL errMsg is defined
-    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileNameAsCStr(tc), errMsg);
+    struct str fileName = TokenGetFileName(tc);
+    char buffer[fileName.len + 1];
+    StrGetAsCStr(fileName, buffer);
+    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), buffer, errMsg);
     printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1, printCharExpandSpaceNewLineEOF);
 }
 
@@ -100,7 +103,12 @@ static int lastErrTokenId = -1;
 
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is defined
     if (lastErrTokenId == tok.tokId) return;
-    syntaxErrorHeader(tok.lineNr, TokenGetFileNameAsCStr(tok.owner), errMsg);
+
+    struct str fileName = TokenGetFileName(tok.owner);
+    char buffer[fileName.len + 1];
+    StrGetAsCStr(fileName, buffer);
+
+    syntaxErrorHeader(tok.lineNr, buffer, errMsg);
     if (tok.type == TOKEN_EOF) {
         printLastLineEOFError(tok.owner);
         return;

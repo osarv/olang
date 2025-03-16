@@ -68,8 +68,10 @@ void addChar(TokenCtx tc, char c) {
 }
 
 void readChars(TokenCtx tc) {
-    FILE* fp = fopen(StrGetAsCStr(tc->fileName), "r");
-    if (!fp) ErrorUnableToOpenFile(StrGetAsCStr(tc->fileName));
+    char buffer[tc->fileName.len +1];
+    StrGetAsCStr(tc->fileName, buffer);
+    FILE* fp = fopen(buffer, "r");
+    if (!fp) ErrorUnableToOpenFile(buffer);
 
     int c;
     while ((c = fgetc(fp)) != EOF) {
@@ -276,6 +278,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '&': tok.type = tokenizeAmpersand(tc); break;
         case '|': tok.type = tokenizeVBar(tc); break;
         case ',': tok.type = TOKEN_COMMA; break;
+        case '.': tok.type = TOKEN_DOT; break;
         case '~': tok.type = TOKEN_BITWISE_COMPLEMENT; break;
         case '(': tok.type = TOKEN_PAREN_OPEN; break;
         case ')': tok.type = TOKEN_PAREN_CLOSE; break;
@@ -341,10 +344,6 @@ char TokenGetChar(TokenCtx tc, int index) {
 
 struct str TokenGetFileName(TokenCtx tc) {
     return tc->fileName;
-}
-
-char *TokenGetFileNameAsCStr(TokenCtx tc) {
-    return StrGetAsCStr(tc->fileName);
 }
 
 int TokenGetLineNrLastFedChar(TokenCtx tc) {
@@ -426,6 +425,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_MUL: return "/";
         case TOKEN_DIV: return "*";
         case TOKEN_COMMA: return ",";
+        case TOKEN_DOT: return ".";
         case TOKEN_INCREMENT: return "++";
         case TOKEN_DECREMENT: return "--";
         case TOKEN_ASSIGNMENT_ADD: return "+=";

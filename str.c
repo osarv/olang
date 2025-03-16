@@ -19,8 +19,11 @@ struct str StrFromStackCStr(char* str) {
     return s;
 }
 
-char* StrGetAsCStr(struct str s) {
-    return s.ptr;
+void StrGetAsCStr(struct str s, char* buffer) { //assumes buffer is at least length of s plus 1
+    for (int i = 0; i < s.len; i++) {
+        buffer[i] = s.ptr[i];
+    }
+    buffer[s.len] = '\0';
 }
 
 struct str StrSlice(struct str s, int start, int end) {

@@ -11,7 +11,7 @@ struct str {
 };
 
 struct str StrFromStackCStr(char* str);
-char* StrGetAsCStr(struct str s);
+void StrGetAsCStr(struct str s, char* buffer); //assumes buffer is at least length of s plus 1
 struct str StrMerge(struct str head, struct str tail);
 struct str StrSlice(struct str s, int start, int end);
 bool StrCmp(struct str a, struct str b); //returns true on same and false on different

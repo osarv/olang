@@ -9,11 +9,23 @@
 #include "var.h"
 #include "error.h"
 
+struct pcAlias {
+    struct str str;
+    ParserCtx pc;
+};
+
+struct pcAliasList {
+    int cap;
+    int len;
+    struct pcAlias* ptr;
+};
+
 struct parserContext {
     TokenCtx tc; //contains fileName
     TypeList publTypes;
     TypeList privTypes;
-    struct pcList* ctxs;
+    struct pcList* ctxs; //universal across the compilation
+    struct pcAliasList aliases; //private for each parser context
 };
 
 struct pcList {
@@ -21,6 +33,28 @@ struct pcList {
     int len;
     ParserCtx* ptr;
 };
+
+#define PC_ALIAS_LIST_STEP_SIZE 100
+void pcAliasListAdd(struct pcAliasList* al, struct pcAlias alias) {
+    if (al->len >= al->cap) {
+        al->cap += PC_ALIAS_LIST_STEP_SIZE;
+        al->ptr = realloc(al->ptr, sizeof(*(al->ptr)) * al->cap);
+        CheckAllocPtr(al->ptr);
+    }
+    al->ptr[al->len] = alias;
+    al->len++;
+}
+
+ParserCtx pcAliasListGetPc(struct pcAliasList* al, struct str alias) {
+    for (int i = 0; i < al->len; i++) {
+        if (StrCmp(al->ptr[i].str, alias)) return al->ptr[i].pc;
+    }
+    return NULL;
+}
+
+void pcAliasListClear(struct pcAliasList* al) {
+    al->len = 0;
+}
 
 struct pcList* pcListNew() {
     struct pcList* list = malloc(sizeof(*list));
@@ -186,11 +220,26 @@ void tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
     }
 }
 
-bool parseType(ParserCtx pc, struct type* t) {
+ParserCtx tryParseAlias(ParserCtx pc) { //returns pc if not found
+    struct token aliasTok;
     struct token tok;
-    if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_TYPE_NAME)) return false;
-    if (!pcGetType(pc, tok.str, t)) {
-        SyntaxErrorInvalidToken(tok, EXPECTED_TYPE_NAME);
+    if (!tryParseToken(pc, TOKEN_IDENTIFIER, &aliasTok)) return pc;
+    if (tryParseToken(pc, TOKEN_DOT, &tok)) {
+        ParserCtx aliasCtx = pcAliasListGetPc(&(pc->aliases), aliasTok.str);
+        if (aliasCtx) return aliasCtx;
+        SyntaxErrorInvalidToken(aliasTok, UNKNOWN_FILE_ALIAS);
+        return pc;
+    }
+    TokenUnfeed(pc->tc);
+    return pc;
+}
+
+bool parseType(ParserCtx pc, struct type* t) {
+    ParserCtx tSource = tryParseAlias(pc);
+    struct token tok;
+    if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, UNKNOWN_TYPE)) return false;
+    if (!pcGetType(tSource, tok.str, t)) {
+        SyntaxErrorInvalidToken(tok, UNKNOWN_TYPE);
         return false;
     }
     t->tok = tok;
@@ -199,7 +248,7 @@ bool parseType(ParserCtx pc, struct type* t) {
 
 bool parseTypeNoPlaceholder(ParserCtx pc, struct type* t) {
     if (!parseType(pc, t)) return false;
-    if (t->placeholder) SyntaxErrorInvalidToken(t->tok, EXPECTED_TYPE_NAME);
+    if (t->placeholder) SyntaxErrorInvalidToken(t->tok, UNKNOWN_TYPE);
     return true;
 }
 
@@ -229,7 +278,7 @@ bool parseVarDeclaration(ParserCtx pc, struct var* v) {
 bool parseStructMember(ParserCtx pc, struct var* v) {
     if (!parseVarDeclaration(pc, v)) return false;
     if (v->type.structMAlloc == true && v->type.placeholder) {
-        SyntaxErrorInvalidToken(v->type.tok, EXPECTED_TYPE_NAME);
+        SyntaxErrorInvalidToken(v->type.tok, UNKNOWN_TYPE);
         return false;
     }
     return true;
@@ -366,7 +415,7 @@ void parseTypeDef(ParserCtx pc) {
         case TOKEN_STRUCT: t = TypeFromType(nameTok.str, nameTok, parseTypeDefStruct(pc)); break;
         case TOKEN_VOCAB: t = TypeFromType(nameTok.str, nameTok, parseTypeDefVocab(pc)); break;
         case TOKEN_FUNC: t = TypeFromType(nameTok.str, nameTok, parseTypeDefFunc(pc)); break;
-        default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION);
+        default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION); return;
     }
     tryParseTypeArrayDeclarationRefsOnly(pc, &t);
     pcUpdateOrAddType(pc, t);
@@ -384,15 +433,22 @@ ParserCtx parserCtxNew(struct str fileName, struct pcList* ctxs) {
     return pc;
 }
 
-ParserCtx parseImportCtx(ParserCtx parentCtx) {
+ParserCtx parseImport(ParserCtx parentCtx) {
     struct token tok;
-    parseToken(parentCtx, TOKEN_STRING_LITERAL, &tok, EXPECTED_FILE_NAME);
-    struct str fileName = StrSlice(tok.str, 1, tok.str.len -2);
-
     ParserCtx importCtx;
-    if ((importCtx = pcListGet(parentCtx->ctxs, fileName))) return importCtx;
-    importCtx = parserCtxNew(fileName, parentCtx->ctxs);
-    pcListAdd(parentCtx->ctxs, importCtx);
+    parseToken(parentCtx, TOKEN_STRING_LITERAL, &tok, EXPECTED_FILE_NAME);
+    struct str fileName = StrSlice(tok.str, 1, tok.str.len -1);
+    parseToken(parentCtx, TOKEN_IDENTIFIER, &tok, EXPECTED_FILE_ALIAS);
+
+    if ((importCtx = pcListGet(parentCtx->ctxs, fileName)));
+    else {
+        importCtx = parserCtxNew(fileName, parentCtx->ctxs);
+        pcListAdd(parentCtx->ctxs, importCtx);
+    }
+    struct pcAlias alias;
+    alias.str = tok.str;
+    alias.pc = importCtx;
+    pcAliasListAdd(&(parentCtx->aliases), alias);
     return importCtx;
 }
 
@@ -418,7 +474,7 @@ void parseFileFirstPass(ParserCtx pc) {
         struct token tok = TokenFeed(pc->tc);
         switch (tok.type) {
             case TOKEN_TYPE: parseStructPlaceholder(pc); break;
-            case TOKEN_IMPORT: parseFileFirstPass(parseImportCtx(pc)); break;
+            case TOKEN_IMPORT: parseFileFirstPass(parseImport(pc)); break;
             default: break;
         }
     }
@@ -429,38 +485,32 @@ void parseFileSecondPass(ParserCtx pc) {
         struct token tok = TokenFeed(pc->tc);
         switch (tok.type) {
             case TOKEN_TYPE: parseTypeDef(pc); break;
+            case TOKEN_IMPORT: parseFileSecondPass(parseImport(pc)); break;
             default: break;
         }
     }
 }
 
-void parseFileThirdPass(ParserCtx pc) {
-    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
-        struct token tok = TokenFeed(pc->tc);
-        switch (tok.type) {
-            default: break;
-        }
+void pcListResetTokenCtxs(struct pcList* ctxs) {
+    for (int i = 0; i < ctxs->len; i++) {
+        TokenReset(ctxs->ptr[i]->tc);
     }
 }
 
-void parseFileFourthPass(ParserCtx pc) {
-    while (TokenPeek(pc->tc).type != TOKEN_EOF) {
-        struct token tok = TokenFeed(pc->tc);
-        switch (tok.type) {
-            default: break;
-        }
+void pcListClearAliases(struct pcList* ctxs) {
+    for (int i = 0; i < ctxs->len; i++) {
+        pcAliasListClear(&(ctxs->ptr[i]->aliases));
     }
 }
 
 ParserCtx ParseFile(char* fileName) {
     struct pcList* ctxs = pcListNew();
     ParserCtx pc = parserCtxNew(StrFromStackCStr(fileName), ctxs);
+    pcListAdd(ctxs, pc);
     parseFileFirstPass(pc);
-    TokenReset(pc->tc);
+    pcListResetTokenCtxs(ctxs);
+    pcListClearAliases(ctxs);
     parseFileSecondPass(pc);
-    TokenReset(pc->tc);
-    parseFileThirdPass(pc);
-    TokenReset(pc->tc);
-    parseFileFourthPass(pc);
+    pcListResetTokenCtxs(ctxs);
     return pc;
 }

@@ -27,6 +27,7 @@ enum tokenType {
     TOKEN_MUL,
     TOKEN_DIV,
     TOKEN_COMMA,
+    TOKEN_DOT,
     TOKEN_INCREMENT,
     TOKEN_DECREMENT,
     TOKEN_ASSIGNMENT_ADD,
@@ -69,7 +70,6 @@ TokenCtx TokenizeFile(struct str fileName);
 int TokenGetCharCursor(TokenCtx tc);
 char TokenGetChar(TokenCtx tc, int index);
 struct str TokenGetFileName(TokenCtx tc);
-char* TokenGetFileNameAsCStr(TokenCtx tc);
 int TokenGetLineNrLastFedChar(TokenCtx tc);
 int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found

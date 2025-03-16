@@ -3,6 +3,9 @@ type sdfs myTestArr
 type myVocab1 vocab {THIS, THAT}
 type myVocab2 vocab {THIS, THEN, NOW, WHAT}
 
+import "test2.olang" test2
+type sdfsddfs test2.myInt23
+
 type myStruct struct {
     sfs int32[2],
     that int64,
