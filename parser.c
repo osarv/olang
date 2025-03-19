@@ -246,9 +246,10 @@ bool parseType(ParserCtx pc, struct type* t) {
     return true;
 }
 
-bool parseTypeNoPlaceholder(ParserCtx pc, struct type* t) {
+bool parseTypeDefType(ParserCtx pc, struct type* t) {
     if (!parseType(pc, t)) return false;
     if (t->placeholder) SyntaxErrorInvalidToken(t->tok, UNKNOWN_TYPE);
+    tryParseTypeArrayDeclarationRefsOnly(pc, t);
     return true;
 }
 
@@ -278,17 +279,16 @@ bool parseVarDeclaration(ParserCtx pc, struct var* v) {
 bool parseStructMember(ParserCtx pc, struct var* v) {
     if (!parseVarDeclaration(pc, v)) return false;
     if (v->type.structMAlloc == true && v->type.placeholder) {
-        SyntaxErrorInvalidToken(v->type.tok, UNKNOWN_TYPE);
+        SyntaxErrorInvalidToken(v->type.tok, STRUCT_NOT_YET_DEFINED);
         return false;
     }
     return true;
 }
 
-VarList parseStructMembersList(ParserCtx pc) {
-    VarList vars = VarListCreate();
-    if (TokenPeek(pc->tc).type == TOKEN_CURLY_BRACKET_CLOSE) return vars;
+void parseStructMembersList(ParserCtx pc, VarList members) {
+    if (TokenPeek(pc->tc).type == TOKEN_CURLY_BRACKET_CLOSE) return;
     struct var var;
-    if (parseStructMember(pc, &var)) VarListAdd(vars, var);
+    if (parseStructMember(pc, &var)) VarListAdd(members, var);
     else parseUntilCommaOrCurlyClose(pc);
     struct token tok;
     while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
@@ -297,18 +297,18 @@ VarList parseStructMembersList(ParserCtx pc) {
             continue;
         }
         struct var tmp;
-        if (VarListGet(vars, var.name, &tmp)) SyntaxErrorInvalidToken(var.tok, VAR_NAME_IN_USE);
-        VarListAdd(vars, var);
+        if (VarListGet(members, var.name, &tmp)) SyntaxErrorInvalidToken(var.tok, VAR_NAME_IN_USE);
+        VarListAdd(members, var);
     }
-    return vars;
 }
 
 struct type parseTypeDefStruct(ParserCtx pc) {
     struct token tok;
     struct type t = (struct type){0};
     t.bType = BASETYPE_STRUCT;
+    t.vars = VarListCreate();
     parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
-    t.vars = parseStructMembersList(pc);
+    parseStructMembersList(pc, t.vars);
     parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, EXPECTED_CLOSING_CURLY_OR_COMMA);
     return t;
 }
@@ -411,13 +411,12 @@ void parseTypeDef(ParserCtx pc) {
     struct token defTok = TokenFeed(pc->tc);
     struct type t = (struct type){0};
     switch(defTok.type) {
-    case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); parseTypeNoPlaceholder(pc, &t); t = TypeFromType(nameTok.str, nameTok, t); break;
+    case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); parseTypeDefType(pc, &t); t = TypeFromType(nameTok.str, nameTok, t); break;
         case TOKEN_STRUCT: t = TypeFromType(nameTok.str, nameTok, parseTypeDefStruct(pc)); break;
         case TOKEN_VOCAB: t = TypeFromType(nameTok.str, nameTok, parseTypeDefVocab(pc)); break;
         case TOKEN_FUNC: t = TypeFromType(nameTok.str, nameTok, parseTypeDefFunc(pc)); break;
         default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION); return;
     }
-    tryParseTypeArrayDeclarationRefsOnly(pc, &t);
     pcUpdateOrAddType(pc, t);
 }
 
@@ -458,6 +457,7 @@ struct type StructPlaceholder(struct token nameTok) {
     t.name = nameTok.str;
     t.tok = nameTok;
     t.placeholder = true;
+    t.vars = VarListCreate();
     return t;
 }
 

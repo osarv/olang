@@ -22,6 +22,7 @@ enum baseType {
 
 #define ARRAY_REF -1 //for array dimensions that hold references
 struct type {
+    struct type* subType; //embedded type
     enum baseType bType;
     struct str name;
     struct token tok;

@@ -27,6 +27,7 @@
 #define EMPTY_CHAR_LITERAL "empty character literal"
 #define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
 #define MULTIPLE_DECIMAL_POINTS "mutliple decimal points"
+#define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
 
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);
