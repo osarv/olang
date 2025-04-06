@@ -235,6 +235,8 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     if (isSubIdentifer(start, "if")) return TOKEN_IF;
     else if (isSubIdentifer(start, "else")) return TOKEN_ELSE;
     else if (isSubIdentifer(start, "for")) return TOKEN_FOR;
+    else if (isSubIdentifer(start, "compif")) return TOKEN_COMPIF;
+    else if (isSubIdentifer(start, "compelse")) return TOKEN_COMPELSE;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
@@ -402,6 +404,15 @@ struct token TokenMerge(struct token head, struct token tail) {
     return head;
 }
 
+int tokenGetCursor(TokenCtx tc) {
+    return tc->tokCursor;
+}
+
+void tokenSetCursor(TokenCtx tc, int cursor) {
+    if (cursor > tc->tokLen) ErrorBugFound();
+    tc->tokCursor = cursor;
+}
+
 char* TokenTypeToString(enum tokenType type) {
     switch(type) {
         case TOKEN_MERGE: ErrorBugFound(); break;
@@ -413,6 +424,8 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_IDENTIFIER: return "identifier";
         case TOKEN_IF: return "if";
         case TOKEN_ELSE: return "else";
+        case TOKEN_COMPIF: return "compif";
+        case TOKEN_COMPELSE: return "compelse";
         case TOKEN_FOR: return "for";
         case TOKEN_TYPE: return "type";
         case TOKEN_STRUCT: return "struct";

@@ -8,6 +8,7 @@
 typedef struct typeList* TypeList;
 
 enum baseType {
+    BASETYPE_BOOL,
     BASETYPE_INT32,
     BASETYPE_INT64,
     BASETYPE_FLOAT32,
@@ -40,7 +41,7 @@ struct type {
 struct type TypeVanilla(char* name, enum baseType bType);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
 TypeList TypeListCreate();
-void TypeListAdd(TypeList vl, struct type v);
+void TypeListAdd(TypeList tl, struct type t); //may not be used when types are hidden
 bool TypeListGet(TypeList vl, struct str name, struct type* v);
 struct type* TypeListGetAsPtr(TypeList tl, struct str name);
 void TypeListUpdate(TypeList tl, struct type t);

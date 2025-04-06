@@ -8,6 +8,7 @@
 #define EXPECTED_TYPE_DEFINITION "expected type definition"
 #define EXPECTED_TYPE_NAME "expected type name"
 #define EXPECTED_VAR_NAME "expected variable name"
+#define EXPECTED_OPENING_CURLY "expected \"{\""
 #define EXPECTED_CLOSING_SQUARE_BRACKET "expected \"]\""
 #define EXPECTED_CLOSING_CURLY_OR_COMMA "expected \"}\" or \",\""
 #define EXPECTED_CLOSING_PAREN_OR_COMMA "expected \")\" or \",\""
@@ -28,6 +29,9 @@
 #define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
 #define MULTIPLE_DECIMAL_POINTS "mutliple decimal points"
 #define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
+#define TYPE_IS_PRIVATE "this type is private"
+#define VAR_IS_PRIVATE "this variable is private"
+#define FUNC_ARG_PUBLIC "function arguments may not be declared public"
 
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);

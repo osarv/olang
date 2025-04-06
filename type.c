@@ -8,6 +8,7 @@
 struct typeList {
     int len;
     int cap;
+    int hidden;
     struct type* ptr;
 };
 
@@ -37,7 +38,7 @@ TypeList TypeListCreate() {
 }
 
 #define TYPE_ALLOC_STEP_SIZE 100
-void TypeListAdd(TypeList tl, struct type t) {
+void TypeListAdd(TypeList tl, struct type t) { //may not be used when types are hidden
     if (tl->len >= tl->cap) {
         tl->cap += TYPE_ALLOC_STEP_SIZE;
         tl->ptr = realloc(tl->ptr, sizeof(*(tl->ptr)) * tl->cap);
@@ -70,4 +71,16 @@ void TypeListUpdate(TypeList tl, struct type t) {
     for (int i = 0; i < tl->len; i++) {
         if (StrCmp(tl->ptr[i].name, t.name)) tl->ptr[i] = t;
     }
+}
+
+void TypeListHideAll(TypeList tl) {
+    tl->hidden += tl->len;
+    tl->len = 0;
+}
+
+void TypeListUnHideIfNextOne(TypeList tl, struct str name) {
+    if (tl->hidden <= 0) ErrorBugFound();
+    if (!StrCmp(tl->ptr[tl->len].name, name)) return;
+    tl->hidden--;
+    tl->len++;
 }

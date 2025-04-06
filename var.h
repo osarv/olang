@@ -6,12 +6,14 @@ typedef struct varList* VarList;
 #include "type.h"
 #include "str.h"
 #include "token.h"
+#include "operation.h"
 
 struct var {
     struct str name;
     struct type type;
     struct token tok;
     bool mut; //for function arguments
+    struct operationList* values;
 };
 
 struct var VarInit(struct str name, struct type t, struct token tok);

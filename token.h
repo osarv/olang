@@ -15,6 +15,8 @@ enum tokenType {
     TOKEN_IDENTIFIER,
     TOKEN_IF,
     TOKEN_ELSE,
+    TOKEN_COMPIF,
+    TOKEN_COMPELSE,
     TOKEN_FOR,
     TOKEN_TYPE,
     TOKEN_STRUCT,
@@ -79,6 +81,8 @@ struct token TokenPeek(TokenCtx);
 struct token TokenFeed(TokenCtx tc);
 void TokenUnfeed(TokenCtx tc);
 void TokenReset(TokenCtx tc);
+int tokenGetCursor(TokenCtx tc);
+void tokenSetCursor(TokenCtx tc, int cursor);
 struct token TokenMerge(struct token head, struct token tail);
 char* TokenTypeToString(enum tokenType type);
 
