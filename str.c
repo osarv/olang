@@ -26,6 +26,16 @@ void StrGetAsCStr(struct str s, char* buffer) { //assumes buffer is at least len
     buffer[s.len] = '\0';
 }
 
+char* StrGetAsCStrMalloc(struct str s) {
+    char* str = malloc(sizeof(char) * s.len + 1);
+    CheckAllocPtr(str);
+    for (int i = 0; i < s.len; i++) {
+        str[i] = s.ptr[i];
+    }
+    str[s.len] = '\0';
+    return str;
+}
+
 struct str StrSlice(struct str s, int start, int end) {
     if (end > s.len) ErrorBugFound();
     if (start > end) ErrorBugFound();
@@ -45,15 +55,6 @@ bool StrCmp(struct str a, struct str b) { //returns true on same and false on di
         if (a.ptr[i] != b.ptr[i]) return false;
     }
     return true;
-}
-
-long long LongLongFromStr(struct str str) {
-    char tmp[str.len + 1];
-    tmp[str.len] = '\0';
-    for (int i = 0; i < str.len; i++) {
-        tmp[i] = str.ptr[i];
-    }
-    return atoll(tmp);
 }
 
 StrList StrListCreate() {
@@ -81,4 +82,35 @@ bool StrListGet(StrList sl, struct str pattern, struct str* s) {
         }
     }
     return false;
+}
+
+char charFromEscapeStr(struct str s) {
+    switch (s.ptr[2]) {
+        case 'n': return '\n';
+        case 't': return '\t';
+    }
+    return s.ptr[2];
+}
+
+char CharFromStr(struct str s) {
+    if (s.ptr[1] == '\\') return charFromEscapeStr(s);
+    else return s.ptr[1];
+}
+
+long long LongLongFromStr(struct str s) {
+    char tmp[s.len + 1];
+    tmp[s.len] = '\0';
+    for (int i = 0; i < s.len; i++) {
+        tmp[i] = s.ptr[i];
+    }
+    return atoll(tmp);
+}
+
+double DoubleFromStr(struct str s) {
+    char tmp[s.len + 1];
+    tmp[s.len] = '\0';
+    for (int i = 0; i < s.len; i++) {
+        tmp[i] = s.ptr[i];
+    }
+    return atof(tmp);
 }

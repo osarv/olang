@@ -33,6 +33,7 @@ struct pcAliasList {
 };
 
 struct parserContext {
+    int id;
     TokenCtx tc; //contains fileName
     struct rangeList jumps;
     struct pcList* ctxs; //universal across the compilation
@@ -92,13 +93,6 @@ void pcAliasListClear(struct pcAliasList* al) {
     al->len = 0;
 }
 
-struct pcList* pcListNew() {
-    struct pcList* list = malloc(sizeof(*list));
-    *list = (struct pcList){0};
-    CheckAllocPtr(list);
-    return list;
-}
-
 #define PC_LIST_ALLOC_STEP 100
 void pcListAdd(struct pcList* list, ParserCtx pc) {
     if (list->len >= list->cap) {
@@ -126,6 +120,7 @@ bool isPublic(struct str name) {
 
 void pcAddType(ParserCtx pc, struct type t) {
     struct type tmpType;
+    t.pcId = pc->id;
     if (TypeListGet(pc->types, t.name, &tmpType)) SyntaxErrorInvalidToken(t.tok, TYPE_NAME_IN_USE);
     TypeListAdd(pc->types, t);
 }
@@ -143,14 +138,12 @@ void pcUpdateOrAddType(ParserCtx pc, struct type t) {
 }
 
 void addVanillaTypes(ParserCtx pc) {
-    pcAddType(pc, TypeVanilla("bool", BASETYPE_BOOL));
-    pcAddType(pc, TypeVanilla("int32", BASETYPE_INT32));
-    pcAddType(pc, TypeVanilla("int64", BASETYPE_INT64));
-    pcAddType(pc, TypeVanilla("float32", BASETYPE_FLOAT32));
-    pcAddType(pc, TypeVanilla("float64", BASETYPE_FLOAT64));
-    pcAddType(pc, TypeVanilla("bit32", BASETYPE_BIT32));
-    pcAddType(pc, TypeVanilla("bit64", BASETYPE_BIT64));
-    pcAddType(pc, TypeVanilla("byte", BASETYPE_BYTE));
+    pcAddType(pc, TypeVanilla(BASETYPE_BOOL));
+    pcAddType(pc, TypeVanilla(BASETYPE_BYTE));
+    pcAddType(pc, TypeVanilla(BASETYPE_INT32));
+    pcAddType(pc, TypeVanilla(BASETYPE_INT64));
+    pcAddType(pc, TypeVanilla(BASETYPE_FLOAT32));
+    pcAddType(pc, TypeVanilla(BASETYPE_FLOAT64));
 }
 
 int discardUntilOneOfTokensOrEOF(ParserCtx pc, enum tokenType tokens[], int len) {
@@ -202,6 +195,11 @@ bool parseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr, char* e
     return false;
 }
 
+void parseTokenOrSkipUntil(ParserCtx pc, enum tokenType type, char* errMsg) {
+    struct token tok;
+    if (!parseToken(pc, type, &tok, errMsg)) TokenFeedUntil(pc->tc, type);
+}
+
 bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
     *tokPtr = TokenFeed(pc->tc);
     if (tokPtr->type == type) return true;
@@ -209,46 +207,34 @@ bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
     return false;
 }
 
-void tryParseTypeArrayDeclarationRefsOnly(ParserCtx pc, struct type* t) {
-    struct token tok;
-    if (TokenPeek(pc->tc).type != TOKEN_SQUARE_BRACKET_OPEN) return;
-    t->arrLens = realloc(t->arrLens, sizeof(*(t->arrLens)) * 20);
-    CheckAllocPtr(t->arrLens);
+struct operand* tryParseExpr(ParserCtx pc);
 
-    while (tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
-        discardUntilClosingSquareBracket(pc);
-        parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
-        t->arrLens[t->nArrLvls] = ARRAY_REF;
-        t->nArrLvls++;
-        t->tok = TokenMerge(t->tok, tok);
+struct operand* parseIntExpr(ParserCtx pc) {
+    struct token startTok = TokenPeek(pc->tc);
+    struct operand* expr = tryParseExpr(pc);
+    if (!expr) {
+        SyntaxErrorInvalidToken(TokenMerge(startTok, TokenPrevious(pc->tc)), OPERATION_REQUIRES_INT);
+        return NULL;
     }
+    if (!OperandIsInt(expr)) {
+        SyntaxErrorInvalidToken(expr->tok, OPERATION_REQUIRES_INT);
+        return NULL;
+    }
+    return expr;
 }
 
 void tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
     struct token tok;
-    if (TokenPeek(pc->tc).type != TOKEN_SQUARE_BRACKET_OPEN) return;
-    t->arrLens = realloc(t->arrLens, sizeof(*(t->arrLens)) * 20);
-    CheckAllocPtr(t->arrLens);
+    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return;
+    t->arrLen = parseIntExpr(pc);
+    parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
+    t->arrLvls++;
+    t->arrMalloc = true;
 
-    while (tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
-        tok = TokenFeed(pc->tc);
-        if (tok.type == TOKEN_SQUARE_BRACKET_CLOSE) {
-            t->arrLens[t->nArrLvls] = ARRAY_REF;
-            t->nArrLvls++;
-            t->tok = TokenMerge(t->tok, tok);
-        }
-        else if (tok.type == TOKEN_INT_LITERAL) {
-            t->arrLens[t->nArrLvls] = LongLongFromStr(tok.str);
-            t->nArrLvls++;
-            parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
-            t->tok = TokenMerge(t->tok, tok);
-        }
-        else {
-            TokenUnfeed(pc->tc);
-            SyntaxErrorInvalidToken(tok, INVALID_ARRAY_SIZE);
-            parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
-        }
-    }
+    t->tok = TokenMerge(t->tok, tok);
+    if (t->bType == BASETYPE_ARRAY) return;
+    t->arrBase = t->bType;
+    t->bType = BASETYPE_ARRAY;
 }
 
 ParserCtx tryParseAlias(ParserCtx pc) { //returns pc if not found
@@ -265,33 +251,133 @@ ParserCtx tryParseAlias(ParserCtx pc) { //returns pc if not found
     return pc;
 }
 
+void tryParseTypeArrayRefLevels(ParserCtx pc, struct type* t) {
+    struct token tok;
+    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return;
+    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok)) {
+        TokenUnfeed(pc->tc);
+        return;
+    }
+    TokenUnfeed(pc->tc);
+    TokenUnfeed(pc->tc);
+    while (tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
+        if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok)) {
+            TokenUnfeed(pc->tc);
+            break;
+        }
+        t->arrLvls++;
+    }
+    t->tok = TokenMerge(t->tok, tok);
+    if (t->bType == BASETYPE_ARRAY) return;
+    t->arrBase = t->bType;
+    t->bType = BASETYPE_ARRAY;
+}
+
 bool parseType(ParserCtx pc, struct type* t) {
-    ParserCtx tSource = tryParseAlias(pc);
+    ParserCtx source = tryParseAlias(pc);
     struct token tok;
     if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, UNKNOWN_TYPE)) return false;
-    if (!TypeListGet(tSource->types, tok.str, t)) {
+    if (!TypeListGet(source->types, tok.str, t)) {
         SyntaxErrorInvalidToken(tok, UNKNOWN_TYPE);
         return false;
     }
     t->tok = tok;
-    if (tSource != pc && !isPublic(t->name)) {
+    if (source != pc && !isPublic(t->name)) {
         SyntaxErrorInvalidToken(t->tok, TYPE_IS_PRIVATE);
         return false;
     }
+    tryParseTypeArrayRefLevels(pc, t);
     return true;
 }
 
+void tryParseStructDerefAndArrayIndexing(ParserCtx pc, struct var* v) {
+    struct token tok;
+    while (true) {
+        if (v->type.bType == BASETYPE_STRUCT && tryParseToken(pc, TOKEN_DOT, &tok)) {
+            parseToken(pc, TOKEN_IDENTIFIER, &tok, NULL);
+            struct var vMember;
+            if (VarListGet(v->type.vars, tok.str, &vMember)) *v = vMember;
+            v->tok = TokenMerge(v->tok, tok);
+        }
+        else if (v->type.bType == BASETYPE_ARRAY && tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
+            parseIntExpr(pc);
+            parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
+            v->tok = TokenMerge(v->tok, tok);
+            v->type.arrLvls--;
+            if (v->type.arrLvls == 0) v->type.bType = v->type.arrBase;
+        }
+        else break;
+    }
+}
+
+bool tryParseVar(ParserCtx pc, struct var* v) {
+    int startCursor = TokenGetCursor(pc->tc);
+    ParserCtx source = tryParseAlias(pc);
+    struct token tok;
+    if (!tryParseToken(pc, TOKEN_IDENTIFIER, &tok)) {
+        TokenSetCursor(pc->tc, startCursor);
+        return false;
+    }
+    if (!VarListGet(source->vars, tok.str, v) || (source != pc && !isPublic(v->name))) {
+        TokenSetCursor(pc->tc, startCursor);
+        return false;
+    }
+    v->tok = tok;
+    tryParseStructDerefAndArrayIndexing(pc, v);
+    return true;
+}
+
+struct operand* tryParseSingleOperandVarOperand(ParserCtx pc) {
+    struct var v;
+    if (!tryParseVar(pc, &v)) return NULL;
+    if (v.values.len == 0) {SyntaxErrorInvalidToken(v.tok, VAR_NOT_INITIALIZED); return NULL;}
+    else if (v.values.len > 1) {SyntaxErrorInvalidToken(v.tok, OPERATION_YIELDS_MORE_THAN_ONE); return NULL;}
+    else return v.values.ptr[0];
+}
+
+struct operand* tryParseOperand(ParserCtx pc);
+
+struct operand* tryParseTypeCast(ParserCtx pc) {
+    int startCursor = TokenGetCursor(pc->tc);
+    ParserCtx source = tryParseAlias(pc);
+    struct type t;
+    struct token tok;
+    if (!tryParseToken(pc, TOKEN_IDENTIFIER, &tok)) {
+        TokenSetCursor(pc->tc, startCursor);
+        return NULL;
+    }
+    if (!TypeListGet(source->types, tok.str, &t) || (source != pc && !isPublic(t.name))) {
+        TokenSetCursor(pc->tc, startCursor);
+        return NULL;
+    }
+    if (!parseToken(pc, TOKEN_PAREN_OPEN, &tok, NULL)) {
+        TokenSetCursor(pc->tc, startCursor);
+        return NULL;
+    }
+    struct operand* op = tryParseOperand(pc);
+    if (!op) {
+        TokenSetCursor(pc->tc, startCursor);
+        return NULL;
+    }
+    if (!parseToken(pc, TOKEN_PAREN_CLOSE, &tok, NULL)) {
+        TokenSetCursor(pc->tc, startCursor);
+        return NULL;
+    }
+
+    return OperandCreateTypeCast(op, t);
+}
+
 bool parseVar(ParserCtx pc, struct var* v) {
-    ParserCtx vSource = tryParseAlias(pc);
+    ParserCtx source = tryParseAlias(pc);
     struct token tok;
     if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, UNKNOWN_VAR)) return false;
-    if (!VarListGet(vSource->vars, tok.str, v)) {
+    if (!VarListGet(source->vars, tok.str, v)) {
         SyntaxErrorInvalidToken(tok, UNKNOWN_VAR);
         return false;
     }
     v->tok = tok;
-    if (vSource != pc && !isPublic(v->name)) {
-        SyntaxErrorInvalidToken(v->tok, VAR_IS_PRIVATE);
+    if (source != pc && !isPublic(v->name)) {
+        SyntaxErrorInvalidToken(tok, VAR_IS_PRIVATE);
         return false;
     }
     return true;
@@ -300,7 +386,6 @@ bool parseVar(ParserCtx pc, struct var* v) {
 bool parseTypeDefType(ParserCtx pc, struct type* t) {
     if (!parseType(pc, t)) return false;
     if (t->placeholder) SyntaxErrorInvalidToken(t->tok, UNKNOWN_TYPE);
-    tryParseTypeArrayDeclarationRefsOnly(pc, t);
     return true;
 }
 
@@ -315,6 +400,7 @@ bool parseTypeDeclaration(ParserCtx pc, struct type* t) {
         }
     }
     tryParseTypeArrayDeclaration(pc, t);
+    TypeSetSize(t);
     return true;
 }
 
@@ -360,7 +446,7 @@ struct type parseTypeDefStruct(ParserCtx pc) {
     t.vars = VarListCreate();
     parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
     parseStructMembersList(pc, t.vars);
-    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, EXPECTED_CLOSING_CURLY_OR_COMMA);
+    parseTokenOrSkipUntil(pc, TOKEN_CURLY_BRACKET_CLOSE, EXPECTED_CLOSING_CURLY_OR_COMMA);
     return t;
 }
 
@@ -389,7 +475,7 @@ struct type parseTypeDefVocab(ParserCtx pc) {
     t.bType = BASETYPE_VOCAB;
     parseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
     t.words = parseVocabWords(pc);
-    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, EXPECTED_CLOSING_CURLY_OR_COMMA);
+    parseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, NULL);
     return t;
 }
 
@@ -405,7 +491,6 @@ bool parseFuncArg(ParserCtx pc, struct var* v) {
     struct token mutTok;
     if (tryParseToken(pc, TOKEN_MUT, &mutTok)) mut = true;
     if (!parseType(pc, &t)) return false;
-    tryParseTypeArrayDeclarationRefsOnly(pc, &t);
     *v = VarInit(tok.str, t, tok);
     v->mut = mut;
     return true;
@@ -466,19 +551,25 @@ void parseTypeDef(ParserCtx pc) {
     struct token defTok = TokenFeed(pc->tc);
     struct type t = (struct type){0};
     switch(defTok.type) {
-    case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); parseTypeDefType(pc, &t); t = TypeFromType(nameTok.str, nameTok, t); break;
+        case TOKEN_IDENTIFIER:
+            TokenUnfeed(pc->tc); parseTypeDefType(pc, &t); t = TypeFromType(nameTok.str, nameTok, t); break;
         case TOKEN_STRUCT: t = TypeFromType(nameTok.str, nameTok, parseTypeDefStruct(pc)); break;
         case TOKEN_VOCAB: t = TypeFromType(nameTok.str, nameTok, parseTypeDefVocab(pc)); break;
         case TOKEN_FUNC: t = TypeFromType(nameTok.str, nameTok, parseTypeDefFunc(pc)); break;
         default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION); return;
     }
+    TypeSetSize(&t);
     pcUpdateOrAddType(pc, t);
 }
+
+int pcId = 0;
 
 ParserCtx parserCtxNew(struct str fileName, struct pcList* ctxs) {
     ParserCtx pc = malloc(sizeof(*pc));
     CheckAllocPtr(pc);
     *pc = (struct parserContext){0};
+    pc->id = pcId;
+    pcId++;
     pc->types = TypeListCreate();
     pc->vars = VarListCreate();
     pc->tc = TokenizeFile(fileName);
@@ -551,12 +642,12 @@ void parseFileFirstPass(ParserCtx pc) {
 
 void parseFileSecondPass(ParserCtx pc) {
     while (TokenPeek(pc->tc).type != TOKEN_EOF) {
-        int cursor = tokenGetCursor(pc->tc);
+        int cursor = TokenGetCursor(pc->tc);
         struct token tok = TokenFeed(pc->tc);
         switch (tok.type) {
-            case TOKEN_TYPE: parseTypeDef(pc); rangeListAdd(&(pc->jumps), cursor, tokenGetCursor(pc->tc)); break;
+            case TOKEN_TYPE: parseTypeDef(pc); rangeListAdd(&(pc->jumps), cursor, TokenGetCursor(pc->tc)); break;
             case TOKEN_IMPORT: parseFileSecondPass(parseImport(pc)); break;
-            case TOKEN_FUNC: parseFuncPrototype(pc); rangeListAdd(&(pc->jumps), cursor, tokenGetCursor(pc->tc)); break;
+            case TOKEN_FUNC: parseFuncPrototype(pc); rangeListAdd(&(pc->jumps), cursor, TokenGetCursor(pc->tc)); break;
             default: break;
         }
     }
@@ -589,7 +680,8 @@ void discardUntilParenEnds(ParserCtx pc) {
 }
 
 bool parseCompCondition(ParserCtx pc) {
-    (void)pc; //TODO
+    (void)pc;
+    //TODO
     return false;
 }
 
@@ -609,6 +701,117 @@ void parseFuncBody(ParserCtx pc) {
     }
 }
 
+bool tryParsePrefixUnary(ParserCtx pc, enum operation* unary, struct token* tok) {
+    *tok = TokenFeed(pc->tc);
+    switch (tok->type) {
+        case TOKEN_ADD: *unary = OPERATION_ADD; break;
+        case TOKEN_SUB: *unary = OPERATION_SUB; break;
+        case TOKEN_NOT: *unary = OPERATION_NOT; break;
+        case TOKEN_BITWISE_COMPLEMENT: *unary = OPERATION_BITWISE_COMPLEMENT; break;
+        default: TokenUnfeed(pc->tc); return false;
+    }
+    return true;
+}
+
+int countPrefixUnaries(ParserCtx pc) {
+    int i = 0;
+    enum operation unary;
+    struct token tok;
+    while (tryParsePrefixUnary(pc, &unary, &tok)) i++;
+    return i;
+}
+
+//assumes the cursor is set to the unary closes to the pure operand
+struct operand* parsePrefixUnaries(ParserCtx pc, struct operand* op, int nUnaries) {
+    enum operation unary;
+    struct token tok;
+    for (int i = 0; i < nUnaries; i++) {
+        TokenUnfeed(pc->tc);
+        if (!tryParsePrefixUnary(pc, &unary, &tok)) ErrorBugFound();
+        TokenUnfeed(pc->tc);
+        op = OperandCreateUnary(op, unary, tok);
+    }
+    return op;
+}
+
+struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen);
+
+struct operand* tryParseOperand(ParserCtx pc) {
+    int startCursor = TokenGetCursor(pc->tc);
+    int prefixUnaryCnt = countPrefixUnaries(pc);
+
+    struct operand* op;
+    if ((op = tryParseSingleOperandVarOperand(pc))) return op;
+    else if ((op = tryParseTypeCast(pc))) return op;
+    struct token tok = TokenFeed(pc->tc);
+    switch(tok.type) {
+        case TOKEN_PAREN_OPEN: op = tryParseExprInternal(pc, true); if (!op) return NULL; break;
+        case TOKEN_CHAR_LITERAL: op = OperandCharLiteral(tok); break;
+        case TOKEN_INT_LITERAL: op = OperandIntLiteral(tok); break;
+        case TOKEN_FLOAT_LITERAL: op = OperandFloatLiteral(tok); break;
+        case TOKEN_STRING_LITERAL: op = OperandStringLiteral(tok); break;
+        default: SyntaxErrorInvalidToken(tok, EXPECTED_OPERAND); TokenSetCursor(pc->tc, startCursor); return NULL;
+    }
+    int endCursor = TokenGetCursor(pc->tc);
+    TokenSetCursor(pc->tc, startCursor + prefixUnaryCnt);
+    op = parsePrefixUnaries(pc, op, prefixUnaryCnt);
+    TokenSetCursor(pc->tc, endCursor);
+    return op;
+}
+
+bool tryParseBinaryOperation(ParserCtx pc, enum operation* oper) {
+    struct token tok = TokenFeed(pc->tc);
+    switch(tok.type) {
+        case TOKEN_MODULO: *oper = OPERATION_MODULO; return true;
+        case TOKEN_ADD: *oper = OPERATION_ADD; return true;
+        case TOKEN_SUB: *oper = OPERATION_SUB; return true;
+        case TOKEN_MUL: *oper = OPERATION_MUL; return true;
+        case TOKEN_DIV: *oper = OPERATION_DIV; return true;
+        case TOKEN_LESS_THAN: *oper = OPERATION_LESS_THAN; return true;
+        case TOKEN_LESS_THAN_OR_EQUAL: *oper = OPERATION_LESS_THAN_OR_EQUAL; return true;
+        case TOKEN_GREATER_THAN: *oper = OPERATION_GREATER_THAN; return true;
+        case TOKEN_GREATER_THAN_OR_EQUAL: *oper = OPERATION_GREATER_THAN_OR_EQUAL; return true;
+        case TOKEN_EQUAL: *oper = OPERATION_EQUALS; return true;
+        case TOKEN_NOT_EQUAL: *oper = OPERATION_NOT_EQUALS; return true;
+        case TOKEN_AND: *oper = OPERATION_AND; return true;
+        case TOKEN_OR: *oper = OPERATION_OR; return true;
+        case TOKEN_BITSHIFT_LEFT: *oper = OPERATION_BITSHIFT_LEFT; return true;
+        case TOKEN_BITSHIFT_RIGHT: *oper = OPERATION_BITSHIFT_RIGHT; return true;
+        case TOKEN_BITWISE_AND: *oper = OPERATION_BITWISE_AND; return true;
+        case TOKEN_BITWISE_OR: *oper = OPERATION_BITWISE_OR; return true;
+        case TOKEN_BITWISE_XOR: *oper = OPERATION_BITWISE_XOR; return true;
+        default: TokenUnfeed(pc->tc); return false;
+    }
+}
+
+struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen) {
+    struct operandList operands = (struct operandList){0};
+    struct operationList operations = (struct operationList){0};
+    struct operand* op;
+    struct token tok;
+    if (!(op = tryParseOperand(pc))) return NULL;
+    OperandListAdd(&operands, op);
+    enum operation operation;
+    while (tryParseBinaryOperation(pc, &operation)) {
+        OperationListAdd(&operations, operation);
+        if (!(op = tryParseOperand(pc))) {
+            OperandListDestroy(operands);
+            OperationListDestroy(operations);
+            SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_OPERAND); return NULL;
+        }
+        OperandListAdd(&operands, op);
+    }
+    if (insideParen) parseToken(pc, TOKEN_PAREN_CLOSE, &tok, EXPECTED_CLOSING_PAREN);
+    op = OperandEvalExpr(operands, operations);
+    OperandListDestroy(operands);
+    OperationListDestroy(operations);
+    return op;
+}
+
+struct operand* tryParseExpr(ParserCtx pc) {
+    return tryParseExprInternal(pc, false);
+}
+
 void parseGlobalStatement(ParserCtx pc) {
     (void)pc; //TODO
 }
@@ -619,12 +822,12 @@ void parseFileThirdPass(ParserCtx pc) {
         switch (tok.type) {
             case TOKEN_CURLY_BRACKET_CLOSE:
                 if (pc->nCompIfsActive) pc->nCompIfsActive--;
-                else SyntaxErrorInvalidToken(tok, NULL);
+                else SyntaxErrorInvalidToken(tok, TRAILING_CURLY);
                 break;
             case TOKEN_IMPORT: parseFileThirdPass(parseImport(pc)); break;
-            case TOKEN_TYPE: tokenSetCursor(pc->tc, rangeListNext(&(pc->jumps)).next); break;
+            case TOKEN_TYPE: TokenSetCursor(pc->tc, rangeListNext(&(pc->jumps)).next); break;
             case TOKEN_IDENTIFIER: parseGlobalStatement(pc); break;
-            case TOKEN_FUNC: tokenSetCursor(pc->tc, rangeListNext(&(pc->jumps)).next); parseFuncBody(pc); break;
+            case TOKEN_FUNC: TokenSetCursor(pc->tc, rangeListNext(&(pc->jumps)).next); parseFuncBody(pc); break;
             case TOKEN_IF: parseCompIf(pc); break;
             default: break;
         }
@@ -645,15 +848,15 @@ void pcListClearAliases(struct pcList* ctxs) {
 }
 
 ParserCtx ParseFile(char* fileName) {
-    struct pcList* ctxs = pcListNew();
-    ParserCtx pc = parserCtxNew(StrFromStackCStr(fileName), ctxs);
-    pcListAdd(ctxs, pc);
+    struct pcList ctxs = (struct pcList){0};
+    ParserCtx pc = parserCtxNew(StrFromStackCStr(fileName), &ctxs);
+    pcListAdd(&ctxs, pc);
     parseFileFirstPass(pc);
 
-    pcListResetTokenCtxs(ctxs);
+    pcListResetTokenCtxs(&ctxs);
     parseFileSecondPass(pc);
 
-    pcListResetTokenCtxs(ctxs);
+    pcListResetTokenCtxs(&ctxs);
     parseFileThirdPass(pc);
     return pc;
 }

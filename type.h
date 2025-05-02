@@ -9,41 +9,46 @@ typedef struct typeList* TypeList;
 
 enum baseType {
     BASETYPE_BOOL,
+    BASETYPE_BYTE,
     BASETYPE_INT32,
     BASETYPE_INT64,
     BASETYPE_FLOAT32,
     BASETYPE_FLOAT64,
-    BASETYPE_BIT32,
-    BASETYPE_BIT64,
-    BASETYPE_BYTE,
+    BASETYPE_ARRAY,
     BASETYPE_STRUCT,
     BASETYPE_VOCAB,
     BASETYPE_FUNC
 };
 
-#define ARRAY_REF -1 //for array dimensions that hold references
 struct type {
-    struct type* subType; //embedded type
+    int pcId; //set when added to a pcList as a typedef
     enum baseType bType;
     struct str name;
     struct token tok;
-    int nArrLvls;
-    long long* arrLens;
+    enum baseType arrBase;
     bool placeholder;
     bool structMAlloc;
+    bool arrMalloc;
+    struct operand* arrLen; //for when the array is allocated
+    int arrLvls;
     struct varList* vars; //for struct members and function arguments
     TypeList rets; //for function return types
     StrList words; //for vocabulary types
+    bool sizeKnown;
+    long long byteSize; //valid if byteSizeKnown is true
 };
 
 #include "var.h"
 
-struct type TypeVanilla(char* name, enum baseType bType);
+void TypeSetSize(struct type* t);
+struct type TypeVanilla(enum baseType bType);
+struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
 TypeList TypeListCreate();
-void TypeListAdd(TypeList tl, struct type t); //may not be used when types are hidden
-bool TypeListGet(TypeList vl, struct str name, struct type* v);
+void TypeListAdd(TypeList tl, struct type t);
+bool TypeListGet(TypeList vl, struct str name, struct type* t);
 struct type* TypeListGetAsPtr(TypeList tl, struct str name);
 void TypeListUpdate(TypeList tl, struct type t);
+bool TypeIsByteArray(struct type t);
 
 #endif //TYPE_H

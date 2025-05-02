@@ -45,3 +45,12 @@ bool VarListGet(VarList vl, struct str name, struct var* v) {
     }
     return false;
 }
+
+int VarListGetLen(VarList vl) {
+    return vl->len;
+}
+
+struct var VarListGetIdx(VarList vl, int idx) {
+    if (idx < 0 || idx >= vl->len) ErrorBugFound();
+    return vl->ptr[idx];
+}

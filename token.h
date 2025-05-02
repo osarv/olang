@@ -28,6 +28,7 @@ enum tokenType {
     TOKEN_SUB,
     TOKEN_MUL,
     TOKEN_DIV,
+    TOKEN_MODULO,
     TOKEN_COMMA,
     TOKEN_DOT,
     TOKEN_INCREMENT,
@@ -36,6 +37,7 @@ enum tokenType {
     TOKEN_ASSIGNMENT_SUB,
     TOKEN_ASSIGNMENT_MUL,
     TOKEN_ASSIGNMENT_DIV,
+    TOKEN_ASSIGNMENT_MODULO,
     TOKEN_ASSIGNMENT_EQUAL,
     TOKEN_EQUAL,
     TOKEN_NOT,
@@ -79,10 +81,12 @@ int TokenGetStrStart(TokenCtx tc, struct str str);
 int TokenGetEOFIndex(TokenCtx tc);
 struct token TokenPeek(TokenCtx);
 struct token TokenFeed(TokenCtx tc);
+void TokenFeedUntil(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);
+struct token TokenPrevious(TokenCtx tc);
 void TokenReset(TokenCtx tc);
-int tokenGetCursor(TokenCtx tc);
-void tokenSetCursor(TokenCtx tc, int cursor);
+int TokenGetCursor(TokenCtx tc);
+void TokenSetCursor(TokenCtx tc, int cursor);
 struct token TokenMerge(struct token head, struct token tail);
 char* TokenTypeToString(enum tokenType type);
 

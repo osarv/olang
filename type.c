@@ -4,23 +4,89 @@
 #include <string.h>
 #include "error.h"
 #include "type.h"
+#include "operation.h"
+
+#define PTR_SIZE 8 //4 for 32bit
+#define ARR_LEN_SIZE 8 //4 for 32bit
+#define VOCAB_SIZE 4;
 
 struct typeList {
     int len;
     int cap;
-    int hidden;
     struct type* ptr;
 };
 
-struct type TypeVanilla(char* name, enum baseType bType) {
-    struct str str;
-    str.ptr = strdup(name);
-    CheckAllocPtr(str.ptr);
-    str.len = strlen(str.ptr);
+long long typeCalcSize(struct type t, bool* sizeKnown);
 
+long long calcArraySize(struct type t, bool* sizeKnown) {
+    if (!t.arrMalloc) return PTR_SIZE;
+    *sizeKnown = false;
+    t.bType = t.arrBase;
+    return 0;
+}
+
+long long calcStructSize(struct type t, bool* sizeKnown) {
+    if (!t.structMAlloc) return PTR_SIZE;
+    long long size = 0;
+    for (int i = 0; i < VarListGetLen(t.vars); i++) {
+        size += typeCalcSize(VarListGetIdx(t.vars, i).type, sizeKnown);
+    }
+    return size;
+}
+
+long long typeCalcSize(struct type t, bool* sizeKnown) {
+    switch (t.bType) {
+        case BASETYPE_BOOL: return 1;
+        case BASETYPE_BYTE: return 1;
+        case BASETYPE_INT32: return 4;
+        case BASETYPE_INT64: return 8;
+        case BASETYPE_FLOAT32: return 4;
+        case BASETYPE_FLOAT64: return 8;
+        case BASETYPE_ARRAY: return calcArraySize(t, sizeKnown);
+        case BASETYPE_STRUCT: return calcStructSize(t, sizeKnown);
+        case BASETYPE_VOCAB: return VOCAB_SIZE;
+        case BASETYPE_FUNC: return PTR_SIZE;
+    }
+    return 0; //unreachable
+}
+
+void TypeSetSize(struct type* t) {
+    bool sizeKnown = true;
+    t->byteSize = typeCalcSize(*t, &sizeKnown);
+    t->sizeKnown = sizeKnown;
+}
+
+static char* typeVanillaBoolStr = "bool";
+static char* typeVanillaByteStr = "byte";
+static char* typeVanillaInt32Str = "int32";
+static char* typeVanillaInt64Str = "int64";
+static char* typeVanillaFloat32Str = "float32";
+static char* typeVanillaFloat64Str = "float64";
+
+struct type TypeVanilla(enum baseType bType) {
     struct type t = (struct type){0};
-    t.name = str;
+    switch (bType) {
+        case BASETYPE_BOOL: t.byteSize = 1; t.name.ptr = typeVanillaBoolStr; break;
+        case BASETYPE_BYTE: t.byteSize = 1; t.name.ptr = typeVanillaByteStr; break;
+        case BASETYPE_INT32: t.byteSize = 4; t.name.ptr = typeVanillaInt32Str; break;
+        case BASETYPE_INT64: t.byteSize = 8; t.name.ptr = typeVanillaInt64Str; break;
+        case BASETYPE_FLOAT32: t.byteSize = 4; t.name.ptr = typeVanillaFloat32Str; break;
+        case BASETYPE_FLOAT64: t.byteSize = 8; t.name.ptr = typeVanillaFloat64Str; break;
+        default: ErrorBugFound();
+    }
+    t.name.len = strlen(t.name.ptr);
     t.bType = bType;
+    return t;
+}
+
+struct type TypeString(struct operand* len) {
+    struct type t = (struct type){0};
+    t.name.ptr = typeVanillaByteStr;
+    t.name.len = strlen(t.name.ptr);
+    t.bType = BASETYPE_ARRAY;
+    t.arrBase = BASETYPE_BYTE;
+    t.arrMalloc = true;
+    t.arrLen = len;
     return t;
 }
 
@@ -38,7 +104,7 @@ TypeList TypeListCreate() {
 }
 
 #define TYPE_ALLOC_STEP_SIZE 100
-void TypeListAdd(TypeList tl, struct type t) { //may not be used when types are hidden
+void TypeListAdd(TypeList tl, struct type t) {
     if (tl->len >= tl->cap) {
         tl->cap += TYPE_ALLOC_STEP_SIZE;
         tl->ptr = realloc(tl->ptr, sizeof(*(tl->ptr)) * tl->cap);
@@ -66,21 +132,15 @@ struct type* TypeListGetAsPtr(TypeList tl, struct str name) {
     return NULL;
 }
 
-
 void TypeListUpdate(TypeList tl, struct type t) {
     for (int i = 0; i < tl->len; i++) {
         if (StrCmp(tl->ptr[i].name, t.name)) tl->ptr[i] = t;
     }
 }
 
-void TypeListHideAll(TypeList tl) {
-    tl->hidden += tl->len;
-    tl->len = 0;
+bool TypeIsByteArray(struct type t) {
+    if (t.bType != BASETYPE_ARRAY) return false;
+    if (t.arrBase != BASETYPE_BYTE) return false;
+    return true;
 }
 
-void TypeListUnHideIfNextOne(TypeList tl, struct str name) {
-    if (tl->hidden <= 0) ErrorBugFound();
-    if (!StrCmp(tl->ptr[tl->len].name, name)) return;
-    tl->hidden--;
-    tl->len++;
-}

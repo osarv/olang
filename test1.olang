@@ -7,8 +7,8 @@ import "test2.olang" test2
 type sdfsddfs test2.MyInt23
 
 type MyStruct struct {
-    sfs int32[2],
-    that int64,
+    sfs int32[][(1 + 2)],
+    that int64[][1 + 2],
     sdsdfs myTestArr,
     dfs myStruct2
 }
@@ -17,9 +17,9 @@ type myStruct2 struct {
     tsdfsdfs MyStruct{}
 }
 
-type MyFunc func(in mut int32[][])(int32, MyStruct{}[][24])
-type MyFunc2 func(in byte[], in2 mut test2.MyInt23)(int32, int32, MyStruct{}[][24])
+type MyFunc func(in mut int32[][])(int32[2], MyStruct{}[24])
+type MyFunc2 func(in byte[], in2 mut test2.MyInt23)(int32, int32, MyStruct{}[24])
 
-func MyActualFunc(in1 test2.MyInt23, i int32)(bool, int32) {
+func MyActualFunc(in1 test2.MyInt23, i int32[])(bool, int32[2]) {
 
 }

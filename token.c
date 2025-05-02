@@ -163,7 +163,8 @@ void tokenizeCharLiteral(TokenCtx tc) {
         case '\\': tokenizeEscapeChar(tc, false); break;
         default: break;
     }
-    if (feedChar(tc) != '\'') SyntaxErrorLastFedChar(tc, EXPECTED_CLOSING_CHAR_LITERAL);
+    if (feedChar(tc) == '\'') return;
+    SyntaxErrorLastFedChar(tc, EXPECTED_CLOSING_CHAR_LITERAL);
     char* str = "'\n";
     feedUntilIncludingOneOfCharsOrEOF(tc, str);
 }
@@ -192,6 +193,11 @@ enum tokenType tokenizeAsterisk(TokenCtx tc) {
 enum tokenType tokenizeSlash(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_DIV;
     return TOKEN_DIV;
+}
+
+enum tokenType tokenizePercentSign(TokenCtx tc) {
+    if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_MODULO;
+    return TOKEN_MODULO;
 }
 
 enum tokenType tokenizeExclamation(TokenCtx tc) {
@@ -249,12 +255,18 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
 enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     int nDots = 0;
     char c = feedChar(tc);
+    bool lastWasDecimal = false;
     while (isDigit(c) || c == '.') {
-        if (c == '.') nDots++;
-        if (nDots > 1) SyntaxErrorLastFedChar(tc, MULTIPLE_DECIMAL_POINTS);
+        if (c == '.') {
+            nDots++;
+            if (nDots > 1) SyntaxErrorLastFedChar(tc, MULTIPLE_DECIMAL_POINTS);
+            lastWasDecimal = true;
+        }
+        else lastWasDecimal = false;
         c = feedChar(tc);
     }
     unfeedChar(tc);
+    if (lastWasDecimal) SyntaxErrorLastFedChar(tc, LAST_WAS_DECIMAL_POINT);
     if (nDots == 0) return TOKEN_INT_LITERAL;
     return TOKEN_FLOAT_LITERAL;
 }
@@ -274,6 +286,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '-': tok.type = tokenizeHyphen(tc); break;
         case '*': tok.type = tokenizeAsterisk(tc); break;
         case '/': tok.type = tokenizeSlash(tc); break;
+        case '%': tok.type = tokenizePercentSign(tc); break;
         case '!': tok.type = tokenizeExclamation(tc); break;
         case '<': tok.type = tokenizeLessThan(tc); break;
         case '>': tok.type = tokenizeGreaterThan(tc); break;
@@ -345,6 +358,7 @@ char TokenGetChar(TokenCtx tc, int index) {
 }
 
 struct str TokenGetFileName(TokenCtx tc) {
+    if (!tc) return (struct str){0};
     return tc->fileName;
 }
 
@@ -387,9 +401,24 @@ struct token TokenFeed(TokenCtx tc) {
     return tok;
 }
 
+void TokenFeedUntil(TokenCtx tc, enum tokenType type) {
+    struct token tok = TokenFeed(tc);
+    while (tok.type != type && tok.type != TOKEN_EOF) tok = TokenFeed(tc);
+}
+
 void TokenUnfeed(TokenCtx tc) {
     if (tc->tokCursor <= 0) ErrorBugFound();
     tc->tokCursor--;
+}
+
+struct token TokenCurrent(TokenCtx tc) {
+    TokenUnfeed(tc);
+    return TokenFeed(tc);
+}
+
+struct token TokenPrevious(TokenCtx tc) {
+    TokenUnfeed(tc);
+    return TokenFeed(tc);
 }
 
 void TokenReset(TokenCtx tc) {
@@ -404,11 +433,11 @@ struct token TokenMerge(struct token head, struct token tail) {
     return head;
 }
 
-int tokenGetCursor(TokenCtx tc) {
+int TokenGetCursor(TokenCtx tc) {
     return tc->tokCursor;
 }
 
-void tokenSetCursor(TokenCtx tc, int cursor) {
+void TokenSetCursor(TokenCtx tc, int cursor) {
     if (cursor > tc->tokLen) ErrorBugFound();
     tc->tokCursor = cursor;
 }
@@ -435,8 +464,9 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_IMPORT: return "import";
         case TOKEN_ADD: return "+";
         case TOKEN_SUB: return "-";
-        case TOKEN_MUL: return "/";
-        case TOKEN_DIV: return "*";
+        case TOKEN_MUL: return "*";
+        case TOKEN_DIV: return "/";
+        case TOKEN_MODULO: return "%";
         case TOKEN_COMMA: return ",";
         case TOKEN_DOT: return ".";
         case TOKEN_INCREMENT: return "++";
@@ -445,6 +475,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_ASSIGNMENT_SUB: return "-=";
         case TOKEN_ASSIGNMENT_MUL: return "*=";
         case TOKEN_ASSIGNMENT_DIV: return "/=";
+        case TOKEN_ASSIGNMENT_MODULO: return "%=";
         case TOKEN_ASSIGNMENT_EQUAL: return "=";
         case TOKEN_EQUAL: return "==";
         case TOKEN_NOT: return "!";

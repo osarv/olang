@@ -71,6 +71,11 @@ void printErrorLines(TokenCtx tc, int errStart, int errEnd, void(*pErrChars)(cha
     puts("\n" COLOR_RESET);
 }
 
+void printTokErrorLine(struct token tok) {
+    int startIndex =  TokenGetStrStart(tok.owner, tok.str);
+    printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
+}
+
 void printLastLineEOFError(TokenCtx tc) {
     int idx = TokenGetEOFIndex(tc);
     if (idx > 0) idx--;
@@ -113,7 +118,32 @@ void SyntaxErrorInvalidToken(struct token tok, char* errMsg) { //NULL errMsg is 
         printLastLineEOFError(tok.owner);
         return;
     }
-    int startIndex =  TokenGetStrStart(tok.owner, tok.str);
-    printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
+    printTokErrorLine(tok);
     lastErrTokenId = tok.tokId;
+}
+
+void SyntaxErrorOperandIncompatibleType(struct operand* o, char* errMsg) {
+    struct str fileName = TokenGetFileName(o->tok.owner);
+    char buffer[fileName.len + 1];
+    StrGetAsCStr(fileName, buffer);
+    syntaxErrorHeader(o->tok.lineNr, buffer, errMsg);
+    printTokErrorLine(o->tok);
+}
+
+void SyntaxErrorOperandsNotSameSize(struct operand* a, struct operand* b) {
+    struct str fileName = TokenGetFileName(a->tok.owner);
+    char buffer[fileName.len + 1];
+    StrGetAsCStr(fileName, buffer);
+    syntaxErrorHeader(a->tok.lineNr, buffer, OPERANDS_NOT_SAME_SIZE);
+    printTokErrorLine(a->tok);
+    printTokErrorLine(b->tok);
+}
+
+void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b) {
+    struct str fileName = TokenGetFileName(a->tok.owner);
+    char buffer[fileName.len + 1];
+    StrGetAsCStr(fileName, buffer);
+    syntaxErrorHeader(a->tok.lineNr, buffer, OPERANDS_NOT_SAME_TYPE);
+    printTokErrorLine(a->tok);
+    printTokErrorLine(b->tok);
 }
