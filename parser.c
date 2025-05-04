@@ -214,10 +214,7 @@ struct operand* tryParseExpr(ParserCtx pc);
 
 struct operand* parseIntExpr(ParserCtx pc) {
     struct operand* expr = tryParseExpr(pc);
-    if (!expr) {
-        SyntaxErrorInvalidToken(TokenPeek(pc->tc), OPERATION_REQUIRES_INT);
-        return NULL;
-    }
+    if (!expr) return NULL;
     if (!OperandIsInt(expr)) {
         SyntaxErrorInvalidToken(expr->tok, OPERATION_REQUIRES_INT);
         return NULL;
@@ -225,18 +222,20 @@ struct operand* parseIntExpr(ParserCtx pc) {
     return expr;
 }
 
-void tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
+bool tryParseTypeArrayDeclaration(ParserCtx pc, struct type* t) {
     struct token tok;
-    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return;
+    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return false;
     t->arrLen = parseIntExpr(pc);
+    if (!t->arrLen) return false;
     parseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, NULL);
     t->arrLvls++;
     t->arrMalloc = true;
 
     t->tok = TokenMerge(t->tok, tok);
-    if (t->bType == BASETYPE_ARRAY) return;
+    if (t->bType == BASETYPE_ARRAY) return true;
     t->arrBase = t->bType;
     t->bType = BASETYPE_ARRAY;
+    return true;
 }
 
 ParserCtx tryParseAlias(ParserCtx pc) { //returns pc if not found
@@ -413,7 +412,7 @@ bool parseTypeDeclaration(ParserCtx pc, struct type* t) {
             t->tok = TokenMerge(t->tok, tok);
         }
     }
-    tryParseTypeArrayDeclaration(pc, t);
+    if (!tryParseTypeArrayDeclaration(pc, t)) return false;
     TypeSetSize(t);
     return true;
 }
@@ -718,8 +717,8 @@ void parseFuncBody(ParserCtx pc) {
 bool tryParsePrefixUnary(ParserCtx pc, enum operation* unary, struct token* tok) {
     *tok = TokenFeed(pc->tc);
     switch (tok->type) {
-        case TOKEN_ADD: *unary = OPERATION_ADD; break;
-        case TOKEN_SUB: *unary = OPERATION_SUB; break;
+        case TOKEN_ADD: *unary = OPERATION_PLUS; break;
+        case TOKEN_SUB: *unary = OPERATION_MINUS; break;
         case TOKEN_NOT: *unary = OPERATION_NOT; break;
         case TOKEN_BITWISE_COMPLEMENT: *unary = OPERATION_BITWISE_COMPLEMENT; break;
         default: TokenUnfeed(pc->tc); return false;
@@ -755,21 +754,24 @@ struct operand* tryParseOperand(ParserCtx pc) {
     int prefixUnaryCnt = countPrefixUnaries(pc);
 
     struct operand* op;
-    if ((op = tryParseSingleOperandVarOperand(pc))) return op;
-    else if ((op = tryParseTypeCast(pc))) return op;
-    struct token tok = TokenFeed(pc->tc);
-    switch(tok.type) {
-        case TOKEN_PAREN_OPEN:
-            op = tryParseExprInternal(pc, true);
-            if (!op) {TokenUnfeed(pc->tc); return NULL;}
-            op->tok = TokenMerge(tok, TokenPrevious(pc->tc));
-            break;
-        case TOKEN_BOOL_LITERAL: op = OperandBoolLiteral(tok); break;
-        case TOKEN_CHAR_LITERAL: op = OperandCharLiteral(tok); break;
-        case TOKEN_INT_LITERAL: op = OperandIntLiteral(tok); break;
-        case TOKEN_FLOAT_LITERAL: op = OperandFloatLiteral(tok); break;
-        case TOKEN_STRING_LITERAL: op = OperandStringLiteral(tok); break;
-        default: SyntaxErrorInvalidToken(tok, EXPECTED_OPERAND); TokenSetCursor(pc->tc, startCursor); return NULL;
+    if ((op = tryParseSingleOperandVarOperand(pc)));
+    else if ((op = tryParseTypeCast(pc)));
+    else {
+        struct token tok = TokenFeed(pc->tc);
+        switch(tok.type) {
+            case TOKEN_PAREN_OPEN:
+                op = tryParseExprInternal(pc, true);
+                if (!op) {TokenUnfeed(pc->tc); return NULL;}
+                op->tok = TokenMerge(tok, TokenPrevious(pc->tc));
+                break;
+            case TOKEN_BOOL_LITERAL: op = OperandBoolLiteral(tok); break;
+            case TOKEN_CHAR_LITERAL: op = OperandCharLiteral(tok); break;
+            case TOKEN_INT_LITERAL: op = OperandIntLiteral(tok); break;
+            case TOKEN_FLOAT_LITERAL: op = OperandFloatLiteral(tok); break;
+            case TOKEN_STRING_LITERAL: op = OperandStringLiteral(tok); break;
+            default: SyntaxErrorInvalidToken(tok, EXPECTED_OPERAND);
+                     TokenSetCursor(pc->tc, startCursor); return NULL;
+        }
     }
     int endCursor = TokenGetCursor(pc->tc);
     TokenSetCursor(pc->tc, startCursor + prefixUnaryCnt);
