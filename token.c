@@ -249,6 +249,8 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "func")) return TOKEN_FUNC;
     else if (isSubIdentifer(start, "mut")) return TOKEN_MUT;
     else if (isSubIdentifer(start, "import")) return TOKEN_IMPORT;
+    else if (isSubIdentifer(start, "true")) return TOKEN_BOOL_LITERAL;
+    else if (isSubIdentifer(start, "false")) return TOKEN_BOOL_LITERAL;
     return TOKEN_IDENTIFIER;
 }
 
@@ -446,6 +448,7 @@ char* TokenTypeToString(enum tokenType type) {
     switch(type) {
         case TOKEN_MERGE: ErrorBugFound(); break;
         case TOKEN_EOF: return "end of file";
+        case TOKEN_BOOL_LITERAL: return "bool literal";
         case TOKEN_INT_LITERAL: return "int literal";
         case TOKEN_FLOAT_LITERAL: return "float literal";
         case TOKEN_CHAR_LITERAL: return "character literal";

@@ -8,6 +8,7 @@ typedef struct tokenContext* TokenCtx;
 enum tokenType {
     TOKEN_MERGE, //merge tokens have no type and can not be produced by the context
     TOKEN_EOF,
+    TOKEN_BOOL_LITERAL,
     TOKEN_INT_LITERAL,
     TOKEN_FLOAT_LITERAL,
     TOKEN_CHAR_LITERAL,

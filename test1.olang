@@ -7,8 +7,8 @@ import "test2.olang" test2
 type sdfsddfs test2.MyInt23
 
 type MyStruct struct {
-    sfs int32[][(1 + 2)],
-    that int64[][1 + 2],
+    sfs int32[][((2 + int64(0.01)))],
+    that int64[][],
     sdsdfs myTestArr,
     dfs myStruct2
 }

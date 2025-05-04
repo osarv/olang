@@ -79,6 +79,15 @@ bool canUseAsFloat64(struct operand* op) {
     return false;
 }
 
+struct operand* OperandBoolLiteral(struct token tok) {
+    struct operand* op = operandEmpty();
+    op->tok = tok;
+    op->type = TypeVanilla(BASETYPE_BOOL);
+    op->opType = OPERATION_NONE;
+    op->isLiteral = true;
+    return op;
+}
+
 struct operand* OperandCharLiteral(struct token tok) {
     struct operand* op = operandEmpty();
     op->tok = tok;
@@ -344,6 +353,7 @@ struct operand* OperandCreateUnary(struct operand* in, enum operation opType, st
     if (!in) return NULL;
     if (!checkCompatUnary(in, opType)) return NULL;
     struct operand* out = operandEmpty();
+    *out = *in;
     OperandListAdd(&(out->args), in);
     out->tok = tok;
     out->opType = opType;
@@ -368,7 +378,8 @@ struct operand* OperandCreateBinary(struct operand* a, struct operand* b, enum o
     return c;
 }
 
-struct operand* OperandCreateTypeCast(struct operand* op, struct type to) {
+struct operand* OperandCreateTypeCast(struct operand* op, struct type to, struct token tok) {
+    if (!op) return NULL;
     if ((TypeIsByteArray(to) && op->type.bType != BASETYPE_FUNC) || TypeIsByteArray(op->type));
     else if (!typeCastIsCompat(op, to)) {
         SyntaxErrorInvalidToken(to.tok, INVALID_TYPECAST);
@@ -377,6 +388,8 @@ struct operand* OperandCreateTypeCast(struct operand* op, struct type to) {
     struct operand* new = operandEmpty();
     *new = *op;
     new->type = to;
+    new->tok = tok;
+    new->isLiteral = false;
     return new;
 }
 

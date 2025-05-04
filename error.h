@@ -48,7 +48,6 @@
 #define INVALID_TYPECAST "operand may not be cast to this type"
 #define TRAILING_PAREN "trailing parenthesis"
 #define TRAILING_CURLY "trailing curly bracket"
-#define INVALID_EXPR "invalid expression"
 
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);
