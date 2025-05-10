@@ -185,6 +185,13 @@ enum tokenType tokenizeHyphen(TokenCtx tc) {
     return TOKEN_SUB;
 }
 
+enum tokenType tokenizeEqualSign(TokenCtx tc) {
+    enum tokenType type = TOKEN_ASSIGNMENT;
+    if (tryFeedChar(tc, '=')) type = TOKEN_EQUAL;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_EQUAL;
+    return type;
+}
+
 enum tokenType tokenizeAsterisk(TokenCtx tc) {
     if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_MUL;
     return TOKEN_MUL;
@@ -201,30 +208,50 @@ enum tokenType tokenizePercentSign(TokenCtx tc) {
 }
 
 enum tokenType tokenizeExclamation(TokenCtx tc) {
-    if (tryFeedChar(tc, '=')) return TOKEN_NOT_EQUAL;
-    return TOKEN_NOT;
+    enum tokenType type = TOKEN_NOT;
+    if (tryFeedChar(tc, '=')) type = TOKEN_NOT_EQUAL;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_NOT_EQUAL;
+    return type;
 }
 
 enum tokenType tokenizeLessThan(TokenCtx tc) {
+    enum tokenType type = TOKEN_LESS_THAN;
     if (tryFeedChar(tc, '=')) return TOKEN_LESS_THAN_OR_EQUAL;
-    if (tryFeedChar(tc, '<')) return TOKEN_BITSHIFT_LEFT;
-    return TOKEN_LESS_THAN;
+    if (tryFeedChar(tc, '<')) type = TOKEN_BITSHIFT_LEFT;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_BITSHIFT_LEFT;
+    return type;
 }
 
 enum tokenType tokenizeGreaterThan(TokenCtx tc) {
+    enum tokenType type = TOKEN_GREATER_THAN;
     if (tryFeedChar(tc, '=')) return TOKEN_GREATER_THAN_OR_EQUAL;
-    if (tryFeedChar(tc, '>')) return TOKEN_BITSHIFT_RIGHT;
-    return TOKEN_GREATER_THAN;
+    if (tryFeedChar(tc, '>')) type = TOKEN_BITSHIFT_RIGHT;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_BITSHIFT_RIGHT;
+    return type;
 }
 
 enum tokenType tokenizeAmpersand(TokenCtx tc) {
-    if (tryFeedChar(tc, '&')) return TOKEN_AND;
-    return TOKEN_BITWISE_AND;
+    enum tokenType type = TOKEN_BITWISE_AND;
+    if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_BITWISE_AND;
+    if (tryFeedChar(tc, '&')) type = TOKEN_AND;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_AND;
+    return type;
 }
 
 enum tokenType tokenizeVBar(TokenCtx tc) {
-    if (tryFeedChar(tc, '|')) return TOKEN_OR;
-    return TOKEN_BITWISE_OR;
+    enum tokenType type = TOKEN_BITWISE_OR;
+    if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_BITWISE_OR;
+    if (tryFeedChar(tc, '|')) type = TOKEN_OR;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_OR;
+    return type;
+}
+
+enum tokenType tokenizeCaret(TokenCtx tc) {
+    enum tokenType type = TOKEN_BITWISE_XOR;
+    if (tryFeedChar(tc, '=')) return TOKEN_ASSIGNMENT_BITWISE_XOR;
+    if (tryFeedChar(tc, '^')) type = TOKEN_XOR;
+    if (tryFeedChar(tc, '=')) type = TOKEN_ASSIGNMENT_XOR;
+    return type;
 }
 
 bool isSubIdentifer(char* start, char* subId) {
@@ -286,6 +313,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '"': tok.type = TOKEN_STRING_LITERAL; tokenizeStringLiteral(tc); break;
         case '+': tok.type = tokenizePlus(tc); break;
         case '-': tok.type = tokenizeHyphen(tc); break;
+        case '=': tok.type = tokenizeEqualSign(tc); break;
         case '*': tok.type = tokenizeAsterisk(tc); break;
         case '/': tok.type = tokenizeSlash(tc); break;
         case '%': tok.type = tokenizePercentSign(tc); break;
@@ -294,6 +322,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '>': tok.type = tokenizeGreaterThan(tc); break;
         case '&': tok.type = tokenizeAmpersand(tc); break;
         case '|': tok.type = tokenizeVBar(tc); break;
+        case '^': tok.type = tokenizeCaret(tc); break;
         case ',': tok.type = TOKEN_COMMA; break;
         case '.': tok.type = TOKEN_DOT; break;
         case '~': tok.type = TOKEN_BITWISE_COMPLEMENT; break;
@@ -440,7 +469,6 @@ int TokenGetCursor(TokenCtx tc) {
 }
 
 void TokenSetCursor(TokenCtx tc, int cursor) {
-    if (cursor > tc->tokLen) ErrorBugFound();
     tc->tokCursor = cursor;
 }
 
@@ -472,19 +500,30 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_MODULO: return "%";
         case TOKEN_COMMA: return ",";
         case TOKEN_DOT: return ".";
-        case TOKEN_INCREMENT: return "++";
-        case TOKEN_DECREMENT: return "--";
+        case TOKEN_ASSIGNMENT: return "=";
         case TOKEN_ASSIGNMENT_ADD: return "+=";
         case TOKEN_ASSIGNMENT_SUB: return "-=";
         case TOKEN_ASSIGNMENT_MUL: return "*=";
         case TOKEN_ASSIGNMENT_DIV: return "/=";
         case TOKEN_ASSIGNMENT_MODULO: return "%=";
-        case TOKEN_ASSIGNMENT_EQUAL: return "=";
+        case TOKEN_ASSIGNMENT_EQUAL: return "===";
+        case TOKEN_ASSIGNMENT_NOT_EQUAL: return "!==";
+        case TOKEN_ASSIGNMENT_AND: return "&&=";
+        case TOKEN_ASSIGNMENT_OR: return "||=";
+        case TOKEN_ASSIGNMENT_XOR: return "^^=";
+        case TOKEN_ASSIGNMENT_BITSHIFT_LEFT: return "<<=";
+        case TOKEN_ASSIGNMENT_BITSHIFT_RIGHT: return ">>=";
+        case TOKEN_ASSIGNMENT_BITWISE_AND: return "&=";
+        case TOKEN_ASSIGNMENT_BITWISE_OR: return "|=";
+        case TOKEN_ASSIGNMENT_BITWISE_XOR: return "^=";
+        case TOKEN_INCREMENT: return "++";
+        case TOKEN_DECREMENT: return "--";
         case TOKEN_EQUAL: return "==";
         case TOKEN_NOT: return "!";
         case TOKEN_NOT_EQUAL: return "!=";
         case TOKEN_AND: return "&&";
         case TOKEN_OR: return "||";
+        case TOKEN_XOR: return "^^";
         case TOKEN_LESS_THAN: return "<";
         case TOKEN_LESS_THAN_OR_EQUAL: return "<=";
         case TOKEN_GREATER_THAN: return ">";

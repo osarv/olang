@@ -36,6 +36,11 @@ void VarListAdd(VarList vl, struct var v) {
     vl->len++;
 }
 
+void VarListAddSetOrigin(VarList vl, struct var v) {
+    VarListAdd(vl, v);
+    vl->ptr[vl->len -1].origin = vl->ptr + vl->len -1;
+}
+
 bool VarListGet(VarList vl, struct str name, struct var* v) {
     for (int i = 0; i < vl->len; i++) {
         if (StrCmp(vl->ptr[i].name, name)) {

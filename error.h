@@ -44,10 +44,11 @@
 #define OPERANDS_NOT_SAME_SIZE "operand must be the same size"
 #define EXPECTED_OPERAND "expected operand"
 #define VAR_NOT_INITIALIZED "variable used before being initialized"
-#define OPERATION_YIELDS_MORE_THAN_ONE "operation yields more than one operand"
 #define INVALID_TYPECAST "operand may not be cast to this type"
 #define TRAILING_PAREN "trailing parenthesis"
 #define TRAILING_CURLY "trailing curly bracket"
+#define EXPECTED_ASSIGNMENT "expected assignment"
+#define VAR_IMMUTABLE "variable is immutable"
 
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);

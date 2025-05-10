@@ -6,19 +6,23 @@ typedef struct varList* VarList;
 #include "type.h"
 #include "str.h"
 #include "token.h"
-#include "operation.h"
+#include "statement.h"
 
 struct var {
     struct str name;
     struct type type;
     struct token tok;
     bool mut; //local variables are mutable by default
-    struct operandList values;
+    bool mayBeInitialized;
+    VarList localVars; //for functions
+    struct var* origin; //where the var is found in read var operation
+    struct statementList statements; //for functions
 };
 
 struct var VarInit(struct str name, struct type t, struct token tok);
 VarList VarListCreate();
 void VarListAdd(VarList vl, struct var v);
+void VarListAddSetOrigin(VarList vl, struct var v);
 bool VarListGet(VarList vl, struct str name, struct var* v);
 int VarListGetLen(VarList vl);
 struct var VarListGetIdx(VarList vl, int idx);

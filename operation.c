@@ -313,6 +313,7 @@ bool checkCompatBinary(struct operand* a, struct operand* b, enum operation opTy
 
         case OPERATION_AND: *resBType = BASETYPE_BOOL; return checkIsBothBool(a, b);
         case OPERATION_OR: *resBType = BASETYPE_BOOL; return checkIsBothBool(a, b);
+        case OPERATION_XOR: *resBType = BASETYPE_BOOL; return checkIsBothBool(a, b);
 
         case OPERATION_BITSHIFT_LEFT: return checkIsCompatBitShift(a, b, resBType);
         case OPERATION_BITSHIFT_RIGHT: return checkIsCompatBitShift(a, b, resBType);
@@ -349,7 +350,16 @@ bool checkCompatUnary(struct operand* op, enum operation opType) {
     }
 }
 
-struct operand* OperandCreateUnary(struct operand* in, enum operation opType, struct token tok) {
+struct operand* OperandReadVar(struct var* v) {
+    struct operand* op = operandEmpty();
+    op->tok = v->tok;
+    op->type = v->type;
+    op->opType = OPERATION_READ_VAR;
+    op->readVar = v->origin;
+    return op;
+}
+
+struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok) {
     if (!in) return NULL;
     if (!checkCompatUnary(in, opType)) return NULL;
     struct operand* out = operandEmpty();
@@ -360,7 +370,7 @@ struct operand* OperandCreateUnary(struct operand* in, enum operation opType, st
     return out;
 }
 
-struct operand* OperandCreateBinary(struct operand* a, struct operand* b, enum operation opType) {
+struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType) {
     if (!a || !b) return NULL;
     enum baseType sharedBType;
     if (!checkCompatBinary(a, b, opType, &sharedBType)) return NULL;
@@ -378,7 +388,7 @@ struct operand* OperandCreateBinary(struct operand* a, struct operand* b, enum o
     return c;
 }
 
-struct operand* OperandCreateTypeCast(struct operand* op, struct type to, struct token tok) {
+struct operand* OperandTypeCast(struct operand* op, struct type to, struct token tok) {
     if (!op) return NULL;
     if ((TypeIsByteArray(to) && op->type.bType != BASETYPE_FUNC) || TypeIsByteArray(op->type));
     else if (!typeCastIsCompat(op, to)) {
@@ -407,7 +417,7 @@ struct operationList operationListSlice(struct operationList ops, int start, int
     return ops;
 }
 
-enum operation operatorPrecedenceA[] = {OPERATION_AND, OPERATION_OR};
+enum operation operatorPrecedenceA[] = {OPERATION_AND, OPERATION_OR, OPERATION_XOR};
 enum operation operatorPrecedenceB[] = {OPERATION_BITWISE_AND, OPERATION_BITWISE_OR, OPERATION_BITWISE_XOR};
 enum operation operatorPrecedenceC[] = {
     OPERATION_LESS_THAN,
@@ -425,7 +435,7 @@ struct operand* operandEvalPreferenceLvl(struct operandList opnds, struct operat
             struct operand* a = OperandEvalExpr(operandListSlice(opnds, 0, i +1), operationListSlice(oprts, 0, i));
             struct operand* b = OperandEvalExpr(
                     operandListSlice(opnds, i +1, opnds.len), operationListSlice(oprts, i +1, oprts.len));
-            return OperandCreateBinary(a, b, oprts.ptr[i]);
+            return OperandBinary(a, b, oprts.ptr[i]);
         }
     }
     return NULL;

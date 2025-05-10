@@ -7,10 +7,8 @@
 enum operation {
     OPERATION_NONE,
 
-    //func call
+    OPERATION_READ_VAR,
     OPERATION_FUNCCALL,
-
-    //type cast
     OPERATION_TYPECAST,
 
     //prefix unary
@@ -33,6 +31,7 @@ enum operation {
     OPERATION_NOT_EQUALS,
     OPERATION_AND,
     OPERATION_OR,
+    OPERATION_XOR,
     OPERATION_BITSHIFT_LEFT,
     OPERATION_BITSHIFT_RIGHT,
     OPERATION_BITWISE_AND,
@@ -58,15 +57,17 @@ struct operand {
     struct operandList args;
     enum operation opType;
     bool isLiteral;
+    struct var* readVar;
 };
 
 void OperandListAdd(struct operandList* ol, struct operand* o);
 void OperationListAdd(struct operationList* ol, enum operation oper);
 void OperandListDestroy(struct operandList ol);
 void OperationListDestroy(struct operationList ol);
-struct operand* OperandCreateUnary(struct operand* in, enum operation opType, struct token tok);
-struct operand* OperandCreateBinary(struct operand* a, struct operand* b, enum operation opType);
-struct operand* OperandCreateTypeCast(struct operand* op, struct type to, struct token tok);
+struct operand* OperandReadVar(struct var* v);
+struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok);
+struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType);
+struct operand* OperandTypeCast(struct operand* op, struct type to, struct token tok);
 struct operand* OperandBoolLiteral(struct token tok);
 struct operand* OperandCharLiteral(struct token tok);
 struct operand* OperandIntLiteral(struct token tok);
