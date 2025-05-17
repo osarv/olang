@@ -11,6 +11,7 @@
 #define EXPECTED_TYPE_NAME "expected type name"
 #define EXPECTED_VAR_NAME "expected variable name"
 #define EXPECTED_OPENING_CURLY "expected \"{\""
+#define EXPECTED_CLOSING_CURLY "expected \"}\""
 #define EXPECTED_CLOSING_SQUARE_BRACKET "expected \"]\""
 #define EXPECTED_CLOSING_PAREN "expected \")\""
 #define EXPECTED_CLOSING_CURLY_OR_COMMA "expected \"}\" or \",\""

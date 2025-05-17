@@ -75,5 +75,6 @@ struct operand* OperandFloatLiteral(struct token tok);
 struct operand* OperandStringLiteral(struct token tok);
 struct operand* OperandEvalExpr(struct operandList opnds, struct operationList oprts);
 bool OperandIsInt(struct operand* op);
+bool OperandIsBool(struct operand* op);
 
 #endif //OPERATION_H

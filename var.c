@@ -11,6 +11,13 @@ struct varList {
     struct var* ptr;
 };
 
+struct var* VarAlloc() {
+    struct var* v = malloc(sizeof(*v));
+    CheckAllocPtr(v);
+    *v = (struct var){0};
+    return v;
+}
+
 struct var VarInit(struct str name, struct type t, struct token tok) {
     struct var v = (struct var){0};
     v.name = name;
@@ -58,4 +65,15 @@ int VarListGetLen(VarList vl) {
 struct var VarListGetIdx(VarList vl, int idx) {
     if (idx < 0 || idx >= vl->len) ErrorBugFound();
     return vl->ptr[idx];
+}
+
+void VarListAddList(VarList head, VarList tail) {
+    for (int i = 0; i < tail->len; i++) {
+        VarListAdd(head, tail->ptr[i]);
+    }
+}
+
+void VarListRetract(VarList vl, int n) {
+    if (vl->len > n) ErrorBugFound();
+    vl->len -= n;
 }

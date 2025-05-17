@@ -270,6 +270,9 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "for")) return TOKEN_FOR;
     else if (isSubIdentifer(start, "compif")) return TOKEN_COMPIF;
     else if (isSubIdentifer(start, "compelse")) return TOKEN_COMPELSE;
+    else if (isSubIdentifer(start, "match")) return TOKEN_MATCH;
+    else if (isSubIdentifer(start, "matchall")) return TOKEN_MATCHALL;
+    else if (isSubIdentifer(start, "is")) return TOKEN_IS;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
@@ -487,6 +490,9 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_COMPIF: return "compif";
         case TOKEN_COMPELSE: return "compelse";
         case TOKEN_FOR: return "for";
+        case TOKEN_MATCH: return "match";
+        case TOKEN_MATCHALL: return "matchall";
+        case TOKEN_IS: return "is";
         case TOKEN_TYPE: return "type";
         case TOKEN_STRUCT: return "struct";
         case TOKEN_VOCAB: return "vocab";

@@ -456,3 +456,7 @@ struct operand* OperandEvalExpr(struct operandList opnds, struct operationList o
 bool OperandIsInt(struct operand* op) {
     return canUseAsInt(op);
 }
+
+bool OperandIsBool(struct operand* op) {
+    return canUseAsBool(op);
+}

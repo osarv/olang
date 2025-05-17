@@ -34,13 +34,11 @@ struct type {
     struct varList* vars; //for struct members and function arguments
     TypeList rets; //for function return types
     StrList words; //for vocabulary types
-    bool sizeKnown;
-    long long byteSize; //valid if byteSizeKnown is true
 };
 
 #include "var.h"
 
-void TypeSetSize(struct type* t);
+long long TypeGetSize(struct type t);
 struct type TypeVanilla(enum baseType bType);
 struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);

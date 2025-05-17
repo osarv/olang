@@ -16,25 +16,24 @@ struct typeList {
     struct type* ptr;
 };
 
-long long typeCalcSize(struct type t, bool* sizeKnown);
+long long TypeGetSize(struct type t);
 
-long long calcArraySize(struct type t, bool* sizeKnown) {
+long long getArraySize(struct type t) {
     if (!t.arrMalloc) return PTR_SIZE;
-    *sizeKnown = false;
     t.bType = t.arrBase;
     return 0;
 }
 
-long long calcStructSize(struct type t, bool* sizeKnown) {
+long long getStructSize(struct type t) {
     if (!t.structMAlloc) return PTR_SIZE;
     long long size = 0;
     for (int i = 0; i < VarListGetLen(t.vars); i++) {
-        size += typeCalcSize(VarListGetIdx(t.vars, i).type, sizeKnown);
+        size += TypeGetSize(VarListGetIdx(t.vars, i).type);
     }
     return size;
 }
 
-long long typeCalcSize(struct type t, bool* sizeKnown) {
+long long TypeGetSize(struct type t) {
     switch (t.bType) {
         case BASETYPE_BOOL: return 1;
         case BASETYPE_BYTE: return 1;
@@ -42,18 +41,12 @@ long long typeCalcSize(struct type t, bool* sizeKnown) {
         case BASETYPE_INT64: return 8;
         case BASETYPE_FLOAT32: return 4;
         case BASETYPE_FLOAT64: return 8;
-        case BASETYPE_ARRAY: return calcArraySize(t, sizeKnown);
-        case BASETYPE_STRUCT: return calcStructSize(t, sizeKnown);
+        case BASETYPE_ARRAY: return getArraySize(t);
+        case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_VOCAB: return VOCAB_SIZE;
         case BASETYPE_FUNC: return PTR_SIZE;
     }
     return 0; //unreachable
-}
-
-void TypeSetSize(struct type* t) {
-    bool sizeKnown = true;
-    t->byteSize = typeCalcSize(*t, &sizeKnown);
-    t->sizeKnown = sizeKnown;
 }
 
 static char* typeVanillaBoolStr = "bool";
@@ -66,12 +59,12 @@ static char* typeVanillaFloat64Str = "float64";
 struct type TypeVanilla(enum baseType bType) {
     struct type t = (struct type){0};
     switch (bType) {
-        case BASETYPE_BOOL: t.byteSize = 1; t.name.ptr = typeVanillaBoolStr; break;
-        case BASETYPE_BYTE: t.byteSize = 1; t.name.ptr = typeVanillaByteStr; break;
-        case BASETYPE_INT32: t.byteSize = 4; t.name.ptr = typeVanillaInt32Str; break;
-        case BASETYPE_INT64: t.byteSize = 8; t.name.ptr = typeVanillaInt64Str; break;
-        case BASETYPE_FLOAT32: t.byteSize = 4; t.name.ptr = typeVanillaFloat32Str; break;
-        case BASETYPE_FLOAT64: t.byteSize = 8; t.name.ptr = typeVanillaFloat64Str; break;
+        case BASETYPE_BOOL: t.name.ptr = typeVanillaBoolStr; break;
+        case BASETYPE_BYTE: t.name.ptr = typeVanillaByteStr; break;
+        case BASETYPE_INT32: t.name.ptr = typeVanillaInt32Str; break;
+        case BASETYPE_INT64: t.name.ptr = typeVanillaInt64Str; break;
+        case BASETYPE_FLOAT32: t.name.ptr = typeVanillaFloat32Str; break;
+        case BASETYPE_FLOAT64: t.name.ptr = typeVanillaFloat64Str; break;
         default: ErrorBugFound();
     }
     t.name.len = strlen(t.name.ptr);
