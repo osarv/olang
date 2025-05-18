@@ -2,6 +2,7 @@
 #define STATEMENT_H
 
 #include "token.h"
+#include "list.h"
 
 enum statementType {
     STATEMENT_STACK_ALLOCATION,
@@ -17,12 +18,6 @@ enum statementType {
     STATEMENT_NOMATCH
 };
 
-struct statementList {
-    int cap;
-    int len;
-    struct statement* ptr;
-};
-
 struct statement {
     enum statementType sType;
     struct token tok;
@@ -35,11 +30,10 @@ struct statement {
 
     struct operand* condOp;
     struct statement* forEveryAssignment;
-    struct statementList codeBlock;
+    struct list codeBlock;
 };
 
 struct statement* StatementEmpty();
 struct statement* StatementStackAllocation(struct var* v);
-void StatementListAdd(struct statementList* sl, struct statement s);
 
 #endif //STATEMENT_H

@@ -5,38 +5,11 @@
 #include "operation.h"
 #include "error.h"
 
-#define OPERAND_ALLOC_STEP_SIZE 100
-void OperandListAdd(struct operandList* ol, struct operand* o) { 
-    if (ol->len >= ol->cap) {
-        ol->cap += OPERAND_ALLOC_STEP_SIZE;
-        ol->ptr = realloc(ol->ptr, sizeof(*(ol->ptr)) * ol->cap);
-    }
-    ol->ptr[ol->len] = o;
-    ol->len++;
-}
-
-#define OPERATION_ALLOC_STEP_SIZE 100
-void OperationListAdd(struct operationList* ol, enum operation oper) { 
-    if (ol->len >= ol->cap) {
-        ol->cap += OPERATION_ALLOC_STEP_SIZE;
-        ol->ptr = realloc(ol->ptr, sizeof(*(ol->ptr)) * ol->cap);
-    }
-    ol->ptr[ol->len] = oper;
-    ol->len++;
-}
-
-void OperandListDestroy(struct operandList ol) {
-    if (ol.ptr) free(ol.ptr);
-}
-
-void OperationListDestroy(struct operationList ol) {
-    if (ol.ptr) free(ol.ptr);
-}
-
 struct operand* operandEmpty() {
     struct operand* op = malloc(sizeof(*op));
     CheckAllocPtr(op);
     *op = (struct operand){0};
+    op->args = ListInit(sizeof(struct operand*));
     return op;
 }
 
@@ -364,7 +337,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
     if (!checkCompatUnary(in, opType)) return NULL;
     struct operand* out = operandEmpty();
     *out = *in;
-    OperandListAdd(&(out->args), in);
+    ListAdd(&out->args, &in);
     out->tok = tok;
     out->opType = opType;
     return out;
@@ -381,8 +354,8 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     else if (sharedBType == BASETYPE_FUNC) c->type = a->type;
     c->type = TypeVanilla(sharedBType);
 
-    OperandListAdd(&(c->args), a);
-    OperandListAdd(&(c->args), b);
+    ListAdd(&c->args, &a);
+    ListAdd(&c->args, &b);
     c->tok = TokenMerge(a->tok, b->tok);
     c->opType = opType;
     return c;
@@ -403,20 +376,6 @@ struct operand* OperandTypeCast(struct operand* op, struct type to, struct token
     return new;
 }
 
-//only for internal use in expression evaluation
-struct operandList operandListSlice(struct operandList ops, int start, int end) {
-    ops.ptr += start;
-    ops.len = end - start;
-    return ops;
-}
-
-//only for internal use in expression evaluation
-struct operationList operationListSlice(struct operationList ops, int start, int end) {
-    ops.ptr += start;
-    ops.len = end - start;
-    return ops;
-}
-
 enum operation operatorPrecedenceA[] = {OPERATION_AND, OPERATION_OR, OPERATION_XOR};
 enum operation operatorPrecedenceB[] = {OPERATION_BITWISE_AND, OPERATION_BITWISE_OR, OPERATION_BITWISE_XOR};
 enum operation operatorPrecedenceC[] = {
@@ -428,22 +387,22 @@ enum operation operatorPrecedenceD[] = {OPERATION_BITSHIFT_LEFT, OPERATION_BITSH
 enum operation operatorPrecedenceE[] = {OPERATION_ADD, OPERATION_SUB};
 enum operation operatorPrecedenceF[] = {OPERATION_MUL, OPERATION_DIV, OPERATION_MODULO};
 
-struct operand* operandEvalPreferenceLvl(struct operandList opnds, struct operationList oprts, enum operation* lvl, int n){
+struct operand* operandEvalPreferenceLvl(struct list opnds, struct list oprts, enum operation* lvl, int n){
     for (int i = 0; i < oprts.len; i++) {
         for (int j = 0; j < n; j++) {
-            if (oprts.ptr[i] != lvl[j]) continue;
-            struct operand* a = OperandEvalExpr(operandListSlice(opnds, 0, i +1), operationListSlice(oprts, 0, i));
+            if (*(enum operation*)ListGetIdx(&oprts, i) != lvl[j]) continue;
+            struct operand* a = OperandEvalExpr(ListSlice(&opnds, 0, i +1), ListSlice(&oprts, 0, i));
             struct operand* b = OperandEvalExpr(
-                    operandListSlice(opnds, i +1, opnds.len), operationListSlice(oprts, i +1, oprts.len));
-            return OperandBinary(a, b, oprts.ptr[i]);
+                    ListSlice(&opnds, i +1, opnds.len), ListSlice(&oprts, i +1, oprts.len));
+            return OperandBinary(a, b, *(enum operation*)ListGetIdx(&oprts, i));
         }
     }
     return NULL;
 }
 
 //parenthesis and unary operators are handled at caller level
-struct operand* OperandEvalExpr(struct operandList opnds, struct operationList oprts) {
-    if (opnds.len == 1) return opnds.ptr[0];
+struct operand* OperandEvalExpr(struct list opnds, struct list oprts) {
+    if (opnds.len == 1) return *(struct operand**)ListGetIdx(&opnds, 0);
     struct operand* op;
     if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceA, 2))) return op;
     else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceB, 3))) return op;

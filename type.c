@@ -10,12 +10,6 @@
 #define ARR_LEN_SIZE 8 //4 for 32bit
 #define VOCAB_SIZE 4;
 
-struct typeList {
-    int len;
-    int cap;
-    struct type* ptr;
-};
-
 long long TypeGetSize(struct type t);
 
 long long getArraySize(struct type t) {
@@ -27,8 +21,8 @@ long long getArraySize(struct type t) {
 long long getStructSize(struct type t) {
     if (!t.structMAlloc) return PTR_SIZE;
     long long size = 0;
-    for (int i = 0; i < VarListGetLen(t.vars); i++) {
-        size += TypeGetSize(VarListGetIdx(t.vars, i).type);
+    for (int i = 0; i < t.vars.len; i++) {
+        size += TypeGetSize((*(struct var*)ListGetIdx(&t.vars, i)).type);
     }
     return size;
 }
@@ -89,51 +83,14 @@ struct type TypeFromType(struct str name, struct token tok, struct type tFrom) {
     return tFrom;
 }
 
-TypeList TypeListCreate() {
-    TypeList tl = malloc(sizeof(*tl));
-    CheckAllocPtr(tl);
-    *tl = (struct typeList){0};
-    return tl;
-}
-
-#define TYPE_ALLOC_STEP_SIZE 100
-void TypeListAdd(TypeList tl, struct type t) {
-    if (tl->len >= tl->cap) {
-        tl->cap += TYPE_ALLOC_STEP_SIZE;
-        tl->ptr = realloc(tl->ptr, sizeof(*(tl->ptr)) * tl->cap);
-    }
-    tl->ptr[tl->len] = t;
-    tl->len++;
-}
-
-bool TypeListGet(TypeList tl, struct str name, struct type* t) {
-    for (int i = 0; i < tl->len; i++) {
-        if (StrCmp(tl->ptr[i].name, name)) {
-            *t = tl->ptr[i];
-            return true;
-        }
-    }
-    return false;
-}
-
-struct type* TypeListGetAsPtr(TypeList tl, struct str name) {
-    for (int i = 0; i < tl->len; i++) {
-        if (StrCmp(tl->ptr[i].name, name)) {
-            return tl->ptr + i;
-        }
-    }
-    return NULL;
-}
-
-void TypeListUpdate(TypeList tl, struct type t) {
-    for (int i = 0; i < tl->len; i++) {
-        if (StrCmp(tl->ptr[i].name, t.name)) tl->ptr[i] = t;
-    }
-}
-
 bool TypeIsByteArray(struct type t) {
     if (t.bType != BASETYPE_ARRAY) return false;
     if (t.arrBase != BASETYPE_BYTE) return false;
     return true;
 }
 
+bool TypeCmpForList(void* name, void* elem) {
+    struct str searchName = *(struct str*)name;
+    struct str elemName = ((struct type*)elem)->name;
+    return StrCmp(searchName, elemName);
+}

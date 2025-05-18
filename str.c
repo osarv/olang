@@ -5,12 +5,6 @@
 #include "str.h"
 #include "error.h"
 
-struct strList {
-    int len;
-    int cap;
-    struct str* ptr;
-};
-
 struct str StrFromStackCStr(char* str) {
     struct str s;
     s.ptr = strdup(str);
@@ -57,33 +51,6 @@ bool StrCmp(struct str a, struct str b) { //returns true on same and false on di
     return true;
 }
 
-StrList StrListCreate() {
-    StrList sl = malloc(sizeof(*sl));
-    CheckAllocPtr(sl);
-    *sl = (struct strList){0};
-    return sl;
-}
-
-#define STR_ALLOC_STEP_SIZE 100
-void StrListAdd(StrList sl, struct str s) {
-    if (sl->len >= sl->cap) {
-        sl->cap += STR_ALLOC_STEP_SIZE;
-        sl->ptr = realloc(sl->ptr, sizeof(*(sl->ptr)) * sl->cap);
-    }
-    sl->ptr[sl->len] = s;
-    sl->len++;
-}
-
-bool StrListGet(StrList sl, struct str pattern, struct str* s) {
-    for (int i = 0; i < sl->len; i++) {
-        if (StrCmp(sl->ptr[i], pattern)) {
-            *s = sl->ptr[i];
-            return true;
-        }
-    }
-    return false;
-}
-
 char charFromEscapeStr(struct str s) {
     switch (s.ptr[2]) {
         case 'n': return '\n';
@@ -113,4 +80,10 @@ double DoubleFromStr(struct str s) {
         tmp[i] = s.ptr[i];
     }
     return atof(tmp);
+}
+
+bool StrCmpForList(void* cmpStr, void* elem) {
+    struct str cmpS= *(struct str*)cmpStr;
+    struct str elemS = *(struct str*)elem;
+    return StrCmp(cmpS, elemS);
 }

@@ -10,7 +10,7 @@ type MyStruct struct {
     sfs int32[][-2],
     that int64[][],
     sdsdfs myTestArr,
-    dfs myStruct2
+    dsfs myStruct2
 }
 
 type myStruct2 struct {

@@ -3,9 +3,7 @@
 
 #include "token.h"
 #include "str.h"
-#include "ptrlist.h"
-
-typedef struct typeList* TypeList;
+#include "list.h"
 
 enum baseType {
     BASETYPE_BOOL,
@@ -31,9 +29,9 @@ struct type {
     bool arrMalloc;
     struct operand* arrLen; //for when the array is allocated
     int arrLvls;
-    struct varList* vars; //for struct members and function arguments
-    TypeList rets; //for function return types
-    StrList words; //for vocabulary types
+    struct list vars; //for struct members and function arguments
+    struct list rets; //for function return types
+    struct list words; //for vocabulary types
 };
 
 #include "var.h"
@@ -42,11 +40,7 @@ long long TypeGetSize(struct type t);
 struct type TypeVanilla(enum baseType bType);
 struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
-TypeList TypeListCreate();
-void TypeListAdd(TypeList tl, struct type t);
-bool TypeListGet(TypeList vl, struct str name, struct type* t);
-struct type* TypeListGetAsPtr(TypeList tl, struct str name);
-void TypeListUpdate(TypeList tl, struct type t);
 bool TypeIsByteArray(struct type t);
+bool TypeCmpForList(void* name, void* elem);
 
 #endif //TYPE_H

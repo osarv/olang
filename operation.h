@@ -39,31 +39,15 @@ enum operation {
     OPERATION_BITWISE_XOR,
 };
 
-struct operationList {
-    int len;
-    int cap;
-    enum operation* ptr;
-};
-
-struct operandList {
-    int len;
-    int cap;
-    struct operand** ptr;
-};
-
 struct operand {
     struct token tok;
     struct type type;
-    struct operandList args;
+    struct list args;
     enum operation opType;
     bool isLiteral;
     struct var* readVar;
 };
 
-void OperandListAdd(struct operandList* ol, struct operand* o);
-void OperationListAdd(struct operationList* ol, enum operation oper);
-void OperandListDestroy(struct operandList ol);
-void OperationListDestroy(struct operationList ol);
 struct operand* OperandReadVar(struct var* v);
 struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok);
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType);
@@ -73,7 +57,7 @@ struct operand* OperandCharLiteral(struct token tok);
 struct operand* OperandIntLiteral(struct token tok);
 struct operand* OperandFloatLiteral(struct token tok);
 struct operand* OperandStringLiteral(struct token tok);
-struct operand* OperandEvalExpr(struct operandList opnds, struct operationList oprts);
+struct operand* OperandEvalExpr(struct list opnds, struct list oprts);
 bool OperandIsInt(struct operand* op);
 bool OperandIsBool(struct operand* op);
 

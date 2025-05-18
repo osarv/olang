@@ -4,6 +4,7 @@
 #include <string.h>
 #include "token.h"
 #include "error.h"
+#include "list.h"
 
 static int tokIdCtr = 0;
 
@@ -13,17 +14,10 @@ int tokIdCtrCount() {
 
 struct tokenContext {
     struct str fileName;
-
-    char* chars;
-    int charLen;
-    int charCap;
-    int charCursor;
+    struct list chars;
     int charLineNr;
+    struct list tokens;
 
-    struct token* tokens;
-    int tokLen;
-    int tokCap;
-    int tokCursor;
 };
 
 bool isValidChar(char c) {
@@ -35,16 +29,15 @@ bool isValidChar(char c) {
 }
 
 char feedChar(TokenCtx tc) {
-    char c = tc->chars[tc->charCursor];
+    char c = *(char*)ListFeed(&tc->chars);
     if (c == '\n') tc->charLineNr++;
-    tc->charCursor++;
     return c;
 }
 
 void unfeedChar(TokenCtx tc) {
-    if (tc->charCursor <= 0) ErrorBugFound();
-    tc->charCursor--;
-    if (tc->chars[tc->charCursor] == '\n') tc->charLineNr--;
+    ListUnfeed(&tc->chars);
+    if (tc->chars.len <= 0) ErrorBugFound();
+    if (*(char*)ListPeek(&tc->chars) == '\n') tc->charLineNr--;
 }
 
 bool tryFeedChar(TokenCtx tc, char c) {
@@ -56,17 +49,6 @@ bool tryFeedChar(TokenCtx tc, char c) {
     return true;
 }
 
-#define CHAR_ALLOC_STEP 1000
-void addChar(TokenCtx tc, char c) {
-    if (tc->charLen >= tc->charCap) {
-        tc->charCap += CHAR_ALLOC_STEP;
-        tc->chars = realloc(tc->chars, sizeof(char) * tc->charCap);
-        CheckAllocPtr(tc->chars);
-    }
-    tc->chars[tc->charLen] = c;
-    tc->charLen++;
-}
-
 void readChars(TokenCtx tc) {
     char buffer[tc->fileName.len +1];
     StrGetAsCStr(tc->fileName, buffer);
@@ -75,14 +57,15 @@ void readChars(TokenCtx tc) {
 
     int c;
     while ((c = fgetc(fp)) != EOF) {
-        addChar(tc, (char)c);
+        ListAdd(&tc->chars, &c);
         if (c == '\n') tc->charLineNr++;
     }
-    addChar(tc, '\0');
-    for (int i = 0; i < tc->charLen -1; i++) {
+    c = '\0';
+    ListAdd(&tc->chars, &c);
+    for (int i = 0; i < tc->chars.len -1; i++) {
         if (!isValidChar(feedChar(tc))) SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
     }
-    tc->charCursor = 0;
+    ListResetCursor(&tc->chars);
     tc->charLineNr = 1;
 }
 
@@ -261,7 +244,7 @@ bool isSubIdentifer(char* start, char* subId) {
 }
 
 enum tokenType tokenizeIdentifier(TokenCtx tc) {
-    char* start = tc->chars + tc->charCursor -1;
+    char* start = (char*)tc->chars.ptr + tc->chars.cursor -1;
     while (isIdentifierBodyChar(feedChar(tc)));
     unfeedChar(tc);
 
@@ -305,7 +288,7 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
 
 struct token tokenizeToken(TokenCtx tc) {
     struct token tok;
-    tok.str.ptr = tc->chars + tc->charCursor;
+    tok.str.ptr = (char*)tc->chars.ptr + tc->chars.cursor;
     tok.lineNr = tc->charLineNr;
 
     char c = feedChar(tc);
@@ -337,28 +320,16 @@ struct token tokenizeToken(TokenCtx tc) {
         case '}': tok.type = TOKEN_CURLY_BRACKET_CLOSE; break;
         default: SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
     }
-    tok.str.len = tc->chars + tc->charCursor - tok.str.ptr;
+    tok.str.len = (char*)tc->chars.ptr + tc->chars.cursor - tok.str.ptr;
+    tok.owner = tc;
     return tok;
 }
 
-#define TOK_ALLOC_STEP 1000
-void tokenContextAdd(TokenCtx tc, struct token tok) {
-    if (tc->tokLen <= tc->tokCap) {
-        tc->tokCap += TOK_ALLOC_STEP;
-        tc->tokens = realloc(tc->tokens, sizeof(struct token) * tc->tokCap);
-        CheckAllocPtr(tc->tokens);
-    }
-    tok.tokId = tokIdCtrCount();
-    tok.owner = tc;
-    tc->tokens[tc->tokLen] = tok;
-    tc->tokLen++;
-}
-
 void tokenizeTokensFromChars(TokenCtx tc) {
-    while (tc->chars[tc->charCursor] != '\0') {
+    while (*(char*)ListPeek(&tc->chars) != '\0') {
         if (!findNextTokStart(tc)) break;
         struct token tok = tokenizeToken(tc);
-        tokenContextAdd(tc, tok);
+        ListAdd(&tc->tokens, &tok);
     }
 }
 
@@ -374,6 +345,8 @@ TokenCtx TokenizeFile(struct str fileName) {
     TokenCtx tc = malloc(sizeof(*tc));
     CheckAllocPtr(tc);
     *tc = (struct tokenContext){0};
+    tc->chars = ListInit(sizeof(char));
+    tc->tokens = ListInit(sizeof(struct token));
     tc->charLineNr = 1;
     tc->fileName = fileName;
 
@@ -383,12 +356,12 @@ TokenCtx TokenizeFile(struct str fileName) {
 }
 
 int TokenGetCharCursor(TokenCtx tc) {
-    return tc->charCursor;
+    return tc->chars.cursor;
 }
 
 char TokenGetChar(TokenCtx tc, int index) {
-    if (index < 0 || index >= tc->charLen) ErrorBugFound();
-    return tc->chars[index];
+    if (index < 0 || index >= tc->chars.len) ErrorBugFound();
+    return *(char*)ListGetIdx(&tc->chars, index);
 }
 
 struct str TokenGetFileName(TokenCtx tc) {
@@ -397,42 +370,43 @@ struct str TokenGetFileName(TokenCtx tc) {
 }
 
 int TokenGetLineNrLastFedChar(TokenCtx tc) {
-    if (tc->charCursor -1 < 0) return 1;
-    if (tc->chars[tc->charCursor -1] == '\n') return tc->charLineNr -1;
+    if (tc->chars.cursor -1 < 0) return 1;
+    if (*(char*)ListPrevious(&tc->chars) == '\n') return tc->charLineNr -1;
     return tc->charLineNr;
 }
 
 int TokenGetPrevNewline(TokenCtx tc, int cursor) { //returns first index on none found
     for (int i = cursor -1 ; i >= 0; i--) {
-        if (tc->chars[i] == '\n') return i;
+        if (*(char*)ListGetIdx(&tc->chars, i) == '\n') return i;
     }
     return -1;
 }
 
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on none found
-    for (int i = cursor; i < tc->charLen; i++) {
-        if (tc->chars[i] == '\n') return i;
+    for (int i = cursor; i < tc->chars.len; i++) {
+        if (*(char*)ListGetIdx(&tc->chars, i) == '\n') return i;
     }
-    return tc->charLen -1;
+    return tc->chars.len -1;
 }
 
 int TokenGetStrStart(TokenCtx tc, struct str str) {
-    return str.ptr - tc->chars;
+    return str.ptr - (char*)tc->chars.ptr;
 }
 
 int TokenGetEOFIndex(TokenCtx tc) {
-    return tc->charLen -1;
+    return tc->chars.len -1;
 }
 
 struct token TokenPeek(TokenCtx tc)  {
-    if (tc->tokCursor >= tc->tokLen) return TokenEOF(tc);
-    return tc->tokens[tc->tokCursor];
+    struct token* tokPtr = ListPeek(&tc->tokens);
+    if (!tokPtr) return TokenEOF(tc);
+    return *tokPtr;
 }
 
 struct token TokenFeed(TokenCtx tc) {
-    struct token tok = TokenPeek(tc);
-    tc->tokCursor++;
-    return tok;
+    struct token* tokPtr = ListFeed(&tc->tokens);
+    if (!tokPtr) return TokenEOF(tc);
+    return *tokPtr;
 }
 
 void TokenFeedUntil(TokenCtx tc, enum tokenType type) {
@@ -441,22 +415,18 @@ void TokenFeedUntil(TokenCtx tc, enum tokenType type) {
 }
 
 void TokenUnfeed(TokenCtx tc) {
-    if (tc->tokCursor <= 0) ErrorBugFound();
-    tc->tokCursor--;
-}
-
-struct token TokenCurrent(TokenCtx tc) {
-    TokenUnfeed(tc);
-    return TokenFeed(tc);
+    ListUnfeed(&tc->tokens);
+    if (tc->tokens.len <= 0) ErrorBugFound();
 }
 
 struct token TokenPrevious(TokenCtx tc) {
-    TokenUnfeed(tc);
-    return TokenFeed(tc);
+    struct token* tokPtr = ListPrevious(&tc->tokens);
+    if (!tokPtr) ErrorBugFound();
+    return *tokPtr;
 }
 
 void TokenReset(TokenCtx tc) {
-    tc->tokCursor = 0;
+    ListResetCursor(&tc->tokens);
 }
 
 struct token TokenMerge(struct token head, struct token tail) {
@@ -468,11 +438,11 @@ struct token TokenMerge(struct token head, struct token tail) {
 }
 
 int TokenGetCursor(TokenCtx tc) {
-    return tc->tokCursor;
+    return tc->tokens.cursor;
 }
 
 void TokenSetCursor(TokenCtx tc, int cursor) {
-    tc->tokCursor = cursor;
+    ListSetCursor(&tc->tokens, cursor);
 }
 
 char* TokenTypeToString(enum tokenType type) {

@@ -15,13 +15,3 @@ struct statement* StatementStackAllocation(struct var* toAlloc) {
     s->nAllocBytes = TypeGetSize(toAlloc->type);
     return s;
 }
-
-#define STATEMENT_ALLOC_STEP_SIZE 100
-void StatementListAdd(struct statementList* sl, struct statement s) {
-    if (sl->len >= sl->cap) {
-        sl->cap += STATEMENT_ALLOC_STEP_SIZE;
-        sl->ptr = realloc(sl->ptr, sizeof(*(sl->ptr)) * sl->cap);
-    }
-    sl->ptr[sl->len] = s;
-    sl->len++;
-}
