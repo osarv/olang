@@ -49,6 +49,7 @@
 #define TRAILING_PAREN "trailing parenthesis"
 #define TRAILING_CURLY "trailing curly bracket"
 #define EXPECTED_ASSIGNMENT "expected assignment"
+#define EXPECTED_EXPRESSION "expected expression"
 #define VAR_IMMUTABLE "variable is immutable"
 
 void FinishCompilation();

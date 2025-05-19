@@ -20,8 +20,12 @@ struct var VarInit(struct str name, struct type t, struct token tok) {
     return v;
 }
 
-bool VarCmpForList(void* name, void* elem) {
+bool varCmpForList(void* name, void* elem) {
     struct str searchName = *(struct str*)name;
     struct str elemName = ((struct var*)elem)->name;
     return StrCmp(searchName, elemName);
+}
+
+struct var* VarGetList(struct list* l, struct str name) {
+    return ListGetCmp(l, &name, varCmpForList);
 }

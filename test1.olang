@@ -23,6 +23,7 @@ type MyFunc2 func(in byte[], in2 mut test2.MyInt23)(int32, int32, MyStruct{}[24]
 func MyActualFunc(mStr mut MyStruct, in1 test2.MyInt23, i int32[])(bool, int32[2]) {
     if true {
         for i int32 = 0, i < 0, i++ {
+            if (sdfsd == 0) {}
         }
     }
 }

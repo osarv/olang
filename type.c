@@ -89,8 +89,12 @@ bool TypeIsByteArray(struct type t) {
     return true;
 }
 
-bool TypeCmpForList(void* name, void* elem) {
+bool typeCmpForList(void* name, void* elem) {
     struct str searchName = *(struct str*)name;
     struct str elemName = ((struct type*)elem)->name;
     return StrCmp(searchName, elemName);
+}
+
+struct type* TypeGetList(struct list* l, struct str name) {
+    return ListGetCmp(l, &name, typeCmpForList);
 }

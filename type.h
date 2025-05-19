@@ -41,6 +41,6 @@ struct type TypeVanilla(enum baseType bType);
 struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
 bool TypeIsByteArray(struct type t);
-bool TypeCmpForList(void* name, void* elem);
+struct type* TypeGetList(struct list* l, struct str name);
 
 #endif //TYPE_H

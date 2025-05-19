@@ -82,8 +82,12 @@ double DoubleFromStr(struct str s) {
     return atof(tmp);
 }
 
-bool StrCmpForList(void* cmpStr, void* elem) {
+bool strCmpForList(void* cmpStr, void* elem) {
     struct str cmpS= *(struct str*)cmpStr;
     struct str elemS = *(struct str*)elem;
     return StrCmp(cmpS, elemS);
+}
+
+struct str* StrGetList(struct list* l, struct str name) {
+    return ListGetCmp(l, &name, strCmpForList);
 }

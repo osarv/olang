@@ -2,6 +2,7 @@
 #define STR_H
 
 #include "stdbool.h"
+#include "list.h"
 
 struct str {
     char* ptr;
@@ -17,6 +18,6 @@ bool StrCmp(struct str a, struct str b); //returns true on same and false on dif
 char CharFromStr(struct str s);
 long long LongLongFromStr(struct str str);
 double DoubleFromStr(struct str s);
-bool StrCmpForList(void* cmpStr, void* elem);
+struct str* StrGetList(struct list* l, struct str name);
 
 #endif //STR_H
