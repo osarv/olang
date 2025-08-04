@@ -3,6 +3,7 @@
 
 #include "token.h"
 #include "list.h"
+#include "var.h"
 
 enum statementType {
     STATEMENT_STACK_ALLOCATION,
@@ -11,6 +12,7 @@ enum statementType {
     STATEMENT_ASSIGNMENT_DECREMENT,
     STATEMENT_IF,
     STATEMENT_ELSE,
+    STATEMENT_RETURN,
     STATEMENT_FOR,
     STATEMENT_MATCH,
     STATEMENT_MATCHALL,
@@ -20,20 +22,11 @@ enum statementType {
 
 struct statement {
     enum statementType sType;
-    struct token tok;
-
-    struct var* assignVar;
-    struct operand* assignOp;
-    struct statement* assignment;
-    struct statement* stackAllocation;
-    long long nAllocBytes;
-
-    struct operand* condOp;
-    struct statement* forEveryAssignment;
+    struct var var;
+    struct operand* op;
     struct list codeBlock;
 };
 
-struct statement* StatementEmpty();
-struct statement* StatementStackAllocation(struct var* v);
+void StatementStackAllocAddList(struct list* codeBlock, struct var allocvar);
 
 #endif //STATEMENT_H

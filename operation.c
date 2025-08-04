@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include "var.h"
 #include "operation.h"
-#include "error.h"
+#include "util.h"
 
 struct operand* operandEmpty() {
     struct operand* op = malloc(sizeof(*op));
@@ -194,7 +194,7 @@ bool isArraySameType(struct operand* a, struct operand* b) {
 
 bool isStructVocabFuncSameType(struct operand* a, struct operand* b) {
     if (!StrCmp(a->type.name, b->type.name)) return false;
-    if (a->type.pcId != b->type.pcId) return false;
+    if (a->type.owner != b->type.owner) return false;
     return true;
 }
 
@@ -276,10 +276,15 @@ bool checkCompatBinary(struct operand* a, struct operand* b, enum operation opTy
         case OPERATION_SUB: return checkIsSameNumberType(a, b, resBType);
         case OPERATION_MUL: return checkIsSameNumberType(a, b, resBType);
         case OPERATION_DIV: return checkIsSameNumberType(a, b, resBType);
-        case OPERATION_LESS_THAN: return checkIsSameNumberType(a, b, resBType);
-        case OPERATION_LESS_THAN_OR_EQUAL: return checkIsSameNumberType(a, b, resBType);
-        case OPERATION_GREATER_THAN: return checkIsSameNumberType(a, b, resBType);
-        case OPERATION_GREATER_THAN_OR_EQUAL: return checkIsSameNumberType(a, b, resBType);
+
+        case OPERATION_LESS_THAN: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
+        case OPERATION_LESS_THAN_OR_EQUAL: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
+        case OPERATION_GREATER_THAN: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
+        case OPERATION_GREATER_THAN_OR_EQUAL: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
 
         case OPERATION_EQUALS: return checkIsSameType(a, b, resBType);
         case OPERATION_NOT_EQUALS: return checkIsSameType(a, b, resBType);
@@ -297,7 +302,7 @@ bool checkCompatBinary(struct operand* a, struct operand* b, enum operation opTy
     }
 }
 
-bool typeCastIsCompat(struct operand* op, struct type to) {
+bool TypeCastIsCompat(struct operand* op, struct type to) {
     switch(to.bType) {
         case BASETYPE_BOOL: return false;
         case BASETYPE_BYTE: return canUseAsInt(op);
@@ -309,6 +314,7 @@ bool typeCastIsCompat(struct operand* op, struct type to) {
         case BASETYPE_STRUCT: return false;
         case BASETYPE_VOCAB: return false;
         case BASETYPE_FUNC: return false;
+        case BASETYPE_ERROR: return false;
     }
     return false; //unreachable
 }
@@ -323,13 +329,55 @@ bool checkCompatUnary(struct operand* op, enum operation opType) {
     }
 }
 
-struct operand* OperandReadVar(struct var* v) {
+struct operand* OperandReadVar(struct var v) {
     struct operand* op = operandEmpty();
-    op->tok = v->tok;
-    op->type = v->type;
+    op->tok = v.tok;
+    op->type = v.type;
     op->opType = OPERATION_READ_VAR;
-    op->readVar = v->origin;
+    op->readVar = v.origin;
     return op;
+}
+
+void tryEvalIntLiteral(struct operand* op) {
+    for (int i = 0; i < op->args.len; i++) {
+        struct operand* arg = ListGetIdx(&op->args, i);
+        if (arg->type.bType != BASETYPE_INT32 && arg->type.bType != BASETYPE_INT64 &&
+                arg->type.bType != BASETYPE_BOOL && arg->type.bType != BASETYPE_BYTE) return;
+        if (!arg->isLiteral) return;
+    }
+
+    struct operand* a = ListGetIdx(&op->args, 0);
+    struct operand* b;
+    if (op->args.len > 1) b = ListGetIdx(&op->args, 1);
+
+    switch (op->opType) {
+        case OPERATION_TYPECAST: break;
+        case OPERATION_NOT: op->intLiteralVal = !a->intLiteralVal; break;
+        case OPERATION_BITWISE_COMPLEMENT: op->intLiteralVal = ~a->intLiteralVal; break;
+        case OPERATION_PLUS: op->intLiteralVal = +a->intLiteralVal; break;
+        case OPERATION_MINUS: op->intLiteralVal = -a->intLiteralVal; break;
+        case OPERATION_MODULO: op->intLiteralVal = a->intLiteralVal % b->intLiteralVal; break;
+        case OPERATION_ADD: op->intLiteralVal = a->intLiteralVal + b->intLiteralVal; break;
+        case OPERATION_SUB: op->intLiteralVal = a->intLiteralVal - b->intLiteralVal; break;
+        case OPERATION_MUL: op->intLiteralVal = a->intLiteralVal * b->intLiteralVal; break;
+        case OPERATION_DIV: op->intLiteralVal = a->intLiteralVal / b->intLiteralVal; break;
+        case OPERATION_LESS_THAN: op->intLiteralVal = a->intLiteralVal < b->intLiteralVal; break;
+        case OPERATION_LESS_THAN_OR_EQUAL: op->intLiteralVal = a->intLiteralVal <= b->intLiteralVal; break;
+        case OPERATION_GREATER_THAN: op->intLiteralVal = a->intLiteralVal > b->intLiteralVal; break;
+        case OPERATION_GREATER_THAN_OR_EQUAL: op->intLiteralVal = a->intLiteralVal >= b->intLiteralVal; break;
+        case OPERATION_EQUALS: op->intLiteralVal = a->intLiteralVal == b->intLiteralVal; break;
+        case OPERATION_NOT_EQUALS: op->intLiteralVal = a->intLiteralVal != b->intLiteralVal; break;
+        case OPERATION_AND: op->intLiteralVal = a->intLiteralVal && b->intLiteralVal; break;
+        case OPERATION_OR: op->intLiteralVal = a->intLiteralVal || b->intLiteralVal; break;
+        case OPERATION_XOR: op->intLiteralVal = a->intLiteralVal && b->intLiteralVal ? false :
+                            !(!a->intLiteralVal && !b->intLiteralVal); break;
+        case OPERATION_BITSHIFT_LEFT: op->intLiteralVal = a->intLiteralVal << b->intLiteralVal; break;
+        case OPERATION_BITSHIFT_RIGHT: op->intLiteralVal = a->intLiteralVal >> b->intLiteralVal; break;
+        case OPERATION_BITWISE_AND: op->intLiteralVal = a->intLiteralVal & b->intLiteralVal; break;
+        case OPERATION_BITWISE_OR: op->intLiteralVal = a->intLiteralVal | b->intLiteralVal; break;
+        case OPERATION_BITWISE_XOR: op->intLiteralVal = a->intLiteralVal ^ b->intLiteralVal; break;
+        default: ErrorBugFound();
+    }
 }
 
 struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok) {
@@ -340,6 +388,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
     ListAdd(&out->args, &in);
     out->tok = tok;
     out->opType = opType;
+    tryEvalIntLiteral(out);
     return out;
 }
 
@@ -358,21 +407,23 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     ListAdd(&c->args, &b);
     c->tok = TokenMerge(a->tok, b->tok);
     c->opType = opType;
+    c->isLiteral = a->isLiteral && b->isLiteral;
+    tryEvalIntLiteral(c);
     return c;
 }
 
 struct operand* OperandTypeCast(struct operand* op, struct type to, struct token tok) {
     if (!op) return NULL;
     if ((TypeIsByteArray(to) && op->type.bType != BASETYPE_FUNC) || TypeIsByteArray(op->type));
-    else if (!typeCastIsCompat(op, to)) {
-        SyntaxErrorInvalidToken(to.tok, INVALID_TYPECAST);
+    else if (!TypeCastIsCompat(op, to)) {
+        SyntaxErrorOperandIncompatibleType(op, to);
         return NULL;
     }
     struct operand* new = operandEmpty();
     *new = *op;
     new->type = to;
     new->tok = tok;
-    new->isLiteral = false;
+    tryEvalIntLiteral(new);
     return new;
 }
 

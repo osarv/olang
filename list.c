@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "list.h"
-#include "error.h"
+#include "util.h"
 
 struct list ListInit(int elemSize) {
     struct list l = (struct list){0};
@@ -24,8 +24,8 @@ void ListClear(struct list* l) {
     l->len = 0;
 }
 
-void ListDestroy(struct list* l) {
-    free(l->ptr);
+void ListDestroy(struct list l) {
+    if (l.ptr) free(l.ptr);
 }
 
 void listCopyElem(void* ptr, void* elem, int elemSize) {
@@ -46,12 +46,26 @@ void ListAdd(struct list* l, void* elem) {
     memcpy((char*)l->ptr + l->len * l->elemSize, elem, l->elemSize);
     l->len++;
 }
+
+void ListAddList(struct list* head, struct list tail) {
+    if (head->elemSize != tail.elemSize) ErrorBugFound();
+    for (int i = 0; i < tail.len; i++) {
+        ListAdd(head, &tail.ptr + i * tail.elemSize);
+    }
+}
+
+void ListRetract(struct list* l, int newLen) {
+    if (newLen > l->len) ErrorBugFound();
+    l->len = newLen;
+}
+
 void* ListGetIdx(struct list* l, int idx) {
     if (idx >= l->len) ErrorBugFound();
     return (char*)l->ptr + idx * l->elemSize;
 }
 
-void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void* listElem)) {
+void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void* listElem)) { //returns NULL if l is NULL
+    if (!l) return NULL;
     for (int i = 0; i < l->len; i++) {
         void* listElem = (char*)l->ptr + l->elemSize * i;
         if (cmpFunc(cmpVal, listElem)) return listElem;

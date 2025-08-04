@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "token.h"
-#include "error.h"
+#include "util.h"
 #include "list.h"
 
 static int tokIdCtr = 0;
@@ -56,16 +56,9 @@ void readChars(TokenCtx tc) {
     if (!fp) ErrorUnableToOpenFile(buffer);
 
     int c;
-    while ((c = fgetc(fp)) != EOF) {
-        ListAdd(&tc->chars, &c);
-        if (c == '\n') tc->charLineNr++;
-    }
+    while ((c = fgetc(fp)) != EOF) ListAdd(&tc->chars, &c);
     c = '\0';
     ListAdd(&tc->chars, &c);
-    for (int i = 0; i < tc->chars.len -1; i++) {
-        if (!isValidChar(feedChar(tc))) SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
-    }
-    ListResetCursor(&tc->chars);
     tc->charLineNr = 1;
 }
 
@@ -253,12 +246,14 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "for")) return TOKEN_FOR;
     else if (isSubIdentifer(start, "compif")) return TOKEN_COMPIF;
     else if (isSubIdentifer(start, "compelse")) return TOKEN_COMPELSE;
+    else if (isSubIdentifer(start, "return")) return TOKEN_RETURN;
     else if (isSubIdentifer(start, "match")) return TOKEN_MATCH;
     else if (isSubIdentifer(start, "matchall")) return TOKEN_MATCHALL;
     else if (isSubIdentifer(start, "is")) return TOKEN_IS;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;
+    else if (isSubIdentifer(start, "error")) return TOKEN_ERROR;
     else if (isSubIdentifer(start, "func")) return TOKEN_FUNC;
     else if (isSubIdentifer(start, "mut")) return TOKEN_MUT;
     else if (isSubIdentifer(start, "import")) return TOKEN_IMPORT;
@@ -311,6 +306,7 @@ struct token tokenizeToken(TokenCtx tc) {
         case '^': tok.type = tokenizeCaret(tc); break;
         case ',': tok.type = TOKEN_COMMA; break;
         case '.': tok.type = TOKEN_DOT; break;
+        case '?': tok.type = TOKEN_QUESTIONMARK; break;
         case '~': tok.type = TOKEN_BITWISE_COMPLEMENT; break;
         case '(': tok.type = TOKEN_PAREN_OPEN; break;
         case ')': tok.type = TOKEN_PAREN_CLOSE; break;
@@ -322,6 +318,7 @@ struct token tokenizeToken(TokenCtx tc) {
     }
     tok.str.len = (char*)tc->chars.ptr + tc->chars.cursor - tok.str.ptr;
     tok.owner = tc;
+    tok.tokId = tokIdCtrCount();
     return tok;
 }
 
@@ -409,14 +406,30 @@ struct token TokenFeed(TokenCtx tc) {
     return *tokPtr;
 }
 
-void TokenFeedUntil(TokenCtx tc, enum tokenType type) {
+void TokenFeedUntilAfter(TokenCtx tc, enum tokenType type) {
     struct token tok = TokenFeed(tc);
     while (tok.type != type && tok.type != TOKEN_EOF) tok = TokenFeed(tc);
+}
+
+void TokenFeedUntilBefore(TokenCtx tc, enum tokenType type) {
+    TokenFeedUntilAfter(tc, type);
+    TokenUnfeed(tc);
 }
 
 void TokenUnfeed(TokenCtx tc) {
     ListUnfeed(&tc->tokens);
     if (tc->tokens.len <= 0) ErrorBugFound();
+}
+
+bool TokenFeedSpecific(TokenCtx tc, enum tokenType type, struct token* tok, char* errMsg) { //tok and errMsg may be NULL
+    struct token tmpTok = TokenFeed(tc);
+    if (tmpTok.type != type) {
+        TokenUnfeed(tc);
+        if (errMsg) SyntaxErrorInvalidToken(tmpTok, errMsg);
+        return false;
+    }
+    *tok = tmpTok;
+    return true;
 }
 
 struct token TokenPrevious(TokenCtx tc) {
@@ -435,6 +448,21 @@ struct token TokenMerge(struct token head, struct token tail) {
     head.str = StrMerge(head.str, tail.str);
     head.tokId = tokIdCtrCount();
     return head;
+}
+
+struct token TokenMergeFromListRange(struct list l, int start, int end) {
+    if (start > end) ErrorBugFound();
+    if (start < 0) ErrorBugFound();
+    if (end > l.len) ErrorBugFound();
+    struct token head = *(struct token*)ListGetIdx(&l, start);
+    struct token tail = *(struct token*)ListGetIdx(&l, end -1);
+    return TokenMerge(head, tail);
+}
+
+struct token TokenMergeFromList(struct list l) {
+    struct token head = *(struct token*)ListGetIdx(&l, 0);
+    struct token tail = *(struct token*)ListGetIdx(&l, l.len -1);
+    return TokenMerge(head, tail);
 }
 
 int TokenGetCursor(TokenCtx tc) {
@@ -459,6 +487,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_ELSE: return "else";
         case TOKEN_COMPIF: return "compif";
         case TOKEN_COMPELSE: return "compelse";
+        case TOKEN_RETURN: return "return";
         case TOKEN_FOR: return "for";
         case TOKEN_MATCH: return "match";
         case TOKEN_MATCHALL: return "matchall";
@@ -466,6 +495,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_TYPE: return "type";
         case TOKEN_STRUCT: return "struct";
         case TOKEN_VOCAB: return "vocab";
+        case TOKEN_ERROR: return "error";
         case TOKEN_FUNC: return "func";
         case TOKEN_MUT: return "mut";
         case TOKEN_IMPORT: return "import";
@@ -476,6 +506,7 @@ char* TokenTypeToString(enum tokenType type) {
         case TOKEN_MODULO: return "%";
         case TOKEN_COMMA: return ",";
         case TOKEN_DOT: return ".";
+        case TOKEN_QUESTIONMARK: return "?";
         case TOKEN_ASSIGNMENT: return "=";
         case TOKEN_ASSIGNMENT_ADD: return "+=";
         case TOKEN_ASSIGNMENT_SUB: return "-=";

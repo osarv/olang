@@ -15,11 +15,12 @@ enum baseType {
     BASETYPE_ARRAY,
     BASETYPE_STRUCT,
     BASETYPE_VOCAB,
-    BASETYPE_FUNC
+    BASETYPE_FUNC,
+    BASETYPE_ERROR,
 };
 
 struct type {
-    int pcId; //set when added to a pcList as a typedef
+    struct parserContext* owner;
     enum baseType bType;
     struct str name;
     struct token tok;
@@ -30,8 +31,10 @@ struct type {
     struct operand* arrLen; //for when the array is allocated
     int arrLvls;
     struct list vars; //for struct members and function arguments
-    struct list rets; //for function return types
-    struct list words; //for vocabulary types
+    struct list words; //for vocabs and errors
+    struct list retType; //max=1; holds return type for func
+    struct list errors;
+    bool hasError;
 };
 
 #include "var.h"
@@ -42,5 +45,6 @@ struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
 bool TypeIsByteArray(struct type t);
 struct type* TypeGetList(struct list* l, struct str name);
+bool IsSameType(struct type a, struct type b);
 
 #endif //TYPE_H

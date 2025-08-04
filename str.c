@@ -3,9 +3,9 @@
 #include <stdbool.h>
 #include <string.h>
 #include "str.h"
-#include "error.h"
+#include "util.h"
 
-struct str StrFromStackCStr(char* str) {
+struct str StrFromCStr(char* str) {
     struct str s;
     s.ptr = strdup(str);
     CheckAllocPtr(s.ptr);
@@ -18,6 +18,17 @@ void StrGetAsCStr(struct str s, char* buffer) { //assumes buffer is at least len
         buffer[i] = s.ptr[i];
     }
     buffer[s.len] = '\0';
+}
+
+void StrDestroy(struct str s) {
+    if (s.ptr) free(s.ptr);
+}
+
+void StrAppendChar(struct str* s, char c) {
+    s->ptr = realloc(s->ptr, sizeof(char) * s->len +1);
+    CheckAllocPtr(s->ptr);
+    s->ptr[s->len] = c;
+    s->len++;
 }
 
 char* StrGetAsCStrMalloc(struct str s) {
@@ -90,4 +101,10 @@ bool strCmpForList(void* cmpStr, void* elem) {
 
 struct str* StrGetList(struct list* l, struct str name) {
     return ListGetCmp(l, &name, strCmpForList);
+}
+
+void StrPrint(struct str s, FILE* stream) {
+    for (int i = 0; i < s.len; i++) {
+        fputc(s.ptr[i], stream);
+    }
 }

@@ -3,15 +3,9 @@
 #include "statement.h"
 #include "error.h"
 
-struct statement* StatementEmpty() {
-    struct statement* s = malloc(sizeof(*s));
-    CheckAllocPtr(s);
-    *s = (struct statement){0};
-    return s;
-}
-struct statement* StatementStackAllocation(struct var* toAlloc) {
-    struct statement* s = StatementEmpty();
-    s->sType = STATEMENT_STACK_ALLOCATION;
-    s->nAllocBytes = TypeGetSize(toAlloc->type);
-    return s;
+void StatementStackAllocAddList(struct list* codeBlock, struct var allocVar) {
+    struct statement s = (struct statement){0};
+    s.sType = STATEMENT_STACK_ALLOCATION;
+    s.var = allocVar;
+    ListAdd(codeBlock, &s);
 }

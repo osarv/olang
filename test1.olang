@@ -17,13 +17,25 @@ type myStruct2 struct {
     tsdfsdfs MyStruct{}
 }
 
-type MyFunc func(in mut int32[][])(int32[2], MyStruct{}[24])
-type MyFunc2 func(in byte[], in2 mut test2.MyInt23)(int32, int32, MyStruct{}[24])
+error myError {
+    ERROR_1,
+    ERROR_2
+}
 
-func MyActualFunc(mStr mut MyStruct, in test2.MyInt23, i int32[])(bool, int32[2]) {
+error myError2 {
+    ERROR_1,
+    ERROR_2
+}
+
+type MyFunc func(in mut int32[][]) myError?int32[2]
+type MyFunc2 func(in byte[], in2 mut test2.MyInt23)
+
+func MyActualFunc(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError, myError2?bool {
     if true {
-        for i int32 = 0, i < 0, i++ {
-            if (sdfsd == 0) {}
+        for i int32 = 0, i < in, i++ {
+            if false {}
         }
     }
+    in = 0
+    j = in
 }

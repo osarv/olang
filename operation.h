@@ -36,7 +36,7 @@ enum operation {
     OPERATION_BITSHIFT_RIGHT,
     OPERATION_BITWISE_AND,
     OPERATION_BITWISE_OR,
-    OPERATION_BITWISE_XOR,
+    OPERATION_BITWISE_XOR
 };
 
 struct operand {
@@ -46,9 +46,10 @@ struct operand {
     enum operation opType;
     bool isLiteral;
     struct var* readVar;
+    long long intLiteralVal;
 };
 
-struct operand* OperandReadVar(struct var* v);
+struct operand* OperandReadVar(struct var v);
 struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok);
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType);
 struct operand* OperandTypeCast(struct operand* op, struct type to, struct token tok);
@@ -58,6 +59,7 @@ struct operand* OperandIntLiteral(struct token tok);
 struct operand* OperandFloatLiteral(struct token tok);
 struct operand* OperandStringLiteral(struct token tok);
 struct operand* OperandEvalExpr(struct list opnds, struct list oprts);
+bool TypeCastIsCompat(struct operand* op, struct type to);
 bool OperandIsInt(struct operand* op);
 bool OperandIsBool(struct operand* op);
 

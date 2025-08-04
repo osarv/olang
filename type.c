@@ -2,13 +2,14 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-#include "error.h"
+#include "util.h"
 #include "type.h"
 #include "operation.h"
 
 #define PTR_SIZE 8 //4 for 32bit
 #define ARR_LEN_SIZE 8 //4 for 32bit
 #define VOCAB_SIZE 4;
+#define ERROR_SIZE 4;
 
 long long TypeGetSize(struct type t);
 
@@ -39,6 +40,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_VOCAB: return VOCAB_SIZE;
         case BASETYPE_FUNC: return PTR_SIZE;
+        case BASETYPE_ERROR: return ERROR_SIZE;
     }
     return 0; //unreachable
 }
@@ -64,6 +66,18 @@ struct type TypeVanilla(enum baseType bType) {
     t.name.len = strlen(t.name.ptr);
     t.bType = bType;
     return t;
+}
+
+bool isTypeVanilla(enum baseType bType) {
+    switch (bType) {
+        case BASETYPE_BOOL: return true;
+        case BASETYPE_BYTE: return true;
+        case BASETYPE_INT32: return true;
+        case BASETYPE_INT64: return true;
+        case BASETYPE_FLOAT32: return true;
+        case BASETYPE_FLOAT64: return true;
+        default: return false;
+    }
 }
 
 struct type TypeString(struct operand* len) {
@@ -97,4 +111,11 @@ bool typeCmpForList(void* name, void* elem) {
 
 struct type* TypeGetList(struct list* l, struct str name) {
     return ListGetCmp(l, &name, typeCmpForList);
+}
+
+bool IsSameType(struct type a, struct type b) {
+    if (isTypeVanilla(a.bType) && a.bType == b.bType) return true;
+    if (a.owner != b.owner) return false;
+    if (StrCmp(a.name, b.name)) return true;
+    return false;
 }

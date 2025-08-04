@@ -15,10 +15,12 @@ struct list {
 struct list ListInit(int elemSize);
 struct list ListSlice(struct list* l, int start, int end); //list slices may not be added to
 void ListClear(struct list* l);
-void ListDestroy(struct list* l);
+void ListDestroy(struct list l);
 void ListAdd(struct list* l, void* elem);
+void ListAddList(struct list* head, struct list tail);
+void ListRetract(struct list* l, int newLen);
 void* ListGetIdx(struct list* l, int idx);
-void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void* listElem));
+void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void* listElem)); //returns NULL if l is NULL
 void* ListPeek(struct list* l);
 void* ListPrevious(struct list* l);
 void* ListFeed(struct list* l);

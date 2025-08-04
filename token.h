@@ -2,12 +2,13 @@
 #define TOKEN_H
 
 #include "str.h"
+#include "list.h"
 
 typedef struct tokenContext* TokenCtx;
 
 enum tokenType {
+    TOKEN_EOF = 0, //can also be used to indicate there is no token
     TOKEN_MERGE, //merge tokens have no type and can not be produced by the context
-    TOKEN_EOF,
     TOKEN_BOOL_LITERAL,
     TOKEN_INT_LITERAL,
     TOKEN_FLOAT_LITERAL,
@@ -18,6 +19,7 @@ enum tokenType {
     TOKEN_ELSE,
     TOKEN_COMPIF,
     TOKEN_COMPELSE,
+    TOKEN_RETURN,
     TOKEN_FOR,
     TOKEN_MATCH,
     TOKEN_MATCHALL,
@@ -26,6 +28,7 @@ enum tokenType {
     TOKEN_STRUCT,
     TOKEN_VOCAB,
     TOKEN_FUNC,
+    TOKEN_ERROR,
     TOKEN_MUT,
     TOKEN_IMPORT,
     TOKEN_ADD,
@@ -35,6 +38,7 @@ enum tokenType {
     TOKEN_MODULO,
     TOKEN_COMMA,
     TOKEN_DOT,
+    TOKEN_QUESTIONMARK,
     TOKEN_ASSIGNMENT,
     TOKEN_ASSIGNMENT_ADD,
     TOKEN_ASSIGNMENT_SUB,
@@ -94,15 +98,19 @@ int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none 
 int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
 int TokenGetStrStart(TokenCtx tc, struct str str);
 int TokenGetEOFIndex(TokenCtx tc);
-struct token TokenPeek(TokenCtx);
+struct token TokenPeek(TokenCtx tc);
 struct token TokenFeed(TokenCtx tc);
-void TokenFeedUntil(TokenCtx tc, enum tokenType type);
+void TokenFeedUntilBefore(TokenCtx tc, enum tokenType type);
+void TokenFeedUntilAfter(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);
+bool TokenFeedSpecific(TokenCtx tc, enum tokenType type, struct token* tok, char* errMsg); //tok and errMsg may be NULL
 struct token TokenPrevious(TokenCtx tc);
 void TokenReset(TokenCtx tc);
 int TokenGetCursor(TokenCtx tc);
 void TokenSetCursor(TokenCtx tc, int cursor);
 struct token TokenMerge(struct token head, struct token tail);
+struct token TokenMergeFromListRange(struct list l, int start, int end);
+struct token TokenMergeFromList(struct list l);
 char* TokenTypeToString(enum tokenType type);
 
 #endif //TOKEN_H

@@ -2,21 +2,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-#include "error.h"
+#include "util.h"
 #include "var.h"
 
-struct var* VarAlloc() {
-    struct var* v = malloc(sizeof(*v));
+struct var* VarAllocSetOrigin() {
+    struct var* v = malloc(sizeof(struct var));
     CheckAllocPtr(v);
-    *v = (struct var){0};
-    return v;
-}
-
-struct var VarInit(struct str name, struct type t, struct token tok) {
-    struct var v = (struct var){0};
-    v.name = name;
-    v.type = t;
-    v.tok = tok;
+    v->origin = v;
     return v;
 }
 
@@ -28,4 +20,10 @@ bool varCmpForList(void* name, void* elem) {
 
 struct var* VarGetList(struct list* l, struct str name) {
     return ListGetCmp(l, &name, varCmpForList);
+}
+
+void VarListAddSetOrigin(struct list* l, struct var v) {
+    ListAdd(l, &v);
+    struct var* vPtr = ListGetIdx(l, l->len -1);
+    vPtr->origin = vPtr;
 }
