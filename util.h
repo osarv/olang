@@ -6,6 +6,7 @@
 #include "var.h"
 #include "operation.h"
 
+#define EXPECTED_SEMICOLON "expected ;"
 #define EXPECTED_LITERAL_EXPR "expected literal expression"
 #define EXPECTED_ERROR_WORD "expected error word"
 #define EXPECTED_FUNC_NAME "expected function name"
@@ -59,7 +60,8 @@
 #define UNKNOWN_ERROR "unknown error"
 #define UNKNOWN_VAR "unknown variable"
 #define UNKNOWN_FILE_ALIAS "unknown file alias"
-#define WORD_ALREADY_IN_USE "word already in use"
+#define VOCAB_WORD_ALREADY_IN_USE "vocab word already in use"
+#define ERROR_WORD_ALREADY_IN_USE "error word already in use"
 #define INVALID_ARRAY_SIZE "invalid array size"
 #define UNKNOWN_SYMBOL "unknown symbol"
 #define INVALID_ESCAPE_CHAR "invalid escape character"
@@ -83,7 +85,9 @@
 #define TRAILING_PAREN "trailing parenthesis"
 #define TRAILING_CURLY "trailing curly bracket"
 #define EXPECTED_ASSIGNMENT "expected assignment"
+#define EXPECTED_ASSIGNMENT_OPERATOR "expected assignment"
 #define EXPECTED_EXPRESSION "expected expression"
+#define INVALID_EXPRESSION "invalid expression"
 #define VAR_IMMUTABLE "variable is immutable"
 
 void FinishCompilation();
@@ -93,7 +97,7 @@ void ErrorUnableToOpenFile(char* fileName);
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg);
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg);
 void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t);
-void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b);
+void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b); //assumes tokA preceeds tokB
 void SyntaxErrorOperandsNotSameSize(struct operand* a, struct operand* b);
 
 #endif //UTIL_H

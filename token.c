@@ -248,7 +248,7 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "compelse")) return TOKEN_COMPELSE;
     else if (isSubIdentifer(start, "return")) return TOKEN_RETURN;
     else if (isSubIdentifer(start, "match")) return TOKEN_MATCH;
-    else if (isSubIdentifer(start, "matchall")) return TOKEN_MATCHALL;
+    else if (isSubIdentifer(start, "nomatch")) return TOKEN_NOMATCH;
     else if (isSubIdentifer(start, "is")) return TOKEN_IS;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
@@ -306,14 +306,15 @@ struct token tokenizeToken(TokenCtx tc) {
         case '^': tok.type = tokenizeCaret(tc); break;
         case ',': tok.type = TOKEN_COMMA; break;
         case '.': tok.type = TOKEN_DOT; break;
+        case ';': tok.type = TOKEN_SEMICOLON; break;
         case '?': tok.type = TOKEN_QUESTIONMARK; break;
         case '~': tok.type = TOKEN_BITWISE_COMPLEMENT; break;
         case '(': tok.type = TOKEN_PAREN_OPEN; break;
         case ')': tok.type = TOKEN_PAREN_CLOSE; break;
-        case '[': tok.type = TOKEN_SQUARE_BRACKET_OPEN; break;
-        case ']': tok.type = TOKEN_SQUARE_BRACKET_CLOSE; break;
-        case '{': tok.type = TOKEN_CURLY_BRACKET_OPEN; break;
-        case '}': tok.type = TOKEN_CURLY_BRACKET_CLOSE; break;
+        case '[': tok.type = TOKEN_SQUARE_OPEN; break;
+        case ']': tok.type = TOKEN_SQUARE_CLOSE; break;
+        case '{': tok.type = TOKEN_CURLY_OPEN; break;
+        case '}': tok.type = TOKEN_CURLY_CLOSE; break;
         default: SyntaxErrorLastFedChar(tc, UNKNOWN_SYMBOL);
     }
     tok.str.len = (char*)tc->chars.ptr + tc->chars.cursor - tok.str.ptr;
@@ -465,88 +466,23 @@ struct token TokenMergeFromList(struct list l) {
     return TokenMerge(head, tail);
 }
 
+struct token TokenFromCursorRange(TokenCtx tc, int start, int end) {
+    if (end > tc->tokens.len) ErrorBugFound();
+    struct list toks = ListInit(sizeof(struct token));
+    struct token* tokPtr;
+    for (int i = start; i < end; i++) {
+        tokPtr = ListGetIdx(&tc->tokens, i);
+        ListAdd(&toks, tokPtr);
+    }
+    struct token retTok = TokenMergeFromList(toks);
+    ListDestroy(toks);
+    return retTok;
+}
+
 int TokenGetCursor(TokenCtx tc) {
     return tc->tokens.cursor;
 }
 
 void TokenSetCursor(TokenCtx tc, int cursor) {
     ListSetCursor(&tc->tokens, cursor);
-}
-
-char* TokenTypeToString(enum tokenType type) {
-    switch(type) {
-        case TOKEN_MERGE: ErrorBugFound(); break;
-        case TOKEN_EOF: return "end of file";
-        case TOKEN_BOOL_LITERAL: return "bool literal";
-        case TOKEN_INT_LITERAL: return "int literal";
-        case TOKEN_FLOAT_LITERAL: return "float literal";
-        case TOKEN_CHAR_LITERAL: return "character literal";
-        case TOKEN_STRING_LITERAL: return "string literal";
-        case TOKEN_IDENTIFIER: return "identifier";
-        case TOKEN_IF: return "if";
-        case TOKEN_ELSE: return "else";
-        case TOKEN_COMPIF: return "compif";
-        case TOKEN_COMPELSE: return "compelse";
-        case TOKEN_RETURN: return "return";
-        case TOKEN_FOR: return "for";
-        case TOKEN_MATCH: return "match";
-        case TOKEN_MATCHALL: return "matchall";
-        case TOKEN_IS: return "is";
-        case TOKEN_TYPE: return "type";
-        case TOKEN_STRUCT: return "struct";
-        case TOKEN_VOCAB: return "vocab";
-        case TOKEN_ERROR: return "error";
-        case TOKEN_FUNC: return "func";
-        case TOKEN_MUT: return "mut";
-        case TOKEN_IMPORT: return "import";
-        case TOKEN_ADD: return "+";
-        case TOKEN_SUB: return "-";
-        case TOKEN_MUL: return "*";
-        case TOKEN_DIV: return "/";
-        case TOKEN_MODULO: return "%";
-        case TOKEN_COMMA: return ",";
-        case TOKEN_DOT: return ".";
-        case TOKEN_QUESTIONMARK: return "?";
-        case TOKEN_ASSIGNMENT: return "=";
-        case TOKEN_ASSIGNMENT_ADD: return "+=";
-        case TOKEN_ASSIGNMENT_SUB: return "-=";
-        case TOKEN_ASSIGNMENT_MUL: return "*=";
-        case TOKEN_ASSIGNMENT_DIV: return "/=";
-        case TOKEN_ASSIGNMENT_MODULO: return "%=";
-        case TOKEN_ASSIGNMENT_EQUAL: return "===";
-        case TOKEN_ASSIGNMENT_NOT_EQUAL: return "!==";
-        case TOKEN_ASSIGNMENT_AND: return "&&=";
-        case TOKEN_ASSIGNMENT_OR: return "||=";
-        case TOKEN_ASSIGNMENT_XOR: return "^^=";
-        case TOKEN_ASSIGNMENT_BITSHIFT_LEFT: return "<<=";
-        case TOKEN_ASSIGNMENT_BITSHIFT_RIGHT: return ">>=";
-        case TOKEN_ASSIGNMENT_BITWISE_AND: return "&=";
-        case TOKEN_ASSIGNMENT_BITWISE_OR: return "|=";
-        case TOKEN_ASSIGNMENT_BITWISE_XOR: return "^=";
-        case TOKEN_INCREMENT: return "++";
-        case TOKEN_DECREMENT: return "--";
-        case TOKEN_EQUAL: return "==";
-        case TOKEN_NOT: return "!";
-        case TOKEN_NOT_EQUAL: return "!=";
-        case TOKEN_AND: return "&&";
-        case TOKEN_OR: return "||";
-        case TOKEN_XOR: return "^^";
-        case TOKEN_LESS_THAN: return "<";
-        case TOKEN_LESS_THAN_OR_EQUAL: return "<=";
-        case TOKEN_GREATER_THAN: return ">";
-        case TOKEN_GREATER_THAN_OR_EQUAL: return ">=";
-        case TOKEN_BITWISE_AND: return "&";
-        case TOKEN_BITWISE_OR: return "|";
-        case TOKEN_BITWISE_XOR: return "^";
-        case TOKEN_BITWISE_COMPLEMENT: return "~";
-        case TOKEN_BITSHIFT_LEFT: return "<<";
-        case TOKEN_BITSHIFT_RIGHT: return ">>";
-        case TOKEN_PAREN_OPEN: return "(";
-        case TOKEN_PAREN_CLOSE: return ")";
-        case TOKEN_SQUARE_BRACKET_OPEN: return "[";
-        case TOKEN_SQUARE_BRACKET_CLOSE: return "]";
-        case TOKEN_CURLY_BRACKET_OPEN: return "{";
-        case TOKEN_CURLY_BRACKET_CLOSE: return "}";
-    }
-    return "";
 }

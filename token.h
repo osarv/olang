@@ -22,8 +22,8 @@ enum tokenType {
     TOKEN_RETURN,
     TOKEN_FOR,
     TOKEN_MATCH,
-    TOKEN_MATCHALL,
     TOKEN_IS,
+    TOKEN_NOMATCH,
     TOKEN_TYPE,
     TOKEN_STRUCT,
     TOKEN_VOCAB,
@@ -38,6 +38,7 @@ enum tokenType {
     TOKEN_MODULO,
     TOKEN_COMMA,
     TOKEN_DOT,
+    TOKEN_SEMICOLON,
     TOKEN_QUESTIONMARK,
     TOKEN_ASSIGNMENT,
     TOKEN_ASSIGNMENT_ADD,
@@ -75,10 +76,10 @@ enum tokenType {
     TOKEN_BITSHIFT_RIGHT,
     TOKEN_PAREN_OPEN,
     TOKEN_PAREN_CLOSE,
-    TOKEN_SQUARE_BRACKET_OPEN,
-    TOKEN_SQUARE_BRACKET_CLOSE,
-    TOKEN_CURLY_BRACKET_OPEN,
-    TOKEN_CURLY_BRACKET_CLOSE
+    TOKEN_SQUARE_OPEN,
+    TOKEN_SQUARE_CLOSE,
+    TOKEN_CURLY_OPEN,
+    TOKEN_CURLY_CLOSE
 };
 
 struct token {
@@ -111,6 +112,6 @@ void TokenSetCursor(TokenCtx tc, int cursor);
 struct token TokenMerge(struct token head, struct token tail);
 struct token TokenMergeFromListRange(struct list l, int start, int end);
 struct token TokenMergeFromList(struct list l);
-char* TokenTypeToString(enum tokenType type);
+struct token TokenFromCursorRange(TokenCtx tc, int start, int end);
 
 #endif //TOKEN_H

@@ -75,7 +75,7 @@ void printErrorLines(TokenCtx tc, int errStart, int errEnd, void(*pErrChars)(cha
     puts("\n" COLOR_RESET);
 }
 
-void printTokErrorLine(struct token tok) {
+void printTokErrorLineOneTok(struct token tok) {
     int startIndex =  TokenGetStrStart(tok.owner, tok.str);
     printErrorLines(tok.owner, startIndex, startIndex + tok.str.len -1, printCharExpandNewLineEOF);
 }
@@ -117,7 +117,7 @@ void SyntaxErrorInvalidToken(struct token tok, char* errMsg) {
         printLastLineEOFError(tok.owner);
         return;
     }
-    printTokErrorLine(tok);
+    printTokErrorLineOneTok(tok);
 }
 
 void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t) {
@@ -126,19 +126,38 @@ void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t) {
     errMsg = StrMerge(errMsg, t.tok.str);
     StrAppendChar(&errMsg, '"');
     syntaxErrorHeader(o->tok.lineNr, fileName, errMsg);
-    printTokErrorLine(o->tok);
+    printTokErrorLineOneTok(o->tok);
+}
+
+void printTokErrorLineTwoTok(struct token tokA, struct token tokB) { //assumes tokA preceeds tokB
+    TokenCtx tc = tokA.owner; 
+    int aStart =  TokenGetStrStart(tc, tokA.str);
+    int bStart =  TokenGetStrStart(tc, tokB.str);
+    int linesStart = TokenGetPrevNewline(tc, aStart) +1;
+    int linesEnd = TokenGetNextOrThisNewline(tc, bStart + tokB.str.len);
+
+    int i = linesStart;
+    fputs(COLOR_FG_CYAN, stdout);
+    for (; i < aStart; i++) putchar(TokenGetChar(tc, i));
+    fputs(COLOR_FG_RED, stdout);
+    for (; i <= aStart + tokA.str.len; i++) printCharExpandNewLineEOF(TokenGetChar(tc, i));
+    fputs(COLOR_FG_CYAN, stdout);
+    for (; i < bStart; i++) putchar(TokenGetChar(tc, i));
+    fputs(COLOR_FG_RED, stdout);
+    for (; i <= bStart + tokB.str.len; i++) printCharExpandNewLineEOF(TokenGetChar(tc, i));
+    fputs(COLOR_FG_CYAN, stdout);
+    for (; i < linesEnd; i++) putchar(TokenGetChar(tc, i));
+    puts("\n" COLOR_RESET);
 }
 
 void SyntaxErrorOperandsNotSameSize(struct operand* a, struct operand* b) {
     struct str fileName = TokenGetFileName(a->tok.owner);
     syntaxErrorHeader(a->tok.lineNr, fileName, StrFromCStr(OPERANDS_NOT_SAME_SIZE));
-    printTokErrorLine(a->tok);
-    printTokErrorLine(b->tok);
+    printTokErrorLineOneTok(b->tok);
 }
 
-void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b) {
+void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b) { //assumes tokA preceeds tokB
     struct str fileName = TokenGetFileName(a->tok.owner);
     syntaxErrorHeader(a->tok.lineNr, fileName, StrFromCStr(OPERANDS_NOT_SAME_TYPE));
-    printTokErrorLine(a->tok);
-    printTokErrorLine(b->tok);
+    printTokErrorLineTwoTok(a->tok, b->tok);
 }

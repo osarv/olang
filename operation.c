@@ -212,16 +212,16 @@ bool checkIsSameTypeNoLiterals(struct operand* a, struct operand* b) {
 
 bool checkIsSameType(struct operand* a, struct operand* b, enum baseType* bType) {
     if (a->isLiteral && b->isLiteral) {
-        if (!canUseTwoLiteralsAsSameType(a, b, bType)) {SyntaxErrorOperandsNotSameType(a, b); return false;}
+        if (!canUseTwoLiteralsAsSameType(a, b, bType)) return false;
         return true;
     }
     else if (a->isLiteral) {
-        if (!canUseLiteralAsNonLiteral(b, a)) {SyntaxErrorOperandsNotSameType(a, b); return false;}
+        if (!canUseLiteralAsNonLiteral(b, a)) return false;
         *bType = b->type.bType;
         return true;
     }
     else if (b->isLiteral) {
-        if (!canUseLiteralAsNonLiteral(a, b)) {SyntaxErrorOperandsNotSameType(a, b); return false;}
+        if (!canUseLiteralAsNonLiteral(a, b)) return false;
         *bType = b->type.bType;
         return true;
     }
@@ -285,9 +285,10 @@ bool checkCompatBinary(struct operand* a, struct operand* b, enum operation opTy
                                       *resBType = BASETYPE_BOOL; return true;
         case OPERATION_GREATER_THAN_OR_EQUAL: if (!checkIsSameNumberType(a, b, resBType)) return false;
                                       *resBType = BASETYPE_BOOL; return true;
-
-        case OPERATION_EQUALS: return checkIsSameType(a, b, resBType);
-        case OPERATION_NOT_EQUALS: return checkIsSameType(a, b, resBType);
+        case OPERATION_EQUALS: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
+        case OPERATION_NOT_EQUALS: if (!checkIsSameNumberType(a, b, resBType)) return false;
+                                      *resBType = BASETYPE_BOOL; return true;
 
         case OPERATION_AND: *resBType = BASETYPE_BOOL; return checkIsBothBool(a, b);
         case OPERATION_OR: *resBType = BASETYPE_BOOL; return checkIsBothBool(a, b);
@@ -395,7 +396,10 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType) {
     if (!a || !b) return NULL;
     enum baseType sharedBType;
-    if (!checkCompatBinary(a, b, opType, &sharedBType)) return NULL;
+    if (!checkCompatBinary(a, b, opType, &sharedBType)) {
+        SyntaxErrorOperandsNotSameType(a, b);
+        return NULL;
+    }
     struct operand* c = operandEmpty();
     if (sharedBType == BASETYPE_ARRAY) c->type = a->type;
     else if (sharedBType == BASETYPE_STRUCT) c->type = a->type;
@@ -421,6 +425,7 @@ struct operand* OperandTypeCast(struct operand* op, struct type to, struct token
     }
     struct operand* new = operandEmpty();
     *new = *op;
+    ListAdd(&new->args, &op);
     new->type = to;
     new->tok = tok;
     tryEvalIntLiteral(new);
@@ -433,7 +438,9 @@ enum operation operatorPrecedenceC[] = {
     OPERATION_LESS_THAN,
     OPERATION_LESS_THAN_OR_EQUAL,
     OPERATION_GREATER_THAN,
-    OPERATION_GREATER_THAN_OR_EQUAL};
+    OPERATION_GREATER_THAN_OR_EQUAL,
+    OPERATION_NOT_EQUALS,
+    OPERATION_EQUALS};
 enum operation operatorPrecedenceD[] = {OPERATION_BITSHIFT_LEFT, OPERATION_BITSHIFT_RIGHT};
 enum operation operatorPrecedenceE[] = {OPERATION_ADD, OPERATION_SUB};
 enum operation operatorPrecedenceF[] = {OPERATION_MUL, OPERATION_DIV, OPERATION_MODULO};
@@ -457,7 +464,7 @@ struct operand* OperandEvalExpr(struct list opnds, struct list oprts) {
     struct operand* op;
     if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceA, 2))) return op;
     else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceB, 3))) return op;
-    else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceC, 4))) return op;
+    else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceC, 6))) return op;
     else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceD, 2))) return op;
     else if ((op = operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceE, 2))) return op;
     else return operandEvalPreferenceLvl(opnds, oprts, operatorPrecedenceF, 3);

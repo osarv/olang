@@ -37,6 +37,7 @@ struct parserContext {
     struct list types;
     struct list errors;
     struct list vars;
+    struct list globStmtns;
     struct list* ctxs; //universal across the compilation
 };
 
@@ -113,47 +114,96 @@ bool forceParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr, ch
     return parseToken(pc, type, tokPtr, MODE_FORCE, errMsg);
 }
 
-bool forceParseTokenSkipUntilFound(ParserCtx pc, enum tokenType type, char* errMsg) {
+bool forceParseSemicolon(ParserCtx pc) {
     struct token tok;
-    if (forceParseToken(pc, type, &tok, errMsg)) return true;
-    TokenFeedUntilAfter(pc->tc, type);
-    return false;
+    return parseToken(pc, TOKEN_SEMICOLON, &tok, MODE_FORCE, EXPECTED_SEMICOLON);
+}
+
+bool forceParseCurlyOpen(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_CURLY_OPEN, &tok, MODE_FORCE, EXPECTED_CURLY_OPEN);
+}
+
+bool forceParseParenOpen(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_PAREN_OPEN, &tok, MODE_FORCE, EXPECTED_PAREN_OPEN);
+}
+
+bool forceParseParenClose(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_PAREN_CLOSE, &tok, MODE_FORCE, EXPECTED_PAREN_CLOSE);
 }
 
 bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
     return parseToken(pc, type, tokPtr, MODE_TRY, NULL);
 }
 
-void skipUntilOneOfTokens(ParserCtx pc, int nToks, enum tokenType* tokens) {
-    enum tokenType tType;
-    tType = TokenFeed(pc->tc).type;
-    while (tType != TOKEN_EOF) {
-        for (int i = 0; i < nToks; i++) if (tType == tokens[i]) return;
-        tType = TokenFeed(pc->tc).type;
-    }
+bool tryParseCurlyClose(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_CURLY_CLOSE, &tok, MODE_TRY, NULL);
 }
 
-void skipUntilCurlyCloses(ParserCtx pc) {
+void skipPastSemiColonOrUntilCurlyClose(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_SEMICOLON && tok.type != TOKEN_CURLY_CLOSE);
+    if (tok.type == TOKEN_CURLY_CLOSE) TokenUnfeed(pc->tc);
+}
+
+void skipPastSemiColon(ParserCtx pc) {
+    TokenFeedUntilAfter(pc->tc, TOKEN_SEMICOLON);
+}
+
+bool forceParseSemiColonOrSkipPast(ParserCtx pc) {
+    if (forceParseSemicolon(pc)) return true;
+    skipPastSemiColon(pc);
+    return false;
+}
+
+bool forceParseSemiColonOrSkipPastOrUntilCurlyClose(ParserCtx pc) {
+    if (forceParseSemicolon(pc)) return true;
+    skipPastSemiColonOrUntilCurlyClose(pc);
+    return false;
+}
+
+void skipUntilSemiColon(ParserCtx pc) {
+    TokenFeedUntilBefore(pc->tc, TOKEN_SEMICOLON);
+}
+
+void skipUntilSemiColonOrCurlyOpen(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_EOF && tok.type != TOKEN_SEMICOLON && tok.type != TOKEN_CURLY_OPEN);
+    TokenUnfeed(pc->tc);
+}
+
+void skipUntilCommaOrParenClose(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_EOF && tok.type != TOKEN_COMMA && tok.type != TOKEN_PAREN_CLOSE);
+    TokenUnfeed(pc->tc);
+}
+
+void skipUntilCommaOrQuestionMark(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_EOF && tok.type != TOKEN_COMMA && tok.type != TOKEN_QUESTIONMARK);
+    TokenUnfeed(pc->tc);
+}
+
+void skipPastCommaOrCurlyClose(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_EOF && tok.type != TOKEN_COMMA && tok.type != TOKEN_CURLY_CLOSE);
+}
+
+void skipPastCurlyClosesNested(ParserCtx pc) {
     struct token tok = TokenFeed(pc->tc);
     int nOpen = 1;
     while (true) {
         if (tok.type == TOKEN_EOF) return;
-        if (tok.type == TOKEN_CURLY_BRACKET_OPEN) nOpen++;
-        else if (tok.type == TOKEN_CURLY_BRACKET_CLOSE) {
-            nOpen--;
-            if (nOpen <= 0) break;
-        }
-        tok = TokenFeed(pc->tc);
-    }
-}
-
-void skipUntilParenCloses(ParserCtx pc) {
-    struct token tok = TokenFeed(pc->tc);
-    int nOpen = 1;
-    while (true) {
-        if (tok.type == TOKEN_EOF) return;
-        if (tok.type == TOKEN_PAREN_OPEN) nOpen++;
-        else if (tok.type == TOKEN_PAREN_CLOSE) {
+        if (tok.type == TOKEN_CURLY_OPEN) nOpen++;
+        else if (tok.type == TOKEN_CURLY_CLOSE) {
             nOpen--;
             if (nOpen <= 0) break;
         }
@@ -203,10 +253,10 @@ struct operand* forceParseBoolExpr(ParserCtx pc) {
 bool tryParseArrayDeclaration(ParserCtx pc, struct type* t) {
     int startCursor = pcGetCursor(pc);
     struct token tok;
-    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return true;
+    if (!tryParseToken(pc, TOKEN_SQUARE_OPEN, &tok)) return true;
     t->arrLen = forceParseIntExpr(pc);
     if (!t->arrLen) return pcSetCursorRetFalse(pc, startCursor);
-    forceParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, EXPECTED_SQUARE_CLOSE);
+    forceParseToken(pc, TOKEN_SQUARE_CLOSE, &tok, EXPECTED_SQUARE_CLOSE);
     t->arrLvls++;
     t->arrMalloc = true;
 
@@ -230,14 +280,14 @@ ParserCtx tryParseAlias(ParserCtx pc) { //returns pc if not found
 
 void tryParseTypeArrayRefLevels(ParserCtx pc, struct type* t) {
     struct token tok;
-    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) return;
-    if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok)) {
+    if (!tryParseToken(pc, TOKEN_SQUARE_OPEN, &tok)) return;
+    if (!tryParseToken(pc, TOKEN_SQUARE_CLOSE, &tok)) {
         TokenUnfeed(pc->tc);
         return;
     }
     t->arrLvls++;
-    while (tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
-        if (!tryParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok)) {
+    while (tryParseToken(pc, TOKEN_SQUARE_OPEN, &tok)) {
+        if (!tryParseToken(pc, TOKEN_SQUARE_CLOSE, &tok)) {
             TokenUnfeed(pc->tc);
             break;
         }
@@ -250,6 +300,7 @@ void tryParseTypeArrayRefLevels(ParserCtx pc, struct type* t) {
 }
 
 bool parseType(ParserCtx pc, struct type* t, enum parsingMode mode) {
+    *t = (struct type){0};
     int startCursor = pcGetCursor(pc);
     ParserCtx source = tryParseAlias(pc);
     struct token tok;
@@ -278,9 +329,9 @@ void tryParseStructDerefAndArrayIndexing(ParserCtx pc, struct var* v) {
             if ((vMember = VarGetList(&v->type.vars, tok.str))) *v = *vMember;
             v->tok = TokenMerge(v->tok, tok);
         }
-        else if (v->type.bType == BASETYPE_ARRAY && tryParseToken(pc, TOKEN_SQUARE_BRACKET_OPEN, &tok)) {
+        else if (v->type.bType == BASETYPE_ARRAY && tryParseToken(pc, TOKEN_SQUARE_OPEN, &tok)) {
             forceParseIntExpr(pc);
-            forceParseToken(pc, TOKEN_SQUARE_BRACKET_CLOSE, &tok, EXPECTED_SQUARE_CLOSE);
+            forceParseToken(pc, TOKEN_SQUARE_CLOSE, &tok, EXPECTED_SQUARE_CLOSE);
             v->tok = TokenMerge(v->tok, tok);
             v->type.arrLvls--;
             if (v->type.arrLvls == 0) v->type.bType = v->type.arrBase;
@@ -290,6 +341,7 @@ void tryParseStructDerefAndArrayIndexing(ParserCtx pc, struct var* v) {
 }
 
 bool parseVar(ParserCtx pc, struct var* v, enum parsingMode mode) {
+    *v = (struct var){0};
     int startCursor = pcGetCursor(pc);
     ParserCtx source = tryParseAlias(pc);
     struct token tok;
@@ -325,23 +377,24 @@ struct operand* tryParseTypeCast(ParserCtx pc) {
     struct type t;
     struct token tok;
     if (!parseType(pc, &t, MODE_TRY)) return pcSetCursorRetNull(pc, startCursor);
-    if (!forceParseToken(pc, TOKEN_PAREN_OPEN, &tok, EXPECTED_PAREN_OPEN)) return pcSetCursorRetNull(pc, startCursor);
+    if (!forceParseParenOpen(pc)) return pcSetCursorRetNull(pc, startCursor);
     struct operand* op = tryParseOperand(pc);
     if (!op) return pcSetCursorRetNull(pc, startCursor);
-    if (!forceParseToken(pc, TOKEN_PAREN_CLOSE, &tok, EXPECTED_PAREN_CLOSE)) return pcSetCursorRetNull(pc, startCursor);
+    if (!forceParseParenClose(pc)) return pcSetCursorRetNull(pc, startCursor);
     op = OperandTypeCast(op, t, TokenMerge(t.tok, tok));
     if (!op) pcSetCursor(pc, startCursor);
     return op;
 }
 
-bool forceParseTypeDefType(ParserCtx pc, struct type* t) {
-    int startCursor = pcGetCursor(pc);
-    if (!parseType(pc, t, MODE_FORCE)) return false;
-    if (t->placeholder) {
-        SyntaxErrorInvalidToken(t->tok, UNKNOWN_TYPE);
-        return pcSetCursorRetFalse(pc, startCursor);
+struct type forceParseTypeDefType(ParserCtx pc) {
+    struct type t = (struct type){0};
+    if (!parseType(pc, &t, MODE_FORCE)) {skipUntilSemiColon(pc); return t;}
+    if (t.placeholder) {
+        SyntaxErrorInvalidToken(t.tok, STRUCT_NOT_YET_DEFINED);
+        skipUntilSemiColon(pc);
     }
-    return true;
+    forceParseSemiColonOrSkipPast(pc);
+    return t;
 }
 
 bool parseTypeDeclaration(ParserCtx pc, struct type* t, enum parsingMode mode) {
@@ -349,9 +402,9 @@ bool parseTypeDeclaration(ParserCtx pc, struct type* t, enum parsingMode mode) {
     if (!parseType(pc, t, mode)) return false;
     if (t->bType == BASETYPE_STRUCT) {
         struct token tok;
-        if (tryParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok)) {
+        if (tryParseToken(pc, TOKEN_CURLY_OPEN, &tok)) {
             t->structMAlloc = true;
-            forceParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok, EXPECTED_CURLY_CLOSE);
+            forceParseToken(pc, TOKEN_CURLY_CLOSE, &tok, EXPECTED_CURLY_CLOSE);
             t->tok = TokenMerge(t->tok, tok);
         }
     }
@@ -389,33 +442,23 @@ bool parseVarDeclarationMutByDefault(ParserCtx pc, struct var* v, enum parsingMo
     return true;
 }
 
-bool forceParseStructMember(ParserCtx pc, struct var* v) {
-    int startCursor = TokenGetCursor(pc->tc);
-    if (!parseVarDeclarationMutByDefault(pc, v, MODE_FORCE)) return false;
-    if (v->type.structMAlloc == true && v->type.placeholder) {
-        SyntaxErrorInvalidToken(v->type.tok, STRUCT_NOT_YET_DEFINED);
-        return pcSetCursorRetFalse(pc, startCursor);
+void forceParseStructMember(ParserCtx pc, struct list* members) {
+    struct var memb;
+    bool ret = parseVarDeclarationMutByDefault(pc, &memb, MODE_FORCE);
+    if (!ret) {skipPastSemiColonOrUntilCurlyClose(pc); return;}
+    forceParseSemiColonOrSkipPastOrUntilCurlyClose(pc);
+    if (memb.type.structMAlloc == true && memb.type.placeholder) {
+        SyntaxErrorInvalidToken(memb.type.tok, STRUCT_NOT_YET_DEFINED);
+        return;
     }
-    return true;
+    if (VarGetList(members, memb.name)) SyntaxErrorInvalidToken(memb.tok, VAR_NAME_IN_USE);
+    else ListAdd(members, &memb);
 }
 
 struct list forceParseStructBody(ParserCtx pc) {
-    struct token tok;
-    forceParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, EXPECTED_CURLY_OPEN);
+    forceParseCurlyOpen(pc);
     struct list members = ListInit(sizeof(struct var));
-    if (tryParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok)) return members;
-    struct var var;
-    if (!forceParseStructMember(pc, &var)) {skipUntilCurlyCloses(pc); return members;}
-    ListAdd(&members, &var);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
-        if (!forceParseStructMember(pc, &var)) {
-            skipUntilCurlyCloses(pc);
-            return members;
-        }
-        if (VarGetList(&members, var.name)) SyntaxErrorInvalidToken(var.tok, VAR_NAME_IN_USE);
-        ListAdd(&members, &var);
-    }
-    forceParseTokenSkipUntilFound(pc, TOKEN_CURLY_BRACKET_CLOSE, EXPECTED_CLOSING_CURLY);
+    while(!tryParseCurlyClose(pc)) forceParseStructMember(pc, &members);
     return members;
 }
 
@@ -426,22 +469,19 @@ struct type forceParseTypeDefStruct(ParserCtx pc) {
     return t;
 }
 
+void forceParseVocabWord(ParserCtx pc, struct list* words) {
+    struct token word;
+    bool ret = forceParseToken(pc, TOKEN_IDENTIFIER, &word, EXPECTED_VOCAB_WORD);
+    if (!ret) {skipPastSemiColonOrUntilCurlyClose(pc); return;}
+    forceParseSemiColonOrSkipPastOrUntilCurlyClose(pc);
+    if (StrGetList(words, word.str)) SyntaxErrorInvalidToken(word, VOCAB_WORD_ALREADY_IN_USE);
+    else ListAdd(words, &word.str);
+}
+
 struct list forceParseVocabBody(ParserCtx pc) {
-    struct token tok;
-    forceParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, EXPECTED_CURLY_OPEN);
+    forceParseCurlyOpen(pc);
     struct list words = ListInit(sizeof(struct str));
-    if (tryParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok)) return words;
-    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_VOCAB_WORD)) {skipUntilCurlyCloses(pc); return words;}
-    ListAdd(&words, &tok.str);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
-        if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_VOCAB_WORD)) {
-            skipUntilCurlyCloses(pc);
-            return words;
-        }
-        if (StrGetList(&words, tok.str)) SyntaxErrorInvalidToken(tok, WORD_ALREADY_IN_USE);
-        else ListAdd(&words, &tok.str);
-    }
-    forceParseTokenSkipUntilFound(pc, TOKEN_CURLY_BRACKET_CLOSE, EXPECTED_CURLY_CLOSE);
+    while(!tryParseCurlyClose(pc)) forceParseVocabWord(pc, &words);
     return words;
 }
 
@@ -452,50 +492,41 @@ struct type forceParseTypeDefVocab(ParserCtx pc) {
     return t;
 }
 
-bool forceParseFuncArg(ParserCtx pc, struct var* v) {
-    int startCursor = pcGetCursor(pc);
+void forceParseFuncArg(ParserCtx pc, struct list* args) {
+    struct var arg;
     struct token tok;
-    struct type t;
     bool mut = false;
-    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_VAR_NAME)) return false;
+    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_VAR_NAME)) {skipUntilCommaOrParenClose(pc); return;}
     if (isPublic(tok.str)) {
         SyntaxErrorInvalidToken(tok, FUNC_ARG_PUBLIC);
-        return pcSetCursorRetFalse(pc, startCursor);
+        skipUntilCommaOrParenClose(pc);
+        return;
     }
     struct token mutTok;
     if (tryParseToken(pc, TOKEN_MUT, &mutTok)) mut = true;
-    if (!parseType(pc, &t, MODE_FORCE)) return pcSetCursorRetFalse(pc, startCursor);
-    v->name = tok.str;
-    v->tok = tok;
-    v->type = t;
-    v->mut = mut;
-    v->mayBeInitialized = true;
-    return true;
+    if (!parseType(pc, &arg.type, MODE_FORCE)) {skipUntilCommaOrParenClose(pc); return;}
+    arg.name = tok.str;
+    arg.tok = tok;
+    arg.mut = mut;
+    arg.mayBeInitialized = true;
+    if (VarGetList(args, arg.name)) SyntaxErrorInvalidToken(arg.tok, VAR_NAME_IN_USE);
+    else VarListAddSetOrigin(args, arg);
 }
 
 struct list forceParseFuncArgs(ParserCtx pc) {
     struct token tok;
-    forceParseToken(pc, TOKEN_PAREN_OPEN, &tok, EXPECTED_PAREN_OPEN);
+    forceParseParenOpen(pc);
     struct list args = ListInit(sizeof(struct var));
     if (tryParseToken(pc, TOKEN_PAREN_CLOSE, &tok)) return args;
-    struct var var;
-    if (!forceParseFuncArg(pc, &var)) {skipUntilParenCloses(pc); return args;}
-    VarListAddSetOrigin(&args, var);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
-        if (!forceParseFuncArg(pc, &var)) {
-            skipUntilParenCloses(pc);
-            return args;
-        }
-        if (VarGetList(&args, var.name)) SyntaxErrorInvalidToken(var.tok, VAR_NAME_IN_USE);
-        VarListAddSetOrigin(&args, var);
-    }
-    forceParseTokenSkipUntilFound(pc, TOKEN_PAREN_CLOSE, EXPECTED_PAREN_CLOSE);
+    forceParseFuncArg(pc, &args);
+    while(tryParseToken(pc, TOKEN_COMMA, &tok)) forceParseFuncArg(pc, &args);
+    forceParseParenClose(pc);
     return args;
 }
 
 bool parseError(ParserCtx pc, struct error* err, enum parsingMode mode) {
+    *err = (struct error){0};
     int startCursor = pcGetCursor(pc);
-    *err = (struct error) {0};
     ParserCtx source = tryParseAlias(pc);
     struct token tok;
     if (!parseToken(pc, TOKEN_IDENTIFIER, &tok, mode, EXPECTED_ERROR)) return pcSetCursorRetFalse(pc, startCursor);
@@ -506,18 +537,36 @@ bool parseError(ParserCtx pc, struct error* err, enum parsingMode mode) {
     return true;
 }
 
-struct list tryParseFuncErrors(ParserCtx pc) {
-    struct token tok;
-    struct list errors = ListInit(sizeof(struct error));
-    struct error error;
-    if (!parseError(pc, &error, MODE_TRY)) return errors;
-    ListAdd(&errors, &error);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
-        if (!parseError(pc, &error, MODE_FORCE)) return errors;
-        if (ErrorGetList(&errors, error.name)) SyntaxErrorInvalidToken(error.tok, DUPLICATE_ERROR);
-        else ListAdd(&errors, &error);
+void forceParseFuncError(ParserCtx pc, struct list* errors) {
+    struct error err;
+    if (!parseError(pc, &err, MODE_FORCE)) {skipUntilCommaOrQuestionMark(pc); return;}
+    if (ErrorGetList(errors, err.name)) SyntaxErrorInvalidToken(err.tok, DUPLICATE_ERROR);
+    else ListAdd(errors, &err);
+}
+
+bool tryFindQuestionMarkBeforeCurlyOpenOrSemiColon(ParserCtx pc) {
+    int startCursor = pcGetCursor(pc);
+    struct token tok = TokenFeed(pc->tc);
+    bool found = false;
+    while (tok.type != TOKEN_CURLY_OPEN && tok.type != TOKEN_SEMICOLON && tok.type != TOKEN_EOF) {
+        if (tok.type == TOKEN_QUESTIONMARK) {
+            found = true;
+            break;
+        }
+        tok = TokenFeed(pc->tc);
     }
-    forceParseTokenSkipUntilFound(pc, TOKEN_QUESTIONMARK, EXPECTED_QUESTIONMARK);
+    pcSetCursor(pc, startCursor);
+    return found;
+}
+
+struct list tryParseFuncErrors(ParserCtx pc) {
+    struct list errors = ListInit(sizeof(struct error));
+    if (!tryFindQuestionMarkBeforeCurlyOpenOrSemiColon(pc)) return errors;
+    struct token tok;
+    if (tryParseToken(pc, TOKEN_QUESTIONMARK, &tok)) return errors;
+    forceParseFuncError(pc, &errors);
+    while(tryParseToken(pc, TOKEN_COMMA, &tok)) forceParseFuncError(pc, &errors);
+    forceParseToken(pc, TOKEN_QUESTIONMARK, &tok, EXPECTED_QUESTIONMARK);
     return errors;
 }
 
@@ -539,36 +588,32 @@ struct type forceParseTypeDefFunc(ParserCtx pc) {
 
 void forceParseTypeDef(ParserCtx pc) {
     struct token nameTok;
-    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &nameTok, EXPECTED_TYPE_NAME)) return;
+    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &nameTok, EXPECTED_TYPE_NAME)) {skipPastSemiColon(pc); return;}
     struct token defTok = TokenFeed(pc->tc);
-    struct type t = (struct type){0};
+    struct type t;
     switch(defTok.type) {
-        case TOKEN_IDENTIFIER:
-            TokenUnfeed(pc->tc); forceParseTypeDefType(pc, &t); t = TypeFromType(nameTok.str, nameTok, t); break;
+        case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); t = TypeFromType(nameTok.str, nameTok, forceParseTypeDefType(pc)); break;
         case TOKEN_STRUCT: t = TypeFromType(nameTok.str, nameTok, forceParseTypeDefStruct(pc)); break;
         case TOKEN_VOCAB: t = TypeFromType(nameTok.str, nameTok, forceParseTypeDefVocab(pc)); break;
         case TOKEN_FUNC: t = TypeFromType(nameTok.str, nameTok, forceParseTypeDefFunc(pc)); break;
-        default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION); return;
+        default: SyntaxErrorInvalidToken(defTok, EXPECTED_TYPE_DEFINITION);
     }
     pcUpdateOrAddType(pc, t);
 }
 
+void forceParseErrorWord(ParserCtx pc, struct list* words) {
+    struct token word;
+    bool ret = forceParseToken(pc, TOKEN_IDENTIFIER, &word, EXPECTED_ERROR_WORD);
+    if (!ret) {skipPastSemiColon(pc); return;}
+    forceParseSemiColonOrSkipPast(pc);
+    if (StrGetList(words, word.str)) SyntaxErrorInvalidToken(word, ERROR_WORD_ALREADY_IN_USE);
+    else ListAdd(words, &word.str);
+}
+
 struct list forceParseErrorBody(ParserCtx pc) {
-    struct token tok;
-    forceParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, EXPECTED_CURLY_OPEN);
+    forceParseCurlyOpen(pc);
     struct list words = ListInit(sizeof(struct str));
-    if (tryParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok)) return words;
-    if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_ERROR_WORD)) {skipUntilCurlyCloses(pc); return words;}
-    ListAdd(&words, &tok.str);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) {
-        if (!forceParseToken(pc, TOKEN_IDENTIFIER, &tok, EXPECTED_ERROR_WORD)) {
-            skipUntilCurlyCloses(pc);
-            return words;
-        }
-        if (StrGetList(&words, tok.str)) SyntaxErrorInvalidToken(tok, WORD_ALREADY_IN_USE);
-        else ListAdd(&words, &tok.str);
-    }
-    forceParseTokenSkipUntilFound(pc, TOKEN_CURLY_BRACKET_CLOSE, EXPECTED_CURLY_CLOSE);
+    while(!tryParseCurlyClose(pc)) forceParseErrorWord(pc, &words);
     return words;
 }
 
@@ -589,6 +634,7 @@ ParserCtx parserCtxNew(struct str fileName, struct list* ctxs) {
     pc.types = ListInit(sizeof(struct type));
     pc.errors = ListInit(sizeof(struct error));
     pc.vars = ListInit(sizeof(struct var));
+    pc.globStmtns = ListInit(sizeof(struct statement));
     pc.tc = TokenizeFile(fileName);
     pc.ctxs = ctxs;
     addVanillaTypes(&pc);
@@ -597,16 +643,17 @@ ParserCtx parserCtxNew(struct str fileName, struct list* ctxs) {
 }
 
 ParserCtx parseImport(ParserCtx parentCtx) {
-    struct token tok;
-    ParserCtx importCtx;
-    forceParseToken(parentCtx, TOKEN_STRING_LITERAL, &tok, EXPECTED_FILE_NAME);
-    struct str fileName = StrSlice(tok.str, 1, tok.str.len -1);
-    forceParseToken(parentCtx, TOKEN_IDENTIFIER, &tok, EXPECTED_FILE_ALIAS);
+    struct token aliasTok;
+    struct token fileNameTok;
+    forceParseToken(parentCtx, TOKEN_IDENTIFIER, &aliasTok, EXPECTED_FILE_ALIAS);
+    forceParseToken(parentCtx, TOKEN_STRING_LITERAL, &fileNameTok, EXPECTED_FILE_NAME);
+    struct str fileName = StrSlice(fileNameTok.str, 1, fileNameTok.str.len -1);
 
+    ParserCtx importCtx;
     if ((importCtx = pcGetList(parentCtx->ctxs, fileName)));
     else importCtx = parserCtxNew(fileName, parentCtx->ctxs);
     struct pcAlias alias;
-    alias.name = tok.str;
+    alias.name = aliasTok.str;
     alias.pc = importCtx;
     ListAdd(&parentCtx->aliases, &alias);
     return importCtx;
@@ -682,12 +729,13 @@ bool parseCompCondition(ParserCtx pc) {
 void parseCompIf(ParserCtx pc) {
     bool cond = parseCompCondition(pc);
     struct token tok;
-    forceParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, NULL);
-    if (!cond) skipUntilCurlyCloses(pc);
+    forceParseToken(pc, TOKEN_CURLY_OPEN, &tok, NULL);
+    if (!cond) skipPastCurlyClosesNested(pc);
 }
 
+bool parseVarDeclAndOrAssignmentStatement(ParserCtx pc, struct list* codeBlock, enum parsingMode mode);
 void parseGlobalStatement(ParserCtx pc) {
-    (void)pc; //TODO
+    parseVarDeclAndOrAssignmentStatement(pc, &pc->globStmtns, MODE_FORCE);
 }
 
 struct operand* varOpBinary(struct var v, struct operand* op, enum operation opType) {
@@ -695,15 +743,45 @@ struct operand* varOpBinary(struct var v, struct operand* op, enum operation opT
     return OperandBinary(OperandReadVar(v), op, opType);
 }
 
+bool isAssignmentOperator(enum tokenType type) {
+    switch (type) {
+        case TOKEN_INCREMENT: return true;
+        case TOKEN_DECREMENT: return true;
+        case TOKEN_ASSIGNMENT: return true;
+        case TOKEN_ASSIGNMENT_ADD: return true;
+        case TOKEN_ASSIGNMENT_SUB: return true;
+        case TOKEN_ASSIGNMENT_MUL: return true;
+        case TOKEN_ASSIGNMENT_DIV: return true;
+        case TOKEN_ASSIGNMENT_MODULO: return true;
+        case TOKEN_ASSIGNMENT_EQUAL: return true;
+        case TOKEN_ASSIGNMENT_NOT_EQUAL: return true;
+        case TOKEN_ASSIGNMENT_AND: return true;
+        case TOKEN_ASSIGNMENT_OR: return true;
+        case TOKEN_ASSIGNMENT_XOR: return true;
+        case TOKEN_ASSIGNMENT_BITSHIFT_LEFT: return true;
+        case TOKEN_ASSIGNMENT_BITSHIFT_RIGHT: return true;
+        case TOKEN_ASSIGNMENT_BITWISE_AND: return true;
+        case TOKEN_ASSIGNMENT_BITWISE_OR: return true;
+        case TOKEN_ASSIGNMENT_BITWISE_XOR: return true;
+        default: return false;
+    }
+}
+
 bool parseAssignment(ParserCtx pc, struct list* codeBlock, struct var* assignV, enum parsingMode mode) {
     int startCursor = pcGetCursor(pc);
     struct statement s;
     if (!assignV->mut) {
         SyntaxErrorInvalidToken(assignV->tok, VAR_IMMUTABLE);
+        skipUntilSemiColon(pc);
         return false;
     }
     assignV->origin->mayBeInitialized = true;
     struct token tok = TokenFeed(pc->tc);
+    if (!isAssignmentOperator(tok.type)) {
+        if (mode == MODE_FORCE) SyntaxErrorInvalidToken(tok, EXPECTED_ASSIGNMENT_OPERATOR);
+        pcSetCursor(pc, startCursor);
+        return false;
+    }
     if (tok.type == TOKEN_INCREMENT) {
         s.sType = STATEMENT_ASSIGNMENT_INCREMENT;
         s.var = *assignV;
@@ -717,7 +795,7 @@ bool parseAssignment(ParserCtx pc, struct list* codeBlock, struct var* assignV, 
         ListAdd(codeBlock, &s);
         return true;
     }
-    struct operand* op = parseExpr(pc, mode);
+    struct operand* op = parseExpr(pc, MODE_FORCE);
     if (!op) return pcSetCursorRetFalse(pc, startCursor);
     switch(tok.type) {
         case TOKEN_ASSIGNMENT: break;
@@ -736,8 +814,7 @@ bool parseAssignment(ParserCtx pc, struct list* codeBlock, struct var* assignV, 
         case TOKEN_ASSIGNMENT_BITWISE_AND: op = varOpBinary(*assignV, op, OPERATION_AND); break;
         case TOKEN_ASSIGNMENT_BITWISE_OR: op = varOpBinary(*assignV, op, OPERATION_OR); break;
         case TOKEN_ASSIGNMENT_BITWISE_XOR: op = varOpBinary(*assignV, op, OPERATION_XOR); break;
-        default: if (mode == MODE_FORCE) SyntaxErrorInvalidToken(tok, EXPECTED_ASSIGNMENT);
-                     return pcSetCursorRetFalse(pc, startCursor);
+        default: SyntaxErrorInvalidToken(tok, EXPECTED_ASSIGNMENT); return pcSetCursorRetFalse(pc, startCursor);
     }
     if (!op) return pcSetCursorRetFalse(pc, startCursor);
     s.sType = STATEMENT_ASSIGNMENT;
@@ -747,20 +824,29 @@ bool parseAssignment(ParserCtx pc, struct list* codeBlock, struct var* assignV, 
     return true;
 }
 
+bool parseAssignmentWithSemiColon(ParserCtx pc, struct list* codeBlock, struct var* assignV, enum parsingMode mode) {
+    if (parseAssignment(pc, codeBlock, assignV, mode)) {
+        forceParseSemiColonOrSkipPast(pc);
+        return true;
+    }
+    skipPastSemiColon(pc);
+    return false;
+}
+
 bool parseStatement(ParserCtx pc, struct list* codeBlock);
 struct list parseCodeBlock(ParserCtx pc) {
     int varLen = pc->vars.len;
     struct list codeBlock = ListInit(sizeof(struct statement));
     struct token tok;
-    if (!forceParseToken(pc, TOKEN_CURLY_BRACKET_OPEN, &tok, EXPECTED_CURLY_OPEN)) return codeBlock;
-    if (tryParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok)) return codeBlock;
+    if (!forceParseToken(pc, TOKEN_CURLY_OPEN, &tok, EXPECTED_CURLY_OPEN)) {skipPastCurlyClosesNested(pc); return codeBlock;}
+    if (tryParseToken(pc, TOKEN_CURLY_CLOSE, &tok)) return codeBlock;
     while (parseStatement(pc, &codeBlock)) {
-        if (tryParseToken(pc, TOKEN_CURLY_BRACKET_CLOSE, &tok)) {
+        if (tryParseToken(pc, TOKEN_CURLY_CLOSE, &tok)) {
             ListRetract(&pc->vars, varLen);
             return codeBlock;
         }
     }
-    TokenFeedUntilAfter(pc->tc, TOKEN_CURLY_BRACKET_CLOSE);
+    skipPastCurlyClosesNested(pc);
     ListRetract(&pc->vars, varLen);
     return codeBlock;
 }
@@ -768,7 +854,7 @@ struct list parseCodeBlock(ParserCtx pc) {
 void parseIfStatement(ParserCtx pc, struct list* codeBlock) {
     struct statement s;
     s.op = forceParseBoolExpr(pc);
-    if (!s.op) TokenFeedUntilBefore(pc->tc, TOKEN_CURLY_BRACKET_OPEN);
+    if (!s.op) TokenFeedUntilBefore(pc->tc, TOKEN_CURLY_OPEN);
     s.codeBlock = parseCodeBlock(pc);
     ListAdd(codeBlock, &s);
 }
@@ -780,9 +866,9 @@ bool parseVarDeclAndOrAssignmentStatementMutByDefault(ParserCtx pc, struct list*
         s.sType = STATEMENT_STACK_ALLOCATION;
         s.var = *v;
         ListAdd(codeBlock, &s);
-        return parseAssignment(pc, codeBlock, v, MODE_TRY);
+        return parseAssignmentWithSemiColon(pc, codeBlock, v, MODE_TRY);
     }
-    if (parseVar(pc, v, mode)) return parseAssignment(pc, codeBlock, v, MODE_FORCE);
+    if (parseVar(pc, v, mode)) return parseAssignmentWithSemiColon(pc, codeBlock, v, MODE_FORCE);
     if (mode == MODE_FORCE) SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_STATEMENT);
     return false;
 }
@@ -794,14 +880,14 @@ bool parseVarDeclAndOrAssignmentStatement(ParserCtx pc, struct list* codeBlock, 
         s.sType = STATEMENT_STACK_ALLOCATION;
         s.var = *v;
         ListAdd(codeBlock, &s);
-        return parseAssignment(pc, codeBlock, v, MODE_TRY);
+        return parseAssignmentWithSemiColon(pc, codeBlock, v, MODE_TRY);
     }
-    if (parseVar(pc, v, mode)) return parseAssignment(pc, codeBlock, v, MODE_FORCE);
+    if (parseVar(pc, v, mode)) return parseAssignmentWithSemiColon(pc, codeBlock, v, MODE_FORCE);
     if (mode == MODE_FORCE) SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_STATEMENT);
     return false;
 }
 
-bool parseAssignmentStatement(ParserCtx pc, struct list* codeBlock, enum parsingMode mode) {
+bool parseForEndOfLoopAssignment(ParserCtx pc, struct list* codeBlock, enum parsingMode mode) {
     struct var v;
     if (parseVar(pc, &v, mode)) return parseAssignment(pc, codeBlock, &v, MODE_FORCE);
     if (mode == MODE_FORCE) SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_STATEMENT);
@@ -811,32 +897,51 @@ bool parseAssignmentStatement(ParserCtx pc, struct list* codeBlock, enum parsing
 bool parseForHeader(ParserCtx pc, struct statement* s, struct list* codeBlock) {
     int varLen = pc->vars.len;
     parseVarDeclAndOrAssignmentStatementMutByDefault(pc, codeBlock, MODE_TRY);
-    struct token tok;
-    if (!forceParseToken(pc, TOKEN_COMMA, &tok, EXPECTED_COMMA)) {ListRetract(&pc->vars, varLen); return false;}
     s->op = forceParseBoolExpr(pc);
     if (!s->op) {ListRetract(&pc->vars, varLen); return false;}
+    forceParseSemiColonOrSkipPast(pc);
     s->sType = STATEMENT_FOR;
-    if (!forceParseToken(pc, TOKEN_COMMA, &tok, EXPECTED_COMMA)) {ListRetract(&pc->vars, varLen); return true;}
-    parseAssignmentStatement(pc, codeBlock, MODE_TRY);
+    parseForEndOfLoopAssignment(pc, codeBlock, MODE_TRY);
     return true;
 }
 
 void parseForStatement(ParserCtx pc, struct list* codeBlock) {
     struct statement s = (struct statement){0};
-    if (!parseForHeader(pc, &s, codeBlock)) TokenFeedUntilBefore(pc->tc, TOKEN_CURLY_BRACKET_OPEN);
+    if (!parseForHeader(pc, &s, codeBlock)) TokenFeedUntilBefore(pc->tc, TOKEN_CURLY_OPEN);
     s.codeBlock = parseCodeBlock(pc);
     ListAdd(codeBlock, &s);
 }
 
-void parseMatchStatement(ParserCtx pc, struct list* codeBlock) {
-    (void)pc;
-    (void)codeBlock;
-    //TODO
+bool parseMatchCase(ParserCtx pc, struct list* codeBlock, struct type type, struct list* vocabWords) {
+    struct statement s = (struct statement){0};
+    struct token tok;
+    if (tryParseToken(pc, TOKEN_IS, &tok)) {
+        s.sType = STATEMENT_IS;
+        s.op = parseExpr(pc, MODE_FORCE);
+        s.codeBlock = parseCodeBlock(pc);
+        if (!s.op) return false;
+        if (type.bType == BASETYPE_VOCAB) ListAdd(vocabWords, &s.op->tok);
+    }
+    else if (tryParseToken(pc, TOKEN_NOMATCH, &tok)) {
+        s.sType = STATEMENT_NOMATCH;
+        s.codeBlock = parseCodeBlock(pc);
+    }
+    ListAdd(codeBlock, &s);
+    return false;
 }
 
-void parseMatchAllStatement(ParserCtx pc, struct list* codeBlock) {
-    parseMatchStatement(pc, codeBlock);
-    //TODO
+void parseMatchStatement(ParserCtx pc, struct list* codeBlock) {
+    struct statement s = (struct statement){0};
+    s.op = parseExpr(pc, MODE_FORCE);
+    struct token tok;
+    if (!forceParseToken(pc, TOKEN_CURLY_OPEN, &tok, EXPECTED_CURLY_OPEN)) return;
+    if (s.op == NULL) {skipPastCurlyClosesNested(pc); return;}
+    s.codeBlock = ListInit(sizeof(struct statement));
+
+    struct list vocabWords = ListInit(sizeof(struct str));
+    while (parseMatchCase(pc, codeBlock, s.op->type, &vocabWords));
+    forceParseToken(pc, TOKEN_CURLY_CLOSE, &tok, EXPECTED_CURLY_CLOSE);
+    ListAdd(codeBlock, &s);
 }
 
 bool parseControlFlowStatement(ParserCtx pc, struct list* codeBlock) {
@@ -845,13 +950,14 @@ bool parseControlFlowStatement(ParserCtx pc, struct list* codeBlock) {
         case TOKEN_IF: parseIfStatement(pc, codeBlock); return true;
         case TOKEN_FOR: parseForStatement(pc, codeBlock); return true;
         case TOKEN_MATCH: parseMatchStatement(pc, codeBlock); return true;
-        case TOKEN_MATCHALL: parseMatchAllStatement(pc, codeBlock); return true;
         default: SyntaxErrorInvalidToken(tok, EXPECTED_CLOSING_CURLY); return false;
     }
 }
 
 bool parseStatement(ParserCtx pc, struct list* codeBlock) {
-    if (TokenPeek(pc->tc).type == TOKEN_IDENTIFIER) return parseVarDeclAndOrAssignmentStatement(pc, codeBlock, MODE_TRY);
+    if (TokenPeek(pc->tc).type == TOKEN_IDENTIFIER) {
+        return parseVarDeclAndOrAssignmentStatementMutByDefault(pc, codeBlock, MODE_TRY);
+    }
     return parseControlFlowStatement(pc, codeBlock);
 }
 
@@ -951,7 +1057,6 @@ struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen) {
     struct list operands = ListInit(sizeof(struct operand*));
     struct list operations = ListInit(sizeof(enum operation));
     struct operand* op;
-    struct token tok;
     if (!(op = tryParseOperand(pc))) return NULL;
     ListAdd(&operands, &op);
     enum operation operation;
@@ -966,7 +1071,7 @@ struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen) {
         ListAdd(&operations, &operation);
         ListAdd(&operands, &op);
     }
-    if (insideParen && !forceParseToken(pc, TOKEN_PAREN_CLOSE, &tok, EXPECTED_CLOSING_PAREN)) {
+    if (insideParen && !forceParseParenClose(pc)) {
         TokenSetCursor(pc->tc, startCursor);
         return NULL;
     }
@@ -979,7 +1084,11 @@ struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen) {
 
 struct operand* parseExpr(ParserCtx pc, enum parsingMode mode) {
     struct operand* op = tryParseExprInternal(pc, false);
-    if (!op && mode == MODE_FORCE) SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_EXPRESSION);
+    if (!op && mode == MODE_FORCE) {
+        int tokStart = TokenGetCursor(pc->tc);
+        skipUntilSemiColonOrCurlyOpen(pc);
+        SyntaxErrorInvalidToken(TokenFromCursorRange(pc->tc, tokStart, TokenGetCursor(pc->tc)), INVALID_EXPRESSION);
+    }
     return op;
 }
 
@@ -1002,7 +1111,7 @@ void parseFileThirdPass(ParserCtx pc) {
             case TOKEN_IMPORT: parseFileThirdPass(parseImport(pc)); break;
             case TOKEN_TYPE: TokenSetCursor(pc->tc, *(int*)ListFeed(&pc->jumps)); break;
             case TOKEN_ERROR: TokenSetCursor(pc->tc, *(int*)ListFeed(&pc->jumps)); break;
-            case TOKEN_IDENTIFIER: parseGlobalStatement(pc); break;
+            case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); parseGlobalStatement(pc); break;
             case TOKEN_FUNC: parseFuncBody(pc); break;
             case TOKEN_COMPIF: parseCompIf(pc); break;
             default: break;
