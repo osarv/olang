@@ -20,6 +20,7 @@ enum tokenType {
     TOKEN_COMPIF,
     TOKEN_COMPELSE,
     TOKEN_RETURN,
+    TOKEN_EXIT,
     TOKEN_FOR,
     TOKEN_MATCH,
     TOKEN_IS,

@@ -247,6 +247,7 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "compif")) return TOKEN_COMPIF;
     else if (isSubIdentifer(start, "compelse")) return TOKEN_COMPELSE;
     else if (isSubIdentifer(start, "return")) return TOKEN_RETURN;
+    else if (isSubIdentifer(start, "exit")) return TOKEN_EXIT;
     else if (isSubIdentifer(start, "match")) return TOKEN_MATCH;
     else if (isSubIdentifer(start, "nomatch")) return TOKEN_NOMATCH;
     else if (isSubIdentifer(start, "is")) return TOKEN_IS;

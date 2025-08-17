@@ -91,11 +91,14 @@
 #define INVALID_EXPRESSION "invalid expression"
 #define VAR_IMMUTABLE "variable is immutable"
 #define INVALID_RETURN_TYPE "return statement is of the wrong type"
+#define MAIN_FUNC_NOT_FOUND "could not find the main function"
 
+int getNSyntaxErrors();
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);
 void ErrorBugFound();
 void ErrorUnableToOpenFile(char* fileName);
+void SyntaxErrorInfo(TokenCtx tc, char* errMsg);
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg);
 void SyntaxErrorInvalidToken(struct token tok, char* errMsg);
 void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t);

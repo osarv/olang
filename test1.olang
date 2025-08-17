@@ -42,8 +42,7 @@ error myError2 {
 type MyFunc func(in mut int32[][]) myError?int32[2];
 type MyFunc2 func(in byte[], in2 mut test2.MyInt23);
 
-
-func MyActualFunc(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError, myError2?bool {
+func main(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError, myError2?bool {
     if true {
         for i int32 = 0; i < in; i++ {
             if false {}
@@ -56,4 +55,5 @@ func MyActualFunc(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myErro
     j = k;
     jk bool = true;
     return jk;
+    exit;
 }

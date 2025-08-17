@@ -835,10 +835,8 @@ bool parseAssignment(ParserCtx pc, struct list* codeBlock, struct var* assignV, 
 }
 
 void parseAssignmentWithSemiColon(ParserCtx pc, struct list* codeBlock, struct var* assignV, enum parsingMode mode) {
-    if (parseAssignment(pc, codeBlock, assignV, mode)) {
-        forceParseSemiColonOrSkipPast(pc);
-    }
-    else skipPastSemiColon(pc);
+    if (parseAssignment(pc, codeBlock, assignV, mode))
+    forceParseSemiColonOrSkipPast(pc);
 }
 
 void parseLocalStatement(ParserCtx pc, struct list* codeBlock, struct type funcT);
@@ -966,6 +964,16 @@ void parseReturnStatement(ParserCtx pc, struct list* codeBlock, struct type func
     else ListAdd(codeBlock, &s);
 }
 
+void parseExitStatement(ParserCtx pc, struct list* codeBlock) {
+    struct statement s = (struct statement){0};
+    s.sType = STATEMENT_EXIT;
+    if (tryParseSemiColon(pc)) {ListAdd(codeBlock, &s); return;}
+    s.op = forceParseIntExpr(pc);
+    if (!s.op) skipPastSemiColonOrUntilCurlyClose(pc);
+    else forceParseSemiColonOrSkipPastOrUntilCurlyClose(pc);
+    ListAdd(codeBlock, &s);
+}
+
 void parseLocalStatement(ParserCtx pc, struct list* codeBlock, struct type funcT) {
     struct token tok = TokenFeed(pc->tc);
     switch (tok.type) {
@@ -973,10 +981,11 @@ void parseLocalStatement(ParserCtx pc, struct list* codeBlock, struct type funcT
             TokenUnfeed(pc->tc);
             parseVarDeclAndOrAssignmentStatementMutByDefault(pc, codeBlock, MODE_FORCE);
             break;
-        case TOKEN_RETURN: parseReturnStatement(pc, codeBlock, funcT); break;
         case TOKEN_IF: parseIfStatement(pc, codeBlock, funcT); break;
         case TOKEN_FOR: parseForStatement(pc, codeBlock, funcT); break;
         case TOKEN_MATCH: parseMatchStatement(pc, codeBlock, funcT); break;
+        case TOKEN_RETURN: parseReturnStatement(pc, codeBlock, funcT); break;
+        case TOKEN_EXIT: parseExitStatement(pc, codeBlock); break;
         default: SyntaxErrorInvalidToken(tok, EXPECTED_STATEMENT); skipPastSemiColon(pc);
     }
 }
@@ -1147,6 +1156,14 @@ void resetTokenCtxs(struct list* ctxs) {
     }
 }
 
+bool findMainFunc(ParserCtx pc) {
+    for (int i = 0; i < pc->vars.len; i++) {
+        struct var* v = ListGetIdx(&pc->vars, i);
+        if (v->type.bType == BASETYPE_FUNC && StrCmp(v->name, StrFromCStr("main"))) return true;
+    }
+    return false;
+}
+
 ParserCtx ParseFile(char* fileName) {
     struct list ctxs = ListInit(sizeof(struct parserContext));
     ParserCtx pc = parserCtxNew(StrFromCStr(fileName), &ctxs);
@@ -1157,5 +1174,8 @@ ParserCtx ParseFile(char* fileName) {
 
     resetTokenCtxs(&ctxs);
     parseFileThirdPass(pc);
+
+    if (getNSyntaxErrors() == 0 && !findMainFunc(pc)) SyntaxErrorInfo(pc->tc, MAIN_FUNC_NOT_FOUND);
+
     return pc;
 }

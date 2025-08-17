@@ -6,6 +6,9 @@
 #include "token.h"
 
 static int nSyntaxErrors = 0;
+int getNSyntaxErrors() {
+    return nSyntaxErrors;
+}
 
 void FinishCompilation() {
     if (nSyntaxErrors == 1) {
@@ -99,6 +102,12 @@ void syntaxErrorHeader(int lineNr, struct str fileName, struct str errMsg) {
     fputs(COLOR_FG_RED " error: " COLOR_FG_YELLOW, stdout);
     StrPrint(errMsg, stdout);
     puts(COLOR_RESET);
+}
+
+void SyntaxErrorInfo(TokenCtx tc, char* errMsg) {
+    struct str err = StrFromCStr(errMsg);
+    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), err);
+    StrDestroy(err);
 }
 
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) {
