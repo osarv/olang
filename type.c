@@ -113,7 +113,7 @@ struct type* TypeGetList(struct list* l, struct str name) {
     return ListGetCmp(l, &name, typeCmpForList);
 }
 
-bool IsSameType(struct type a, struct type b) {
+bool TypeIsSame(struct type a, struct type b) {
     if (isTypeVanilla(a.bType) && a.bType == b.bType) return true;
     if (a.owner != b.owner) return false;
     if (StrCmp(a.name, b.name)) return true;

@@ -45,6 +45,6 @@ struct type TypeString(struct operand* len);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
 bool TypeIsByteArray(struct type t);
 struct type* TypeGetList(struct list* l, struct str name);
-bool IsSameType(struct type a, struct type b);
+bool TypeIsSame(struct type a, struct type b);
 
 #endif //TYPE_H

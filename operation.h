@@ -59,7 +59,6 @@ struct operand* OperandIntLiteral(struct token tok);
 struct operand* OperandFloatLiteral(struct token tok);
 struct operand* OperandStringLiteral(struct token tok);
 struct operand* OperandEvalExpr(struct list opnds, struct list oprts);
-bool TypeCastIsCompat(struct operand* op, struct type to);
 bool OperandIsInt(struct operand* op);
 bool OperandIsBool(struct operand* op);
 

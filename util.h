@@ -87,8 +87,10 @@
 #define EXPECTED_ASSIGNMENT "expected assignment"
 #define EXPECTED_ASSIGNMENT_OPERATOR "expected assignment"
 #define EXPECTED_EXPRESSION "expected expression"
+#define EXPECTED_STATEMENT "expected statement"
 #define INVALID_EXPRESSION "invalid expression"
 #define VAR_IMMUTABLE "variable is immutable"
+#define INVALID_RETURN_TYPE "return statement is of the wrong type"
 
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);

@@ -51,7 +51,9 @@ func MyActualFunc(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myErro
     }
     in = 0;
     k float32 = 0.0;
-    j = in;
+    k = in;
     if 0 != in {}
     j = k;
+    jk bool = true;
+    return jk;
 }

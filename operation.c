@@ -303,7 +303,7 @@ bool checkCompatBinary(struct operand* a, struct operand* b, enum operation opTy
     }
 }
 
-bool TypeCastIsCompat(struct operand* op, struct type to) {
+bool typeCastIsCompat(struct operand* op, struct type to) {
     switch(to.bType) {
         case BASETYPE_BOOL: return false;
         case BASETYPE_BYTE: return canUseAsInt(op);
@@ -419,7 +419,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
 struct operand* OperandTypeCast(struct operand* op, struct type to, struct token tok) {
     if (!op) return NULL;
     if ((TypeIsByteArray(to) && op->type.bType != BASETYPE_FUNC) || TypeIsByteArray(op->type));
-    else if (!TypeCastIsCompat(op, to)) {
+    else if (!typeCastIsCompat(op, to)) {
         SyntaxErrorOperandIncompatibleType(op, to);
         return NULL;
     }
