@@ -23,7 +23,7 @@ enum tokenType {
     TOKEN_EXIT,
     TOKEN_FOR,
     TOKEN_MATCH,
-    TOKEN_IS,
+    TOKEN_CASE,
     TOKEN_NOMATCH,
     TOKEN_TYPE,
     TOKEN_STRUCT,

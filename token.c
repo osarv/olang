@@ -250,7 +250,7 @@ enum tokenType tokenizeIdentifier(TokenCtx tc) {
     else if (isSubIdentifer(start, "exit")) return TOKEN_EXIT;
     else if (isSubIdentifer(start, "match")) return TOKEN_MATCH;
     else if (isSubIdentifer(start, "nomatch")) return TOKEN_NOMATCH;
-    else if (isSubIdentifer(start, "is")) return TOKEN_IS;
+    else if (isSubIdentifer(start, "case")) return TOKEN_CASE;
     else if (isSubIdentifer(start, "type")) return TOKEN_TYPE;
     else if (isSubIdentifer(start, "struct")) return TOKEN_STRUCT;
     else if (isSubIdentifer(start, "vocab")) return TOKEN_VOCAB;

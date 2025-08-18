@@ -221,6 +221,11 @@ void skipPastCurlyClosesNested(ParserCtx pc) {
     }
 }
 
+void skipUntilCurlyClosesNested(ParserCtx pc) {
+    skipPastCurlyClosesNested(pc);
+    TokenUnfeed(pc->tc);
+}
+
 int pcGetCursor(ParserCtx pc) {
     return TokenGetCursor(pc->tc);
 }
@@ -575,7 +580,7 @@ struct list tryParseFuncErrors(ParserCtx pc) {
     struct token tok;
     if (tryParseToken(pc, TOKEN_QUESTIONMARK, &tok)) return errors;
     forceParseFuncError(pc, &errors);
-    while(tryParseToken(pc, TOKEN_COMMA, &tok)) forceParseFuncError(pc, &errors);
+    while(tryParseToken(pc, TOKEN_ADD, &tok)) forceParseFuncError(pc, &errors);
     forceParseToken(pc, TOKEN_QUESTIONMARK, &tok, EXPECTED_QUESTIONMARK);
     return errors;
 }
@@ -846,8 +851,14 @@ struct list parseCodeBlock(ParserCtx pc, struct type funcT) {
     struct token tok;
     if (!forceParseToken(pc, TOKEN_CURLY_OPEN, &tok, EXPECTED_CURLY_OPEN)) {skipPastCurlyClosesNested(pc); return codeBlock;}
     if (tryParseToken(pc, TOKEN_CURLY_CLOSE, &tok)) return codeBlock;
-    while (!tryParseCurlyClose(pc) && !tryParseEOF(pc)) parseLocalStatement(pc, &codeBlock, funcT);
-    skipPastCurlyClosesNested(pc);
+    while (!tryParseCurlyClose(pc)) {
+        if (tryParseEOF(pc)) {
+            SyntaxErrorInvalidToken(TokenPrevious(pc->tc), EXPECTED_CURLY_CLOSE);
+            ListRetract(&pc->vars, varLen);
+            return codeBlock;
+        }
+        parseLocalStatement(pc, &codeBlock, funcT);
+    }
     ListRetract(&pc->vars, varLen);
     return codeBlock;
 }
@@ -911,35 +922,44 @@ void parseForStatement(ParserCtx pc, struct list* codeBlock, struct type funcT) 
     ListAdd(codeBlock, &s);
 }
 
-bool parseMatchCase(ParserCtx pc, struct list* codeBlock, struct type type, struct type funcT, struct list* vocabWords) {
+void forceParseMatchCase(ParserCtx pc, struct list* codeBlock, struct type type, struct type funcT, struct list* vocabWords) {
     struct statement s = (struct statement){0};
     struct token tok;
-    if (tryParseToken(pc, TOKEN_IS, &tok)) {
-        s.sType = STATEMENT_IS;
+    if (tryParseToken(pc, TOKEN_CASE, &tok)) {
+        s.sType = STATEMENT_CASE;
         s.op = parseExpr(pc, MODE_FORCE);
         s.codeBlock = parseCodeBlock(pc, funcT);
-        if (!s.op) return false;
+        if (!s.op) return;
         if (type.bType == BASETYPE_VOCAB) ListAdd(vocabWords, &s.op->tok);
     }
     else if (tryParseToken(pc, TOKEN_NOMATCH, &tok)) {
         s.sType = STATEMENT_NOMATCH;
         s.codeBlock = parseCodeBlock(pc, funcT);
     }
+    else {
+        SyntaxErrorInvalidToken(TokenPeek(pc->tc), EXPECTED_CASE_OR_NOMATCH);
+        skipUntilCurlyClosesNested(pc);
+        return;
+    }
     ListAdd(codeBlock, &s);
-    return false;
 }
 
 void parseMatchStatement(ParserCtx pc, struct list* codeBlock, struct type funcT) {
     struct statement s = (struct statement){0};
+    s.sType = STATEMENT_MATCH;
     s.op = parseExpr(pc, MODE_FORCE);
-    struct token tok;
-    if (!forceParseToken(pc, TOKEN_CURLY_OPEN, &tok, EXPECTED_CURLY_OPEN)) return;
+    if (!forceParseCurlyOpen(pc)) return;
     if (s.op == NULL) {skipPastCurlyClosesNested(pc); return;}
     s.codeBlock = ListInit(sizeof(struct statement));
 
     struct list vocabWords = ListInit(sizeof(struct str));
-    while (parseMatchCase(pc, codeBlock, s.op->type, funcT, &vocabWords));
-    forceParseToken(pc, TOKEN_CURLY_CLOSE, &tok, EXPECTED_CURLY_CLOSE);
+    while (!tryParseCurlyClose(pc)) {
+        if (tryParseEOF(pc)) {
+            SyntaxErrorInvalidToken(TokenPrevious(pc->tc), EXPECTED_CURLY_CLOSE);
+            return;
+        }
+        forceParseMatchCase(pc, codeBlock, s.op->type, funcT, &vocabWords);
+    }
     ListAdd(codeBlock, &s);
 }
 

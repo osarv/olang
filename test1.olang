@@ -39,15 +39,22 @@ error myError2 {
     ERROR_2;
 }
 
-type MyFunc func(in mut int32[][]) myError?int32[2];
+type MyFunc func(in mut int32[][]) myError ? int32[2];
 type MyFunc2 func(in byte[], in2 mut test2.MyInt23);
 
-func main(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError, myError2?bool {
+func main(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError + myError2 ? bool {
     if true {
         for i int32 = 0; i < in; i++ {
             if false {}
         }
     }
+
+    match 0 {
+        case 'h' {return true; exit 0;}
+        case 2 {exit;}
+        nomatch {exit 0;}
+    }
+
     in = 0;
     k float32 = 0.0;
     k = in;

@@ -6,6 +6,7 @@
 #include "var.h"
 #include "operation.h"
 
+#define EXPECTED_CASE_OR_NOMATCH "expected case or nomatch"
 #define EXPECTED_SEMICOLON "expected ;"
 #define EXPECTED_LITERAL_EXPR "expected literal expression"
 #define EXPECTED_ERROR_WORD "expected error word"
