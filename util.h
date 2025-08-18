@@ -6,6 +6,8 @@
 #include "var.h"
 #include "operation.h"
 
+#define TRAILING_COMP_ARGS "trailing compilation arguments"
+#define NO_FILE_SPECIFIED "no file specified"
 #define EXPECTED_CASE_OR_NOMATCH "expected case or nomatch"
 #define EXPECTED_SEMICOLON "expected ;"
 #define EXPECTED_LITERAL_EXPR "expected literal expression"
@@ -97,6 +99,7 @@
 int getNSyntaxErrors();
 void FinishCompilation();
 void CheckAllocPtr(void* ptr);
+void ErrorFatal(char* errMsg);
 void ErrorBugFound();
 void ErrorUnableToOpenFile(char* fileName);
 void SyntaxErrorInfo(TokenCtx tc, char* errMsg);

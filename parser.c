@@ -124,6 +124,18 @@ bool forceParseCurlyOpen(ParserCtx pc) {
     return parseToken(pc, TOKEN_CURLY_OPEN, &tok, MODE_FORCE, EXPECTED_CURLY_OPEN);
 }
 
+bool forceParseCurlyClose(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_CURLY_CLOSE, &tok, MODE_FORCE, EXPECTED_CURLY_CLOSE);
+}
+
+void forceParseCurlyCloseOrSkipPast(ParserCtx pc) {
+    struct token tok;
+    if (!parseToken(pc, TOKEN_CURLY_CLOSE, &tok, MODE_FORCE, EXPECTED_CURLY_CLOSE)) {
+        TokenFeedUntilAfter(pc->tc, TOKEN_CURLY_CLOSE);
+    }
+}
+
 bool forceParseParenOpen(ParserCtx pc) {
     struct token tok;
     return parseToken(pc, TOKEN_PAREN_OPEN, &tok, MODE_FORCE, EXPECTED_PAREN_OPEN);
@@ -141,6 +153,11 @@ bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
 bool tryParseEOF(ParserCtx pc) {
     struct token tok;
     return parseToken(pc, TOKEN_EOF, &tok, MODE_TRY, NULL);
+}
+
+bool tryParseComma(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_COMMA, &tok, MODE_TRY, NULL);
 }
 
 bool tryParseSemiColon(ParserCtx pc) {
@@ -178,6 +195,13 @@ bool forceParseSemiColonOrSkipPastOrUntilCurlyClose(ParserCtx pc) {
 
 void skipUntilSemiColon(ParserCtx pc) {
     TokenFeedUntilBefore(pc->tc, TOKEN_SEMICOLON);
+}
+
+void skipUntilCommaOrCurlyClose(ParserCtx pc) {
+    struct token tok;
+    do tok = TokenFeed(pc->tc);
+    while (tok.type != TOKEN_EOF && tok.type != TOKEN_COMMA && tok.type != TOKEN_CURLY_CLOSE);
+    TokenUnfeed(pc->tc);
 }
 
 void skipUntilSemiColonOrCurlyOpen(ParserCtx pc) {
@@ -460,8 +484,7 @@ bool parseVarDeclarationMutByDefault(ParserCtx pc, struct var* v, enum parsingMo
 void forceParseStructMember(ParserCtx pc, struct list* members) {
     struct var memb;
     bool ret = parseVarDeclarationMutByDefault(pc, &memb, MODE_FORCE);
-    if (!ret) {skipPastSemiColonOrUntilCurlyClose(pc); return;}
-    forceParseSemiColonOrSkipPastOrUntilCurlyClose(pc);
+    if (!ret) {skipPastCommaOrCurlyClose(pc); return;}
     if (memb.type.structMAlloc == true && memb.type.placeholder) {
         SyntaxErrorInvalidToken(memb.type.tok, STRUCT_NOT_YET_DEFINED);
         return;
@@ -473,7 +496,9 @@ void forceParseStructMember(ParserCtx pc, struct list* members) {
 struct list forceParseStructBody(ParserCtx pc) {
     forceParseCurlyOpen(pc);
     struct list members = ListInit(sizeof(struct var));
-    while(!tryParseCurlyClose(pc) && !tryParseEOF(pc)) forceParseStructMember(pc, &members);
+    forceParseStructMember(pc, &members);
+    while(tryParseComma(pc)) forceParseStructMember(pc, &members);
+    forceParseCurlyCloseOrSkipPast(pc);
     return members;
 }
 
@@ -487,8 +512,7 @@ struct type forceParseTypeDefStruct(ParserCtx pc) {
 void forceParseVocabWord(ParserCtx pc, struct list* words) {
     struct token word;
     bool ret = forceParseToken(pc, TOKEN_IDENTIFIER, &word, EXPECTED_VOCAB_WORD);
-    if (!ret) {skipPastSemiColonOrUntilCurlyClose(pc); return;}
-    forceParseSemiColonOrSkipPastOrUntilCurlyClose(pc);
+    if (!ret) {skipUntilCommaOrCurlyClose(pc); return;}
     if (StrGetList(words, word.str)) SyntaxErrorInvalidToken(word, VOCAB_WORD_ALREADY_IN_USE);
     else ListAdd(words, &word.str);
 }
@@ -496,7 +520,9 @@ void forceParseVocabWord(ParserCtx pc, struct list* words) {
 struct list forceParseVocabBody(ParserCtx pc) {
     forceParseCurlyOpen(pc);
     struct list words = ListInit(sizeof(struct str));
-    while(!tryParseCurlyClose(pc) && !tryParseEOF(pc)) forceParseVocabWord(pc, &words);
+    forceParseVocabWord(pc, &words);
+    while(tryParseComma(pc)) forceParseVocabWord(pc, &words);
+    forceParseCurlyCloseOrSkipPast(pc);
     return words;
 }
 
@@ -619,8 +645,7 @@ void forceParseTypeDef(ParserCtx pc) {
 void forceParseErrorWord(ParserCtx pc, struct list* words) {
     struct token word;
     bool ret = forceParseToken(pc, TOKEN_IDENTIFIER, &word, EXPECTED_ERROR_WORD);
-    if (!ret) {skipPastSemiColon(pc); return;}
-    forceParseSemiColonOrSkipPast(pc);
+    if (!ret) {skipUntilCommaOrCurlyClose(pc); return;}
     if (StrGetList(words, word.str)) SyntaxErrorInvalidToken(word, ERROR_WORD_ALREADY_IN_USE);
     else ListAdd(words, &word.str);
 }
@@ -628,7 +653,9 @@ void forceParseErrorWord(ParserCtx pc, struct list* words) {
 struct list forceParseErrorBody(ParserCtx pc) {
     forceParseCurlyOpen(pc);
     struct list words = ListInit(sizeof(struct str));
-    while(!tryParseCurlyClose(pc) && !tryParseEOF(pc)) forceParseErrorWord(pc, &words);
+    forceParseErrorWord(pc, &words);
+    while(tryParseComma(pc)) forceParseErrorWord(pc, &words);
+    forceParseCurlyCloseOrSkipPast(pc);
     return words;
 }
 

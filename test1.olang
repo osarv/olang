@@ -2,42 +2,34 @@ type myTestArr int32[][];
 type sdfs myTestArr;
 
 type myVocab1 vocab {
-    THIS;
-    THAT;
+    THIS,
+    THAT
 }
 
 type myVocab2 vocab {
-    THIS;
-    THEN;
-    NOW;
-    WHAT;
+    THIS,
+    THEN,
+    NOW,
+    WHAT
 }
 
 import test2 "test2.olang";
 type sdfsddfs test2.MyInt23;
 
 type MyStruct struct {
-    sfs int32[][-2];
-    that int64[][];
-    sdsdfs myTestArr;
-    dsvs myStruct2;
+    sfs int32[][-2],
+    that int64[][],
+    sdsdfs myTestArr,
+    dsvs myStruct2
 }
 
-type myStruct2 struct {
-    tsdfsdfs MyStruct{};
-}
+type myStruct2 struct {tsdfsdfs MyStruct{}}
 
-error myError {
-    ERROR_1;
-    ERROR_2;
-}
+error myError {ERROR_1, ERROR_2}
+error myError2 {ERROR_1, ERROR_2}
 
 hi mut int32 = 2;
 
-error myError2 {
-    ERROR_1;
-    ERROR_2;
-}
 
 type MyFunc func(in mut int32[][]) myError ? int32[2];
 type MyFunc2 func(in byte[], in2 mut test2.MyInt23);

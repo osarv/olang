@@ -23,7 +23,7 @@ void FinishCompilation() {
     exit(EXIT_SUCCESS);
 }
 
-void errorFatal(char* errMsg) {
+void ErrorFatal(char* errMsg) {
     nSyntaxErrors++;
     fputs(COLOR_FG_RED "fatal error: " COLOR_FG_YELLOW, stdout);
     fputs(errMsg, stdout);
@@ -32,11 +32,11 @@ void errorFatal(char* errMsg) {
 }
 
 void CheckAllocPtr(void* ptr) {
-    if (!ptr) errorFatal("memory allocation failed");
+    if (!ptr) ErrorFatal("memory allocation failed");
 }
 
 void ErrorBugFound() {
-    errorFatal("compiler bug found");
+    ErrorFatal("compiler bug found");
 }
 
 void ErrorUnableToOpenFile(char* fileName) {
@@ -47,7 +47,7 @@ void ErrorUnableToOpenFile(char* fileName) {
     strcat(errMsg, fileName);
     strcat(errMsg, COLOR_FG_YELLOW "\"" COLOR_RESET "\n");
 
-    errorFatal(errMsg);
+    ErrorFatal(errMsg);
     FinishCompilation();
 }
 
