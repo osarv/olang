@@ -34,6 +34,7 @@ struct parserContext {
     TokenCtx tc; //contains fileName
     struct list jumps;
     struct list aliases; //private for each parser context
+    struct list hiddenAliases; //hidden until encountered during a parser pass; to prevent access to tools not yet defined
     struct list types;
     struct list errors;
     struct list vars;
@@ -673,6 +674,7 @@ ParserCtx parserCtxNew(struct str fileName, struct list* ctxs) {
     struct parserContext pc = (struct parserContext){0};
     pc.jumps = ListInit(sizeof(int));
     pc.aliases = ListInit(sizeof(struct pcAlias));
+    pc.hiddenAliases = ListInit(sizeof(struct pcAlias));
     pc.types = ListInit(sizeof(struct type));
     pc.errors = ListInit(sizeof(struct error));
     pc.vars = ListInit(sizeof(struct var));
@@ -689,6 +691,7 @@ ParserCtx parseImport(ParserCtx parentCtx) {
     struct token fileNameTok;
     forceParseToken(parentCtx, TOKEN_IDENTIFIER, &aliasTok, EXPECTED_FILE_ALIAS);
     forceParseToken(parentCtx, TOKEN_STRING_LITERAL, &fileNameTok, EXPECTED_FILE_NAME);
+    forceParseSemiColonOrSkipPast(parentCtx);
     struct str fileName = StrSlice(fileNameTok.str, 1, fileNameTok.str.len -1);
 
     ParserCtx importCtx;
@@ -698,7 +701,16 @@ ParserCtx parseImport(ParserCtx parentCtx) {
     alias.name = aliasTok.str;
     alias.pc = importCtx;
     ListAdd(&parentCtx->aliases, &alias);
+    ListAdd(&parentCtx->hiddenAliases, &alias);
     return importCtx;
+}
+
+ParserCtx retrieveImport(ParserCtx parentCtx) {
+    skipUntilSemiColon(parentCtx);
+    struct pcAlias* alias = ListFeed(&parentCtx->hiddenAliases);
+    if (!alias) ErrorBugFound();
+    ListAdd(&parentCtx->aliases, alias);
+    return alias->pc;
 }
 
 struct type StructPlaceholder(struct token nameTok) {
@@ -756,7 +768,7 @@ void parseFileSecondPass(ParserCtx pc) {
             case TOKEN_TYPE: forceParseTypeDef(pc); cursor = TokenGetCursor(pc->tc); ListAdd(&pc->jumps, &cursor); break;
             case TOKEN_ERROR: forceParseErrorDef(pc); cursor = TokenGetCursor(pc->tc); ListAdd(&pc->jumps, &cursor); break;
             case TOKEN_FUNC: forceParseFuncPrototype(pc); cursor = TokenGetCursor(pc->tc); ListAdd(&pc->jumps, &cursor); break;
-            case TOKEN_IMPORT: parseFileSecondPass(parseImport(pc)); break;
+            case TOKEN_IMPORT: parseFileSecondPass(retrieveImport(pc)); break;
             default: break;
         }
     }
@@ -1184,7 +1196,7 @@ void parseFileThirdPass(ParserCtx pc) {
     while (TokenPeek(pc->tc).type != TOKEN_EOF) {
         struct token tok = TokenFeed(pc->tc);
         switch (tok.type) {
-            case TOKEN_IMPORT: parseFileThirdPass(parseImport(pc)); break;
+            case TOKEN_IMPORT: parseFileThirdPass(retrieveImport(pc)); break;
             case TOKEN_TYPE: TokenSetCursor(pc->tc, *(int*)ListFeed(&pc->jumps)); break;
             case TOKEN_ERROR: TokenSetCursor(pc->tc, *(int*)ListFeed(&pc->jumps)); break;
             case TOKEN_IDENTIFIER: TokenUnfeed(pc->tc); parseGlobalStatement(pc); break;
@@ -1199,6 +1211,7 @@ void resetTokenCtxs(struct list* ctxs) {
     for (int i = 0; i < ctxs->len; i++) {
         TokenReset(((ParserCtx)ListGetIdx(ctxs, i))->tc);
         ListClear(&((ParserCtx)ListGetIdx(ctxs, i))->aliases);
+        ListResetCursor(&((ParserCtx)ListGetIdx(ctxs, i))->hiddenAliases);
         ListResetCursor(&((ParserCtx)ListGetIdx(ctxs, i))->jumps);
     }
 }
