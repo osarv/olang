@@ -487,3 +487,9 @@ int TokenGetCursor(TokenCtx tc) {
 void TokenSetCursor(TokenCtx tc, int cursor) {
     ListSetCursor(&tc->tokens, cursor);
 }
+
+struct token TokenNone() {
+    struct token tok = (struct token){0};
+    tok.type = TOKEN_NONE;
+    return tok;
+}

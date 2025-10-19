@@ -330,6 +330,15 @@ bool checkCompatUnary(struct operand* op, enum operation opType) {
     }
 }
 
+struct operand* OperandFuncCall(struct var func, struct list args, struct token tok) {
+    struct operand* op = operandEmpty();
+    op->tok = tok;
+    if (func.type.retType.len != 0) op->type = *(struct type*)ListGetIdx(&func.type.retType, 0);
+    op->opType = OPERATION_FUNCCALL;
+    op->args = args;
+    return op;
+}
+
 struct operand* OperandReadVar(struct var v) {
     struct operand* op = operandEmpty();
     op->tok = v.tok;

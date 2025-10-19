@@ -1,4 +1,5 @@
 #include <stdlib.h>
+/*
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -154,6 +155,16 @@ bool tryParseToken(ParserCtx pc, enum tokenType type, struct token* tokPtr) {
 bool tryParseEOF(ParserCtx pc) {
     struct token tok;
     return parseToken(pc, TOKEN_EOF, &tok, MODE_TRY, NULL);
+}
+
+bool tryParseParenOpen(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_PAREN_OPEN, &tok, MODE_TRY, NULL);
+}
+
+bool tryParseParenClose(ParserCtx pc) {
+    struct token tok;
+    return parseToken(pc, TOKEN_PAREN_CLOSE, &tok, MODE_TRY, NULL);
 }
 
 bool tryParseComma(ParserCtx pc) {
@@ -1084,12 +1095,35 @@ struct operand* parsePrefixUnaries(ParserCtx pc, struct operand* op, int nUnarie
 
 struct operand* tryParseExprInternal(ParserCtx pc, bool insideParen);
 
+struct operand* forceParseFuncCallArgsWithParenClose(ParserCtx pc, struct var v) {
+    struct list args = ListInit(sizeof(struct operand*));
+    struct token tok;
+    for (int i = 0; i < v.type.vars.len; i++) {
+        struct operand* arg = parseExpr(pc, MODE_FORCE);
+        skipUntilCommaOrParenClose(pc);
+        if (arg) ListAdd(&args, arg);
+        if (tryParseComma(pc)) continue;
+        if (tryParseToken(pc, TOKEN_PAREN_CLOSE, &tok)) break;
+    }
+    return OperandFuncCall(v, args, TokenMerge(v.tok, tok));
+}
+
+struct operand* tryParseFuncCall(ParserCtx pc) {
+    int startCursor = pcGetCursor(pc);
+    struct var v;
+    if (!parseVar(pc, &v, MODE_TRY)) return NULL;
+    if (v.type.bType != BASETYPE_FUNC) return pcSetCursorRetNull(pc, startCursor);
+    if (!tryParseParenOpen(pc)) return pcSetCursorRetNull(pc, startCursor);
+    return forceParseFuncCallArgsWithParenClose(pc, v);
+}
+
 struct operand* tryParseOperand(ParserCtx pc) {
     int startCursor = TokenGetCursor(pc->tc);
     int prefixUnaryCnt = countPrefixUnaries(pc);
 
     struct operand* op;
-    if ((op = tryParseVarAsOperand(pc)));
+    if ((op = tryParseFuncCall(pc)));
+    else if ((op = tryParseVarAsOperand(pc)));
     else if ((op = tryParseTypeCast(pc)));
     else {
         struct token tok = TokenFeed(pc->tc);
@@ -1239,3 +1273,4 @@ ParserCtx ParseFile(char* fileName) {
 
     return pc;
 }
+*/

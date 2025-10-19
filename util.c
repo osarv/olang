@@ -95,9 +95,11 @@ void printLastLineEOFError(TokenCtx tc) {
     puts("\n" COLOR_RESET);
 }
 
+#define NO_LINE_NR -1
 void syntaxErrorHeader(int lineNr, struct str fileName, struct str errMsg) {
     nSyntaxErrors++;
-    printf(COLOR_FG_GREEN "%d ", lineNr);
+    fputs(COLOR_FG_GREEN, stdout);
+    if (lineNr != NO_LINE_NR) printf("%d ", lineNr);
     StrPrint(fileName, stdout);
     fputs(COLOR_FG_RED " error: " COLOR_FG_YELLOW, stdout);
     StrPrint(errMsg, stdout);
@@ -106,7 +108,7 @@ void syntaxErrorHeader(int lineNr, struct str fileName, struct str errMsg) {
 
 void SyntaxErrorInfo(TokenCtx tc, char* errMsg) {
     struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(TokenGetLineNrLastFedChar(tc), TokenGetFileName(tc), err);
+    syntaxErrorHeader(NO_LINE_NR, TokenGetFileName(tc), err);
     StrDestroy(err);
 }
 

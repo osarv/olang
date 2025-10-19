@@ -13,7 +13,8 @@ struct list {
 };
 
 struct list ListInit(int elemSize);
-struct list ListSlice(struct list* l, int start, int end); //list slices may not be added to
+struct list ListInitToken();
+struct list ListSlice(struct list* l, int start, int end); //list slices must not be added to
 void ListClear(struct list* l);
 void ListDestroy(struct list l);
 void ListAdd(struct list* l, void* elem);

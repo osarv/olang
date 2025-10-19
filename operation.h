@@ -49,6 +49,7 @@ struct operand {
     long long intLiteralVal;
 };
 
+struct operand* OperandFuncCall(struct var func, struct list args, struct token tok);
 struct operand* OperandReadVar(struct var v);
 struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok);
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType);

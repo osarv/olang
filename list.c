@@ -3,6 +3,7 @@
 #include <string.h>
 #include "list.h"
 #include "util.h"
+#include "token.h"
 
 struct list ListInit(int elemSize) {
     struct list l = (struct list){0};
@@ -10,7 +11,13 @@ struct list ListInit(int elemSize) {
     return l;
 }
 
-struct list ListSlice(struct list* l, int start, int end) { //list slices may not be added to
+struct list ListInitToken() {
+    struct list l = (struct list){0};
+    l.elemSize = sizeof(struct token);
+    return l;
+}
+
+struct list ListSlice(struct list* l, int start, int end) { //list slices must not be added to
     struct list lSlice;
     lSlice.elemSize = l->elemSize;
     lSlice.len = end - start;

@@ -7,7 +7,8 @@
 typedef struct tokenContext* TokenCtx;
 
 enum tokenType {
-    TOKEN_EOF = 0, //can also be used to indicate there is no token
+    TOKEN_NONE = 0,
+    TOKEN_EOF = 0,
     TOKEN_MERGE, //merge tokens have no type and can not be produced by the context
     TOKEN_BOOL_LITERAL,
     TOKEN_INT_LITERAL,
@@ -114,5 +115,6 @@ struct token TokenMerge(struct token head, struct token tail);
 struct token TokenMergeFromListRange(struct list l, int start, int end);
 struct token TokenMergeFromList(struct list l);
 struct token TokenFromCursorRange(TokenCtx tc, int start, int end);
+struct token TokenNone();
 
 #endif //TOKEN_H
