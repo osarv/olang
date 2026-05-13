@@ -2,7 +2,7 @@
 #define TYPE_H
 
 #include "token.h"
-#include "str.h"
+#include "util.h"
 #include "list.h"
 
 enum baseType {

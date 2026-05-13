@@ -1,87 +1,86 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
-#include "str.h"
 #include "list.h"
+#include "util.h"
 
 typedef struct tokenContext* TokenCtx;
 
 enum tokenType {
-    TOKEN_NONE = 0,
-    TOKEN_EOF = 0,
-    TOKEN_MERGE, //merge tokens have no type and can not be produced by the context
-    TOKEN_BOOL_LITERAL,
-    TOKEN_INT_LITERAL,
-    TOKEN_FLOAT_LITERAL,
-    TOKEN_CHAR_LITERAL,
-    TOKEN_STRING_LITERAL,
-    TOKEN_IDENTIFIER,
-    TOKEN_IF,
-    TOKEN_ELSE,
-    TOKEN_COMPIF,
-    TOKEN_COMPELSE,
-    TOKEN_RETURN,
-    TOKEN_EXIT,
-    TOKEN_FOR,
-    TOKEN_MATCH,
-    TOKEN_CASE,
-    TOKEN_NOMATCH,
-    TOKEN_TYPE,
-    TOKEN_STRUCT,
-    TOKEN_VOCAB,
-    TOKEN_FUNC,
-    TOKEN_ERROR,
-    TOKEN_MUT,
-    TOKEN_IMPORT,
-    TOKEN_ADD,
-    TOKEN_SUB,
-    TOKEN_MUL,
-    TOKEN_DIV,
-    TOKEN_MODULO,
-    TOKEN_COMMA,
-    TOKEN_DOT,
-    TOKEN_SEMICOLON,
-    TOKEN_QUESTIONMARK,
-    TOKEN_ASSIGNMENT,
-    TOKEN_ASSIGNMENT_ADD,
-    TOKEN_ASSIGNMENT_SUB,
-    TOKEN_ASSIGNMENT_MUL,
-    TOKEN_ASSIGNMENT_DIV,
-    TOKEN_ASSIGNMENT_MODULO,
-    TOKEN_ASSIGNMENT_EQUAL,
-    TOKEN_ASSIGNMENT_NOT_EQUAL,
-    TOKEN_ASSIGNMENT_AND,
-    TOKEN_ASSIGNMENT_OR,
-    TOKEN_ASSIGNMENT_XOR,
-    TOKEN_ASSIGNMENT_BITSHIFT_LEFT,
-    TOKEN_ASSIGNMENT_BITSHIFT_RIGHT,
-    TOKEN_ASSIGNMENT_BITWISE_AND,
-    TOKEN_ASSIGNMENT_BITWISE_OR,
-    TOKEN_ASSIGNMENT_BITWISE_XOR,
-    TOKEN_INCREMENT,
-    TOKEN_DECREMENT,
-    TOKEN_EQUAL,
-    TOKEN_NOT,
-    TOKEN_NOT_EQUAL,
-    TOKEN_AND,
-    TOKEN_OR,
-    TOKEN_XOR,
-    TOKEN_LESS_THAN,
-    TOKEN_LESS_THAN_OR_EQUAL,
-    TOKEN_GREATER_THAN,
-    TOKEN_GREATER_THAN_OR_EQUAL,
-    TOKEN_BITWISE_AND,
-    TOKEN_BITWISE_OR,
-    TOKEN_BITWISE_XOR,
-    TOKEN_BITWISE_COMPLEMENT,
-    TOKEN_BITSHIFT_LEFT,
-    TOKEN_BITSHIFT_RIGHT,
-    TOKEN_PAREN_OPEN,
-    TOKEN_PAREN_CLOSE,
-    TOKEN_SQUARE_OPEN,
-    TOKEN_SQUARE_CLOSE,
-    TOKEN_CURLY_OPEN,
-    TOKEN_CURLY_CLOSE
+    TOK_NONE = 0, //set to 0 in case tokens are uninitialized by accident
+    TOK_EOF,
+    TOK_BOOL_LIT,
+    TOK_INT_LIT,
+    TOK_FLOAT_LIT,
+    TOK_CHAR_LIT,
+    TOK_STR_LIT,
+    TOK_IDEN,
+    TOK_IF,
+    TOK_ELSE,
+    TOK_COMPIF,
+    TOK_COMPELSE,
+    TOK_TRY,
+    TOK_CATCH,
+    TOK_RET,
+    TOK_EXIT,
+    TOK_FOR,
+    TOK_MATCH,
+    TOK_CASE,
+    TOK_NOMATCH,
+    TOK_TYPE,
+    TOK_STRUCT,
+    TOK_VOCAB,
+    TOK_FUNC,
+    TOK_ERROR,
+    TOK_MUT,
+    TOK_IMPORT,
+    TOK_ADD,
+    TOK_SUB,
+    TOK_MUL,
+    TOK_DIV,
+    TOK_MOD,
+    TOK_COMMA,
+    TOK_DOT,
+    TOK_SCOLON,
+    TOK_QSNTMRK,
+    TOK_ASS,
+    TOK_ASS_ADD,
+    TOK_ASS_SUB,
+    TOK_ASS_MUL,
+    TOK_ASS_DIV,
+    TOK_ASS_MOD,
+    TOK_ASS_AND,
+    TOK_ASS_OR,
+    TOK_ASS_XOR,
+    TOK_ASS_BTSFT_L,
+    TOK_ASS_BTSFT_R,
+    TOK_ASS_BTWSE_AND,
+    TOK_ASS_BTWSE_OR,
+    TOK_ASS_BTWSE_XOR,
+    TOK_INC,
+    TOK_DEC,
+    TOK_EQ,
+    TOK_NOT,
+    TOK_NEQ,
+    TOK_AND,
+    TOK_OR,
+    TOK_XOR,
+    TOK_LST,
+    TOK_LSE,
+    TOK_GRT,
+    TOK_GRE,
+    TOK_BTWSE_AND,
+    TOK_BTWSE_OR,
+    TOK_BTWSE_XOR,
+    TOK_BTWSE_INV,
+    TOK_BTSFT_L,
+    TOK_BTSFT_R,
+    TOK_PAREN_O,
+    TOK_PAREN_C,
+    TOK_SQUARE_O,
+    TOK_SQUARE_C,
+    TOK_CURLY_O,
+    TOK_CURLY_C
 };
 
 struct token {
@@ -92,29 +91,20 @@ struct token {
     TokenCtx owner; //filled in when added into the ctx
 };
 
-TokenCtx TokenizeFile(struct str fileName);
-int TokenGetCharCursor(TokenCtx tc);
-char TokenGetChar(TokenCtx tc, int index);
+TokenCtx TokenizeFile(char* fileName);
 struct str TokenGetFileName(TokenCtx tc);
-int TokenGetLineNrLastFedChar(TokenCtx tc);
-int TokenGetPrevNewline(TokenCtx tc, int cursor); //returns first index on none found
-int TokenGetNextOrThisNewline(TokenCtx tc, int cursor); //returns last index on none found
-int TokenGetStrStart(TokenCtx tc, struct str str);
-int TokenGetEOFIndex(TokenCtx tc);
-struct token TokenPeek(TokenCtx tc);
 struct token TokenFeed(TokenCtx tc);
-void TokenFeedUntilBefore(TokenCtx tc, enum tokenType type);
-void TokenFeedUntilAfter(TokenCtx tc, enum tokenType type);
+void TokenFeedPast(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);
-bool TokenFeedSpecific(TokenCtx tc, enum tokenType type, struct token* tok, char* errMsg); //tok and errMsg may be NULL
-struct token TokenPrevious(TokenCtx tc);
-void TokenReset(TokenCtx tc);
-int TokenGetCursor(TokenCtx tc);
-void TokenSetCursor(TokenCtx tc, int cursor);
+int TokenGetStrStart(struct token tok);
+int TokenGetLineStart(TokenCtx tc, int charIdx);
+int TokenGetLineEnd(TokenCtx tc, int charIdx);
+char TokenGetChar(TokenCtx tc, int charIdx);
 struct token TokenMerge(struct token head, struct token tail);
 struct token TokenMergeFromListRange(struct list l, int start, int end);
 struct token TokenMergeFromList(struct list l);
-struct token TokenFromCursorRange(TokenCtx tc, int start, int end);
-struct token TokenNone();
+int TokenGetCursor(TokenCtx tc);
+void TokenSetCursor(TokenCtx tc, int cursor);
+enum tokenType TokenGetTypeFromStr(char* str);
 
 #endif //TOKEN_H

@@ -332,16 +332,8 @@ void tokenizeTokensFromChars(TokenCtx tc) {
     }
 }
 
-struct token TokenEOF(TokenCtx tc) {
-    struct token tok = (struct token){0};
-    tok.type = TOKEN_EOF;
-    tok.lineNr = tc->charLineNr;
-    tok.owner = tc;
-    return tok;
-}
-
-TokenCtx TokenizeFile(struct str fileName) {
-    TokenCtx tc = malloc(sizeof(*tc));
+TokenCtx TokenizeFile(char* fileName) {
+    TokenCtx tc = MallocOrCrash(sizeof(*tc));
     CheckAllocPtr(tc);
     *tc = (struct tokenContext){0};
     tc->chars = ListInit(sizeof(char));
@@ -354,52 +346,9 @@ TokenCtx TokenizeFile(struct str fileName) {
     return tc;
 }
 
-int TokenGetCharCursor(TokenCtx tc) {
-    return tc->chars.cursor;
-}
-
-char TokenGetChar(TokenCtx tc, int index) {
-    if (index < 0 || index >= tc->chars.len) ErrorBugFound();
-    return *(char*)ListGetIdx(&tc->chars, index);
-}
-
 struct str TokenGetFileName(TokenCtx tc) {
     if (!tc) return (struct str){0};
     return tc->fileName;
-}
-
-int TokenGetLineNrLastFedChar(TokenCtx tc) {
-    if (tc->chars.cursor -1 < 0) return 1;
-    if (*(char*)ListPrevious(&tc->chars) == '\n') return tc->charLineNr -1;
-    return tc->charLineNr;
-}
-
-int TokenGetPrevNewline(TokenCtx tc, int cursor) { //returns first index on none found
-    for (int i = cursor -1 ; i >= 0; i--) {
-        if (*(char*)ListGetIdx(&tc->chars, i) == '\n') return i;
-    }
-    return -1;
-}
-
-int TokenGetNextOrThisNewline(TokenCtx tc, int cursor) { //returns last index on none found
-    for (int i = cursor; i < tc->chars.len; i++) {
-        if (*(char*)ListGetIdx(&tc->chars, i) == '\n') return i;
-    }
-    return tc->chars.len -1;
-}
-
-int TokenGetStrStart(TokenCtx tc, struct str str) {
-    return str.ptr - (char*)tc->chars.ptr;
-}
-
-int TokenGetEOFIndex(TokenCtx tc) {
-    return tc->chars.len -1;
-}
-
-struct token TokenPeek(TokenCtx tc)  {
-    struct token* tokPtr = ListPeek(&tc->tokens);
-    if (!tokPtr) return TokenEOF(tc);
-    return *tokPtr;
 }
 
 struct token TokenFeed(TokenCtx tc) {
@@ -408,40 +357,14 @@ struct token TokenFeed(TokenCtx tc) {
     return *tokPtr;
 }
 
-void TokenFeedUntilAfter(TokenCtx tc, enum tokenType type) {
+void TokenFeedPast(TokenCtx tc, enum tokenType type) {
     struct token tok = TokenFeed(tc);
     while (tok.type != type && tok.type != TOKEN_EOF) tok = TokenFeed(tc);
-}
-
-void TokenFeedUntilBefore(TokenCtx tc, enum tokenType type) {
-    TokenFeedUntilAfter(tc, type);
-    TokenUnfeed(tc);
 }
 
 void TokenUnfeed(TokenCtx tc) {
     ListUnfeed(&tc->tokens);
     if (tc->tokens.len <= 0) ErrorBugFound();
-}
-
-bool TokenFeedSpecific(TokenCtx tc, enum tokenType type, struct token* tok, char* errMsg) { //tok and errMsg may be NULL
-    struct token tmpTok = TokenFeed(tc);
-    if (tmpTok.type != type) {
-        TokenUnfeed(tc);
-        if (errMsg) SyntaxErrorInvalidToken(tmpTok, errMsg);
-        return false;
-    }
-    *tok = tmpTok;
-    return true;
-}
-
-struct token TokenPrevious(TokenCtx tc) {
-    struct token* tokPtr = ListPrevious(&tc->tokens);
-    if (!tokPtr) ErrorBugFound();
-    return *tokPtr;
-}
-
-void TokenReset(TokenCtx tc) {
-    ListResetCursor(&tc->tokens);
 }
 
 struct token TokenMerge(struct token head, struct token tail) {
@@ -467,19 +390,6 @@ struct token TokenMergeFromList(struct list l) {
     return TokenMerge(head, tail);
 }
 
-struct token TokenFromCursorRange(TokenCtx tc, int start, int end) {
-    if (end > tc->tokens.len) ErrorBugFound();
-    struct list toks = ListInit(sizeof(struct token));
-    struct token* tokPtr;
-    for (int i = start; i < end; i++) {
-        tokPtr = ListGetIdx(&tc->tokens, i);
-        ListAdd(&toks, tokPtr);
-    }
-    struct token retTok = TokenMergeFromList(toks);
-    ListDestroy(toks);
-    return retTok;
-}
-
 int TokenGetCursor(TokenCtx tc) {
     return tc->tokens.cursor;
 }
@@ -488,8 +398,86 @@ void TokenSetCursor(TokenCtx tc, int cursor) {
     ListSetCursor(&tc->tokens, cursor);
 }
 
-struct token TokenNone() {
-    struct token tok = (struct token){0};
-    tok.type = TOKEN_NONE;
-    return tok;
+enum tokenGetTypeFromStrCmp(char* str, char* pattern) {
+    for (int i = 0; i < strlen(pattern); i++) {
+        if (str[i] != pattern[i]) return false;
+    }
+    return true;
+}
+
+enum tokenType TokenGetTypeFromStr(char* str) {
+    if (tokenGetTypeFromStrCmp(str, "TOKEN_EOF")) return TOKEN_EOF;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BOOL_LIT")) return TOK_BOOL_LIT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_INT_LIT")) return TOK_INT_LIT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_FLOAT_LIT")) return TOK_INT_LIT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_CHAR_LIT")) return TOK_CHAR_LIT
+    if (tokenGetTypeFromStrCmp(str, "TOK_STR_LIT")) return TOK_STR_LIT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_IDEN")) return TOK_IDEN;
+    if (tokenGetTypeFromStrCmp(str, "TOK_IF")) return TOK_IF;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ELSE")) return TOK_ELSE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_COMPIF")) return TOK_COMPIF;
+    if (tokenGetTypeFromStrCmp(str, "TOK_COMPELSE")) return TOK_COMPELSE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_RET")) return TOK_RET;
+    if (tokenGetTypeFromStrCmp(str, "TOK_EXIT")) return TOK_EXIT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_FOR")) return TOK_FOR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_MATCH")) return TOK_MATCH;
+    if (tokenGetTypeFromStrCmp(str, "TOK_CASE")) return TOK_CASE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_NOMATCH")) return TOK_NOMATCH;
+    if (tokenGetTypeFromStrCmp(str, "TOK_TYPE")) return TOK_TYPE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_STRUCT")) return TOK_STRUCT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_VOCAB")) return TOK_VOCAB;
+    if (tokenGetTypeFromStrCmp(str, "TOK_FUNC")) return TOK_FUNC;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ERROR")) return TOK_ERROR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_MUT")) return TOK_MUT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_IMPORT")) return TOK_IMPORT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ADD")) return TOK_ADD;
+    if (tokenGetTypeFromStrCmp(str, "TOK_SUB")) return TOK_SUB;
+    if (tokenGetTypeFromStrCmp(str, "TOK_MUL")) return TOK_MUL;
+    if (tokenGetTypeFromStrCmp(str, "TOK_DIV")) return TOK_DIV;
+    if (tokenGetTypeFromStrCmp(str, "TOK_MOD")) return TOK_MOD;
+    if (tokenGetTypeFromStrCmp(str, "TOK_COMMA")) return TOK_COMMA;
+    if (tokenGetTypeFromStrCmp(str, "TOK_DOT")) return TOK_DOT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_SCOLON")) return TOK_SCOLON;
+    if (tokenGetTypeFromStrCmp(str, "TOK_QSNTMRK")) return TOK_QSNTMRK;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS")) return TOK_ASS;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_ADD")) return TOK_ASS_ADD;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_SUB")) return TOK_ASS_SUB;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_MUL")) return TOK_ASS_MUL;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_DIV")) return TOK_ASS_DIV;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_MOD")) return TOK_ASS_MOD;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_AND")) return TOK_ASS_AND;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_OR")) return TOK_ASS_OR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_XOR")) return TOK_ASS_XOR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_BTSFT_L")) return TOK_ASS_BTSFT_L;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_BTSFT_R")) return TOK_ASS_BTSFT_R;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_BTWSE_AND")) return TOK_ASS_BTWSE_AND;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_BTWSE_OR")) return TOK_ASS_BTWSE_OR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_ASS_BTWSE_XOR")) return TOK_ASS_BTWSE_XOR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_INC")) return TOK_INC;
+    if (tokenGetTypeFromStrCmp(str, "TOK_DEC")) return TOK_DEC;
+    if (tokenGetTypeFromStrCmp(str, "TOK_EQ")) return TOK_EQ;
+    if (tokenGetTypeFromStrCmp(str, "TOK_NOT")) return TOK_NOT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_NEQ")) return TOK_NEQ;
+    if (tokenGetTypeFromStrCmp(str, "TOK_AND")) return TOK_AND;
+    if (tokenGetTypeFromStrCmp(str, "TOK_OR")) return TOK_OR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_XOR")) return TOK_XOR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_LST")) return TOK_LST;
+    if (tokenGetTypeFromStrCmp(str, "TOK_LSE")) return TOK_LSE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_GRT")) return TOK_GRT;
+    if (tokenGetTypeFromStrCmp(str, "TOK_GRE")) return TOK_GRE;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTWSE_AND")) return TOK_BTWSE_AND;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTWSE_OR")) return TOK_BTWSE_OR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTWSE_OR")) return TOK_BTWSE_OR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTWSE_XOR")) return TOK_BTWSE_XOR;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTWSE_INV")) return TOK_BTWSE_INV;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTSFT_L")) return TOK_BTSFT_L;
+    if (tokenGetTypeFromStrCmp(str, "TOK_BTSFT_R")) return TOK_BTSFT_R;
+    if (tokenGetTypeFromStrCmp(str, "TOK_PAREN_O")) return TOK_PAREN_O;
+    if (tokenGetTypeFromStrCmp(str, "TOK_PAREN_C")) return TOK_PAREN_C;
+    if (tokenGetTypeFromStrCmp(str, "TOK_SQUARE_O")) return TOK_SQUARE_O;
+    if (tokenGetTypeFromStrCmp(str, "TOK_SQUARE_C")) return TOK_SQUARE_C;
+    if (tokenGetTypeFromStrCmp(str, "TOK_CURLY_O")) return TOK_CURLY_O;
+    if (tokenGetTypeFromStrCmp(str, "TOK_CURLY_C")) return TOK_CURLY_C;
+    ErrorBugFound();
+    return TOKEN_NONE;
 }

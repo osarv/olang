@@ -40,6 +40,11 @@ func main(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError + myEr
         nomatch {exit 0;}
     }
 
+    do {
+        dfsk float32 = 2;
+        dfsk++;
+    } while true;
+
     if true {
         for i int32 = 0; i < in; i++ {
             if false {}

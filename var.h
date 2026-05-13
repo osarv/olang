@@ -2,7 +2,6 @@
 #define VAR_H
 
 #include "type.h"
-#include "str.h"
 #include "token.h"
 #include "list.h"
 

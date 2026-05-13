@@ -5,40 +5,53 @@
 #include "color.h"
 #include "token.h"
 
-static int nSyntaxErrors = 0;
-int getNSyntaxErrors() {
-    return nSyntaxErrors;
+struct str Str(char* ptr, int len) {
+    struct str s;
+    s.ptr = ptr;
+    s.len = len;
+    return s;
 }
 
-void FinishCompilation() {
-    if (nSyntaxErrors == 1) {
-        printf(COLOR_FG_RED "compilation failed with 1 error\n" COLOR_RESET);
+struct str StrFromCStr(char* cStr) {
+    struct str s;
+    s.ptr = cStr;
+    s.len = strlen(cStr);
+    return s;
+}
+
+void* MallocOrCrash(size_t size) {
+    void* ptr = malloc(size);
+    if (!ptr) {
+        fputs(COLOR_RED "ERROR: " COLOR_RESET "memory allocation failed\n", stderr);
         exit(EXIT_FAILURE);
     }
-    else if (nSyntaxErrors) {
-        printf(COLOR_FG_RED "compilation failed with %d error(s)\n" COLOR_RESET, nSyntaxErrors);
+    return ptr;
+}
+
+void* CallocOrCrash(size_t size) {
+    void* ptr = calloc(size, 1);
+    if (!ptr) {
+        fputs(COLOR_RED "ERROR: " COLOR_RESET "memory allocation failed\n", stderr);
         exit(EXIT_FAILURE);
     }
-    puts(COLOR_FG_GREEN "compilation successful" COLOR_RESET);
-    exit(EXIT_SUCCESS);
+    return ptr;
 }
 
-void ErrorFatal(char* errMsg) {
-    nSyntaxErrors++;
-    fputs(COLOR_FG_RED "fatal error: " COLOR_FG_YELLOW, stdout);
-    fputs(errMsg, stdout);
-    puts(COLOR_RESET);
-    FinishCompilation();
-}
-
-void CheckAllocPtr(void* ptr) {
-    if (!ptr) ErrorFatal("memory allocation failed");
+void* ReallocOrCrash(void* oldPtr, size_t size) {
+    void* ptr = realloc(oldPtr, size);
+    if (!ptr) {
+        fputs(COLOR_RED "ERROR: " COLOR_RESET "memory allocation failed\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    return ptr;
 }
 
 void ErrorBugFound() {
-    ErrorFatal("compiler bug found");
+    fputs(COLOR_RED "ERROR: bug found\n" COLOR_RESET, stderr);
+    exit(EXIT_FAILURE);
 }
 
+/*
 void ErrorUnableToOpenFile(char* fileName) {
     char errMsg[strlen(fileName) + 100];
     errMsg[0] = '\0';
@@ -119,18 +132,6 @@ void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg) {
     printErrorLines(tc, TokenGetCharCursor(tc) -1, TokenGetCharCursor(tc) -1, printCharExpandSpaceNewLineEOF);
 }
 
-void SyntaxErrorInvalidToken(struct token tok, char* errMsg) {
-    struct str fileName = TokenGetFileName(tok.owner);
-    struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(tok.lineNr, fileName, err);
-    StrDestroy(err);
-    if (tok.type == TOKEN_EOF) {
-        printLastLineEOFError(tok.owner);
-        return;
-    }
-    printTokErrorLineOneTok(tok);
-}
-
 void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t) {
     struct str fileName = TokenGetFileName(o->tok.owner);
     struct str errMsg = StrFromCStr("operand can not be used as type \"");
@@ -172,3 +173,4 @@ void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b) { //as
     syntaxErrorHeader(a->tok.lineNr, fileName, StrFromCStr(OPERANDS_NOT_SAME_TYPE));
     printTokErrorLineTwoTok(a->tok, b->tok);
 }
+*/

@@ -1,114 +1,45 @@
 #ifndef UTIL_H
 #define UTIL_H
+#include <stdio.h>
 
-#include "token.h"
-#include "parser.h"
-#include "var.h"
-#include "operation.h"
+#define COLOR_RESET "\x1b[0m"
+#define COLOR_FG_RED "\x1b[31m"
+#define COLOR_FG_GREEN "\x1b[32m"
+#define COLOR_FG_YELLOW "\x1b[33m"
+#define COLOR_FG_CYAN "\x1b[36m"
 
-#define TRAILING_TOKEN "trailing token"
-#define EXPECTED_TYPE_NAME "expected type name"
-#define EXPECTED_TYPE_DEF "expected type definition"
+#ifdef TEST
+#undef TEST
+#define TEST(func) __attribute__((constructor)) static void Test##func()
+#endif //TEST
 
-#define NAMESPACE_NOT_ALLOWED "namespace not allowed"
-#define TRAILING_COMP_ARGS "trailing compilation arguments"
-#define NO_FILE_SPECIFIED "no file specified"
-#define EXPECTED_CASE_OR_NOMATCH "expected case or nomatch"
-#define EXPECTED_SEMICOLON "expected ;"
-#define EXPECTED_LITERAL_EXPR "expected literal expression"
-#define EXPECTED_ERROR_WORD "expected error word"
-#define EXPECTED_FUNC_NAME "expected function name"
-#define UNKNOWN_STRUCT_MEMBER "unknown struct member"
-#define TRAILING_TOKENS "trailing tokens"
-#define INVALID_TYPE "invalid type"
-#define INVALID_VAR "invalid variable"
-#define INVALID_ERROR "invalid error"
-#define INVALID_ARR_DECL "invalid array declaration"
-#define NAMESPACE_IS_PRIVATE "namespace is private"
-#define UNKNOWN_NAMESPACE "unkown namespace"
-#define TYPE_NAME_IN_USE "type name already in use"
-#define ERROR_IN_USE "error already in use"
-#define VAR_NAME_IN_USE "variable name already in use"
-#define WRONG_TOKEN "wrong token"
-#define EXPECTED_PAREN_OPEN "expected ("
-#define EXPECTED_PAREN_CLOSE "expected )"
-#define EXPECTED_CURLY_OPEN "expected {"
-#define EXPECTED_CURLY_CLOSE "expected }"
-#define EXPECTED_SQUARE_OPEN "expected ["
-#define EXPECTED_SQUARE_CLOSE "expected ]"
-#define EXPECTED_QUESTIONMARK "expected ?"
-#define EXPECTED_DOT "expected ."
-#define EXPECTED_COMMA "expected ,"
-#define EXPECTED_STATEMENT "expected statement"
-#define EXPECTED_STATEMENT_OR_CURLY_CLOSE "expected statement or }"
-#define EXPECTED_COMMA_OR_CURLY_CLOSE "expected , or }"
-#define EXPECTED_TYPE "expected type"
-#define EXPECTED_ERROR "expected error"
-#define EXPECTED_VAR "expected variable"
-#define INVALID_VAR_NAME "invalid variable name"
-#define INVALID_FUNC_NAME "invalid function name"
-#define INVALID_TYPE_NAME "invalid function name"
-#define INVALID_IDENTIFIER "invalid identifier"
-#define EXPECTED_ERROR_NAME "expected error name"
-#define EXPECTED_VAR_NAME "expected variable name"
-#define EXPECTED_OPENING_CURLY "expected \"{\""
-#define EXPECTED_CLOSING_CURLY "expected \"}\""
-#define EXPECTED_CLOSING_SQUARE_BRACKET "expected \"]\""
-#define EXPECTED_CLOSING_PAREN "expected \")\""
-#define EXPECTED_CLOSING_CURLY_OR_COMMA "expected \"}\" or \",\""
-#define EXPECTED_CLOSING_PAREN_OR_COMMA "expected \")\" or \",\""
-#define EXPECTED_FILE_NAME "expected file name"
-#define EXPECTED_VOCAB_WORD "expected vocab word"
-#define EXPECTED_FILE_ALIAS "expected file alias"
-#define DUPLICATE_ERROR "duplicate error"
-#define UNKNOWN_TYPE "unknown type"
-#define UNKNOWN_ERROR "unknown error"
-#define UNKNOWN_VAR "unknown variable"
-#define UNKNOWN_FILE_ALIAS "unknown file alias"
-#define VOCAB_WORD_ALREADY_IN_USE "vocab word already in use"
-#define ERROR_WORD_ALREADY_IN_USE "error word already in use"
-#define INVALID_ARRAY_SIZE "invalid array size"
-#define UNKNOWN_SYMBOL "unknown symbol"
-#define INVALID_ESCAPE_CHAR "invalid escape character"
-#define NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL "newline before closing of character literal"
-#define EMPTY_CHAR_LITERAL "empty character literal"
-#define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
-#define MULTIPLE_DECIMAL_POINTS "multiple decimal points"
-#define LAST_WAS_DECIMAL_POINT "float literals must not end in a decimal point"
-#define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
-#define TYPE_IS_PRIVATE "this type is private"
-#define VAR_IS_PRIVATE "this variable is private"
-#define VAR_NOT_INITIALIZED "variable used before initialization"
-#define FUNC_ARG_PUBLIC "function arguments must not be declared public"
-#define OPERATION_REQUIRES_INT "operand must be an integer"
-#define OPERATION_REQUIRES_NUMBER "operand must be a number"
-#define OPERATION_REQUIRES_BOOL "operand must be a boolean"
-#define OPERATION_REQUIRES_BYTE_OR_INT "operand must be byte or integer"
-#define OPERANDS_NOT_SAME_TYPE "operand must be the same type"
-#define OPERANDS_NOT_SAME_SIZE "operand must be the same size"
-#define EXPECTED_OPERAND "expected operand"
-#define TRAILING_PAREN "trailing parenthesis"
-#define TRAILING_CURLY "trailing curly bracket"
-#define EXPECTED_ASSIGNMENT "expected assignment"
-#define EXPECTED_ASSIGNMENT_OPERATOR "expected assignment"
-#define EXPECTED_EXPRESSION "expected expression"
-#define EXPECTED_STATEMENT "expected statement"
-#define INVALID_EXPRESSION "invalid expression"
-#define VAR_IMMUTABLE "variable is immutable"
-#define INVALID_RETURN_TYPE "return statement is of the wrong type"
-#define MAIN_FUNC_NOT_FOUND "could not find the main function"
+#ifndef TEST
+#undef TEST
+#define TEST(func) __attribute__((unused)) static void Test##func()
+#endif //TEST
 
-int getNSyntaxErrors();
-void FinishCompilation();
-void CheckAllocPtr(void* ptr);
-void ErrorFatal(char* errMsg);
+#define TEST_PASSED {printf(COLOR_GREEN "%s passed\n" COLOR_RESET, __func__); return;}
+#define TEST_FAILED {printf(COLOR_RED "%s failed\n" COLOR_RESET, __func__); return;}
+
+struct str {
+    char* ptr;
+    int len;
+};
+
+struct str Str(char* ptr, int len);
+struct str StrFromCStr(char* cStr);
+void StrPrint(struct str s, FILE* stream);
 void ErrorBugFound();
-void ErrorUnableToOpenFile(char* fileName);
+void* MallocOrCrash(size_t size);
+void* CallocOrCrash(size_t size);
+void* ReallocOrCrash(void* oldPtr, size_t size);
+
+/*
 void SyntaxErrorInfo(TokenCtx tc, char* errMsg);
 void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg);
-void SyntaxErrorInvalidToken(struct token tok, char* errMsg);
 void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t);
 void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b); //assumes tokA preceeds tokB
 void SyntaxErrorOperandsNotSameSize(struct operand* a, struct operand* b);
+*/
 
 #endif //UTIL_H

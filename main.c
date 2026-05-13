@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "syntax.h"
 #include "util.h"
+#include "error.h"
 
 int main(int argc, char** argv) {
     if (argc < 2) ErrorFatal(NO_FILE_SPECIFIED);

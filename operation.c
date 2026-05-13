@@ -1,4 +1,5 @@
 #include <stdlib.h>
+/*
 #include <stdio.h>
 #include <stdbool.h>
 #include "var.h"
@@ -486,3 +487,4 @@ bool OperandIsInt(struct operand* op) {
 bool OperandIsBool(struct operand* op) {
     return canUseAsBool(op);
 }
+*/
