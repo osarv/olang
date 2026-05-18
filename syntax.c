@@ -67,14 +67,14 @@ struct syntaxRule rules[] = {
     {SNTX_CBLOCK, "TOK_CURLY_O ! * SNTX_STMNT $ TOK_CURLY_C"},
 };
 
-char* getNextPatternPart(char* pattern) {
+char* nextPatternPart(char* pattern) {
     for (int i = 0; i < (int)strlen(pattern); i++) {
         if (pattern[i] == ' ') return pattern +i +1;
     }
     return NULL;
 }
 
-char* getLastPatternPart(char* pattern) {
+char* lastPatternPart(char* pattern) {
     int lastPart = 0;
     for (int i = (int)strlen(pattern) -1; i >= 0; i--) {
         if (pattern[i] == ' ') return pattern + i +1;
@@ -82,57 +82,91 @@ char* getLastPatternPart(char* pattern) {
     return NULL;
 }
 
+#define CURSOR_NOT_SET -1
+
 struct syntax ParseRule(SyntaxCtx sc, struct syntaxRule rule, bool started) {
     struct syntax s; 
     s.type = rule.type;
     s.parts = ListInit(sizeof(union syntaxPart));
 
     bool optional = false;
-    enum tokenType expected;
-    struct syntax nested;
+/   bool mayRepeat = false;
+    enum tokenType expectedTok;
+    enum syntaxType expectedSntx;
+    struct token foundTok;
+    struct syntax foundSntx;
     int startCursor = TokenGetCursor(sc->tc);
+    int repeatCursor = CURSOR_NOT_SET;
     while (rule.pattern[0] != '\0') {
         switch (rule.pattern[0]) {
             case 'T':
-                expected = TokenGetTypeFromStr(rule.pattern);
-                struct token tok = TokenFeed(sc->tc);
-                if (tok.type != tokType) {
+                expectedTok = TokenGetTypeFromStr(rule.pattern);
+                foundTok = TokenFeed(sc->tc);
+                if (foundTok.type != tokType) {
                     s.type = SNTX_NOT_FOUND;
                     s.errorTok = tok;
-                    if (optional) rule.pattern = getNextPatternPart(rule.pattern); break;
+                    if (optional) {
+                        TokenUnfeed(sc->tc);
+                        break;
+                    }
                     else if (started) {
                         ErrMsgUnexpectedToken((tok, TokenStrFromType(expected)));
-                        TokenFeedUntil(sc->tc, getLastPatternPart(rule.pattern));
+                        TokenFeedUntil(sc->tc, lastPatternPart(rule.pattern));
                         return s;
                     }
-                    else TokenSetCursor(sc->tc, startCursor); return s;
+                    else {
+                        TokenSetCursor(sc->tc, startCursor);
+                        return s;
+                    }
                 }
-                ListAdd(&s.parts, &tok);
+                if (mayRepeat && *nextPatternPart(rule.pattern) == '$') {
+                    TokenSetCursor(sc->tc, repeatCursor);
+                }
+                ListAdd(&s.parts, &foundTok);
                 break;
 
             case 'S':
-                enum syntaxType = syntaxGetTypeFromStr(rule.pattern);
-                nested = ParseRule(sc, rules[(rule.pattern)], started);
-                if (nested.type == SNTX_NOT_FOUND) {
+                expectedSntx = syntaxGetTypeFromStr(rule.pattern);
+                foundSntx = ParseRule(sc, rules[(rule.pattern)], started);
+                if (foundSntx.type != expectedSntx) {
                     s.type = SNTX_NOT_FOUND;
                     s.errorTok = tok;
-                    if (optional) rule.pattern = getNextPatternPart(rule.pattern); break;
+                    if (optional) {
+                        TokenUnfeed(sc->tc);
+                        break;
+                    }
                     else if (started) {
-                        ErrMsgUnexpectedToken((nested.errorTok, syntaxStrFromType(syntaxType)));
-                        TokenFeedUntil(sc->tc, getLastPatternPart(rule.pattern));
+                        ErrMsgUnexpectedToken((foundSntx.errorTok, syntaxStrFromType(syntaxType)));
+                        TokenFeedUntil(sc->tc, lastPatternPart(rule.pattern));
                         return s;
                     }
-                    else TokenSetCursor(sc->tc, startCursor); return s;
+                    else {
+                        TokenSetCursor(sc->tc, startCursor);
+                        return s;
+                    }
                 }
-                ListAdd(&s.parts, &nested);
+                if (mayRepeat && *nextPatternPart(rule.pattern) == '$') {
+                    TokenSetCursor(sc->tc, repeatCursor);
+                }
+                ListAdd(&s.parts, &foundSntx);
                 break;
-            case '?': optional = true; break;
             //case '&': optionalAtLeastOne = true; break;
-            //case '*': optionalRepeating = true; break;
+            case '*':
+                      repeatCursor = TokenGetCursor(sc->tc);
+                      mayRepeat = true;
+                      break;
+
+            case '$':
+                      repeatCursor = CURSOR_NOT_SET;
+                      optional = false;
+                      mayRepeat = false;
+                      break;
+
+            case '?': optional = true; break;
             case '!': started = true; break;
-            case '$': optional = false; break;
+            default: ErrorBugFound();
         }
-        rule.pattern = getNextPatternPart(rule.pattern);
+        rule.pattern = nextPatternPart(rule.pattern);
     }
 }
 
