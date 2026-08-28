@@ -6,8 +6,7 @@
 #include "var.h"
 
 struct var* VarAllocSetOrigin() {
-    struct var* v = malloc(sizeof(struct var));
-    CheckAllocPtr(v);
+    struct var* v = MallocOrCrash(sizeof(struct var));
     v->origin = v;
     return v;
 }

@@ -14,12 +14,12 @@ void ListDestroy(struct list l) {
     if (l.ptr) free(l.ptr);
 }
 
-#define LIST_ALLOC_STEP_SIZE 100
+#define LIST_ALLOC_MIN_CAP 16
 void ListAdd(struct list* l, void* elem) {
     if (l->elemSize == 0) ErrorBugFound();
     if (l->len >= l->cap) {
         if (l->ptr && l->cap == 0) ErrorBugFound(); //tried to add to slice
-        l->cap += LIST_ALLOC_STEP_SIZE;
+        l->cap = l->cap ? l->cap * 2 : LIST_ALLOC_MIN_CAP; //geometric growth: amortized O(1) per add
         l->ptr = ReallocOrCrash(l->ptr, l->elemSize * l->cap);
     }
     memcpy((char*)l->ptr + l->len * l->elemSize, elem, l->elemSize);
@@ -29,7 +29,7 @@ void ListAdd(struct list* l, void* elem) {
 void ListAddList(struct list* head, struct list tail) {
     if (head->elemSize != tail.elemSize) ErrorBugFound();
     for (int i = 0; i < tail.len; i++) {
-        ListAdd(head, &tail.ptr + i * tail.elemSize);
+        ListAdd(head, (char*)tail.ptr + i * tail.elemSize);
     }
 }
 

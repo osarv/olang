@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "statement.h"
-#include "error.h"
+#include "errmsg.h"
 
 void StatementStackAllocAddList(struct list* codeBlock, struct var allocVar) {
     struct statement s = (struct statement){0};

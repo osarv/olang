@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include "syntax.h"
 #include "util.h"
-#include "error.h"
+#include "errmsg.h"
 
 int main(int argc, char** argv) {
-    if (argc < 2) ErrorFatal(NO_FILE_SPECIFIED);
-    if (argc > 2) ErrorFatal(TRAILING_COMP_ARGS);
+    if (argc < 2) ErrMsgFatal(NO_FILE_SPECIFIED);
+    if (argc > 2) ErrMsgFatal(TRAILING_COMP_ARGS);
     ParseSyntax(argv[1]);
-    FinishCompilation();
+    ErrMsgFinishCompilation();
     return 0;
 }

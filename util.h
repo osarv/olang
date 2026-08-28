@@ -1,6 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 #include <stdio.h>
+#include <stdbool.h>
 
 #define COLOR_RESET "\x1b[0m"
 #define COLOR_FG_RED "\x1b[31m"
@@ -18,8 +19,8 @@
 #define TEST(func) __attribute__((unused)) static void Test##func()
 #endif //TEST
 
-#define TEST_PASSED {printf(COLOR_GREEN "%s passed\n" COLOR_RESET, __func__); return;}
-#define TEST_FAILED {printf(COLOR_RED "%s failed\n" COLOR_RESET, __func__); return;}
+#define TEST_PASSED {printf(COLOR_FG_GREEN "%s passed\n" COLOR_RESET, __func__); return;}
+#define TEST_FAILED {printf(COLOR_FG_RED "%s failed\n" COLOR_RESET, __func__); return;}
 
 struct str {
     char* ptr;
@@ -28,18 +29,13 @@ struct str {
 
 struct str Str(char* ptr, int len);
 struct str StrFromCStr(char* cStr);
+char* StrToCStr(struct str s, char* buf);
+bool StrCmp(struct str a, struct str b);
 void StrPrint(struct str s, FILE* stream);
 void ErrorBugFound();
+void CheckAllocPtr(void* ptr);
 void* MallocOrCrash(size_t size);
 void* CallocOrCrash(size_t size);
 void* ReallocOrCrash(void* oldPtr, size_t size);
-
-/*
-void SyntaxErrorInfo(TokenCtx tc, char* errMsg);
-void SyntaxErrorLastFedChar(TokenCtx tc, char* errMsg);
-void SyntaxErrorOperandIncompatibleType(struct operand* o, struct type t);
-void SyntaxErrorOperandsNotSameType(struct operand* a, struct operand* b); //assumes tokA preceeds tokB
-void SyntaxErrorOperandsNotSameSize(struct operand* a, struct operand* b);
-*/
 
 #endif //UTIL_H

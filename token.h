@@ -7,8 +7,7 @@
 typedef struct tokenContext* TokenCtx;
 
 enum tokenType {
-    TOK_NONE = 0, //set to 0 in case tokens are uninitialized by accident
-    TOK_EOF,
+    TOK_NONE = 0, //to indicate EOF and no token; set to zero to guarantee array indexing
     TOK_BOOL_LIT,
     TOK_INT_LIT,
     TOK_FLOAT_LIT,
@@ -24,6 +23,8 @@ enum tokenType {
     TOK_RET,
     TOK_EXIT,
     TOK_FOR,
+    TOK_DO,
+    TOK_WHILE,
     TOK_MATCH,
     TOK_CASE,
     TOK_NOMATCH,
@@ -41,7 +42,7 @@ enum tokenType {
     TOK_MOD,
     TOK_COMMA,
     TOK_DOT,
-    TOK_SCOLON,
+    TOK_STMNT_END, //synthetic only - see asiTriggerType in token.c; ';' is not valid syntax and has no literal form
     TOK_QSNTMRK,
     TOK_ASS,
     TOK_ASS_ADD,
@@ -94,6 +95,7 @@ struct token {
 TokenCtx TokenizeFile(char* fileName);
 struct str TokenGetFileName(TokenCtx tc);
 struct token TokenFeed(TokenCtx tc);
+struct token TokenFeedUntil(TokenCtx tc, enum tokenType type);
 void TokenFeedPast(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);
 int TokenGetStrStart(struct token tok);
@@ -105,6 +107,9 @@ struct token TokenMergeFromListRange(struct list l, int start, int end);
 struct token TokenMergeFromList(struct list l);
 int TokenGetCursor(TokenCtx tc);
 void TokenSetCursor(TokenCtx tc, int cursor);
-enum tokenType TokenGetTypeFromStr(char* str);
+int TokenGetCharCursor(TokenCtx tc);
+int TokenGetLineNr(TokenCtx tc);
+enum tokenType TokenTypeFromStr(char* str);
+char* TokenStrFromType(enum tokenType type);
 
 #endif //TOKEN_H

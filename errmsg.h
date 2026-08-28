@@ -9,7 +9,6 @@
 #define TRAILING_COMP_ARGS "trailing compilation arguments"
 #define NO_FILE_SPECIFIED "no file specified"
 #define EXPECTED_CASE_OR_NOMATCH "expected case or nomatch"
-#define EXPECTED_SEMICOLON "expected ;"
 #define EXPECTED_LITERAL_EXPR "expected literal expression"
 #define EXPECTED_ERROR_WORD "expected error word"
 #define EXPECTED_FUNC_NAME "expected function name"
@@ -96,7 +95,9 @@
 int ErrMsgGetNErrors();
 void ErrMsgFinishCompilation();
 void ErrMsgFatal(char* errMsg);
+void ErrMsgUnableToOpenFile(struct str fileName);
 void ErrMsgUnexpectedToken(struct token found, char* expected);
+void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
 
 #endif //ERRMSG_H
 

@@ -1,0 +1,1 @@
+this is a custom programming language project called olang. It uses code structure similar to c but with quality of life improvements. the error handling is like the one in ziglang. I am planning on adding more rust-like compile time security features in the future.

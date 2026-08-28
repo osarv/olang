@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "util.h"
 #include "errmsg.h"
 #include "token.h"
@@ -67,19 +68,39 @@ void syntaxErrorHeader(int lineNr, struct str fileName, struct str errMsg) {
 }
 
 
+void ErrMsgUnableToOpenFile(struct str fileName) {
+    char buf[fileName.len + 64];
+    buf[0] = '\0';
+    strcat(buf, "unable to open file \"");
+    strncat(buf, fileName.ptr, fileName.len);
+    strcat(buf, "\"\n");
+    ErrMsgFatal(buf);
+}
+
+void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg) {
+    struct str fileName = TokenGetFileName(tc);
+    struct str err = StrFromCStr(errMsg);
+    syntaxErrorHeader(TokenGetLineNr(tc), fileName, err);
+    int idx = TokenGetCharCursor(tc) -1;
+    printErrorLine(tc, idx, idx);
+}
+
 void ErrMsgUnexpectedToken(struct token found, char* expected) {
     struct str fileName = TokenGetFileName(found.owner);
-    char buf[100];
-
-    //TODO
-    struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(tok.lineNr, fileName, err);
-    StrDestroy(err);
-    if (tok.type == TOK_EOF) {
+    char buf[found.str.len + (int)strlen(expected) + 64];
+    buf[0] = '\0';
+    strcat(buf, "unexpected token '");
+    strncat(buf, found.str.ptr, found.str.len);
+    strcat(buf, "' expected '");
+    strcat(buf, expected);
+    strcat(buf, "'\n");
+    struct str err = StrFromCStr(buf);
+    syntaxErrorHeader(found.lineNr, fileName, err);
+    if (found.type == TOK_NONE) {
         //printLastLineEOFError(tok.owner);
         return;
     }
-    printTokErrorLineOneTok(tok);
+    printTokErrorLineOneTok(found);
     //fputs("expected: " COLOR_FG_RED, stdout);
     //fputs(expected, stdout);
     //puts(COLOR_RESET);

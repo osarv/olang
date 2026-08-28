@@ -1,0 +1,24 @@
+type Foo int32
+
+error MyError {
+    ERR_A,
+    ERR_B
+}
+
+func add(a int32, b int32) int32 {
+    return a + b
+}
+
+func main() ? int32 {
+    x mut int32 = 5
+    y mut int32 = x + 1
+    z mut int32 = x +
+        y
+    if x < y {
+        z = add(x, y)
+    }
+    for i mut int32 = 0, i < 3, i++ {
+        z = z + i
+    }
+    return z
+}

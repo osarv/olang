@@ -8,8 +8,8 @@
 
 #define PTR_SIZE 8 //4 for 32bit
 #define ARR_LEN_SIZE 8 //4 for 32bit
-#define VOCAB_SIZE 4;
-#define ERROR_SIZE 4;
+#define VOCAB_SIZE 4
+#define ERROR_SIZE 4
 
 long long TypeGetSize(struct type t);
 
