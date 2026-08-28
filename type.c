@@ -7,20 +7,18 @@
 #include "operation.h"
 
 #define PTR_SIZE 8 //4 for 32bit
-#define ARR_LEN_SIZE 8 //4 for 32bit
 #define VOCAB_SIZE 4
 #define ERROR_SIZE 4
 
 long long TypeGetSize(struct type t);
 
 long long getArraySize(struct type t) {
-    if (!t.arrMalloc) return PTR_SIZE;
-    t.bType = t.arrBase;
-    return 0;
+    if (t.arrMalloc) return PTR_SIZE;
+    return TypeGetSize(*t.arrElem);
 }
 
 long long getStructSize(struct type t) {
-    if (!t.structMAlloc) return PTR_SIZE;
+    if (t.structMAlloc) return PTR_SIZE;
     long long size = 0;
     for (int i = 0; i < t.vars.len; i++) {
         size += TypeGetSize((*(struct var*)ListGetIdx(&t.vars, i)).type);
@@ -30,6 +28,7 @@ long long getStructSize(struct type t) {
 
 long long TypeGetSize(struct type t) {
     switch (t.bType) {
+        case BASETYPE_VOID: return 0;
         case BASETYPE_BOOL: return 1;
         case BASETYPE_BYTE: return 1;
         case BASETYPE_INT32: return 4;
@@ -63,7 +62,7 @@ struct type TypeVanilla(enum baseType bType) {
         case BASETYPE_FLOAT64: t.name.ptr = typeVanillaFloat64Str; break;
         default: ErrorBugFound();
     }
-    t.name.len = strlen(t.name.ptr);
+    t.name.len = (int)strlen(t.name.ptr);
     t.bType = bType;
     return t;
 }
@@ -80,17 +79,6 @@ bool isTypeVanilla(enum baseType bType) {
     }
 }
 
-struct type TypeString(struct operand* len) {
-    struct type t = (struct type){0};
-    t.name.ptr = typeVanillaByteStr;
-    t.name.len = strlen(t.name.ptr);
-    t.bType = BASETYPE_ARRAY;
-    t.arrBase = BASETYPE_BYTE;
-    t.arrMalloc = true;
-    t.arrLen = len;
-    return t;
-}
-
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom) {
     tFrom.name = name;
     tFrom.tok = tok;
@@ -99,7 +87,7 @@ struct type TypeFromType(struct str name, struct token tok, struct type tFrom) {
 
 bool TypeIsByteArray(struct type t) {
     if (t.bType != BASETYPE_ARRAY) return false;
-    if (t.arrBase != BASETYPE_BYTE) return false;
+    if (t.arrElem->bType != BASETYPE_BYTE) return false;
     return true;
 }
 
@@ -113,9 +101,67 @@ struct type* TypeGetList(struct list* l, struct str name) {
     return ListGetCmp(l, &name, typeCmpForList);
 }
 
+bool TypeIsNumeric(struct type t) {
+    switch (t.bType) {
+        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
+        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64:
+            return true;
+        default: return false;
+    }
+}
+
+bool TypeIsInt(struct type t) {
+    switch (t.bType) {
+        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: return true;
+        default: return false;
+    }
+}
+
+bool TypeIsFloat(struct type t) {
+    switch (t.bType) {
+        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: return true;
+        default: return false;
+    }
+}
+
 bool TypeIsSame(struct type a, struct type b) {
-    if (isTypeVanilla(a.bType) && a.bType == b.bType) return true;
-    if (a.owner != b.owner) return false;
-    if (StrCmp(a.name, b.name)) return true;
-    return false;
+    if (a.bType != b.bType) return false;
+    if (isTypeVanilla(a.bType)) return true;
+    switch (a.bType) {
+        case BASETYPE_ARRAY:
+            if (a.arrMalloc != b.arrMalloc) return false;
+            return TypeIsSame(*a.arrElem, *b.arrElem);
+        case BASETYPE_FUNC: {
+            if (a.vars.len != b.vars.len) return false;
+            for (int i = 0; i < a.vars.len; i++) {
+                struct type ta = (*(struct var*)ListGetIdx(&a.vars, i)).type;
+                struct type tb = (*(struct var*)ListGetIdx(&b.vars, i)).type;
+                if (!TypeIsSame(ta, tb)) return false;
+            }
+            if (a.hasRetType != b.hasRetType) return false;
+            if (a.hasRetType && !TypeIsSame(*a.retType, *b.retType)) return false;
+            return true;
+        }
+        //struct/vocab/error are always named declarations - identity is owner+name
+        default:
+            if (a.owner != b.owner) return false;
+            return StrCmp(a.name, b.name);
+    }
+}
+
+char* TypeDescribe(struct type t) {
+    static char buf[256];
+    if (t.name.len > 0 && t.name.len < (int)sizeof(buf)) {
+        memcpy(buf, t.name.ptr, (size_t)t.name.len);
+        buf[t.name.len] = '\0';
+        return buf;
+    }
+    switch (t.bType) {
+        case BASETYPE_ARRAY: return "array type";
+        case BASETYPE_STRUCT: return "struct type";
+        case BASETYPE_VOCAB: return "vocab type";
+        case BASETYPE_FUNC: return "func type";
+        case BASETYPE_ERROR: return "error type";
+        default: return "type";
+    }
 }

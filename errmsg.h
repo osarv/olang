@@ -98,6 +98,8 @@ void ErrMsgFatal(char* errMsg);
 void ErrMsgUnableToOpenFile(struct str fileName);
 void ErrMsgUnexpectedToken(struct token found, char* expected);
 void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
+void ErrMsgSemantic(struct token tok, char* errMsg);
+void ErrMsgFile(struct str fileName, char* errMsg);
 
 #endif //ERRMSG_H
 

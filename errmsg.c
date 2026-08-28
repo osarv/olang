@@ -85,6 +85,19 @@ void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg) {
     printErrorLine(tc, idx, idx);
 }
 
+void ErrMsgFile(struct str fileName, char* errMsg) {
+    struct str err = StrFromCStr(errMsg);
+    syntaxErrorHeader(NO_LINE_NR, fileName, err);
+}
+
+void ErrMsgSemantic(struct token tok, char* errMsg) {
+    struct str fileName = TokenGetFileName(tok.owner);
+    struct str err = StrFromCStr(errMsg);
+    syntaxErrorHeader(tok.lineNr, fileName, err);
+    if (tok.type == TOK_NONE) return;
+    printTokErrorLineOneTok(tok);
+}
+
 void ErrMsgUnexpectedToken(struct token found, char* expected) {
     struct str fileName = TokenGetFileName(found.owner);
     char buf[found.str.len + (int)strlen(expected) + 64];
