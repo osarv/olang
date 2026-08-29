@@ -96,11 +96,47 @@ of sync with the actual code.
   transitively re-exporting its own imports (so importing A also reaches through A's import of B). None
   of these came up while building the test suite that motivated this change, so none were forced - but
   they're the same "capital letter = exported" rule, just not yet wired into their own grammar slot.
+- **Struct/array literal syntax + `:=` type inference.** `Type[v1, v2, ...]` constructs a struct
+  (positional, in member-declaration order) or an array (`T[N][v1, ...]` fixed, `T[][v1, ...]`
+  dynamic/malloc'd) inline, as a general expression usable anywhere a value is needed - not just on the
+  right of a var-decl. The type is always restated on the literal itself
+  (`x mut int32[] = int32[][5, 6, 7]`, not `x mut int32[] = [5, 6, 7]`) - chosen so a literal is
+  self-describing and var-decl grammar needs no changes at all. `x := <literal>` infers `x`'s type
+  entirely from an initializing literal (locals, for-loop init vars, and globals, via the existing
+  two-phase resolve/check split); a non-literal initializer (`x := f()`) is a compile error
+  (`TYPE_CANNOT_BE_INFERRED`), since only a literal is guaranteed to syntactically carry a full concrete
+  type. `:=` is its own token (`TOK_ASS_INFER`), not reused `=`, because reusing `=` made `SNTX_VAR_DECL`
+  and `SNTX_STMNT_ASSIGN` (e.g. `result = 100`) genuinely ambiguous with no way for the PEG engine to
+  prefer one over the other. The value-list delimiter is `[...]`, not `{...}`: `{...}` collides with block
+  syntax (`if x { y }` was silently misparsed, consuming `x { y }` as a struct literal and leaving the
+  `if` without its required block) with no way to backtrack out of it once chosen; `]` never closes a
+  block anywhere in the grammar and was already an automatic-statement-end trigger, so `[...]` has zero
+  collision risk there and needed no tokenizer changes.
+  **Known, unresolved gap: a literal needs at least two values.** `Point[1]` (a genuine single-field
+  struct literal) and `int32[][5]`/`int32[]` (a single-element or empty array literal) are syntactically
+  indistinguishable from plain indexing (`Point[1]` also reads as "read var `Point`, then index by 1") to
+  this PEG engine: it greedily consumes a lone bracket as an array-type suffix and can't backtrack out of
+  that once the literal's own value-list bracket then fails to appear (see the comment on
+  `SNTX_EXPR_LITERAL` in syntax.c). Resolving this for real needs the base name's type-vs-variable status,
+  which only semantic analysis knows, not the parser - not attempted. Single/empty-value literals
+  currently fall through to plain indexing and fail with confusing errors (`unknown variable`/`operand is
+  not an array`) rather than a clean diagnostic.
+  **Still out of scope:** `Type{}[...]` (heap-indirect struct construction - the first real `malloc` for a
+  struct) is deliberately not implemented, since it needs the ownership/lifetime model from the
+  `{}`-heap-allocation open question below to mean anything.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
-- **No struct/array literal syntax.** A struct or array value can currently only come from an existing
-  variable or a function parameter - there is no way to construct one from scratch in an expression.
-  This means structs are effectively inert (undemonstrable end-to-end) until this exists.
 - **No free/GC for `{}`-heap-allocated structs.** Deliberate leak for now; no ownership/borrow model
   exists yet. This is the eventual home for the "rust-like compile-time security features" direction.
+- **What `{}` even means is disputed - current implementation may have it backwards.** As implemented
+  and described under "Value vs. reference semantics" above, plain `Type` is embedded/by-value and
+  `Type{}` is heap-indirect/by-reference. The user's original mental model was closer to the opposite:
+  `{}` meaning "laid out in memory" (contiguous/embedded) and no `{}` meaning "floating" (a reference) -
+  roughly inverted from what's built. Not resolved either way yet - explicitly parked, not to be
+  silently changed in either direction. Revisit once the ownership/lifetime model above is designed,
+  since "what does `{}` mean" and "who owns/frees a `{}` allocation" are really the same question.
+- **Struct/array literal syntax (`Type[v1, v2, ...]`) is unconfirmed.** The "Settled decisions" entry
+  above documents what's actually implemented and working today, but the user has explicitly said they're
+  "not sold" on this syntax - it may still be reworked or dropped. Don't treat that entry as final; don't
+  build further features on top of this syntax assuming it's permanent without checking first.

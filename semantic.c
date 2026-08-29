@@ -532,16 +532,17 @@ bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
     }
 }
 
-struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
-    struct type result = resolveTypeRefBase(mod, refNode);
-
-    struct list sfx = allPartsOfType(refNode, SNTX_ARR_SFX);
+//wraps `base` in one array level per SNTX_ARR_SFX child of `node` (fixed size from a compile-time-const
+//int expr, or dynamic if the brackets are empty) - shared by type references and literal expressions,
+//which both spell array suffixes the same way ("T[3]", "T[]")
+struct type applyArraySuffixes(struct type base, struct syntax* node) {
+    struct list sfx = allPartsOfType(node, SNTX_ARR_SFX);
     for (int i = 0; i < sfx.len; i++) {
         struct syntax* s = *(struct syntax**)ListGetIdx(&sfx, i);
         struct type wrapped = (struct type){0};
         wrapped.bType = BASETYPE_ARRAY;
         wrapped.arrElem = MallocOrCrash(sizeof(struct type));
-        *wrapped.arrElem = result;
+        *wrapped.arrElem = base;
         struct syntax* sizeExprNode = firstPartOfType(s, SNTX_EXPR);
         wrapped.arrMalloc = (sizeExprNode == NULL);
         if (sizeExprNode) {
@@ -557,9 +558,56 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
             lenOp->intLiteralVal = size;
             wrapped.arrLen = lenOp;
         }
-        result = wrapped;
+        base = wrapped;
     }
-    return result;
+    return base;
+}
+
+struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
+    return applyArraySuffixes(resolveTypeRefBase(mod, refNode), refNode);
+}
+
+//resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
+//lookup as resolveTypeRefBase, minus the "{}" heap-indirect handling: a literal's own trailing "{...}"
+//holds values, not the (always-empty) heap-indirection marker, and constructing a value always requires
+//the type to be fully resolved (never the "grab it mid-resolution" trick {} exists for)
+struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNode) {
+    struct list idens = allTokOfType(nameNode, TOK_IDEN);
+    struct type* found;
+
+    if (idens.len == 1) {
+        struct token nameTok = *(struct token*)ListGetIdx(&idens, 0);
+        struct str name = strFromTok(nameTok);
+        found = TypeGetList(&mod->types, name);
+        if (!found) {
+            switch (name.len) {
+                case 4:
+                    if (!strncmp(name.ptr, "bool", 4)) return TypeVanilla(BASETYPE_BOOL);
+                    break;
+                case 5:
+                    if (!strncmp(name.ptr, "int32", 5)) return TypeVanilla(BASETYPE_INT32);
+                    if (!strncmp(name.ptr, "int64", 5)) return TypeVanilla(BASETYPE_INT64);
+                    break;
+                default: break;
+            }
+            if (StrCmp(name, StrFromCStr("byte"))) return TypeVanilla(BASETYPE_BYTE);
+            if (StrCmp(name, StrFromCStr("float32"))) return TypeVanilla(BASETYPE_FLOAT32);
+            if (StrCmp(name, StrFromCStr("float64"))) return TypeVanilla(BASETYPE_FLOAT64);
+            ErrMsgSemantic(nameTok, UNKNOWN_TYPE);
+            return TypeVanilla(BASETYPE_INT32);
+        }
+    } else {
+        struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
+        struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
+        struct semaModule* target = findImport(mod, strFromTok(aliasTok));
+        if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return TypeVanilla(BASETYPE_INT32); }
+        struct str name = strFromTok(nameTok);
+        found = TypeGetList(&target->types, name);
+        if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_TYPE); return TypeVanilla(BASETYPE_INT32); }
+        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
+    }
+    resolveTypeDecl(found);
+    return *found;
 }
 
 struct type resolveVocabBody(struct semaModule* mod, struct token nameTok, struct syntax* bodyNode) {
@@ -735,7 +783,10 @@ void semaResolveModule(struct semaModule* mod) {
         } else if (actual->type == SNTX_VAR_DECL) {
             struct token nameTok = firstTokOfType(actual, TOK_IDEN);
             struct var* v = VarGetList(&mod->vars, strFromTok(nameTok));
-            v->type = resolveTypeExpr(mod, firstPartOfType(actual, SNTX_TYPE_EXPR));
+            struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
+            //":=" (no type node) is resolved later in semaCheckBodies instead, once the initializer
+            //operand that its type gets read off exists
+            if (typeExprNode) v->type = resolveTypeExpr(mod, typeExprNode);
         }
     }
 }
@@ -1116,6 +1167,35 @@ struct operand* OperandErrorLiteral(struct type errType, struct token wordTok) {
     return op;
 }
 
+//"Point[1, 2]" - positional, in member-declaration order, each value checked the same way an assignment
+//would check it. args becomes op->args (codegen reads the field values straight from there).
+struct operand* OperandStructLiteral(struct type t, struct list args, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, t);
+    op->isLiteral = true;
+    op->args = args;
+    if (args.len != t.vars.len) { ErrMsgSemantic(tok, WRONG_ARG_COUNT); return op; }
+    for (int i = 0; i < args.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        struct type memberType = (*(struct var*)ListGetIdx(&t.vars, i)).type;
+        if (!OperandFitsType(arg, memberType)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
+    }
+    return op;
+}
+
+//"int32[3][1, 2, 3]" (fixed - value count must match the declared size exactly) or "int32[][1, 2, 3]"
+//(dynamic - mallocd at runtime, see cgAggregateLiteral; size is just however many values are given)
+struct operand* OperandArrayLiteral(struct type t, struct list args, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, t);
+    op->isLiteral = true;
+    op->args = args;
+    if (!t.arrMalloc && args.len != t.arrLen->intLiteralVal) { ErrMsgSemantic(tok, WRONG_ARG_COUNT); return op; }
+    for (int i = 0; i < args.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        if (!OperandFitsType(arg, *t.arrElem)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
+    }
+    return op;
+}
+
 // ---- expressions ----
 
 enum operation opFromTokType(enum tokenType t) {
@@ -1241,6 +1321,22 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     return callOp;
 }
 
+//"Type[v1, v2, ...]" (struct) or "T[N][...]"/"T[][...]" (array) - see resolveLiteralBaseType/
+//applyArraySuffixes for how the type itself is resolved, and OperandStructLiteral/OperandArrayLiteral for
+//the value checks. firstTokOfType finds only this rule's own direct "[" (the one right before the value
+//list) - a preceding SNTX_ARR_SFX's own brackets are nested one level deeper, inside its own sub-node.
+struct operand* buildLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
+    struct token tok = firstTokOfType(s, TOK_SQUARE_O);
+    struct type t = applyArraySuffixes(resolveLiteralBaseType(ctx->mod, nameNode), s);
+    struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
+
+    if (t.bType == BASETYPE_ARRAY) return OperandArrayLiteral(t, args, tok);
+    if (t.bType == BASETYPE_STRUCT) return OperandStructLiteral(t, args, tok);
+    ErrMsgSemantic(tok, INVALID_LITERAL_TYPE);
+    return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+}
+
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
@@ -1260,6 +1356,9 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     }
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_TRY) {
         return buildTryExpr(ctx, partSntx(s, 0));
+    }
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_LITERAL) {
+        return buildLiteralExpr(ctx, partSntx(s, 0));
     }
     if (s->parts.len == 2) { //SNTX_NAME SNTX_EXPR_CALL - "func(...)" or "alias.func(...)"
         struct syntax* nameNode = partSntx(s, 0);
@@ -1316,9 +1415,17 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
 struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token nameTok = firstTokOfType(s, TOK_IDEN);
     bool mut = true; //local variables are mutable by default; "mut" is only meaningful on globals
-    struct type declType = resolveTypeExpr(ctx->mod, firstPartOfType(s, SNTX_TYPE_EXPR));
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+
+    struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
+    struct type declType;
+    if (typeExprNode) {
+        declType = resolveTypeExpr(ctx->mod, typeExprNode);
+        if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+    } else { // ":=" - type read straight off the (required-to-be-literal) initializer
+        if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+        declType = rhs->type;
+    }
 
     struct var* v = scopeDeclare(ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     struct statement stmt = (struct statement){0};
@@ -1415,9 +1522,17 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* initNode = firstPartOfType(s, SNTX_FOR_INIT);
     struct token nameTok = firstTokOfType(initNode, TOK_IDEN);
     bool mut = true; //local variables are mutable by default
-    struct type declType = resolveTypeExpr(ctx->mod, firstPartOfType(initNode, SNTX_TYPE_EXPR));
     struct operand* initVal = buildExprFromSyntax(&innerCtx, firstPartOfType(initNode, SNTX_EXPR));
-    if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, VALUE_TYPE_MISMATCH);
+
+    struct syntax* typeExprNode = firstPartOfType(initNode, SNTX_TYPE_EXPR);
+    struct type declType;
+    if (typeExprNode) {
+        declType = resolveTypeExpr(ctx->mod, typeExprNode);
+        if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, VALUE_TYPE_MISMATCH);
+    } else { // ":=" - type read straight off the (required-to-be-literal) initializer
+        if (!initVal->isLiteral) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
+        declType = initVal->type;
+    }
     struct var* loopVar = scopeDeclare(innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
@@ -1665,7 +1780,12 @@ void semaCheckBodies(struct semaModule* mod) {
             struct checkCtx ctx = {0};
             ctx.mod = mod;
             struct operand* rhs = buildExprFromSyntax(&ctx, firstPartOfType(actual, SNTX_EXPR));
-            if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+            if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
+                if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+            } else { // ":=" - type read straight off the (required-to-be-literal) initializer
+                if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+                v->type = rhs->type;
+            }
             v->initExpr = rhs;
             continue;
         }

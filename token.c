@@ -60,6 +60,7 @@ struct tokRule tokRules[] = {
     {TOK_STMNT_END, "", "end of statement"}, //no literal form - only ever synthesized, see stmntEndTriggerType
     {TOK_QSNTMRK, "?", NULL},
     {TOK_ASS, "=", NULL},
+    {TOK_ASS_INFER, ":=", NULL},
     {TOK_ASS_ADD, "+=", NULL},
     {TOK_ASS_SUB, "-=", NULL},
     {TOK_ASS_MUL, "*=", NULL},
@@ -569,6 +570,7 @@ enum tokenType TokenTypeFromStr(char* str) {
     if (tokenTypeStrCmp(str, "TOK_ASS_BTWSE_OR")) return TOK_ASS_BTWSE_OR;
     if (tokenTypeStrCmp(str, "TOK_ASS_BTWSE_XOR")) return TOK_ASS_BTWSE_XOR;
     if (tokenTypeStrCmp(str, "TOK_ASS")) return TOK_ASS;
+    if (tokenTypeStrCmp(str, "TOK_ASS_INFER")) return TOK_ASS_INFER;
     if (tokenTypeStrCmp(str, "TOK_INC")) return TOK_INC;
     if (tokenTypeStrCmp(str, "TOK_DEC")) return TOK_DEC;
     if (tokenTypeStrCmp(str, "TOK_EQ")) return TOK_EQ;

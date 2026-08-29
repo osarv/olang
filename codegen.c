@@ -403,6 +403,59 @@ char* cgFloatConst(double v, bool isF32) {
     return buf;
 }
 
+//"Type[v1, v2, ...]" (struct) or "T[N][...]"/"T[][...]" (array) - constructs a value inline. Struct and
+//fixed arrays are by-ref (see typeIsByRef): allocate storage, store each value into its slot, and return
+//the address, exactly like reading an existing by-ref variable would. A dynamic array mallocs its backing
+//storage (same "deliberate leak, no free yet" policy as {}-heap structs - see the report) and returns the
+//{ i64, ptr } slice value directly, matching how a dynamic array is represented everywhere else.
+char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
+    if (op->type.bType == BASETYPE_STRUCT) {
+        char storTy[256];
+        structAggSpelling(op->type, storTy, sizeof(storTy));
+        char* slot = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, storTy);
+        for (int i = 0; i < op->args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
+            char* fieldAddr = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
+            cgStoreInto(ctx, arg->type, cgValue(ctx, arg), fieldAddr);
+        }
+        return slot;
+    }
+
+    if (!op->type.arrMalloc) { //fixed array
+        char storTy[256];
+        llvmType(op->type, storTy, sizeof(storTy));
+        char* slot = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, storTy);
+        for (int i = 0; i < op->args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
+            char* elemAddr = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %d\n", elemAddr, storTy, slot, i);
+            cgStoreInto(ctx, arg->type, cgValue(ctx, arg), elemAddr);
+        }
+        return slot;
+    }
+
+    //dynamic array: malloc its backing storage, store each value, build the { i64, ptr } slice value
+    char elemTy[256];
+    llvmType(*op->type.arrElem, elemTy, sizeof(elemTy));
+    long long elemSize = TypeGetSize(*op->type.arrElem);
+    char* bytes = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", bytes, elemSize * (long long)op->args.len);
+    for (int i = 0; i < op->args.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
+        char* elemAddr = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %d\n", elemAddr, elemTy, bytes, i);
+        cgStoreInto(ctx, arg->type, cgValue(ctx, arg), elemAddr);
+    }
+    char* agg1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", agg1, op->args.len);
+    char* agg2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", agg2, agg1, bytes);
+    return agg2;
+}
+
 char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
     char* buf = MallocOrCrash(64);
     switch (op->type.bType) {
@@ -411,7 +464,11 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
             snprintf(buf, 64, "%lld", op->intLiteralVal); return buf;
         case BASETYPE_FLOAT32: return cgFloatConst(op->floatLiteralVal, true);
         case BASETYPE_FLOAT64: return cgFloatConst(op->floatLiteralVal, false);
-        case BASETYPE_ARRAY: return cgStringLiteralGlobal(ctx, op);
+        //a string literal's own token IS the TOK_STR_LIT it was decoded from (see OperandStringLiteral) -
+        //an aggregate "T[][...]"/"T[N][...]" literal's tok is TOK_SQUARE_O instead, so this reliably
+        //tells the two apart without needing a dedicated flag
+        case BASETYPE_ARRAY: return op->tok.type == TOK_STR_LIT ? cgStringLiteralGlobal(ctx, op) : cgAggregateLiteral(ctx, op);
+        case BASETYPE_STRUCT: return cgAggregateLiteral(ctx, op);
         default: ErrorBugFound(); return buf;
     }
 }
@@ -851,9 +908,6 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
 
 void cgMatch(struct cgCtx* ctx, struct statement* s) {
     char* matchedVal = cgValue(ctx, s->op);
-    char cmpTy[256];
-    if (typeIsByRef(s->op->type)) strcpy(cmpTy, "ptr");
-    else llvmType(s->op->type, cmpTy, sizeof(cmpTy));
 
     int id = ctx->lblCtr++;
     char endLbl[32];
@@ -862,8 +916,8 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
     for (int i = 0; i < s->matchCases.len; i++) {
         struct statement* c = ListGetIdx(&s->matchCases, i);
         char* caseVal = cgValue(ctx, c->op);
-        char* cmp = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %s\n", cmp, cmpTy, matchedVal, caseVal);
+        //structural equality for struct/array case values (see cgBinaryOp's == handling), not raw icmp
+        char* cmp = cgDeepEq(ctx, s->op->type, matchedVal, caseVal);
         char caseLbl[40], nextLbl[40];
         snprintf(caseLbl, sizeof(caseLbl), "match.case.%d.%d", id, i);
         snprintf(nextLbl, sizeof(nextLbl), "match.next.%d.%d", id, i);

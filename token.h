@@ -46,6 +46,8 @@ enum tokenType {
     TOK_STMNT_END, //synthetic only - see asiTriggerType in token.c; ';' is not valid syntax and has no literal form
     TOK_QSNTMRK,
     TOK_ASS,
+    TOK_ASS_INFER, //":=" - declares a new variable with its type read off the (required-to-be-literal)
+                    //initializer, instead of stated explicitly - see SNTX_VAR_DECL/SNTX_FOR_INIT
     TOK_ASS_ADD,
     TOK_ASS_SUB,
     TOK_ASS_MUL,

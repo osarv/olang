@@ -66,6 +66,25 @@ func describe(n int32) ? int32 {
     return result
 }
 
+## match's case values may be struct/array literals, not just scalars - this is the reason
+## SNTX_EXPR_LITERAL uses "[...]" rather than "{...}" (see CLAUDE.md): a case value is checked
+## structurally against the matched expression (cgDeepEq in codegen.c), not by identity
+func classifyPoint(p Point) ? int32 {
+    result mut int32 = 0
+    match p {
+        case Point[1, 2] {
+            result = 100
+        }
+        case Point[3, 4] {
+            result = 200
+        }
+        nomatch {
+            result = -1
+        }
+    }
+    return result
+}
+
 func sumUntil(n int32) ? int32 {
     total mut int32 = 0
     i mut int32 = 1
@@ -152,6 +171,39 @@ test "fixed byte arrays compare by value, not identity" {
     c mut byte[5] = "world"
     assert(a == b)
     assert(a != c)
+}
+
+test "struct literal construction and structural equality" {
+    p mut Point = Point[1, 2]
+    q mut Point = Point[1, 2]
+    r mut Point = Point[3, 4]
+    assert(p.x == 1)
+    assert(p.y == 2)
+    assert(p == q)
+    assert(p != r)
+}
+
+test "array literal construction, fixed and dynamic" {
+    fixed mut int32[3] = int32[3][10, 20, 30]
+    dyn mut int32[] = int32[][10, 20, 30]
+    assert(fixed[0] == 10)
+    assert(fixed[2] == 30)
+    assert(dyn[0] == 10)
+    assert(dyn[2] == 30)
+}
+
+test "struct literal as a match case value" {
+    assert(classifyPoint(Point[1, 2]) == 100)
+    assert(classifyPoint(Point[3, 4]) == 200)
+    assert(classifyPoint(Point[9, 9]) == -1)
+}
+
+test ":= infers a variable's type from its literal initializer" {
+    x := 5
+    y mut := 7
+    y = y + 1
+    assert(x == 5)
+    assert(y == 8)
 }
 
 test "try/catch: SafeDiv succeeds on a non-zero divisor" {

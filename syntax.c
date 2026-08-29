@@ -42,14 +42,18 @@ struct syntaxRule rules[] = {
     [SNTX_FUNC_TYPE] = {"SNTX_FUNC_TYPE", "TOK_FUNC SNTX_FUNC_SIG"},
     [SNTX_FUNC_DEF] = {"SNTX_FUNC_DEF", "TOK_FUNC TOK_IDEN SNTX_FUNC_SIG SNTX_BLOCK"},
 
-    [SNTX_VAR_DECL] = {"SNTX_VAR_DECL", "TOK_IDEN TOK_MUT? SNTX_TYPE_EXPR TOK_ASS SNTX_EXPR TOK_STMNT_END"},
+    //":=" (TOK_ASS_INFER) declares with the type read off the initializer, which must then be a literal
+    //(checked in semantic.c) - a distinct token from "=" on purpose, so this can never be confused with
+    //an assignment to an existing variable (see the report for why that ambiguity is a real, not
+    //theoretical, problem: "x = 5" would otherwise parse as shadowing a new inferred-type "x")
+    [SNTX_VAR_DECL] = {"SNTX_VAR_DECL", "TOK_IDEN TOK_MUT? (SNTX_TYPE_EXPR TOK_ASS|TOK_ASS_INFER) SNTX_EXPR TOK_STMNT_END"},
 
     [SNTX_ASSIGN_OP] = {"SNTX_ASSIGN_OP", "TOK_ASS|TOK_ASS_ADD|TOK_ASS_SUB|TOK_ASS_MUL|TOK_ASS_DIV|TOK_ASS_MOD|"
         "TOK_ASS_AND|TOK_ASS_OR|TOK_ASS_XOR|TOK_ASS_BTSFT_L|TOK_ASS_BTSFT_R|TOK_ASS_BTWSE_AND|TOK_ASS_BTWSE_OR|TOK_ASS_BTWSE_XOR"},
     [SNTX_STMNT_ASSIGN] = {"SNTX_STMNT_ASSIGN", "SNTX_EXPR_POSTFIX SNTX_ASSIGN_OP SNTX_EXPR TOK_STMNT_END"},
     [SNTX_STMNT_EXPR] = {"SNTX_STMNT_EXPR", "SNTX_EXPR TOK_STMNT_END"},
     [SNTX_STMNT_IF] = {"SNTX_STMNT_IF", "TOK_IF SNTX_EXPR SNTX_BLOCK (TOK_ELSE (SNTX_STMNT_IF|SNTX_BLOCK))?"},
-    [SNTX_FOR_INIT] = {"SNTX_FOR_INIT", "TOK_IDEN TOK_MUT? SNTX_TYPE_EXPR TOK_ASS SNTX_EXPR"},
+    [SNTX_FOR_INIT] = {"SNTX_FOR_INIT", "TOK_IDEN TOK_MUT? (SNTX_TYPE_EXPR TOK_ASS|TOK_ASS_INFER) SNTX_EXPR"},
     [SNTX_STMNT_FOR] = {"SNTX_STMNT_FOR", "TOK_FOR SNTX_FOR_INIT TOK_COMMA SNTX_EXPR TOK_COMMA SNTX_EXPR SNTX_BLOCK"},
     [SNTX_STMNT_DO] = {"SNTX_STMNT_DO", "TOK_DO SNTX_BLOCK TOK_WHILE SNTX_EXPR TOK_STMNT_END"},
     [SNTX_STMNT_CASE] = {"SNTX_STMNT_CASE", "TOK_CASE SNTX_EXPR SNTX_BLOCK"},
@@ -85,10 +89,29 @@ struct syntaxRule rules[] = {
     //bare propagating try, e.g. "x mut int32 = try safeDiv(a, b)" - usable anywhere an expression is,
     //binds tighter than everything except a call's own args (only ever wraps a single primary)
     [SNTX_EXPR_TRY] = {"SNTX_EXPR_TRY", "TOK_TRY SNTX_EXPR_PRIMARY"},
+    //"Type[v1, v2, ...]" (struct) or "T[N][...]"/"T[][...]" (array) - constructs a value inline. Uses
+    //"[...]" rather than the more C-like "{...}" on purpose - see the report: "{" is also how every
+    //if/for/do/case/match body starts, and a bare-identifier condition immediately followed by "{" (e.g.
+    //"if x { y }") is genuinely ambiguous between "block" and "literal" with no way to backtrack out of it
+    //once chosen (this table-driven engine commits to the first alternative that matches, PEG-style, and
+    //never revisits an earlier choice when a later sibling fails). "]" never closes a block anywhere in
+    //this grammar, so there's no equivalent ambiguity - and it's already an automatic-statement-end
+    //trigger (see stmntEndTriggerType in token.c), so no tokenizer change was needed for that either.
+    //A trailing SNTX_ARR_SFX (single expr or empty) can never be confused with a value list of TWO OR MORE
+    //values (see SNTX_EXPR_ARGS): a comma can never appear inside SNTX_ARR_SFX's single-expr shape, and
+    //this whole rule backtracks as one unit if the trailing "[...]" is missing, so ordinary indexing like
+    //"arr[0][1]" is unaffected. A ONE-value (or empty) value list is a real, unresolved gap, though: it
+    //looks identical to a valid array suffix, and since this engine never backtracks out of an
+    //already-matched "*" repetition once a later sibling fails, that lone value gets silently swallowed as
+    //a bogus array suffix, and the whole literal attempt then falls through to plain indexing instead
+    //("Point[1]" parses as "read var Point, then index it by 1", not as a literal) - see CLAUDE.md's open
+    //questions. Resolving it for real needs the base name's TYPE-vs-VARIABLE status, which only semantic
+    //analysis knows, not the parser - not attempted here.
+    [SNTX_EXPR_LITERAL] = {"SNTX_EXPR_LITERAL", "SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O SNTX_EXPR_ARGS TOK_SQUARE_C"},
     //a call target may be namespaced ("alias.func(...)"); a bare read may not yet (see the report) - the
-    //trailing SNTX_EXPR_CALL is what disambiguates the namespaced call form from ordinary member access
+    //trailing "(" (call) or "[" (literal) is what disambiguates those from ordinary member access
     [SNTX_EXPR_PRIMARY] = {"SNTX_EXPR_PRIMARY", "TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|"
-        "SNTX_EXPR_TRY|(SNTX_NAME SNTX_EXPR_CALL)|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
+        "SNTX_EXPR_TRY|(SNTX_NAME SNTX_EXPR_CALL)|SNTX_EXPR_LITERAL|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
     [SNTX_EXPR_POSTFIX] = {"SNTX_EXPR_POSTFIX", "SNTX_EXPR_PRIMARY (SNTX_EXPR_INDEX|SNTX_EXPR_MEMBR|TOK_INC|TOK_DEC)*"},
     [SNTX_EXPR_UNARY_OP] = {"SNTX_EXPR_UNARY_OP", "TOK_NOT|TOK_SUB|TOK_BTWSE_INV|TOK_INC|TOK_DEC"},
     [SNTX_EXPR_UNARY] = {"SNTX_EXPR_UNARY", "SNTX_EXPR_UNARY_OP* SNTX_EXPR_POSTFIX"},
