@@ -186,6 +186,11 @@ struct semaModule {
     struct list vars;    //list of struct var: globals and functions share one namespace
     struct list imports; //list of struct semaImport
     struct list tests;   //list of struct semaTest: only test{} blocks declared directly in this file
+    struct list declaredTypeNames; //list of struct str: this file's own top-level "type"/"error" names,
+                                    //from ScanTypeNames - populated before the real parse even runs, so
+                                    //the parser can tell "Type{...}" (a struct literal) apart from
+                                    //"condition { block }" by checking whether a name is a known type -
+                                    //see the report
 };
 
 long long TypeGetSize(struct type t);

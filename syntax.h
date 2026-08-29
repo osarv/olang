@@ -50,22 +50,15 @@ enum syntaxType {
     SNTX_EXPR_INDEX,
     SNTX_EXPR_MEMBR,
     SNTX_EXPR_TRY,
-    SNTX_EXPR_LITERAL,
+    SNTX_EXPR_LITERAL,        //array literal only now - "T[N][v1, ...]"/"T[][v1, ...]" - see ParseSyntax
+    SNTX_EXPR_STRUCT_LITERAL, //struct literal - "Type{v1, ...}" - type-name-aware, see ParseSyntax
+    SNTX_EXPR_VOCAB_VALUE,    //"Type.WORD" - a vocab value - type-name-aware, see ParseSyntax
     SNTX_EXPR_PRIMARY,
     SNTX_EXPR_POSTFIX,
     SNTX_EXPR_UNARY_OP,
     SNTX_EXPR_UNARY,
-    SNTX_EXPR_MUL,
-    SNTX_EXPR_ADD,
-    SNTX_EXPR_SHIFT,
-    SNTX_EXPR_REL,
-    SNTX_EXPR_EQ,
-    SNTX_EXPR_BAND,
-    SNTX_EXPR_BXOR,
-    SNTX_EXPR_BOR,
-    SNTX_EXPR_AND,
-    SNTX_EXPR_XOR,
-    SNTX_EXPR_OR,
+    SNTX_EXPR_BINARY, //generic "left op right" - precedence resolved by the parser itself (precedence
+                       //climbing), not by grammar nesting - see the report
     SNTX_EXPR,
     SNTX_NOT_FOUND
 };
@@ -88,6 +81,30 @@ struct syntaxModule {
     struct list decls; //list of struct syntax
 };
 
-struct syntaxModule ParseSyntax(char* fileName);
+//true if `name` (no alias) or `alias.name` (alias.len > 0) names a known struct/vocab/error type -
+//consulted only to disambiguate "Type{values}" (a struct literal) from "condition { block }" while
+//parsing; an alias the lookup doesn't recognize simply isn't treated as a type at the parser level (a
+//real error is reported later, in semantic analysis, which has the authoritative name tables) - see the
+//report for why the parser needs this at all instead of just trying alternatives blindly.
+typedef bool (*TypeNameLookup)(void* ctx, struct str alias, struct str name);
+
+struct scannedImport {
+    struct str alias;
+    struct str path; //raw string-literal content, quotes stripped
+};
+
+struct scanResult {
+    struct list typeNames; //list of struct str
+    struct list imports;   //list of struct scannedImport
+};
+
+//scans an already-tokenized file for its own top-level "type NAME"/"error NAME" declarations and
+//"import ALIAS "path"" lines, without parsing bodies at all (just enough brace-depth tracking to skip
+//over them) - cheap, and run before the real parse specifically so the real parse can already answer "is
+//this identifier a declared type" via TypeNameLookup (including "alias.Name", once the caller has
+//recursively done the same scan for each imported file too). Resets the token cursor to 0 when done.
+struct scanResult ScanTopLevelDecls(TokenCtx tc);
+
+struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKnownType);
 
 #endif //SYNTAX_H

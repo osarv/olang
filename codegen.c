@@ -530,7 +530,10 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
     char* buf = MallocOrCrash(64);
     switch (op->type.bType) {
         case BASETYPE_BOOL: strcpy(buf, op->intLiteralVal ? "true" : "false"); return buf;
-        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
+        //a vocab value's intLiteralVal is its declared ordinal (see OperandVocabLiteral) - represented as
+        //a plain i32 same as any other small integer type, but never exposed to olang code as one (no
+        //arithmetic/ordering operators accept BASETYPE_VOCAB - see TypeIsNumeric/TypeIsInt)
+        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_VOCAB:
             snprintf(buf, 64, "%lld", op->intLiteralVal); return buf;
         case BASETYPE_FLOAT32: return cgFloatConst(op->floatLiteralVal, true);
         case BASETYPE_FLOAT64: return cgFloatConst(op->floatLiteralVal, false);
@@ -871,6 +874,17 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_NONE: return cgLiteral(ctx, op);
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
+            //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a
+            //function pointer, e.g. "f" inside "func apply(f func(...) ? T)") has no separate storage
+            //slot to load through at all - cgLookupVarAddr's "not a local, so mangle as global" branch
+            //returns the function's own mangled symbol directly, which unlike every other global IS
+            //already the value (an LLVM `define`, not a `global` storage declaration) - loading "through"
+            //it would read the function's own machine code as if it were a stored pointer. Every other
+            //global genuinely is a storage slot, so this only carves out the function case.
+            if (op->opType == OPERATION_READ_VAR && op->type.bType == BASETYPE_FUNC
+                    && !cgFindLocal(ctx, op->readVar->name)) {
+                return addr;
+            }
             return cgLoadOrAddr(ctx, op->type, addr);
         }
         case OPERATION_FUNCCALL: return cgFuncCall(ctx, op);

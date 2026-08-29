@@ -326,6 +326,28 @@ void registerBuiltins(struct semaModule* mod) {
     VarListAddSetOrigin(&mod->vars, assertVar);
 }
 
+struct semaModule* findImport(struct semaModule* mod, struct str alias);
+
+//consulted by the parser (see TypeNameLookup in syntax.h) only to tell "Type{values}" (a struct literal)
+//apart from "condition { block }" - never authoritative, semantic analysis proper (below) still does the
+//real name resolution/visibility checks. Safe to call mid-parse because declaredTypeNames is fully
+//populated for this module *and* every module it imports before ParseSyntax ever runs - see
+//semaLoadModule: each module scans its own top-level names before recursing into its imports, so even a
+//cyclic import pair has both sides' names ready by the time either one's real parse starts.
+bool isKnownTypeForParsing(void* ctxPtr, struct str alias, struct str name) {
+    struct semaModule* mod = ctxPtr;
+    struct semaModule* target = mod;
+    if (alias.len > 0) {
+        target = findImport(mod, alias);
+        if (!target) return false;
+    }
+    for (int i = 0; i < target->declaredTypeNames.len; i++) {
+        struct str* n = ListGetIdx(&target->declaredTypeNames, i);
+        if (StrCmp(*n, name)) return true;
+    }
+    return false;
+}
+
 struct semaModule* semaLoadModule(struct str fileName) {
     struct semaModule* existing = findLoadedModule(fileName);
     if (existing) return existing;
@@ -340,27 +362,27 @@ struct semaModule* semaLoadModule(struct str fileName) {
     registerBuiltins(mod);
     ListAdd(&allModules, &mod); //register before recursing, to break import cycles
 
-    //heap-allocated, not a stack buffer: TokenizeFile/StrFromCStr alias this pointer for the whole
+    //heap-allocated, not a stack buffer: TokenizeFile/StrToCStr alias this pointer for the whole
     //compilation (used later whenever an error is reported), they don't copy it
     char* buf = MallocOrCrash((size_t)fileName.len +1);
     StrToCStr(fileName, buf);
-    mod->syn = ParseSyntax(buf);
+    TokenCtx tc = TokenizeFile(buf);
 
-    for (int i = 0; i < mod->syn.decls.len; i++) {
-        struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
-        struct syntax* actual = partSntx(decl, 0);
-        if (actual->type != SNTX_IMPORT) continue;
+    //declare this module's own top-level names *before* recursing into its imports (see
+    //isKnownTypeForParsing's comment - this ordering is exactly what makes cyclic imports work)
+    struct scanResult scan = ScanTopLevelDecls(tc);
+    mod->declaredTypeNames = scan.typeNames;
 
-        struct token aliasTok = firstTokOfType(actual, TOK_IDEN);
-        struct token pathTok = firstTokOfType(actual, TOK_STR_LIT);
-        struct str path = Str(pathTok.str.ptr +1, pathTok.str.len -2);
-        struct semaModule* target = semaLoadModule(path);
-
+    for (int i = 0; i < scan.imports.len; i++) {
+        struct scannedImport* si = ListGetIdx(&scan.imports, i);
+        struct semaModule* target = semaLoadModule(si->path);
         struct semaImport imp = {0};
-        imp.alias = strFromTok(aliasTok);
+        imp.alias = si->alias;
         imp.mod = target;
         ListAdd(&mod->imports, &imp);
     }
+
+    mod->syn = ParseSyntax(tc, mod, isKnownTypeForParsing);
     return mod;
 }
 
@@ -1234,6 +1256,27 @@ struct operand* OperandErrorLiteral(struct type errType, struct token wordTok) {
     return op;
 }
 
+//"Type.WORD" - a vocab value. intLiteralVal is the word's declared ordinal, same representation an error
+//word already uses above - vocab types communicate a fixed set and a selection from it, not a C-enum-
+//style number: TypeIsNumeric/TypeIsInt (used to gate arithmetic/ordering operators) don't include
+//BASETYPE_VOCAB, so those are already rejected for free once a value of this type exists at all -
+//equality/inequality (REQ_NONE) and match/case (structural cgDeepEq, type-agnostic) already work
+//generically for any type, including this one, with no vocab-specific code needed there either.
+struct operand* OperandVocabLiteral(struct type vocabType, struct token wordTok) {
+    struct operand* op = operandNew(wordTok, OPERATION_NONE, vocabType);
+    op->isLiteral = true;
+    for (int i = 0; i < vocabType.words.len; i++) {
+        struct token w = *(struct token*)ListGetIdx(&vocabType.words, i);
+        if (StrCmp(w.str, wordTok.str)) {
+            op->intLiteralVal = i;
+            op->memberName = wordTok.str;
+            return op;
+        }
+    }
+    ErrMsgSemantic(wordTok, UNKNOWN_VOCAB_WORD);
+    return op;
+}
+
 //"Point[1, 2]" - positional, in member-declaration order, each value checked the same way an assignment
 //would check it. args becomes op->args (codegen reads the field values straight from there).
 struct operand* OperandStructLiteral(struct type t, struct list args, struct token tok) {
@@ -1388,20 +1431,56 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     return callOp;
 }
 
-//"Type[v1, v2, ...]" (struct) or "T[N][...]"/"T[][...]" (array) - see resolveLiteralBaseType/
-//applyArraySuffixes for how the type itself is resolved, and OperandStructLiteral/OperandArrayLiteral for
-//the value checks. firstTokOfType finds only this rule's own direct "[" (the one right before the value
-//list) - a preceding SNTX_ARR_SFX's own brackets are nested one level deeper, inside its own sub-node.
-struct operand* buildLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
+//"T[N][v1, ...]"/"T[][v1, ...]" (fixed/dynamic array) - see resolveLiteralBaseType/applyArraySuffixes for
+//how the type itself is resolved, and OperandArrayLiteral for the value checks. firstTokOfType finds only
+//this rule's own direct "[" (the one right before the value list) - a preceding SNTX_ARR_SFX's own
+//brackets are nested one level deeper, inside its own sub-node.
+struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
     struct type t = applyArraySuffixes(resolveLiteralBaseType(ctx->mod, nameNode), s);
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
     if (t.bType == BASETYPE_ARRAY) return OperandArrayLiteral(t, args, tok);
-    if (t.bType == BASETYPE_STRUCT) return OperandStructLiteral(t, args, tok);
-    ErrMsgSemantic(tok, INVALID_LITERAL_TYPE);
+    ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
     return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+}
+
+//"Type{v1, v2, ...}" - the parser only ever produces this node when the name was already confirmed to be
+//some known type (see nameIsKnownType in syntax.c), but that check can't tell struct/vocab/error types
+//apart - only a struct can actually be built this way, so that narrowing happens here instead.
+struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
+    struct token tok = firstTokOfType(s, TOK_CURLY_O);
+    struct type t = resolveLiteralBaseType(ctx->mod, nameNode);
+    struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
+
+    if (t.bType == BASETYPE_STRUCT) return OperandStructLiteral(t, args, tok);
+    ErrMsgSemantic(tok, INVALID_STRUCT_LITERAL_TYPE);
+    return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+}
+
+//"Type.WORD" - a vocab value. Deliberately doesn't go through resolveLiteralBaseType: that function's own
+//2-identifier case means "alias.TypeName" (a cross-module type reference), but here the shape means
+//something different - "TypeName.word", always local (the parser only ever produces this node when the
+//*first* identifier is a locally-known type, never an import alias - see firstIdenIsLocalKnownType in
+//syntax.c), so the first identifier is resolved directly against this module's own types instead.
+struct operand* buildVocabValueExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
+    struct list idens = allTokOfType(nameNode, TOK_IDEN);
+    struct token typeTok = *(struct token*)ListGetIdx(&idens, 0);
+    struct token wordTok = *(struct token*)ListGetIdx(&idens, 1);
+    struct type* t = TypeGetList(&ctx->mod->types, strFromTok(typeTok));
+    if (!t) {
+        ErrMsgSemantic(typeTok, UNKNOWN_TYPE);
+        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    }
+    resolveTypeDecl(t);
+    if (t->bType != BASETYPE_VOCAB) {
+        ErrMsgSemantic(typeTok, INVALID_VOCAB_VALUE_TYPE);
+        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    }
+    return OperandVocabLiteral(*t, wordTok);
 }
 
 //"own" - a "scope"-typed value naming the enclosing function's own private scope (see the report). Not
@@ -1434,7 +1513,13 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         return buildTryExpr(ctx, partSntx(s, 0));
     }
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_LITERAL) {
-        return buildLiteralExpr(ctx, partSntx(s, 0));
+        return buildArrayLiteralExpr(ctx, partSntx(s, 0));
+    }
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_VOCAB_VALUE) {
+        return buildVocabValueExpr(ctx, partSntx(s, 0));
+    }
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_STRUCT_LITERAL) {
+        return buildStructLiteralExpr(ctx, partSntx(s, 0));
     }
     if (s->parts.len == 2) { //SNTX_NAME SNTX_EXPR_CALL - "func(...)" or "alias.func(...)"
         struct syntax* nameNode = partSntx(s, 0);
@@ -1457,10 +1542,10 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
 
 struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
     switch (s->type) {
-        case SNTX_EXPR: case SNTX_EXPR_OR: case SNTX_EXPR_XOR: case SNTX_EXPR_AND:
-        case SNTX_EXPR_BOR: case SNTX_EXPR_BXOR: case SNTX_EXPR_BAND:
-        case SNTX_EXPR_EQ: case SNTX_EXPR_REL: case SNTX_EXPR_SHIFT:
-        case SNTX_EXPR_ADD: case SNTX_EXPR_MUL:
+        //SNTX_EXPR is always a single-child wrapper around whatever parseBinaryExpr actually built - a
+        //degenerate 1-part "chain" itself when parts.len==1, so buildBinChain's own generic handling of
+        //that shape (just recurse into part[0] and return it) covers both uniformly - see the report
+        case SNTX_EXPR: case SNTX_EXPR_BINARY:
             return buildBinChain(ctx, s);
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);

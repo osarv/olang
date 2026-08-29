@@ -7,145 +7,13 @@
 #include "token.h"
 #include "util.h"
 
-/* the whole olang grammar, one row per construct: name (for pattern cross-references) + pattern.
- * pattern DSL: space-separated sequence; "TOK_X"/"SNTX_X" atoms; "(a|b|c)" alternation; "?" zero-or-one;
- * "*" zero-or-more (quantifier attaches directly, no space, to the atom or group before it) */
-struct syntaxRule {
-    char* name;
-    char* pattern;
-};
-
-struct syntaxRule rules[] = {
-    [SNTX_TOP_DECL] = {"SNTX_TOP_DECL", "SNTX_TYPE_DECL|SNTX_IMPORT|SNTX_ERROR_DECL|SNTX_FUNC_DEF|SNTX_VAR_DECL|SNTX_TEST_DECL"},
-    [SNTX_IMPORT] = {"SNTX_IMPORT", "TOK_IMPORT TOK_IDEN TOK_STR_LIT TOK_STMNT_END?"},
-
-    [SNTX_NAME] = {"SNTX_NAME", "TOK_IDEN (TOK_DOT TOK_IDEN)?"},
-    [SNTX_ARR_SFX] = {"SNTX_ARR_SFX", "TOK_SQUARE_O SNTX_EXPR? TOK_SQUARE_C"},
-    //the optional TOK_IDEN names which scope this heap-indirect reference is allocated into ("{s}") -
-    //bare "{}" (no name) means this value's own private/local scope. See buildLiteralExpr's neighbor,
-    //resolveTypeRefBase, for how the name gets resolved (only where a scope parameter is actually
-    //visible - see the report for which contexts that currently is)
-    [SNTX_TYPE_REF] = {"SNTX_TYPE_REF", "SNTX_NAME SNTX_ARR_SFX* (TOK_CURLY_O TOK_IDEN? TOK_CURLY_C)?"},
-    //trailing TOK_STMNT_END? absorbs an implicit end-of-statement synthesized when the last item sits
-    //on its own line before '}' (see asiTriggerType in token.c) - these lists are comma-separated, not
-    //statement-terminated, but the synthesis is purely lexical and can't tell the difference
-    [SNTX_VOCAB_BODY] = {"SNTX_VOCAB_BODY", "TOK_VOCAB TOK_CURLY_O TOK_IDEN (TOK_COMMA TOK_IDEN)* TOK_STMNT_END? TOK_CURLY_C"},
-    [SNTX_STRUCT_MEMBR] = {"SNTX_STRUCT_MEMBR", "TOK_IDEN SNTX_TYPE_EXPR"},
-    [SNTX_STRUCT_BODY] = {"SNTX_STRUCT_BODY", "TOK_STRUCT TOK_CURLY_O (SNTX_STRUCT_MEMBR (TOK_COMMA SNTX_STRUCT_MEMBR)*)? TOK_STMNT_END? TOK_CURLY_C"},
-    [SNTX_TYPE_EXPR] = {"SNTX_TYPE_EXPR", "SNTX_VOCAB_BODY|SNTX_STRUCT_BODY|SNTX_FUNC_TYPE|SNTX_TYPE_REF"},
-    [SNTX_TYPE_DECL] = {"SNTX_TYPE_DECL", "TOK_TYPE TOK_IDEN SNTX_TYPE_EXPR TOK_STMNT_END?"},
-    [SNTX_TEST_DECL] = {"SNTX_TEST_DECL", "TOK_TEST TOK_STR_LIT SNTX_BLOCK"},
-
-    [SNTX_ERROR_DECL] = {"SNTX_ERROR_DECL", "TOK_ERROR TOK_IDEN TOK_CURLY_O TOK_IDEN (TOK_COMMA TOK_IDEN)* TOK_STMNT_END? TOK_CURLY_C"},
-    [SNTX_ERROR_LIST] = {"SNTX_ERROR_LIST", "SNTX_NAME (TOK_ADD SNTX_NAME)*"},
-    [SNTX_RET_TYPE] = {"SNTX_RET_TYPE", "TOK_QSNTMRK SNTX_TYPE_EXPR"},
-
-    [SNTX_PARAM] = {"SNTX_PARAM", "TOK_IDEN TOK_MUT? SNTX_TYPE_EXPR"},
-    [SNTX_PARAM_LIST] = {"SNTX_PARAM_LIST", "(SNTX_PARAM (TOK_COMMA SNTX_PARAM)*)?"},
-    [SNTX_FUNC_SIG] = {"SNTX_FUNC_SIG", "TOK_PAREN_O SNTX_PARAM_LIST TOK_PAREN_C SNTX_ERROR_LIST? SNTX_RET_TYPE?"},
-    [SNTX_FUNC_TYPE] = {"SNTX_FUNC_TYPE", "TOK_FUNC SNTX_FUNC_SIG"},
-    [SNTX_FUNC_DEF] = {"SNTX_FUNC_DEF", "TOK_FUNC TOK_IDEN SNTX_FUNC_SIG SNTX_BLOCK"},
-
-    //":=" (TOK_ASS_INFER) declares with the type read off the initializer, which must then be a literal
-    //(checked in semantic.c) - a distinct token from "=" on purpose, so this can never be confused with
-    //an assignment to an existing variable (see the report for why that ambiguity is a real, not
-    //theoretical, problem: "x = 5" would otherwise parse as shadowing a new inferred-type "x")
-    [SNTX_VAR_DECL] = {"SNTX_VAR_DECL", "TOK_IDEN TOK_MUT? (SNTX_TYPE_EXPR TOK_ASS|TOK_ASS_INFER) SNTX_EXPR TOK_STMNT_END"},
-
-    [SNTX_ASSIGN_OP] = {"SNTX_ASSIGN_OP", "TOK_ASS|TOK_ASS_ADD|TOK_ASS_SUB|TOK_ASS_MUL|TOK_ASS_DIV|TOK_ASS_MOD|"
-        "TOK_ASS_AND|TOK_ASS_OR|TOK_ASS_XOR|TOK_ASS_BTSFT_L|TOK_ASS_BTSFT_R|TOK_ASS_BTWSE_AND|TOK_ASS_BTWSE_OR|TOK_ASS_BTWSE_XOR"},
-    [SNTX_STMNT_ASSIGN] = {"SNTX_STMNT_ASSIGN", "SNTX_EXPR_POSTFIX SNTX_ASSIGN_OP SNTX_EXPR TOK_STMNT_END"},
-    [SNTX_STMNT_EXPR] = {"SNTX_STMNT_EXPR", "SNTX_EXPR TOK_STMNT_END"},
-    [SNTX_STMNT_IF] = {"SNTX_STMNT_IF", "TOK_IF SNTX_EXPR SNTX_BLOCK (TOK_ELSE (SNTX_STMNT_IF|SNTX_BLOCK))?"},
-    [SNTX_FOR_INIT] = {"SNTX_FOR_INIT", "TOK_IDEN TOK_MUT? (SNTX_TYPE_EXPR TOK_ASS|TOK_ASS_INFER) SNTX_EXPR"},
-    [SNTX_STMNT_FOR] = {"SNTX_STMNT_FOR", "TOK_FOR SNTX_FOR_INIT TOK_COMMA SNTX_EXPR TOK_COMMA SNTX_EXPR SNTX_BLOCK"},
-    [SNTX_STMNT_DO] = {"SNTX_STMNT_DO", "TOK_DO SNTX_BLOCK TOK_WHILE SNTX_EXPR TOK_STMNT_END"},
-    [SNTX_STMNT_CASE] = {"SNTX_STMNT_CASE", "TOK_CASE SNTX_EXPR SNTX_BLOCK"},
-    [SNTX_STMNT_NOMATCH] = {"SNTX_STMNT_NOMATCH", "TOK_NOMATCH SNTX_BLOCK"},
-    [SNTX_STMNT_MATCH] = {"SNTX_STMNT_MATCH", "TOK_MATCH SNTX_EXPR TOK_CURLY_O SNTX_STMNT_CASE* SNTX_STMNT_NOMATCH? TOK_CURLY_C"},
-    [SNTX_STMNT_RET] = {"SNTX_STMNT_RET", "TOK_RET SNTX_EXPR? TOK_STMNT_END"},
-    //process exit with a fixed status: done = OS-standard success (0), crash = OS-standard failure (1).
-    //neither takes a value - see the report for why that's deliberate (main's own error diagnostics are
-    //the informative path; these are the "no more questions, exit now" escape hatch)
-    [SNTX_STMNT_DONE] = {"SNTX_STMNT_DONE", "TOK_DONE TOK_STMNT_END"},
-    [SNTX_STMNT_CRASH] = {"SNTX_STMNT_CRASH", "TOK_CRASH TOK_STMNT_END"},
-    //selects the error part of a function's return union, e.g. "error MyError.NotFound" - the word after
-    //the dot must be one of the error type's declared members (see SNTX_ERROR_DECL)
-    [SNTX_STMNT_ERROR] = {"SNTX_STMNT_ERROR", "TOK_ERROR TOK_IDEN TOK_DOT TOK_IDEN TOK_STMNT_END"},
-    //one catch match: "MyError" or "alias.MyError" (whole type), "MyError.NotFound" or
-    //"alias.MyError.NotFound" (one word) - see StatementCatchCoversType's caller for how the 2-identifier
-    //case disambiguates "alias.MyError" from "MyError.NotFound" (an import alias and an error type live in
-    //different namespaces, so the ambiguity is resolved by checking which one the leading name actually is)
-    [SNTX_CATCH_ERR] = {"SNTX_CATCH_ERR", "TOK_IDEN (TOK_DOT TOK_IDEN)? (TOK_DOT TOK_IDEN)?"},
-    [SNTX_CATCH_ERR_LIST] = {"SNTX_CATCH_ERR_LIST", "SNTX_CATCH_ERR (TOK_OR SNTX_CATCH_ERR)*"},
-    [SNTX_CATCH_CLAUSE] = {"SNTX_CATCH_CLAUSE", "TOK_CATCH SNTX_CATCH_ERR_LIST SNTX_BLOCK"},
-    //"try f()" alone propagates (see SNTX_EXPR_TRY, a general expression); this is the catch-handling
-    //statement form - control flow only, the caught error is never exposed as a value
-    [SNTX_STMNT_TRY_CATCH] = {"SNTX_STMNT_TRY_CATCH", "TOK_TRY SNTX_EXPR_PRIMARY SNTX_CATCH_CLAUSE"},
-    [SNTX_STMNT] = {"SNTX_STMNT", "SNTX_VAR_DECL|SNTX_STMNT_ASSIGN|SNTX_STMNT_IF|SNTX_STMNT_FOR|SNTX_STMNT_DO|"
-        "SNTX_STMNT_MATCH|SNTX_STMNT_RET|SNTX_STMNT_DONE|SNTX_STMNT_CRASH|SNTX_STMNT_ERROR|SNTX_STMNT_TRY_CATCH|SNTX_STMNT_EXPR"},
-    [SNTX_BLOCK] = {"SNTX_BLOCK", "TOK_CURLY_O SNTX_STMNT* TOK_CURLY_C"},
-
-    [SNTX_EXPR_ARGS] = {"SNTX_EXPR_ARGS", "(SNTX_EXPR (TOK_COMMA SNTX_EXPR)*)?"},
-    [SNTX_EXPR_CALL] = {"SNTX_EXPR_CALL", "TOK_PAREN_O SNTX_EXPR_ARGS TOK_PAREN_C"},
-    [SNTX_EXPR_INDEX] = {"SNTX_EXPR_INDEX", "TOK_SQUARE_O SNTX_EXPR TOK_SQUARE_C"},
-    [SNTX_EXPR_MEMBR] = {"SNTX_EXPR_MEMBR", "TOK_DOT TOK_IDEN"},
-    //bare propagating try, e.g. "x mut int32 = try safeDiv(a, b)" - usable anywhere an expression is,
-    //binds tighter than everything except a call's own args (only ever wraps a single primary)
-    [SNTX_EXPR_TRY] = {"SNTX_EXPR_TRY", "TOK_TRY SNTX_EXPR_PRIMARY"},
-    //"Type[v1, v2, ...]" (struct) or "T[N][...]"/"T[][...]" (array) - constructs a value inline. Uses
-    //"[...]" rather than the more C-like "{...}" on purpose - see the report: "{" is also how every
-    //if/for/do/case/match body starts, and a bare-identifier condition immediately followed by "{" (e.g.
-    //"if x { y }") is genuinely ambiguous between "block" and "literal" with no way to backtrack out of it
-    //once chosen (this table-driven engine commits to the first alternative that matches, PEG-style, and
-    //never revisits an earlier choice when a later sibling fails). "]" never closes a block anywhere in
-    //this grammar, so there's no equivalent ambiguity - and it's already an automatic-statement-end
-    //trigger (see stmntEndTriggerType in token.c), so no tokenizer change was needed for that either.
-    //A trailing SNTX_ARR_SFX (single expr or empty) can never be confused with a value list of TWO OR MORE
-    //values (see SNTX_EXPR_ARGS): a comma can never appear inside SNTX_ARR_SFX's single-expr shape, and
-    //this whole rule backtracks as one unit if the trailing "[...]" is missing, so ordinary indexing like
-    //"arr[0][1]" is unaffected. A ONE-value (or empty) value list is a real, unresolved gap, though: it
-    //looks identical to a valid array suffix, and since this engine never backtracks out of an
-    //already-matched "*" repetition once a later sibling fails, that lone value gets silently swallowed as
-    //a bogus array suffix, and the whole literal attempt then falls through to plain indexing instead
-    //("Point[1]" parses as "read var Point, then index it by 1", not as a literal) - see CLAUDE.md's open
-    //questions. Resolving it for real needs the base name's TYPE-vs-VARIABLE status, which only semantic
-    //analysis knows, not the parser - not attempted here.
-    [SNTX_EXPR_LITERAL] = {"SNTX_EXPR_LITERAL", "SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O SNTX_EXPR_ARGS TOK_SQUARE_C"},
-    //a call target may be namespaced ("alias.func(...)"); a bare read may not yet (see the report) - the
-    //trailing "(" (call) or "[" (literal) is what disambiguates those from ordinary member access
-    //TOK_OWN ("own") evaluates to the enclosing function's own private scope - a "scope"-typed value,
-    //usable anywhere one is expected (e.g. passed as an argument) - see buildPrimary
-    [SNTX_EXPR_PRIMARY] = {"SNTX_EXPR_PRIMARY", "TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|TOK_OWN|"
-        "SNTX_EXPR_TRY|(SNTX_NAME SNTX_EXPR_CALL)|SNTX_EXPR_LITERAL|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
-    [SNTX_EXPR_POSTFIX] = {"SNTX_EXPR_POSTFIX", "SNTX_EXPR_PRIMARY (SNTX_EXPR_INDEX|SNTX_EXPR_MEMBR|TOK_INC|TOK_DEC)*"},
-    [SNTX_EXPR_UNARY_OP] = {"SNTX_EXPR_UNARY_OP", "TOK_NOT|TOK_SUB|TOK_BTWSE_INV|TOK_INC|TOK_DEC"},
-    [SNTX_EXPR_UNARY] = {"SNTX_EXPR_UNARY", "SNTX_EXPR_UNARY_OP* SNTX_EXPR_POSTFIX"},
-    //classic precedence-climbing chain, loosest (SNTX_EXPR) at the bottom, tightest (SNTX_EXPR_UNARY) at the top
-    [SNTX_EXPR_MUL] = {"SNTX_EXPR_MUL", "SNTX_EXPR_UNARY ((TOK_MUL|TOK_DIV|TOK_MOD) SNTX_EXPR_UNARY)*"},
-    [SNTX_EXPR_ADD] = {"SNTX_EXPR_ADD", "SNTX_EXPR_MUL ((TOK_ADD|TOK_SUB) SNTX_EXPR_MUL)*"},
-    [SNTX_EXPR_SHIFT] = {"SNTX_EXPR_SHIFT", "SNTX_EXPR_ADD ((TOK_BTSFT_L|TOK_BTSFT_R) SNTX_EXPR_ADD)*"},
-    [SNTX_EXPR_REL] = {"SNTX_EXPR_REL", "SNTX_EXPR_SHIFT ((TOK_LST|TOK_LSE|TOK_GRT|TOK_GRE) SNTX_EXPR_SHIFT)*"},
-    [SNTX_EXPR_EQ] = {"SNTX_EXPR_EQ", "SNTX_EXPR_REL ((TOK_EQ|TOK_NEQ) SNTX_EXPR_REL)*"},
-    [SNTX_EXPR_BAND] = {"SNTX_EXPR_BAND", "SNTX_EXPR_EQ (TOK_BTWSE_AND SNTX_EXPR_EQ)*"},
-    [SNTX_EXPR_BXOR] = {"SNTX_EXPR_BXOR", "SNTX_EXPR_BAND (TOK_BTWSE_XOR SNTX_EXPR_BAND)*"},
-    [SNTX_EXPR_BOR] = {"SNTX_EXPR_BOR", "SNTX_EXPR_BXOR (TOK_BTWSE_OR SNTX_EXPR_BXOR)*"},
-    [SNTX_EXPR_AND] = {"SNTX_EXPR_AND", "SNTX_EXPR_BOR (TOK_AND SNTX_EXPR_BOR)*"},
-    [SNTX_EXPR_XOR] = {"SNTX_EXPR_XOR", "SNTX_EXPR_AND (TOK_XOR SNTX_EXPR_AND)*"},
-    [SNTX_EXPR_OR] = {"SNTX_EXPR_OR", "SNTX_EXPR_XOR (TOK_OR SNTX_EXPR_XOR)*"},
-    [SNTX_EXPR] = {"SNTX_EXPR", "SNTX_EXPR_OR"},
-};
-#define N_SNTX_RULES ((int)(sizeof(rules) / sizeof(rules[0])))
-
-enum syntaxType syntaxTypeFromStr(char* name) {
-    for (int i = 0; i < N_SNTX_RULES; i++) {
-        if (rules[i].name && !strcmp(rules[i].name, name)) return (enum syntaxType)i;
-    }
-    ErrorBugFound(); //malformed grammar table: unknown SNTX_ name referenced
-    return SNTX_NOT_FOUND;
-}
-
-// ---- parse tree matching context (private to this file) ----
+/* Hand-written recursive-descent parser (previously a generic table-driven PEG engine interpreting
+ * grammar-rule strings at runtime - see the report for why that was replaced: no way to embed a
+ * "semantic predicate" like isKnownType, error messages that only ever named the deepest single expected
+ * token, and a structural inability to backtrack into an already-matched repetition once a later sibling
+ * failed. All three are gone here: predicates are just C function calls, error messages are written by
+ * hand at the point that actually knows what's wrong, and backtracking is exactly whatever save/restore
+ * this code chooses to do. */
 
 typedef struct syntaxContext* SyntaxCtx;
 
@@ -154,117 +22,19 @@ struct syntaxContext {
     int furthestPos;
     struct token furthestTok;
     char* furthestExpected;
+    void* typeCtx;
+    TypeNameLookup isKnownType; //see the report on struct syntax's declaration - only ever consulted to
+                                //tell a struct literal's type name apart from an ordinary variable/block
 };
 
-// ---- pattern DSL: compiled into a small tree, then matched against the token stream ----
+// ---- token-stream primitives ----
 
-enum patKind { PAT_TOK, PAT_SNTX, PAT_SEQ, PAT_ALT };
-
-struct patNode {
-    enum patKind kind;
-    enum tokenType tokType;   //PAT_TOK
-    enum syntaxType sntxType; //PAT_SNTX
-    struct list items;        //PAT_SEQ, PAT_ALT: list of struct patNode*
-    bool optional;            //'?' or '*'
-    bool repeat;              //'*'
-};
-
-bool isPatIdenChar(char c) {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+struct token peekTok(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    TokenSetCursor(sc->tc, cur);
+    return t;
 }
-
-char* patSkipSpaces(char* p) {
-    while (*p == ' ') p++;
-    return p;
-}
-
-struct patNode* patNodeNew(enum patKind kind) {
-    struct patNode* n = MallocOrCrash(sizeof(struct patNode));
-    *n = (struct patNode){0};
-    n->kind = kind;
-    if (kind == PAT_SEQ || kind == PAT_ALT) n->items = ListInit(sizeof(struct patNode*));
-    return n;
-}
-
-struct patNode* patParseAlt(char** pp);
-
-struct patNode* patParseAtomOrGroup(char** pp) {
-    *pp = patSkipSpaces(*pp);
-    if (**pp == '(') {
-        (*pp)++;
-        struct patNode* n = patParseAlt(pp);
-        *pp = patSkipSpaces(*pp);
-        if (**pp != ')') ErrorBugFound(); //malformed grammar table: unclosed group
-        (*pp)++;
-        return n;
-    }
-
-    char* start = *pp;
-    while (isPatIdenChar(**pp)) (*pp)++;
-    int len = (int)(*pp - start);
-    char buf[64];
-    if (len == 0 || len >= (int)sizeof(buf)) ErrorBugFound(); //malformed grammar table
-
-    memcpy(buf, start, len);
-    buf[len] = '\0';
-    struct patNode* n;
-    if (!strncmp(buf, "TOK_", 4)) {
-        n = patNodeNew(PAT_TOK);
-        n->tokType = TokenTypeFromStr(buf);
-    } else if (!strncmp(buf, "SNTX_", 5)) {
-        n = patNodeNew(PAT_SNTX);
-        n->sntxType = syntaxTypeFromStr(buf);
-    } else {
-        ErrorBugFound(); //malformed grammar table: unrecognized atom prefix
-        return NULL;
-    }
-    return n;
-}
-
-struct patNode* patParseElement(char** pp) {
-    struct patNode* n = patParseAtomOrGroup(pp);
-    if (**pp == '?') { n->optional = true; (*pp)++; }
-    else if (**pp == '*') { n->optional = true; n->repeat = true; (*pp)++; }
-    return n;
-}
-
-struct patNode* patParseSeq(char** pp) {
-    struct patNode* seq = patNodeNew(PAT_SEQ);
-    while (true) {
-        *pp = patSkipSpaces(*pp);
-        if (**pp == '\0' || **pp == ')' || **pp == '|') break;
-        struct patNode* e = patParseElement(pp);
-        ListAdd(&seq->items, &e);
-    }
-    if (seq->items.len == 1) return *(struct patNode**)ListGetIdx(&seq->items, 0);
-    return seq;
-}
-
-struct patNode* patParseAlt(char** pp) {
-    struct patNode* first = patParseSeq(pp);
-    *pp = patSkipSpaces(*pp);
-    if (**pp != '|') return first;
-
-    struct patNode* alt = patNodeNew(PAT_ALT);
-    ListAdd(&alt->items, &first);
-    while (**pp == '|') {
-        (*pp)++;
-        struct patNode* seq = patParseSeq(pp);
-        ListAdd(&alt->items, &seq);
-        *pp = patSkipSpaces(*pp);
-    }
-    return alt;
-}
-
-struct patNode* patParsePattern(char* pattern) {
-    char* p = pattern;
-    struct patNode* n = patParseAlt(&p);
-    p = patSkipSpaces(p);
-    if (*p != '\0') ErrorBugFound(); //malformed grammar table: trailing garbage
-    return n;
-}
-
-// ---- matching engine ----
 
 void recordFurthestError(SyntaxCtx sc, struct token found, char* expected) {
     int pos = TokenGetCursor(sc->tc);
@@ -274,129 +44,1228 @@ void recordFurthestError(SyntaxCtx sc, struct token found, char* expected) {
     sc->furthestExpected = expected;
 }
 
-struct syntax ParseRule(SyntaxCtx sc, enum syntaxType type);
-bool matchNode(SyntaxCtx sc, struct patNode* node, struct syntax* out);
-
-bool matchOnce(SyntaxCtx sc, struct patNode* node, struct syntax* out) {
-    switch (node->kind) {
-        case PAT_TOK: {
-            int cursor = TokenGetCursor(sc->tc);
-            struct token tok = TokenFeed(sc->tc);
-            if (tok.type != node->tokType) {
-                recordFurthestError(sc, tok, TokenStrFromType(node->tokType));
-                TokenSetCursor(sc->tc, cursor);
-                return false;
-            }
-            struct syntaxPart part = {0};
-            part.isToken = true;
-            part.tok = tok;
-            ListAdd(&out->parts, &part);
-            return true;
-        }
-        case PAT_SNTX: {
-            struct syntax nested = ParseRule(sc, node->sntxType);
-            if (nested.type == SNTX_NOT_FOUND) return false;
-            struct syntax* heapNested = MallocOrCrash(sizeof(struct syntax));
-            *heapNested = nested;
-            struct syntaxPart part = {0};
-            part.isToken = false;
-            part.sntx = heapNested;
-            ListAdd(&out->parts, &part);
-            return true;
-        }
-        case PAT_SEQ: {
-            int cursor = TokenGetCursor(sc->tc);
-            int partsLen = out->parts.len; //a later child failing must undo earlier children's appended parts too
-            for (int i = 0; i < node->items.len; i++) {
-                struct patNode* child = *(struct patNode**)ListGetIdx(&node->items, i);
-                if (!matchNode(sc, child, out)) {
-                    TokenSetCursor(sc->tc, cursor);
-                    ListRetract(&out->parts, partsLen);
-                    return false;
-                }
-            }
-            return true;
-        }
-        case PAT_ALT: {
-            for (int i = 0; i < node->items.len; i++) {
-                int cursor = TokenGetCursor(sc->tc);
-                struct patNode* child = *(struct patNode**)ListGetIdx(&node->items, i);
-                if (matchNode(sc, child, out)) return true;
-                TokenSetCursor(sc->tc, cursor);
-            }
-            return false;
-        }
-    }
-    ErrorBugFound();
-    return false;
+//consumes and returns the next token unconditionally (callers that already peeked use this to commit)
+struct token advanceTok(SyntaxCtx sc) {
+    return TokenFeed(sc->tc);
 }
 
-bool matchNode(SyntaxCtx sc, struct patNode* node, struct syntax* out) {
-    if (node->repeat) {
+//consumes and returns the next token if it matches `type`; otherwise records the failure (for error
+//reporting) and returns a TOK_NONE token, leaving the cursor untouched - callers check .type
+struct token acceptTok(SyntaxCtx sc, enum tokenType type) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    if (t.type == type) return t;
+    recordFurthestError(sc, t, TokenStrFromType(type));
+    TokenSetCursor(sc->tc, cur);
+    return (struct token){0};
+}
+
+//the token immediately before the current cursor (the one just consumed), without moving anything
+struct token prevTok(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    if (cur == 0) return (struct token){0};
+    TokenSetCursor(sc->tc, cur - 1);
+    struct token t = TokenFeed(sc->tc); //advances back to `cur`
+    return t;
+}
+
+//a statement normally needs an explicit TOK_STMNT_END, synthesized by ASI after most token kinds - but
+//deliberately never after "}" (blocks are never followed by one, so stmntEndTriggerType in token.c
+//excludes it on purpose). A struct literal also ends in "}", though, and unlike a block it always sits at
+//the tail of some larger construct (a var-decl's value, an expression statement, ...) that genuinely
+//needs a terminator right there - so this accepts a real STMNT_END token OR, when the token just consumed
+//was "}", treats that as the terminator too, with nothing extra to consume.
+bool acceptStmntEnd(SyntaxCtx sc) {
+    if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
+    return prevTok(sc).type == TOK_CURLY_C;
+}
+
+// ---- tree-building primitives ----
+
+struct syntax* newNode(enum syntaxType type) {
+    struct syntax* s = MallocOrCrash(sizeof(struct syntax));
+    s->type = type;
+    s->parts = ListInit(sizeof(struct syntaxPart));
+    return s;
+}
+
+void addTok(struct syntax* s, struct token t) {
+    struct syntaxPart p = {0};
+    p.isToken = true;
+    p.tok = t;
+    ListAdd(&s->parts, &p);
+}
+
+void addSntx(struct syntax* s, struct syntax* child) {
+    struct syntaxPart p = {0};
+    p.isToken = false;
+    p.sntx = child;
+    ListAdd(&s->parts, &p);
+}
+
+// ---- forward declarations (grammar is mutually recursive throughout) ----
+
+struct syntax* parseName(SyntaxCtx sc);
+struct syntax* parseArrSfx(SyntaxCtx sc);
+struct syntax* parseTypeRef(SyntaxCtx sc);
+struct syntax* parseTypeExpr(SyntaxCtx sc);
+struct syntax* parseBlock(SyntaxCtx sc);
+struct syntax* parseStmnt(SyntaxCtx sc);
+struct syntax* parseExpr(SyntaxCtx sc);
+struct syntax* parseExprPrimary(SyntaxCtx sc);
+struct syntax* parseExprPostfix(SyntaxCtx sc);
+struct syntax* parseExprArgs(SyntaxCtx sc);
+struct syntax* parseCatchErrList(SyntaxCtx sc);
+
+// ---- names, types ----
+
+//"IDEN (DOT IDEN)?" - never fails if a leading IDEN is present; callers check the leading token first
+struct syntax* parseName(SyntaxCtx sc) {
+    struct token first = acceptTok(sc, TOK_IDEN);
+    if (first.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_NAME);
+    addTok(s, first);
+    int cur = TokenGetCursor(sc->tc);
+    struct token dot = TokenFeed(sc->tc);
+    if (dot.type == TOK_DOT) {
+        struct token second = TokenFeed(sc->tc);
+        if (second.type == TOK_IDEN) {
+            addTok(s, dot);
+            addTok(s, second);
+            return s;
+        }
+    }
+    TokenSetCursor(sc->tc, cur);
+    return s;
+}
+
+//"[" EXPR? "]" - self-contained, backtracks fully on any failure so a caller's "*" loop can just stop
+struct syntax* parseArrSfx(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_SQUARE_O);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_ARR_SFX);
+    addTok(s, open);
+    int beforeExpr = TokenGetCursor(sc->tc);
+    struct syntax* e = parseExpr(sc);
+    if (e) addSntx(s, e); else TokenSetCursor(sc->tc, beforeExpr);
+    struct token close = acceptTok(sc, TOK_SQUARE_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
+}
+
+//"NAME ARR_SFX* (CURLY_O IDEN? CURLY_C)?" - the optional trailing "{name}" names which scope a
+//heap-indirect reference belongs to; bare "{}" means the value's own private scope - see the report
+struct syntax* parseTypeRef(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* name = parseName(sc);
+    if (!name) return NULL;
+    struct syntax* s = newNode(SNTX_TYPE_REF);
+    addSntx(s, name);
+    while (true) {
+        struct syntax* sfx = parseArrSfx(sc);
+        if (!sfx) break;
+        addSntx(s, sfx);
+    }
+    int beforeBrace = TokenGetCursor(sc->tc);
+    struct token open = TokenFeed(sc->tc);
+    if (open.type == TOK_CURLY_O) {
+        int beforeIden = TokenGetCursor(sc->tc);
+        struct token iden = TokenFeed(sc->tc);
+        if (iden.type != TOK_IDEN) TokenSetCursor(sc->tc, beforeIden);
+        struct token close = TokenFeed(sc->tc);
+        if (close.type == TOK_CURLY_C) {
+            addTok(s, open);
+            if (iden.type == TOK_IDEN) addTok(s, iden);
+            addTok(s, close);
+        } else {
+            TokenSetCursor(sc->tc, beforeBrace);
+        }
+    } else {
+        TokenSetCursor(sc->tc, beforeBrace);
+    }
+    (void)cur;
+    return s;
+}
+
+struct syntax* parseVocabBody(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_VOCAB);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token open = acceptTok(sc, TOK_CURLY_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token first = acceptTok(sc, TOK_IDEN);
+    if (first.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_VOCAB_BODY);
+    addTok(s, kw);
+    addTok(s, open);
+    addTok(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct token iden = acceptTok(sc, TOK_IDEN);
+        if (iden.type == TOK_NONE) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addTok(s, iden);
+    }
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
+}
+
+struct syntax* parseStructMembr(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STRUCT_MEMBR);
+    addTok(s, name);
+    addSntx(s, type);
+    return s;
+}
+
+struct syntax* parseStructBody(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_STRUCT);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token open = acceptTok(sc, TOK_CURLY_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STRUCT_BODY);
+    addTok(s, kw);
+    addTok(s, open);
+    struct syntax* first = parseStructMembr(sc);
+    if (first) {
+        addSntx(s, first);
         while (true) {
-            int cursor = TokenGetCursor(sc->tc);
-            if (!matchOnce(sc, node, out)) {
-                TokenSetCursor(sc->tc, cursor);
-                break;
-            }
+            int before = TokenGetCursor(sc->tc);
+            struct token comma = TokenFeed(sc->tc);
+            if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+            struct syntax* m = parseStructMembr(sc);
+            if (!m) { TokenSetCursor(sc->tc, before); break; }
+            addTok(s, comma);
+            addSntx(s, m);
         }
-        return true;
     }
-    if (node->optional) {
-        int cursor = TokenGetCursor(sc->tc);
-        if (!matchOnce(sc, node, out)) TokenSetCursor(sc->tc, cursor);
-        return true;
-    }
-    return matchOnce(sc, node, out);
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
 }
 
-struct patNode* compiledPatterns[N_SNTX_RULES] = {0};
+struct syntax* parseParamList(SyntaxCtx sc);
+struct syntax* parseFuncSig(SyntaxCtx sc);
 
-//pattern strings are static grammar, not per-parse input, so compile each one once and reuse the tree
-struct patNode* getCompiledPattern(enum syntaxType type) {
-    if (!compiledPatterns[type]) compiledPatterns[type] = patParsePattern(rules[type].pattern);
-    return compiledPatterns[type];
+struct syntax* parseFuncType(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_FUNC);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* sig = parseFuncSig(sc);
+    if (!sig) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_FUNC_TYPE);
+    addTok(s, kw);
+    addSntx(s, sig);
+    return s;
 }
 
-struct syntax ParseRule(SyntaxCtx sc, enum syntaxType type) {
-    struct syntax s = {0};
-    s.type = type;
-    s.parts = ListInit(sizeof(struct syntaxPart));
+//"VOCAB_BODY|STRUCT_BODY|FUNC_TYPE|TYPE_REF"
+struct syntax* parseTypeExpr(SyntaxCtx sc) {
+    struct syntax* inner = parseVocabBody(sc);
+    if (!inner) inner = parseStructBody(sc);
+    if (!inner) inner = parseFuncType(sc);
+    if (!inner) inner = parseTypeRef(sc);
+    if (!inner) return NULL;
+    struct syntax* s = newNode(SNTX_TYPE_EXPR);
+    addSntx(s, inner);
+    return s;
+}
 
-    int cursor = TokenGetCursor(sc->tc);
-    struct patNode* pat = getCompiledPattern(type);
-    if (!matchNode(sc, pat, &s)) {
-        s.type = SNTX_NOT_FOUND;
-        TokenSetCursor(sc->tc, cursor);
+struct syntax* parseTypeDecl(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_TYPE);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_TYPE_DECL);
+    addTok(s, kw);
+    addTok(s, name);
+    addSntx(s, type);
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    return s;
+}
+
+struct syntax* parseImport(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_IMPORT);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token alias = acceptTok(sc, TOK_IDEN);
+    if (alias.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token path = acceptTok(sc, TOK_STR_LIT);
+    if (path.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_IMPORT);
+    addTok(s, kw);
+    addTok(s, alias);
+    addTok(s, path);
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    return s;
+}
+
+struct syntax* parseErrorDecl(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_ERROR);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token open = acceptTok(sc, TOK_CURLY_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token first = acceptTok(sc, TOK_IDEN);
+    if (first.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_ERROR_DECL);
+    addTok(s, kw);
+    addTok(s, name);
+    addTok(s, open);
+    addTok(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct token iden = acceptTok(sc, TOK_IDEN);
+        if (iden.type == TOK_NONE) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addTok(s, iden);
+    }
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
+}
+
+struct syntax* parseErrorList(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* first = parseName(sc);
+    if (!first) return NULL;
+    struct syntax* s = newNode(SNTX_ERROR_LIST);
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token plus = TokenFeed(sc->tc);
+        if (plus.type != TOK_ADD) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* name = parseName(sc);
+        if (!name) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, plus);
+        addSntx(s, name);
+    }
+    (void)cur;
+    return s;
+}
+
+struct syntax* parseRetType(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token q = acceptTok(sc, TOK_QSNTMRK);
+    if (q.type == TOK_NONE) return NULL;
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_RET_TYPE);
+    addTok(s, q);
+    addSntx(s, type);
+    return s;
+}
+
+struct syntax* parseParam(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_PARAM);
+    addTok(s, name);
+    int beforeMut = TokenGetCursor(sc->tc);
+    struct token mut = TokenFeed(sc->tc);
+    if (mut.type == TOK_MUT) addTok(s, mut); else TokenSetCursor(sc->tc, beforeMut);
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addSntx(s, type);
+    return s;
+}
+
+//"(PARAM (COMMA PARAM)*)?" - always succeeds (possibly with zero params)
+struct syntax* parseParamList(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_PARAM_LIST);
+    struct syntax* first = parseParam(sc);
+    if (!first) return s;
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* p = parseParam(sc);
+        if (!p) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, p);
     }
     return s;
 }
 
+struct syntax* parseFuncSig(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_PAREN_O);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* params = parseParamList(sc);
+    struct token close = acceptTok(sc, TOK_PAREN_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_FUNC_SIG);
+    addTok(s, open);
+    addSntx(s, params);
+    addTok(s, close);
+    struct syntax* errs = parseErrorList(sc);
+    if (errs) addSntx(s, errs);
+    struct syntax* ret = parseRetType(sc);
+    if (ret) addSntx(s, ret);
+    return s;
+}
+
+struct syntax* parseFuncDef(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_FUNC);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* sig = parseFuncSig(sc);
+    if (!sig) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_FUNC_DEF);
+    addTok(s, kw);
+    addTok(s, name);
+    addSntx(s, sig);
+    addSntx(s, block);
+    return s;
+}
+
+struct syntax* parseTestDecl(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_TEST);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token desc = acceptTok(sc, TOK_STR_LIT);
+    if (desc.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_TEST_DECL);
+    addTok(s, kw);
+    addTok(s, desc);
+    addSntx(s, block);
+    return s;
+}
+
+//":=" declares with the type read off the (required-to-be-literal) initializer - a distinct token from
+//"=" so this can never be confused with an assignment to an existing variable
+struct syntax* parseVarDecl(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_VAR_DECL);
+    addTok(s, name);
+    int beforeMut = TokenGetCursor(sc->tc);
+    struct token mut = TokenFeed(sc->tc);
+    if (mut.type == TOK_MUT) addTok(s, mut); else TokenSetCursor(sc->tc, beforeMut);
+
+    int beforeInfer = TokenGetCursor(sc->tc);
+    struct token infer = TokenFeed(sc->tc);
+    if (infer.type == TOK_ASS_INFER) {
+        addTok(s, infer);
+    } else {
+        TokenSetCursor(sc->tc, beforeInfer);
+        struct syntax* type = parseTypeExpr(sc);
+        if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+        struct token ass = acceptTok(sc, TOK_ASS);
+        if (ass.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, type);
+        addTok(s, ass);
+    }
+    struct syntax* rhs = parseExpr(sc);
+    if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addSntx(s, rhs);
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
+//same shape as VAR_DECL but no trailing statement-end (a for-loop's init clause is followed by ",")
+struct syntax* parseForInit(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_FOR_INIT);
+    addTok(s, name);
+    int beforeMut = TokenGetCursor(sc->tc);
+    struct token mut = TokenFeed(sc->tc);
+    if (mut.type == TOK_MUT) addTok(s, mut); else TokenSetCursor(sc->tc, beforeMut);
+
+    int beforeInfer = TokenGetCursor(sc->tc);
+    struct token infer = TokenFeed(sc->tc);
+    if (infer.type == TOK_ASS_INFER) {
+        addTok(s, infer);
+    } else {
+        TokenSetCursor(sc->tc, beforeInfer);
+        struct syntax* type = parseTypeExpr(sc);
+        if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+        struct token ass = acceptTok(sc, TOK_ASS);
+        if (ass.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, type);
+        addTok(s, ass);
+    }
+    struct syntax* rhs = parseExpr(sc);
+    if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addSntx(s, rhs);
+    return s;
+}
+
+enum tokenType assignOpToks[] = {
+    TOK_ASS, TOK_ASS_ADD, TOK_ASS_SUB, TOK_ASS_MUL, TOK_ASS_DIV, TOK_ASS_MOD,
+    TOK_ASS_AND, TOK_ASS_OR, TOK_ASS_XOR, TOK_ASS_BTSFT_L, TOK_ASS_BTSFT_R,
+    TOK_ASS_BTWSE_AND, TOK_ASS_BTWSE_OR, TOK_ASS_BTWSE_XOR
+};
+#define N_ASSIGN_OP_TOKS ((int)(sizeof(assignOpToks) / sizeof(assignOpToks[0])))
+
+struct syntax* parseAssignOp(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    for (int i = 0; i < N_ASSIGN_OP_TOKS; i++) {
+        if (t.type == assignOpToks[i]) {
+            struct syntax* s = newNode(SNTX_ASSIGN_OP);
+            addTok(s, t);
+            return s;
+        }
+    }
+    TokenSetCursor(sc->tc, cur);
+    return NULL;
+}
+
+struct syntax* parseStmntAssign(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* lhs = parseExprPostfix(sc);
+    if (!lhs) return NULL;
+    struct syntax* op = parseAssignOp(sc);
+    if (!op) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* rhs = parseExpr(sc);
+    if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_ASSIGN);
+    addSntx(s, lhs);
+    addSntx(s, op);
+    addSntx(s, rhs);
+    return s;
+}
+
+struct syntax* parseStmntExpr(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* e = parseExpr(sc);
+    if (!e) return NULL;
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_EXPR);
+    addSntx(s, e);
+    return s;
+}
+
+struct syntax* parseStmntIf(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_IF);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* cond = parseExpr(sc);
+    if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_IF);
+    addTok(s, kw);
+    addSntx(s, cond);
+    addSntx(s, block);
+    int beforeElse = TokenGetCursor(sc->tc);
+    struct token elseKw = TokenFeed(sc->tc);
+    if (elseKw.type == TOK_ELSE) {
+        struct syntax* elseIf = parseStmntIf(sc);
+        if (elseIf) { addTok(s, elseKw); addSntx(s, elseIf); return s; }
+        struct syntax* elseBlock = parseBlock(sc);
+        if (elseBlock) { addTok(s, elseKw); addSntx(s, elseBlock); return s; }
+        TokenSetCursor(sc->tc, beforeElse);
+    } else {
+        TokenSetCursor(sc->tc, beforeElse);
+    }
+    return s;
+}
+
+struct syntax* parseStmntFor(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_FOR);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* init = parseForInit(sc);
+    if (!init) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token c1 = acceptTok(sc, TOK_COMMA);
+    if (c1.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* cond = parseExpr(sc);
+    if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token c2 = acceptTok(sc, TOK_COMMA);
+    if (c2.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* post = parseExpr(sc);
+    if (!post) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_FOR);
+    addTok(s, kw);
+    addSntx(s, init);
+    addTok(s, c1);
+    addSntx(s, cond);
+    addTok(s, c2);
+    addSntx(s, post);
+    addSntx(s, block);
+    return s;
+}
+
+struct syntax* parseStmntDo(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_DO);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token whileKw = acceptTok(sc, TOK_WHILE);
+    if (whileKw.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* cond = parseExpr(sc);
+    if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_DO);
+    addTok(s, kw);
+    addSntx(s, block);
+    addTok(s, whileKw);
+    addSntx(s, cond);
+    return s;
+}
+
+struct syntax* parseStmntCase(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_CASE);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* val = parseExpr(sc);
+    if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_CASE);
+    addTok(s, kw);
+    addSntx(s, val);
+    addSntx(s, block);
+    return s;
+}
+
+struct syntax* parseStmntNomatch(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_NOMATCH);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_NOMATCH);
+    addTok(s, kw);
+    addSntx(s, block);
+    return s;
+}
+
+struct syntax* parseStmntMatch(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_MATCH);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* val = parseExpr(sc);
+    if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token open = acceptTok(sc, TOK_CURLY_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_MATCH);
+    addTok(s, kw);
+    addSntx(s, val);
+    addTok(s, open);
+    while (true) {
+        struct syntax* c = parseStmntCase(sc);
+        if (!c) break;
+        addSntx(s, c);
+    }
+    struct syntax* nomatch = parseStmntNomatch(sc);
+    if (nomatch) addSntx(s, nomatch);
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
+}
+
+struct syntax* parseStmntRet(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_RET);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_STMNT_RET);
+    addTok(s, kw);
+    struct syntax* val = parseExpr(sc);
+    if (val) addSntx(s, val);
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
+struct syntax* parseStmntDone(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_DONE);
+    if (kw.type == TOK_NONE) return NULL;
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_DONE);
+    addTok(s, kw);
+    return s;
+}
+
+struct syntax* parseStmntCrash(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_CRASH);
+    if (kw.type == TOK_NONE) return NULL;
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_CRASH);
+    addTok(s, kw);
+    return s;
+}
+
+struct syntax* parseStmntError(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_ERROR);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token type = acceptTok(sc, TOK_IDEN);
+    if (type.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token dot = acceptTok(sc, TOK_DOT);
+    if (dot.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token word = acceptTok(sc, TOK_IDEN);
+    if (word.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_ERROR);
+    addTok(s, kw);
+    addTok(s, type);
+    addTok(s, dot);
+    addTok(s, word);
+    return s;
+}
+
+//"IDEN (DOT IDEN)? (DOT IDEN)?" - "MyError"/"alias.MyError" (whole type) or "MyError.Word"/
+//"alias.MyError.Word" (one word); which shape it is gets disambiguated later, in semantic analysis (an
+//import alias and an error type live in different namespaces, see the report)
+struct syntax* parseCatchErr(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token first = acceptTok(sc, TOK_IDEN);
+    if (first.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_CATCH_ERR);
+    addTok(s, first);
+    for (int i = 0; i < 2; i++) {
+        int before = TokenGetCursor(sc->tc);
+        struct token dot = TokenFeed(sc->tc);
+        if (dot.type != TOK_DOT) { TokenSetCursor(sc->tc, before); break; }
+        struct token iden = TokenFeed(sc->tc);
+        if (iden.type != TOK_IDEN) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, dot);
+        addTok(s, iden);
+    }
+    (void)cur;
+    return s;
+}
+
+struct syntax* parseCatchErrList(SyntaxCtx sc) {
+    struct syntax* first = parseCatchErr(sc);
+    if (!first) return NULL;
+    struct syntax* s = newNode(SNTX_CATCH_ERR_LIST);
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token orTok = TokenFeed(sc->tc);
+        if (orTok.type != TOK_OR) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* e = parseCatchErr(sc);
+        if (!e) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, orTok);
+        addSntx(s, e);
+    }
+    return s;
+}
+
+struct syntax* parseCatchClause(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_CATCH);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* errs = parseCatchErrList(sc);
+    if (!errs) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_CATCH_CLAUSE);
+    addTok(s, kw);
+    addSntx(s, errs);
+    addSntx(s, block);
+    return s;
+}
+
+//"try f()" alone propagates (see parseExprTry, a general expression); this is the catch-handling
+//statement form - control flow only, the caught error is never exposed as a value
+struct syntax* parseStmntTryCatch(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_TRY);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* primary = parseExprPrimary(sc);
+    if (!primary) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* clause = parseCatchClause(sc);
+    if (!clause) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_TRY_CATCH);
+    addTok(s, kw);
+    addSntx(s, primary);
+    addSntx(s, clause);
+    return s;
+}
+
+//wrapped in a genuine SNTX_STMNT node - buildBlock finds statements by searching for that exact type
+//(allPartsOfType(blockNode, SNTX_STMNT)), and buildStatement then unwraps part[0] itself - same reasoning
+//as parseTopDecl's own wrapper
+struct syntax* parseStmnt(SyntaxCtx sc) {
+    struct syntax* inner;
+    if ((inner = parseVarDecl(sc))) {}
+    else if ((inner = parseStmntAssign(sc))) {}
+    else if ((inner = parseStmntIf(sc))) {}
+    else if ((inner = parseStmntFor(sc))) {}
+    else if ((inner = parseStmntDo(sc))) {}
+    else if ((inner = parseStmntMatch(sc))) {}
+    else if ((inner = parseStmntRet(sc))) {}
+    else if ((inner = parseStmntDone(sc))) {}
+    else if ((inner = parseStmntCrash(sc))) {}
+    else if ((inner = parseStmntError(sc))) {}
+    else if ((inner = parseStmntTryCatch(sc))) {}
+    else if ((inner = parseStmntExpr(sc))) {}
+    else return NULL;
+    struct syntax* s = newNode(SNTX_STMNT);
+    addSntx(s, inner);
+    return s;
+}
+
+struct syntax* parseBlock(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_CURLY_O);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_BLOCK);
+    addTok(s, open);
+    while (true) {
+        struct syntax* stmt = parseStmnt(sc);
+        if (!stmt) break;
+        addSntx(s, stmt);
+    }
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, close);
+    return s;
+}
+
+// ---- expressions ----
+
+//"(EXPR (COMMA EXPR)*)?" - always succeeds (possibly with zero args)
+struct syntax* parseExprArgs(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_EXPR_ARGS);
+    struct syntax* first = parseExpr(sc);
+    if (!first) return s;
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* e = parseExpr(sc);
+        if (!e) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, e);
+    }
+    return s;
+}
+
+struct syntax* parseExprCall(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_PAREN_O);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* args = parseExprArgs(sc);
+    struct token close = acceptTok(sc, TOK_PAREN_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_EXPR_CALL);
+    addTok(s, open);
+    addSntx(s, args);
+    addTok(s, close);
+    return s;
+}
+
+struct syntax* parseExprTry(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_TRY);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* primary = parseExprPrimary(sc);
+    if (!primary) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_EXPR_TRY);
+    addTok(s, kw);
+    addSntx(s, primary);
+    return s;
+}
+
+//"NAME ARR_SFX* [ ARGS ]" - array literal, fixed ("T[3][...]") or dynamic ("T[][...]"). Unchanged from
+//before, including its one known gap: a single-value (or empty) value list is indistinguishable from a
+//trailing array suffix, so it gets silently swallowed by the "*" loop below and this whole attempt fails,
+//falling through to plain indexing instead - see CLAUDE.md. Not addressed here on purpose (arrays keep
+//their existing syntax as-is; only struct literals move to type-aware "{...}" - see the report).
+struct syntax* parseArrayLiteral(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* name = parseName(sc);
+    if (!name) return NULL;
+    struct syntax* s = newNode(SNTX_EXPR_LITERAL);
+    addSntx(s, name);
+    while (true) {
+        struct syntax* sfx = parseArrSfx(sc);
+        if (!sfx) break;
+        addSntx(s, sfx);
+    }
+    struct token open = acceptTok(sc, TOK_SQUARE_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* args = parseExprArgs(sc);
+    struct token close = acceptTok(sc, TOK_SQUARE_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, open);
+    addSntx(s, args);
+    addTok(s, close);
+    return s;
+}
+
+//"NAME { ARGS }" - struct literal. `name` and the opening "{" are already committed by the caller
+//(parseExprPrimary), which only reaches here once name is confirmed to be a known type - see the report
+//for why that makes this safe to commit to hard (no backtracking to reinterpret "{" as a block start).
+struct syntax* parseStructLiteralTail(SyntaxCtx sc, struct syntax* name, struct token open) {
+    struct syntax* s = newNode(SNTX_EXPR_STRUCT_LITERAL);
+    addSntx(s, name);
+    addTok(s, open);
+    struct syntax* args = parseExprArgs(sc);
+    addSntx(s, args);
+    struct token close = acceptTok(sc, TOK_CURLY_C);
+    if (close.type == TOK_NONE) return NULL;
+    addTok(s, close);
+    return s;
+}
+
+bool nameIsKnownType(SyntaxCtx sc, struct syntax* name) {
+    if (!sc->isKnownType) return false;
+    struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
+    if (name->parts.len == 1) {
+        struct str n = Str(p0->tok.str.ptr, p0->tok.str.len);
+        return sc->isKnownType(sc->typeCtx, (struct str){0}, n);
+    }
+    struct str alias = Str(p0->tok.str.ptr, p0->tok.str.len);
+    struct syntaxPart* p2 = ListGetIdx(&name->parts, 2);
+    struct str n = Str(p2->tok.str.ptr, p2->tok.str.len);
+    return sc->isKnownType(sc->typeCtx, alias, n);
+}
+
+//true if a qualified name's *first* identifier alone (ignoring the qualification) is a locally-known
+//type - "Direction.NORTH" is a vocab value exactly when "Direction" is a local type, never an import
+//alias (an alias and a local type live in different lookups here on purpose, so "sh.SomeType{...}"
+//- a real cross-module struct literal - is never confused with this)
+bool firstIdenIsLocalKnownType(SyntaxCtx sc, struct syntax* name) {
+    if (!sc->isKnownType || name->parts.len != 3) return false;
+    struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
+    struct str n = Str(p0->tok.str.ptr, p0->tok.str.len);
+    return sc->isKnownType(sc->typeCtx, (struct str){0}, n);
+}
+
+//"TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|TOK_OWN|EXPR_TRY|
+// (NAME EXPR_CALL)|STRUCT_LITERAL|EXPR_LITERAL|TOK_IDEN|(PAREN_O EXPR PAREN_C)"
+struct syntax* parseExprPrimary(SyntaxCtx sc) {
+    struct token t = peekTok(sc);
+    switch (t.type) {
+        case TOK_BOOL_LIT: case TOK_INT_LIT: case TOK_FLOAT_LIT: case TOK_CHAR_LIT:
+        case TOK_STR_LIT: case TOK_OWN: {
+            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+            addTok(s, advanceTok(sc));
+            return s;
+        }
+        case TOK_TRY: {
+            struct syntax* tryExpr = parseExprTry(sc);
+            if (!tryExpr) return NULL;
+            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+            addSntx(s, tryExpr);
+            return s;
+        }
+        case TOK_PAREN_O: {
+            int cur = TokenGetCursor(sc->tc);
+            struct token open = advanceTok(sc);
+            struct syntax* e = parseExpr(sc);
+            if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
+            struct token close = acceptTok(sc, TOK_PAREN_C);
+            if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+            addTok(s, open);
+            addSntx(s, e);
+            addTok(s, close);
+            return s;
+        }
+        case TOK_IDEN: {
+            int save = TokenGetCursor(sc->tc);
+            struct syntax* name = parseName(sc);
+            struct token after = peekTok(sc);
+            if (after.type == TOK_PAREN_O) {
+                struct syntax* call = parseExprCall(sc);
+                if (call) {
+                    struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+                    addSntx(s, name);
+                    addSntx(s, call);
+                    return s;
+                }
+                TokenSetCursor(sc->tc, save);
+            } else if (after.type == TOK_CURLY_O && nameIsKnownType(sc, name)) {
+                struct token open = advanceTok(sc); //consume the "{" now that we're committing
+                struct syntax* lit = parseStructLiteralTail(sc, name, open);
+                if (lit) {
+                    struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+                    addSntx(s, lit);
+                    return s;
+                }
+                //name was a known type immediately followed by "{" - not a real ambiguity (a bare type
+                //name is never a valid condition/value on its own), so a malformed literal is a real
+                //parse error, not a silent fallback to "maybe this was a block after all"
+                recordFurthestError(sc, peekTok(sc), "'}'");
+                return NULL;
+            } else if (firstIdenIsLocalKnownType(sc, name)) {
+                //"Type.WORD" - a vocab value (see the report on communicating a fixed set/selection, not
+                //a C-enum-style number). Committed the same way struct literals are: "Direction" being a
+                //known local type here is never a coincidence worth backtracking out of.
+                struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+                struct syntax* vv = newNode(SNTX_EXPR_VOCAB_VALUE);
+                addSntx(vv, name);
+                addSntx(s, vv);
+                return s;
+            }
+            TokenSetCursor(sc->tc, save);
+            struct syntax* arrLit = parseArrayLiteral(sc);
+            if (arrLit) {
+                struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+                addSntx(s, arrLit);
+                return s;
+            }
+            TokenSetCursor(sc->tc, save);
+            struct token bare = advanceTok(sc);
+            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+            addTok(s, bare);
+            return s;
+        }
+        default:
+            recordFurthestError(sc, t, "expression");
+            return NULL;
+    }
+}
+
+struct syntax* parseExprIndex(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_SQUARE_O);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* e = parseExpr(sc);
+    if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token close = acceptTok(sc, TOK_SQUARE_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_EXPR_INDEX);
+    addTok(s, open);
+    addSntx(s, e);
+    addTok(s, close);
+    return s;
+}
+
+struct syntax* parseExprMembr(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token dot = acceptTok(sc, TOK_DOT);
+    if (dot.type == TOK_NONE) return NULL;
+    struct token iden = acceptTok(sc, TOK_IDEN);
+    if (iden.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_EXPR_MEMBR);
+    addTok(s, dot);
+    addTok(s, iden);
+    return s;
+}
+
+struct syntax* parseExprPostfix(SyntaxCtx sc) {
+    struct syntax* primary = parseExprPrimary(sc);
+    if (!primary) return NULL;
+    struct syntax* s = newNode(SNTX_EXPR_POSTFIX);
+    addSntx(s, primary);
+    while (true) {
+        struct syntax* idx = parseExprIndex(sc);
+        if (idx) { addSntx(s, idx); continue; }
+        struct syntax* mem = parseExprMembr(sc);
+        if (mem) { addSntx(s, mem); continue; }
+        int before = TokenGetCursor(sc->tc);
+        struct token t = TokenFeed(sc->tc);
+        if (t.type == TOK_INC || t.type == TOK_DEC) { addTok(s, t); continue; }
+        TokenSetCursor(sc->tc, before);
+        break;
+    }
+    return s;
+}
+
+bool isUnaryOpTok(enum tokenType t) {
+    return t == TOK_NOT || t == TOK_SUB || t == TOK_BTWSE_INV || t == TOK_INC || t == TOK_DEC;
+}
+
+struct syntax* parseExprUnary(SyntaxCtx sc) {
+    struct list ops = ListInit(sizeof(struct token));
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token t = TokenFeed(sc->tc);
+        if (!isUnaryOpTok(t.type)) { TokenSetCursor(sc->tc, before); break; }
+        ListAdd(&ops, &t);
+    }
+    struct syntax* postfix = parseExprPostfix(sc);
+    if (!postfix) return NULL; //note: any consumed unary-op tokens are simply not attached to anything;
+                                //a real prefix-op-with-no-operand is always a hard error further up anyway
+    struct syntax* s = newNode(SNTX_EXPR_UNARY);
+    for (int i = 0; i < ops.len; i++) {
+        struct token* opTok = ListGetIdx(&ops, i);
+        struct syntax* opNode = newNode(SNTX_EXPR_UNARY_OP);
+        addTok(opNode, *opTok);
+        addSntx(s, opNode);
+    }
+    addSntx(s, postfix);
+    return s;
+}
+
+//standard precedence-climbing, replacing the old 11-rule grammar chain (SNTX_EXPR_MUL..SNTX_EXPR_OR) with
+//one table + one function - see the report. Precedence numbers below match that chain's nesting exactly
+//(1 = loosest/"||", 11 = tightest/"* / %"); every olang binary operator is left-associative, so ties
+//always recurse at prec+1.
+int binOpPrecedence(enum tokenType t) {
+    switch (t) {
+        case TOK_OR: return 1;
+        case TOK_XOR: return 2;
+        case TOK_AND: return 3;
+        case TOK_BTWSE_OR: return 4;
+        case TOK_BTWSE_XOR: return 5;
+        case TOK_BTWSE_AND: return 6;
+        case TOK_EQ: case TOK_NEQ: return 7;
+        case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE: return 8;
+        case TOK_BTSFT_L: case TOK_BTSFT_R: return 9;
+        case TOK_ADD: case TOK_SUB: return 10;
+        case TOK_MUL: case TOK_DIV: case TOK_MOD: return 11;
+        default: return 0; //not a binary operator
+    }
+}
+
+struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
+    struct syntax* left = parseExprUnary(sc);
+    if (!left) return NULL;
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token opTok = TokenFeed(sc->tc);
+        int prec = binOpPrecedence(opTok.type);
+        if (prec == 0 || prec < minPrec) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* right = parseBinaryExpr(sc, prec + 1); //left-assoc: recurse tighter, not equal
+        if (!right) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* bin = newNode(SNTX_EXPR_BINARY);
+        addSntx(bin, left);
+        addTok(bin, opTok);
+        addSntx(bin, right);
+        left = bin;
+    }
+    return left;
+}
+
+struct syntax* parseExpr(SyntaxCtx sc) {
+    struct syntax* inner = parseBinaryExpr(sc, 1);
+    if (!inner) return NULL;
+    struct syntax* s = newNode(SNTX_EXPR);
+    addSntx(s, inner);
+    return s;
+}
+
+// ---- top level ----
+
+//wrapped in a genuine SNTX_TOP_DECL node (rather than just returning the matched alternative directly) -
+//semantic.c's module-walking passes all expect one part[0] to unwrap, the same shape the old table-driven
+//engine always produced for every rule (even a pure alternation still got its own wrapper node)
+struct syntax* parseTopDecl(SyntaxCtx sc) {
+    struct syntax* inner;
+    if ((inner = parseTypeDecl(sc))) {}
+    else if ((inner = parseImport(sc))) {}
+    else if ((inner = parseErrorDecl(sc))) {}
+    else if ((inner = parseFuncDef(sc))) {}
+    else if ((inner = parseVarDecl(sc))) {}
+    else if ((inner = parseTestDecl(sc))) {}
+    else return NULL;
+    struct syntax* s = newNode(SNTX_TOP_DECL);
+    addSntx(s, inner);
+    return s;
+}
+
+// ---- declaration scan (see syntax.h) ----
+
+struct scanResult ScanTopLevelDecls(TokenCtx tc) {
+    struct scanResult r = {0};
+    r.typeNames = ListInit(sizeof(struct str));
+    r.imports = ListInit(sizeof(struct scannedImport));
+    TokenSetCursor(tc, 0);
+    int depth = 0;
+    while (true) {
+        struct token t = TokenFeed(tc);
+        if (t.type == TOK_NONE) break;
+        if (t.type == TOK_CURLY_O) { depth++; continue; }
+        if (t.type == TOK_CURLY_C) { depth--; continue; }
+        if (depth != 0) continue;
+        if (t.type == TOK_TYPE || t.type == TOK_ERROR) {
+            struct token name = TokenFeed(tc);
+            if (name.type == TOK_IDEN) {
+                struct str n = Str(name.str.ptr, name.str.len);
+                ListAdd(&r.typeNames, &n);
+            }
+        } else if (t.type == TOK_IMPORT) {
+            struct token alias = TokenFeed(tc);
+            if (alias.type != TOK_IDEN) continue;
+            struct token path = TokenFeed(tc);
+            if (path.type != TOK_STR_LIT) continue;
+            struct scannedImport imp = {0};
+            imp.alias = Str(alias.str.ptr, alias.str.len);
+            imp.path = Str(path.str.ptr +1, path.str.len -2); //strip surrounding quotes
+            ListAdd(&r.imports, &imp);
+        }
+    }
+    TokenSetCursor(tc, 0);
+    return r;
+}
+
 // ---- driver ----
 
-struct syntaxModule ParseSyntax(char* fileName) {
+struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKnownType) {
     struct syntaxContext sc = {0};
-    sc.tc = TokenizeFile(fileName);
+    sc.tc = tc;
     sc.furthestPos = -1;
+    sc.typeCtx = typeCtx;
+    sc.isKnownType = isKnownType;
 
     struct syntaxModule mod = {0};
-    mod.tc = sc.tc;
+    mod.tc = tc;
     mod.decls = ListInit(sizeof(struct syntax));
 
     while (true) {
-        struct token peek = TokenFeed(sc.tc);
+        struct token peek = peekTok(&sc);
         if (peek.type == TOK_NONE) break;
-        TokenUnfeed(sc.tc);
 
         sc.furthestPos = TokenGetCursor(sc.tc);
-        struct syntax decl = ParseRule(&sc, SNTX_TOP_DECL);
-        if (decl.type == SNTX_NOT_FOUND) {
+        struct syntax* decl = parseTopDecl(&sc);
+        if (!decl) {
             char* expected = sc.furthestExpected ? sc.furthestExpected : "declaration";
             ErrMsgUnexpectedToken(sc.furthestTok, expected);
             TokenFeedUntil(sc.tc, TOK_STMNT_END);
             continue;
         }
-        ListAdd(&mod.decls, &decl);
+        ListAdd(&mod.decls, decl);
     }
     return mod;
 }

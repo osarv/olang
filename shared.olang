@@ -6,6 +6,19 @@ type Point struct {
     y int32
 }
 
+type Line struct {
+    a Point,
+    b Point
+}
+
+## a genuinely single-field struct - single-value struct literals ("Wrapper{42}") were impossible before
+## the hand-written, type-aware parser (a lone value inside "{}" was always indistinguishable from an
+## ordinary index/block by the old table-driven engine - see CLAUDE.md), so this exists specifically to
+## keep that capability under test, not just the multi-field case every other Point literal already covers
+type Wrapper struct {
+    v int32
+}
+
 type Direction vocab {
     NORTH,
     SOUTH,
@@ -50,6 +63,45 @@ func setBit(flags int32, bit int32) ? int32 {
     return flags | (1 << bit)
 }
 
+func doubleIt(n int32) ? int32 {
+    return n * 2
+}
+
+## a bare read of a global FUNCTION (as opposed to a local/parameter that merely *holds* a function
+## pointer) used to have no real storage slot to load through - the mangled function symbol IS its own
+## address already (an LLVM `define`, not a `global`) - so loading "through" it read the function's own
+## machine code as if it were a stored pointer, segfaulting the instant it was called. See cgValue in
+## codegen.c.
+func applyToFive(f func(n int32) ? int32) ? int32 {
+    return f(5)
+}
+
+## vocab values ("Type.WORD") communicate a fixed set and a selection from it - not a C-enum-style number:
+## no ordering/arithmetic (rejected the same way any non-numeric type is, see TypeIsNumeric/TypeIsInt),
+## only equality/inequality and match/case, both already generic over every type with no vocab-specific
+## codegen needed.
+func opposite(d Direction) ? Direction {
+    result mut Direction = Direction.NORTH
+    match d {
+        case Direction.NORTH {
+            result = Direction.SOUTH
+        }
+        case Direction.SOUTH {
+            result = Direction.NORTH
+        }
+        case Direction.EAST {
+            result = Direction.WEST
+        }
+        case Direction.WEST {
+            result = Direction.EAST
+        }
+        nomatch {
+            result = Direction.NORTH
+        }
+    }
+    return result
+}
+
 func describe(n int32) ? int32 {
     result mut int32 = 0
     match n {
@@ -66,16 +118,15 @@ func describe(n int32) ? int32 {
     return result
 }
 
-## match's case values may be struct/array literals, not just scalars - this is the reason
-## SNTX_EXPR_LITERAL uses "[...]" rather than "{...}" (see CLAUDE.md): a case value is checked
+## match's case values may be struct/array literals, not just scalars - a case value is checked
 ## structurally against the matched expression (cgDeepEq in codegen.c), not by identity
 func classifyPoint(p Point) ? int32 {
     result mut int32 = 0
     match p {
-        case Point[1, 2] {
+        case Point{1, 2} {
             result = 100
         }
-        case Point[3, 4] {
+        case Point{3, 4} {
             result = 200
         }
         nomatch {
@@ -91,7 +142,7 @@ func classifyPoint(p Point) ? int32 {
 ## the value's own private scope. "own" is a keyword evaluating to that private scope as a passable value,
 ## so a caller can hand a callee its own scope instead of the callee's default private one.
 func makePoint(x int32, y int32, s scope) ? Point{s} {
-    p mut Point{s} = Point[x, y]
+    p mut Point{s} = Point{x, y}
     return p
 }
 
@@ -105,7 +156,7 @@ func takesHeapPoint(p Point{}) ? int32 {
 }
 
 func returnsHeapPoint(s scope) ? Point{s} {
-    return Point[9, 8]
+    return Point{9, 8}
 }
 
 ## Exercises the real arena allocator (emitScopeRuntime in codegen.c), not just the type-checking: many
@@ -116,7 +167,7 @@ func sumManyPoints(n int32, s scope) ? int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
-        p mut Point{s} = Point[i, i]
+        p mut Point{s} = Point{i, i}
         total = total + p.x
         i++
     } while i < n
@@ -193,6 +244,20 @@ test "bitwise or, and, xor, shift" {
     assert((5 ^ 3) == 6)
 }
 
+test "a function passed by name as a value can be called through the receiving parameter" {
+    assert(applyToFive(doubleIt) == 10)
+    g mut func(n int32) ? int32 = doubleIt
+    assert(g(3) == 6)
+}
+
+test "vocab values: construction, equality, and match/case" {
+    n mut Direction = Direction.NORTH
+    assert(n == Direction.NORTH)
+    assert(n != Direction.SOUTH)
+    assert(opposite(Direction.NORTH) == Direction.SOUTH)
+    assert(opposite(Direction.EAST) == Direction.WEST)
+}
+
 test "match selects the right case" {
     assert(describe(1) == 100)
     assert(describe(2) == 200)
@@ -212,13 +277,26 @@ test "fixed byte arrays compare by value, not identity" {
 }
 
 test "struct literal construction and structural equality" {
-    p mut Point = Point[1, 2]
-    q mut Point = Point[1, 2]
-    r mut Point = Point[3, 4]
+    p mut Point = Point{1, 2}
+    q mut Point = Point{1, 2}
+    r mut Point = Point{3, 4}
     assert(p.x == 1)
     assert(p.y == 2)
     assert(p == q)
     assert(p != r)
+}
+
+test "single-value struct literal" {
+    w mut Wrapper = Wrapper{42}
+    assert(w.v == 42)
+}
+
+test "nested struct literals" {
+    l mut Line = Line{Point{1, 2}, Point{3, 4}}
+    assert(l.a.x == 1)
+    assert(l.a.y == 2)
+    assert(l.b.x == 3)
+    assert(l.b.y == 4)
 }
 
 test "array literal construction, fixed and dynamic" {
@@ -231,9 +309,9 @@ test "array literal construction, fixed and dynamic" {
 }
 
 test "struct literal as a match case value" {
-    assert(classifyPoint(Point[1, 2]) == 100)
-    assert(classifyPoint(Point[3, 4]) == 200)
-    assert(classifyPoint(Point[9, 9]) == -1)
+    assert(classifyPoint(Point{1, 2}) == 100)
+    assert(classifyPoint(Point{3, 4}) == 200)
+    assert(classifyPoint(Point{9, 9}) == -1)
 }
 
 test ":= infers a variable's type from its literal initializer" {
@@ -267,7 +345,7 @@ test "own passes a test's own scope down to a scope-parameterized function" {
 }
 
 test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
-    assert(takesHeapPoint(Point[5, 6]) == 5)
+    assert(takesHeapPoint(Point{5, 6}) == 5)
     q mut Point{} = returnsHeapPoint(own)
     assert(q.x == 9)
     assert(q.y == 8)

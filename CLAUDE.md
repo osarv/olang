@@ -96,34 +96,102 @@ of sync with the actual code.
   transitively re-exporting its own imports (so importing A also reaches through A's import of B). None
   of these came up while building the test suite that motivated this change, so none were forced - but
   they're the same "capital letter = exported" rule, just not yet wired into their own grammar slot.
-- **Struct/array literal syntax + `:=` type inference.** `Type[v1, v2, ...]` constructs a struct
-  (positional, in member-declaration order) or an array (`T[N][v1, ...]` fixed, `T[][v1, ...]`
-  dynamic/malloc'd) inline, as a general expression usable anywhere a value is needed - not just on the
-  right of a var-decl. The type is always restated on the literal itself
-  (`x mut int32[] = int32[][5, 6, 7]`, not `x mut int32[] = [5, 6, 7]`) - chosen so a literal is
-  self-describing and var-decl grammar needs no changes at all. `x := <literal>` infers `x`'s type
-  entirely from an initializing literal (locals, for-loop init vars, and globals, via the existing
+- **Struct/array literal syntax + `:=` type inference.** Struct literals are `Type{v1, v2, ...}`
+  (positional, in member-declaration order); array literals are `T[N][v1, ...]` (fixed) / `T[][v1, ...]`
+  (dynamic/malloc'd) - two different delimiters now, not one shared one (see the parser-rewrite entry
+  below for why `{...}` finally became safe to use for structs). Both are general expressions usable
+  anywhere a value is needed, not just on the right of a var-decl; the type is always restated on the
+  literal itself (`x mut int32[] = int32[][5, 6, 7]`, not `x mut int32[] = [5, 6, 7]`), chosen so a
+  literal is self-describing and var-decl grammar needs no changes at all. `x := <literal>` infers `x`'s
+  type entirely from an initializing literal (locals, for-loop init vars, and globals, via the existing
   two-phase resolve/check split); a non-literal initializer (`x := f()`) is a compile error
   (`TYPE_CANNOT_BE_INFERRED`), since only a literal is guaranteed to syntactically carry a full concrete
   type. `:=` is its own token (`TOK_ASS_INFER`), not reused `=`, because reusing `=` made `SNTX_VAR_DECL`
-  and `SNTX_STMNT_ASSIGN` (e.g. `result = 100`) genuinely ambiguous with no way for the PEG engine to
-  prefer one over the other. The value-list delimiter is `[...]`, not `{...}`: `{...}` collides with block
-  syntax (`if x { y }` was silently misparsed, consuming `x { y }` as a struct literal and leaving the
-  `if` without its required block) with no way to backtrack out of it once chosen; `]` never closes a
-  block anywhere in the grammar and was already an automatic-statement-end trigger, so `[...]` has zero
-  collision risk there and needed no tokenizer changes.
-  **Known, unresolved gap: a literal needs at least two values.** `Point[1]` (a genuine single-field
-  struct literal) and `int32[][5]`/`int32[]` (a single-element or empty array literal) are syntactically
-  indistinguishable from plain indexing (`Point[1]` also reads as "read var `Point`, then index by 1") to
-  this PEG engine: it greedily consumes a lone bracket as an array-type suffix and can't backtrack out of
-  that once the literal's own value-list bracket then fails to appear (see the comment on
-  `SNTX_EXPR_LITERAL` in syntax.c). Resolving this for real needs the base name's type-vs-variable status,
-  which only semantic analysis knows, not the parser - not attempted. Single/empty-value literals
-  currently fall through to plain indexing and fail with confusing errors (`unknown variable`/`operand is
-  not an array`) rather than a clean diagnostic.
+  and `SNTX_STMNT_ASSIGN` (e.g. `result = 100`) genuinely ambiguous with no way to prefer one over the
+  other without a distinguishing token.
+  **Struct literals moved from `[...]` to `{...}`** once the parser rewrite (below) made that safe: type
+  names are now known to the parser (via `ScanTopLevelDecls`/`TypeNameLookup`), so `Type{` only ever
+  commits to struct-literal parsing when `Type` is an actual declared type - an ordinary variable
+  followed by `{` (`if x { y }`) is never affected, since a variable is never mistaken for a type. This
+  also incidentally **closes the old "a literal needs at least two values" gap for structs**: `Wrapper{42}`
+  (a genuine single-field struct literal) parses correctly now, and so does `Point{}` (a clean
+  `WRONG_ARG_COUNT` semantic error instead of a confusing parse failure) - both were structurally
+  impossible under the old bracket-only design. **Array literals deliberately kept `[...]` and their
+  existing single-value gap unchanged** (`int32[1][5]` still misparses as indexing, `int32[][]` still
+  doesn't work) - arrays were explicitly left alone, not swept into the same fix, so this asymmetry
+  between struct and array literals is intentional, not an oversight.
   **Still out of scope:** `Type{}[...]` (heap-indirect struct construction - the first real `malloc` for a
   struct) is deliberately not implemented, since it needs the ownership/lifetime model from the
-  `{}`-heap-allocation open question below to mean anything.
+  ownership-scopes entry below to mean anything.
+- **The parser is hand-written recursive descent, not a table-driven PEG engine.** Full rewrite: `syntax.c`
+  used to store the grammar as data (strings like `"SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O ..."`, interpreted
+  by a generic matcher at parse time); it's now one function per grammar rule (`parseIf`, `parseVarDecl`,
+  `parseExprPrimary`, ...), calling each other directly. Every real production compiler looked at as
+  precedent (Clang, rustc, Go, Swift, and specifically Zig, which this project already takes style cues
+  from) is hand-written recursive descent, not table-driven or generator-based, for exactly the reasons
+  that motivated this: a generic engine has no way to embed a *semantic predicate* ("is this identifier a
+  known type") without becoming stateful and losing its clean separation from semantic analysis, and it
+  can only backtrack the way its own matching algorithm happens to allow - which is precisely what forced
+  the earlier `{...}`→`[...]` delimiter change for literals (see git history) rather than fixing the real
+  problem. A hand-written parser has neither limitation: a predicate is just a function call, and
+  backtracking is exactly whatever `TokenSetCursor` save/restore the code chooses to do.
+  **The tree shape (`struct syntax`/`struct syntaxPart`) is unchanged** - every hand-written `parseX`
+  function builds the exact same node shape the old table engine would have for that rule (including two
+  "invisible" wrapper nodes, `SNTX_TOP_DECL` and `SNTX_STMNT`, which exist only because the old engine gave
+  *every* rule its own wrapper, even a pure alternation - semantic.c's whole tree-walking API
+  (`partSntx`/`firstPartOfType`/`firstTokOfType`/...) needed zero changes as a result, and every existing
+  test kept passing without touching semantic.c's structure. The one real simplification: the old
+  11-rule precedence chain (`SNTX_EXPR_MUL` through `SNTX_EXPR_OR`, one grammar rule per precedence level)
+  is gone, replaced by one `SNTX_EXPR_BINARY` node type built by standard precedence-climbing
+  (`parseBinaryExpr`) - same precedence, same left-associativity, same output shape `buildBinChain` in
+  semantic.c already expected (it was always generic over "however many same-precedence pairs are in this
+  node," so it needed no changes either), just far less grammar to maintain.
+  **Type-name awareness (what makes `Type{...}` safe) needs type names known *before* parsing, not after.**
+  Previously, `ParseSyntax` parsed a whole file with zero awareness of declared names - all name
+  collection happened in a separate, later semantic pass over the finished tree. Now each module does a
+  cheap pre-pass first (`ScanTopLevelDecls` in syntax.c: brace-depth-tracked, skips function bodies
+  entirely, just grabs top-level `type`/`error` names and `import` alias/path pairs) *before* its real
+  parse runs, and `semaLoadModule` in semantic.c was restructured to do this scan - and recursively ensure
+  every imported module has *also* been scanned - before calling the real parser, so `alias.Type{...}`
+  resolves correctly too. Cyclic imports (runner.olang ↔ worker.olang) still work: each module scans its
+  own names before recursing into its imports, so by the time a cyclic partner's scan reaches back to a
+  module already being loaded, that module's own names are already populated.
+  **Dead code removed as part of this:** `TokenTypeFromStr`/`tokenTypeStrCmp` in token.c (an ~80-line
+  if-chain that existed only to parse the old grammar table's rule-definition strings back into token
+  types - a hand-written parser's rules are just C code referencing token types directly, so this whole
+  string round-trip is gone). `TokenStrFromType` (the reverse direction, enum → readable name) stays -
+  still needed for "expected X" error messages, same as before.
+  **Two pre-existing, unrelated gaps found while stress-testing this - both since resolved (see their own
+  entries below):** vocab types had never had any way to construct/reference a value at all, and calling
+  through a function-*valued* parameter/variable segfaulted at runtime. Neither was caused by the parser
+  rewrite (confirmed: the first was never exercised by any test in the project's history, and the second
+  is a codegen bug in a code path the rewrite never touched) - both were just newly discovered by it.
+- **Vocab values: `Type.WORD`, communicating a fixed set and a selection from it - deliberately not a
+  C-enum-style number.** Vocab types were declarable from the start but had no way to construct or read a
+  value at all until now - completely inert, the same gap struct literals had before they existed.
+  `Direction.NORTH` is parsed the same type-name-aware way struct literals are (see the parser-rewrite
+  entry above): the parser commits to a vocab-value read only when the identifier before the dot is a
+  *local* (never alias-qualified) known type, so it's never confused with a real cross-module reference
+  like `sh.SomeType{...}` or an ordinary `localVar.field` member access. Semantically a vocab value is just
+  its declared ordinal (`OperandVocabLiteral`, the same representation an error word already used), but
+  deliberately not treated as a number anywhere: `TypeIsNumeric`/`TypeIsInt` (which gate every
+  arithmetic/ordering/bitwise operator) don't include `BASETYPE_VOCAB`, so `<`, `+`, `&`, etc. are already
+  rejected with the ordinary "operand must be a number" error, no vocab-specific restriction needed.
+  Equality/inequality (`==`/`!=`, unrestricted by type) and `match`/`case` (structural `cgDeepEq`,
+  type-agnostic) already worked generically for any type, so those needed no new code at all - constructing
+  the value was the entire gap. This is a deliberate, narrower design than a C enum: a vocab type
+  communicates a set and a selection from it for comparison and branching, not an underlying orderable/
+  arithmetic number.
+- **Fixed: calling through a function-valued parameter/variable segfaulted.** A bare read of a *global
+  function* (`double` used as a value, as opposed to calling it directly) was being treated like reading
+  any other global: load a value from its mangled address. That's correct for an actual global variable
+  (a real storage slot), but a function symbol *is* its own address already (an LLVM `define`, not a
+  `global`) - there's no separate slot to load through, so the generated code was reading the function's
+  own machine code as if it were a stored pointer, corrupting the very first call through it. Reading a
+  *local* variable or parameter that merely holds a function pointer (e.g. a callee's own parameter `f` in
+  `func apply(f func(n int32) ? int32) ...)`) was never affected - that genuinely is a real storage slot.
+  Fixed in `cgValue` (codegen.c): a bare read of a function that doesn't resolve to a local now returns
+  its mangled address directly instead of loading through it.
 - **Ownership scopes (design settled, implementation partial) - `scope` type + `{}`/`{name}` tagging.**
   Direction, chosen after a long design discussion: olang moves away from "no free/GC, deliberate leak
   forever" toward compiler-enforced (not runtime-checked, not manually-managed) memory *and* resource
@@ -234,7 +302,13 @@ of sync with the actual code.
   roughly inverted from what's built. Not resolved either way yet - explicitly parked, not to be
   silently changed in either direction. Revisit once the ownership/lifetime model above is designed,
   since "what does `{}` mean" and "who owns/frees a `{}` allocation" are really the same question.
-- **Struct/array literal syntax (`Type[v1, v2, ...]`) is unconfirmed.** The "Settled decisions" entry
-  above documents what's actually implemented and working today, but the user has explicitly said they're
-  "not sold" on this syntax - it may still be reworked or dropped. Don't treat that entry as final; don't
-  build further features on top of this syntax assuming it's permanent without checking first.
+  `{}` now has a *third* overloaded meaning too (struct-literal value syntax, `Point{1, 2}`, unrelated to
+  either the heap-indirection marker or a block) - worth keeping in mind if this ever gets resolved, since
+  there'll be three uses of the same two characters to make sense of, not two.
+- **Struct/array literal syntax: array literal syntax is settled; struct literals moved to `{...}`.** The
+  user explicitly confirmed array literals ("fine like they are") and gave the struct-literal delimiter
+  change as a direct instruction - both are implemented as described in the "Settled decisions" entry
+  above, and that instruction reads as continued buy-in on the literal-expression mechanism itself, not
+  renewed doubt about it. What's still genuinely open is narrower than before: not "should literals like
+  this exist," but "is `{...}` this pinned as *the* answer for structs" - still worth checking before
+  building further features on top of it as permanent without confirming.
