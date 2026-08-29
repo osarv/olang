@@ -4,11 +4,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include "util.h"
-#include "list.h"
 #include "token.h"
 #include "syntax.h"
-#include "type.h"
-#include "statement.h"
 #include "semantic.h"
 #include "codegen.h"
 

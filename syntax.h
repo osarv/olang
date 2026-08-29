@@ -1,7 +1,6 @@
 #ifndef SYNTAX_H
 #define SYNTAX_H
 
-#include "list.h"
 #include "token.h"
 #include "util.h"
 

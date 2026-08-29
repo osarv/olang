@@ -4,7 +4,6 @@
 #include <string.h>
 #include "token.h"
 #include "util.h"
-#include "list.h"
 #include "errmsg.h"
 
 struct tokRule {

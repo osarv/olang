@@ -1,7 +1,6 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
-#include "list.h"
 #include "util.h"
 
 typedef struct tokenContext* TokenCtx;
