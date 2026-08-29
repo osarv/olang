@@ -15,7 +15,7 @@ char* findClang() {
 }
 
 void ensureBuildDir() {
-    (void)mkdir(".olang-build", 0755); //already existing is fine
+    (void)mkdir("build", 0755); //already existing is fine
 }
 
 char* baseNameNoExt(char* path) {
@@ -43,18 +43,19 @@ void compileProgram(char* file) {
 
     ensureBuildDir();
     char* base = baseNameNoExt(file);
-    char irPath[512];
-    snprintf(irPath, sizeof(irPath), ".olang-build/%s.ll", base);
+    char irPath[512], binPath[512];
+    snprintf(irPath, sizeof(irPath), "build/%s.ll", base);
+    snprintf(binPath, sizeof(binPath), "build/%s", base);
     CodegenProgram(root, irPath);
 
     char* clang = findClang();
     requireClangOrExplain(clang, irPath);
 
     char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s -lm", clang, base, irPath);
+    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s -lm", clang, binPath, irPath);
     int rc = system(cmd);
     if (rc != 0) { fprintf(stderr, "native compilation failed\n"); exit(EXIT_FAILURE); }
-    printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, base);
+    printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, binPath);
 }
 
 //returns 0 if this file's tests all passed, nonzero otherwise - never exits the process, so the rest of
@@ -70,8 +71,8 @@ int runTestFile(char* file, char* clang) {
     ensureBuildDir();
     char* base = baseNameNoExt(file);
     char irPath[512], binPath[512];
-    snprintf(irPath, sizeof(irPath), ".olang-build/%s_test.ll", base);
-    snprintf(binPath, sizeof(binPath), ".olang-build/%s_test", base);
+    snprintf(irPath, sizeof(irPath), "build/%s_test.ll", base);
+    snprintf(binPath, sizeof(binPath), "build/%s_test", base);
     CodegenTests(root, irPath);
 
     requireClangOrExplain(clang, irPath);

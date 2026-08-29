@@ -1,22 +1,20 @@
 CC = gcc
 CFLAGS = -Wall -Werror -Wextra -Wpedantic -g
 
-bin/%.o: %.c bin
+build/%.o: %.c
+	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 all: clean build run
 
-build: $(addprefix bin/, $(addsuffix .o, $(basename $(wildcard *.c))))
-	$(CC) $(CFLAGS) $^ -o bin/out
+build: $(addprefix build/, $(addsuffix .o, $(basename $(wildcard *.c))))
+	$(CC) $(CFLAGS) $^ -o build/out
 
 run:
-	bin/out -c runner.olang
+	build/out -c runner.olang
 
 test: build
-	bin/out -t shared.olang worker.olang runner.olang
+	build/out -t shared.olang worker.olang runner.olang
 
 clean:
-	rm -rf bin
-
-bin:
-	mkdir bin
+	rm -rf build
