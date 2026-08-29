@@ -124,11 +124,72 @@ of sync with the actual code.
   **Still out of scope:** `Type{}[...]` (heap-indirect struct construction - the first real `malloc` for a
   struct) is deliberately not implemented, since it needs the ownership/lifetime model from the
   `{}`-heap-allocation open question below to mean anything.
+- **Ownership scopes (design settled, implementation partial) - `scope` type + `{}`/`{name}` tagging.**
+  Direction, chosen after a long design discussion: olang moves away from "no free/GC, deliberate leak
+  forever" toward compiler-enforced (not runtime-checked, not manually-managed) memory *and* resource
+  release, modeled on RAII rather than a tracing GC or Rust's full borrow checker. The core idea: every
+  `{}`-heap-indirect value belongs to a *scope* - a nested, strictly FILO-closing region (implemented as a
+  growable, chunked bump allocator: cheap to open, and since nothing inside it is ever freed
+  individually, closing it is an O(1) bulk operation, not a general malloc/free). A bare `{}` (unchanged
+  syntax) means "this value's own private scope, closed when its own call returns"; `{name}` (new) tags a
+  value to an explicitly-passed `scope`-typed parameter instead, so it can escape into the *caller's*
+  scope rather than dying with the callee. Critically, a callee's own private allocations and whatever it
+  writes into a passed-in scope are never the same physical arena - each scope is its own independent
+  chunk-list, so a callee popping its own scope at return can never interfere with something it wrote into
+  a scope it was handed, regardless of allocation order. `scope` is a new, restricted builtin type
+  (lowercase, like `int32`/`bool`) that mirrors how error types are restricted: it may only ever be a
+  function parameter's type (`s scope`) - never a struct field, a return type on its own, an ordinary
+  variable's type, or constructible via any literal - so nothing can "instantiate" one out of thin air,
+  the same way you can't hold an `error`-typed value in a plain variable. `resolveScopeTag`/
+  `isScopeTypeRef` in semantic.c implement this via their own dedicated resolution path, never through
+  the general `resolveTypeExpr`/`resolveTypeRef` used for ordinary types (exactly like
+  `resolveErrorTypeName` is separate from those too) - so `scope` structurally cannot leak into a
+  position it shouldn't. A named tag currently resolves only against the current function's own parameter
+  list (earlier params for another param's type, the full list for the return type or a local var-decl's
+  type) - not against struct fields.
+  **`own` - the root-scope answer.** A new keyword, usable as an ordinary expression anywhere a
+  `scope`-typed value is expected, evaluating to "the enclosing function's own private scope" - the same
+  scope bare `{}` already implicitly means, just now nameable so it can be *passed* (e.g.
+  `makeNode(5, own)`), not just used locally. Deliberately not `self`/`this`: those read as "the current
+  object instance" in every language that has them, and olang has no objects/methods - `own` reads as
+  what it actually is. `main` and every `test { }` block need no special-casing to get a first scope:
+  they already have their own implicit private one like any function does, and can now hand it to a
+  callee via `own`, exactly like any other function would. This stays safe for free, not because of new
+  checking: `own` is just another *source* of a `scope`-typed value alongside a declared parameter, and
+  every existing restriction (`scope` can't be a return type, a struct field, or an ordinary variable's
+  type) applies to it identically - `return own` and `x mut scope = own` are rejected the same way
+  `return s`/`x mut scope = s` already are, so there's no new way for a scope to escape its origin.
+  `OperandOwn` in semantic.c requires `ctx->hasOwnScope` (true inside a function body or a `test { }`
+  block, false for a global initializer, which has no enclosing scope at all).
+  **What's implemented:** the grammar (`{}` optionally carries a `TOK_IDEN`), `scope` as a parameter-only
+  type, `own` as a primary expression, and resolving `{name}` tags in parameter types, return types, and
+  local var-decl types, with the resolved parameter recorded on `struct type.scopeParam` in semantic.h.
+  **A real, pre-existing bug this surfaced and fixed, unrelated to the scope design itself:** a plain
+  struct literal (structMAlloc false) is allowed by the type checker to fit a `{}`-heap-indirect target
+  (structMAlloc true) - `TypeIsSame` deliberately ignores structMAlloc for structs - but codegen was never
+  actually promoting that case to a heap allocation at any of the three places it can happen (a var-decl,
+  a call argument, a return value): it just aliased the literal's own about-to-be-gone stack storage,
+  producing a dangling pointer the instant that stack frame was gone. Silent and easy to miss in a
+  same-function, never-crosses-a-return test; a hard "value doesn't match function result type" LLVM
+  verifier error for the return case, and a real segfault for the call-argument case, once actually
+  exercised. Fixed in `cgStoreInto`/`cgBoundaryValue` (codegen.c): both now malloc-and-copy when the
+  target wants heap-indirect and the source is a plain value, using the *target's* declared type rather
+  than the source operand's own type to decide.
+  **What's deliberately not implemented yet, and why each is its own next step:**
+  (1) **No real arena/chunk-pool allocator** - codegen still treats every `{}`/`{name}` value identically
+  (plain `malloc`, same "deliberate leak" as before, now at least correctly heap-allocated per the fix
+  above); `scopeParam` is currently informational only, not yet read by codegen to pick an arena.
+  (2) **No scope-generic struct types** - a struct field like `next Node{s}` needs the *type itself* to be
+  generic over which scope its self-referential fields belong to (`type Node<s scope> struct {...}`,
+  roughly), which needs a real generics mechanism olang doesn't have in any form yet. Struct fields
+  currently only accept a bare `{}` (still private-scope, unchanged from before); an explicit `{name}` on
+  a struct field correctly fails with `UNKNOWN_SCOPE` rather than silently doing the wrong thing.
+  **Not resolved by any of this:** whether `{}`/no-`{}` has the right direction at all (see the next
+  entry) - this whole design was built on top of the *current* "plain = value, `{}` = heap-indirect"
+  convention rather than settling that question.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
-- **No free/GC for `{}`-heap-allocated structs.** Deliberate leak for now; no ownership/borrow model
-  exists yet. This is the eventual home for the "rust-like compile-time security features" direction.
 - **What `{}` even means is disputed - current implementation may have it backwards.** As implemented
   and described under "Value vs. reference semantics" above, plain `Type` is embedded/by-value and
   `Type{}` is heap-indirect/by-reference. The user's original mental model was closer to the opposite:

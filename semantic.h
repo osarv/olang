@@ -20,6 +20,9 @@ enum baseType {
     BASETYPE_VOCAB,
     BASETYPE_FUNC,
     BASETYPE_ERROR,
+    BASETYPE_SCOPE, //an ownership scope - see the report; only ever a function parameter's type, never
+                     //resolved through the general resolveTypeExpr/resolveTypeRef path (mirrors how error
+                     //types have their own dedicated resolveErrorTypeName lookup, not the general one)
 };
 
 struct type {
@@ -37,7 +40,12 @@ struct type {
 
     //BASETYPE_STRUCT
     struct list vars; //list of struct var: struct members, or function/func-type parameters
-    bool structMAlloc; //true when referenced via a trailing "{}" - heap-indirect, breaks recursive embedding
+    bool structMAlloc; //true when referenced via a trailing "{}" or "{name}" - heap-indirect, breaks
+                        //recursive embedding
+    //valid only when structMAlloc: NULL for a bare "{}" (this value's own private/local scope - not
+    //further distinguished at the type-system level yet, see the report); non-NULL for an explicit
+    //"{name}", pointing at the BASETYPE_SCOPE parameter that value is allocated into
+    struct var* scopeParam;
 
     //BASETYPE_VOCAB, BASETYPE_ERROR
     struct list words; //list of struct token: vocab or error member names

@@ -34,6 +34,8 @@ enum tokenType {
     TOK_FUNC,
     TOK_ERROR,
     TOK_MUT,
+    TOK_OWN, //an expression evaluating to the enclosing function's own private scope, usable anywhere a
+             //"scope"-typed value is expected - see the report
     TOK_IMPORT,
     TOK_TEST,
     TOK_ADD,

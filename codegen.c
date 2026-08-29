@@ -93,6 +93,9 @@ void llvmType(struct type t, char* buf, size_t n) {
         case BASETYPE_VOCAB: snprintf(buf, n, "i32"); return;
         case BASETYPE_ERROR: snprintf(buf, n, "i32"); return;
         case BASETYPE_FUNC: snprintf(buf, n, "ptr"); return;
+        //no real arena/runtime backing exists yet (see the report) - opaque pointer for now, same as any
+        //other reference-shaped value; codegen never actually reads through it yet
+        case BASETYPE_SCOPE: snprintf(buf, n, "ptr"); return;
         case BASETYPE_STRUCT:
             if (t.structMAlloc) snprintf(buf, n, "ptr");
             else structAggSpelling(t, buf, n);
@@ -250,15 +253,33 @@ struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name) {
 
 char* cgZeroValue(struct type t) {
     char* buf = MallocOrCrash(16);
-    bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_STRUCT && t.structMAlloc);
+    bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_SCOPE) ||
+        (t.bType == BASETYPE_STRUCT && t.structMAlloc);
     strcpy(buf, isPtr ? "null" : "zeroinitializer");
     return buf;
 }
 
-void cgStoreInto(struct cgCtx* ctx, struct type t, char* src, char* dstAddr) {
+//srcT is the value's own checked type (which OperandFitsType allows to differ from dstT only in
+//structMAlloc-ness - TypeIsSame deliberately ignores that flag for structs, see the report). A plain
+//struct value (e.g. "Point[1, 2]") stored into a "{}"-heap-indirect target is exactly that case: src is
+//a stack address (cgValue()'s by-ref convention), and storing it as-is into a structMAlloc slot would
+//leave a dangling pointer the moment src's own stack frame is gone - so that combination gets its own
+//malloc-and-copy branch instead of a raw pointer store.
+void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src, char* dstAddr) {
+    if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && srcT.bType == BASETYPE_STRUCT && !srcT.structMAlloc) {
+        char storTy[256];
+        structAggSpelling(srcT, storTy, sizeof(storTy));
+        char* heap = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", heap, TypeGetSize(srcT));
+        char* loaded = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", heap, dstAddr);
+        return;
+    }
     char ty[256];
-    llvmType(t, ty, sizeof(ty));
-    if (typeIsByRef(t)) {
+    llvmType(dstT, ty, sizeof(ty));
+    if (typeIsByRef(dstT)) {
         char* tmp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", tmp, ty, src);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, tmp, dstAddr);
@@ -271,9 +292,24 @@ char* cgValue(struct cgCtx* ctx, struct operand* op);
 char* cgAddr(struct cgCtx* ctx, struct operand* op);
 
 //converts op's cgValue() (a ptr for by-ref types) into the real value to use at a call-argument/return
-//boundary, where aggregates cross by value rather than by our internal storage-pointer convention
-char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op) {
+//boundary, where aggregates cross by value rather than by our internal storage-pointer convention.
+//dstT is the declared type of the slot being crossed into (a parameter's type, or the function's declared
+//return type) - needed for the same malloc-promotion case cgStoreInto handles (a plain struct value, e.g.
+//a literal, crossing into a "{}"-heap-indirect parameter/return type): without it, op's own by-ref
+//address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
+//whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
+char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT) {
     char* v = cgValue(ctx, op);
+    if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && op->type.bType == BASETYPE_STRUCT && !op->type.structMAlloc) {
+        char storTy[256];
+        structAggSpelling(op->type, storTy, sizeof(storTy));
+        char* heap = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", heap, TypeGetSize(op->type));
+        char* loaded = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
+        return heap;
+    }
     if (!typeIsByRef(op->type)) return v;
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
@@ -416,9 +452,12 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, storTy);
         for (int i = 0; i < op->args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
+            //the field's own declared type (not arg->type) is what decides malloc-promotion - a "{}"
+            //field is exactly where a plain struct literal argument needs one (see cgStoreInto)
+            struct type fieldT = (*(struct var*)ListGetIdx(&op->type.vars, i)).type;
             char* fieldAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
-            cgStoreInto(ctx, arg->type, cgValue(ctx, arg), fieldAddr);
+            cgStoreInto(ctx, fieldT, arg->type, cgValue(ctx, arg), fieldAddr);
         }
         return slot;
     }
@@ -432,7 +471,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
             char* elemAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %d\n", elemAddr, storTy, slot, i);
-            cgStoreInto(ctx, arg->type, cgValue(ctx, arg), elemAddr);
+            cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr);
         }
         return slot;
     }
@@ -447,7 +486,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
         char* elemAddr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %d\n", elemAddr, elemTy, bytes, i);
-        cgStoreInto(ctx, arg->type, cgValue(ctx, arg), elemAddr);
+        cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr);
     }
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", agg1, op->args.len);
@@ -469,6 +508,9 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
         //tells the two apart without needing a dedicated flag
         case BASETYPE_ARRAY: return op->tok.type == TOK_STR_LIT ? cgStringLiteralGlobal(ctx, op) : cgAggregateLiteral(ctx, op);
         case BASETYPE_STRUCT: return cgAggregateLiteral(ctx, op);
+        //"own" - no real arena/runtime backing exists yet (see the report), so this is a placeholder,
+        //same as any other not-yet-backed "scope" value
+        case BASETYPE_SCOPE: strcpy(buf, "null"); return buf;
         default: ErrorBugFound(); return buf;
     }
 }
@@ -722,9 +764,12 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     char argsBuf[4096] = "";
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
-        char* av = cgBoundaryValue(ctx, argOp);
+        //the parameter's own declared type (not argOp->type) decides malloc-promotion and the LLVM type
+        //word at the call site - a "{}" parameter is exactly where a plain struct argument needs one
+        struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        char* av = cgBoundaryValue(ctx, argOp, paramT);
         char aty[256];
-        llvmType(argOp->type, aty, sizeof(aty));
+        llvmType(paramT, aty, sizeof(aty));
         char piece[512];
         snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, av);
         strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
@@ -825,13 +870,13 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char* rhs = cgValue(ctx, s->op);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
-    cgStoreInto(ctx, s->var.type, rhs, slot);
+    cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot);
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
     char* val = cgValue(ctx, s->op);
     char* addr = cgAddr(ctx, s->target);
-    cgStoreInto(ctx, s->target->type, val, addr);
+    cgStoreInto(ctx, s->target->type, s->op->type, val, addr);
 }
 
 void cgIf(struct cgCtx* ctx, struct statement* s) {
@@ -866,7 +911,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     char* rhs = cgValue(ctx, s->forInit);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
-    cgStoreInto(ctx, s->var.type, rhs, slot);
+    cgStoreInto(ctx, s->var.type, s->forInit->type, rhs, slot);
 
     int id = ctx->lblCtr++;
     char condLbl[32], bodyLbl[32], endLbl[32];
@@ -943,9 +988,12 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
         ctx->terminated = true;
         return;
     }
+    //the function's own declared return type (not s->op->type) decides malloc-promotion and the LLVM
+    //type word here, same reasoning as the parameter case in cgFuncCall
+    struct type retT = *ctx->curFunc->type.retType;
     char ty[256];
-    llvmType(s->op->type, ty, sizeof(ty));
-    char* val = cgBoundaryValue(ctx, s->op);
+    llvmType(retT, ty, sizeof(ty));
+    char* val = cgBoundaryValue(ctx, s->op, retT);
     if (!fallible) {
         fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
         ctx->terminated = true;
@@ -1018,9 +1066,10 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     char argsBuf[4096] = "";
     for (int i = 0; i < callOp->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&callOp->args, i);
-        char* av = cgBoundaryValue(ctx, argOp);
+        struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        char* av = cgBoundaryValue(ctx, argOp, paramT);
         char aty[256];
-        llvmType(argOp->type, aty, sizeof(aty));
+        llvmType(paramT, aty, sizeof(aty));
         char piece[512];
         snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, av);
         strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
@@ -1192,7 +1241,7 @@ void cgInitGlobalsFunc(struct cgCtx* ctx) {
             char gaddr[256];
             mangleGlobal(mod, v->name, gaddr, sizeof(gaddr));
             char* val = cgValue(ctx, v->initExpr);
-            cgStoreInto(ctx, v->type, val, gaddr);
+            cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr);
         }
     }
     fputs("  ret void\n}\n\n", ctx->fnOut);

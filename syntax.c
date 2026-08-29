@@ -21,7 +21,11 @@ struct syntaxRule rules[] = {
 
     [SNTX_NAME] = {"SNTX_NAME", "TOK_IDEN (TOK_DOT TOK_IDEN)?"},
     [SNTX_ARR_SFX] = {"SNTX_ARR_SFX", "TOK_SQUARE_O SNTX_EXPR? TOK_SQUARE_C"},
-    [SNTX_TYPE_REF] = {"SNTX_TYPE_REF", "SNTX_NAME SNTX_ARR_SFX* (TOK_CURLY_O TOK_CURLY_C)?"},
+    //the optional TOK_IDEN names which scope this heap-indirect reference is allocated into ("{s}") -
+    //bare "{}" (no name) means this value's own private/local scope. See buildLiteralExpr's neighbor,
+    //resolveTypeRefBase, for how the name gets resolved (only where a scope parameter is actually
+    //visible - see the report for which contexts that currently is)
+    [SNTX_TYPE_REF] = {"SNTX_TYPE_REF", "SNTX_NAME SNTX_ARR_SFX* (TOK_CURLY_O TOK_IDEN? TOK_CURLY_C)?"},
     //trailing TOK_STMNT_END? absorbs an implicit end-of-statement synthesized when the last item sits
     //on its own line before '}' (see asiTriggerType in token.c) - these lists are comma-separated, not
     //statement-terminated, but the synthesis is purely lexical and can't tell the difference
@@ -110,7 +114,9 @@ struct syntaxRule rules[] = {
     [SNTX_EXPR_LITERAL] = {"SNTX_EXPR_LITERAL", "SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O SNTX_EXPR_ARGS TOK_SQUARE_C"},
     //a call target may be namespaced ("alias.func(...)"); a bare read may not yet (see the report) - the
     //trailing "(" (call) or "[" (literal) is what disambiguates those from ordinary member access
-    [SNTX_EXPR_PRIMARY] = {"SNTX_EXPR_PRIMARY", "TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|"
+    //TOK_OWN ("own") evaluates to the enclosing function's own private scope - a "scope"-typed value,
+    //usable anywhere one is expected (e.g. passed as an argument) - see buildPrimary
+    [SNTX_EXPR_PRIMARY] = {"SNTX_EXPR_PRIMARY", "TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|TOK_OWN|"
         "SNTX_EXPR_TRY|(SNTX_NAME SNTX_EXPR_CALL)|SNTX_EXPR_LITERAL|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
     [SNTX_EXPR_POSTFIX] = {"SNTX_EXPR_POSTFIX", "SNTX_EXPR_PRIMARY (SNTX_EXPR_INDEX|SNTX_EXPR_MEMBR|TOK_INC|TOK_DEC)*"},
     [SNTX_EXPR_UNARY_OP] = {"SNTX_EXPR_UNARY_OP", "TOK_NOT|TOK_SUB|TOK_BTWSE_INV|TOK_INC|TOK_DEC"},

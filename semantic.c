@@ -51,6 +51,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_VOCAB: return VOCAB_SIZE;
         case BASETYPE_FUNC: return PTR_SIZE;
         case BASETYPE_ERROR: return ERROR_SIZE;
+        case BASETYPE_SCOPE: return PTR_SIZE;
     }
     return 0; //unreachable
 }
@@ -174,6 +175,7 @@ char* TypeDescribe(struct type t) {
         case BASETYPE_VOCAB: return "vocab type";
         case BASETYPE_FUNC: return "func type";
         case BASETYPE_ERROR: return "error type";
+        case BASETYPE_SCOPE: return "scope";
         default: return "type";
     }
 }
@@ -449,11 +451,25 @@ void semaCollectNames(struct semaModule* mod) {
 
 // ---- pass 2: resolve type shapes and function signatures ----
 
-struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode);
+struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
 void resolveTypeDecl(struct type* t);
 
+//resolves a "{name}" heap-indirection tag's optional scope name against scopeParams (the function
+//parameters visible at this point in the signature/body being resolved, or NULL where none are - struct
+//fields and globals, which have no such context; see the report). Bare "{}" (no name token at all) is
+//left as scopeParam == NULL, meaning "this value's own private/local scope".
+struct var* resolveScopeTag(struct syntax* refNode, struct list* scopeParams) {
+    struct list nameToks = allTokOfType(refNode, TOK_IDEN);
+    if (nameToks.len == 0) return NULL;
+    struct token nameTok = *(struct token*)ListGetIdx(&nameToks, 0);
+    struct var* found = scopeParams ? VarGetList(scopeParams, strFromTok(nameTok)) : NULL;
+    if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_SCOPE); return NULL; }
+    if (found->type.bType != BASETYPE_SCOPE) { ErrMsgSemantic(nameTok, NOT_A_SCOPE); return NULL; }
+    return found;
+}
+
 //base type a name resolves to, before any array suffixes on the reference are applied
-struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode) {
+struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct syntax* nameNode = firstPartOfType(refNode, SNTX_NAME);
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
     struct token nameTok;
@@ -497,6 +513,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode) {
     if (!malloced) resolveTypeDecl(found);
     struct type result = *found;
     result.structMAlloc = malloced;
+    if (malloced) result.scopeParam = resolveScopeTag(refNode, scopeParams);
     //a {}-indirect reference may be grabbed while its target is still mid-resolution (that's the whole
     //point - see the comment above); its placeholder bType (still BASETYPE_VOID at that point) must not
     //leak through, since {} syntax only ever refers to a struct
@@ -563,8 +580,8 @@ struct type applyArraySuffixes(struct type base, struct syntax* node) {
     return base;
 }
 
-struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
-    return applyArraySuffixes(resolveTypeRefBase(mod, refNode), refNode);
+struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
+    return applyArraySuffixes(resolveTypeRefBase(mod, refNode, scopeParams), refNode);
 }
 
 //resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
@@ -643,10 +660,38 @@ struct type resolveStructBody(struct semaModule* mod, struct token nameTok, stru
         v.name = memberName;
         v.tok = memberTok;
         v.mut = true;
-        v.type = resolveTypeExpr(mod, typeExprNode);
+        //NULL: a struct field can't reference a scope parameter - that needs the type itself to be
+        //generic over a scope, which olang has no mechanism for yet (see the report). A bare "{}" field
+        //still works fine (structMAlloc, private/local scope); an explicit "{name}" field correctly fails
+        //with UNKNOWN_SCOPE until that generics mechanism exists.
+        v.type = resolveTypeExpr(mod, typeExprNode, NULL);
         ListAdd(&t.vars, &v);
     }
     return t;
+}
+
+//true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "{}"/"{name}" tag, no
+//namespace. "scope" is deliberately never registered as a real type (unlike int32/bool/etc in
+//resolveTypeRefBase) - it only ever resolves here, in a parameter's type position, so it structurally
+//can't appear as a struct field, return type, or ordinary variable's type, mirroring how error types are
+//restricted to their own dedicated grammar slots rather than being usable as a general type.
+static char* typeScopeStr = "scope";
+
+struct type TypeScope(void) {
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_SCOPE;
+    t.name = StrFromCStr(typeScopeStr);
+    return t;
+}
+
+bool isScopeTypeRef(struct syntax* typeExprNode) {
+    struct syntax* actual = partSntx(typeExprNode, 0);
+    if (actual->type != SNTX_TYPE_REF) return false;
+    if (hasTokOfType(actual, TOK_CURLY_O)) return false;
+    if (allPartsOfType(actual, SNTX_ARR_SFX).len != 0) return false;
+    struct list idens = allTokOfType(firstPartOfType(actual, SNTX_NAME), TOK_IDEN);
+    if (idens.len != 1) return false;
+    return StrCmp(strFromTok(*(struct token*)ListGetIdx(&idens, 0)), StrFromCStr("scope"));
 }
 
 void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out) {
@@ -657,11 +702,14 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         struct token nameTok = firstTokOfType(p, TOK_IDEN);
         struct str name = strFromTok(nameTok);
         if (VarGetList(out, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+        struct syntax* typeExprNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         struct var v = (struct var){0};
         v.name = name;
         v.tok = nameTok;
         v.mut = hasTokOfType(p, TOK_MUT);
-        v.type = resolveTypeExpr(mod, firstPartOfType(p, SNTX_TYPE_EXPR));
+        //"out" doubles as this param list's growing scopeParams: an earlier param's name is visible to a
+        //later param's "{name}" tag (e.g. "func f(s scope, n Node{s})"), not the other way around
+        v.type = isScopeTypeRef(typeExprNode) ? TypeScope() : resolveTypeExpr(mod, typeExprNode, out);
         ListAdd(out, &v);
     }
 }
@@ -687,18 +735,22 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     if (retTypeNode) {
         t.hasRetType = true;
         t.retType = MallocOrCrash(sizeof(struct type));
-        *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR));
+        //full param list (t.vars) is already built above, so a return type may reference any of them,
+        //e.g. "func makeNode(v int32, s scope) Node{s}"
+        *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
     }
     return t;
 }
 
-struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode) {
+struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     struct syntax* actual = partSntx(typeExprNode, 0);
     switch (actual->type) {
         case SNTX_VOCAB_BODY: return resolveVocabBody(mod, (struct token){0}, actual);
         case SNTX_STRUCT_BODY: return resolveStructBody(mod, (struct token){0}, actual);
+        //a func-type's own signature builds its own independent parameter list, so it gets no scopeParams
+        //from the surrounding context - nothing outside it could resolve a scope tag against it anyway
         case SNTX_FUNC_TYPE: return resolveFuncSig(mod, firstPartOfType(actual, SNTX_FUNC_SIG));
-        case SNTX_TYPE_REF: return resolveTypeRef(mod, actual);
+        case SNTX_TYPE_REF: return resolveTypeRef(mod, actual, scopeParams);
         default: ErrorBugFound(); return TypeVanilla(BASETYPE_INT32);
     }
 }
@@ -749,7 +801,7 @@ void resolveTypeDecl(struct type* t) {
         if (!StrCmp(strFromTok(declNameTok), t->name)) continue;
 
         struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
-        struct type resolved = resolveTypeExpr(owner, typeExprNode);
+        struct type resolved = resolveTypeExpr(owner, typeExprNode, NULL); //module-level, no function context
         struct str name = t->name;
         struct token tok = t->tok;
         struct semaModule* ownerSave = t->owner;
@@ -786,7 +838,7 @@ void semaResolveModule(struct semaModule* mod) {
             struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
             //":=" (no type node) is resolved later in semaCheckBodies instead, once the initializer
             //operand that its type gets read off exists
-            if (typeExprNode) v->type = resolveTypeExpr(mod, typeExprNode);
+            if (typeExprNode) v->type = resolveTypeExpr(mod, typeExprNode, NULL); //global, no function context
         }
     }
 }
@@ -801,7 +853,11 @@ struct scope {
 struct checkCtx {
     struct semaModule* mod;
     struct scope* scope;
-    struct var* func; //current function (for return-type checking); NULL for global initializers
+    struct var* func; //current function (for return-type checking); NULL for global initializers AND for
+                       //test { } blocks (which have no error union/return type of their own either)
+    bool hasOwnScope; //true inside a function body or a test { } block - both are "own"'s valid range,
+                       //even though only the former also sets func (see the field above); false for a
+                       //global initializer, which has no enclosing scope at all
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
 };
@@ -1337,6 +1393,14 @@ struct operand* buildLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
 }
 
+//"own" - a "scope"-typed value naming the enclosing function's own private scope (see the report). Not
+//isLiteral (unlike the other OPERATION_NONE nodes above): letting ":=" infer off it would smuggle a
+//"scope" value into an ordinary variable, defeating the whole "scope is parameter-only" restriction.
+struct operand* OperandOwn(struct checkCtx* ctx, struct token tok) {
+    if (!ctx->hasOwnScope) ErrMsgSemantic(tok, OWN_OUTSIDE_FUNC);
+    return operandNew(tok, OPERATION_NONE, TypeScope());
+}
+
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
@@ -1346,6 +1410,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             case TOK_FLOAT_LIT: return OperandFloatLiteral(tok);
             case TOK_CHAR_LIT: return OperandCharLiteral(tok);
             case TOK_STR_LIT: return OperandStringLiteral(tok);
+            case TOK_OWN: return OperandOwn(ctx, tok);
             case TOK_IDEN: {
                 struct var* v = lookupVar(ctx, tok);
                 if (!v) return OperandIntLiteral(tok); //placeholder, keeps checking the rest of the file
@@ -1420,7 +1485,8 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
     struct type declType;
     if (typeExprNode) {
-        declType = resolveTypeExpr(ctx->mod, typeExprNode);
+        //ctx->func is NULL for a global initializer, which has no parameter list to tag a "{name}" against
+        declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
         if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
@@ -1527,7 +1593,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* typeExprNode = firstPartOfType(initNode, SNTX_TYPE_EXPR);
     struct type declType;
     if (typeExprNode) {
-        declType = resolveTypeExpr(ctx->mod, typeExprNode);
+        declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
         if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, VALUE_TYPE_MISMATCH);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         if (!initVal->isLiteral) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
@@ -1792,6 +1858,7 @@ void semaCheckBodies(struct semaModule* mod) {
         if (actual->type == SNTX_TEST_DECL) {
             struct checkCtx ctx = {0};
             ctx.mod = mod;
+            ctx.hasOwnScope = true;
             struct semaTest test = (struct semaTest){0};
             struct token descTok = firstTokOfType(actual, TOK_STR_LIT);
             test.description = Str(descTok.str.ptr +1, descTok.str.len -2);
@@ -1818,6 +1885,7 @@ void semaCheckBodies(struct semaModule* mod) {
         ctx.mod = mod;
         ctx.scope = &fnScope;
         ctx.func = func;
+        ctx.hasOwnScope = true;
         func->codeBlock = buildBlock(&ctx, firstPartOfType(actual, SNTX_BLOCK));
     }
 }

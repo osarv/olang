@@ -85,6 +85,29 @@ func classifyPoint(p Point) ? int32 {
     return result
 }
 
+## "scope" is a restricted type (like an error type): only ever a function parameter's type, never a
+## struct field, a return type on its own, or an ordinary variable's type - see CLAUDE.md. A "{name}" tag
+## names which scope-typed parameter a value is allocated into; bare "{}" (unchanged from before) means
+## the value's own private scope. "own" is a keyword evaluating to that private scope as a passable value,
+## so a caller can hand a callee its own scope instead of the callee's default private one.
+func makePoint(x int32, y int32, s scope) ? Point{s} {
+    p mut Point{s} = Point[x, y]
+    return p
+}
+
+## A plain struct literal (structMAlloc false) fitting a "{}"-heap-indirect target (structMAlloc true) is
+## allowed by the type checker (TypeIsSame deliberately ignores structMAlloc for structs), so codegen must
+## malloc-and-copy at every point that promotion can happen - a var-decl, a call argument, and a return
+## value - rather than just aliasing the literal's own (about-to-be-gone) stack storage. See cgStoreInto/
+## cgBoundaryValue in codegen.c.
+func takesHeapPoint(p Point{}) ? int32 {
+    return p.x
+}
+
+func returnsHeapPoint() ? Point{} {
+    return Point[9, 8]
+}
+
 func sumUntil(n int32) ? int32 {
     total mut int32 = 0
     i mut int32 = 1
@@ -220,4 +243,17 @@ test "try/catch: SafeDiv reports failure on divide by zero" {
         failed = true
     }
     assert(failed)
+}
+
+test "own passes a test's own scope down to a scope-parameterized function" {
+    p mut Point{} = makePoint(3, 4, own)
+    assert(p.x == 3)
+    assert(p.y == 4)
+}
+
+test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
+    assert(takesHeapPoint(Point[5, 6]) == 5)
+    q mut Point{} = returnsHeapPoint()
+    assert(q.x == 9)
+    assert(q.y == 8)
 }

@@ -48,6 +48,7 @@ struct tokRule tokRules[] = {
     {TOK_FUNC, "func", NULL},
     {TOK_ERROR, "error", NULL},
     {TOK_MUT, "mut", NULL},
+    {TOK_OWN, "own", NULL},
     {TOK_IMPORT, "import", NULL},
     {TOK_TEST, "test", NULL},
     {TOK_ADD, "+", NULL},
@@ -366,7 +367,7 @@ struct token tokenizeToken(TokenCtx tc) {
 bool stmntEndTriggerType(enum tokenType type) {
     switch (type) {
         case TOK_IDEN: case TOK_INT_LIT: case TOK_FLOAT_LIT: case TOK_CHAR_LIT:
-        case TOK_STR_LIT: case TOK_BOOL_LIT:
+        case TOK_STR_LIT: case TOK_BOOL_LIT: case TOK_OWN:
         case TOK_INC: case TOK_DEC:
         case TOK_PAREN_C: case TOK_SQUARE_C:
         case TOK_RET: case TOK_DONE: case TOK_CRASH:
@@ -545,6 +546,7 @@ enum tokenType TokenTypeFromStr(char* str) {
     if (tokenTypeStrCmp(str, "TOK_FUNC")) return TOK_FUNC;
     if (tokenTypeStrCmp(str, "TOK_ERROR")) return TOK_ERROR;
     if (tokenTypeStrCmp(str, "TOK_MUT")) return TOK_MUT;
+    if (tokenTypeStrCmp(str, "TOK_OWN")) return TOK_OWN;
     if (tokenTypeStrCmp(str, "TOK_IMPORT")) return TOK_IMPORT;
     if (tokenTypeStrCmp(str, "TOK_TEST")) return TOK_TEST;
     if (tokenTypeStrCmp(str, "TOK_ADD")) return TOK_ADD;
