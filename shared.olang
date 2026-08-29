@@ -104,8 +104,23 @@ func takesHeapPoint(p Point{}) ? int32 {
     return p.x
 }
 
-func returnsHeapPoint() ? Point{} {
+func returnsHeapPoint(s scope) ? Point{s} {
     return Point[9, 8]
+}
+
+## Exercises the real arena allocator (emitScopeRuntime in codegen.c), not just the type-checking: many
+## allocations into one still-open scope forces chunk growth (linking on more than one chunk), and calling
+## this repeatedly forces __olang_scope_close/__olang_scope_alloc to actually recycle chunks through the
+## free pool rather than just malloc-and-leak.
+func sumManyPoints(n int32, s scope) ? int32 {
+    total mut int32 = 0
+    i mut int32 = 0
+    do {
+        p mut Point{s} = Point[i, i]
+        total = total + p.x
+        i++
+    } while i < n
+    return total
 }
 
 func sumUntil(n int32) ? int32 {
@@ -253,7 +268,23 @@ test "own passes a test's own scope down to a scope-parameterized function" {
 
 test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
     assert(takesHeapPoint(Point[5, 6]) == 5)
-    q mut Point{} = returnsHeapPoint()
+    q mut Point{} = returnsHeapPoint(own)
     assert(q.x == 9)
     assert(q.y == 8)
+}
+
+test "the real arena allocator handles chunk growth and reuse across many scope open/close cycles" {
+    expectedOneRound mut int32 = 0
+    i mut int32 = 0
+    do {
+        expectedOneRound = expectedOneRound + i
+        i++
+    } while i < 300
+    round mut int32 = 0
+    total mut int32 = 0
+    do {
+        total = total + sumManyPoints(300, own)
+        round++
+    } while round < 10
+    assert(total == expectedOneRound * 10)
 }

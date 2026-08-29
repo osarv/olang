@@ -25,7 +25,8 @@ long long TypeGetSize(struct type t);
 
 long long getArraySize(struct type t) {
     if (t.arrMalloc) return PTR_SIZE;
-    return TypeGetSize(*t.arrElem);
+    long long n = t.arrLen ? t.arrLen->intLiteralVal : 0;
+    return TypeGetSize(*t.arrElem) * n;
 }
 
 long long getStructSize(struct type t) {
@@ -738,6 +739,16 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //full param list (t.vars) is already built above, so a return type may reference any of them,
         //e.g. "func makeNode(v int32, s scope) Node{s}"
         *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
+        //a bare "{}" return type is always wrong, not just sometimes: the function's own private scope
+        //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
+        //would already be dangling before the caller ever sees it - catching this once, here, covers
+        //every return statement in the function (single, multiple, implicit fallthrough, error
+        //propagation) without needing to inspect each one individually. Doesn't catch a bare "{}" field
+        //nested inside a plain (non-heap-indirect) returned struct - that's the same still-open
+        //scope-generics gap as struct fields generally (see the report), not attempted here.
+        if (t.retType->bType == BASETYPE_STRUCT && t.retType->structMAlloc && !t.retType->scopeParam) {
+            ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), BARE_SCOPE_RETURN_TYPE);
+        }
     }
     return t;
 }

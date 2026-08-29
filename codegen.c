@@ -31,6 +31,11 @@ struct cgCtx {
     struct semaModule* curMod; //module whose function/global/test body is currently being generated
     struct var* curFunc; //function currently being generated; NULL outside a real function body (globals/tests)
     struct cgScope* scope;
+    //the current function's own private scope - an alloca'd %olang.scope, lazily-empty until the first
+    //"{}"/"own" allocation actually touches it (see the report). NULL outside a real function/test body
+    //(globals, the program-main wrapper, the test harness's own non-per-test code), where "own" is never
+    //reachable (checked in semantic.c via ctx->hasOwnScope) so this is never read there.
+    char* ownScopeSlot;
     int tmpCtr;
     int lblCtr;
     int strCtr;
@@ -177,6 +182,14 @@ void cgBr(struct cgCtx* ctx, char* label) {
 //calleeType's error types `code` actually is is a runtime fact, so this is a runtime remap (a small chain
 //of selects - calleeType.errors.len is always small), even though every operand of it is otherwise a
 //compile-time constant computed purely from the two (already mutually visible) signatures involved.
+//emitted right before every "ret" of a real function/test body (never for the synthesized wrapper
+//functions - global-init, program-main, the test harness's own dispatch loop - which have no own scope
+//at all, ownScopeSlot stays NULL there). Reclaims this function's own private scope's chunks back to the
+//pool - see emitScopeRuntime. A safe no-op if the scope was never actually used (still empty).
+void cgCloseOwnScope(struct cgCtx* ctx) {
+    if (ctx->ownScopeSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
+}
+
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* calleeOrd = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", calleeOrd, code);
@@ -206,6 +219,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* newCode = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
+    cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %s\n", newCode);
     } else {
@@ -259,18 +273,34 @@ char* cgZeroValue(struct type t) {
     return buf;
 }
 
+char* cgLookupVarAddr(struct cgCtx* ctx, struct var* v);
+
+//the runtime "ptr" value for a scopeParam field (see semantic.h): NULL means "this value's own private
+//scope" (the enclosing function/test's own alloca, same as "own" itself evaluates to - see cgLiteral);
+//non-NULL names a scope-typed parameter, whose current value (whatever scope its own caller passed) is
+//just an ordinary local read.
+char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
+    if (!scopeParam) return ctx->ownScopeSlot;
+    char* addr = cgLookupVarAddr(ctx, scopeParam);
+    char* loaded = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", loaded, addr);
+    return loaded;
+}
+
 //srcT is the value's own checked type (which OperandFitsType allows to differ from dstT only in
 //structMAlloc-ness - TypeIsSame deliberately ignores that flag for structs, see the report). A plain
 //struct value (e.g. "Point[1, 2]") stored into a "{}"-heap-indirect target is exactly that case: src is
 //a stack address (cgValue()'s by-ref convention), and storing it as-is into a structMAlloc slot would
 //leave a dangling pointer the moment src's own stack frame is gone - so that combination gets its own
-//malloc-and-copy branch instead of a raw pointer store.
+//malloc-and-copy branch instead of a raw pointer store. The heap storage itself now comes from dstT's own
+//scope (cgResolveScope), not a bare @malloc - see emitScopeRuntime.
 void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src, char* dstAddr) {
     if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && srcT.bType == BASETYPE_STRUCT && !srcT.structMAlloc) {
         char storTy[256];
         structAggSpelling(srcT, storTy, sizeof(storTy));
+        char* scopeVal = cgResolveScope(ctx, dstT.scopeParam);
         char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", heap, TypeGetSize(srcT));
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
         char* loaded = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
@@ -303,8 +333,9 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT) {
     if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && op->type.bType == BASETYPE_STRUCT && !op->type.structMAlloc) {
         char storTy[256];
         structAggSpelling(op->type, storTy, sizeof(storTy));
+        char* scopeVal = cgResolveScope(ctx, dstT.scopeParam);
         char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", heap, TypeGetSize(op->type));
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
         char* loaded = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
@@ -508,9 +539,9 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
         //tells the two apart without needing a dedicated flag
         case BASETYPE_ARRAY: return op->tok.type == TOK_STR_LIT ? cgStringLiteralGlobal(ctx, op) : cgAggregateLiteral(ctx, op);
         case BASETYPE_STRUCT: return cgAggregateLiteral(ctx, op);
-        //"own" - no real arena/runtime backing exists yet (see the report), so this is a placeholder,
-        //same as any other not-yet-backed "scope" value
-        case BASETYPE_SCOPE: strcpy(buf, "null"); return buf;
+        //"own" - the only expression that ever produces a bare BASETYPE_SCOPE value (see the report) -
+        //is just the current function/test's own scope alloca, set up in cgFunction/cgTestHarnessMain
+        case BASETYPE_SCOPE: return ctx->ownScopeSlot;
         default: ErrorBugFound(); return buf;
     }
 }
@@ -984,16 +1015,20 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
 void cgRet(struct cgCtx* ctx, struct statement* s) {
     bool fallible = ctx->curFunc && ctx->curFunc->type.errors.len > 0;
     if (!s->op) {
+        cgCloseOwnScope(ctx);
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
         return;
     }
     //the function's own declared return type (not s->op->type) decides malloc-promotion and the LLVM
-    //type word here, same reasoning as the parameter case in cgFuncCall
+    //type word here, same reasoning as the parameter case in cgFuncCall. Computed before closing this
+    //function's own scope below: a bare "{}" return type is rejected at the signature level (see
+    //resolveFuncSig), so this can never itself resolve to the own scope that's about to close.
     struct type retT = *ctx->curFunc->type.retType;
     char ty[256];
     llvmType(retT, ty, sizeof(ty));
     char* val = cgBoundaryValue(ctx, s->op, retT);
+    cgCloseOwnScope(ctx);
     if (!fallible) {
         fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
         ctx->terminated = true;
@@ -1034,6 +1069,7 @@ void cgCrash(struct cgCtx* ctx, struct statement* s) {
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
+    cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
         ctx->terminated = true;
@@ -1195,6 +1231,8 @@ void emitGlobalDecls(FILE* out) {
     }
 }
 
+void emitScopeRuntime(FILE* out);
+
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
  * to a test harness's recovery point (when @__olang_jmp_target is set) or hard-abort (outside test mode,
  * where it's always null). jmp_buf is assumed to be glibc's x86-64 Linux 200-byte layout - see report. */
@@ -1224,6 +1262,113 @@ void emitRuntimeDecls(FILE* out) {
         "soft:\n"
         "  call void @longjmp(ptr %tgt, i32 1)\n"
         "  unreachable\n"
+        "}\n\n", out);
+    emitScopeRuntime(out);
+}
+
+/* the real backing for "scope"/"own"/"{name}" (see the report): every scope is a growable, chunked
+ * bump allocator. A chunk is { next, used, cap } followed immediately by cap bytes of data; a scope is
+ * just a chunk-list head, lazily null until first use. Allocating only ever bumps a cursor or links on
+ * one more chunk - nothing is ever freed individually. Closing a scope doesn't return memory to the OS at
+ * all: it splices the whole chunk list onto @__olang_chunk_pool (a single global free-list) in one O(1)
+ * operation (after an O(chunks-in-this-scope) walk to find the tail to splice at), so the very next scope
+ * that needs a chunk anywhere in the program can reuse it without ever calling malloc again. This is
+ * exactly the "arena allocator, but the whole language's memory model is built out of scopes of these"
+ * design from the report - not yet wired to reclaim scope-generic struct fields (they don't exist yet)
+ * or anything beyond the current function/test's own private scope and whatever scope was explicitly
+ * passed to it. */
+void emitScopeRuntime(FILE* out) {
+    fputs(
+        "%olang.chunk = type { ptr, i64, i64 }\n" //next, used, cap - data follows immediately after
+        "%olang.scope = type { ptr }\n"           //head chunk, or null if nothing allocated yet
+        "@__olang_chunk_pool = global ptr null\n"
+        "\n"
+        //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
+        //larger, original capacity) or freshly malloc'd at max(4096, size) bytes
+        "define ptr @__olang_new_chunk(i64 %size) {\n"
+        "entry:\n"
+        "  %pool = load ptr, ptr @__olang_chunk_pool\n"
+        "  %poolnull = icmp eq ptr %pool, null\n"
+        "  br i1 %poolnull, label %fresh, label %trypool\n"
+        "trypool:\n"
+        "  %capptr = getelementptr %olang.chunk, ptr %pool, i32 0, i32 2\n"
+        "  %cap = load i64, ptr %capptr\n"
+        "  %fits = icmp uge i64 %cap, %size\n"
+        "  br i1 %fits, label %usepool, label %fresh\n"
+        "usepool:\n"
+        "  %nextptr = getelementptr %olang.chunk, ptr %pool, i32 0, i32 0\n"
+        "  %next = load ptr, ptr %nextptr\n"
+        "  store ptr %next, ptr @__olang_chunk_pool\n"
+        "  %usedptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 1\n"
+        "  store i64 0, ptr %usedptr.p\n"
+        "  ret ptr %pool\n"
+        "fresh:\n"
+        "  %big = icmp ugt i64 %size, 4096\n"
+        "  %reqsize = select i1 %big, i64 %size, i64 4096\n"
+        "  %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64\n"
+        "  %total = add i64 %hdrsize, %reqsize\n"
+        "  %new = call ptr @malloc(i64 %total)\n"
+        "  %usedptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 1\n"
+        "  store i64 0, ptr %usedptr.n\n"
+        "  %capptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 2\n"
+        "  store i64 %reqsize, ptr %capptr.n\n"
+        "  ret ptr %new\n"
+        "}\n\n"
+        //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
+        //doesn't have room
+        "define ptr @__olang_scope_alloc(ptr %scope, i64 %size) {\n"
+        "entry:\n"
+        "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
+        "  %head = load ptr, ptr %headptr\n"
+        "  %headnull = icmp eq ptr %head, null\n"
+        "  br i1 %headnull, label %needchunk, label %checkspace\n"
+        "checkspace:\n"
+        "  %csusedptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 1\n"
+        "  %csused = load i64, ptr %csusedptr\n"
+        "  %cscapptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 2\n"
+        "  %cscap = load i64, ptr %cscapptr\n"
+        "  %remaining = sub i64 %cscap, %csused\n"
+        "  %fits = icmp uge i64 %remaining, %size\n"
+        "  br i1 %fits, label %alloc, label %needchunk\n"
+        "needchunk:\n"
+        "  %newchunk = call ptr @__olang_new_chunk(i64 %size)\n"
+        "  %oldhead = load ptr, ptr %headptr\n"
+        "  %newnextptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 0\n"
+        "  store ptr %oldhead, ptr %newnextptr\n"
+        "  store ptr %newchunk, ptr %headptr\n"
+        "  br label %alloc\n"
+        "alloc:\n"
+        "  %curhead = load ptr, ptr %headptr\n"
+        "  %curusedptr = getelementptr %olang.chunk, ptr %curhead, i32 0, i32 1\n"
+        "  %curused = load i64, ptr %curusedptr\n"
+        "  %dataptr = getelementptr %olang.chunk, ptr %curhead, i32 1\n"
+        "  %result = getelementptr i8, ptr %dataptr, i64 %curused\n"
+        "  %newused = add i64 %curused, %size\n"
+        "  store i64 %newused, ptr %curusedptr\n"
+        "  ret ptr %result\n"
+        "}\n\n"
+        //splices this scope's entire chunk list onto the free pool in one O(1) op (after walking to find
+        //this list's own tail) and resets the scope back to empty/lazy
+        "define void @__olang_scope_close(ptr %scope) {\n"
+        "entry:\n"
+        "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
+        "  %head = load ptr, ptr %headptr\n"
+        "  %empty = icmp eq ptr %head, null\n"
+        "  br i1 %empty, label %done, label %walk\n"
+        "walk:\n"
+        "  %cur = phi ptr [ %head, %entry ], [ %next, %walk ]\n"
+        "  %tailnextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
+        "  %next = load ptr, ptr %tailnextptr\n"
+        "  %atend = icmp eq ptr %next, null\n"
+        "  br i1 %atend, label %linkpool, label %walk\n"
+        "linkpool:\n"
+        "  %poolhead = load ptr, ptr @__olang_chunk_pool\n"
+        "  store ptr %poolhead, ptr %tailnextptr\n"
+        "  store ptr %head, ptr @__olang_chunk_pool\n"
+        "  store ptr null, ptr %headptr\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret void\n"
         "}\n\n", out);
 }
 
@@ -1279,12 +1424,23 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
         fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
     }
 
+    //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the
+    //sense that no chunk is grabbed until something actually allocates into it) until "own" or a bare
+    //"{}" allocation touches it; harmless and cheap to always set up even when never used.
+    char* ownScope = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = alloca %%olang.scope\n", ownScope);
+    char* ownScopeHeadPtr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.scope, ptr %s, i32 0, i32 0\n", ownScopeHeadPtr, ownScope);
+    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", ownScopeHeadPtr);
+    ctx->ownScopeSlot = ownScope;
+
     for (int i = 0; i < func->codeBlock.len; i++) {
         struct statement* s = ListGetIdx(&func->codeBlock, i);
         cgStatement(ctx, s);
     }
 
     if (!ctx->terminated) {
+        cgCloseOwnScope(ctx);
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
             //function's implicit zero-value return below - zeroinitializer's i32 field is code 0
@@ -1298,6 +1454,7 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     }
     fputs("}\n\n", ctx->fnOut);
     ctx->curFunc = NULL;
+    ctx->ownScopeSlot = NULL;
     cgPopScope(ctx);
 }
 
@@ -1427,7 +1584,20 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         ctx->terminated = true;
 
         cgLabel(ctx, runLbl);
+        //this test's own private scope, same as any real function gets (see cgFunction) - a test body may
+        //use "own"/bare "{}" exactly like a function body can (see ctx->hasOwnScope in semantic.c). Not
+        //closed on the assert-failure path (the longjmp above bypasses this normal control flow entirely)
+        //- a known, deliberate v1 simplification: those chunks just aren't returned to the pool for reuse
+        //on a failed test, nothing unsafe about it (see the report).
+        char* testScope = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = alloca %%olang.scope\n", testScope);
+        char* testScopeHeadPtr = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.scope, ptr %s, i32 0, i32 0\n", testScopeHeadPtr, testScope);
+        fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", testScopeHeadPtr);
+        ctx->ownScopeSlot = testScope;
         cgBlock(ctx, &t->codeBlock);
+        cgCloseOwnScope(ctx);
+        ctx->ownScopeSlot = NULL;
         cgBr(ctx, passLbl);
 
         cgLabel(ctx, passLbl);

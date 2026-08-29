@@ -175,15 +175,52 @@ of sync with the actual code.
   exercised. Fixed in `cgStoreInto`/`cgBoundaryValue` (codegen.c): both now malloc-and-copy when the
   target wants heap-indirect and the source is a plain value, using the *target's* declared type rather
   than the source operand's own type to decide.
-  **What's deliberately not implemented yet, and why each is its own next step:**
-  (1) **No real arena/chunk-pool allocator** - codegen still treats every `{}`/`{name}` value identically
-  (plain `malloc`, same "deliberate leak" as before, now at least correctly heap-allocated per the fix
-  above); `scopeParam` is currently informational only, not yet read by codegen to pick an arena.
-  (2) **No scope-generic struct types** - a struct field like `next Node{s}` needs the *type itself* to be
+  **The real arena/chunk-pool allocator is now implemented** (`emitScopeRuntime` in codegen.c, hand-emitted
+  LLVM IR alongside `__olang_assert_fail` and the other runtime support - no separate C runtime file).
+  `%olang.chunk = { ptr next, i64 used, i64 cap }` with `cap` bytes of data immediately following the
+  header; `%olang.scope = { ptr head }`, lazily null until first use. `__olang_scope_alloc` bumps a
+  cursor in the current chunk, or grabs one more (from a single global free-list, `@__olang_chunk_pool`,
+  before ever calling `malloc`) and links it on when the current one doesn't have room - nothing is ever
+  freed individually, matching the design. `__olang_scope_close` splices a scope's *entire* chunk list
+  onto the free pool in one O(1) op (after an O(chunks-in-this-scope) walk to find its own tail) - the
+  next scope anywhere in the program that needs a chunk can reuse it without touching the OS. Every real
+  function and every `test { }` block gets its own private `%olang.scope` alloca at entry (cheap even
+  when unused - lazy, and `-O3` cleans up the rest); `own` now evaluates to that alloca instead of a
+  placeholder; `cgStoreInto`/`cgBoundaryValue`'s malloc-promotion branches now call
+  `__olang_scope_alloc(cgResolveScope(...), size)` instead of bare `malloc`; `cgCloseOwnScope` is called
+  right before every real `ret` a function can hit (explicit `return`, `error`, the try/catch error-
+  propagation path, and the implicit fell-off-the-end case) - stress-tested with thousands of allocations
+  across many scope open/close cycles, including allocations larger than one default (4096-byte) chunk.
+  **New restriction this required, not just an implementation detail: a function's return type can never
+  be a bare `{}` (untagged) heap-indirect struct** (`BARE_SCOPE_RETURN_TYPE`, checked once in
+  `resolveFuncSig`, which covers every return statement in that function for free). Before the real
+  allocator existed this was harmless (plain `malloc`, nothing ever got reclaimed); the moment "own"'s
+  scope actually closes at return, a value tagged to it would already be dangling before the caller ever
+  saw it - the function's own private scope closes at the exact point it returns. Return something tagged
+  to an explicitly-*passed* scope instead (`{s}`, e.g. `func f(s scope) ? Node{s}`), same as escaping to a
+  caller always required. This does **not** catch a bare `{}` field nested inside a plain (non-heap-
+  indirect) struct that then gets returned - that's the same still-open scope-generics gap below, not
+  attempted here.
+  **A second, separate, more severe pre-existing bug found and fixed while stress-testing this:**
+  `TypeGetSize`'s fixed-array case (`getArraySize` in semantic.c) computed only *one element's* size,
+  completely ignoring the array's length - so any struct or array containing a fixed-size array field was
+  under-sized at every point `TypeGetSize` drives a `malloc`/`__olang_scope_alloc` call, a real heap
+  buffer overflow. Invisible before this session (nothing sized a struct's malloc off `TypeGetSize` at all
+  until the boundary-crossing fix earlier in this file's history, and that fix's own test structs happened
+  to have no array fields); caught here because a stress test finally used a struct with one. Fixed to
+  multiply by the element count.
+  **What's deliberately still not implemented, and why each is its own next step:**
+  (1) **No scope-generic struct types** - a struct field like `next Node{s}` needs the *type itself* to be
   generic over which scope its self-referential fields belong to (`type Node<s scope> struct {...}`,
   roughly), which needs a real generics mechanism olang doesn't have in any form yet. Struct fields
-  currently only accept a bare `{}` (still private-scope, unchanged from before); an explicit `{name}` on
-  a struct field correctly fails with `UNKNOWN_SCOPE` rather than silently doing the wrong thing.
+  currently only accept a bare `{}` (private-scope); an explicit `{name}` on a struct field correctly
+  fails with `UNKNOWN_SCOPE`, and a plain struct wrapping a bare-`{}` field that then escapes via return
+  is the one dangling-pointer shape the allocator can't yet catch (see above) - both are the same
+  underlying gap. (2) **Known, deliberate v1 simplifications, not bugs:** a failed test's scope never
+  closes (the assert-failure longjmp bypasses normal control flow entirely) - its chunks just aren't
+  returned to the pool for reuse, nothing unsafe about it, just slightly less reuse on a failing run; and
+  `__olang_new_chunk` only checks the free pool's *head* chunk for a fit before falling back to `malloc` -
+  a deliberate O(1) tradeoff, since the pool is expected to be mostly-uniform default-sized chunks.
   **Not resolved by any of this:** whether `{}`/no-`{}` has the right direction at all (see the next
   entry) - this whole design was built on top of the *current* "plain = value, `{}` = heap-indirect"
   convention rather than settling that question.
