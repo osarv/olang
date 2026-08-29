@@ -1,0 +1,152 @@
+## Imports shared.olang for its types/errors/functions, and imports runner.olang - which imports this
+## file right back, forming a genuine import cycle (see runner.olang for the other half).
+
+import sh "shared.olang"
+import rn "runner.olang"
+
+error WorkerError {
+    BAD_INPUT
+}
+
+error InputError {
+    NEGATIVE,
+    TOO_BIG
+}
+
+func Classify(n int32) sh.RangeError + WorkerError ? int32 {
+    if n < 0 {
+        error WorkerError.BAD_INPUT
+    }
+    return try sh.CheckRange(n, 0, 100)
+}
+
+## combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
+## re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
+## ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
+func classifyInput(n int32) WorkerError + InputError ? int32 {
+    if n < 0 {
+        error InputError.NEGATIVE
+    }
+    if n > 1000 {
+        error InputError.TOO_BIG
+    }
+    if n == 0 {
+        error WorkerError.BAD_INPUT
+    }
+    return n
+}
+
+func reclassifyInput(n int32) InputError + WorkerError ? int32 {
+    return try classifyInput(n)
+}
+
+func checkRangeOk(n int32) ? bool {
+    ok mut bool = true
+    try sh.CheckRange(n, 0, 100) catch sh.RangeError {
+        ok = false
+    }
+    return ok
+}
+
+func AskRunner(n int32) ? int32 {
+    return rn.DoubleIt(n)
+}
+
+test "Classify accepts values inside the range" {
+    ok mut bool = true
+    try Classify(50) catch sh.RangeError || WorkerError {
+        ok = false
+    }
+    assert(ok)
+}
+
+test "Classify rejects negative input with its own error" {
+    caught mut bool = false
+    try Classify(-1) catch sh.RangeError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "Classify rejects out-of-range input with the shared error" {
+    caught mut bool = false
+    try Classify(500) catch sh.RangeError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "checkRangeOk reports success and failure correctly" {
+    assert(checkRangeOk(50))
+    assert(!checkRangeOk(500))
+}
+
+test "reordered propagation identifies negative correctly" {
+    caught mut bool = false
+    try reclassifyInput(-1) catch InputError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "reordered propagation identifies too-big correctly" {
+    caught mut bool = false
+    try reclassifyInput(2000) catch InputError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "reordered propagation identifies bad-input correctly" {
+    caught mut bool = false
+    try reclassifyInput(0) catch InputError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "reordered propagation: catching both combined error types with ||" {
+    caught mut bool = false
+    try reclassifyInput(-1) catch InputError || WorkerError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "reordered propagation: success path is unaffected by the reordering" {
+    caught mut bool = false
+    try reclassifyInput(50) catch InputError || WorkerError {
+        caught = true
+    }
+    assert(!caught)
+}
+
+test "cross-module: ComputeChecked identifies div-by-zero correctly" {
+    caught mut bool = false
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError || sh.RangeError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "cross-module: ComputeChecked identifies too-small correctly" {
+    caught mut bool = false
+    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError || sh.RangeError {
+        caught = true
+    }
+    assert(caught)
+}
+
+## exercises the "alias.Type.word" catch form specifically (3 identifiers) - every other cross-module
+## catch in this file uses the whole-type "alias.Type" form (2 identifiers) instead
+test "cross-module: catching a specific word by its full alias.Type.word name" {
+    caught mut bool = false
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO || sh.MathError.OVERFLOW || sh.RangeError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "calling across the worker/runner import cycle" {
+    assert(AskRunner(21) == 42)
+}

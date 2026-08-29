@@ -295,7 +295,7 @@ char* cgLookupVarAddr(struct cgCtx* ctx, struct var* v) {
     struct cgLocal* l = cgFindLocal(ctx, v->name);
     if (l) return l->llvmVal;
     char* buf = MallocOrCrash(256);
-    mangleGlobal(ctx->curMod, v->name, buf, 256);
+    mangleGlobal(v->owner, v->name, buf, 256);
     return buf;
 }
 
@@ -659,7 +659,7 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
         target = loaded;
     } else {
         target = MallocOrCrash(256);
-        mangleGlobal(ctx->curMod, func->name, target, 256);
+        mangleGlobal(func->owner, func->name, target, 256);
     }
 
     char argsBuf[4096] = "";
@@ -909,9 +909,19 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
 
 //exit is treated as a plain OS process exit (like C's exit()), unrelated to the function's declared error
 //list - see the report for why (this is an assumption about language semantics, not yet confirmed)
-void cgExit(struct cgCtx* ctx, struct statement* s) {
-    char* code = s->op ? cgValue(ctx, s->op) : "0";
-    fprintf(ctx->fnOut, "  call void @exit(i32 %s)\n", code);
+//done/crash are a plain OS process exit with a fixed status, from anywhere - unrelated to the enclosing
+//function's declared error union on purpose (see the report: terminating the whole process is a
+//different operation from returning to a caller, same as Zig's/Rust's process-exit functions)
+void cgDone(struct cgCtx* ctx, struct statement* s) {
+    (void)s;
+    fputs("  call void @exit(i32 0)\n", ctx->fnOut);
+    fputs("  unreachable\n", ctx->fnOut);
+    ctx->terminated = true;
+}
+
+void cgCrash(struct cgCtx* ctx, struct statement* s) {
+    (void)s;
+    fputs("  call void @exit(i32 1)\n", ctx->fnOut);
     fputs("  unreachable\n", ctx->fnOut);
     ctx->terminated = true;
 }
@@ -949,7 +959,7 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
         target = loaded;
     } else {
         target = MallocOrCrash(256);
-        mangleGlobal(ctx->curMod, func->name, target, 256);
+        mangleGlobal(func->owner, func->name, target, 256);
     }
     char argsBuf[4096] = "";
     for (int i = 0; i < callOp->args.len; i++) {
@@ -1035,7 +1045,8 @@ void cgStatement(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_DO: cgDo(ctx, s); return;
         case STATEMENT_MATCH: cgMatch(ctx, s); return;
         case STATEMENT_RET: cgRet(ctx, s); return;
-        case STATEMENT_EXIT: cgExit(ctx, s); return;
+        case STATEMENT_DONE: cgDone(ctx, s); return;
+        case STATEMENT_CRASH: cgCrash(ctx, s); return;
         case STATEMENT_ERROR: cgError(ctx, s); return;
         case STATEMENT_TRY_CATCH: cgTryCatch(ctx, s); return;
         default: ErrorBugFound(); return;
@@ -1087,10 +1098,12 @@ void emitGlobalDecls(FILE* out) {
 void emitRuntimeDecls(FILE* out) {
     fputs(
         "declare i32 @printf(ptr, ...)\n"
+        "declare i32 @fputs(ptr, ptr)\n"
         "declare void @abort() noreturn\n"
         "declare void @exit(i32) noreturn\n"
         "declare ptr @malloc(i64)\n"
         "declare i32 @setjmp(ptr) returns_twice\n"
+        "@stderr = external global ptr\n"
         "declare void @longjmp(ptr, i32) noreturn\n"
         "\n"
         "@__olang_jmp_target = global ptr null\n"
@@ -1213,8 +1226,10 @@ void cgEmitModuleDecls(FILE* out) {
     fputs("\n", out);
 }
 
-//converts the root module's olang main() result into a process exit code: int32 used directly, bool
-//true/false -> 0/1, anything else (void, int64 truncated) -> 0
+//main's signature is fixed to "<errors> ? void" (checked in semantic.c: no params, no success type, at
+//least one declared error) - so its LLVM return is always a bare i32 code, no payload to worry about.
+//code 0 -> process exit 0. Nonzero -> prints which declared error it was to stderr, then exits 1 (the
+//OS-standard success/failure pair - see the report for why a finer-grained exit code isn't worth it).
 void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     struct var* mainFunc = VarGetList(&root->vars, StrFromCStr("main"));
     fputs("define i32 @main() {\nentry:\n", ctx->fnOut);
@@ -1223,77 +1238,45 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     char mname[256];
     mangleGlobal(root, mainFunc->name, mname, sizeof(mname));
 
-    if (mainFunc->type.errors.len > 0) {
-        //no try/catch yet (see the report): an uncaught error out of main is a hard failure, same as any
-        //other unhandled fallible call
-        char wrapTy[256];
-        llvmFuncRetType(mainFunc->type, wrapTy, sizeof(wrapTy));
-        char* raw = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call %s %s()\n", raw, wrapTy, mname);
-        char* code = raw;
-        if (mainFunc->type.hasRetType) {
-            code = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", code, wrapTy, raw);
-        }
-        char* isErr = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n", isErr, code);
-        int id = ctx->lblCtr++;
-        char failLbl[32], okLbl[32];
-        snprintf(failLbl, sizeof(failLbl), "mainerr.fail.%d", id);
-        snprintf(okLbl, sizeof(okLbl), "mainerr.ok.%d", id);
-        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", isErr, failLbl, okLbl);
-        ctx->terminated = true;
-        cgLabel(ctx, failLbl);
-        fputs("  call void @__olang_assert_fail()\n", ctx->fnOut);
-        cgBr(ctx, okLbl);
-        cgLabel(ctx, okLbl);
-        if (!mainFunc->type.hasRetType) {
-            fputs("  ret i32 0\n}\n", ctx->fnOut);
-            return;
-        }
-        struct type rt = *mainFunc->type.retType;
-        char* result = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 1\n", result, wrapTy, raw);
-        if (rt.bType == BASETYPE_BOOL) {
-            char* c = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = select i1 %s, i32 0, i32 1\n", c, result);
-            fprintf(ctx->fnOut, "  ret i32 %s\n", c);
-        } else if (rt.bType == BASETYPE_INT32) {
-            fprintf(ctx->fnOut, "  ret i32 %s\n", result);
-        } else if (rt.bType == BASETYPE_INT64) {
-            char* trunc = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = trunc i64 %s to i32\n", trunc, result);
-            fprintf(ctx->fnOut, "  ret i32 %s\n", trunc);
-        } else {
-            fputs("  ret i32 0\n", ctx->fnOut);
-        }
-        fputs("}\n", ctx->fnOut);
-        return;
-    }
+    char* code = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call i32 %s()\n", code, mname);
+    char* isErr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n", isErr, code);
+    int id = ctx->lblCtr++;
+    char errLbl[32], okLbl[32];
+    snprintf(errLbl, sizeof(errLbl), "mainerr.%d", id);
+    snprintf(okLbl, sizeof(okLbl), "mainok.%d", id);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", isErr, errLbl, okLbl);
+    ctx->terminated = true;
 
-    if (!mainFunc->type.hasRetType) {
-        fprintf(ctx->fnOut, "  call void %s()\n", mname);
-        fputs("  ret i32 0\n}\n", ctx->fnOut);
-        return;
+    cgLabel(ctx, errLbl);
+    //pick the message matching this specific (declared error type, word) via a chain of selects, same
+    //shape as cgPropagateError's ordinal remap - main's declared error set is small and fully known here
+    char* msg = cgGlobalStringConst(ctx, "unhandled error\n"); //defensive fallback, never actually selected
+    for (int i = 0; i < mainFunc->type.errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&mainFunc->type.errors, i);
+        int typeOrdinal = i +1;
+        for (int w = 0; w < e->words.len; w++) {
+            struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
+            char text[300];
+            snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
+                e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
+            char* candidate = cgGlobalStringConst(ctx, text);
+            long long exact = ((long long)typeOrdinal << 16) | w;
+            char* cmp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp eq i32 %s, %lld\n", cmp, code, exact);
+            char* next = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = select i1 %s, ptr %s, ptr %s\n", next, cmp, candidate, msg);
+            msg = next;
+        }
     }
-    struct type rt = *mainFunc->type.retType;
-    char rty[256];
-    llvmType(rt, rty, sizeof(rty));
-    char* result = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call %s %s()\n", result, rty, mname);
-    if (rt.bType == BASETYPE_BOOL) {
-        char* code = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = select i1 %s, i32 0, i32 1\n", code, result);
-        fprintf(ctx->fnOut, "  ret i32 %s\n", code);
-    } else if (rt.bType == BASETYPE_INT32) {
-        fprintf(ctx->fnOut, "  ret i32 %s\n", result);
-    } else if (rt.bType == BASETYPE_INT64) {
-        char* trunc = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = trunc i64 %s to i32\n", trunc, result);
-        fprintf(ctx->fnOut, "  ret i32 %s\n", trunc);
-    } else {
-        fputs("  ret i32 0\n", ctx->fnOut);
-    }
+    char* errStream = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr @stderr\n", errStream);
+    fprintf(ctx->fnOut, "  call i32 @fputs(ptr %s, ptr %s)\n", msg, errStream);
+    fputs("  ret i32 1\n", ctx->fnOut);
+
+    cgLabel(ctx, okLbl);
+    fputs("  ret i32 0\n", ctx->fnOut);
     fputs("}\n", ctx->fnOut);
 }
 

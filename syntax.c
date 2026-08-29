@@ -33,7 +33,7 @@ struct syntaxRule rules[] = {
     [SNTX_TEST_DECL] = {"SNTX_TEST_DECL", "TOK_TEST TOK_STR_LIT SNTX_BLOCK"},
 
     [SNTX_ERROR_DECL] = {"SNTX_ERROR_DECL", "TOK_ERROR TOK_IDEN TOK_CURLY_O TOK_IDEN (TOK_COMMA TOK_IDEN)* TOK_STMNT_END? TOK_CURLY_C"},
-    [SNTX_ERROR_LIST] = {"SNTX_ERROR_LIST", "TOK_IDEN (TOK_ADD TOK_IDEN)*"},
+    [SNTX_ERROR_LIST] = {"SNTX_ERROR_LIST", "SNTX_NAME (TOK_ADD SNTX_NAME)*"},
     [SNTX_RET_TYPE] = {"SNTX_RET_TYPE", "TOK_QSNTMRK SNTX_TYPE_EXPR"},
 
     [SNTX_PARAM] = {"SNTX_PARAM", "TOK_IDEN TOK_MUT? SNTX_TYPE_EXPR"},
@@ -56,19 +56,26 @@ struct syntaxRule rules[] = {
     [SNTX_STMNT_NOMATCH] = {"SNTX_STMNT_NOMATCH", "TOK_NOMATCH SNTX_BLOCK"},
     [SNTX_STMNT_MATCH] = {"SNTX_STMNT_MATCH", "TOK_MATCH SNTX_EXPR TOK_CURLY_O SNTX_STMNT_CASE* SNTX_STMNT_NOMATCH? TOK_CURLY_C"},
     [SNTX_STMNT_RET] = {"SNTX_STMNT_RET", "TOK_RET SNTX_EXPR? TOK_STMNT_END"},
-    [SNTX_STMNT_EXIT] = {"SNTX_STMNT_EXIT", "TOK_EXIT SNTX_EXPR? TOK_STMNT_END"},
+    //process exit with a fixed status: done = OS-standard success (0), crash = OS-standard failure (1).
+    //neither takes a value - see the report for why that's deliberate (main's own error diagnostics are
+    //the informative path; these are the "no more questions, exit now" escape hatch)
+    [SNTX_STMNT_DONE] = {"SNTX_STMNT_DONE", "TOK_DONE TOK_STMNT_END"},
+    [SNTX_STMNT_CRASH] = {"SNTX_STMNT_CRASH", "TOK_CRASH TOK_STMNT_END"},
     //selects the error part of a function's return union, e.g. "error MyError.NotFound" - the word after
     //the dot must be one of the error type's declared members (see SNTX_ERROR_DECL)
     [SNTX_STMNT_ERROR] = {"SNTX_STMNT_ERROR", "TOK_ERROR TOK_IDEN TOK_DOT TOK_IDEN TOK_STMNT_END"},
-    //one catch match: "MyError" (catches every word of that type) or "MyError.NotFound" (just that word)
-    [SNTX_CATCH_ERR] = {"SNTX_CATCH_ERR", "TOK_IDEN (TOK_DOT TOK_IDEN)?"},
+    //one catch match: "MyError" or "alias.MyError" (whole type), "MyError.NotFound" or
+    //"alias.MyError.NotFound" (one word) - see StatementCatchCoversType's caller for how the 2-identifier
+    //case disambiguates "alias.MyError" from "MyError.NotFound" (an import alias and an error type live in
+    //different namespaces, so the ambiguity is resolved by checking which one the leading name actually is)
+    [SNTX_CATCH_ERR] = {"SNTX_CATCH_ERR", "TOK_IDEN (TOK_DOT TOK_IDEN)? (TOK_DOT TOK_IDEN)?"},
     [SNTX_CATCH_ERR_LIST] = {"SNTX_CATCH_ERR_LIST", "SNTX_CATCH_ERR (TOK_OR SNTX_CATCH_ERR)*"},
     [SNTX_CATCH_CLAUSE] = {"SNTX_CATCH_CLAUSE", "TOK_CATCH SNTX_CATCH_ERR_LIST SNTX_BLOCK"},
     //"try f()" alone propagates (see SNTX_EXPR_TRY, a general expression); this is the catch-handling
     //statement form - control flow only, the caught error is never exposed as a value
     [SNTX_STMNT_TRY_CATCH] = {"SNTX_STMNT_TRY_CATCH", "TOK_TRY SNTX_EXPR_PRIMARY SNTX_CATCH_CLAUSE"},
     [SNTX_STMNT] = {"SNTX_STMNT", "SNTX_VAR_DECL|SNTX_STMNT_ASSIGN|SNTX_STMNT_IF|SNTX_STMNT_FOR|SNTX_STMNT_DO|"
-        "SNTX_STMNT_MATCH|SNTX_STMNT_RET|SNTX_STMNT_EXIT|SNTX_STMNT_ERROR|SNTX_STMNT_TRY_CATCH|SNTX_STMNT_EXPR"},
+        "SNTX_STMNT_MATCH|SNTX_STMNT_RET|SNTX_STMNT_DONE|SNTX_STMNT_CRASH|SNTX_STMNT_ERROR|SNTX_STMNT_TRY_CATCH|SNTX_STMNT_EXPR"},
     [SNTX_BLOCK] = {"SNTX_BLOCK", "TOK_CURLY_O SNTX_STMNT* TOK_CURLY_C"},
 
     [SNTX_EXPR_ARGS] = {"SNTX_EXPR_ARGS", "(SNTX_EXPR (TOK_COMMA SNTX_EXPR)*)?"},
@@ -78,8 +85,10 @@ struct syntaxRule rules[] = {
     //bare propagating try, e.g. "x mut int32 = try safeDiv(a, b)" - usable anywhere an expression is,
     //binds tighter than everything except a call's own args (only ever wraps a single primary)
     [SNTX_EXPR_TRY] = {"SNTX_EXPR_TRY", "TOK_TRY SNTX_EXPR_PRIMARY"},
+    //a call target may be namespaced ("alias.func(...)"); a bare read may not yet (see the report) - the
+    //trailing SNTX_EXPR_CALL is what disambiguates the namespaced call form from ordinary member access
     [SNTX_EXPR_PRIMARY] = {"SNTX_EXPR_PRIMARY", "TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|"
-        "SNTX_EXPR_TRY|(TOK_IDEN SNTX_EXPR_CALL)|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
+        "SNTX_EXPR_TRY|(SNTX_NAME SNTX_EXPR_CALL)|TOK_IDEN|(TOK_PAREN_O SNTX_EXPR TOK_PAREN_C)"},
     [SNTX_EXPR_POSTFIX] = {"SNTX_EXPR_POSTFIX", "SNTX_EXPR_PRIMARY (SNTX_EXPR_INDEX|SNTX_EXPR_MEMBR|TOK_INC|TOK_DEC)*"},
     [SNTX_EXPR_UNARY_OP] = {"SNTX_EXPR_UNARY_OP", "TOK_NOT|TOK_SUB|TOK_BTWSE_INV|TOK_INC|TOK_DEC"},
     [SNTX_EXPR_UNARY] = {"SNTX_EXPR_UNARY", "SNTX_EXPR_UNARY_OP* SNTX_EXPR_POSTFIX"},

@@ -10,10 +10,10 @@ build: $(addprefix bin/, $(addsuffix .o, $(basename $(wildcard *.c))))
 	$(CC) $(CFLAGS) $^ -o bin/out
 
 run:
-	bin/out -c test1.olang
+	bin/out -c runner.olang
 
 test: build
-	bin/out -t test3.olang test4.olang
+	bin/out -t shared.olang worker.olang runner.olang
 
 clean:
 	rm -rf bin

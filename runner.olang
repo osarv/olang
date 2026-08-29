@@ -1,0 +1,39 @@
+## Completes the worker.olang <-> runner.olang import cycle, and is the -c mode entry point (has main).
+
+import sh "shared.olang"
+import wk "worker.olang"
+
+error RunnerError {
+    STARTUP_FAILED
+}
+
+func DoubleIt(n int32) ? int32 {
+    return n * 2
+}
+
+func main() RunnerError {
+    try sh.SafeDiv(10, 2) catch sh.MathError {
+        error RunnerError.STARTUP_FAILED
+    }
+    done
+}
+
+test "calling back across the cycle from runner" {
+    assert(wk.AskRunner(5) == 10)
+}
+
+test "runner sees the same shared error type worker does" {
+    caught mut bool = false
+    try sh.SafeDiv(1, 0) catch sh.MathError {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "runner can call worker's cross-module wrapper directly" {
+    ok mut bool = true
+    try wk.Classify(50) catch sh.RangeError || wk.WorkerError {
+        ok = false
+    }
+    assert(ok)
+}

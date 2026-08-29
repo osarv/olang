@@ -56,11 +56,49 @@ of sync with the actual code.
   still have to treat *all* of `MyError` as possible (only `catch MyError`, not enumerating the remaining
   individual words, reliably covers it), since a signature can only declare whole error types via `+`,
   never a narrowed subset of one type's words.
+- **`main`'s signature is fixed: no parameters, no success type, at least one declared error** - e.g.
+  `func main() MyError { ... }`. There is no other valid shape (no `? bool`/`? int32` "return a status"
+  convention anymore). Process exit code is exactly two values: success (implicit/bare `return`) is OS
+  exit 0; any error that escapes uncaught to `main` prints `unhandled error: TypeName.Word` to stderr and
+  exits 1. This is deliberately coarse - packing the specific error into the exit code itself isn't worth
+  it (only 8 bits, low values already have shell/signal conventions, easy silent collisions for anything
+  with more than a couple of error types) - the point of an exit code is a crude machine-readable
+  done/failed signal for scripts/CI, and the specific error belongs on stderr where it's actually
+  readable.
+- **`done`/`crash` replace `exit <expr>`.** Both are bare statements (no operand) usable in any function,
+  not just `main`: `done` = OS-standard success (exit 0), `crash` = OS-standard failure (exit 1). Like the
+  old `exit`, both are a plain, immediate OS process exit - deliberately unrelated to the enclosing
+  function's declared error union, same as Zig's `std.process.exit()`/Rust's `std::process::exit()` (both
+  plain stdlib functions outside their error-handling machinery, not language keywords - olang's choice
+  to make this a statement is a deliberate divergence, not an accident). Terminating the whole process is
+  a different operation from returning an error to one caller, so tying the two together would only be
+  confusing. Neither prints anything - `crash` is the "no diagnostics, exit now" escape hatch, distinct
+  from an uncaught error reaching `main` (which does print, per the entry above).
+- **Cross-module visibility: anything starting with a capital letter is exported.** One rule
+  (`isPublic` in semantic.c), applied uniformly to types (already existed), functions, and error types.
+  A lowercase name is only visible within its own declaring module. This also unblocked something that
+  turned out not to exist yet: **cross-module function calls and cross-module error types in a
+  signature/`catch` clause had no grammar support at all** before this - `import` only ever let a file
+  reference another module's *type* declarations (`alias.TypeName`), never call its functions or use its
+  errors. Fixed by reusing `SNTX_NAME` (`alias.Name`) in the call-target and error-list grammar, and by
+  extending `SNTX_CATCH_ERR` to carry up to 3 identifiers (`alias.MyError.word`). Also fixed a real,
+  previously-latent bug this surfaced: `struct var` had no owning-module reference at all (unlike
+  `struct type`, which already had `owner`), so a cross-module call mangled its target under the
+  *caller's* module by construction - added `struct var.owner`, set at collection time, and codegen now
+  mangles a call target under the callee's own module.
+  **Deliberately not done, to keep this change bounded** (all fall under the same "capital letter =
+  exported" rule once implemented, so this is scope, not a rule change): bare cross-module *variable*
+  reads with no call (`x = alias.SomeGlobal`) - genuinely riskier, since a bare `TOK_IDEN` primary can't
+  gain a namespace without colliding with ordinary struct member access (`localVar.field`) at the grammar
+  level, so it needs real semantic-level disambiguation, not just a grammar tweak; the `error` statement
+  raising a *foreign* module's error type directly (`error alias.MyError.word`) - today you can declare a
+  foreign error in your own signature and `try`/`catch` it, but not originate one yourself; and a module
+  transitively re-exporting its own imports (so importing A also reaches through A's import of B). None
+  of these came up while building the test suite that motivated this change, so none were forced - but
+  they're the same "capital letter = exported" rule, just not yet wired into their own grammar slot.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
-- **`exit <expr>` semantics.** Currently a plain OS process exit, unrelated to the function's declared
-  error types. This is an assumption, not a confirmed design decision.
 - **No struct/array literal syntax.** A struct or array value can currently only come from an existing
   variable or a function parameter - there is no way to construct one from scratch in an expression.
   This means structs are effectively inert (undemonstrable end-to-end) until this exists.

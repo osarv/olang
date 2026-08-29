@@ -109,12 +109,6 @@ void ErrMsgUnexpectedToken(struct token found, char* expected) {
     strcat(buf, "'\n");
     struct str err = StrFromCStr(buf);
     syntaxErrorHeader(found.lineNr, fileName, err);
-    if (found.type == TOK_NONE) {
-        //printLastLineEOFError(tok.owner);
-        return;
-    }
+    if (found.type == TOK_NONE) return;
     printTokErrorLineOneTok(found);
-    //fputs("expected: " COLOR_FG_RED, stdout);
-    //fputs(expected, stdout);
-    //puts(COLOR_RESET);
 }

@@ -51,6 +51,9 @@ struct type {
 //a variable or function - the two share one namespace/list everywhere they're declared (module scope,
 //function params, struct members), so one struct covers both
 struct var {
+    struct semaModule* owner; //the module this was declared in; NULL for locals/params (never called or
+                               //read cross-module by name, so codegen never needs it for those) - used to
+                               //mangle a cross-module call target under its own module, not the caller's
     struct str name;
     struct type type;
     struct token tok;
@@ -72,7 +75,8 @@ enum statementType {
     STATEMENT_MATCH,
     STATEMENT_CASE,
     STATEMENT_RET,
-    STATEMENT_EXIT,
+    STATEMENT_DONE,  //process exit, OS-standard success (0) - never takes a value
+    STATEMENT_CRASH, //process exit, OS-standard failure (1) - never takes a value
     STATEMENT_ERROR,
     STATEMENT_TRY_CATCH
 };
@@ -90,8 +94,9 @@ struct statement {
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
     struct operand* op;          //VAR_DECL/ASSIGN: rhs value; IF/FOR/DO/MATCH/CASE: condition/matched value;
-                                  //RET/EXIT: value (NULL if bare); ERROR: the selected error word (never NULL);
-                                  //TRY_CATCH: the tried call (OPERATION_FUNCCALL, never NULL)
+                                  //RET: value (NULL if bare); ERROR: the selected error word (never NULL);
+                                  //TRY_CATCH: the tried call (OPERATION_FUNCCALL, never NULL); unused for
+                                  //DONE/CRASH, which never carry a value
     struct operand* forInit;     //FOR only: the loop variable's initial value expression
     struct operand* forPost;     //FOR only: the post-iteration expression
     struct list block;           //list of struct statement: the primary body; TRY_CATCH: the catch body

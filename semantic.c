@@ -369,6 +369,32 @@ struct semaModule* findImport(struct semaModule* mod, struct str alias) {
     return NULL;
 }
 
+void resolveTypeDecl(struct type* t);
+
+//resolves a possibly-namespaced error-type name node ("MyError" or "alias.MyError", from SNTX_NAME) to
+//its declared error type - shared by function-signature error lists and (via its own disambiguation,
+//see StatementCatchCoversType's caller) catch clauses. Reports its own errors and returns NULL on failure.
+struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNode) {
+    struct list idens = allTokOfType(nameNode, TOK_IDEN);
+    if (idens.len == 1) {
+        struct token nameTok = *(struct token*)ListGetIdx(&idens, 0);
+        struct type* errType = TypeGetList(&mod->types, strFromTok(nameTok));
+        if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); return NULL; }
+        resolveTypeDecl(errType);
+        return errType;
+    }
+    struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
+    struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
+    struct semaModule* target = findImport(mod, strFromTok(aliasTok));
+    if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
+    struct str name = strFromTok(nameTok);
+    struct type* errType = TypeGetList(&target->types, name);
+    if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); return NULL; }
+    if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return NULL; }
+    resolveTypeDecl(errType);
+    return errType;
+}
+
 // ---- pass 1: collect top-level names ----
 
 void collectType(struct semaModule* mod, struct token nameTok, enum baseType bType) {
@@ -387,6 +413,7 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut) {
     struct str name = strFromTok(nameTok);
     if (VarGetList(&mod->vars, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); return; }
     struct var v = (struct var){0};
+    v.owner = mod;
     v.name = name;
     v.tok = nameTok;
     v.mut = mut;
@@ -599,12 +626,11 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     t.errors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(sigNode, SNTX_ERROR_LIST);
     if (errListNode) {
-        struct list names = allTokOfType(errListNode, TOK_IDEN);
+        struct list names = allPartsOfType(errListNode, SNTX_NAME);
         for (int i = 0; i < names.len; i++) {
-            struct token nameTok = *(struct token*)ListGetIdx(&names, i);
-            struct type* errType = TypeGetList(&mod->types, strFromTok(nameTok));
-            if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); continue; }
-            resolveTypeDecl(errType);
+            struct syntax* nameNode = *(struct syntax**)ListGetIdx(&names, i);
+            struct type* errType = resolveErrorTypeName(mod, nameNode);
+            if (!errType) continue;
             ListAdd(&t.errors, &errType);
         }
     }
@@ -767,6 +793,24 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     return v;
 }
 
+//resolves a possibly-namespaced call-target name node ("func" or "alias.func", from SNTX_NAME) to a var -
+//the 1-identifier case is just lookupVar; the namespaced case looks up the target module directly and
+//requires public visibility, mirroring resolveErrorTypeName
+struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
+    struct list idens = allTokOfType(nameNode, TOK_IDEN);
+    if (idens.len == 1) return lookupVar(ctx, *(struct token*)ListGetIdx(&idens, 0));
+
+    struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
+    struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
+    struct semaModule* target = findImport(ctx->mod, strFromTok(aliasTok));
+    if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
+    struct str name = strFromTok(nameTok);
+    struct var* v = VarGetList(&target->vars, name);
+    if (!v) { ErrMsgSemantic(nameTok, UNKNOWN_VAR); return NULL; }
+    if (!isPublic(name)) { ErrMsgSemantic(nameTok, VAR_IS_PRIVATE); return NULL; }
+    return v;
+}
+
 // ---- operand construction & type checking ----
 //
 // unary/binary operators are dispatched through the two small tables below - one line per operator,
@@ -835,20 +879,20 @@ struct operand* OperandFuncCall(struct var* func, struct list args, struct token
     op->args = args;
 
     if (args.len != func->type.vars.len) {
-        ErrMsgSemantic(tok, "wrong number of arguments");
+        ErrMsgSemantic(tok, WRONG_ARG_COUNT);
         return op;
     }
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        if (!OperandFitsType(arg, paramType)) ErrMsgSemantic(arg->tok, OPERANDS_NOT_SAME_TYPE);
+        if (!OperandFitsType(arg, paramType)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
     }
     return op;
 }
 
 struct operand* OperandIndex(struct operand* base, struct operand* index, struct token tok) {
     if (base->type.bType != BASETYPE_ARRAY) {
-        ErrMsgSemantic(tok, "operand is not an array");
+        ErrMsgSemantic(tok, NOT_AN_ARRAY);
         return operandNew(tok, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
     }
     if (!TypeIsInt(index->type)) ErrMsgSemantic(index->tok, OPERATION_REQUIRES_INT);
@@ -879,7 +923,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     struct operand* op = operandNew(tok, opType, in->type);
     ListAdd(&op->args, &in);
     if (!OperandIsLvalue(in)) {
-        ErrMsgSemantic(tok, "operand must be a variable, index, or member");
+        ErrMsgSemantic(tok, NOT_AN_LVALUE);
         return op;
     }
     if (!OperandIsNumeric(in)) ErrMsgSemantic(tok, OPERATION_REQUIRES_NUMBER);
@@ -1217,16 +1261,18 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_TRY) {
         return buildTryExpr(ctx, partSntx(s, 0));
     }
-    if (s->parts.len == 2) { //TOK_IDEN SNTX_EXPR_CALL
-        struct token nameTok = partAt(s, 0)->tok;
+    if (s->parts.len == 2) { //SNTX_NAME SNTX_EXPR_CALL - "func(...)" or "alias.func(...)"
+        struct syntax* nameNode = partSntx(s, 0);
+        struct list nameIdens = allTokOfType(nameNode, TOK_IDEN);
+        struct token nameTok = *(struct token*)ListGetIdx(&nameIdens, nameIdens.len -1);
         struct syntax* callNode = partSntx(s, 1);
-        struct var* func = lookupVar(ctx, nameTok);
+        struct var* func = resolveCallTarget(ctx, nameNode);
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
         bool allowed = ctx->allowFallibleCall;
         ctx->allowFallibleCall = false;
         struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
         if (!func) return OperandIntLiteral(nameTok);
-        if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, INVALID_VAR); return OperandIntLiteral(nameTok); }
+        if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, NOT_CALLABLE); return OperandIntLiteral(nameTok); }
         if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
         return OperandFuncCall(func, args, nameTok);
     }
@@ -1272,7 +1318,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool mut = true; //local variables are mutable by default; "mut" is only meaningful on globals
     struct type declType = resolveTypeExpr(ctx->mod, firstPartOfType(s, SNTX_TYPE_EXPR));
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, OPERANDS_NOT_SAME_TYPE);
+    if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
 
     struct var* v = scopeDeclare(ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     struct statement stmt = (struct statement){0};
@@ -1310,14 +1356,14 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token opTok = partAt(opNode, 0)->tok;
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
 
-    if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, INVALID_VAR);
+    if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
     else if (!OperandIsMutableLvalue(target)) ErrMsgSemantic(target->tok, VAR_IMMUTABLE);
 
     bool isCompound;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct operand* value = rhs;
     if (isCompound) value = OperandBinary(target, rhs, compoundOp, opTok);
-    else if (!OperandFitsType(rhs, target->type)) ErrMsgSemantic(opTok, OPERANDS_NOT_SAME_TYPE);
+    else if (!OperandFitsType(rhs, target->type)) ErrMsgSemantic(opTok, VALUE_TYPE_MISMATCH);
 
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSIGN;
@@ -1371,7 +1417,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool mut = true; //local variables are mutable by default
     struct type declType = resolveTypeExpr(ctx->mod, firstPartOfType(initNode, SNTX_TYPE_EXPR));
     struct operand* initVal = buildExprFromSyntax(&innerCtx, firstPartOfType(initNode, SNTX_EXPR));
-    if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, OPERANDS_NOT_SAME_TYPE);
+    if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, VALUE_TYPE_MISMATCH);
     struct var* loopVar = scopeDeclare(innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
@@ -1400,7 +1446,7 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
 
 struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct type matchedType) {
     struct operand* val = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, OPERANDS_NOT_SAME_TYPE);
+    if (!TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_CASE;
     stmt.op = val;
@@ -1435,10 +1481,10 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
     struct token tok = firstTokOfType(s, TOK_RET);
 
-    if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, INVALID_RETURN_TYPE);
-    else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, INVALID_RETURN_TYPE);
+    if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
+    else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_MISSING_VALUE);
     else if (val && ctx->func && ctx->func->type.hasRetType && !OperandFitsType(val, *ctx->func->type.retType)) {
-        ErrMsgSemantic(val->tok, INVALID_RETURN_TYPE);
+        ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
     }
 
     struct statement stmt = (struct statement){0};
@@ -1472,13 +1518,14 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
-struct statement buildExitStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
-    struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_EXIT;
-    stmt.op = val;
-    return stmt;
+struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
+    (void)ctx; (void)s;
+    return (struct statement){.sType = STATEMENT_DONE};
+}
+
+struct statement buildCrashStmnt(struct checkCtx* ctx, struct syntax* s) {
+    (void)ctx; (void)s;
+    return (struct statement){.sType = STATEMENT_CRASH};
 }
 
 //"try f(...) catch A || B.word { ... }" - pure control flow, the caught error is never bound to a value.
@@ -1509,9 +1556,42 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     for (int i = 0; i < matchNodes.len; i++) {
         struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
         struct list idens = allTokOfType(m, TOK_IDEN);
-        struct token typeTok = *(struct token*)ListGetIdx(&idens, 0);
-        struct type* errType = TypeGetList(&ctx->mod->types, strFromTok(typeTok));
+
+        //1 identifier: "MyError" (same-module, whole type). 3: "alias.MyError.word" (cross-module, one
+        //word) - unambiguous either way. 2 is the genuinely ambiguous case: "Foo.Bar" could be a same-
+        //module "MyError.word" or a cross-module "alias.MyError" (whole type) - resolved by which
+        //namespace the leading identifier actually belongs to (an import alias and an error type can
+        //never collide, since imports and types are different lists)
+        struct semaModule* target = NULL; //non-NULL iff this match names a foreign module's error type
+        struct token typeTok;
+        bool hasWordTok = false;
+        struct token wordTok = {0};
+
+        if (idens.len == 1) {
+            typeTok = *(struct token*)ListGetIdx(&idens, 0);
+        } else if (idens.len == 3) {
+            struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
+            typeTok = *(struct token*)ListGetIdx(&idens, 1);
+            wordTok = *(struct token*)ListGetIdx(&idens, 2);
+            hasWordTok = true;
+            target = findImport(ctx->mod, strFromTok(aliasTok));
+            if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); continue; }
+        } else { //idens.len == 2 - the ambiguous case
+            struct token first = *(struct token*)ListGetIdx(&idens, 0);
+            struct token second = *(struct token*)ListGetIdx(&idens, 1);
+            target = findImport(ctx->mod, strFromTok(first));
+            if (target) {
+                typeTok = second; //alias.MyError - whole type, foreign module
+            } else {
+                typeTok = first; //MyError.word - one word, same module
+                wordTok = second;
+                hasWordTok = true;
+            }
+        }
+
+        struct type* errType = TypeGetList(target ? &target->types : &ctx->mod->types, strFromTok(typeTok));
         if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(typeTok, UNKNOWN_ERROR); continue; }
+        if (target && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); continue; }
         resolveTypeDecl(errType);
 
         bool produces = false;
@@ -1523,8 +1603,7 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
 
         struct catchMatch cm = (struct catchMatch){0};
         cm.errType = *errType;
-        if (idens.len > 1) {
-            struct token wordTok = *(struct token*)ListGetIdx(&idens, 1);
+        if (hasWordTok) {
             long long wordIdx = -1;
             for (int w = 0; w < errType->words.len; w++) {
                 struct token wt = *(struct token*)ListGetIdx(&errType->words, w);
@@ -1566,7 +1645,8 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
         case SNTX_STMNT_DO: return buildDoStmnt(ctx, actual);
         case SNTX_STMNT_MATCH: return buildMatchStmnt(ctx, actual);
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
-        case SNTX_STMNT_EXIT: return buildExitStmnt(ctx, actual);
+        case SNTX_STMNT_DONE: return buildDoneStmnt(ctx, actual);
+        case SNTX_STMNT_CRASH: return buildCrashStmnt(ctx, actual);
         case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
         case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
         case SNTX_STMNT_EXPR: return buildExprStmnt(ctx, actual);
@@ -1585,7 +1665,7 @@ void semaCheckBodies(struct semaModule* mod) {
             struct checkCtx ctx = {0};
             ctx.mod = mod;
             struct operand* rhs = buildExprFromSyntax(&ctx, firstPartOfType(actual, SNTX_EXPR));
-            if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, OPERANDS_NOT_SAME_TYPE);
+            if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
             v->initExpr = rhs;
             continue;
         }
@@ -1635,6 +1715,11 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     if (!testMode) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
         if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND);
+        //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
+        //stderr) - no other success type is meaningful as a process exit code, so none is allowed
+        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.errors.len == 0) {
+            ErrMsgFile(rootModule->fileName, INVALID_MAIN_SIGNATURE);
+        }
     }
     return rootModule;
 }

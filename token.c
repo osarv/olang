@@ -34,7 +34,8 @@ struct tokRule tokRules[] = {
     {TOK_TRY, "try", NULL},
     {TOK_CATCH, "catch", NULL},
     {TOK_RET, "return", NULL},
-    {TOK_EXIT, "exit", NULL},
+    {TOK_DONE, "done", NULL},
+    {TOK_CRASH, "crash", NULL},
     {TOK_FOR, "for", NULL},
     {TOK_DO, "do", NULL},
     {TOK_WHILE, "while", NULL},
@@ -367,7 +368,7 @@ bool stmntEndTriggerType(enum tokenType type) {
         case TOK_STR_LIT: case TOK_BOOL_LIT:
         case TOK_INC: case TOK_DEC:
         case TOK_PAREN_C: case TOK_SQUARE_C:
-        case TOK_RET: case TOK_EXIT:
+        case TOK_RET: case TOK_DONE: case TOK_CRASH:
             return true;
         default: return false;
     }
@@ -529,7 +530,8 @@ enum tokenType TokenTypeFromStr(char* str) {
     if (tokenTypeStrCmp(str, "TOK_TRY")) return TOK_TRY;
     if (tokenTypeStrCmp(str, "TOK_CATCH")) return TOK_CATCH;
     if (tokenTypeStrCmp(str, "TOK_RET")) return TOK_RET;
-    if (tokenTypeStrCmp(str, "TOK_EXIT")) return TOK_EXIT;
+    if (tokenTypeStrCmp(str, "TOK_DONE")) return TOK_DONE;
+    if (tokenTypeStrCmp(str, "TOK_CRASH")) return TOK_CRASH;
     if (tokenTypeStrCmp(str, "TOK_FOR")) return TOK_FOR;
     if (tokenTypeStrCmp(str, "TOK_DO")) return TOK_DO;
     if (tokenTypeStrCmp(str, "TOK_WHILE")) return TOK_WHILE;
