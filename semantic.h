@@ -4,9 +4,7 @@
 #include "util.h"
 #include "list.h"
 #include "syntax.h"
-#include "type.h"
-
-struct var; //defined in var.h; only referenced by pointer here
+#include "type.h" //struct var lives here too - see the comment on it in type.h
 
 enum operation {
     OPERATION_NONE,

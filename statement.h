@@ -3,7 +3,7 @@
 
 #include "token.h"
 #include "list.h"
-#include "var.h"
+#include "type.h"
 
 struct operand; //defined in semantic.h; only referenced by pointer here
 

@@ -5,6 +5,8 @@
 #include "util.h"
 #include "list.h"
 
+struct operand; //defined in semantic.h; only referenced by pointer here
+
 enum baseType {
     BASETYPE_VOID, //result of a function call with no declared return type
     BASETYPE_BOOL,
@@ -46,7 +48,21 @@ struct type {
     struct list errors; //list of struct type*: error types declared in the signature's error list
 };
 
-#include "var.h"
+//a variable or function - the two share one namespace/list everywhere they're declared (module scope,
+//function params, struct members), so one struct covers both; struct type and struct var are mutually
+//referential (a type's struct/func members are vars, a var carries a type) and stay in this one file
+//for exactly that reason, rather than splitting them and needing an include-order workaround
+struct var {
+    struct str name;
+    struct type type;
+    struct token tok;
+    bool mut; //local variables are mutable by default
+    bool mayBeInitialized; //access defined only through the origin member
+    struct var* origin; //where the variable declaration is stored throughout the compilation process
+    struct list codeBlock; //for functions
+    struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
+    bool isBuiltin; //true for compiler intrinsics (e.g. assert) - has no codeBlock to walk
+};
 
 long long TypeGetSize(struct type t);
 struct type TypeVanilla(enum baseType bType);
@@ -58,5 +74,9 @@ bool TypeIsNumeric(struct type t);
 bool TypeIsInt(struct type t);
 bool TypeIsFloat(struct type t);
 char* TypeDescribe(struct type t);
+
+struct var* VarAllocSetOrigin();
+struct var* VarGetList(struct list* l, struct str name);
+void VarListAddSetOrigin(struct list* l, struct var v);
 
 #endif //TYPE_H

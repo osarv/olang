@@ -165,3 +165,25 @@ char* TypeDescribe(struct type t) {
         default: return "type";
     }
 }
+
+struct var* VarAllocSetOrigin() {
+    struct var* v = MallocOrCrash(sizeof(struct var));
+    v->origin = v;
+    return v;
+}
+
+bool varCmpForList(void* name, void* elem) {
+    struct str searchName = *(struct str*)name;
+    struct str elemName = ((struct var*)elem)->name;
+    return StrCmp(searchName, elemName);
+}
+
+struct var* VarGetList(struct list* l, struct str name) {
+    return ListGetCmp(l, &name, varCmpForList);
+}
+
+void VarListAddSetOrigin(struct list* l, struct var v) {
+    ListAdd(l, &v);
+    struct var* vPtr = ListGetIdx(l, l->len -1);
+    vPtr->origin = vPtr;
+}

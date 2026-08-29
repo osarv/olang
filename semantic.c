@@ -7,7 +7,6 @@
 #include "token.h"
 #include "syntax.h"
 #include "type.h"
-#include "var.h"
 #include "statement.h"
 #include "errmsg.h"
 #include "semantic.h"

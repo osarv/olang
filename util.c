@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "util.h"
-#include "color.h"
 #include "token.h"
 
 struct str Str(char* ptr, int len) {
