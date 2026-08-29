@@ -8,26 +8,16 @@
 #include "syntax.h"
 #include "type.h"
 #include "var.h"
-#include "operation.h"
 #include "statement.h"
 #include "errmsg.h"
 #include "semantic.h"
 
-struct semaImport {
-    struct str alias;
-    struct semaModule* mod;
-};
-
-struct semaModule {
-    struct str fileName;
-    struct syntaxModule syn;
-    struct list types;   //list of struct type
-    struct list vars;    //list of struct var: globals and functions share one namespace
-    struct list imports; //list of struct semaImport
-};
-
 static struct list allModules; //list of struct semaModule*
 static struct semaModule* rootModule;
+
+struct list* SemanticAllModules(void) {
+    return &allModules;
+}
 
 // ---- parse tree walking helpers ----
 
@@ -107,6 +97,23 @@ struct semaModule* findLoadedModule(struct str fileName) {
     return slot ? *slot : NULL;
 }
 
+//compiler intrinsics available in every module without an import - currently just assert(cond bool)
+void registerBuiltins(struct semaModule* mod) {
+    struct var param = (struct var){0};
+    param.name = StrFromCStr("cond");
+    param.type = TypeVanilla(BASETYPE_BOOL);
+    param.mut = false;
+
+    struct var assertVar = (struct var){0};
+    assertVar.name = StrFromCStr("assert");
+    assertVar.type.bType = BASETYPE_FUNC;
+    assertVar.type.vars = ListInit(sizeof(struct var));
+    ListAdd(&assertVar.type.vars, &param);
+    assertVar.type.errors = ListInit(sizeof(struct type*));
+    assertVar.isBuiltin = true;
+    VarListAddSetOrigin(&mod->vars, assertVar);
+}
+
 struct semaModule* semaLoadModule(struct str fileName) {
     struct semaModule* existing = findLoadedModule(fileName);
     if (existing) return existing;
@@ -117,6 +124,8 @@ struct semaModule* semaLoadModule(struct str fileName) {
     mod->types = ListInit(sizeof(struct type));
     mod->vars = ListInit(sizeof(struct var));
     mod->imports = ListInit(sizeof(struct semaImport));
+    mod->tests = ListInit(sizeof(struct semaTest));
+    registerBuiltins(mod);
     ListAdd(&allModules, &mod); //register before recursing, to break import cycles
 
     //heap-allocated, not a stack buffer: TokenizeFile/StrFromCStr alias this pointer for the whole
@@ -194,6 +203,7 @@ void semaCollectNames(struct semaModule* mod) {
                 collectVar(mod, firstTokOfType(actual, TOK_IDEN), hasTokOfType(actual, TOK_MUT));
                 break;
             case SNTX_IMPORT:
+            case SNTX_TEST_DECL:
                 break;
             default:
                 ErrorBugFound();
@@ -251,7 +261,39 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode) {
     if (!malloced) resolveTypeDecl(found);
     struct type result = *found;
     result.structMAlloc = malloced;
+    //a {}-indirect reference may be grabbed while its target is still mid-resolution (that's the whole
+    //point - see the comment above); its placeholder bType (still BASETYPE_VOID at that point) must not
+    //leak through, since {} syntax only ever refers to a struct
+    if (malloced) result.bType = BASETYPE_STRUCT;
     return result;
+}
+
+//attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
+//negated by a single leading unary '-') - used for fixed array sizes, which must be known at compile time
+bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
+    bool negate = false;
+    while (true) {
+        if (s->type == SNTX_EXPR_PRIMARY) {
+            if (s->parts.len != 1 || !partAt(s, 0)->isToken || partAt(s, 0)->tok.type != TOK_INT_LIT) return false;
+            struct token tok = partAt(s, 0)->tok;
+            char buf[tok.str.len +1];
+            memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
+            buf[tok.str.len] = '\0';
+            *out = strtoll(buf, NULL, 10);
+            if (negate) *out = -*out;
+            return true;
+        }
+        if (s->type == SNTX_EXPR_UNARY && s->parts.len == 2) {
+            struct syntax* opNode = partSntx(s, 0);
+            struct token opTok = partAt(opNode, 0)->tok;
+            if (opTok.type != TOK_SUB || negate) return false; //only a single leading '-' is supported
+            negate = true;
+            s = partSntx(s, 1);
+            continue;
+        }
+        if (s->parts.len != 1 || partAt(s, 0)->isToken) return false;
+        s = partSntx(s, 0);
+    }
 }
 
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
@@ -266,6 +308,19 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode) {
         *wrapped.arrElem = result;
         struct syntax* sizeExprNode = firstPartOfType(s, SNTX_EXPR);
         wrapped.arrMalloc = (sizeExprNode == NULL);
+        if (sizeExprNode) {
+            long long size;
+            if (!tryEvalConstIntExpr(sizeExprNode, &size) || size < 0) {
+                ErrMsgSemantic(firstTokOfType(s, TOK_SQUARE_O), INVALID_ARRAY_SIZE);
+                size = 0;
+            }
+            struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
+            *lenOp = (struct operand){0};
+            lenOp->type = TypeVanilla(BASETYPE_INT64);
+            lenOp->isLiteral = true;
+            lenOp->intLiteralVal = size;
+            wrapped.arrLen = lenOp;
+        }
         result = wrapped;
     }
     return result;
@@ -461,6 +516,8 @@ struct checkCtx {
     struct semaModule* mod;
     struct scope* scope;
     struct var* func; //current function (for return-type checking); NULL for global initializers
+    bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
+                             //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -499,6 +556,311 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) { ErrMsgSemantic(tok, UNKNOWN_VAR); return NULL; }
     return v;
+}
+
+// ---- operand construction & type checking ----
+//
+// unary/binary operators are dispatched through the two small tables below - one line per operator,
+// the same "rules as data" idea as token.c's token table and syntax.c's grammar table, instead of a
+// scattered switch/if chain. Everything else here (literals, calls, indexing, member access) doesn't
+// have that repetitive one-of-many-operators shape, so it stays as plain, single-purpose functions.
+
+struct operand* operandNew(struct token tok, enum operation opType, struct type type) {
+    struct operand* op = MallocOrCrash(sizeof(struct operand));
+    *op = (struct operand){0};
+    op->tok = tok;
+    op->opType = opType;
+    op->type = type;
+    op->args = ListInit(sizeof(struct operand*));
+    return op;
+}
+
+bool OperandIsInt(struct operand* op) {
+    return TypeIsInt(op->type);
+}
+
+bool OperandIsBool(struct operand* op) {
+    return op->type.bType == BASETYPE_BOOL;
+}
+
+bool OperandIsNumeric(struct operand* op) {
+    return TypeIsNumeric(op->type);
+}
+
+//can op flow into a target-typed slot (assignment, initialization, argument passing)? an int literal
+//widens into a float slot since it carries no fixed width of its own yet; anything else must match
+//exactly - general implicit numeric conversion (e.g. int32->int64, or non-literal int->float) is
+//undecided language design, not implemented here
+bool OperandFitsType(struct operand* op, struct type target) {
+    if (TypeIsSame(target, op->type)) return true;
+    if (op->isLiteral && TypeIsInt(op->type) && TypeIsFloat(target)) {
+        op->type = target;
+        return true;
+    }
+    return false;
+}
+
+bool OperandIsLvalue(struct operand* op) {
+    return op->opType == OPERATION_READ_VAR || op->opType == OPERATION_INDEX || op->opType == OPERATION_MEMBER;
+}
+
+bool OperandIsMutableLvalue(struct operand* op) {
+    switch (op->opType) {
+        case OPERATION_READ_VAR: return op->readVar->mut;
+        case OPERATION_INDEX: return OperandIsMutableLvalue(*(struct operand**)ListGetIdx(&op->args, 0));
+        case OPERATION_MEMBER: return OperandIsMutableLvalue(*(struct operand**)ListGetIdx(&op->args, 0));
+        default: return false;
+    }
+}
+
+struct operand* OperandReadVar(struct var* v, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
+    op->readVar = v;
+    return op;
+}
+
+struct operand* OperandFuncCall(struct var* func, struct list args, struct token tok) {
+    struct type ret = func->type.hasRetType ? *func->type.retType : TypeVanilla(BASETYPE_VOID);
+    struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
+    op->readVar = func;
+    op->args = args;
+
+    if (args.len != func->type.vars.len) {
+        ErrMsgSemantic(tok, "wrong number of arguments");
+        return op;
+    }
+    for (int i = 0; i < args.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        if (!OperandFitsType(arg, paramType)) ErrMsgSemantic(arg->tok, OPERANDS_NOT_SAME_TYPE);
+    }
+    return op;
+}
+
+struct operand* OperandIndex(struct operand* base, struct operand* index, struct token tok) {
+    if (base->type.bType != BASETYPE_ARRAY) {
+        ErrMsgSemantic(tok, "operand is not an array");
+        return operandNew(tok, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
+    }
+    if (!TypeIsInt(index->type)) ErrMsgSemantic(index->tok, OPERATION_REQUIRES_INT);
+
+    struct operand* op = operandNew(tok, OPERATION_INDEX, *base->type.arrElem);
+    ListAdd(&op->args, &base);
+    ListAdd(&op->args, &index);
+    return op;
+}
+
+struct operand* OperandMember(struct operand* base, struct str member, struct token tok) {
+    if (base->type.bType != BASETYPE_STRUCT) {
+        ErrMsgSemantic(tok, UNKNOWN_STRUCT_MEMBER);
+        return operandNew(tok, OPERATION_MEMBER, TypeVanilla(BASETYPE_INT32));
+    }
+    struct var* memberVar = VarGetList(&base->type.vars, member);
+    if (!memberVar) {
+        ErrMsgSemantic(tok, UNKNOWN_STRUCT_MEMBER);
+        return operandNew(tok, OPERATION_MEMBER, TypeVanilla(BASETYPE_INT32));
+    }
+    struct operand* op = operandNew(tok, OPERATION_MEMBER, memberVar->type);
+    op->memberName = member;
+    ListAdd(&op->args, &base);
+    return op;
+}
+
+struct operand* incDec(struct operand* in, enum operation opType, struct token tok) {
+    struct operand* op = operandNew(tok, opType, in->type);
+    ListAdd(&op->args, &in);
+    if (!OperandIsLvalue(in)) {
+        ErrMsgSemantic(tok, "operand must be a variable, index, or member");
+        return op;
+    }
+    if (!OperandIsNumeric(in)) ErrMsgSemantic(tok, OPERATION_REQUIRES_NUMBER);
+    if (!OperandIsMutableLvalue(in)) ErrMsgSemantic(tok, VAR_IMMUTABLE);
+    return op;
+}
+
+//what kind of operand an operator requires, beyond "must be the same type as the other side" - REQ_NONE
+//means no kind restriction at all (only EQ/NEQ: any type is comparable, structs/arrays included - see
+//cgDeepEq in codegen.c)
+enum operandReq { REQ_NONE, REQ_BOOL, REQ_INT, REQ_NUMERIC };
+
+bool operandMeetsReq(struct operand* op, enum operandReq req) {
+    switch (req) {
+        case REQ_BOOL: return OperandIsBool(op);
+        case REQ_INT: return OperandIsInt(op);
+        case REQ_NUMERIC: return OperandIsNumeric(op);
+        default: return true; //REQ_NONE
+    }
+}
+
+char* operandReqErrMsg(enum operandReq req) {
+    switch (req) {
+        case REQ_BOOL: return OPERATION_REQUIRES_BOOL;
+        case REQ_INT: return OPERATION_REQUIRES_INT;
+        case REQ_NUMERIC: return OPERATION_REQUIRES_NUMBER;
+        default: ErrorBugFound(); return NULL; //REQ_NONE never fails a check, so never needs a message
+    }
+}
+
+//unary operators: what kind of operand is required, and whether the result is bool (versus the operand's
+//own type). Prefix/postfix INC/DEC aren't listed here - they additionally require a mutable lvalue, which
+//doesn't fit this shape, so they stay handled by incDec() above.
+struct unOpRule { enum operandReq require; bool resultBool; };
+struct unOpRule unOpRules[] = {
+    [OPERATION_NOT]       = {REQ_BOOL,    true},
+    [OPERATION_BTWSE_INV] = {REQ_INT,     false},
+    [OPERATION_MINUS]     = {REQ_NUMERIC, false},
+};
+
+struct operand* OperandUnary(struct operand* in, enum operation opType, struct token tok) {
+    switch (opType) {
+        case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC:
+        case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
+            return incDec(in, opType, tok);
+        case OPERATION_NOT: case OPERATION_BTWSE_INV: case OPERATION_MINUS: {
+            struct unOpRule rule = unOpRules[opType];
+            struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : in->type);
+            ListAdd(&op->args, &in);
+            if (!operandMeetsReq(in, rule.require)) ErrMsgSemantic(tok, operandReqErrMsg(rule.require));
+            return op;
+        }
+        default:
+            ErrorBugFound();
+            return NULL;
+    }
+}
+
+//binary operators: what kind each operand must be, whether both sides must additionally be the same
+//type, and whether the result is bool (versus operand a's own type - every arithmetic/bitwise/shift
+//result follows a's type)
+struct binOpRule { enum operandReq require; bool sameType; bool resultBool; };
+struct binOpRule binOpRules[] = {
+    [OPERATION_AND]       = {REQ_BOOL,    false, true},
+    [OPERATION_OR]        = {REQ_BOOL,    false, true},
+    [OPERATION_XOR]       = {REQ_BOOL,    false, true},
+    [OPERATION_LST]       = {REQ_NUMERIC, true,  true},
+    [OPERATION_LSE]       = {REQ_NUMERIC, true,  true},
+    [OPERATION_GRT]       = {REQ_NUMERIC, true,  true},
+    [OPERATION_GRE]       = {REQ_NUMERIC, true,  true},
+    [OPERATION_EQ]        = {REQ_NONE,    true,  true},
+    [OPERATION_NEQ]       = {REQ_NONE,    true,  true},
+    [OPERATION_BTSFT_L]   = {REQ_INT,     false, false}, //shift amount doesn't need to match the shifted type
+    [OPERATION_BTSFT_R]   = {REQ_INT,     false, false},
+    [OPERATION_BTWSE_AND] = {REQ_INT,     true,  false},
+    [OPERATION_BTWSE_OR]  = {REQ_INT,     true,  false},
+    [OPERATION_BTWSE_XOR] = {REQ_INT,     true,  false},
+    [OPERATION_MOD]       = {REQ_INT,     true,  false},
+    [OPERATION_ADD]       = {REQ_NUMERIC, true,  false},
+    [OPERATION_SUB]       = {REQ_NUMERIC, true,  false},
+    [OPERATION_MUL]       = {REQ_NUMERIC, true,  false},
+    [OPERATION_DIV]       = {REQ_NUMERIC, true,  false},
+};
+
+struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType, struct token tok) {
+    struct binOpRule rule = binOpRules[opType];
+    struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : a->type);
+    ListAdd(&op->args, &a);
+    ListAdd(&op->args, &b);
+
+    bool aOk = operandMeetsReq(a, rule.require);
+    bool bOk = operandMeetsReq(b, rule.require);
+    if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
+    if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
+    if (rule.sameType && aOk && bOk && !TypeIsSame(a->type, b->type)) ErrMsgSemantic(tok, OPERANDS_NOT_SAME_TYPE);
+    return op;
+}
+
+struct operand* OperandBoolLiteral(struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_BOOL));
+    op->isLiteral = true;
+    op->intLiteralVal = !strncmp(tok.str.ptr, "true", (size_t)tok.str.len) ? 1 : 0;
+    return op;
+}
+
+long long decodeCharBody(char* ptr, int len) {
+    if (len == 0) return 0;
+    if (ptr[0] != '\\') return ptr[0];
+    if (len < 2) return 0;
+    switch (ptr[1]) {
+        case 'n': return '\n';
+        case 't': return '\t';
+        case '\\': return '\\';
+        case '\'': return '\'';
+        case '"': return '"';
+        default: return ptr[1];
+    }
+}
+
+struct operand* OperandCharLiteral(struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_BYTE));
+    op->isLiteral = true;
+    op->intLiteralVal = decodeCharBody(tok.str.ptr +1, tok.str.len -2);
+    return op;
+}
+
+struct operand* OperandIntLiteral(struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    op->isLiteral = true;
+    char buf[tok.str.len +1];
+    memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
+    buf[tok.str.len] = '\0';
+    op->intLiteralVal = strtoll(buf, NULL, 10);
+    return op;
+}
+
+struct operand* OperandFloatLiteral(struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_FLOAT32));
+    op->isLiteral = true;
+    char buf[tok.str.len +1];
+    memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
+    buf[tok.str.len] = '\0';
+    op->floatLiteralVal = strtod(buf, NULL);
+    return op;
+}
+
+//counts decoded bytes in a string literal body (each "\X" escape pair collapses to one byte)
+long long decodeStringLen(char* ptr, int len) {
+    long long n = 0;
+    for (int i = 0; i < len; i++) {
+        if (ptr[i] == '\\') i++;
+        n++;
+    }
+    return n;
+}
+
+struct operand* OperandStringLiteral(struct token tok) {
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_ARRAY;
+    t.arrElem = MallocOrCrash(sizeof(struct type));
+    *t.arrElem = TypeVanilla(BASETYPE_BYTE);
+    t.arrMalloc = false;
+
+    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
+    *lenOp = (struct operand){0};
+    lenOp->type = TypeVanilla(BASETYPE_INT64);
+    lenOp->isLiteral = true;
+    lenOp->intLiteralVal = decodeStringLen(tok.str.ptr +1, tok.str.len -2);
+    t.arrLen = lenOp;
+
+    struct operand* op = operandNew(tok, OPERATION_NONE, t);
+    op->isLiteral = true;
+    return op;
+}
+
+//"MyError.someWord" - errType must already be resolved (its words list populated); wordTok is checked
+//against those words here since the grammar can't tell a valid member from a typo
+struct operand* OperandErrorLiteral(struct type errType, struct token wordTok) {
+    struct operand* op = operandNew(wordTok, OPERATION_NONE, errType);
+    op->isLiteral = true;
+    for (int i = 0; i < errType.words.len; i++) {
+        struct token w = *(struct token*)ListGetIdx(&errType.words, i);
+        if (StrCmp(w.str, wordTok.str)) {
+            op->intLiteralVal = i;
+            op->memberName = wordTok.str;
+            return op;
+        }
+    }
+    ErrMsgSemantic(wordTok, EXPECTED_ERROR_WORD);
+    return op;
 }
 
 // ---- expressions ----
@@ -592,6 +954,40 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
     return result;
 }
 
+//every error type a `try`'d call can produce must appear in the enclosing function's own declared error
+//list, so an unhandled/uncaught error always has somewhere valid to propagate to. Required even for error
+//types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
+//deliberate simplification (checking only the escaping subset would need catch-exhaustiveness analysis)
+void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
+    if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
+    for (int i = 0; i < calleeType.errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&calleeType.errors, i);
+        bool found = false;
+        for (int j = 0; j < ctx->func->type.errors.len; j++) {
+            struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
+            if (TypeIsSame(*e, *fe)) { found = true; break; }
+        }
+        if (!found) { ErrMsgSemantic(tok, TRY_ERROR_NOT_IN_SIGNATURE); return; }
+    }
+}
+
+//"try f(...)" as a plain expression: propagates on error (checkTrySuperset), yields f's success value
+struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool prevAllow = ctx->allowFallibleCall;
+    ctx->allowFallibleCall = true;
+    struct operand* callOp = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR_PRIMARY));
+    ctx->allowFallibleCall = prevAllow;
+
+    if (callOp->opType != OPERATION_FUNCCALL || callOp->readVar->type.errors.len == 0) {
+        ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL);
+        return callOp;
+    }
+    checkTrySuperset(ctx, tok, callOp->readVar->type);
+    callOp->isTried = true;
+    return callOp;
+}
+
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
@@ -609,13 +1005,20 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             default: ErrorBugFound(); return NULL;
         }
     }
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_TRY) {
+        return buildTryExpr(ctx, partSntx(s, 0));
+    }
     if (s->parts.len == 2) { //TOK_IDEN SNTX_EXPR_CALL
         struct token nameTok = partAt(s, 0)->tok;
         struct syntax* callNode = partSntx(s, 1);
         struct var* func = lookupVar(ctx, nameTok);
+        //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
+        bool allowed = ctx->allowFallibleCall;
+        ctx->allowFallibleCall = false;
         struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
         if (!func) return OperandIntLiteral(nameTok);
         if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, INVALID_VAR); return OperandIntLiteral(nameTok); }
+        if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
         return OperandFuncCall(func, args, nameTok);
     }
     //parenthesized sub-expression: TOK_PAREN_O SNTX_EXPR TOK_PAREN_C
@@ -771,6 +1174,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_FOR;
     stmt.var = *loopVar;
     stmt.op = cond;
+    stmt.forInit = initVal;
     stmt.forPost = post;
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
@@ -834,12 +1238,112 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_ERROR);
+    struct list idens = allTokOfType(s, TOK_IDEN);
+    struct token errTypeTok = *(struct token*)ListGetIdx(&idens, 0);
+    struct token wordTok = *(struct token*)ListGetIdx(&idens, 1);
+
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_ERROR;
+
+    if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
+
+    struct type* errType = TypeGetList(&ctx->mod->types, strFromTok(errTypeTok));
+    if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(errTypeTok, UNKNOWN_ERROR); return stmt; }
+    resolveTypeDecl(errType);
+
+    bool declared = false;
+    for (int i = 0; i < ctx->func->type.errors.len; i++) {
+        if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == errType) { declared = true; break; }
+    }
+    if (!declared) { ErrMsgSemantic(errTypeTok, ERROR_NOT_DECLARED_IN_SIG); return stmt; }
+
+    stmt.op = OperandErrorLiteral(*errType, wordTok);
+    return stmt;
+}
+
 struct statement buildExitStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXIT;
     stmt.op = val;
+    return stmt;
+}
+
+//"try f(...) catch A || B.word { ... }" - pure control flow, the caught error is never bound to a value.
+//An error not fully caught here propagates per the normal try rules (see StatementCatchCoversType below)
+struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_TRY);
+    struct syntax* primaryNode = firstPartOfType(s, SNTX_EXPR_PRIMARY);
+    struct syntax* catchNode = firstPartOfType(s, SNTX_CATCH_CLAUSE);
+
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_TRY_CATCH;
+
+    bool prevAllow = ctx->allowFallibleCall;
+    ctx->allowFallibleCall = true;
+    struct operand* callOp = buildExprFromSyntax(ctx, primaryNode);
+    ctx->allowFallibleCall = prevAllow;
+    stmt.op = callOp;
+    stmt.block = buildBlock(ctx, firstPartOfType(catchNode, SNTX_BLOCK));
+    stmt.catchMatches = ListInit(sizeof(struct catchMatch));
+
+    if (callOp->opType != OPERATION_FUNCCALL || callOp->readVar->type.errors.len == 0) {
+        ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL);
+        return stmt;
+    }
+
+    struct syntax* errListNode = firstPartOfType(catchNode, SNTX_CATCH_ERR_LIST);
+    struct list matchNodes = allPartsOfType(errListNode, SNTX_CATCH_ERR);
+    for (int i = 0; i < matchNodes.len; i++) {
+        struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
+        struct list idens = allTokOfType(m, TOK_IDEN);
+        struct token typeTok = *(struct token*)ListGetIdx(&idens, 0);
+        struct type* errType = TypeGetList(&ctx->mod->types, strFromTok(typeTok));
+        if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(typeTok, UNKNOWN_ERROR); continue; }
+        resolveTypeDecl(errType);
+
+        bool produces = false;
+        for (int j = 0; j < callOp->readVar->type.errors.len; j++) {
+            struct type* e = *(struct type**)ListGetIdx(&callOp->readVar->type.errors, j);
+            if (TypeIsSame(*e, *errType)) { produces = true; break; }
+        }
+        if (!produces) { ErrMsgSemantic(typeTok, CATCH_ERROR_NOT_PRODUCED_BY_CALL); continue; }
+
+        struct catchMatch cm = (struct catchMatch){0};
+        cm.errType = *errType;
+        if (idens.len > 1) {
+            struct token wordTok = *(struct token*)ListGetIdx(&idens, 1);
+            long long wordIdx = -1;
+            for (int w = 0; w < errType->words.len; w++) {
+                struct token wt = *(struct token*)ListGetIdx(&errType->words, w);
+                if (StrCmp(strFromTok(wt), strFromTok(wordTok))) { wordIdx = w; break; }
+            }
+            if (wordIdx < 0) { ErrMsgSemantic(wordTok, EXPECTED_ERROR_WORD); continue; }
+            cm.hasWord = true;
+            cm.wordOrdinal = wordIdx;
+        }
+        ListAdd(&stmt.catchMatches, &cm);
+    }
+
+    //only an error type that ISN'T fully caught here needs to be declared in the enclosing function's own
+    //signature - one that's fully caught can never actually escape, so it doesn't need anywhere to
+    //propagate to (this also means try/catch can be used inside a test block, which has no error union of
+    //its own, as long as every possible error is caught locally)
+    for (int i = 0; i < callOp->readVar->type.errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&callOp->readVar->type.errors, i);
+        if (StatementCatchCoversType(&stmt.catchMatches, *e)) continue;
+        if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return stmt; }
+        bool found = false;
+        for (int j = 0; j < ctx->func->type.errors.len; j++) {
+            struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
+            if (TypeIsSame(*e, *fe)) { found = true; break; }
+        }
+        if (!found) { ErrMsgSemantic(tok, TRY_ERROR_NOT_IN_SIGNATURE); return stmt; }
+    }
+
     return stmt;
 }
 
@@ -854,6 +1358,8 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
         case SNTX_STMNT_MATCH: return buildMatchStmnt(ctx, actual);
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_EXIT: return buildExitStmnt(ctx, actual);
+        case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
+        case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
         case SNTX_STMNT_EXPR: return buildExprStmnt(ctx, actual);
         default: ErrorBugFound(); return (struct statement){0};
     }
@@ -871,6 +1377,17 @@ void semaCheckBodies(struct semaModule* mod) {
             ctx.mod = mod;
             struct operand* rhs = buildExprFromSyntax(&ctx, firstPartOfType(actual, SNTX_EXPR));
             if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, OPERANDS_NOT_SAME_TYPE);
+            v->initExpr = rhs;
+            continue;
+        }
+        if (actual->type == SNTX_TEST_DECL) {
+            struct checkCtx ctx = {0};
+            ctx.mod = mod;
+            struct semaTest test = (struct semaTest){0};
+            struct token descTok = firstTokOfType(actual, TOK_STR_LIT);
+            test.description = Str(descTok.str.ptr +1, descTok.str.len -2);
+            test.codeBlock = buildBlock(&ctx, firstPartOfType(actual, SNTX_BLOCK));
+            ListAdd(&mod->tests, &test);
             continue;
         }
         if (actual->type != SNTX_FUNC_DEF) continue;
@@ -898,7 +1415,7 @@ void semaCheckBodies(struct semaModule* mod) {
 
 // ---- entry point ----
 
-void SemanticAnalyzeFile(char* fileName) {
+struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));
 
@@ -906,6 +1423,9 @@ void SemanticAnalyzeFile(char* fileName) {
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
 
-    struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
-    if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND);
+    if (!testMode) {
+        struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
+        if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND);
+    }
+    return rootModule;
 }

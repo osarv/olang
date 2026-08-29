@@ -4,7 +4,6 @@
 #include <string.h>
 #include "util.h"
 #include "type.h"
-#include "operation.h"
 
 #define PTR_SIZE 8 //4 for 32bit
 #define VOCAB_SIZE 4
@@ -54,6 +53,7 @@ static char* typeVanillaFloat64Str = "float64";
 struct type TypeVanilla(enum baseType bType) {
     struct type t = (struct type){0};
     switch (bType) {
+        case BASETYPE_VOID: t.bType = BASETYPE_VOID; return t;
         case BASETYPE_BOOL: t.name.ptr = typeVanillaBoolStr; break;
         case BASETYPE_BYTE: t.name.ptr = typeVanillaByteStr; break;
         case BASETYPE_INT32: t.name.ptr = typeVanillaInt32Str; break;

@@ -35,6 +35,7 @@ enum tokenType {
     TOK_ERROR,
     TOK_MUT,
     TOK_IMPORT,
+    TOK_TEST,
     TOK_ADD,
     TOK_SUB,
     TOK_MUL,

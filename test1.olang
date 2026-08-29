@@ -17,7 +17,7 @@ import test2 "test2.olang"
 type sdfsddfs test2.MyInt23
 
 type MyStruct struct {
-    sfs int32[][-2],
+    sfs int32[][2],
     that int64[][],
     sdsdfs myTestArr,
     dsvs myStruct2
@@ -58,7 +58,7 @@ func main(mStr mut MyStruct, in mut test2.MyInt23, j mut int32[]) myError + myEr
         }
     }
 
-    b bool = main(mStr, in, j)
+    b bool = try main(mStr, in, j)
     k float32 = 0.0
     k = 3.5
     if 0 != in {}

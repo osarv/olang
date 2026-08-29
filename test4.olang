@@ -1,0 +1,27 @@
+test "basic arithmetic" {
+    x mut int32 = 2
+    y mut int32 = 3
+    assert(x + y == 5)
+}
+
+test "loop accumulates correctly" {
+    sum mut int32 = 0
+    for i mut int32 = 0, i < 5, i++ {
+        sum = sum + i
+    }
+    assert(sum == 10)
+}
+
+test "boolean logic" {
+    a mut bool = true
+    b mut bool = false
+    assert(a && !b)
+}
+
+test "fixed byte arrays compare by value, not by identity" {
+    a mut byte[5] = "hello"
+    b mut byte[5] = "hello"
+    c mut byte[5] = "world"
+    assert(a == b)
+    assert(a != c)
+}

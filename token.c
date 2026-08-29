@@ -49,6 +49,7 @@ struct tokRule tokRules[] = {
     {TOK_ERROR, "error", NULL},
     {TOK_MUT, "mut", NULL},
     {TOK_IMPORT, "import", NULL},
+    {TOK_TEST, "test", NULL},
     {TOK_ADD, "+", NULL},
     {TOK_SUB, "-", NULL},
     {TOK_MUL, "*", NULL},
@@ -543,6 +544,7 @@ enum tokenType TokenTypeFromStr(char* str) {
     if (tokenTypeStrCmp(str, "TOK_ERROR")) return TOK_ERROR;
     if (tokenTypeStrCmp(str, "TOK_MUT")) return TOK_MUT;
     if (tokenTypeStrCmp(str, "TOK_IMPORT")) return TOK_IMPORT;
+    if (tokenTypeStrCmp(str, "TOK_TEST")) return TOK_TEST;
     if (tokenTypeStrCmp(str, "TOK_ADD")) return TOK_ADD;
     if (tokenTypeStrCmp(str, "TOK_SUB")) return TOK_SUB;
     if (tokenTypeStrCmp(str, "TOK_MUL")) return TOK_MUL;

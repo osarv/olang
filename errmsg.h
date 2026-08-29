@@ -91,6 +91,16 @@
 #define VAR_IMMUTABLE "variable is immutable"
 #define INVALID_RETURN_TYPE "return statement is of the wrong type"
 #define MAIN_FUNC_NOT_FOUND "could not find the main function"
+#define ERROR_NOT_DECLARED_IN_SIG "error type not declared in this function's signature"
+#define ERROR_STMNT_OUTSIDE_FUNC "error statement is only valid inside a function"
+#define UNHANDLED_FALLIBLE_CALL "call to a fallible function must be handled with try/catch"
+#define TRY_REQUIRES_FALLIBLE_CALL "try requires a direct call to a fallible function"
+#define TRY_ERROR_NOT_IN_SIGNATURE "this function's signature must declare every error the tried call can produce that isn't fully caught here"
+#define TRY_OUTSIDE_FUNC "try/catch is only valid inside a function, unless every possible error is caught"
+#define CATCH_ERROR_NOT_PRODUCED_BY_CALL "this error is not declared by the function being called"
+#define EXPECTED_C_OR_T_FLAG "expected -c or -t"
+#define EXPECTED_ONE_COMPILE_FILE "-c takes exactly one file"
+#define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
 
 int ErrMsgGetNErrors();
 void ErrMsgFinishCompilation();
