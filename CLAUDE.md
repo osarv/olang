@@ -403,11 +403,9 @@ of sync with the actual code.
   any local whose type's own `destructFunc` is the function currently being generated
   (`l->type.destructFunc == ctx->curFunc`) - the only local that can ever be true for is a destructor's own
   self-parameter, so this adds no false skips anywhere else.
-  **Known limitation, not attempted here:** no move semantics - a destructor-bearing local that is itself
-  the value being returned out of its own function still gets destructed before the caller ever sees it
-  (`cgRunLocalDestructors` runs before the return value is handed back), which is a real footgun for that
-  specific shape. Not a concern for the motivating file-handle case (used locally, never returned by value),
-  and not addressed here since move semantics were never part of the discussion that led to this feature.
+  **Known limitation at the time, since closed - see the "return x" skips its own destructor entry
+  further below:** no move semantics - a destructor-bearing local that is itself the value being returned
+  out of its own function used to still get destructed before the caller ever saw it.
 - **A bare `<>` struct field assigned through a scope-tagged base now inherits that base's own scope,
   instead of always defaulting to whatever function happens to be executing.** Narrow fix, not the general
   one (see the scope-generic-struct-types gap above, which this doesn't close): a struct field can't carry
@@ -1027,3 +1025,33 @@ of sync with the actual code.
   source (not currently constructible - see the array-index-scope-override entry above for why an array's
   own element shape is hard to make independently reference-typed at all) would need a real runtime loop,
   not this one.
+
+- **"return x" now skips x's own destructor - closes the move-semantics gap the constructors/destructors
+  entry above flagged as a known limitation.** Before this, `cgRunLocalDestructors` ran unconditionally
+  over every currently-live plain (non-`<>`) local before a `ret`, with no exception for a local that was
+  itself the value being handed back. That's not a memory-corruption bug (the returned value is already a
+  separately-loaded LLVM SSA snapshot by the time the destructor call's own, independent load happens, and
+  a destructor's `.self` parameter is by-value - any mutation it makes is local to its own frame and can't
+  reach either the caller's copy or the original stack slot) - it's a *resource* bug: the destructor still
+  performs whatever real external side effect it's coded to do (closing a file descriptor, say), so the
+  caller receives a byte-identical copy of a struct whose backing resource has already been released out
+  from under it. Silent and easy to miss, since the returned *values* look completely fine.
+  **Deliberately narrow, not real move semantics - a plain "skip this one local" check, not dataflow
+  tracking.** `cgRunLocalDestructors` gained a `skipLocal` parameter (a `struct cgLocal*`, `NULL` at every
+  call site except `cgRet`'s own value-return path); `cgSkipLocalForReturn(ctx, op)` resolves it by
+  checking whether `op` (the return statement's own operand) is a bare `OPERATION_READ_VAR`, and if so
+  looking that variable up by name via the existing `cgFindLocal` (matching this file's own established
+  "codegen looks locals up by name, never by `struct var*` identity" convention - see the parameter-
+  identity-duality bug found earlier this session). Only a bare `return x` is recognized: `return x.field`,
+  `return arr[i]`, or any other expression that merely reads *through* a local still destructs every local
+  it reads from exactly as before, since none of those hand a local's own value out whole - a real,
+  intentionally-drawn boundary, not an oversight. This also correctly extends to a *parameter* being
+  returned bare (`func identity(h Handle) ? Handle { return h }`), with no special-casing needed: a
+  function's own parameters are declared as ordinary `cgLocal`s at function entry (see `cgFunction`), so
+  `cgFindLocal` already finds them the same way it finds any other local.
+  **Confirmed correct, not just "doesn't crash," via the external side effect itself**: a new pair of tests
+  observe `resourcesClosed` (the existing `Handle` destructor's own side-effect counter) directly - one
+  proving the returned local's destructor no longer fires inside the function that returns it, the other
+  proving the skip is scoped to exactly the one local named by `return` and not a blanket "no destructors
+  fire on any return" - a second, non-returned local declared in the same function still gets destructed
+  normally, before that function even returns.

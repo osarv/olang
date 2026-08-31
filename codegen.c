@@ -203,18 +203,22 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     if (ctx->ownScopeSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
 }
 
+struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name);
+
 //destructs every currently-live PLAIN (non-"<>") local of a hasDestruct-bearing struct type, in LIFO order
 //(innermost/most-recently-declared first, across the whole active scope chain) - called right before every
 //real "ret" a function/test can hit, mirroring cgCloseOwnScope's own injection points exactly (a destructor
 //can never fail/propagate - see the report - so there's no error-path interaction to worry about here). A
 //"<>"-heap-indirect local's destructor runs later instead, when its owning scope closes - see
-//__olang_scope_register_dtor/emitScopeRuntime. Known limitation, not attempted here: a destructor-bearing
-//local that's itself the value being returned still gets destructed before the caller sees it - move
-//semantics (skipping destruction when a value is being handed out) were never part of the design.
-void cgRunLocalDestructors(struct cgCtx* ctx) {
+//__olang_scope_register_dtor/emitScopeRuntime. skipLocal, when non-NULL, is the one local whose destructor
+//must NOT run here - see cgSkipLocalForReturn: not general move semantics (still not attempted - see the
+//report), just the one narrow, common case ("return x" handing x's own value straight to the caller) that
+//a plain "skip this one" check can resolve without any real dataflow tracking.
+void cgRunLocalDestructors(struct cgCtx* ctx, struct cgLocal* skipLocal) {
     for (struct cgScope* sc = ctx->scope; sc; sc = sc->parent) {
         for (int i = sc->locals.len -1; i >= 0; i--) {
             struct cgLocal* l = ListGetIdx(&sc->locals, i);
+            if (l == skipLocal) continue;
             if (l->type.bType != BASETYPE_STRUCT || l->type.structMAlloc || !l->type.hasDestruct) continue;
             //don't re-destruct the instance a destructor is already running on - this is exactly ".self"
             //while generating that very destructor's own body (see resolveStructCtorInto in semantic.c)
@@ -228,6 +232,18 @@ void cgRunLocalDestructors(struct cgCtx* ctx) {
             fprintf(ctx->fnOut, "  call void %s(%s %s)\n", dtorSym, ty, loaded);
         }
     }
+}
+
+//"return x" where x is a bare read of a currently-live local hands that local's own VALUE to the caller -
+//its destructor must not fire in cgRunLocalDestructors below, the same way a "<>"-heap-indirect value's
+//destructor is never run here either: ownership of the value is passing to the caller, who becomes
+//responsible for it once their own copy (a var-decl, another return, ...) eventually goes out of scope in
+//turn. Deliberately narrow, not real move semantics: only a bare local read is recognized - "return
+//x.field", "return arr[i]", or any other expression that merely reads *through* a local still destructs
+//every local it reads from exactly as before, since none of those hand the local's OWN value out whole.
+struct cgLocal* cgSkipLocalForReturn(struct cgCtx* ctx, struct operand* op) {
+    if (op->opType != OPERATION_READ_VAR) return NULL;
+    return cgFindLocal(ctx, op->readVar->name);
 }
 
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
@@ -259,7 +275,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* newCode = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
-    cgRunLocalDestructors(ctx);
+    cgRunLocalDestructors(ctx, NULL);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %s\n", newCode);
@@ -1318,7 +1334,7 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
 void cgRet(struct cgCtx* ctx, struct statement* s) {
     bool fallible = ctx->curFunc && ctx->curFunc->type.errors.len > 0;
     if (!s->op) {
-        cgRunLocalDestructors(ctx);
+        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
@@ -1332,7 +1348,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(retT, ty, sizeof(ty));
     char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
-    cgRunLocalDestructors(ctx);
+    cgRunLocalDestructors(ctx, cgSkipLocalForReturn(ctx, s->op));
     cgCloseOwnScope(ctx);
     if (!fallible) {
         fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
@@ -1392,7 +1408,7 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
-    cgRunLocalDestructors(ctx);
+    cgRunLocalDestructors(ctx, NULL);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
@@ -1806,7 +1822,7 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     }
 
     if (!ctx->terminated) {
-        cgRunLocalDestructors(ctx);
+        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
@@ -1961,7 +1977,7 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", testScope);
         ctx->ownScopeSlot = testScope;
         cgBlock(ctx, &t->codeBlock);
-        cgRunLocalDestructors(ctx);
+        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         ctx->ownScopeSlot = NULL;
         cgBr(ctx, passLbl);

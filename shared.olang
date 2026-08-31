@@ -325,6 +325,26 @@ func useHandleLocally() ? int32 {
     return h.id
 }
 
+## the one narrow exception to the rule above: "return h" (a BARE read of the local, not a field/index
+## read through it like "h.id" above) hands h's own VALUE to the caller rather than discarding it - h's
+## destructor must NOT run here, or the caller would receive a copy whose backing resource (whatever the
+## destructor releases) was already released out from under it. cgSkipLocalForReturn/cgRunLocalDestructors
+## in codegen.c - see the report. Not general move semantics: only this exact "return <bare local>" shape
+## is recognized.
+func makeHandle(n int32) ? Handle {
+    h mut Handle = Handle(n)
+    return h
+}
+
+## the returned local's own destructor is skipped in makeHandle, but a DIFFERENT local that ISN'T returned
+## still gets destructed normally right there, before makeHandle even returns - proves the skip is scoped
+## to exactly the one local named by "return", not a blanket "no destructors fire on any return" escape.
+func makeAndDiscardOne(n int32) ? Handle {
+    keep mut Handle = Handle(n)
+    discard mut Handle = Handle(n + 100)
+    return keep
+}
+
 ## a "<>"-heap-indirect instance's destructor instead runs when its *owning scope* closes - registered
 ## with that scope at allocation time (see __olang_scope_register_dtor in codegen.c) and walked in LIFO
 ## order right before that scope's chunks are reclaimed. Bare "<>" here means this function's own private
@@ -736,6 +756,24 @@ test "destructor runs when a plain local goes out of scope at function return" {
     result mut int32 = useHandleLocally()
     assert(result == 7)
     assert(resourcesClosed == before + 1)
+}
+
+test "returning a destructor-bearing local by value defers its destructor to the caller" {
+    before mut int32 = resourcesClosed
+    h mut Handle = makeHandle(42)
+    ## makeHandle has already returned - if its own local's destructor had incorrectly fired before
+    ## returning, resourcesClosed would already be before+1 here, one call too early
+    assert(resourcesClosed == before)
+    assert(h.id == 42)
+}
+
+test "the skip is scoped to exactly the returned local, not every local in that function" {
+    before mut int32 = resourcesClosed
+    kept mut Handle = makeAndDiscardOne(1)
+    ## "discard" (never returned) is already destructed by the time makeAndDiscardOne returns; "kept"'s
+    ## own destructor is still deferred to here, so exactly one destructor has fired so far
+    assert(resourcesClosed == before + 1)
+    assert(kept.id == 1)
 }
 
 test "destructor runs for every heap-indirect instance when their scope closes, in one batch" {
