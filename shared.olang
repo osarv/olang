@@ -471,6 +471,29 @@ func fieldOfFieldChecked(a scope, x int32, y int32) ? Point<a> {
     return o.mid.leaf
 }
 
+## a BARE-PUN field ("{ wrapped }" alone, forwarding a same-named constructor PARAMETER directly, rather
+## than constructing a fresh value the way Mid's "leaf" field above does) needed its own, separate fix: a
+## parameter never gets its own scopeBindings populated (unlike a local var-decl or a field's own explicit
+## initializer, both of which do) - so a bare-pun field's persisted map used to always be empty even when
+## the parameter's own type was constructor-bearing, and the substitution fell through to "foreign,
+## unverifiable, allow," silently accepting an actually-wrong scope. Fixed two ways: OperandFuncCall now
+## merges a non-scope argument's own scopeBindings into the call's own map (so whatever substitution the
+## "WrappedPoint(a, ...)" argument already carries survives the "PunnedBox(...)" call boundary), and
+## OperandMember carries a base's own map forward onto a further member access (since a bare-pun field has
+## no persisted map of its own to compose through) - see the report.
+type WrappedPoint struct(s scope, inner Point<s>) {
+    inner
+}
+
+type PunnedBox struct(s scope, wrapped WrappedPoint<s>) {
+    wrapped
+}
+
+func makePunnedBoxChecked(a scope, x int32, y int32) ? Point<a> {
+    b mut PunnedBox<> = PunnedBox(a, WrappedPoint(a, Point{x, y}))
+    return b.wrapped.inner
+}
+
 ## reassignment tracking: a var's own scope-binding map used to be set once, at its own declaration, and
 ## never revisited - so "box = ScopedBox(otherScope, ...)" here left box's OWN tracked binding stale,
 ## silently still saying "a" even after box was reassigned to point at something else entirely. A plain
@@ -968,6 +991,12 @@ test "the static scope checker traces a scope tag through a field of a field, no
     p mut Point<> = fieldOfFieldChecked(own, 9, 10)
     assert(p.x == 9)
     assert(p.y == 10)
+}
+
+test "the static scope checker traces a scope tag through a bare-pun field, not just an explicit one" {
+    p mut Point<> = makePunnedBoxChecked(own, 11, 12)
+    assert(p.x == 11)
+    assert(p.y == 12)
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {

@@ -1148,3 +1148,44 @@ of sync with the actual code.
   deliberately, even though the reassignment happens to be the same scope every iteration here - the
   documented, accepted cost of not attempting per-iteration fixpoint analysis) vs. one that never reassigns
   the var at all (left untouched, confirming the loop-body tracking doesn't over-trigger on unrelated code).
+
+- **A bare-pun constructor field ("`{ wrapped }`" alone, forwarding a same-named constructor parameter
+  directly, rather than constructing a fresh value the way an explicit initializer does) now traces
+  through the static scope checker too - found while confirming the field-of-a-field fix genuinely
+  generalizes to 3+ levels, not a depth limit specifically but a real, separate gap in its own right.**
+  The field-of-a-field fix persists a field's own `scopeBindings` from *its own initializer expression*,
+  checked once at the field's own declaration - but a bare-pun field has no initializer expression at all;
+  its value *is* one of the constructor's own parameters, unchanged. A parameter, unlike a local var-decl,
+  never gets its own `scopeBindings` populated (there's no single, fixed initializer to derive it from - a
+  parameter's value varies by call site, the same reason a scope-typed parameter's own binding is never
+  persisted onto the parameter itself either, only onto each individual *call*). So a bare-pun field's
+  persisted map was always empty, `resolveEffectiveScopeVar` fell through to the raw, foreign, type-level
+  var, and the existing "foreign, unverifiable, allow" default silently accepted an actually-wrong scope -
+  confirmed by test before the fix (compiled clean) and after (correctly rejected).
+  **Fixed with the same idea scope-typed parameters already use - per-call, not per-declaration - extended
+  to non-scope parameters:** `OperandFuncCall` now also merges a non-scope-typed argument's own
+  `scopeBindings` into the call's own map (so whatever a fresh nested call like `WrappedPoint(a, ...)`
+  already knows survives the *outer* call's own boundary, e.g. `PunnedBox(a, WrappedPoint(a, ...))`), and
+  `OperandMember` now also carries a base's own map forward onto a further member access, skipping any key
+  already set by the field's own more specific info (a bare-pun field has no persisted map of its own to
+  compose through, so without this the merged info from `OperandFuncCall` would have nowhere to flow to).
+  Safe unconditionally - every type's own ctor scope params are their own distinct `struct var*`, never
+  shared across types, so an unrelated carried-forward key can never collide with, or be mistaken for,
+  anything a later lookup actually asks for by a different key.
+  **One real, narrow precision cost found and accepted, not fixed - a genuine key-space limitation, not an
+  oversight:** when a constructor has *two or more* bare-pun parameters that happen to share the exact
+  same underlying constructor-bearing type (e.g. two `Leaf3<...>`-typed fields, each tagged to a
+  *different* scope), `OperandFuncCall`'s merge sees the same inner key (`Leaf3`'s own ctor scope param)
+  from two different arguments and can't tell them apart - `struct scopeBinding` is a flat `{typeParam,
+  boundTo}` pair with no notion of *which field's own chain* it came through. Rather than silently keep
+  whichever argument happened to merge first (which could resolve one field's own member access using an
+  *unrelated* field's own binding - a real false accept), a genuine conflict is marked `SCOPE_AMBIGUOUS`
+  (the same sentinel the reassignment-tracking entry above introduced) and rejected - confirmed by test:
+  the field that's actually sound in this shape (`t.a.val`, genuinely tagged to `a2`) is now also rejected
+  alongside the field that's actually unsound (`t.b.val` against `Point<a2>`, genuinely tagged to `b2`) -
+  a real false rejection, not just a hypothetical one. This is strictly better than what existed before
+  (both were silently, wrongly *accepted*), and disambiguating the two would need extending `struct
+  scopeBinding`'s own key space to carry *which parameter/field path* a binding came through, not just
+  *which inner ctor param* - a real design question (how should that path be represented and compared?),
+  not a straightforward implementation gap, so deliberately left as a known, narrow, safe-but-imprecise
+  edge case rather than attempted here.

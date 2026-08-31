@@ -1512,12 +1512,40 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     //for any later, unrelated caller's own resolveEffectiveScopeVar lookup.
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* param = ListGetIdx(&func->type.vars, i);
-        if (param->type.bType != BASETYPE_SCOPE) continue;
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
-        struct scopeBinding b = (struct scopeBinding){0};
-        b.typeParam = param;
-        b.boundTo = arg->opType == OPERATION_READ_VAR ? canonicalVar(arg->readVar) : NULL;
-        ListAdd(&op->scopeBindings, &b);
+        if (param->type.bType == BASETYPE_SCOPE) {
+            struct scopeBinding b = (struct scopeBinding){0};
+            b.typeParam = param;
+            b.boundTo = arg->opType == OPERATION_READ_VAR ? canonicalVar(arg->readVar) : NULL;
+            ListAdd(&op->scopeBindings, &b);
+            continue;
+        }
+        //a non-scope-typed argument may itself already carry a real scopeBindings map (e.g. a fresh call
+        //to another constructor, "Leaf3(s, ...)", passed as this argument) - merge it into op's own map so
+        //a BARE-PUN field on the callee's own type (one that just forwards this parameter's value
+        //unchanged, with no explicit initializer of its own to persist a map from - see
+        //semaCheckBodies/OperandMember's own "carry base's map forward" step) can still resolve through it
+        //later, via whatever this call's own result gets assigned/persisted onto. Conflicting entries for
+        //the same key from two DIFFERENT arguments (a real, if narrow, possibility - two parameters that
+        //each happen to be instances of the same constructor-bearing type, tagged to different scopes) are
+        //marked SCOPE_AMBIGUOUS rather than silently keeping whichever was merged first, which could
+        //otherwise resolve one parameter's own field access using an unrelated parameter's own binding.
+        for (int j = 0; j < arg->scopeBindings.len; j++) {
+            struct scopeBinding* e = ListGetIdx(&arg->scopeBindings, j);
+            struct scopeBinding* existing = NULL;
+            for (int k = 0; k < op->scopeBindings.len; k++) {
+                struct scopeBinding* have = ListGetIdx(&op->scopeBindings, k);
+                if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { existing = have; break; }
+            }
+            if (existing) {
+                if (canonicalVar(existing->boundTo) != canonicalVar(e->boundTo)) existing->boundTo = SCOPE_AMBIGUOUS;
+            } else {
+                struct scopeBinding nb = (struct scopeBinding){0};
+                nb.typeParam = e->typeParam;
+                nb.boundTo = e->boundTo;
+                ListAdd(&op->scopeBindings, &nb);
+            }
+        }
     }
     return op;
 }
@@ -1592,6 +1620,30 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = inner->typeParam;
         b.boundTo = resolveEffectiveScopeVar(base, inner->boundTo);
+        ListAdd(&op->scopeBindings, &b);
+    }
+    //a BARE-PUN field (one whose value is literally a constructor parameter, forwarded unchanged - see
+    //semaCheckBodies) has no initializer expression of its own to persist a map from, so memberVar's own
+    //scopeBindings above is empty for it even when the field's own type is constructor-bearing - the
+    //relevant substitution instead lives on base's own map already, merged in there by OperandFuncCall at
+    //whatever call site actually constructed the value base now holds (see OperandFuncCall's own "merge a
+    //non-scope argument's own map" step). Carrying base's own entries forward here (skipping any key
+    //already set above, so the field's own more specific info always wins) makes that reachable through a
+    //further member access on THIS operand - safe unconditionally, not just for bare-pun fields, since
+    //every type's own ctor scope params are their own distinct struct var* (never shared across types), so
+    //an unrelated carried-forward key can never collide with, or be mistaken for, anything a later lookup
+    //actually asks for.
+    for (int i = 0; i < base->scopeBindings.len; i++) {
+        struct scopeBinding* e = ListGetIdx(&base->scopeBindings, i);
+        bool already = false;
+        for (int j = 0; j < op->scopeBindings.len; j++) {
+            struct scopeBinding* have = ListGetIdx(&op->scopeBindings, j);
+            if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { already = true; break; }
+        }
+        if (already) continue;
+        struct scopeBinding b = (struct scopeBinding){0};
+        b.typeParam = e->typeParam;
+        b.boundTo = e->boundTo;
         ListAdd(&op->scopeBindings, &b);
     }
     return op;
