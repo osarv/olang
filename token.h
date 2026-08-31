@@ -22,6 +22,8 @@ enum tokenType {
     TOK_RET,
     TOK_DONE,
     TOK_CRASH,
+    TOK_ASSERT, //"assert EXPR" - a statement, takes its operand directly like "return" does, not a
+                //function call - see the report
     TOK_FOR,
     TOK_DO,
     TOK_WHILE,

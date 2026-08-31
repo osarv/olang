@@ -32,7 +32,7 @@ test "runner sees the same shared error type worker does" {
 
 test "runner can call worker's cross-module wrapper directly" {
     ok mut bool = true
-    try wk.Classify(50) catch sh.RangeError || wk.WorkerError {
+    try wk.Classify(50) catch sh.RangeError + wk.WorkerError {
         ok = false
     }
     assert(ok)

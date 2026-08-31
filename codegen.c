@@ -806,24 +806,6 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
 char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
 
-    if (func->isBuiltin) { //assert(cond) - the only builtin
-        struct operand* condOp = *(struct operand**)ListGetIdx(&op->args, 0);
-        char* cv = cgValue(ctx, condOp);
-        char* notc = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", notc, cv);
-        int id = ctx->lblCtr++;
-        char failLbl[32], okLbl[32];
-        snprintf(failLbl, sizeof(failLbl), "assert.fail.%d", id);
-        snprintf(okLbl, sizeof(okLbl), "assert.ok.%d", id);
-        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", notc, failLbl, okLbl);
-        ctx->terminated = true;
-        cgLabel(ctx, failLbl);
-        fputs("  call void @__olang_assert_fail()\n", ctx->fnOut);
-        cgBr(ctx, okLbl);
-        cgLabel(ctx, okLbl);
-        return "";
-    }
-
     char* target;
     struct cgLocal* local = cgFindLocal(ctx, func->name);
     if (local) {
@@ -1119,6 +1101,24 @@ void cgCrash(struct cgCtx* ctx, struct statement* s) {
     ctx->terminated = true;
 }
 
+//"assert EXPR" - a statement now, not a call (see the report); __olang_assert_fail itself is unchanged -
+//see emitRuntimeDecls for its longjmp-in-test-mode-else-hard-abort behavior
+void cgAssert(struct cgCtx* ctx, struct statement* s) {
+    char* cv = cgValue(ctx, s->op);
+    char* notc = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", notc, cv);
+    int id = ctx->lblCtr++;
+    char failLbl[32], okLbl[32];
+    snprintf(failLbl, sizeof(failLbl), "assert.fail.%d", id);
+    snprintf(okLbl, sizeof(okLbl), "assert.ok.%d", id);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", notc, failLbl, okLbl);
+    ctx->terminated = true;
+    cgLabel(ctx, failLbl);
+    fputs("  call void @__olang_assert_fail()\n", ctx->fnOut);
+    cgBr(ctx, okLbl);
+    cgLabel(ctx, okLbl);
+}
+
 //selects the error part of the enclosing function's return union: packs (which declared error type, which
 //word) into the single i32 code an unhandled caller checks (see errorCode/the report). No try/catch exists
 //yet, so this always genuinely returns to the caller now - the caller decides what "unhandled" means
@@ -1243,6 +1243,7 @@ void cgStatement(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_RET: cgRet(ctx, s); return;
         case STATEMENT_DONE: cgDone(ctx, s); return;
         case STATEMENT_CRASH: cgCrash(ctx, s); return;
+        case STATEMENT_ASSERT: cgAssert(ctx, s); return;
         case STATEMENT_ERROR: cgError(ctx, s); return;
         case STATEMENT_TRY_CATCH: cgTryCatch(ctx, s); return;
         default: ErrorBugFound(); return;
@@ -1278,7 +1279,7 @@ void emitGlobalDecls(FILE* out) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType == BASETYPE_FUNC || v->isBuiltin) continue;
+            if (v->type.bType == BASETYPE_FUNC) continue;
             char name[256];
             mangleGlobal(mod, v->name, name, sizeof(name));
             char ty[256];
@@ -1480,7 +1481,7 @@ void cgInitGlobalsFunc(struct cgCtx* ctx) {
         ctx->scope = NULL;
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType == BASETYPE_FUNC || v->isBuiltin || !v->initExpr) continue;
+            if (v->type.bType == BASETYPE_FUNC || !v->initExpr) continue;
             char gaddr[256];
             mangleGlobal(mod, v->name, gaddr, sizeof(gaddr));
             char* val = cgValue(ctx, v->initExpr);
@@ -1561,7 +1562,7 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType != BASETYPE_FUNC || v->isBuiltin) continue;
+            if (v->type.bType != BASETYPE_FUNC) continue;
             cgFunction(ctx, mod, v);
         }
     }

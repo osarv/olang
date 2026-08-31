@@ -309,23 +309,6 @@ struct semaModule* findLoadedModule(struct str fileName) {
     return slot ? *slot : NULL;
 }
 
-//compiler intrinsics available in every module without an import - currently just assert(cond bool)
-void registerBuiltins(struct semaModule* mod) {
-    struct var param = (struct var){0};
-    param.name = StrFromCStr("cond");
-    param.type = TypeVanilla(BASETYPE_BOOL);
-    param.mut = false;
-
-    struct var assertVar = (struct var){0};
-    assertVar.name = StrFromCStr("assert");
-    assertVar.type.bType = BASETYPE_FUNC;
-    assertVar.type.vars = ListInit(sizeof(struct var));
-    ListAdd(&assertVar.type.vars, &param);
-    assertVar.type.errors = ListInit(sizeof(struct type*));
-    assertVar.isBuiltin = true;
-    VarListAddSetOrigin(&mod->vars, assertVar);
-}
-
 struct semaModule* findImport(struct semaModule* mod, struct str alias);
 
 //consulted by the parser (see TypeNameLookup in syntax.h) only to tell "Type{values}" (a struct literal)
@@ -359,7 +342,6 @@ struct semaModule* semaLoadModule(struct str fileName) {
     mod->vars = ListInit(sizeof(struct var));
     mod->imports = ListInit(sizeof(struct semaImport));
     mod->tests = ListInit(sizeof(struct semaTest));
-    registerBuiltins(mod);
     ListAdd(&allModules, &mod); //register before recursing, to break import cycles
 
     //heap-allocated, not a stack buffer: TokenizeFile/StrToCStr alias this pointer for the whole
@@ -1989,6 +1971,17 @@ struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
     return (struct statement){.sType = STATEMENT_DONE};
 }
 
+//"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
+//every if/do-while condition already goes through
+struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_ASSERT;
+    stmt.op = cond;
+    return stmt;
+}
+
 struct statement buildCrashStmnt(struct checkCtx* ctx, struct syntax* s) {
     (void)ctx; (void)s;
     return (struct statement){.sType = STATEMENT_CRASH};
@@ -2113,6 +2106,7 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_DONE: return buildDoneStmnt(ctx, actual);
         case SNTX_STMNT_CRASH: return buildCrashStmnt(ctx, actual);
+        case SNTX_STMNT_ASSERT: return buildAssertStmnt(ctx, actual);
         case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
         case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
         case SNTX_STMNT_EXPR: return buildExprStmnt(ctx, actual);

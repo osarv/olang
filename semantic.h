@@ -92,7 +92,6 @@ struct var {
     struct var* origin; //where the variable declaration is stored throughout the compilation process
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
-    bool isBuiltin; //true for compiler intrinsics (e.g. assert) - has no codeBlock to walk
 };
 
 enum statementType {
@@ -107,6 +106,7 @@ enum statementType {
     STATEMENT_RET,
     STATEMENT_DONE,  //process exit, OS-standard success (0) - never takes a value
     STATEMENT_CRASH, //process exit, OS-standard failure (1) - never takes a value
+    STATEMENT_ASSERT,
     STATEMENT_ERROR,
     STATEMENT_TRY_CATCH
 };
@@ -123,10 +123,10 @@ struct statement {
     enum statementType sType;
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
-    struct operand* op;          //VAR_DECL/ASSIGN: rhs value; IF/FOR/DO/MATCH/CASE: condition/matched value;
-                                  //RET: value (NULL if bare); ERROR: the selected error word (never NULL);
-                                  //TRY_CATCH: the tried call (OPERATION_FUNCCALL, never NULL); unused for
-                                  //DONE/CRASH, which never carry a value
+    struct operand* op;          //VAR_DECL/ASSIGN: rhs value; IF/FOR/DO/MATCH/CASE/ASSERT: condition/matched
+                                  //value; RET: value (NULL if bare); ERROR: the selected error word (never
+                                  //NULL); TRY_CATCH: the tried call (OPERATION_FUNCCALL, never NULL); unused
+                                  //for DONE/CRASH, which never carry a value
     struct operand* forInit;     //FOR only: the loop variable's initial value expression
     struct operand* forPost;     //FOR only: the post-iteration expression
     struct list block;           //list of struct statement: the primary body; TRY_CATCH: the catch body

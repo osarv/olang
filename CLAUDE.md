@@ -25,7 +25,24 @@ of sync with the actual code.
   is pulled in transitively from `file.olang`. `olang -t file1.olang file2.olang ...` runs every
   file's `test { }` blocks as independent, isolated OS processes; `main` is not required, and one
   broken file doesn't stop the others from being checked/run.
-- **`test "description" { }` blocks + builtin `assert(cond)`.** Zig-style. Only usable in `-t` mode.
+- **`test "description" { }` blocks.** Zig-style. Only usable in `-t` mode.
+- **`assert EXPR` is a statement, not a function call - usable in any function body, not just inside
+  `test { }`.** Takes its operand directly the same way `return EXPR` does (`TOK_ASSERT`, own grammar rule
+  `SNTX_STMNT_ASSERT`/`STATEMENT_ASSERT`), not a call to a builtin var - so `assert(cond)` and
+  `assert cond` both work, and mean exactly the same thing: `(cond)` is just an ordinary parenthesized
+  sub-expression, which `EXPR` already handles on its own, so no special-casing was needed to keep every
+  existing `assert(...)` call site parsing unchanged. This replaced an earlier design where `assert` was a
+  compiler-intrinsic *function* (`registerBuiltins`, `struct var.isBuiltin`) called like any other - both
+  are now gone, and codegen's assert-failure branch/label logic moved as-is from `cgFuncCall`'s builtin
+  branch into its own `cgAssert(ctx, statement*)`, driven by `cgStatement`'s normal statement dispatch
+  instead of a special-cased call target. Usable in *any* function, not just `test { }` (confirmed
+  directly: `assert` inside `main` in a `-c`-compiled program works, and a *failing* one there hard-aborts
+  via `abort()`/SIGABRT - much like C's own `assert()` - rather than being caught). The soft, recoverable
+  failure behavior (mark this one test failed, print, keep running the rest) is specific to the `-t` test
+  harness, which sets a longjmp target (`@__olang_jmp_target`) before each test; `__olang_assert_fail`
+  (unchanged by this - still the same runtime function) checks that target and only takes the soft path
+  when it's actually set (never true outside the test harness) - see `emitRuntimeDecls`/`cgTestHarnessMain`
+  in codegen.c.
 - **Error-union return ABI.** Zig-style, but with *locally*-scoped codes instead of one whole-program
   numbering, specifically so a compiled module's codes never shift because of an unrelated error type
   declared elsewhere (a real gap in naive Zig-style `anyerror` schemes, which are only stable within one
@@ -40,11 +57,19 @@ of sync with the actual code.
 - **`try`/`catch` call sites.** Forced handling: a bare call to a fallible function is a compile error.
   `try f(...)` is a general *expression* (usable anywhere a value is needed, e.g.
   `x mut int32 = try f(...)`) that propagates on error - it requires the enclosing function's own
-  signature to declare every error `f` can produce. `try f(...) catch A || B.word { ... }` is a
+  signature to declare every error `f` can produce. `try f(...) catch A + B.word { ... }` is a
   *statement*: pure control flow, the caught error is never bound to a value (no `|err|`-style capture -
   error words carry no data anyway, so there'd be nothing extra to expose). `catch MyError` (bare, no
   `.word`) matches any word of that type; `catch MyError.NotFound` matches only that one word; multiple
-  matches combine with `||`. An error not matched by any clause propagates using the same superset rule
+  matches combine with `+`, the same operator a function signature already uses to combine several whole
+  error types into one declared set (`ErrA + ErrB ? T`) - a catch clause is doing exactly that same thing
+  (matching against a combined set of error types/words), so it uses the same operator. **`||` was tried
+  first and deliberately dropped**: it reads as a boolean-OR condition, which is misleading here - a catch
+  clause never actually evaluates or produces a new boolean/set value the way `||` implies, it's declaring
+  set membership, and `+` already means exactly that everywhere else error types are combined. `parseCatchErrList`
+  in syntax.c only ever accepts `TOK_ADD` now; `||` (`TOK_OR`) remains the ordinary boolean-OR expression
+  operator everywhere else in the language, unaffected - this restriction is purely about the catch-list
+  grammar. An error not matched by any clause propagates using the same superset rule
   as bare `try` - except only for the part that actually escapes: an error type every one of whose words
   is caught (via a bare whole-type match, or by individually catching every one of its declared words)
   never needs to appear in the enclosing signature at all. This has a real, non-obvious consequence:

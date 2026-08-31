@@ -36,6 +36,7 @@ struct tokRule tokRules[] = {
     {TOK_RET, "return", NULL},
     {TOK_DONE, "done", NULL},
     {TOK_CRASH, "crash", NULL},
+    {TOK_ASSERT, "assert", NULL},
     {TOK_FOR, "for", NULL},
     {TOK_DO, "do", NULL},
     {TOK_WHILE, "while", NULL},

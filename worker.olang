@@ -54,7 +54,7 @@ func AskRunner(n int32) ? int32 {
 
 test "Classify accepts values inside the range" {
     ok mut bool = true
-    try Classify(50) catch sh.RangeError || WorkerError {
+    try Classify(50) catch sh.RangeError + WorkerError {
         ok = false
     }
     assert(ok)
@@ -62,7 +62,7 @@ test "Classify accepts values inside the range" {
 
 test "Classify rejects negative input with its own error" {
     caught mut bool = false
-    try Classify(-1) catch sh.RangeError || WorkerError {
+    try Classify(-1) catch sh.RangeError + WorkerError {
         caught = true
     }
     assert(caught)
@@ -70,7 +70,7 @@ test "Classify rejects negative input with its own error" {
 
 test "Classify rejects out-of-range input with the shared error" {
     caught mut bool = false
-    try Classify(500) catch sh.RangeError || WorkerError {
+    try Classify(500) catch sh.RangeError + WorkerError {
         caught = true
     }
     assert(caught)
@@ -83,7 +83,7 @@ test "checkRangeOk reports success and failure correctly" {
 
 test "reordered propagation identifies negative correctly" {
     caught mut bool = false
-    try reclassifyInput(-1) catch InputError || WorkerError {
+    try reclassifyInput(-1) catch InputError + WorkerError {
         caught = true
     }
     assert(caught)
@@ -91,7 +91,7 @@ test "reordered propagation identifies negative correctly" {
 
 test "reordered propagation identifies too-big correctly" {
     caught mut bool = false
-    try reclassifyInput(2000) catch InputError || WorkerError {
+    try reclassifyInput(2000) catch InputError + WorkerError {
         caught = true
     }
     assert(caught)
@@ -99,15 +99,15 @@ test "reordered propagation identifies too-big correctly" {
 
 test "reordered propagation identifies bad-input correctly" {
     caught mut bool = false
-    try reclassifyInput(0) catch InputError || WorkerError {
+    try reclassifyInput(0) catch InputError + WorkerError {
         caught = true
     }
     assert(caught)
 }
 
-test "reordered propagation: catching both combined error types with ||" {
+test "reordered propagation: catching both combined error types with +" {
     caught mut bool = false
-    try reclassifyInput(-1) catch InputError || WorkerError {
+    try reclassifyInput(-1) catch InputError + WorkerError {
         caught = true
     }
     assert(caught)
@@ -115,7 +115,7 @@ test "reordered propagation: catching both combined error types with ||" {
 
 test "reordered propagation: success path is unaffected by the reordering" {
     caught mut bool = false
-    try reclassifyInput(50) catch InputError || WorkerError {
+    try reclassifyInput(50) catch InputError + WorkerError {
         caught = true
     }
     assert(!caught)
@@ -123,7 +123,7 @@ test "reordered propagation: success path is unaffected by the reordering" {
 
 test "cross-module: ComputeChecked identifies div-by-zero correctly" {
     caught mut bool = false
-    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError || sh.RangeError {
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError + sh.RangeError {
         caught = true
     }
     assert(caught)
@@ -131,7 +131,7 @@ test "cross-module: ComputeChecked identifies div-by-zero correctly" {
 
 test "cross-module: ComputeChecked identifies too-small correctly" {
     caught mut bool = false
-    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError || sh.RangeError {
+    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError + sh.RangeError {
         caught = true
     }
     assert(caught)
@@ -141,7 +141,7 @@ test "cross-module: ComputeChecked identifies too-small correctly" {
 ## catch in this file uses the whole-type "alias.Type" form (2 identifiers) instead
 test "cross-module: catching a specific word by its full alias.Type.word name" {
     caught mut bool = false
-    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO || sh.MathError.OVERFLOW || sh.RangeError {
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO + sh.MathError.OVERFLOW + sh.RangeError {
         caught = true
     }
     assert(caught)

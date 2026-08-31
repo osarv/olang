@@ -854,6 +854,22 @@ struct syntax* parseStmntCrash(SyntaxCtx sc) {
     return s;
 }
 
+//"assert EXPR" - takes its operand directly like "return" does, not a function call ("assert(cond)"
+//still parses fine too, unchanged: the parens are just an ordinary parenthesized sub-expression, which
+//EXPR already handles on its own - see the report)
+struct syntax* parseStmntAssert(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_ASSERT);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* val = parseExpr(sc);
+    if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STMNT_ASSERT);
+    addTok(s, kw);
+    addSntx(s, val);
+    return s;
+}
+
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
@@ -895,6 +911,11 @@ struct syntax* parseCatchErr(SyntaxCtx sc) {
     return s;
 }
 
+//"+" joins entries here, not "||" - a catch clause is matching against a *set* of error types/words, the
+//same thing "+" already means combining in a function signature's error list ("ErrA + ErrB ? T"); "||"
+//would misleadingly read as a boolean-OR condition rather than "these belong to one combined set" (it
+//never actually produces a new set value the way this reads, per the report - kept only as the general
+//boolean-OR expression operator elsewhere in the language, unrelated to this).
 struct syntax* parseCatchErrList(SyntaxCtx sc) {
     struct syntax* first = parseCatchErr(sc);
     if (!first) return NULL;
@@ -902,11 +923,11 @@ struct syntax* parseCatchErrList(SyntaxCtx sc) {
     addSntx(s, first);
     while (true) {
         int before = TokenGetCursor(sc->tc);
-        struct token orTok = TokenFeed(sc->tc);
-        if (orTok.type != TOK_OR) { TokenSetCursor(sc->tc, before); break; }
+        struct token sepTok = TokenFeed(sc->tc);
+        if (sepTok.type != TOK_ADD) { TokenSetCursor(sc->tc, before); break; }
         struct syntax* e = parseCatchErr(sc);
         if (!e) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, orTok);
+        addTok(s, sepTok);
         addSntx(s, e);
     }
     return s;
@@ -958,6 +979,7 @@ struct syntax* parseStmnt(SyntaxCtx sc) {
     else if ((inner = parseStmntRet(sc))) {}
     else if ((inner = parseStmntDone(sc))) {}
     else if ((inner = parseStmntCrash(sc))) {}
+    else if ((inner = parseStmntAssert(sc))) {}
     else if ((inner = parseStmntError(sc))) {}
     else if ((inner = parseStmntTryCatch(sc))) {}
     else if ((inner = parseStmntExpr(sc))) {}
