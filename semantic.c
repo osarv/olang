@@ -446,14 +446,51 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut) {
     ListAdd(&mod->vars, &v);
 }
 
+//internal names for a constructor-bearing type's synthetic constructor/destructor "functions" - "$" is
+//never producible by the tokenizer's identifier rule, so these can never collide with (or be typed as) a
+//real user name, same idea as the mangled "@m0_name" global symbols codegen already produces
+struct str internalCtorName(struct token typeNameTok) {
+    char* buf = MallocOrCrash((size_t)typeNameTok.str.len + 8);
+    int n = snprintf(buf, (size_t)typeNameTok.str.len + 8, "%.*s$ctor", typeNameTok.str.len, typeNameTok.str.ptr);
+    return Str(buf, n);
+}
+struct str internalDtorName(struct token typeNameTok) {
+    char* buf = MallocOrCrash((size_t)typeNameTok.str.len + 8);
+    int n = snprintf(buf, (size_t)typeNameTok.str.len + 8, "%.*s$dtor", typeNameTok.str.len, typeNameTok.str.ptr);
+    return Str(buf, n);
+}
+
 void semaCollectNames(struct semaModule* mod) {
     for (int i = 0; i < mod->syn.decls.len; i++) {
         struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
         struct syntax* actual = partSntx(decl, 0);
         switch (actual->type) {
-            case SNTX_TYPE_DECL:
-                collectType(mod, firstTokOfType(actual, TOK_IDEN), BASETYPE_VOID);
+            case SNTX_TYPE_DECL: {
+                struct token nameTok = firstTokOfType(actual, TOK_IDEN);
+                collectType(mod, nameTok, BASETYPE_VOID);
+                //a constructor-bearing struct also needs its own synthetic constructor/destructor "var"
+                //entries registered *now* (pass 1), while mod->vars can still safely grow - pass 2/3 take
+                //stable pointers into this same list (via VarGetList) that a later ListAdd could otherwise
+                //invalidate on reallocation. See the report.
+                struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
+                if (ctorNode) {
+                    struct var ctorV = (struct var){0};
+                    ctorV.owner = mod;
+                    ctorV.name = internalCtorName(nameTok);
+                    ctorV.tok = nameTok;
+                    ctorV.type.placeholder = true;
+                    ListAdd(&mod->vars, &ctorV);
+                    if (firstPartOfType(ctorNode, SNTX_DESTRUCT)) {
+                        struct var dtorV = (struct var){0};
+                        dtorV.owner = mod;
+                        dtorV.name = internalDtorName(nameTok);
+                        dtorV.tok = nameTok;
+                        dtorV.type.placeholder = true;
+                        ListAdd(&mod->vars, &dtorV);
+                    }
+                }
                 break;
+            }
             case SNTX_ERROR_DECL:
                 collectType(mod, firstTokOfType(actual, TOK_IDEN), BASETYPE_ERROR);
                 break;
@@ -693,6 +730,99 @@ struct type resolveStructBody(struct semaModule* mod, struct token nameTok, stru
     return t;
 }
 
+//"struct(params) errorList? { fields } destruct?" - mutates *t IN PLACE rather than building-then-copying
+//(the way resolveStructBody/resolveVocabBody do, via resolveTypeDecl's generic "*t = resolved" step)
+//specifically so t->ctorFunc/t->destructFunc's own retType/self-param can point at t directly (the stable
+//slot inside mod->types) instead of a temporary that's about to be overwritten - see the report.
+void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out);
+
+void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax* ctorNode) {
+    t->bType = BASETYPE_STRUCT;
+    t->hasCtor = true;
+
+    struct list ctorParams;
+    resolveParamList(mod, firstPartOfType(ctorNode, SNTX_PARAM_LIST), &ctorParams);
+
+    struct list ctorErrors = ListInit(sizeof(struct type*));
+    struct syntax* errListNode = firstPartOfType(ctorNode, SNTX_ERROR_LIST);
+    if (errListNode) {
+        struct list names = allPartsOfType(errListNode, SNTX_NAME);
+        for (int i = 0; i < names.len; i++) {
+            struct syntax* nameNode = *(struct syntax**)ListGetIdx(&names, i);
+            struct type* errType = resolveErrorTypeName(mod, nameNode);
+            if (!errType) continue;
+            ListAdd(&ctorErrors, &errType);
+        }
+    }
+
+    t->vars = ListInit(sizeof(struct var));
+    t->ctorFieldSyntax = ListInit(sizeof(struct syntax*));
+    struct syntax* fieldListNode = firstPartOfType(ctorNode, SNTX_CTOR_FIELD_LIST);
+    struct list fieldNodes = allPartsOfType(fieldListNode, SNTX_CTOR_FIELD);
+    for (int i = 0; i < fieldNodes.len; i++) {
+        struct syntax* f = *(struct syntax**)ListGetIdx(&fieldNodes, i);
+        struct token fieldNameTok = firstTokOfType(f, TOK_IDEN);
+        struct str fieldName = strFromTok(fieldNameTok);
+        if (VarGetList(&t->vars, fieldName)) { ErrMsgSemantic(fieldNameTok, VAR_NAME_IN_USE); continue; }
+
+        struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
+        struct var v = (struct var){0};
+        v.name = fieldName;
+        v.tok = fieldNameTok;
+        v.mut = hasTokOfType(f, TOK_MUT);
+
+        if (typeExprNode) {
+            //explicit type - "= expr"/":= expr" is checked for real in pass 3 (needs ctor params in
+            //scope); a type with no initializer at all never has anywhere to get a value from
+            v.type = resolveTypeExpr(mod, typeExprNode, &ctorParams);
+            if (!hasTokOfType(f, TOK_ASS)) ErrMsgSemantic(fieldNameTok, CTOR_FIELD_NOT_INITIALIZED);
+        } else if (hasTokOfType(f, TOK_ASS_INFER)) {
+            //":=" - type read off the (required-to-be-literal) rhs in pass 3, same as a global ":=" var
+            v.type = (struct type){0};
+        } else {
+            //bare pun - must match one of the constructor's own parameters by name
+            struct var* param = VarGetList(&ctorParams, fieldName);
+            if (!param) { ErrMsgSemantic(fieldNameTok, CTOR_FIELD_NOT_INITIALIZED); continue; }
+            v.type = param->type;
+        }
+        ListAdd(&t->vars, &v);
+        ListAdd(&t->ctorFieldSyntax, &f);
+    }
+
+    struct var* ctorFuncVar = VarGetList(&mod->vars, internalCtorName(t->tok));
+    ctorFuncVar->owner = mod;
+    ctorFuncVar->type.bType = BASETYPE_FUNC;
+    ctorFuncVar->type.vars = ctorParams;
+    ctorFuncVar->type.errors = ctorErrors;
+    ctorFuncVar->type.hasRetType = true;
+    ctorFuncVar->type.retType = t; //the same stable slot resolveTypeDecl was called with - never a copy
+    ctorFuncVar->type.placeholder = false;
+    t->ctorFunc = ctorFuncVar;
+
+    struct syntax* destructNode = firstPartOfType(ctorNode, SNTX_DESTRUCT);
+    if (destructNode) {
+        t->hasDestruct = true;
+        t->destructBlockSyntax = firstPartOfType(destructNode, SNTX_BLOCK);
+        struct var* dtorFuncVar = VarGetList(&mod->vars, internalDtorName(t->tok));
+        dtorFuncVar->owner = mod;
+        dtorFuncVar->type.bType = BASETYPE_FUNC;
+        dtorFuncVar->type.vars = ListInit(sizeof(struct var));
+        dtorFuncVar->type.errors = ListInit(sizeof(struct type*));
+        dtorFuncVar->type.placeholder = false;
+        t->destructFunc = dtorFuncVar; //set before the snapshot below, not after - selfParam.type.destructFunc
+                                        //must be this same var, so codegen can recognize ".self" as "the
+                                        //instance this very destructor is already running on" and skip
+                                        //re-destructing it (see cgRunLocalDestructors)
+        struct var selfParam = (struct var){0};
+        selfParam.name = StrFromCStr(".self");
+        selfParam.tok = t->tok;
+        selfParam.mut = false;
+        selfParam.type = *t; //by-value snapshot - safe: bType/vars/name/owner/tok/hasDestruct/destructFunc
+                              //are all already final on *t at this point
+        ListAdd(&dtorFuncVar->type.vars, &selfParam);
+    }
+}
+
 //true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "{}"/"{name}" tag, no
 //namespace. "scope" is deliberately never registered as a real type (unlike int32/bool/etc in
 //resolveTypeRefBase) - it only ever resolves here, in a parameter's type position, so it structurally
@@ -833,6 +963,14 @@ void resolveTypeDecl(struct type* t) {
         struct token declNameTok = firstTokOfType(actual, TOK_IDEN);
         if (!StrCmp(strFromTok(declNameTok), t->name)) continue;
 
+        struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
+        if (ctorNode) {
+            //mutates *t in place - see resolveStructCtorInto for why this can't go through the generic
+            //build-then-copy path below
+            resolveStructCtorInto(owner, t, ctorNode);
+            break;
+        }
+
         struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
         struct type resolved = resolveTypeExpr(owner, typeExprNode, NULL); //module-level, no function context
         struct str name = t->name;
@@ -893,6 +1031,9 @@ struct checkCtx {
                        //global initializer, which has no enclosing scope at all
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
+    struct var* destructSelfVar; //non-NULL only while checking a destruct{} body: a bare identifier that
+                                  //isn't a real local but does name one of this var's own type's fields
+                                  //resolves to member access on it instead of UNKNOWN_VAR - see buildPrimary
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -938,7 +1079,24 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
 //requires public visibility, mirroring resolveErrorTypeName
 struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
-    if (idens.len == 1) return lookupVar(ctx, *(struct token*)ListGetIdx(&idens, 0));
+    if (idens.len == 1) {
+        struct token tok = *(struct token*)ListGetIdx(&idens, 0);
+        struct str name = strFromTok(tok);
+        struct var* v = scopeFindLocal(ctx->scope, name);
+        if (v) return v;
+        v = VarGetList(&ctx->mod->vars, name);
+        if (v) return v;
+        //not a var at all - "Type(args)" is legal exactly when Type declares a constructor; the synthetic
+        //ctorFunc reuses every bit of ordinary call-site machinery from here on (arg checking, try/catch
+        //coverage, codegen) with no dedicated call path of its own - see the report
+        struct type* t = TypeGetList(&ctx->mod->types, name);
+        if (t) {
+            resolveTypeDecl(t);
+            if (t->bType == BASETYPE_STRUCT && t->hasCtor) return t->ctorFunc;
+        }
+        ErrMsgSemantic(tok, UNKNOWN_VAR);
+        return NULL;
+    }
 
     struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
     struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
@@ -946,9 +1104,20 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
     if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
     struct str name = strFromTok(nameTok);
     struct var* v = VarGetList(&target->vars, name);
-    if (!v) { ErrMsgSemantic(nameTok, UNKNOWN_VAR); return NULL; }
-    if (!isPublic(name)) { ErrMsgSemantic(nameTok, VAR_IS_PRIVATE); return NULL; }
-    return v;
+    if (v) {
+        if (!isPublic(name)) { ErrMsgSemantic(nameTok, VAR_IS_PRIVATE); return NULL; }
+        return v;
+    }
+    struct type* t = TypeGetList(&target->types, name);
+    if (t) {
+        resolveTypeDecl(t);
+        if (t->bType == BASETYPE_STRUCT && t->hasCtor) {
+            if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return NULL; }
+            return t->ctorFunc;
+        }
+    }
+    ErrMsgSemantic(nameTok, UNKNOWN_VAR);
+    return NULL;
 }
 
 // ---- operand construction & type checking ----
@@ -1455,7 +1624,16 @@ struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct type t = resolveLiteralBaseType(ctx->mod, nameNode);
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
-    if (t.bType == BASETYPE_STRUCT) return OperandStructLiteral(t, args, tok);
+    if (t.bType == BASETYPE_STRUCT) {
+        //a constructor-bearing type must be built by calling it, not by the plain positional literal -
+        //otherwise the constructor's own logic (validation, fallible field initializers) could be
+        //silently bypassed, which would make declaring one pointless. See the report.
+        if (t.hasCtor) {
+            ErrMsgSemantic(tok, TYPE_REQUIRES_CONSTRUCTOR_CALL);
+            return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+        }
+        return OperandStructLiteral(t, args, tok);
+    }
     ErrMsgSemantic(tok, INVALID_STRUCT_LITERAL_TYPE);
     return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
 }
@@ -1502,6 +1680,17 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             case TOK_STR_LIT: return OperandStringLiteral(tok);
             case TOK_OWN: return OperandOwn(ctx, tok);
             case TOK_IDEN: {
+                //inside a destruct{} body only: a bare identifier that isn't a real local but does name
+                //one of the instance's own fields reads as that field (no "self." prefix - see the
+                //report), checked before the ordinary lookup below so a real local of the same name still
+                //correctly shadows it
+                if (ctx->destructSelfVar) {
+                    struct str name = strFromTok(tok);
+                    if (!scopeFindLocal(ctx->scope, name)) {
+                        struct var* field = VarGetList(&ctx->destructSelfVar->type.vars, name);
+                        if (field) return OperandMember(OperandReadVar(ctx->destructSelfVar, tok), name, tok);
+                    }
+                }
                 struct var* v = lookupVar(ctx, tok);
                 if (!v) return OperandIntLiteral(tok); //placeholder, keeps checking the rest of the file
                 return OperandReadVar(v, tok);
@@ -1960,6 +2149,83 @@ void semaCheckBodies(struct semaModule* mod) {
             test.description = Str(descTok.str.ptr +1, descTok.str.len -2);
             test.codeBlock = buildBlock(&ctx, firstPartOfType(actual, SNTX_BLOCK));
             ListAdd(&mod->tests, &test);
+            continue;
+        }
+        if (actual->type == SNTX_TYPE_DECL) {
+            struct token nameTok = firstTokOfType(actual, TOK_IDEN);
+            struct type* t = TypeGetList(&mod->types, strFromTok(nameTok));
+            if (!t->hasCtor) continue;
+
+            //---- constructor body: a single "return Type{field1, field2, ...}" - see the report for why
+            //this needs no dedicated codegen of its own (cgFunction/cgRet/OperandStructLiteral's existing
+            //aggregate-literal codegen already do everything this needs) ----
+            struct scope ctorScope = scopePush(NULL);
+            for (int p = 0; p < t->ctorFunc->type.vars.len; p++) {
+                struct var* param = ListGetIdx(&t->ctorFunc->type.vars, p);
+                struct var* local = VarAllocSetOrigin();
+                *local = *param;
+                local->mayBeInitialized = true;
+                local->mut = true;
+                ListAdd(&ctorScope.localPtrs, &local);
+            }
+            struct checkCtx cctx = {0};
+            cctx.mod = mod;
+            cctx.scope = &ctorScope;
+            cctx.func = t->ctorFunc;
+            cctx.hasOwnScope = true;
+
+            struct list fieldArgs = ListInit(sizeof(struct operand*));
+            for (int i = 0; i < t->vars.len; i++) {
+                struct var* field = ListGetIdx(&t->vars, i);
+                struct syntax* f = *(struct syntax**)ListGetIdx(&t->ctorFieldSyntax, i);
+                struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
+                struct syntax* rhsNode = firstPartOfType(f, SNTX_EXPR);
+                struct operand* fieldOp;
+                if (rhsNode) {
+                    fieldOp = buildExprFromSyntax(&cctx, rhsNode);
+                    if (typeExprNode) {
+                        if (!OperandFitsType(fieldOp, field->type)) ErrMsgSemantic(fieldOp->tok, VALUE_TYPE_MISMATCH);
+                    } else { // ":=" - type read straight off the (required-to-be-literal) rhs
+                        if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
+                        field->type = fieldOp->type;
+                    }
+                } else if (typeExprNode) {
+                    //no initializer at all - CTOR_FIELD_NOT_INITIALIZED already reported in pass 2;
+                    //fabricate a placeholder so the rest of the file still gets checked
+                    fieldOp = operandNew(field->tok, OPERATION_NONE, field->type);
+                } else {
+                    //bare pun - already resolved against a same-named parameter's type in pass 2
+                    struct var* param = scopeFindLocal(&ctorScope, field->name);
+                    fieldOp = param ? OperandReadVar(param, field->tok) : operandNew(field->tok, OPERATION_NONE, field->type);
+                }
+                ListAdd(&fieldArgs, &fieldOp);
+            }
+            struct operand* built = OperandStructLiteral(*t, fieldArgs, t->tok);
+            struct statement retStmt = (struct statement){0};
+            retStmt.sType = STATEMENT_RET;
+            retStmt.op = built;
+            t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
+            StatementAdd(&t->ctorFunc->codeBlock, retStmt);
+
+            //---- destructor body: no error union of its own (ctx.func stays NULL, same as a test{}
+            //block) - a fallible call inside must be fully caught right here, since a destructor can never
+            //propagate a failure to anyone (see the report) ----
+            if (t->hasDestruct) {
+                struct scope dtorScope = scopePush(NULL);
+                struct var* selfParam = ListGetIdx(&t->destructFunc->type.vars, 0);
+                struct var* selfLocal = VarAllocSetOrigin();
+                *selfLocal = *selfParam;
+                selfLocal->mayBeInitialized = true;
+                selfLocal->mut = true;
+                ListAdd(&dtorScope.localPtrs, &selfLocal);
+
+                struct checkCtx dctx = {0};
+                dctx.mod = mod;
+                dctx.scope = &dtorScope;
+                dctx.hasOwnScope = true;
+                dctx.destructSelfVar = selfLocal;
+                t->destructFunc->codeBlock = buildBlock(&dctx, t->destructBlockSyntax);
+            }
             continue;
         }
         if (actual->type != SNTX_FUNC_DEF) continue;

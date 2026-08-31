@@ -292,6 +292,82 @@ of sync with the actual code.
   **Not resolved by any of this:** whether `{}`/no-`{}` has the right direction at all (see the next
   entry) - this whole design was built on top of the *current* "plain = value, `{}` = heap-indirect"
   convention rather than settling that question.
+- **Constructors and destructors - the only two special blocks a struct type can declare.** General
+  `Type.funcName` OOP-style methods (callable as `instance.funcName(...)`) were discussed and deliberately
+  dropped in favor of just these two, specifically to sidestep the field/method name-collision question a
+  general mechanism would have raised (a method sharing a struct's own field name would be ambiguous at
+  `instance.name` - not an issue when there are only ever two, compiler-recognized special blocks, never a
+  user-nameable one). Grammar: `type Name struct(params) ErrA + ErrB? { fields } destruct { stmts }?` -
+  both the error list and the `destruct` block are optional; `struct(` (an open-paren immediately after
+  `struct`) is what commits `parseTypeDecl` to this whole shape instead of a plain `struct { ... }` body,
+  so the two forms never collide.
+  **Fields.** Each entry in `{ fields }` is one of three shapes, chosen per-field: a bare pun (`n` alone -
+  binds directly to a same-named constructor parameter, type inferred from it, no separate declaration);
+  an ordinary explicit var-decl (`v mut int32 = n * 2`, `path FileHandle` - same grammar a local var-decl
+  already uses, `mut` included, never silently inferring a type the way the pun case does); or `:=`
+  inference (`computed := n + 1`, type read off the required-to-be-literal rhs, same rule `:=` already
+  has for locals/globals). A field with an explicit type but no `=` at all (`path FileHandle` alone) has
+  no value to come from and is a compile error (`CTOR_FIELD_NOT_INITIALIZED`) - so is a bare name that
+  doesn't match any constructor parameter. This was a deliberate walk-back from an earlier draft where
+  every field's type was always inferred: fields follow the *same* explicit-unless-`:=` convention as
+  every other declaration in the language, no special-cased inference path of its own.
+  **`Type(args)` needs no dedicated call path at all.** A constructor is represented as an ordinary
+  synthetic `BASETYPE_FUNC` var (`struct type.ctorFunc`, params = the constructor's own declared parameters,
+  errors = its declared error union, retType = the struct's own plain value type) registered in the
+  module's var list under an internal name (`TypeName$ctor` - `$` is never producible by the tokenizer's
+  identifier rule, so this can never collide with, or be typed as, a real user name, the same trick
+  codegen's own `@m0_name` mangled symbols already rely on). `resolveCallTarget` falls back to this
+  synthetic var when a bare/aliased name isn't a variable but does name a type with a constructor - from
+  that point on, argument checking, `UNHANDLED_FALLIBLE_CALL`/`try`/`catch` coverage, and codegen's actual
+  call are *all* the exact same generic machinery every other function call already goes through, with
+  zero constructor-specific code in any of them. **Once a type declares a constructor, the old positional
+  `Type{...}` literal is rejected for it** (`TYPE_REQUIRES_CONSTRUCTOR_CALL`) - otherwise the constructor's
+  own logic (validation, fallible field initializers) could be silently bypassed, making declaring one
+  pointless. A constructor's *body* is itself just one synthesized statement - `return
+  Type{field1Value, field2Value, ...}` (built in pass 3, once the constructor's own parameters are pushed
+  into scope) - reusing `cgFunction`/`cgRet`/`OperandStructLiteral`'s existing aggregate-literal codegen
+  wholesale; there is no constructor-specific codegen at all beyond this.
+  **`destruct { }` has no error union of its own - a destructor can never propagate a failure to anyone.**
+  Same rule a `test { }` block already has (`ctx.func` stays `NULL` while checking the body), so the exact
+  same "every fallible call must be fully caught right here or it's a compile error" enforcement
+  (`checkTrySuperset`/`buildTryCatchStmnt`) applies with no new logic. This isn't a narrower version of the
+  general rule, it's a real necessity: a destructor is never called by user code, it's injected by the
+  compiler at a `ret` or a scope-close, so there's no meaningful "caller" to hand a failure to, and a single
+  scope-close can fire many queued destructors in one batch - same reasoning C++'s implicitly-`noexcept`
+  destructors and Rust's `Drop::drop` (which returns nothing at all) both landed on. Bare field names inside
+  `destruct { }` (e.g. `closeHandle(handle)`) read as that field directly - no `self`/`this` prefix, on
+  purpose, consistent with `own` never being called `self` either (see above) - implemented by recognizing,
+  in `buildPrimary`'s bare-identifier case, an identifier that isn't a real local but does name a field of
+  `ctx.destructSelfVar`'s type, and building `OperandMember` on it instead of failing with `UNKNOWN_VAR`.
+  **Two different destructor trigger points, matching the two places a struct value can actually live:**
+  (1) A **plain (non-`{}`) local** has its destructor called right before every real `ret` a function/test
+  can hit - `cgRunLocalDestructors`, walking the codegen scope chain innermost-first (LIFO, mirroring a
+  stack unwind) and invoked from the exact same injection points `cgCloseOwnScope` already uses (explicit
+  return, the try/catch error-propagation path, and the implicit fell-off-the-end case). (2) A
+  **`{}`-heap-indirect instance** instead gets its destructor called when its *owning scope* closes, not
+  when the local holding it goes out of scope (it may well outlive that) - registered with that scope at
+  the exact point it's heap-allocated (`__olang_scope_register_dtor`, called from both malloc-promotion
+  sites in codegen.c right after the `__olang_scope_alloc` call) and walked LIFO, then freed, in
+  `__olang_scope_close`, before that scope's chunks are spliced back to the free pool. `%olang.scope`
+  grew a second field for this (`{ ptr chunkHead, ptr dtorListHead }`) - a small, separate
+  `@malloc`/`@free`'d linked list, deliberately *not* carved out of the scope's own bump arena, to keep it
+  independent of the arena's own alloc/close bookkeeping. **Real, deliberate cost this adds:** closing a
+  scope is no longer strictly O(1) once it holds destructor-bearing instances - it becomes
+  O(destructor-bearing objects in that scope) to walk and call them. A scope holding only plain data (the
+  common case, e.g. the existing `sumManyPoints` stress test) is completely unaffected, zero added
+  bookkeeping - only types that actually declare `destruct { }` register anything at all.
+  **A real bug found and fixed while building this:** a destructor's own `.self` parameter necessarily has
+  the same type as the instance it's running on (`hasDestruct` true, same `destructFunc`) - without an
+  explicit guard, generating that destructor's own body would see `.self` as "a local needing its own
+  destructor call" and recurse into calling itself on itself. Fixed by having `cgRunLocalDestructors` skip
+  any local whose type's own `destructFunc` is the function currently being generated
+  (`l->type.destructFunc == ctx->curFunc`) - the only local that can ever be true for is a destructor's own
+  self-parameter, so this adds no false skips anywhere else.
+  **Known limitation, not attempted here:** no move semantics - a destructor-bearing local that is itself
+  the value being returned out of its own function still gets destructed before the caller ever sees it
+  (`cgRunLocalDestructors` runs before the return value is handed back), which is a real footgun for that
+  specific shape. Not a concern for the motivating file-handle case (used locally, never returned by value),
+  and not addressed here since move semantics were never part of the discussion that led to this feature.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 

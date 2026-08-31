@@ -190,6 +190,33 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     if (ctx->ownScopeSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
 }
 
+//destructs every currently-live PLAIN (non-"{}") local of a hasDestruct-bearing struct type, in LIFO order
+//(innermost/most-recently-declared first, across the whole active scope chain) - called right before every
+//real "ret" a function/test can hit, mirroring cgCloseOwnScope's own injection points exactly (a destructor
+//can never fail/propagate - see the report - so there's no error-path interaction to worry about here). A
+//"{}"-heap-indirect local's destructor runs later instead, when its owning scope closes - see
+//__olang_scope_register_dtor/emitScopeRuntime. Known limitation, not attempted here: a destructor-bearing
+//local that's itself the value being returned still gets destructed before the caller sees it - move
+//semantics (skipping destruction when a value is being handed out) were never part of the design.
+void cgRunLocalDestructors(struct cgCtx* ctx) {
+    for (struct cgScope* sc = ctx->scope; sc; sc = sc->parent) {
+        for (int i = sc->locals.len -1; i >= 0; i--) {
+            struct cgLocal* l = ListGetIdx(&sc->locals, i);
+            if (l->type.bType != BASETYPE_STRUCT || l->type.structMAlloc || !l->type.hasDestruct) continue;
+            //don't re-destruct the instance a destructor is already running on - this is exactly ".self"
+            //while generating that very destructor's own body (see resolveStructCtorInto in semantic.c)
+            if (l->type.destructFunc == ctx->curFunc) continue;
+            char dtorSym[256];
+            mangleGlobal(l->type.destructFunc->owner, l->type.destructFunc->name, dtorSym, sizeof(dtorSym));
+            char ty[256];
+            llvmType(l->type, ty, sizeof(ty));
+            char* loaded = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, ty, l->llvmVal);
+            fprintf(ctx->fnOut, "  call void %s(%s %s)\n", dtorSym, ty, loaded);
+        }
+    }
+}
+
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* calleeOrd = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", calleeOrd, code);
@@ -219,6 +246,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* newCode = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
+    cgRunLocalDestructors(ctx);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %s\n", newCode);
@@ -287,6 +315,16 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
     return loaded;
 }
 
+//if t (a struct type) declares a destructor, registers it with the scope a value of it was just heap-
+//allocated into, so it runs when that scope closes rather than being lost - see
+//__olang_scope_register_dtor/emitScopeRuntime. Called from both malloc-promotion sites below.
+void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
+    if (!t.hasDestruct) return;
+    char dtorSym[256];
+    mangleGlobal(t.destructFunc->owner, t.destructFunc->name, dtorSym, sizeof(dtorSym));
+    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
+}
+
 //srcT is the value's own checked type (which OperandFitsType allows to differ from dstT only in
 //structMAlloc-ness - TypeIsSame deliberately ignores that flag for structs, see the report). A plain
 //struct value (e.g. "Point[1, 2]") stored into a "{}"-heap-indirect target is exactly that case: src is
@@ -305,6 +343,7 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", heap, dstAddr);
+        cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, heap);
         return;
     }
     char ty[256];
@@ -339,6 +378,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT) {
         char* loaded = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
+        cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
         return heap;
     }
     if (!typeIsByRef(op->type)) return v;
@@ -1029,6 +1069,7 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
 void cgRet(struct cgCtx* ctx, struct statement* s) {
     bool fallible = ctx->curFunc && ctx->curFunc->type.errors.len > 0;
     if (!s->op) {
+        cgRunLocalDestructors(ctx);
         cgCloseOwnScope(ctx);
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
@@ -1042,6 +1083,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(retT, ty, sizeof(ty));
     char* val = cgBoundaryValue(ctx, s->op, retT);
+    cgRunLocalDestructors(ctx);
     cgCloseOwnScope(ctx);
     if (!fallible) {
         fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
@@ -1083,6 +1125,7 @@ void cgCrash(struct cgCtx* ctx, struct statement* s) {
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
+    cgRunLocalDestructors(ctx);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
@@ -1257,6 +1300,7 @@ void emitRuntimeDecls(FILE* out) {
         "declare void @abort() noreturn\n"
         "declare void @exit(i32) noreturn\n"
         "declare ptr @malloc(i64)\n"
+        "declare void @free(ptr)\n"
         "declare i32 @setjmp(ptr) returns_twice\n"
         "@stderr = external global ptr\n"
         "declare void @longjmp(ptr, i32) noreturn\n"
@@ -1293,8 +1337,9 @@ void emitRuntimeDecls(FILE* out) {
  * passed to it. */
 void emitScopeRuntime(FILE* out) {
     fputs(
-        "%olang.chunk = type { ptr, i64, i64 }\n" //next, used, cap - data follows immediately after
-        "%olang.scope = type { ptr }\n"           //head chunk, or null if nothing allocated yet
+        "%olang.chunk = type { ptr, i64, i64 }\n"  //next, used, cap - data follows immediately after
+        "%olang.dtornode = type { ptr, ptr, ptr }\n" //next, instance, dtorFn - see __olang_scope_register_dtor
+        "%olang.scope = type { ptr, ptr }\n"       //head chunk, head dtor-list node (both null if unused)
         "@__olang_chunk_pool = global ptr null\n"
         "\n"
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
@@ -1360,17 +1405,56 @@ void emitScopeRuntime(FILE* out) {
         "  %newused = add i64 %curused, %size\n"
         "  store i64 %newused, ptr %curusedptr\n"
         "  ret ptr %result\n"
+        "}\n\n", out);
+    fputs(
+        //prepends one { instance, dtorFn } node onto scope's own dtor list - walked (and freed) in
+        //@__olang_scope_close below, in the same LIFO order registration happens in, right before that
+        //scope's chunks are reclaimed. Each node is its own small @malloc (not carved out of the scope's
+        //own bump arena) purely to keep this independent of the arena's own alloc/close bookkeeping.
+        "define void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
+        "entry:\n"
+        "  %node = call ptr @malloc(i64 24)\n"
+        "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
+        "  %oldhead = load ptr, ptr %dheadptr\n"
+        "  %nextptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 0\n"
+        "  store ptr %oldhead, ptr %nextptr\n"
+        "  %instptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 1\n"
+        "  store ptr %instance, ptr %instptr\n"
+        "  %fnptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 2\n"
+        "  store ptr %dtorFn, ptr %fnptr\n"
+        "  store ptr %node, ptr %dheadptr\n"
+        "  ret void\n"
         "}\n\n"
-        //splices this scope's entire chunk list onto the free pool in one O(1) op (after walking to find
-        //this list's own tail) and resets the scope back to empty/lazy
+        //walks and calls (then frees) this scope's own dtor-node list first, LIFO - most-recently-
+        //registered first, same order a stack unwind would give - then splices its entire chunk list onto
+        //the free pool in one O(1) op (after walking to find this list's own tail) and resets the scope
+        //back to empty/lazy
         "define void @__olang_scope_close(ptr %scope) {\n"
         "entry:\n"
+        "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
+        "  %dhead = load ptr, ptr %dheadptr\n"
+        "  store ptr null, ptr %dheadptr\n"
+        "  %dempty = icmp eq ptr %dhead, null\n"
+        "  br i1 %dempty, label %chunks, label %dwalk\n"
+        "dwalk:\n"
+        "  %dcur = phi ptr [ %dhead, %entry ], [ %dnext, %dwalk ]\n"
+        "  %instptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 1\n"
+        "  %inst = load ptr, ptr %instptr\n"
+        "  %fnptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 2\n"
+        "  %fn = load ptr, ptr %fnptr\n"
+        "  call void %fn(ptr %inst)\n"
+        "  %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0\n"
+        "  %dnext = load ptr, ptr %dnextptr\n"
+        "  call void @free(ptr %dcur)\n"
+        "  %datend = icmp eq ptr %dnext, null\n"
+        "  br i1 %datend, label %chunks, label %dwalk\n"
+        "chunks:\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %empty = icmp eq ptr %head, null\n"
         "  br i1 %empty, label %done, label %walk\n"
         "walk:\n"
-        "  %cur = phi ptr [ %head, %entry ], [ %next, %walk ]\n"
+        "  %cur = phi ptr [ %head, %chunks ], [ %next, %walk ]\n"
         "  %tailnextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
         "  %next = load ptr, ptr %tailnextptr\n"
         "  %atend = icmp eq ptr %next, null\n"
@@ -1443,9 +1527,7 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     //"{}" allocation touches it; harmless and cheap to always set up even when never used.
     char* ownScope = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = alloca %%olang.scope\n", ownScope);
-    char* ownScopeHeadPtr = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.scope, ptr %s, i32 0, i32 0\n", ownScopeHeadPtr, ownScope);
-    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", ownScopeHeadPtr);
+    fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
 
     for (int i = 0; i < func->codeBlock.len; i++) {
@@ -1454,6 +1536,7 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     }
 
     if (!ctx->terminated) {
+        cgRunLocalDestructors(ctx);
         cgCloseOwnScope(ctx);
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
@@ -1605,11 +1688,10 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         //on a failed test, nothing unsafe about it (see the report).
         char* testScope = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = alloca %%olang.scope\n", testScope);
-        char* testScopeHeadPtr = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.scope, ptr %s, i32 0, i32 0\n", testScopeHeadPtr, testScope);
-        fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", testScopeHeadPtr);
+        fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", testScope);
         ctx->ownScopeSlot = testScope;
         cgBlock(ctx, &t->codeBlock);
+        cgRunLocalDestructors(ctx);
         cgCloseOwnScope(ctx);
         ctx->ownScopeSlot = NULL;
         cgBr(ctx, passLbl);

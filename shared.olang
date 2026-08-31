@@ -218,6 +218,95 @@ func ComputeChecked(a int32, b int32, lo int32, hi int32) MathError + RangeError
     return result
 }
 
+## constructors: "type Name struct(params) errorList? { fields } destruct?" - params are the constructor's
+## own declared arguments; each field is either a bare pun (binds directly to a same-named parameter, type
+## inferred from it - no separate declaration needed) or an ordinary var-decl-shaped "name Type = expr" /
+## "name := expr" (never silently inferred - a field always states its own type unless it opts into ":="
+## the same way any other var-decl would). Once a type declares a constructor, the old positional "Type{...}"
+## literal is rejected for it (TYPE_REQUIRES_CONSTRUCTOR_CALL) - constructing it any other way could
+## silently bypass the constructor's own logic. Counter is the plain case: every field is a pun.
+type Counter struct(start int32) {
+    start
+}
+
+## a field may also be computed from the constructor's parameters via an ordinary expression, alongside a
+## punned one - "doubled" has its own type/initializer, "n" is a bare pun
+type Rectangle struct(n int32) {
+    n,
+    doubled mut int32 = n * 2
+}
+
+error ValidationError {
+    NEGATIVE
+}
+
+func checkNonNegative(n int32) ValidationError ? int32 {
+    if n < 0 {
+        error ValidationError.NEGATIVE
+    }
+    return n
+}
+
+## a constructor may declare its own error union, exactly like a function signature - a fallible field
+## initializer needs "try" the same way any fallible call does, and "Measurement(...)" itself becomes a
+## fallible call site at every caller, handled by the exact same try/catch machinery as any other function
+type Measurement struct(n int32) ValidationError {
+    v mut int32 = try checkNonNegative(n),
+    n
+}
+
+func measurementValue(n int32) ValidationError ? int32 {
+    m mut Measurement = try Measurement(n)
+    return m.v
+}
+
+resourcesClosed mut int32 = 0
+
+## "destruct { }" is the only other special block a type can declare (see the report - general
+## "Type.funcName" methods were considered and explicitly dropped in favor of just these two). It has no
+## error union of its own - same rule as a test{} block - so a fallible call inside must be fully caught
+## right there; a destructor can never propagate a failure to anyone (there's no caller to hand it to,
+## especially once many queued destructors can fire in one scope-close batch - see the report).
+error CloseError {
+    FAIL
+}
+
+func alwaysCloses() CloseError ? bool {
+    return true
+}
+
+## bare field names inside destruct (like "id" below) read as that field directly, no "self."-style prefix
+type Handle struct(id int32) {
+    id
+} destruct {
+    try alwaysCloses() catch CloseError {
+        crash
+    }
+    resourcesClosed = resourcesClosed + 1
+}
+
+## a plain (non-"{}") local's destructor runs right before the enclosing function returns - RAII tied to
+## the function's own frame, not the scope-arena machinery at all
+func useHandleLocally() ? int32 {
+    h mut Handle = Handle(7)
+    return h.id
+}
+
+## a "{}"-heap-indirect instance's destructor instead runs when its *owning scope* closes - registered
+## with that scope at allocation time (see __olang_scope_register_dtor in codegen.c) and walked in LIFO
+## order right before that scope's chunks are reclaimed. Bare "{}" here means this function's own private
+## scope, so every registration from one call of this function is torn down together the moment it returns.
+func useManyHandlesLocally(n int32) ? int32 {
+    total mut int32 = 0
+    i mut int32 = 0
+    do {
+        h mut Handle{} = Handle(i)
+        total = total + h.id
+        i++
+    } while i < n
+    return total
+}
+
 test "factorial of small numbers" {
     assert(factorial(0) == 1)
     assert(factorial(1) == 1)
@@ -365,4 +454,43 @@ test "the real arena allocator handles chunk growth and reuse across many scope 
         round++
     } while round < 10
     assert(total == expectedOneRound * 10)
+}
+
+test "constructor: every field a bare pun" {
+    c mut Counter = Counter(5)
+    assert(c.start == 5)
+}
+
+test "constructor: a computed field alongside a punned one" {
+    r mut Rectangle = Rectangle(3)
+    assert(r.n == 3)
+    assert(r.doubled == 6)
+}
+
+test "constructor: a fallible field initializer propagates through the constructor's own declared error union" {
+    failed mut bool = false
+    try Measurement(-1) catch ValidationError {
+        failed = true
+    }
+    assert(failed)
+
+    failed2 mut bool = false
+    try measurementValue(5) catch ValidationError {
+        failed2 = true
+    }
+    assert(!failed2)
+}
+
+test "destructor runs when a plain local goes out of scope at function return" {
+    before mut int32 = resourcesClosed
+    result mut int32 = useHandleLocally()
+    assert(result == 7)
+    assert(resourcesClosed == before + 1)
+}
+
+test "destructor runs for every heap-indirect instance when their scope closes, in one batch" {
+    before mut int32 = resourcesClosed
+    total mut int32 = useManyHandlesLocally(5)
+    assert(total == 0 + 1 + 2 + 3 + 4)
+    assert(resourcesClosed == before + 5)
 }

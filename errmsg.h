@@ -49,6 +49,8 @@
 #define WRONG_ARG_COUNT "wrong number of arguments"
 #define INVALID_ARRAY_LITERAL_TYPE "only an array type can be constructed with a [ ] literal"
 #define INVALID_STRUCT_LITERAL_TYPE "only a struct type can be constructed with a { } literal"
+#define TYPE_REQUIRES_CONSTRUCTOR_CALL "this type declares a constructor - construct it with Type(...), not Type{...}"
+#define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"
 #define INVALID_VOCAB_VALUE_TYPE "only a vocab type has values of the form 'Type.word'"
 #define UNKNOWN_VOCAB_WORD "unknown vocab word"
 #define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"

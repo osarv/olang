@@ -47,6 +47,28 @@ struct type {
     //"{name}", pointing at the BASETYPE_SCOPE parameter that value is allocated into
     struct var* scopeParam;
 
+    //BASETYPE_STRUCT, only when declared "struct(params) { ... }" - see the report. `vars` above still
+    //holds the actual fields (in declaration order); these describe the constructor/destructor built
+    //around them.
+    bool hasCtor;
+    struct var* ctorFunc; //synthetic BASETYPE_FUNC var (params = the constructor's own declared
+                           //parameters, errors = its declared error union, retType = this struct's plain
+                           //value type) registered under an internal, never-user-typable name so ordinary
+                           //call-site machinery (OperandFuncCall/checkTrySuperset/cgFuncCall) handles
+                           //"Type(args)" with no dedicated call path of its own - resolveCallTarget routes
+                           //a bare type name with hasCtor here instead of failing with UNKNOWN_VAR
+    struct list ctorFieldSyntax; //list of struct syntax* (SNTX_CTOR_FIELD), index-aligned with `vars` -
+                                   //resolved (types only) in pass 2; checked into ctorFunc->codeBlock's
+                                   //single return value in pass 3, once the constructor's own parameters
+                                   //are back in scope
+
+    bool hasDestruct;
+    struct var* destructFunc; //synthetic BASETYPE_FUNC var, one param (the instance, by value, plain
+                                //struct type), no return type, no error union - a destructor can never
+                                //propagate a failure to anyone (see the report), so any fallible call in
+                                //its body must be fully caught right there, same rule as a test{} block
+    struct syntax* destructBlockSyntax; //raw SNTX_BLOCK trailing the constructor; NULL if !hasDestruct
+
     //BASETYPE_VOCAB, BASETYPE_ERROR
     struct list words; //list of struct token: vocab or error member names
 

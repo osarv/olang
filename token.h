@@ -38,6 +38,8 @@ enum tokenType {
              //"scope"-typed value is expected - see the report
     TOK_IMPORT,
     TOK_TEST,
+    TOK_DESTRUCT, //struct destructor block - "destruct { ... }", trailing a "struct(params) { ... }"
+                  //constructor-bearing type declaration - see the report
     TOK_ADD,
     TOK_SUB,
     TOK_MUL,

@@ -264,6 +264,7 @@ struct syntax* parseStructBody(SyntaxCtx sc) {
 
 struct syntax* parseParamList(SyntaxCtx sc);
 struct syntax* parseFuncSig(SyntaxCtx sc);
+struct syntax* parseStructCtor(SyntaxCtx sc);
 
 struct syntax* parseFuncType(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -295,7 +296,11 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct syntax* type = parseTypeExpr(sc);
+    //a constructor-bearing struct ("struct(params) { ... }") is only ever reachable here, never as a
+    //general type expression - disambiguated purely by "(" immediately following "struct", so a plain
+    //"struct { ... }" (parseTypeExpr's path, unchanged) never even attempts this
+    struct syntax* ctor = parseStructCtor(sc);
+    struct syntax* type = ctor ? ctor : parseTypeExpr(sc);
     if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_TYPE_DECL);
     addTok(s, kw);
@@ -437,6 +442,117 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
     if (errs) addSntx(s, errs);
     struct syntax* ret = parseRetType(sc);
     if (ret) addSntx(s, ret);
+    return s;
+}
+
+//one field inside a constructor-bearing struct's body. Tries, in order: ":=" inference, an explicit type
+//(optionally followed by "= expr"), and finally a bare pun (just the name, possibly "mut") when no type
+//expression follows at all - see the report for what each form means
+struct syntax* parseCtorField(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_CTOR_FIELD);
+    addTok(s, name);
+
+    int beforeMut = TokenGetCursor(sc->tc);
+    struct token mut = TokenFeed(sc->tc);
+    if (mut.type == TOK_MUT) addTok(s, mut); else TokenSetCursor(sc->tc, beforeMut);
+
+    int beforeInfer = TokenGetCursor(sc->tc);
+    struct token infer = TokenFeed(sc->tc);
+    if (infer.type == TOK_ASS_INFER) {
+        struct syntax* rhs = parseExpr(sc);
+        if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addTok(s, infer);
+        addSntx(s, rhs);
+        return s;
+    }
+    TokenSetCursor(sc->tc, beforeInfer);
+
+    struct syntax* type = parseTypeExpr(sc);
+    if (type) {
+        addSntx(s, type);
+        int beforeAss = TokenGetCursor(sc->tc);
+        struct token ass = TokenFeed(sc->tc);
+        if (ass.type == TOK_ASS) {
+            struct syntax* rhs = parseExpr(sc);
+            if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+            addTok(s, ass);
+            addSntx(s, rhs);
+        } else {
+            TokenSetCursor(sc->tc, beforeAss);
+        }
+        return s;
+    }
+
+    //no type, no "=", no ":=" - a bare pun, valid only if it turns out to name one of the constructor's
+    //own parameters (checked in semantic.c, which has the param list this parser doesn't)
+    return s;
+}
+
+//"(CTOR_FIELD (COMMA CTOR_FIELD)*)?" - always succeeds (possibly with zero fields)
+struct syntax* parseCtorFieldList(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_CTOR_FIELD_LIST);
+    struct syntax* first = parseCtorField(sc);
+    if (!first) return s;
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* f = parseCtorField(sc);
+        if (!f) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, f);
+    }
+    return s;
+}
+
+struct syntax* parseDestruct(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_DESTRUCT);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_DESTRUCT);
+    addTok(s, kw);
+    addSntx(s, block);
+    return s;
+}
+
+//"STRUCT PAREN_O PARAM_LIST PAREN_C ERROR_LIST? CURLY_O CTOR_FIELD_LIST CURLY_C DESTRUCT?" - only called
+//from parseTypeDecl, right after "type NAME"; committing to this (vs. a plain "struct { ... }") is decided
+//purely by whether "(" immediately follows "struct"
+struct syntax* parseStructCtor(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_STRUCT);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token open = acceptTok(sc, TOK_PAREN_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* params = parseParamList(sc);
+    struct token close = acceptTok(sc, TOK_PAREN_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_STRUCT_CTOR);
+    addTok(s, kw);
+    addTok(s, open);
+    addSntx(s, params);
+    addTok(s, close);
+    struct syntax* errs = parseErrorList(sc);
+    if (errs) addSntx(s, errs);
+    struct token curlyO = acceptTok(sc, TOK_CURLY_O);
+    if (curlyO.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, curlyO);
+    struct syntax* fields = parseCtorFieldList(sc);
+    addSntx(s, fields);
+    int beforeEnd = TokenGetCursor(sc->tc);
+    struct token end = TokenFeed(sc->tc);
+    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    struct token curlyC = acceptTok(sc, TOK_CURLY_C);
+    if (curlyC.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addTok(s, curlyC);
+    struct syntax* destruct = parseDestruct(sc);
+    if (destruct) addSntx(s, destruct);
     return s;
 }
 
