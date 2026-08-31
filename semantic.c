@@ -1338,20 +1338,34 @@ bool varIsOwnParam(struct var* scopeVar, struct var* func) {
 
 //resolves scopeVar to whatever it's *effectively* bound to from op's own perspective, one hop through
 //op's own scopeBindings map (populated for a call operand by OperandFuncCall, for a member operand by
-//OperandMember, and propagated onto a var - and so onto every later read of it - by buildVarDeclStmnt) -
-//see the report on extending the static scope checker past one function's own frame. Falls through to
-//scopeVar unchanged when op carries no matching entry (the common case: nothing to substitute, either
-//because op has no map at all or scopeVar isn't one of the keys it knows how to resolve) - always exactly
-//one hop, never recursive: a binding's own boundTo is already a final, caller-frame-relative answer (see
-//struct scopeBinding's own comment in semantic.h), never itself a key needing further resolution.
+//OperandMember - which also composes a field's own *persisted* map through this same lookup, letting a
+//chain of member accesses resolve through however many levels of nested constructor-bearing types it
+//passes through, one hop at a time - see the "field of a field" entry in the report - and propagated onto
+//a var, and so onto every later read of it, by buildVarDeclStmnt). Falls through to scopeVar unchanged
+//when op carries no matching entry (the common case: nothing to substitute, either because op has no map
+//at all or scopeVar isn't one of the keys it knows how to resolve). Canonicalizes both sides before
+//comparing (see canonicalVar) since a stored key/value may be either a type-level scope param or a
+//function/constructor body's own scope-chain copy of one, depending on which pass produced it.
 struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
     if (!scopeVar) return NULL;
+    struct var* canonScopeVar = canonicalVar(scopeVar);
     for (int i = 0; i < op->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
-        if (b->typeParam == scopeVar) return b->boundTo;
+        if (canonicalVar(b->typeParam) == canonScopeVar) return b->boundTo;
     }
     return scopeVar;
 }
+
+//a dedicated, never-otherwise-reachable "known ambiguous" scope identity - see foldScopeBindingsBranch/
+//scopeCanFlowInto below. Never equal to any real function's own parameter (no function's own type.vars
+//list can ever contain THIS specific instance), so distinguishing it from an ordinary foreign/untracked
+//scope tag matters: "we never tried to trace this var" (an empty scopeBindings map - the existing,
+//pre-existing "unverifiable, allow" default is correct there) is a fundamentally different fact from "we
+//traced it and found it can be more than one thing depending on which branch ran" (this sentinel) - the
+//latter must reject, not fall through to the same default, or the whole point of tracking reassignment
+//across branches would be silently undone the moment two branches disagree.
+struct var scopeAmbiguousStorage = {0};
+struct var* SCOPE_AMBIGUOUS = &scopeAmbiguousStorage;
 
 //can a "<>"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
 //perspective of func (the function currently being checked)? NULL means "bare <> - this function's own
@@ -1364,8 +1378,10 @@ struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
 //Deliberately conservative outside func's own frame: a scope tag that isn't one of func's own declared
 //parameters, and that OperandFitsType's own resolveEffectiveScopeVar call couldn't resolve into one either
 //(a chain deeper than the one hop that mechanism covers - see the report), can't be compared against
-//func's frame at all yet, so it's left unchecked rather than risking a false rejection of valid code.
+//func's frame at all yet, so it's left unchecked rather than risking a false rejection of valid code. A
+//SCOPE_AMBIGUOUS srcScope is the one deliberate exception to that leniency - see its own comment above.
 bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstScope) {
+    if (srcScope == SCOPE_AMBIGUOUS) return false;
     srcScope = canonicalVar(srcScope);
     dstScope = canonicalVar(dstScope);
     if (srcScope == dstScope) return true;
@@ -1488,13 +1504,19 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     //params back into something meaningful in the caller's frame - see resolveEffectiveScopeVar/
     //OperandFitsType. Works identically whether func is an ordinary function or a struct's synthetic
     //constructor - both are just a BASETYPE_FUNC var, no special-casing needed here either.
+    //boundTo is stored canonicalized (see canonicalVar): this call may be checked inside a body where the
+    //argument's own readVar is a scope-chain copy (an ordinary function/constructor's own parameter, read
+    //back as a value - see canonicalVar's own comment), and when this map ends up *persisted* past this
+    //one check (a constructor field's own scopeBindings - see semaCheckBodies/the "field of a field" entry
+    //in the report), storing the type-level original is what makes it a portable, comparable key/value
+    //for any later, unrelated caller's own resolveEffectiveScopeVar lookup.
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* param = ListGetIdx(&func->type.vars, i);
         if (param->type.bType != BASETYPE_SCOPE) continue;
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = param;
-        b.boundTo = arg->opType == OPERATION_READ_VAR ? arg->readVar : NULL;
+        b.boundTo = arg->opType == OPERATION_READ_VAR ? canonicalVar(arg->readVar) : NULL;
         ListAdd(&op->scopeBindings, &b);
     }
     return op;
@@ -1554,6 +1576,22 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = memberVar->type.scopeParam;
         b.boundTo = resolveEffectiveScopeVar(base, memberVar->type.scopeParam);
+        ListAdd(&op->scopeBindings, &b);
+    }
+    //"field of a field": if this field's own declared type is itself constructor-bearing, memberVar's own
+    //scopeBindings (persisted once, at THIS field's declaration - see semaCheckBodies's ctor-body-check,
+    //which builds this field's own initializer expression the same way any other call is built, then saves
+    //its resulting map here) records, in terms of the field's own type's *inner* ctor scope params, what
+    //each was bound to at the point this field's value was originally constructed. Composing each entry
+    //through base's own map (one more resolveEffectiveScopeVar hop) is what lets a further member access
+    //on THIS operand (e.g. the ".leaf" in "o.mid.leaf") resolve correctly - the map on the "mid" operand
+    //itself now carries an entry keyed by MID's own "s", not just OUTER's - see the report. A no-op (empty
+    //loop) whenever the field's own type has no such map of its own, e.g. an ordinary plain struct field.
+    for (int i = 0; i < memberVar->scopeBindings.len; i++) {
+        struct scopeBinding* inner = ListGetIdx(&memberVar->scopeBindings, i);
+        struct scopeBinding b = (struct scopeBinding){0};
+        b.typeParam = inner->typeParam;
+        b.boundTo = resolveEffectiveScopeVar(base, inner->boundTo);
         ListAdd(&op->scopeBindings, &b);
     }
     return op;
@@ -2259,6 +2297,17 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (isCompound) value = OperandBinary(target, rhs, compoundOp, opTok);
     else reportTypeFit(OperandFitsType(ctx->func, rhs, target->type), opTok);
 
+    //a plain "x = y" (never a compound op - +=/etc. never apply to a scope-relevant struct/array type) re-
+    //binds x's own tracked scope identity to whatever y's was, the same propagation buildVarDeclStmnt
+    //already does at declaration time - closes the "stale binding after reassignment" half of the static
+    //checker's reassignment-tracking gap (see the report): before this, a var's scopeBindings were only
+    //ever set once, at its own declaration, so a later plain reassignment left it silently stale. Only a
+    //bare local read as the assignment target has a var to re-bind at all - "x.field = y"/"x[i] = y" leave
+    //x's own binding alone, same as before (this doesn't attempt to track *field-level* reassignment).
+    if (!isCompound && target->opType == OPERATION_READ_VAR) {
+        target->readVar->scopeBindings = value->scopeBindings;
+    }
+
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSIGN;
     stmt.target = target;
@@ -2274,6 +2323,120 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+// ---- flow-sensitive scope-binding tracking across branches (if/match/for/do) - see the report on
+// extending the static scope checker's reassignment-tracking past straight-line code. buildAssignStmnt
+// above closes the straight-line half (a plain "x = y" re-binds x's own scopeBindings immediately); the
+// helpers below close the branching half, which needs a real merge instead of just an in-place update,
+// since two branches can each reassign the same var to something DIFFERENT - accepting whichever branch
+// happened to be checked last (as a naive in-place update would) risks a false REJECTION of sound code
+// (a var correctly bound in the branch that actually runs, but compared against a check that only ever
+// sees the OTHER branch's leftover state) - the same class of mistake the varIsOwnParam identity-duality
+// bug earlier this session already proved is worse than an imprecise, honest "unknown".
+
+//one var's own scopeBindings, captured at a point in time - a shallow copy (the var's own scopeBindings
+//list is only ever reassigned wholesale, never mutated in place, so aliasing its backing array here is
+//safe - see buildVarDeclStmnt/buildAssignStmnt, the only two places a var's own field is ever written).
+struct scopeVarSnapshot {
+    struct var* v;
+    struct list bindings;
+};
+
+//captures every var currently reachable from sc's own scope chain (not just its own directly-owned
+//locals - every enclosing scope too, up to the function's own parameters), so a branching construct can
+//restore to this exact starting point before checking each alternative, and compare their outcomes
+//afterward.
+struct list snapshotScopeBindings(struct scope* sc) {
+    struct list result = ListInit(sizeof(struct scopeVarSnapshot));
+    for (; sc; sc = sc->parent) {
+        for (int i = 0; i < sc->localPtrs.len; i++) {
+            struct var* v = *(struct var**)ListGetIdx(&sc->localPtrs, i);
+            struct scopeVarSnapshot snap = (struct scopeVarSnapshot){0};
+            snap.v = v;
+            snap.bindings = v->scopeBindings;
+            ListAdd(&result, &snap);
+        }
+    }
+    return result;
+}
+
+//writes every var captured by snap back to its own recorded scopeBindings - used both to reset to a
+//common baseline before checking the next alternative branch, and to commit a final merged result once
+//every branch has been checked.
+void applyScopeBindingsSnapshot(struct list* snap) {
+    for (int i = 0; i < snap->len; i++) {
+        struct scopeVarSnapshot* s = ListGetIdx(snap, i);
+        s->v->scopeBindings = s->bindings;
+    }
+}
+
+//true if two scopeBindings lists carry the same set of (typeParam, boundTo) pairs, order-independent, both
+//sides canonicalized (see canonicalVar) since either list may hold a type-level original or a function/
+//constructor body's own scope-chain copy of one, depending on which pass produced it.
+bool scopeBindingsEqual(struct list a, struct list b) {
+    if (a.len != b.len) return false;
+    for (int i = 0; i < a.len; i++) {
+        struct scopeBinding* ba = ListGetIdx(&a, i);
+        bool found = false;
+        for (int j = 0; j < b.len; j++) {
+            struct scopeBinding* bb = ListGetIdx(&b, j);
+            if (canonicalVar(ba->typeParam) == canonicalVar(bb->typeParam)
+                    && canonicalVar(ba->boundTo) == canonicalVar(bb->boundTo)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+//folds next's own outcome into acc (both snapshots of the same var set, taken from the same starting
+//baseline): a var whose recorded bindings agree between the two is left alone in acc; a var that disagrees
+//has every key either side ever tracked for it marked SCOPE_AMBIGUOUS - deliberately NOT reset to plain
+//empty/never-tracked, which would silently fall back to the pre-existing "foreign, unverifiable, allow"
+//default and undo the whole point of tracking this at all (see SCOPE_AMBIGUOUS's own comment). Call once
+//per branch beyond the first to fold an arbitrary number of alternatives (if/else, or match's N cases plus
+//an implicit/explicit "nothing matched" possibility) into one final, honestly-merged result. Monotonic by
+//construction: once a key is marked ambiguous, every later fold that touches it rebuilds from acc's own
+//(already-ambiguous) entry first, so it can never be "un-marked" by a later branch that happens to agree
+//with some earlier, already-superseded value.
+void foldScopeBindingsBranch(struct list* acc, struct list* next) {
+    for (int i = 0; i < acc->len; i++) {
+        struct scopeVarSnapshot* a = ListGetIdx(acc, i);
+        struct scopeVarSnapshot* n = NULL;
+        for (int j = 0; j < next->len; j++) {
+            struct scopeVarSnapshot* cand = ListGetIdx(next, j);
+            if (cand->v == a->v) { n = cand; break; }
+        }
+        if (n && scopeBindingsEqual(a->bindings, n->bindings)) continue;
+
+        struct list ambiguous = ListInit(sizeof(struct scopeBinding));
+        for (int j = 0; j < a->bindings.len; j++) {
+            struct scopeBinding* e = ListGetIdx(&a->bindings, j);
+            struct scopeBinding amb = (struct scopeBinding){0};
+            amb.typeParam = e->typeParam;
+            amb.boundTo = SCOPE_AMBIGUOUS;
+            ListAdd(&ambiguous, &amb);
+        }
+        if (n) {
+            for (int j = 0; j < n->bindings.len; j++) {
+                struct scopeBinding* e = ListGetIdx(&n->bindings, j);
+                bool already = false;
+                for (int k = 0; k < ambiguous.len; k++) {
+                    struct scopeBinding* have = ListGetIdx(&ambiguous, k);
+                    if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { already = true; break; }
+                }
+                if (already) continue;
+                struct scopeBinding amb = (struct scopeBinding){0};
+                amb.typeParam = e->typeParam;
+                amb.boundTo = SCOPE_AMBIGUOUS;
+                ListAdd(&ambiguous, &amb);
+            }
+        }
+        a->bindings = ambiguous;
+    }
+}
+
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
@@ -2284,9 +2447,17 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_IF;
     stmt.op = cond;
+
+    //see the flow-sensitive scope-binding tracking block above: baseline is the starting point both
+    //branches are checked against (restored before the second, so it doesn't see the first's leftover
+    //mutations), and the two outcomes are folded into one honest result once both are known.
+    struct list baseline = snapshotScopeBindings(ctx->scope);
     stmt.block = buildBlock(ctx, thenBlockNode);
+    struct list afterThen = snapshotScopeBindings(ctx->scope);
+    applyScopeBindingsSnapshot(&baseline);
 
     struct syntax* elseIfNode = firstPartOfType(s, SNTX_STMNT_IF);
+    struct list afterElse;
     if (blocks.len == 2) {
         struct syntax* elseBlockNode = *(struct syntax**)ListGetIdx(&blocks, 1);
         stmt.elseStmnt = MallocOrCrash(sizeof(struct statement));
@@ -2294,10 +2465,20 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
         stmt.elseStmnt->sType = STATEMENT_IF; //bare-block wrapper, condition unused
         stmt.elseStmnt->block = buildBlock(ctx, elseBlockNode);
         stmt.elseIsBlock = true;
+        afterElse = snapshotScopeBindings(ctx->scope);
     } else if (elseIfNode) {
         stmt.elseStmnt = MallocOrCrash(sizeof(struct statement));
+        //recurses through this same snapshot/merge logic for its own nested branches first, so by the
+        //time this returns, the vars already reflect that whole "else if..." chain's own merged outcome -
+        //composes correctly through an arbitrary chain with no extra plumbing needed here.
         *stmt.elseStmnt = buildIfStmnt(ctx, elseIfNode);
+        afterElse = snapshotScopeBindings(ctx->scope);
+    } else {
+        afterElse = baseline; //no else at all - the implicit "nothing happened" path
     }
+
+    foldScopeBindingsBranch(&afterThen, &afterElse);
+    applyScopeBindingsSnapshot(&afterThen);
     return stmt;
 }
 
@@ -2334,14 +2515,28 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.op = cond;
     stmt.forInit = initVal;
     stmt.forPost = post;
+    //a var reassigned inside a loop body can, in general, end up different across different iterations -
+    //this checker only ever walks the body once (no fixpoint iteration), so rather than trust whatever
+    //that single walk happened to leave behind, ANY reassignment observed during it kills that var's own
+    //tracked binding outright (reusing foldScopeBindingsBranch against its own unchanged starting point -
+    //see the flow-sensitive scope-binding tracking block above). Safe and conservative, never unsound.
+    struct list baseline = snapshotScopeBindings(innerCtx.scope);
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    struct list after = snapshotScopeBindings(innerCtx.scope);
+    foldScopeBindingsBranch(&baseline, &after);
+    applyScopeBindingsSnapshot(&baseline);
     return stmt;
 }
 
 struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_DO;
+    //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
+    struct list baseline = snapshotScopeBindings(ctx->scope);
     stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
+    struct list after = snapshotScopeBindings(ctx->scope);
+    foldScopeBindingsBranch(&baseline, &after);
+    applyScopeBindingsSnapshot(&baseline);
     stmt.op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(stmt.op)) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
     return stmt;
@@ -2363,19 +2558,37 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_MATCH;
     stmt.op = matched;
 
+    //N-way version of the same fold buildIfStmnt does for two branches - see the flow-sensitive scope-
+    //binding tracking block above. baseline is the reset point before each case; merged accumulates the
+    //running fold (an independent snapshot, not aliased to baseline - folding into it must never disturb
+    //the reset point the next case is about to be checked against).
+    struct list baseline = snapshotScopeBindings(ctx->scope);
+    struct list merged = snapshotScopeBindings(ctx->scope);
+
     stmt.matchCases = ListInit(sizeof(struct statement));
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
         struct statement caseStmt = buildCaseStmnt(ctx, c, matched->type);
         ListAdd(&stmt.matchCases, &caseStmt);
+        struct list afterCase = snapshotScopeBindings(ctx->scope);
+        foldScopeBindingsBranch(&merged, &afterCase);
+        applyScopeBindingsSnapshot(&baseline);
     }
 
     struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
     if (nomatchNode) {
         stmt.hasNomatch = true;
         stmt.nomatchBlock = buildBlock(ctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
+        struct list afterNomatch = snapshotScopeBindings(ctx->scope);
+        foldScopeBindingsBranch(&merged, &afterNomatch);
+        applyScopeBindingsSnapshot(&baseline);
     }
+    //this checker doesn't attempt exhaustiveness analysis, so "no case matched" is always folded in as a
+    //live possibility (via merged's own initial "unchanged" value) even when nomatch is absent and the
+    //match happens to be exhaustive in practice - conservative, never unsound, matching the same "no else"
+    //treatment buildIfStmnt gives a bare "if" with nothing to run.
+    applyScopeBindingsSnapshot(&merged);
     return stmt;
 }
 
@@ -2667,6 +2880,11 @@ void semaCheckBodies(struct semaModule* mod) {
                     struct var* param = scopeFindLocal(&ctorScope, field->name);
                     fieldOp = param ? OperandReadVar(param, field->tok) : operandNew(field->tok, OPERATION_NONE, field->type);
                 }
+                //persisted once, at this field's own declaration, so any later caller's "instance.field"
+                //access (OperandMember) can compose through it - see the "field of a field" entry in the
+                //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
+                //field whose own type isn't constructor-bearing, or one with no scope-typed ctor params.
+                field->scopeBindings = fieldOp->scopeBindings;
                 ListAdd(&fieldArgs, &fieldOp);
             }
             struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);

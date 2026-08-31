@@ -448,6 +448,59 @@ func makePointChecked(a scope, x int32, y int32) ? Point<a> {
     return makePoint(x, y, a)
 }
 
+## "field of a field" - a second, independent constructor-bearing type nested one level deeper. Mid's own
+## "leaf" is tagged to MID's own ctor scope param (also spelled "s", but a completely different "struct
+## var*" than Outer's own "s" - the two only happen to share a name). Outer's own "mid" field is
+## constructed as "Mid(s, ...)" using OUTER's own "s" as MID's own ctor argument - this is the substitution
+## a caller doing "outer.mid.leaf" needs traced through, not just Outer's own field tag, to know what scope
+## "leaf" actually ends up in. Persisted once, at Outer's own declaration (see semaCheckBodies), onto
+## Outer's "mid" field itself (struct var.scopeBindings, reused from the same field a local var-decl's own
+## initializer already populates) - not recomputed per call site.
+type Mid struct(s scope, leaf Point<s>) {
+    leaf
+}
+
+type Outer struct(s scope, x int32, y int32) {
+    mid Mid<s> = Mid(s, Point{x, y})
+}
+
+## Outer's own "s" is bound to "a" here, so "o.mid.leaf" is really "a"-scoped - a chain through TWO levels
+## of constructor-declared scope params (Outer's own field tag, then Mid's own internal one), not just one.
+func fieldOfFieldChecked(a scope, x int32, y int32) ? Point<a> {
+    o mut Outer<> = Outer(a, x, y)
+    return o.mid.leaf
+}
+
+## reassignment tracking: a var's own scope-binding map used to be set once, at its own declaration, and
+## never revisited - so "box = ScopedBox(otherScope, ...)" here left box's OWN tracked binding stale,
+## silently still saying "a" even after box was reassigned to point at something else entirely. A plain
+## "x = y" now re-binds x's own map to y's, the same propagation a var-decl's own initializer already gets
+## (buildAssignStmnt in semantic.c) - "box"'s own binding correctly tracks "a" through BOTH declaration and
+## reassignment here, so "return box.inner" is a real, verified match, not a stale leftover. Reassigning
+## "box" to an UNRELATED scope ("ScopedBox(otherScope, ...)") is correctly rejected at compile time - not
+## testable here since a rejected program can't run as a test{} block; verified ad hoc during development.
+func reassignSameScopeChecked(a scope, x int32, y int32) ? Point<a> {
+    box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
+    box = ScopedBox(a, Point{x, y})
+    return box.inner
+}
+
+## branching: two branches that each reassign a var to a DIFFERENT scope leave it genuinely ambiguous once
+## control reaches past the "if" - correctly rejected (verified ad hoc, not testable here, same as above).
+## When both branches instead agree (as here - both reassign "box" to the SAME "a"), the merge correctly
+## keeps that agreed value rather than conservatively giving up the moment ANY branching is involved -
+## buildIfStmnt's own snapshot/merge (see the report) proves this, not just an in-place update that would
+## only ever see whichever branch happened to run last during the check.
+func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) ? Point<a> {
+    box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
+    if cond {
+        box = ScopedBox(a, Point{x, y})
+    } else {
+        box = ScopedBox(a, Point{y, x})
+    }
+    return box.inner
+}
+
 ## the type-level generalization of "a bare '<>' field's scope inherits its container's own scope" - see
 ## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "<name>" tag the way
 ## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
@@ -909,6 +962,27 @@ test "the static scope checker verifies an ordinary function's return-type scope
     p mut Point<> = makePointChecked(own, 5, 6)
     assert(p.x == 5)
     assert(p.y == 6)
+}
+
+test "the static scope checker traces a scope tag through a field of a field, not just one level" {
+    p mut Point<> = fieldOfFieldChecked(own, 9, 10)
+    assert(p.x == 9)
+    assert(p.y == 10)
+}
+
+test "the static scope checker tracks a var's scope binding through a plain reassignment" {
+    p mut Point<> = reassignSameScopeChecked(own, 11, 12)
+    assert(p.x == 11)
+    assert(p.y == 12)
+}
+
+test "the static scope checker merges two branches that reassign a var to the same agreed scope" {
+    p mut Point<> = reassignBothBranchesAgreeChecked(own, true, 13, 14)
+    assert(p.x == 13)
+    assert(p.y == 14)
+    q mut Point<> = reassignBothBranchesAgreeChecked(own, false, 13, 14)
+    assert(q.x == 14)
+    assert(q.y == 13)
 }
 
 ## "T[N]" with no initializer - real BSS-style zero-fill (see the report and zeroGlobal's own declaration

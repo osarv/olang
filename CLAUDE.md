@@ -764,7 +764,7 @@ of sync with the actual code.
   call's own binding map onto the var it initializes, onto a later member access or return check on that
   var. A second hop (reassigning through another variable, or a field of a field) is not attempted - the
   same conservative "foreign, unverifiable, allow" default applies beyond this point, not a new gap, just
-  not yet closed further.
+  not yet closed further. **Both closed in the two entries below.**
 
 - **Array literal syntax: dropped the redundant size/dynamic-ness prefix - `T[N][v1, ...]`/`T[][v1, ...]`
   became `T[v1, ...]`.** User-driven: the array's own *variable* (or param/return/field type) already
@@ -1055,3 +1055,96 @@ of sync with the actual code.
   proving the skip is scoped to exactly the one local named by `return` and not a blanket "no destructors
   fire on any return" - a second, non-returned local declared in the same function still gets destructed
   normally, before that function even returns.
+
+- **The static scope checker traces a scope tag through "a field of a field," not just one constructor's
+  own field - closing that half of the checker's own documented "second hop" gap.** Both gaps left open by
+  the one-hop version are decidable, ordinary static-analysis problems, not anything fundamentally
+  unprovable - this one is a pure substitution problem, the same technique generics/monomorphization use
+  everywhere: compose bindings across however many levels of nesting, rather than stopping after one.
+  Concretely, `o.mid.leaf` (where `mid`'s own type `Mid<s>` is itself constructor-bearing, with its own
+  internal `leaf Point<s>` using a completely different "s" - Mid's own, not Outer's) used to resolve only
+  `mid`'s own field tag through `o`'s binding map, never composing *Mid's own internal* ctor-param
+  substitution on top of that - so `o.mid.leaf` was silently "foreign, unverifiable, allow" against any
+  return type, confirmed compiling with zero complaint even when `o`'s own scope was provably wrong.
+  **Mechanism: a constructor field's own initializer already builds a real `scopeBindings` map via the
+  exact same `OperandFuncCall` logic any other call already gets** (e.g. `mid Mid<s> = Mid(s, Point{x, y})`
+  is just a call to Mid's own ctor, checked once, when Outer's own type is checked) - it just wasn't kept
+  anywhere past that one check. Now persisted onto the field's own `struct var.scopeBindings` (the same
+  field a var-decl's own initializer already populates - reused, not duplicated) in `semaCheckBodies`'s
+  ctor-body-check, once, at the type's own declaration - not recomputed per call site. `OperandMember` then
+  composes this persisted map through the base's own binding (one more `resolveEffectiveScopeVar` hop) when
+  building a member operand's own map, so a *further* member access on that operand can resolve through it
+  too - the recursion happens across successive `OperandMember` calls, not within any one of them.
+  **A real, latent identity-mismatch bug found and fixed while building this, same root cause as the
+  parameter-copy duality bug from the one-hop checker's own extension:** a constructor field's persisted
+  map can carry a `boundTo` that's a scope-chain *copy* (from inside the checking type's own ctor body,
+  where a parameter is read as a value), while `base`'s own map always stores the type-level *original*
+  (`OperandFuncCall`'s `param` is always read straight off `func->type.vars`) - comparing the two by raw
+  identity in `resolveEffectiveScopeVar`'s lookup silently failed to match, so the composed substitution
+  never actually looked anything up. Fixed two ways, both defensible on their own: `OperandFuncCall` now
+  stores `canonicalVar(arg->readVar)` instead of the raw pointer (so anything persisted past one check is
+  already portable), and `resolveEffectiveScopeVar`'s own lookup now canonicalizes both sides before
+  comparing regardless (defense in depth, matching the codebase's established `canonicalVar` convention for
+  this exact class of mismatch). **Confirmed both directions with ad hoc, uncommitted programs during
+  development** (not testable as a permanent `.olang` test - a rejected program can't run as a `test{}`
+  block): the correctly-scoped version compiles clean, and swapping in a second, unrelated scope parameter
+  at `Outer`'s own construction site is correctly rejected - both confirmed with the checker's `SCOPE_MAY_
+  NOT_OUTLIVE_TARGET` message firing (or not) exactly where expected; the permanent test in shared.olang
+  only exercises the accepting path, matching every other checker test in this file.
+
+- **The static scope checker now tracks reassignment through a plain `x = y`, and merges disagreeing
+  branches into an honest "ambiguous" state instead of either half of the wrong answer - closing the other
+  half of the "second hop" gap.** Before this, a var's own `scopeBindings` were set exactly once, at its
+  own declaration, and never revisited - a later `box = other` left `box`'s tracked binding frozen at
+  whatever it was originally, so a program that reassigned a `<>`-heap-indirect var to point at a
+  *different*, unrelated scope's instance and then read through it compiled with zero complaint, exactly
+  as unsound as the un-tracked case the checker exists to catch. Confirmed by test before the fix (compiled
+  clean) and after (correctly rejected).
+  **Two genuinely different problems, not one:** straight-line reassignment is a simple in-place update -
+  `buildAssignStmnt` now re-binds a bare assignment target's own `scopeBindings` to the rhs's, the identical
+  propagation `buildVarDeclStmnt` already does at declaration time (only ever for a plain, non-compound
+  `x = y` with a bare local-read target - `x.field = y`/`x[i] = y` don't have a *var* to re-bind, and no
+  compound `+=`-style operator ever applies to a scope-relevant struct/array type anyway). Branching is not
+  a simple update: two branches can each reassign the same var to a *different* value, and naively applying
+  whichever branch happened to be checked last (this checker walks both branches of an `if` unconditionally,
+  in source order, regardless of which would actually run) would silently pick one branch's answer at
+  random from the *other* branch's perspective - a real, concrete false-rejection risk (rejecting sound
+  code, the same class of mistake the `varIsOwnParam` identity-duality bug already proved is worse than an
+  honest "unknown"), not just an imprecision.
+  **Mechanism: snapshot before each alternative, restore to the same starting point before checking the
+  next, then fold every outcome into one result** (`snapshotScopeBindings`/`applyScopeBindingsSnapshot`/
+  `foldScopeBindingsBranch`, semantic.c) - a var whose bindings agree across every branch keeps that agreed
+  value; a var where any branch disagrees is marked unresolvable going forward. `buildIfStmnt` folds two
+  outcomes (the `else` branch, or the baseline itself standing in for "no else, nothing happened" when
+  absent); an `else if` chain composes for free, since the recursive `buildIfStmnt` call already leaves the
+  vars in *its own* merged state by the time it returns, so the outer level only needs one more fold against
+  that already-merged outcome. `buildMatchStmnt` does the N-way version of the identical fold across every
+  case plus an implicit/explicit "nothing matched" possibility (this checker doesn't attempt exhaustiveness
+  analysis, so "no case matched" is always folded in as a live alternative even when `nomatch` is absent and
+  the match happens to be exhaustive in practice). `buildForStmnt`/`buildDoStmnt` get the deliberately
+  blunter treatment loops need in a checker with no fixpoint iteration: the body is only ever walked once,
+  so rather than trust that one walk to represent every iteration, *any* reassignment observed during it
+  marks that var unresolvable outright, regardless of what it specifically changed to - safe, never unsound,
+  just more conservative than a real per-iteration analysis would need to be.
+  **A real design bug found and fixed while building this, not about the mechanism's correctness but about
+  what "unresolvable" actually has to mean:** the first version reset a disagreeing var's bindings to plain
+  empty - indistinguishable from "never tracked in the first place," which `resolveEffectiveScopeVar` falls
+  through unchanged, landing right back in `scopeCanFlowInto`'s existing "foreign, unverifiable, allow"
+  default. That's correct for a var this mechanism genuinely never touched, but wrong for one it *did*
+  trace and found to be actively ambiguous - "allow" there silently undoes the whole point of tracking
+  reassignment at all, confirmed concretely: a disagreeing-branches program compiled clean even with this
+  fix's first draft in place. Fixed with `SCOPE_AMBIGUOUS`, a dedicated sentinel `struct var*` that's never
+  equal to any real function's own parameter - `foldScopeBindingsBranch` marks every key either branch ever
+  tracked for a disagreeing var as bound to this sentinel (not emptied), and `scopeCanFlowInto` rejects
+  outright the moment it sees it, before falling into the ordinary foreign-scope leniency. Monotonic by
+  construction: once a key is marked ambiguous, a later fold that touches it again rebuilds from the
+  already-ambiguous entry first, so it can never be "un-marked" by a later branch that happens to coincide
+  with some earlier, already-superseded value.
+  **Confirmed with both directions of every branch shape** (all ad hoc during development except the two
+  accepting cases kept as permanent tests, same convention as every other checker test in this file):
+  straight-line reassignment to the same vs. a different scope; two `if` branches that agree vs. disagree;
+  an `if` with no `else` at all reassigning in the one branch that exists; a `match` where every case (plus
+  `nomatch`) agrees vs. where exactly one disagrees; and a `do` loop that reassigns internally (killed,
+  deliberately, even though the reassignment happens to be the same scope every iteration here - the
+  documented, accepted cost of not attempting per-iteration fixpoint analysis) vs. one that never reassigns
+  the var at all (left untouched, confirming the loop-body tracking doesn't over-trigger on unrelated code).
