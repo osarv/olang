@@ -1234,17 +1234,77 @@ bool OperandIsNumeric(struct operand* op) {
     return TypeIsNumeric(op->type);
 }
 
+static bool typeIsRefShaped(struct type t) {
+    return t.bType == BASETYPE_STRUCT || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
+}
+
+//true if scopeVar is one of func's own declared parameters, by identity - the same pattern
+//cgResolveParamScopeOverride (codegen.c) already uses to compare a scope tag against a signature's own
+//param list. func may be NULL (a global initializer or a test{} block, neither of which has a parameter
+//list of its own) - always false there.
+bool varIsOwnParam(struct var* scopeVar, struct var* func) {
+    if (!scopeVar || !func) return false;
+    for (int i = 0; i < func->type.vars.len; i++) {
+        if (ListGetIdx(&func->type.vars, i) == scopeVar) return true;
+    }
+    return false;
+}
+
+//can a "{}"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
+//perspective of func (the function currently being checked)? NULL means "bare {} - this function's own
+//private scope". olang has no lifetime-bound syntax (no Rust-style "'a: 'b"), so only two relationships
+//are ever provable: the exact same scope (trivially safe - covers own-into-own too), and a named scope
+//flowing into a bare "{}" slot (every scope RECEIVED as a parameter is guaranteed to outlive func's own
+//private scope, by construction - own's scope closes when func itself returns, strictly before any scope
+//its caller passed in could close - see the report). The reverse (own flowing into a named slot) is never
+//safe, and two DIFFERENT named scopes are never provably comparable at all.
+//Deliberately conservative outside func's own frame: a scope tag that isn't one of func's own declared
+//parameters (e.g. a struct's constructor's own scope parameter, read back through a field access on an
+//already-built instance - see the report) can't be compared against func's frame at all yet, so it's left
+//unchecked (same as before this feature existed) rather than risking a false rejection of valid code.
+bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstScope) {
+    if (srcScope == dstScope) return true;
+    if (srcScope && !varIsOwnParam(srcScope, func)) return true;
+    if (dstScope && !varIsOwnParam(dstScope, func)) return true;
+    return srcScope != NULL && dstScope == NULL;
+}
+
+enum typeFit {
+    TYPE_FIT_OK,
+    TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
+    TYPE_FIT_SCOPE_MISMATCH //SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
+};
+
 //can op flow into a target-typed slot (assignment, initialization, argument passing)? an int literal
 //widens into a float slot since it carries no fixed width of its own yet; anything else must match
 //exactly - general implicit numeric conversion (e.g. int32->int64, or non-literal int->float) is
-//undecided language design, not implemented here
-bool OperandFitsType(struct operand* op, struct type target) {
-    if (TypeIsSame(target, op->type)) return true;
+//undecided language design, not implemented here.
+//func is the function currently being checked (NULL for a global initializer/test{} block) - only used for
+//the scope-safety check below: when both target and op->type are ALREADY "{}"-heap-indirect (an existing
+//reference being passed/reassigned, not a fresh literal about to be promoted - see typeNeedsMallocPromotion
+//in codegen.c, the codegen-side mirror of this same "already has a reference" condition), verify the
+//source's scope is provably at least as long-lived as the target's own declared scope - see
+//scopeCanFlowInto. A fresh, not-yet-referenced value (a literal) always starts life directly in the
+//target's own scope at the point it's promoted, so there's nothing to check there at all. Returns a 3-way
+//result rather than a bool specifically so callers can report SCOPE_MAY_NOT_OUTLIVE_TARGET instead of the
+//much less helpful generic VALUE_TYPE_MISMATCH when that's what actually failed.
+enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    if (TypeIsSame(target, op->type)) {
+        if (typeIsRefShaped(target) && target.structMAlloc && op->type.structMAlloc) {
+            if (!scopeCanFlowInto(func, op->type.scopeParam, target.scopeParam)) return TYPE_FIT_SCOPE_MISMATCH;
+        }
+        return TYPE_FIT_OK;
+    }
     if (op->isLiteral && TypeIsInt(op->type) && TypeIsFloat(target)) {
         op->type = target;
-        return true;
+        return TYPE_FIT_OK;
     }
-    return false;
+    return TYPE_FIT_MISMATCH;
+}
+
+void reportTypeFit(enum typeFit fit, struct token tok) {
+    if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+    else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
 }
 
 bool OperandIsLvalue(struct operand* op) {
@@ -1266,7 +1326,7 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
     return op;
 }
 
-struct operand* OperandFuncCall(struct var* func, struct list args, struct token tok) {
+struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct list args, struct token tok) {
     struct type ret = func->type.hasRetType ? *func->type.retType : TypeVanilla(BASETYPE_VOID);
     struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
     op->readVar = func;
@@ -1279,7 +1339,7 @@ struct operand* OperandFuncCall(struct var* func, struct list args, struct token
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        if (!OperandFitsType(arg, paramType)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
+        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
     }
     return op;
 }
@@ -1552,7 +1612,7 @@ struct operand* OperandVocabLiteral(struct type vocabType, struct token wordTok)
 
 //"Point[1, 2]" - positional, in member-declaration order, each value checked the same way an assignment
 //would check it. args becomes op->args (codegen reads the field values straight from there).
-struct operand* OperandStructLiteral(struct type t, struct list args, struct token tok) {
+struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, struct list args, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_NONE, t);
     op->isLiteral = true;
     op->args = args;
@@ -1560,21 +1620,21 @@ struct operand* OperandStructLiteral(struct type t, struct list args, struct tok
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type memberType = (*(struct var*)ListGetIdx(&t.vars, i)).type;
-        if (!OperandFitsType(arg, memberType)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
+        reportTypeFit(OperandFitsType(callerFunc, arg, memberType), arg->tok);
     }
     return op;
 }
 
 //"int32[3][1, 2, 3]" (fixed - value count must match the declared size exactly) or "int32[][1, 2, 3]"
 //(dynamic - mallocd at runtime, see cgAggregateLiteral; size is just however many values are given)
-struct operand* OperandArrayLiteral(struct type t, struct list args, struct token tok) {
+struct operand* OperandArrayLiteral(struct var* callerFunc, struct type t, struct list args, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_NONE, t);
     op->isLiteral = true;
     op->args = args;
     if (!t.arrMalloc && args.len != t.arrLen->intLiteralVal) { ErrMsgSemantic(tok, WRONG_ARG_COUNT); return op; }
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
-        if (!OperandFitsType(arg, *t.arrElem)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
+        reportTypeFit(OperandFitsType(callerFunc, arg, *t.arrElem), arg->tok);
     }
     return op;
 }
@@ -1714,7 +1774,7 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct type t = applyArraySuffixes(resolveLiteralBaseType(ctx->mod, nameNode), s);
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
-    if (t.bType == BASETYPE_ARRAY) return OperandArrayLiteral(t, args, tok);
+    if (t.bType == BASETYPE_ARRAY) return OperandArrayLiteral(ctx->func, t, args, tok);
     ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
     return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
 }
@@ -1736,7 +1796,7 @@ struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
             ErrMsgSemantic(tok, TYPE_REQUIRES_CONSTRUCTOR_CALL);
             return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
         }
-        return OperandStructLiteral(t, args, tok);
+        return OperandStructLiteral(ctx->func, t, args, tok);
     }
     ErrMsgSemantic(tok, INVALID_STRUCT_LITERAL_TYPE);
     return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
@@ -1839,7 +1899,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (!func) return OperandIntLiteral(nameTok);
         if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, NOT_CALLABLE); return OperandIntLiteral(nameTok); }
         if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
-        return OperandFuncCall(func, args, nameTok);
+        return OperandFuncCall(ctx->func, func, args, nameTok);
     }
     //parenthesized sub-expression: TOK_PAREN_O SNTX_EXPR TOK_PAREN_C
     return buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
@@ -1888,7 +1948,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (typeExprNode) {
         //ctx->func is NULL for a global initializer, which has no parameter list to tag a "{name}" against
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
-        if (!OperandFitsType(rhs, declType)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+        reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
         declType = rhs->type;
@@ -1937,7 +1997,7 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct operand* value = rhs;
     if (isCompound) value = OperandBinary(target, rhs, compoundOp, opTok);
-    else if (!OperandFitsType(rhs, target->type)) ErrMsgSemantic(opTok, VALUE_TYPE_MISMATCH);
+    else reportTypeFit(OperandFitsType(ctx->func, rhs, target->type), opTok);
 
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSIGN;
@@ -1995,7 +2055,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct type declType;
     if (typeExprNode) {
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
-        if (!OperandFitsType(initVal, declType)) ErrMsgSemantic(initVal->tok, VALUE_TYPE_MISMATCH);
+        reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         if (!initVal->isLiteral) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
         declType = initVal->type;
@@ -2065,8 +2125,10 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
     else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_MISSING_VALUE);
-    else if (val && ctx->func && ctx->func->type.hasRetType && !OperandFitsType(val, *ctx->func->type.retType)) {
-        ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
+    else if (val && ctx->func && ctx->func->type.hasRetType) {
+        enum typeFit fit = OperandFitsType(ctx->func, val, *ctx->func->type.retType);
+        if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(val->tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+        else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
     }
 
     struct statement stmt = (struct statement){0};
@@ -2260,7 +2322,7 @@ void semaCheckBodies(struct semaModule* mod) {
             ctx.mod = mod;
             struct operand* rhs = buildExprFromSyntax(&ctx, firstPartOfType(actual, SNTX_EXPR));
             if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
-                if (!OperandFitsType(rhs, v->type)) ErrMsgSemantic(rhs->tok, VALUE_TYPE_MISMATCH);
+                reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok);
             } else { // ":=" - type read straight off the (required-to-be-literal) initializer
                 if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
                 v->type = rhs->type;
@@ -2312,7 +2374,7 @@ void semaCheckBodies(struct semaModule* mod) {
                 if (rhsNode) {
                     fieldOp = buildExprFromSyntax(&cctx, rhsNode);
                     if (typeExprNode) {
-                        if (!OperandFitsType(fieldOp, field->type)) ErrMsgSemantic(fieldOp->tok, VALUE_TYPE_MISMATCH);
+                        reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok);
                     } else { // ":=" - type read straight off the (required-to-be-literal) rhs
                         if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
                         field->type = fieldOp->type;
@@ -2328,7 +2390,7 @@ void semaCheckBodies(struct semaModule* mod) {
                 }
                 ListAdd(&fieldArgs, &fieldOp);
             }
-            struct operand* built = OperandStructLiteral(*t, fieldArgs, t->tok);
+            struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
             struct statement retStmt = (struct statement){0};
             retStmt.sType = STATEMENT_RET;
             retStmt.op = built;

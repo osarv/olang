@@ -329,7 +329,7 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
     return loaded;
 }
 
-bool typeIsRefShaped(struct type t);
+static bool typeIsRefShaped(struct type t);
 
 //resolves the scope base's own "{}"-heap-indirect storage lives in - the type-level rule a bare "{}"
 //field is now defined by: its effective scope is always the SAME as whatever contains it, recursively.
@@ -354,7 +354,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op);
 
 //true for a type that "{}"/"{name}" can mark as a reference - a struct, or a fixed-size ("T[N]") array;
 //a dynamic ("T[]") array is excluded, same reasoning as typeNeedsMallocPromotion.
-bool typeIsRefShaped(struct type t) {
+static bool typeIsRefShaped(struct type t) {
     return (t.bType == BASETYPE_STRUCT) || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
 

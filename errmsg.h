@@ -63,6 +63,7 @@
 #define OPERATION_REQUIRES_INT "operand must be an integer"
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
 #define OPERATION_REQUIRES_BOOL "operand must be a boolean"
+#define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's declared scope - only the exact same scope, or a named scope flowing into a bare '{}' (this function's own scope), are provably safe"
 
 // ---- statements and control flow ----
 

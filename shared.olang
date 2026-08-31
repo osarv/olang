@@ -360,6 +360,18 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
     return ScopedBox(outer, Point{x, y})
 }
 
+## the static scope checker's one positively-provable narrowing rule (scopeCanFlowInto in semantic.c): a
+## value tagged with a scope RECEIVED as a parameter is always safe to store into a slot tagged with this
+## function's own bare "{}" scope, since every received scope is guaranteed to outlive the function's own
+## private one (which closes the instant this function itself returns). The reverse, and two different
+## named scopes of the same function, are both rejected at compile time - not testable here since a
+## rejected program can't run as a test{} block; verified ad hoc during development instead.
+func narrowNamedIntoOwn(s scope) ? int32 {
+    p mut Point{s} = fillBoxViaCtor(s)
+    q mut Point{} = p
+    return q.x
+}
+
 ## the type-level generalization of "a bare '{}' field's scope inherits its container's own scope" - see
 ## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "{name}" tag the way
 ## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
@@ -731,3 +743,7 @@ test "a bare '{}' field assigned through a two-hop chain of bare '{}' bases reso
     assert(co.mid.leaf.y == 6)
 }
 
+test "the static scope checker allows a received named scope to narrow into this function's own bare '{}' scope" {
+    r mut int32 = narrowNamedIntoOwn(own)
+    assert(r == 7)
+}

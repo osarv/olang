@@ -640,6 +640,55 @@ of sync with the actual code.
   -tagged one) still can't be resolved soundly by either mechanism - a bare `{}` parameter's true origin
   scope genuinely isn't recoverable from its type alone without the static checker described next.
 
+- **The static scope-containment checker - a first, deliberately bounded version.** Before this, a `{}`/
+  `{name}` reference's scope tag was checked for absolutely nothing beyond parsing: `TypeIsSame` ignores
+  `structMAlloc`/`scopeParam` entirely for structs and arrays (by design - see the report), so
+  `q mut Point{d} = p` compiled with zero complaint even when `p` was tagged `{s}` and `s`/`d` had no
+  known relationship - all of the feature's actual safety came from *runtime* behavior (deferred
+  allocation into whatever scope value a call happened to resolve), never from a compile-time proof. This
+  adds that proof, for the cases it's actually provable in.
+  **The rule, from the "own is always younger than any scope received as a parameter" ordering fact
+  established earlier** (a function's own private scope closes the instant *it* returns, strictly before
+  any scope its caller passed in could close - true by construction, no annotation needed): a value tagged
+  `srcScope` may flow into a slot tagged `dstScope` exactly when `srcScope == dstScope` (including bare
+  `{}` into bare `{}}` - trivially the same scope), or when `srcScope` is any named parameter and `dstScope`
+  is bare `{}` (narrowing a longer-lived reference into "at least as long as my own scope" is always safe -
+  the covariant, safe direction, mirroring how `&'long T` coerces to `&'short T` in Rust). Both directions
+  of the opposite case are rejected: a bare `{}` (own) value flowing into a *named* slot is unsafe (own is
+  the youngest possible scope, so this is the dangerous widening direction), and two *different* named
+  scopes of the same function have no provable relationship at all - olang has no lifetime-bound syntax
+  (no Rust-style `'a: 'b`), so this is conservatively rejected too, even though some such pairs might be
+  fine at any given call site.
+  **Implementation: `scopeCanFlowInto(func, srcScope, dstScope)` (semantic.c)**, wired into
+  `OperandFitsType` - the one shared type-compatibility gate already used at every relevant site (var-decl,
+  assignment, return, call arguments, struct/array-literal field values), so no new call sites were needed,
+  only threading a `func` parameter (the function currently being checked, for identifying which scope tags
+  are *its own* parameters) through it and its two collaborators, `OperandFuncCall`/`OperandStructLiteral`/
+  `OperandArrayLiteral`. The check only fires when *both* sides are already `{}`-heap-indirect (an existing
+  reference being passed/reassigned) - a fresh literal about to be promoted (`typeNeedsMallocPromotion`'s
+  own condition, mirrored here) always starts life directly in the target's own scope, so there's nothing
+  to check there. `OperandFitsType` now returns a 3-way `enum typeFit` (`TYPE_FIT_OK`/`_MISMATCH`/
+  `_SCOPE_MISMATCH`) instead of a bool, so callers report the new, specific `SCOPE_MAY_NOT_OUTLIVE_TARGET`
+  message instead of the far less helpful generic `VALUE_TYPE_MISMATCH` when that's what actually failed.
+  **Deliberately bounded to one function's own frame - the real scope of this first version, chosen after
+  discovering the alternative breaks working code.** `varIsOwnParam(scopeVar, func)` checks `scopeVar`
+  against `func->type.vars` by identity (the same pattern `cgResolveParamScopeOverride` already uses) -
+  `scopeCanFlowInto` treats a scope tag that *isn't* one of `func`'s own declared parameters as
+  unverifiable-so-allowed, not as a violation. This matters concretely: a struct field's own `{name}` tag
+  (e.g. `ScopedBox`'s constructor field `inner Point{s}`) resolves against the *type's own declaration-site*
+  parameter list, not the checking function's - reading `b.inner` back out gets a `scopeParam` that's a
+  *different* `var*` than anything in the current function's frame, even when, at the actual call site, the
+  two positions were bound to literally the same scope. Naively comparing by raw identity across this
+  boundary rejected `fillBoxViaCtor`'s already-working, already-tested `return b.inner` - correctly proving
+  the naive version unsound-in-the-wrong-direction (a false rejection), not just imprecise. Making this
+  provable in general needs tracing a scope tag's *effective* identity back through constructor calls and
+  member chains to whatever the current function's frame actually knows about (a small substitution/
+  monomorphization system, not just a lookup) - real, additional work, deliberately not attempted in this
+  pass. The honest scope of what's checked today: two named scopes (or a named-into-bare-own) *within the
+  same function's own parameter list*. Anything crossing a struct's own field-declared scope tag, or a
+  chain through more than one function's frame, is exactly as unchecked as it was before this feature
+  existed - not a new gap, the *same* gap, just not yet closed.
+
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
 - **Struct/array literal syntax: array literal syntax is settled; struct literals moved to `{...}`.** The
