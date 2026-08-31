@@ -379,14 +379,44 @@ char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct li
     return NULL;
 }
 
-//if t (a struct type) declares a destructor, registers it with the scope a value of it was just heap-
-//allocated into, so it runs when that scope closes rather than being lost - see
-//__olang_scope_register_dtor/emitScopeRuntime. Called from both malloc-promotion sites below.
+//true if t is a struct that declares a destructor, or a fixed-size array whose own element type
+//(recursively) is - the exact shape cgRegisterDtorIfNeeded below walks. Pure lookup, no codegen: used to
+//skip emitting a pointless GEP loop when nothing within t needs one.
+static bool typeMayHaveDestruct(struct type t) {
+    if (t.bType == BASETYPE_STRUCT) return t.hasDestruct;
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc) return typeMayHaveDestruct(*t.arrElem);
+    return false;
+}
+
+//if t declares a destructor (a struct), or is a fixed-size array whose own elements (recursively) do,
+//registers each destructor-bearing instance found within heapPtr's own storage with scopeVal, so it runs
+//when that scope closes rather than being lost - see __olang_scope_register_dtor/emitScopeRuntime. Called
+//from both malloc-promotion sites below, on whatever srcT/op->type was just heap-allocated. A fixed array
+//is always compile-time-sized here (typeNeedsMallocPromotion only ever reaches this for "!arrMalloc"), so
+//its own element loop is unrolled directly at codegen time, one registration call per element/instance -
+//matching the same "getelementptr elemTy, ptr base, i64 i" convention cgPromoteFixedArrayToDynamic's own
+//element-copy loop already uses for a flat, freshly-allocated buffer. Recurses through nested fixed
+//arrays for free: a nested array's own element type is just handed back to this same function one level
+//down, registering each individual leaf struct instance regardless of nesting depth.
 void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
-    if (!t.hasDestruct) return;
-    char dtorSym[256];
-    mangleGlobal(t.destructFunc->owner, t.destructFunc->name, dtorSym, sizeof(dtorSym));
-    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
+    if (t.bType == BASETYPE_STRUCT) {
+        if (!t.hasDestruct) return;
+        char dtorSym[256];
+        mangleGlobal(t.destructFunc->owner, t.destructFunc->name, dtorSym, sizeof(dtorSym));
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
+        return;
+    }
+    if (t.bType != BASETYPE_ARRAY || t.arrMalloc) return;
+    struct type elemT = *t.arrElem;
+    if (!typeMayHaveDestruct(elemT)) return;
+    char elemTy[256];
+    llvmType(elemT, elemTy, sizeof(elemTy));
+    long long count = t.arrLen->intLiteralVal;
+    for (long long i = 0; i < count; i++) {
+        char* elemAddr = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %lld\n", elemAddr, elemTy, heapPtr, i);
+        cgRegisterDtorIfNeeded(ctx, elemT, scopeVal, elemAddr);
+    }
 }
 
 //true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "<>"-heap-indirect
@@ -418,7 +448,10 @@ bool typeNeedsDynamicPromotion(struct type dstT, struct type srcT) {
 //no explicit "<>" marker, since a runtime-known length can never be embedded - see the report. Returns the
 //resulting { i64, ptr } slice value - element-by-element, same convention every other aggregate-building
 //loop in this file already uses (no memcpy intrinsic, kept consistent with e.g. cgAggregateLiteral's own
-//dynamic-array branch).
+//dynamic-array branch). Also registers each destructor-bearing element found in the fresh buffer (see
+//cgRegisterDtorIfNeeded) - srcT is always a fixed array here (only a fixed literal is ever promoted to
+//dynamic, never the reverse), so its own element loop is the exact same compile-time-unrolled shape
+//cgRegisterDtorIfNeeded already walks generically; no new mechanism needed, just one more call site.
 char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* srcAddr, char* scopeVal) {
     struct type elemT = *srcT.arrElem;
     char elemTy[256];
@@ -438,6 +471,7 @@ char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* sr
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, elemTy, srcElemAddr);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", elemTy, v, dstElemAddr);
     }
+    cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, bytes);
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %lld, 0\n", agg1, count);
     char* agg2 = cgNewTmp(ctx);

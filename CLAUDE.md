@@ -614,7 +614,8 @@ of sync with the actual code.
   `structMAlloc` through any type-ref a user can currently write - see that entry for the honest scope of
   what the fix actually covers today. (5) **Arrays of destructor-bearing struct
   elements don't register per-element destructors** - `cgRegisterDtorIfNeeded` only ever fires at a
-  struct's own heap-promotion site, never walked across an array's elements.
+  struct's own heap-promotion site, never walked across an array's elements. **Closed in the per-element-
+  destructor entry further below** - unlike gap (4), this one was genuinely reachable and real.
 
 - **A bare `<>` field's scope is now a real, comprehensively-applied rule: "same as whatever contains it" -
   not just the narrow one-hop `cgAssign` value-level patch from before.** The old patch only handled
@@ -984,6 +985,41 @@ of sync with the actual code.
   needing this fix revisited when that day comes. `make verify` (62 tests, `-c` production build/run
   included) still passes with this change, confirming it's inert on every currently-expressible program,
   not that it does anything a test observed.
+
+- **Arrays of destructor-bearing struct elements now register a destructor per element, not zero.**
+  `cgRegisterDtorIfNeeded(ctx, t, scopeVal, heapPtr)` used to check `t.hasDestruct` directly - correct when
+  `t` is a struct, but silently wrong when `t` is an array (`hasDestruct` is a struct-only field, always
+  false on an array type's own value), so heap-promoting a fixed array of `destruct{}`-declaring struct
+  values registered nothing at all - a real resource leak (e.g. a `FileHandle[3]` never closing any of its
+  three handles), not just a missed optimization. Fixed by making the function dispatch on `t.bType`: a
+  struct registers itself as before; a fixed array (`!arrMalloc` - the only shape that ever reaches this
+  function, since `typeNeedsMallocPromotion`/`cgPromoteFixedArrayToDynamic`'s own source is always fixed)
+  walks its `count` elements via a compile-time-unrolled loop (`count` is always a literal here, from
+  `arrLen`), GEP-ing each element's own address the same "`getelementptr elemTy, ptr base, i64 i`" way
+  `cgPromoteFixedArrayToDynamic`'s own element-copy loop already does, and recurses `cgRegisterDtorIfNeeded`
+  on each - which, for free, also handles a nested fixed array of structs (`Handle[2][3]`), since a nested
+  array's own element type is just handed back to the same function one level down. A new `typeMayHaveDestruct`
+  (pure lookup, no codegen) skips emitting the loop entirely when neither the element type nor anything
+  nested inside it could possibly need it.
+  **Both promotion paths needed the identical fix, since both build a fresh heap buffer via the same
+  per-element GEP shape:** the fixed-array-to-`<>`-reference path (`cgStoreInto`/`cgBoundaryValue`'s
+  `typeNeedsMallocPromotion` branch, already calling `cgRegisterDtorIfNeeded` on the whole promoted type -
+  no call-site change needed there, since `t` could already correctly be an array once the function itself
+  learned to handle one) and the fixed-literal-to-dynamic-`T[]` path (`cgPromoteFixedArrayToDynamic`, which
+  registered nothing at all before this - a second, separate instance of the same underlying gap, found
+  while testing the first fix, not something the original request called out specifically). Fixed with one
+  additional call, `cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, bytes)`, right after that function's own
+  element-copy loop, reusing the exact same recursive walk - no new mechanism needed for the second path
+  either.
+  **Deliberately not attempted here:** a genuinely dynamic (`T[expr]`) runtime-sized array of destructor-
+  bearing elements - `OPERATION_SIZED_ARRAY_ALLOC`'s own zero-fill (`cgSizedArrayAlloc`) never allocates
+  actual struct instances via a literal at all (it always zero-fills, never copies from a source array), so
+  there's nothing to register a destructor *for* at allocation time there; and the walk is still always a
+  compile-time-unrolled C loop, never an LLVM runtime loop, since both call sites are only ever reached for
+  a fixed (`!arrMalloc`, compile-time-constant-length) source array - a hypothetical future runtime-counted
+  source (not currently constructible - see the array-index-scope-override entry above for why an array's
+  own element shape is hard to make independently reference-typed at all) would need a real runtime loop,
+  not this one.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 

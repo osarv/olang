@@ -340,6 +340,37 @@ func useManyHandlesLocally(n int32) ? int32 {
     return total
 }
 
+## a plain fixed-size array of destructor-bearing struct VALUES (not "<>" instances individually - just one
+## array, promoted as a whole into "<>"-heap-indirect storage) needs its OWN element-by-element destructor
+## registration: cgRegisterDtorIfNeeded used to only ever check hasDestruct on the type just heap-promoted,
+## which for an array is the array type itself (never hasDestruct - that field only ever means anything for
+## a struct) - so every element's own destructor was silently dropped. Now walked recursively per element -
+## see the report. Routed through a return value (mirroring makeFixedArrayRef), not a var-decl literal
+## initializer directly - a fixed-size target paired with a literal initializer at a var-decl is
+## REDUNDANT_ARRAY_SIZE regardless of "<>", so this is the shape that actually exercises the malloc-
+## promotion path (typeNeedsMallocPromotion), not the unrelated dynamic-array promotion one ("Handle[]<>"
+## instead would go through cgPromoteFixedArrayToDynamic, which doesn't register destructors at all - a
+## separate, not-yet-attempted gap, since a genuinely dynamic array of destructor-bearing elements needs
+## its own runtime element count, not a compile-time-unrolled loop like this fix uses).
+func makeHandleArrayRef(s scope) ? Handle[3]<s> {
+    return Handle[Handle(20), Handle(21), Handle(22)]
+}
+
+func useHandleArrayLocally() ? int32 {
+    arr mut Handle[3]<> = makeHandleArrayRef(own)
+    return arr[0].id + arr[1].id + arr[2].id
+}
+
+## the OTHER array-promotion path (a fixed literal flowing into a genuinely dynamic "T[]" target -
+## cgPromoteFixedArrayToDynamic, an orthogonal mechanism from the fixed-array-reference one above) needed
+## the identical fix, for the identical reason - it built a fresh buffer via the same "GEP per element"
+## shape but never registered a single destructor. cgRegisterDtorIfNeeded already walked that generically,
+## so this took one extra call, not a new mechanism - see the report.
+func useHandleArrayLocallyDynamic() ? int32 {
+    arr mut Handle[]<> = Handle[Handle(30), Handle(31), Handle(32)]
+    return arr[0].id + arr[1].id + arr[2].id
+}
+
 ## constructors already give a struct field a real, type-level scope - no generics syntax needed. A
 ## field's type is resolved against the constructor's own parameter list (see resolveStructCtorInto in
 ## semantic.c), the same way a later parameter can already reference an earlier one - so a field can
@@ -712,6 +743,20 @@ test "destructor runs for every heap-indirect instance when their scope closes, 
     total mut int32 = useManyHandlesLocally(5)
     assert(total == 0 + 1 + 2 + 3 + 4)
     assert(resourcesClosed == before + 5)
+}
+
+test "destructor runs for every element of an array of destructor-bearing struct values" {
+    before mut int32 = resourcesClosed
+    total mut int32 = useHandleArrayLocally()
+    assert(total == 20 + 21 + 22)
+    assert(resourcesClosed == before + 3)
+}
+
+test "destructor runs for every element of a fixed literal promoted into a dynamic array" {
+    before mut int32 = resourcesClosed
+    total mut int32 = useHandleArrayLocallyDynamic()
+    assert(total == 30 + 31 + 32)
+    assert(resourcesClosed == before + 3)
 }
 
 ## "assert" is a statement (takes its operand directly like "return" does), not a function call - every
