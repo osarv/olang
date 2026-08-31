@@ -607,7 +607,12 @@ of sync with the actual code.
   expressible with what exists today. (4) **The one-hop `cgAssign` field-scope override doesn't extend to
   array elements** - `arr[i] = ...` where `arr`'s own element type is a bare `<>` field-like reference
   still resolves via `ctx->ownScopeSlot`, the same gap struct fields had before their own one-hop fix;
-  same underlying cause, not extended to `OPERATION_INDEX` here. (5) **Arrays of destructor-bearing struct
+  same underlying cause, not extended to `OPERATION_INDEX` here. **Closed in the array-index-scope-
+  override entry further below** - though on closer inspection while closing it, this exact gap turns out
+  to describe a shape gap (3) above already makes unconstructible: the one marker per type-ref applies to
+  the whole array, never independently to `arrElem`, so an array's own element type can never itself be
+  `structMAlloc` through any type-ref a user can currently write - see that entry for the honest scope of
+  what the fix actually covers today. (5) **Arrays of destructor-bearing struct
   elements don't register per-element destructors** - `cgRegisterDtorIfNeeded` only ever fires at a
   struct's own heap-promotion site, never walked across an array's elements.
 
@@ -650,9 +655,8 @@ of sync with the actual code.
   **New shared helper, not new behavior:** `typeIsRefShaped(struct type t)` (struct, or fixed-size array -
   the same "can this be marked `<>`/`<name>`" predicate that was duplicated inline in three places already)
   factored out and reused by `cgResolveParamScopeOverride`, `cgAssign`, and `cgResolveEffectiveScope`.
-  **Deliberately not extended here, both already-documented gaps from the arrays work:** array-*index*
-  targets (`arr[i] = ...`) still aren't covered by either mechanism - `cgResolveEffectiveScope` only walks
-  `OPERATION_MEMBER` chains, not `OPERATION_INDEX`; and a bare-`<>` field reached only through a chain that
+  **Deliberately not extended here, one already-documented gap from the arrays work (the other, array-
+  *index* targets, is closed further below):** a bare-`<>` field reached only through a chain that
   passes through a bare-`<>` *parameter* (as opposed to a locally-constructed value or an explicitly-`<name>`
   -tagged one) still can't be resolved soundly by either mechanism - a bare `<>` parameter's true origin
   scope genuinely isn't recoverable from its type alone without the static checker described next.
@@ -949,6 +953,37 @@ of sync with the actual code.
   type - belongs in a *standard library* built on top of the language once it exists, not as more special
   cases inside the compiler itself. Nothing about the language design should be shaped around this yet;
   revisit once a concrete need for a resizable collection or generic user code actually arises.
+
+- **`cgResolveEffectiveScope`/`cgAssign`'s bare-`<>` scope-override mechanism now also walks
+  `OPERATION_INDEX`, not just `OPERATION_MEMBER` - closing the array-index half of a gap this file had
+  documented in two places, though it turns out to have no live test coverage today.** Mechanically a
+  direct mirror of the existing member-access handling: `cgResolveEffectiveScope` now recurses through
+  `base->opType == OPERATION_MEMBER || base->opType == OPERATION_INDEX` alike (`a[i].b[j]` resolves the
+  same way `a.b.c` already did), and `cgAssign`'s own scope-override computation now considers an
+  `OPERATION_INDEX` target exactly the same way it already considered an `OPERATION_MEMBER` one - same
+  `typeIsRefShaped(base->type) && base->type.structMAlloc` gate, same fallback to `ctx->ownScopeSlot` for
+  an unhandled plain base.
+  **The honest finding while closing this: the motivating shape doesn't actually exist in olang today.**
+  For `arr[i] = ...`'s target type (the array's own `arrElem`) to need this override at all, `arrElem`
+  itself would have to be `structMAlloc` - but `applyRefMarker` only ever sets `structMAlloc`/`scopeParam`
+  on the *outermost* type a type-ref produces, strictly *after* `applyArraySuffixes` has already finished
+  building `arrElem` from the unmarked base (see the `<>`/`<name>`-on-arrays entry above, gap (3): "the
+  single trailing marker applies once, to the whole type"). There is no grammar position to write a
+  per-element marker distinct from the whole-array one - `Point<>[3]` doesn't parse (the marker must
+  follow every array suffix, not precede one), and `Point[3]<s>` marks the array as a single whole
+  reference, leaving `arrElem` (plain `Point`) untouched. Confirmed by hand: `type W struct { p
+  Point<>[3] }` fails to parse (`unexpected token '[' expected '}'`) for exactly this reason. So today,
+  an `OPERATION_INDEX` target's own type is never `structMAlloc`, and the new branch this adds is
+  currently unreachable dead code from any real olang program - no regression test could be written for
+  it, unlike its `OPERATION_MEMBER` sibling (which the array-index-scope-override entry's own
+  `ChainOuter`/`ChainMid` test does exercise, since a *struct field*, unlike an array element, gets its
+  own independent type-ref and so its own independent marker). Kept anyway rather than reverted: it's a
+  direct, cheap, zero-new-abstraction completion of an already-general mechanism (both call sites already
+  existed, already took `struct type t`/`struct operand* base` generically), and it will start being live,
+  correct code the moment any future work makes an array's own `arrElem` independently markable - without
+  needing this fix revisited when that day comes. `make verify` (62 tests, `-c` production build/run
+  included) still passes with this change, confirming it's inert on every currently-expressible program,
+  not that it does anything a test observed.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 

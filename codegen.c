@@ -332,16 +332,18 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
 static bool typeIsRefShaped(struct type t);
 
 //resolves the scope base's own "<>"-heap-indirect storage lives in - the type-level rule a bare "<>"
-//field is now defined by: its effective scope is always the SAME as whatever contains it, recursively.
-//base->type.scopeParam set (an explicit "<name>") is the base case, resolved the ordinary way. A bare
-//"<>" base that is itself a member access (base.field) has no scope of its own to fall back to - it
-//inherits its own base's, walking up an arbitrary chain of bare-"<>" member accesses until either an
-//explicitly-scoped ancestor is found, or the chain bottoms out at a plain var (a var, unlike a field,
-//really can be its own root - a bare "<>" var means "this var's own enclosing function scope", same as
-//cgResolveScope(ctx, NULL) already means). Only ever called on a structMAlloc value - callers check first.
+//field/element is now defined by: its effective scope is always the SAME as whatever contains it,
+//recursively. base->type.scopeParam set (an explicit "<name>") is the base case, resolved the ordinary
+//way. A bare "<>" base that is itself a member access (base.field) OR an index (base[i]) has no scope of
+//its own to fall back to - it inherits its own base's, walking up an arbitrary chain of bare-"<>" member
+//accesses/indexes (freely mixed - "a[i].b[j]" resolves exactly the same way as "a.b.c") until either an
+//explicitly-scoped ancestor is found, or the chain bottoms out at a plain var (a var, unlike a field or
+//element, really can be its own root - a bare "<>" var means "this var's own enclosing function scope",
+//same as cgResolveScope(ctx, NULL) already means). Only ever called on a structMAlloc value - callers
+//check first.
 char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
     if (base->type.scopeParam) return cgResolveScope(ctx, base->type.scopeParam);
-    if (base->opType == OPERATION_MEMBER) {
+    if (base->opType == OPERATION_MEMBER || base->opType == OPERATION_INDEX) {
         struct operand* innerBase = *(struct operand**)ListGetIdx(&base->args, 0);
         if (typeIsRefShaped(innerBase->type) && innerBase->type.structMAlloc) {
             return cgResolveEffectiveScope(ctx, innerBase);
@@ -1156,14 +1158,17 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
-    //a bare "<>" struct/array field has no declared scope of its own (fields can't carry a "<name>" tag -
-    //see the report) - by rule, its effective scope is always the SAME as whatever contains it. When the
-    //target of "base.field = ..." is itself reached through a "<>"-heap-indirect base, resolve that scope
-    //(walking up an arbitrary chain of bare-"<>" member accesses via cgResolveEffectiveScope - not just
-    //one hop) and use it both for building the rhs (so any of ITS OWN nested bare-"<>" fields inherit the
-    //same scope too, see cgValueForTarget) and for the actual promotion below.
+    //a bare "<>" struct field or array element has no declared scope of its own (neither a field nor an
+    //array's own element type can carry a "<name>" tag independently of the whole array - see the report)
+    //- by rule, its effective scope is always the SAME as whatever contains it. When the target of
+    //"base.field = ..." or "base[i] = ..." is itself reached through a "<>"-heap-indirect base, resolve
+    //that scope (walking up an arbitrary chain of bare-"<>" member accesses/indexes via
+    //cgResolveEffectiveScope - not just one hop) and use it both for building the rhs (so any of ITS OWN
+    //nested bare-"<>" fields/elements inherit the same scope too, see cgValueForTarget) and for the actual
+    //promotion below.
     char* scopeOverride = NULL;
-    if (s->target->opType == OPERATION_MEMBER && typeIsRefShaped(s->target->type) && s->target->type.structMAlloc) {
+    bool targetIsMemberOrIndex = s->target->opType == OPERATION_MEMBER || s->target->opType == OPERATION_INDEX;
+    if (targetIsMemberOrIndex && typeIsRefShaped(s->target->type) && s->target->type.structMAlloc) {
         struct operand* base = *(struct operand**)ListGetIdx(&s->target->args, 0);
         if (typeIsRefShaped(base->type) && base->type.structMAlloc) {
             scopeOverride = cgResolveEffectiveScope(ctx, base);
