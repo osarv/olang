@@ -23,19 +23,67 @@ struct list* SemanticAllModules(void) {
 
 long long TypeGetSize(struct type t);
 
+//x86_64 SysV natural alignment (the same rule LLVM's own default, non-packed struct layout follows for
+//the "%m0.Name = type { ... }" aggregates codegen.c emits) - needed so getStructSize's own byte count
+//(fed to @malloc/@__olang_scope_alloc for a heap-promoted struct) actually matches the real size LLVM
+//lays that same aggregate out at, padding included. See the report for the heap-corruption bug this fixes.
+long long TypeGetAlign(struct type t) {
+    switch (t.bType) {
+        case BASETYPE_VOID: return 1;
+        case BASETYPE_BOOL: return 1;
+        case BASETYPE_BYTE: return 1;
+        case BASETYPE_INT32: return 4;
+        case BASETYPE_INT64: return 8;
+        case BASETYPE_FLOAT32: return 4;
+        case BASETYPE_FLOAT64: return 8;
+        case BASETYPE_VOCAB: return 4;
+        case BASETYPE_ERROR: return 4;
+        case BASETYPE_FUNC: return PTR_SIZE;
+        case BASETYPE_SCOPE: return PTR_SIZE;
+        case BASETYPE_ARRAY:
+            if (t.arrMalloc) return PTR_SIZE; //"{ i64, ptr }" slice - both 8-aligned
+            if (t.structMAlloc) return PTR_SIZE; //fixed-size "{}"-heap reference - just a pointer
+            return TypeGetAlign(*t.arrElem);
+        case BASETYPE_STRUCT: {
+            if (t.structMAlloc) return PTR_SIZE;
+            long long maxAlign = 1;
+            for (int i = 0; i < t.vars.len; i++) {
+                long long a = TypeGetAlign((*(struct var*)ListGetIdx(&t.vars, i)).type);
+                if (a > maxAlign) maxAlign = a;
+            }
+            return maxAlign;
+        }
+    }
+    return 1; //unreachable
+}
+
 long long getArraySize(struct type t) {
-    if (t.arrMalloc) return PTR_SIZE;
+    //a dynamic array VALUE is the full "{ i64 len, ptr data }" slice (16 bytes), not just the pointer -
+    //fixed here alongside the new fixed-size-reference case below; a real pre-existing undersizing bug,
+    //same class as getStructSize's own padding bug (see the report): nothing sized a struct's malloc off
+    //this specific branch until a struct could actually embed a dynamic-array field and get heap-promoted,
+    //so it was invisible until now.
+    if (t.arrMalloc) return 16;
+    if (t.structMAlloc) return PTR_SIZE; //fixed-size "{}"-heap reference - just a pointer, size is on the type
     long long n = t.arrLen ? t.arrLen->intLiteralVal : 0;
     return TypeGetSize(*t.arrElem) * n;
 }
 
+//lays fields out in declaration order, padding each one up to its own alignment (never reordered - same
+//as LLVM's own literal struct layout) and rounding the final size up to the whole struct's own alignment
+//(the usual "tail padding" so an array of these still aligns every element) - see TypeGetAlign
 long long getStructSize(struct type t) {
     if (t.structMAlloc) return PTR_SIZE;
-    long long size = 0;
+    long long offset = 0;
+    long long structAlign = 1;
     for (int i = 0; i < t.vars.len; i++) {
-        size += TypeGetSize((*(struct var*)ListGetIdx(&t.vars, i)).type);
+        struct type ft = (*(struct var*)ListGetIdx(&t.vars, i)).type;
+        long long align = TypeGetAlign(ft);
+        if (align > structAlign) structAlign = align;
+        offset = (offset + align - 1) / align * align;
+        offset += TypeGetSize(ft);
     }
-    return size;
+    return (offset + structAlign - 1) / structAlign * structAlign;
 }
 
 long long TypeGetSize(struct type t) {
@@ -512,6 +560,7 @@ struct var* resolveScopeTag(struct syntax* refNode, struct list* scopeParams) {
 
 //base type a name resolves to, before any array suffixes on the reference are applied
 struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
+    (void)scopeParams; //no longer used to resolve a scope tag here - see applyRefMarker
     struct syntax* nameNode = firstPartOfType(refNode, SNTX_NAME);
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
     struct token nameTok;
@@ -549,18 +598,37 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
     }
 
-    bool malloced = hasTokOfType(refNode, TOK_CURLY_O);
-    //a "{}"-indirect reference is a pointer, not an embedding - it must not force full resolution of
-    //the referenced type, since that's exactly what lets two structs recursively embed each other
-    if (!malloced) resolveTypeDecl(found);
-    struct type result = *found;
-    result.structMAlloc = malloced;
-    if (malloced) result.scopeParam = resolveScopeTag(refNode, scopeParams);
-    //a {}-indirect reference may be grabbed while its target is still mid-resolution (that's the whole
-    //point - see the comment above); its placeholder bType (still BASETYPE_VOID at that point) must not
-    //leak through, since {} syntax only ever refers to a struct
-    if (malloced) result.bType = BASETYPE_STRUCT;
-    return result;
+    //whether this WHOLE reference will end up "{}"-marked is decided here, once, independent of any
+    //array suffixes (a flat check on refNode's own direct tokens) - and used only to decide whether to
+    //eagerly resolve the named type. A "{}"-indirect reference is a pointer, not an embedding, so it
+    //must not force full resolution of its target - that's exactly what lets a struct reference itself,
+    //directly or through an array of itself, without infinite recursion. The marker's actual *effect*
+    //(structMAlloc/scopeParam) is applied later, in applyRefMarker, after array suffixes have been
+    //wrapped on - see resolveTypeRef.
+    bool willBeRef = hasTokOfType(refNode, TOK_CURLY_O);
+    if (!willBeRef) resolveTypeDecl(found);
+    return *found;
+}
+
+//applies the trailing "{}"/"{name}" marker (if present on refNode at all) to t, marking it heap-indirect
+//- t may be a struct or an array of anything by this point, since this runs AFTER applyArraySuffixes, so
+//the marker governs the reference as a whole ("a reference to a [3]Point", not "an array of 3 Point
+//references"). See resolveTypeRefBase for why *whether* a marker is present has to be known before that
+//point (to avoid eagerly resolving a self-referential type), even though its *effect* is applied after.
+struct type applyRefMarker(struct type t, struct syntax* refNode, struct list* scopeParams) {
+    if (!hasTokOfType(refNode, TOK_CURLY_O)) return t;
+    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_VOID) {
+        ErrMsgSemantic(firstTokOfType(refNode, TOK_CURLY_O), INVALID_REFERENCE_TARGET);
+        return t;
+    }
+    t.structMAlloc = true;
+    t.scopeParam = resolveScopeTag(refNode, scopeParams);
+    //a "{}"-indirect reference may be grabbed while its (struct) target is still mid-resolution (see
+    //resolveTypeRefBase) - its placeholder bType (still BASETYPE_VOID at that point) must not leak
+    //through; only reachable with zero array suffixes, since applyArraySuffixes always produces a real
+    //BASETYPE_ARRAY outer shell regardless of whether its element is still a placeholder
+    if (t.bType == BASETYPE_VOID) t.bType = BASETYPE_STRUCT;
+    return t;
 }
 
 //attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
@@ -593,10 +661,12 @@ bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
 
 //wraps `base` in one array level per SNTX_ARR_SFX child of `node` (fixed size from a compile-time-const
 //int expr, or dynamic if the brackets are empty) - shared by type references and literal expressions,
-//which both spell array suffixes the same way ("T[3]", "T[]")
+//which both spell array suffixes the same way ("T[3]", "T[]"). Walked right-to-left (last-written suffix
+//wrapped first) so the FIRST-written suffix ends up outermost - "int32[3][4]" is an array of 3, each
+//element an "int32[4]", matching how the dimensions read left-to-right.
 struct type applyArraySuffixes(struct type base, struct syntax* node) {
     struct list sfx = allPartsOfType(node, SNTX_ARR_SFX);
-    for (int i = 0; i < sfx.len; i++) {
+    for (int i = sfx.len -1; i >= 0; i--) {
         struct syntax* s = *(struct syntax**)ListGetIdx(&sfx, i);
         struct type wrapped = (struct type){0};
         wrapped.bType = BASETYPE_ARRAY;
@@ -623,7 +693,9 @@ struct type applyArraySuffixes(struct type base, struct syntax* node) {
 }
 
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
-    return applyArraySuffixes(resolveTypeRefBase(mod, refNode, scopeParams), refNode);
+    struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
+    struct type withArrays = applyArraySuffixes(base, refNode);
+    return applyRefMarker(withArrays, refNode, scopeParams);
 }
 
 //resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
@@ -849,6 +921,28 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
     }
 }
 
+//true if t (or anything nested inside it, transitively, through plain/embedded fields only) has a bare
+//"{}" (unnamed) heap-indirect field - the shape that dangles the instant a plain value containing it
+//escapes via return, since there's no scope name anywhere in the signature it could have been tied to.
+//Deliberately doesn't chase into a NAMED "{name}" field's own pointee: that field's lifetime is already
+//an explicit, independently-checked fact tied to its own name, not something this returning function
+//could be responsible for regardless of how it got here. Never infinite: a plain (non-"{}") struct can
+//never recursively embed itself (that's exactly what "{}" exists to break), so any embedded chain
+//through this function alone is guaranteed to bottom out.
+bool structContainsBareScopeField(struct type t) {
+    if (t.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < t.vars.len; i++) {
+        struct type ft = (*(struct var*)ListGetIdx(&t.vars, i)).type;
+        if (ft.bType != BASETYPE_STRUCT) continue;
+        if (ft.structMAlloc) {
+            if (!ft.scopeParam) return true;
+            continue;
+        }
+        if (structContainsBareScopeField(ft)) return true;
+    }
+    return false;
+}
+
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
@@ -877,11 +971,20 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
         //would already be dangling before the caller ever sees it - catching this once, here, covers
         //every return statement in the function (single, multiple, implicit fallthrough, error
-        //propagation) without needing to inspect each one individually. Doesn't catch a bare "{}" field
-        //nested inside a plain (non-heap-indirect) returned struct - that's the same still-open
-        //scope-generics gap as struct fields generally (see the report), not attempted here.
+        //propagation) without needing to inspect each one individually. The transitive case - a bare "{}"
+        //field nested inside a plain (non-heap-indirect) returned struct - is also caught, below.
         if (t.retType->bType == BASETYPE_STRUCT && t.retType->structMAlloc && !t.retType->scopeParam) {
             ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), BARE_SCOPE_RETURN_TYPE);
+        //the transitive case: a PLAIN return type (not itself heap-indirect, so the check above doesn't
+        //fire) that embeds a bare "{}" field somewhere inside it - see structContainsBareScopeField.
+        //Conservative on purpose: this rejects some sound code too (a function that only ever passes an
+        //already-correctly-scoped value straight through, never allocating into the bare field itself,
+        //would be fine at runtime) - but nothing short of real dataflow/escape analysis (not attempted
+        //here) can tell that case apart from the unsound one at the signature level alone, and signature-
+        //level is as far as this check goes, deliberately, matching BARE_SCOPE_RETURN_TYPE's own scope.
+        } else if (t.retType->bType == BASETYPE_STRUCT && !t.retType->structMAlloc
+                && structContainsBareScopeField(*t.retType)) {
+            ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), NESTED_BARE_SCOPE_RETURN_TYPE);
         }
     }
     return t;
@@ -1178,6 +1281,25 @@ struct operand* OperandFuncCall(struct var* func, struct list args, struct token
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
         if (!OperandFitsType(arg, paramType)) ErrMsgSemantic(arg->tok, VALUE_TYPE_MISMATCH);
     }
+    return op;
+}
+
+//"len(arr)" - unlike C, an olang array always carries its own length; this is the one sanctioned way to
+//read it. Returns int32, matching the integer type used everywhere else in the language (there's no way
+//to write an int64 literal at all currently - bare integer literals are always int32 with no widening
+//path - so an int64-returning len() would be awkward to use anywhere, and an array length never needs
+//int64's extra range in practice); the underlying runtime slice field is i64, so the dynamic case
+//truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side effects a
+//more complex argument expression might have), but for a compile-time-known dimension (embedded, or a
+//"{}"-tagged fixed-size reference) codegen emits the constant directly rather than computing anything at
+//runtime - only a genuinely dynamic ("T[]") array reads its length from the runtime slice.
+struct operand* OperandLen(struct operand* arg, struct token tok) {
+    if (arg->type.bType != BASETYPE_ARRAY) {
+        ErrMsgSemantic(tok, LEN_REQUIRES_ARRAY);
+        return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    }
+    struct operand* op = operandNew(tok, OPERATION_LEN, TypeVanilla(BASETYPE_INT32));
+    ListAdd(&op->args, &arg);
     return op;
 }
 
@@ -1697,6 +1819,18 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         struct list nameIdens = allTokOfType(nameNode, TOK_IDEN);
         struct token nameTok = *(struct token*)ListGetIdx(&nameIdens, nameIdens.len -1);
         struct syntax* callNode = partSntx(s, 1);
+        //"len(arr)" is a compiler builtin, not an ordinary callable var - intercepted here, before the
+        //normal var/constructor lookup, so a bare (never aliased) "len" is never shadowable by a real
+        //declaration of that name; see OperandLen for why it can't just be a normal function
+        if (nameIdens.len == 1 && StrCmp(strFromTok(nameTok), StrFromCStr("len"))) {
+            bool allowedLen = ctx->allowFallibleCall;
+            ctx->allowFallibleCall = false;
+            struct list lenArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            ctx->allowFallibleCall = allowedLen;
+            if (lenArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
+            struct operand* lenArg = *(struct operand**)ListGetIdx(&lenArgs, 0);
+            return OperandLen(lenArg, nameTok);
+        }
         struct var* func = resolveCallTarget(ctx, nameNode);
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
         bool allowed = ctx->allowFallibleCall;

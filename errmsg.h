@@ -33,17 +33,20 @@
 #define SCOPE_NOT_ALLOWED_HERE "'scope' may only be used as a function parameter's type"
 #define OWN_OUTSIDE_FUNC "'own' is only valid inside a function"
 #define BARE_SCOPE_RETURN_TYPE "a bare '{}' return type would always be dangling the instant this function returns - its own private scope closes at that exact point; tag it to a passed-in scope instead, e.g. '{s}'"
+#define NESTED_BARE_SCOPE_RETURN_TYPE "this return type embeds a bare '{}' field somewhere inside it - if this function is the one allocating that field, it would dangle the instant this function returns for the same reason a bare '{}' return type would; give the field an explicit '{name}' tag instead"
 #define UNKNOWN_NAMESPACE "unknown namespace"
 #define UNKNOWN_STRUCT_MEMBER "unknown struct member"
 #define TYPE_IS_PRIVATE "this type is private - only a capitalized name is visible outside its own module"
 #define VAR_IS_PRIVATE "this variable is private - only a capitalized name is visible outside its own module"
 #define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
 #define INVALID_ARRAY_SIZE "invalid array size"
+#define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '{}' - primitives are always by value"
 
 // ---- types and values ----
 
 #define NOT_CALLABLE "this is not a function"
 #define NOT_AN_ARRAY "operand is not an array"
+#define LEN_REQUIRES_ARRAY "len(...) requires an array argument"
 #define NOT_AN_LVALUE "must be a variable, index, or member"
 #define VAR_IMMUTABLE "variable is immutable"
 #define WRONG_ARG_COUNT "wrong number of arguments"

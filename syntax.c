@@ -156,7 +156,11 @@ struct syntax* parseArrSfx(SyntaxCtx sc) {
 }
 
 //"NAME ARR_SFX* (CURLY_O IDEN? CURLY_C)?" - the optional trailing "{name}" names which scope a
-//heap-indirect reference belongs to; bare "{}" means the value's own private scope - see the report
+//heap-indirect reference belongs to; bare "{}" means the value's own private scope - see the report.
+//Briefly spelled "&" instead (see git history) - reverted back to "{}" after further design discussion
+//concluded the two are semantically identical (a plain/embedded value never independently needs a scope
+//tag - it has no separate allocation to tag - so "is this a reference" and "which scope" always travel
+//together as one marker either way), so the choice came down to spelling only, and "{}" was kept.
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct syntax* name = parseName(sc);

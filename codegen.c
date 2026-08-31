@@ -84,8 +84,14 @@ void structAggSpelling(struct type t, char* buf, size_t n) {
 
 /* the LLVM type of a value of type t, used everywhere: alloca operands, function signatures, GEP pointee
  * types. Struct types are always represented by-pointer at the value level (ptr when structMAlloc, the
- * named aggregate itself otherwise - both cases point at memory laid out per structAggSpelling); fixed
- * arrays are the real aggregate [N x ElemT]; dynamic arrays are the two-word slice { i64, ptr }. */
+ * named aggregate itself otherwise - both cases point at memory laid out per structAggSpelling); a fixed
+ * array is the real aggregate [N x ElemT] when embedded, or a bare ptr when "{}"-heap-indirect (same
+ * "ptr when referenced" rule a struct already gets, since its own size is compile-time-known either way -
+ * see the report on extending scope/"{}" to arrays); a dynamic ("T[]") array is always the two-word slice
+ * { i64, ptr } regardless of structMAlloc - a genuinely runtime-sized array always needs to carry its own
+ * length somewhere, so "arrMalloc" wins the shape question over "structMAlloc" for that one case (whether
+ * scope-tracking a dynamic array's own backing store is a separate, not-yet-implemented step - see the
+ * report). */
 void llvmType(struct type t, char* buf, size_t n) {
     switch (t.bType) {
         case BASETYPE_VOID: snprintf(buf, n, "void"); return;
@@ -107,6 +113,7 @@ void llvmType(struct type t, char* buf, size_t n) {
             return;
         case BASETYPE_ARRAY:
             if (t.arrMalloc) { snprintf(buf, n, "{ i64, ptr }"); return; }
+            if (t.structMAlloc) { snprintf(buf, n, "ptr"); return; }
             {
                 char elemBuf[256];
                 llvmType(*t.arrElem, elemBuf, sizeof(elemBuf));
@@ -120,7 +127,7 @@ void llvmType(struct type t, char* buf, size_t n) {
 //true for the categories whose cgValue() "value" is a ptr to storage rather than a loaded scalar/aggregate
 bool typeIsByRef(struct type t) {
     if (t.bType == BASETYPE_STRUCT && !t.structMAlloc) return true;
-    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc) return true;
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc) return true;
     return false;
 }
 
@@ -296,7 +303,8 @@ struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name) {
 char* cgZeroValue(struct type t) {
     char* buf = MallocOrCrash(16);
     bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_SCOPE) ||
-        (t.bType == BASETYPE_STRUCT && t.structMAlloc);
+        (t.bType == BASETYPE_STRUCT && t.structMAlloc) ||
+        (t.bType == BASETYPE_ARRAY && t.structMAlloc && !t.arrMalloc);
     strcpy(buf, isPtr ? "null" : "zeroinitializer");
     return buf;
 }
@@ -315,6 +323,28 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
     return loaded;
 }
 
+char* cgValue(struct cgCtx* ctx, struct operand* op);
+
+//a parameter's own declared type may name ANOTHER parameter of the *same* signature as its scope tag
+//(e.g. "func f(s scope, p Point{s})") - fine for type-checking (semantic.c already resolves this), but at
+//a call site that name has no meaning yet: "s" isn't a local in the CALLER's own scope, it's whatever
+//scope value THIS call happens to be passing as its own "s" argument. Returns that value directly - found
+//by locating which parameter index paramT's scope tag names, then evaluating the caller's own argument
+//expression for that same index - instead of letting cgResolveScope try (and fail) to look "s" up as a
+//caller-local. NULL when paramT's scope tag doesn't need this (bare "{}", or names a scope the caller
+//already has in its own scope, e.g. a scope parameter of the caller itself being passed straight through).
+char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct list* args, struct type paramT) {
+    bool refShaped = (paramT.bType == BASETYPE_STRUCT) || (paramT.bType == BASETYPE_ARRAY && !paramT.arrMalloc);
+    if (!(refShaped && paramT.structMAlloc && paramT.scopeParam)) return NULL;
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&func->type.vars, i);
+        if (p != paramT.scopeParam) continue;
+        struct operand* scopeArg = *(struct operand**)ListGetIdx(args, i);
+        return cgValue(ctx, scopeArg);
+    }
+    return NULL;
+}
+
 //if t (a struct type) declares a destructor, registers it with the scope a value of it was just heap-
 //allocated into, so it runs when that scope closes rather than being lost - see
 //__olang_scope_register_dtor/emitScopeRuntime. Called from both malloc-promotion sites below.
@@ -325,18 +355,35 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
     fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
 }
 
+//true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "{}"-heap-indirect
+//dstT - a struct, or a fixed-size array (same rule either way, see the report on extending scope/"{}" to
+//arrays): dstT wants a reference, srcT doesn't have one yet. Deliberately excludes a dynamic ("T[]")
+//array target even when structMAlloc: a dynamic array's own backing store already gets a fresh @malloc
+//at the point its literal is built (cgAggregateLiteral), before this promotion step would even run -
+//scope-tracking *that* allocation is a separate, not-yet-implemented step, not attempted here.
+bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
+    if (dstT.bType != srcT.bType) return false;
+    if (!dstT.structMAlloc || srcT.structMAlloc) return false;
+    if (dstT.bType == BASETYPE_STRUCT) return true;
+    if (dstT.bType == BASETYPE_ARRAY) return !dstT.arrMalloc;
+    return false;
+}
+
 //srcT is the value's own checked type (which OperandFitsType allows to differ from dstT only in
 //structMAlloc-ness - TypeIsSame deliberately ignores that flag for structs, see the report). A plain
 //struct value (e.g. "Point[1, 2]") stored into a "{}"-heap-indirect target is exactly that case: src is
 //a stack address (cgValue()'s by-ref convention), and storing it as-is into a structMAlloc slot would
 //leave a dangling pointer the moment src's own stack frame is gone - so that combination gets its own
 //malloc-and-copy branch instead of a raw pointer store. The heap storage itself now comes from dstT's own
-//scope (cgResolveScope), not a bare @malloc - see emitScopeRuntime.
-void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src, char* dstAddr) {
-    if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && srcT.bType == BASETYPE_STRUCT && !srcT.structMAlloc) {
+//scope (cgResolveScope), not a bare @malloc - see emitScopeRuntime. scopeOverride, when non-NULL, is used
+//instead of resolving dstT's own scope - see cgAssign for the one case that needs this (a struct field's
+//own scope isn't declared anywhere - see the report). Applies identically to a fixed-size array target -
+//see typeNeedsMallocPromotion.
+void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src, char* dstAddr, char* scopeOverride) {
+    if (typeNeedsMallocPromotion(dstT, srcT)) {
         char storTy[256];
-        structAggSpelling(srcT, storTy, sizeof(storTy));
-        char* scopeVal = cgResolveScope(ctx, dstT.scopeParam);
+        llvmType(srcT, storTy, sizeof(storTy));
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
         char* loaded = cgNewTmp(ctx);
@@ -367,12 +414,12 @@ char* cgAddr(struct cgCtx* ctx, struct operand* op);
 //a literal, crossing into a "{}"-heap-indirect parameter/return type): without it, op's own by-ref
 //address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
 //whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
-char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT) {
+char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     char* v = cgValue(ctx, op);
-    if (dstT.bType == BASETYPE_STRUCT && dstT.structMAlloc && op->type.bType == BASETYPE_STRUCT && !op->type.structMAlloc) {
+    if (typeNeedsMallocPromotion(dstT, op->type)) {
         char storTy[256];
-        structAggSpelling(op->type, storTy, sizeof(storTy));
-        char* scopeVal = cgResolveScope(ctx, dstT.scopeParam);
+        llvmType(op->type, storTy, sizeof(storTy));
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
         char* loaded = cgNewTmp(ctx);
@@ -423,9 +470,16 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
         fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", dataPtr, baseVal);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, %s %s\n", result, elemTy, dataPtr, idxTy, idxVal);
     } else {
-        char* baseVal = cgValue(ctx, base); //ptr to [N x ElemT]
+        //baseVal is a ptr to [N x ElemT] either way - cgValue()'s by-ref convention hands back the
+        //embedded array's own storage address when it's embedded, and typeIsByRef is false for a
+        //structMAlloc array, so cgValue there instead LOADS and hands back the already-heap-allocated
+        //pointer directly - same GEP shape needed in both cases, just where the pointer came from differs
+        char* baseVal = cgValue(ctx, base);
+        struct type embeddedShape = base->type;
+        embeddedShape.structMAlloc = false; //force the raw [N x ElemT] spelling regardless of ref-ness -
+                                             //mirrors structAggSpelling's own "regardless of structMAlloc" rule
         char storTy[256];
-        llvmType(base->type, storTy, sizeof(storTy));
+        llvmType(embeddedShape, storTy, sizeof(storTy));
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, %s %s\n", result, storTy, baseVal, idxTy, idxVal);
     }
     return result;
@@ -528,7 +582,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             struct type fieldT = (*(struct var*)ListGetIdx(&op->type.vars, i)).type;
             char* fieldAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
-            cgStoreInto(ctx, fieldT, arg->type, cgValue(ctx, arg), fieldAddr);
+            cgStoreInto(ctx, fieldT, arg->type, cgValue(ctx, arg), fieldAddr, NULL);
         }
         return slot;
     }
@@ -542,7 +596,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
             char* elemAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %d\n", elemAddr, storTy, slot, i);
-            cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr);
+            cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr, NULL);
         }
         return slot;
     }
@@ -557,7 +611,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
         char* elemAddr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %d\n", elemAddr, elemTy, bytes, i);
-        cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr);
+        cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr, NULL);
     }
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", agg1, op->args.len);
@@ -823,7 +877,8 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
         //the parameter's own declared type (not argOp->type) decides malloc-promotion and the LLVM type
         //word at the call site - a "{}" parameter is exactly where a plain struct argument needs one
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char* av = cgBoundaryValue(ctx, argOp, paramT);
+        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, &op->args, paramT);
+        char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
         char piece[512];
@@ -891,9 +946,28 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     return payload;
 }
 
+//"len(arr)" - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
+//anything more than a bare variable read, e.g. a function call producing the array) even when the
+//dimension turns out to be compile-time-known and the loaded value itself goes unused.
+char* cgLen(struct cgCtx* ctx, struct operand* op) {
+    struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
+    char* argVal = cgValue(ctx, arg);
+    if (arg->type.arrMalloc) {
+        char* rawLen = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", rawLen, argVal);
+        char* result = cgNewTmp(ctx); //OperandLen returns int32 - the runtime slice field is i64
+        fprintf(ctx->fnOut, "  %s = trunc i64 %s to i32\n", result, rawLen);
+        return result;
+    }
+    char* result = MallocOrCrash(32);
+    snprintf(result, 32, "%lld", arg->type.arrLen->intLiteralVal);
+    return result;
+}
+
 char* cgValue(struct cgCtx* ctx, struct operand* op) {
     switch (op->opType) {
         case OPERATION_NONE: return cgLiteral(ctx, op);
+        case OPERATION_LEN: return cgLen(ctx, op);
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
             //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a
@@ -937,13 +1011,29 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char* rhs = cgValue(ctx, s->op);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
-    cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot);
+    cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, NULL);
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
     char* val = cgValue(ctx, s->op);
     char* addr = cgAddr(ctx, s->target);
-    cgStoreInto(ctx, s->target->type, s->op->type, val, addr);
+    //a bare "{}" struct field has no declared scope of its own (fields can't carry a "{name}" tag yet -
+    //see the report), so cgStoreInto's default resolution falls back to "whatever function is executing
+    //right now" (ctx->ownScopeSlot) - dangling the instant that function returns if the instance
+    //containing the field escapes further. Narrow fix, not the general one: when the immediate base of
+    //"base.field = ..." is itself a "{}"-heap-indirect value, the freshly-promoted literal inherits
+    //*that* value's own scope instead - same scope as the instance actually containing it. A plain
+    //(embedded) base, or a base that's itself another member/index expression, still falls back to the
+    //old behavior for now - resolving through arbitrary chains of indirection is a separate, harder
+    //problem, not attempted here.
+    char* scopeOverride = NULL;
+    if (s->target->opType == OPERATION_MEMBER && s->target->type.bType == BASETYPE_STRUCT && s->target->type.structMAlloc) {
+        struct operand* base = *(struct operand**)ListGetIdx(&s->target->args, 0);
+        if (base->type.bType == BASETYPE_STRUCT && base->type.structMAlloc) {
+            scopeOverride = cgResolveScope(ctx, base->type.scopeParam);
+        }
+    }
+    cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride);
 }
 
 void cgIf(struct cgCtx* ctx, struct statement* s) {
@@ -978,7 +1068,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     char* rhs = cgValue(ctx, s->forInit);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
-    cgStoreInto(ctx, s->var.type, s->forInit->type, rhs, slot);
+    cgStoreInto(ctx, s->var.type, s->forInit->type, rhs, slot, NULL);
 
     int id = ctx->lblCtr++;
     char condLbl[32], bodyLbl[32], endLbl[32];
@@ -1064,7 +1154,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     struct type retT = *ctx->curFunc->type.retType;
     char ty[256];
     llvmType(retT, ty, sizeof(ty));
-    char* val = cgBoundaryValue(ctx, s->op, retT);
+    char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
     cgRunLocalDestructors(ctx);
     cgCloseOwnScope(ctx);
     if (!fallible) {
@@ -1160,7 +1250,8 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     for (int i = 0; i < callOp->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&callOp->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char* av = cgBoundaryValue(ctx, argOp, paramT);
+        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, &callOp->args, paramT);
+        char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
         char piece[512];
@@ -1485,7 +1576,7 @@ void cgInitGlobalsFunc(struct cgCtx* ctx) {
             char gaddr[256];
             mangleGlobal(mod, v->name, gaddr, sizeof(gaddr));
             char* val = cgValue(ctx, v->initExpr);
-            cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr);
+            cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr, NULL);
         }
     }
     fputs("  ret void\n}\n\n", ctx->fnOut);

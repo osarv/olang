@@ -145,6 +145,9 @@ enum operation {
     OPERATION_FUNCCALL,
     OPERATION_INDEX,
     OPERATION_MEMBER,
+    OPERATION_LEN, //"len(arr)" - a compiler builtin, not an ordinary function (needs to work over any
+                    //array type regardless of element type/dimensionality, which no user-space signature
+                    //can express without generics) - see the report
 
     //unary
     OPERATION_NOT,

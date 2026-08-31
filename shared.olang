@@ -174,6 +174,34 @@ func sumManyPoints(n int32, s scope) ? int32 {
     return total
 }
 
+## a bare "{}" struct field (fields can't carry an explicit "{name}" tag yet - no scope-generic struct
+## types, see the report) has no declared scope of its own; a field write's promoted literal used to
+## always land in "whatever function is executing right now" regardless of which scope the containing
+## instance actually belongs to - a real dangling-pointer hazard the instant that function returns, for
+## exactly the shape a self-referential struct (a linked list node, say) would need. BoxedPoint exists to
+## put that fix under test: its "inner" field is heap-indirect, and NestedBox writes it from inside a
+## different function than the one that allocated the containing instance.
+type BoxedPoint struct {
+    tag int32,
+    inner Point{}
+}
+
+## the narrow fix (not the general one - see the report): when the base of "base.field = ..." is itself a
+## "{}"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
+## that same scope, instead of this function's own (about-to-close) private scope
+func fillBoxedPoint(s scope, b BoxedPoint{s}, x int32, y int32) ? int32 {
+    b.inner = Point{x, y}
+    return b.inner.x
+}
+
+## forces reuse of whatever arena chunk fillBoxedPoint's own (now-closed) private scope just freed, by
+## allocating something comparably sized right after - if "inner" had dangled into fillBoxedPoint's own
+## scope instead of the caller's, this corrupts it and the later read in the test below fails
+func noisePoint(n int32) ? int32 {
+    p mut Point{} = Point{n, n}
+    return p.x
+}
+
 func sumUntil(n int32) ? int32 {
     total mut int32 = 0
     i mut int32 = 1
@@ -307,6 +335,40 @@ func useManyHandlesLocally(n int32) ? int32 {
     return total
 }
 
+## constructors already give a struct field a real, type-level scope - no generics syntax needed. A
+## field's type is resolved against the constructor's own parameter list (see resolveStructCtorInto in
+## semantic.c), the same way a later parameter can already reference an earlier one - so a field can
+## already name a real "{name}" scope tag pointing at one of the constructor's own scope parameters,
+## same as any function parameter/return type already could. This only works for constructor-bearing
+## types: a plain "type X struct { ... }" still has no parameter list to resolve a field's "{name}"
+## against at all - that half of the scope-generic-struct-types gap is still open.
+type ScopedBox struct(s scope, inner Point{s}) {
+    inner
+}
+
+func fillBoxViaCtor(outer scope) ? Point{outer} {
+    b mut ScopedBox{} = ScopedBox(outer, Point{7, 8})
+    return b.inner
+}
+
+## the transitive counterpart to BARE_SCOPE_RETURN_TYPE (resolveFuncSig in semantic.c): a PLAIN return
+## type that embeds a bare "{}" field anywhere inside it dangles the same way a bare "{}" return type
+## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "{}" on the
+## return type at all) - allowed, and correctly so, since "inner" carries an explicit "{s}" tag rather
+## than a bare one; nothing about returning the wrapping struct plain is unsound here.
+func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
+    return ScopedBox(outer, Point{x, y})
+}
+
+## not constructor-specific - any parameter whose type names an EARLIER parameter of the same signature
+## as its scope tag (not just a struct field's constructor param) used to crash at every call site that
+## needed to malloc-promote a plain literal into it: the tag's name ("s") only has meaning inside the
+## callee's own body, not at the caller, so trying to resolve it there via the normal local-lookup path
+## found nothing and crashed. See cgResolveParamScopeOverride in codegen.c.
+func takesScopedPoint(s scope, p Point{s}) ? int32 {
+    return p.x
+}
+
 test "factorial of small numbers" {
     assert(factorial(0) == 1)
     assert(factorial(1) == 1)
@@ -395,6 +457,52 @@ test "array literal construction, fixed and dynamic" {
     assert(fixed[2] == 30)
     assert(dyn[0] == 10)
     assert(dyn[2] == 30)
+}
+
+## "{}"/"{name}" now apply to arrays exactly the same way they already apply to structs - reusing
+## structMAlloc/scopeParam generically rather than duplicating the whole marker mechanism (see the
+## report). Only the fixed-size case is wired up so far: a "{}"-heap-indirect array with a known
+## compile-time length ("int32[3]{}") is just a bare pointer, the same free lunch a struct reference
+## already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
+## dynamic ("int32[]{}") reference is deliberately not addressed yet - see the report.
+func makeFixedArrayRef(s scope) ? int32[3]{s} {
+    return int32[3][7, 8, 9]
+}
+
+## array suffixes wrap outer-first: "int32[2][3]" is an array of 2, each element an int32[3] - reading
+## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order.
+func makeFixed2DRef(s scope) ? int32[2][3]{s} {
+    return int32[2][3][int32[3][1, 2, 3], int32[3][4, 5, 6]]
+}
+
+test "a fixed-size array reference survives crossing a function boundary via a named scope" {
+    a mut int32[3]{} = makeFixedArrayRef(own)
+    assert(a[0] == 7)
+    assert(a[2] == 9)
+}
+
+test "a 2D fixed array reference - outer dimension first" {
+    m mut int32[2][3]{} = makeFixed2DRef(own)
+    assert(m[0][0] == 1)
+    assert(m[1][2] == 6)
+}
+
+## unlike C, an olang array always carries its own length - len() is the sanctioned way to read it.
+## Compile-time-known dimensions (embedded, or a fixed-size "{}" reference) cost nothing at runtime;
+## only a genuinely dynamic array reads its length from the runtime slice - see OperandLen/cgLen.
+test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic arrays" {
+    embedded mut int32[4] = int32[4][1, 2, 3, 4]
+    assert(len(embedded) == 4)
+
+    ref mut int32[3]{} = makeFixedArrayRef(own)
+    assert(len(ref) == 3)
+
+    m mut int32[2][3]{} = makeFixed2DRef(own)
+    assert(len(m) == 2)
+    assert(len(m[0]) == 3)
+
+    dyn mut int32[] = int32[][10, 20, 30]
+    assert(len(dyn) == 3)
 }
 
 test "struct literal as a match case value" {
@@ -505,3 +613,51 @@ test "assert without parentheses" {
     assert add(2, 3) == 5
     assert !(x == 6)
 }
+
+test "a bare '{}' field assigned through a scope-tagged parameter survives the callee's return" {
+    box mut BoxedPoint{} = BoxedPoint{1, Point{0, 0}}
+    result mut int32 = fillBoxedPoint(own, box, 7, 8)
+    assert(result == 7)
+
+    ## force reuse of fillBoxedPoint's own now-closed private scope's chunk - would corrupt "inner" if it
+    ## had dangled into that scope instead of the one actually passed in
+    noise mut int32 = 0
+    i mut int32 = 0
+    do {
+        noise = noise + noisePoint(i)
+        i++
+    } while i < 20
+
+    assert(box.inner.x == 7)
+    assert(box.inner.y == 8)
+}
+
+test "a parameter type may reference an earlier parameter as its scope tag" {
+    r mut int32 = takesScopedPoint(own, Point{1, 2})
+    assert(r == 1)
+}
+
+test "a constructor field's scope tag, referencing the constructor's own scope parameter, survives the constructor call returning" {
+    q mut Point{} = fillBoxViaCtor(own)
+    assert(q.x == 7)
+    assert(q.y == 8)
+
+    ## force reuse of fillBoxViaCtor's own now-closed private scope's chunk - would corrupt "q" if
+    ## ScopedBox's "inner" field had actually landed there instead of in "outer" (own, passed in)
+    noise mut int32 = 0
+    i mut int32 = 0
+    do {
+        noise = noise + noisePoint(i)
+        i++
+    } while i < 20
+
+    assert(q.x == 7)
+    assert(q.y == 8)
+}
+
+test "a struct returned entirely by value still compiles fine when its nested reference field is named, not bare" {
+    box mut ScopedBox = makeScopedBoxPlain(own, 3, 4)
+    assert(box.inner.x == 3)
+    assert(box.inner.y == 4)
+}
+
