@@ -590,13 +590,13 @@ of sync with the actual code.
   the already-heap-allocated pointer directly - same GEP shape needed in both cases, only the pointee-type
   string was wrong).
   **Deliberately not attempted here, and why each is its own next step:** (1) **A genuinely dynamic
-  (`T[]<>`) array reference isn't scope-tracked yet** - `cgAggregateLiteral`'s dynamic-array branch still
-  always calls a bare `@malloc`, unscoped, regardless of what `<>`/`<name>` the target type carries;
-  marking a dynamic array `<>` currently type-checks but has no effect. This needs threading a scope
-  context into literal construction itself (the allocation happens *inside* building the literal, not as
-  a promotion step afterward the way a struct or fixed array's malloc-promotion works), a different
-  mechanism from anything built so far, not attempted here to avoid rushing a leak or corruption bug into
-  exactly the kind of code this session has spent so much effort hardening. (2) **Embedded (`T[]`, no
+  (`T[]<>`) array reference isn't scope-tracked yet** - `cgPromoteFixedArrayToDynamic` (the sole place a
+  dynamic array's backing store is ever built - see the array-literal-syntax entry below, which made
+  `cgAggregateLiteral`'s own dynamic-array branch dead code and removed it entirely) still always calls a
+  bare `@malloc`, unscoped, regardless of what `<>`/`<name>` the target type carries; marking a dynamic
+  array `<>` currently type-checks but has no effect. **Closed in the dynamic-arrays-as-arena-values entry
+  further below**, once the var-decl work made this the natural next step rather than a standalone fix.
+  (2) **Embedded (`T[]`, no
   `<>`) size inference from an assigning literal isn't implemented** - `x mut int32[] = int32[3][1,2,3]`
   inferring a fixed size of 3 for `x`'s own type. Bare `T[]` still means exactly what it meant before this
   session's changes (dynamic, unscoped, raw `@malloc`) - not reinterpreted, to avoid a breaking change
@@ -833,6 +833,122 @@ of sync with the actual code.
   misparsing as indexing, `int32[][]` not working) documented in the struct/array literal syntax entry
   above - not via the same type-name-awareness fix that closed the equivalent struct-literal gap, but as a
   side effect of the suffix loop (the actual source of that ambiguity) no longer existing at all.
+
+- **Dynamic arrays: no growable/resizable `Vec` - "dynamic" only ever means "sized once, at
+  construction, then fixed" - and three, no-overlap var-decl forms for how a var's initial content is
+  determined.** A real design fork was considered and explicitly deferred: generics, methods, and a
+  resizable `Vec`-like type are a *much* larger, separate direction (see the dedicated "generics/methods/
+  stdlib" entry below) - what's built here stays deliberately close to C's own alloca/BSS story, just
+  routed through the existing scope-arena machinery instead of the real machine stack (see below for why).
+  The three forms, chosen so each is unambiguous about *why* the size is or isn't restated, and a variable
+  declaration always has exactly one way to spell each:
+  (1) **`x T[] = <array literal>`** - bare `T[]`, size *inferred* from the literal's own value count (the
+  existing promotion-inference mechanism - see the array-literal-syntax entry above). This is now the
+  *only* legal shape for `T[]` with an initializer; a bare `T[]` with no initializer at all is a compile
+  error (`VAR_DECL_MISSING_INITIALIZER`) - there is no other way to know its size.
+  (2) **`x T[N]` (N a compile-time constant), no initializer** - zero-filled, real BSS behavior for a
+  global (nothing new needed: `emitGlobalDecls` already emits every global as `global T zeroinitializer`
+  unconditionally; leaving `initExpr`/the var-decl's own rhs `NULL` *is* the entire mechanism). Pairing
+  `T[N]` with an initializing literal is now **also** a compile error (`REDUNDANT_ARRAY_SIZE`) - the
+  literal's own value count already fully determines the size, so restating it on both sides was always
+  redundant, never just harmless, and is now rejected rather than silently accepted whenever the two
+  happen to agree.
+  (3) **`x T[expr]` (expr *not* a compile-time constant), no initializer** - a runtime-sized array, "like
+  C's alloca" in spirit (uninitialized-by-default semantics) but zero-filled and arena-allocated rather
+  than a real stack `alloca`. `T[N]` vs `T[expr]` is decided purely by whether `tryEvalConstIntExpr`
+  (semantic.c) can fold the size expression - a bare integer literal (optionally negated) takes the
+  constant path, anything else (a variable read, a parameter, an arithmetic expression) takes this one.
+  **Deliberately kept as pure var-decl-level syntactic sugar, never a general type-system extension**: the
+  resulting declared type is exactly the same shape a bare `T[]` already has (`arrMalloc=true, arrLen=NULL`)
+  - `struct type.arrLen` stays exactly what it's always been, a compile-time constant or nothing, so no
+  other consumer of `struct type` (`TypeGetSize`, `TypeIsSame`, `len()`, ...) needed to change at all. The
+  runtime size itself is carried on the *operand*, not the type: a new `OPERATION_SIZED_ARRAY_ALLOC`
+  (mirroring how `OPERATION_LEN` is a compiler builtin, not a real function - no signature can be generic
+  over "any array type" without a generics mechanism this language doesn't have) whose `args[0]` is the
+  checked-integer size expression.
+  **Stack vs. arena, resolved by asking what a runtime-sized array actually needs, not by default:** a
+  real LLVM `alloca`/VLA was the first instinct, then dropped in favor of routing through the *existing*
+  scope-arena machinery (`__olang_scope_alloc`) instead - own by default, or the declared type's own
+  `<name>` tag, exactly the same convention a struct/fixed-array reference already uses. The reasoning:
+  a stack-overflow argument against a runtime size doesn't actually hold up on its own - a large
+  *compile-time-constant* fixed array already has the identical risk today with no guard, so runtime
+  sizing isn't a new risk category, just a new way to reach an old one. The real, narrower distinction is
+  that a runtime-sized array can *never* be embedded (no compile-time offset is possible for a
+  runtime-known length), so - unlike a plain/embedded local, which deliberately keeps a real, near-free
+  stack slot for performance and to preserve value semantics (see the reference-syntax entry's own "when
+  do we still need the stack" list) - there is no "cheap embedded slot" benefit a runtime-sized array
+  could ever have claimed in the first place. Routing it through the arena instead sidesteps the
+  stack-overflow surface entirely (the arena grows via `__olang_new_chunk`'s existing pool-then-`malloc`
+  fallback, never a fixed-size stack region) while giving it the exact same FILO/scope-tied lifetime
+  semantics `<>`/`<name>` already provide everywhere else - not a special case, just the ordinary
+  mechanism applied to a shape that happens to need pointer indirection unconditionally.
+  **This is also what closes the "genuinely dynamic array reference isn't scope-tracked yet" gap noted in
+  the `<>`/`<name>`-on-arrays entry above** - not a separate fix, the natural consequence of building this
+  at all: `cgPromoteFixedArrayToDynamic` (the sole remaining place a dynamic array's backing store is ever
+  built, once the array-literal-syntax entry above made `cgAggregateLiteral`'s own dynamic-array branch
+  dead code) now takes an explicit `scopeVal` parameter and allocates via `__olang_scope_alloc` instead of
+  a bare `@malloc`, resolved the same way every other reference allocation already is
+  (`cgResolveScope(ctx, dstT.scopeParam)` at both of its call sites, `cgStoreInto`/`cgBoundaryValue`) - so
+  a fixed-literal-promoted-to-dynamic value is now scope-tracked exactly as soundly as a fresh
+  `OPERATION_SIZED_ARRAY_ALLOC` one is, through the same underlying mechanism. **Every dynamic array is
+  now implicitly reference-shaped for scope-checking purposes, even with no explicit `<>` at all** -
+  because there is no "embedded" shape possible for a runtime-known length in the first place. This
+  required widening `OperandFitsType`'s scope-check gate: previously scope-checking only fired when
+  *both* sides were `structMAlloc` (an explicit `<>`/`<name>`), which is the right gate for structs/fixed
+  arrays (where embedding is a real, valid alternative) but wrong for a dynamic array, where a bare `T[]`
+  with no marker at all still needs exactly the same "does this scope provably outlive the target"
+  check - `needsScopeCheck` now also covers any `arrMalloc` array regardless of `structMAlloc`.
+  **Zero-fill mechanism, new and shared by both no-initializer local forms:** `cgVarDecl` now branches on
+  `s->op == NULL` (no rhs to evaluate at all, not even a constant) and stores `cgZeroValue(s->var.type)`
+  directly - already correctly `"zeroinitializer"` for a plain embedded fixed array, no changes needed
+  there. The runtime-sized form additionally needs an *explicit* zero-fill at the point of allocation
+  (`cgSizedArrayAlloc`, via `llvm.memset.p0.i64`, newly declared alongside the other runtime decls) since,
+  unlike a fresh `@malloc`, arena memory is recycled from the chunk pool and is **not** guaranteed to
+  already be zero - the one place this feature's zero-fill guarantee needed real codegen, not just an
+  omitted store.
+  **A real, previously-latent lexer/ASI bug found and fixed while testing this, not really about arrays at
+  all:** a statement ending in a bare `<name>`/`<>` scope marker, with nothing after it on the same line,
+  never got an implicit end-of-statement inserted - `stmntEndTriggerType` (token.c) never included
+  `TOK_GRT`, so the tokenizer doesn't synthesize a `TOK_STMNT_END` after one, and the parser read straight
+  into the next line as a continuation of the same statement. Invisible before now because every existing
+  use of the marker was always followed by more tokens on the same line (`= expr` on a var-decl, or `{`
+  opening a function body on a return type) - a bare no-initializer var-decl ending in the marker itself
+  (`result mut int32[n]<s>`, nothing else on the line) is the first shape that ever put a trailing `>` at
+  the true end of a statement. Not fixed by adding `TOK_GRT` to `stmntEndTriggerType` (that would also
+  wrongly terminate a genuine multi-line comparison expression deliberately left continuing on the next
+  line, e.g. `x mut bool = a >\n    b` - `>` is a legitimate binary operator there, and the tokenizer has
+  no way to tell the two apart from the token alone). Fixed instead at the same place `TOK_CURLY_C` is
+  already special-cased, `acceptStmntEnd` (syntax.c): a statement whose very last consumed token is
+  `TOK_GRT` can *only* be a marker's own closing `>`, never a genuine trailing comparison operator - a
+  binary `>` can never be the last token of an already-fully-parsed statement (a complete expression always
+  ends in an operand, never a dangling operator), so accepting `TOK_GRT` there is unambiguous by
+  construction, not a heuristic.
+  **Permanent tests added to shared.olang**: a no-init `T[N]` global (`zeroGlobal`) and local zero-fill
+  test, a no-init `T[expr]` (own-scope-default) local test, and `makeSizedArrayRef`/its own crossing-a-
+  function-boundary-via-a-named-scope test, alongside `makeFixedArrayRef`/`makeFixed2DRef`. The three
+  compile-error cases (`VAR_DECL_MISSING_INITIALIZER` for a bare `T[]`/scalar with no initializer,
+  `REDUNDANT_ARRAY_SIZE` for `T[N] = <literal>`, and a mismatched-named-scope `SCOPE_MAY_NOT_OUTLIVE_TARGET`
+  rejection for a runtime-sized array) were confirmed ad hoc rather than added to the suite, matching how
+  every other compile-error case in this file is handled - the test harness has no way to assert "this
+  file fails to compile" from within a `.olang` file, only to run one that already compiles.
+
+- **Deferred: generics, methods, and a real growable `Vec` - a separate, much larger future direction,
+  not started.** Surfaced directly by the dynamic-arrays design discussion above: once a user wants
+  `insert()`/`add()`/arbitrary methods on a "some kind of set dtype" the user might define, or an `alloc()`/
+  `calloc()`-style API generic over an "any" element type, that's a different, much bigger question than
+  "how big is this array's backing store" - a real generics mechanism (something no part of the type
+  system today provides - `len()`, `TypeIsSame`, every array/struct operation is written against concrete,
+  fully-resolved types) and a decision about whether/how olang gets user-callable methods at all (general
+  `Type.funcName` OOP-style methods were already considered and explicitly dropped once, in favor of just
+  constructors/destructors - see that entry above - specifically to sidestep the field/method name-collision
+  question; reopening methods for a stdlib collection type would have to either accept that same collision
+  risk for stdlib types specifically, or find a different mechanism, e.g. free functions namespaced by
+  type). The user's own framing: dynamic arrays as built here should stay "static but unknown at compile
+  time," C-alloca-flavored, not the start of a `Vec`; a real resizable/growable collection - and whatever
+  generics mechanism it would need to be written once, generically, rather than special-cased per element
+  type - belongs in a *standard library* built on top of the language once it exists, not as more special
+  cases inside the compiler itself. Nothing about the language design should be shaped around this yet;
+  revisit once a concrete need for a resizable collection or generic user code actually arises.
 
 ## Open questions (settle before implementing further - don't silently "fix" these)
 

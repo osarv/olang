@@ -164,6 +164,11 @@ enum operation {
     OPERATION_LEN, //"len(arr)" - a compiler builtin, not an ordinary function (needs to work over any
                     //array type regardless of element type/dimensionality, which no user-space signature
                     //can express without generics) - see the report
+    OPERATION_SIZED_ARRAY_ALLOC, //an uninitialized "T[expr]" var-decl (expr not a compile-time constant) -
+                                   //a dynamic array of expr zero-valued elements, arena-allocated (own by
+                                   //default, or the declared type's own "<name>" tag) - see the report.
+                                   //args[0] is the (already-checked-integer) size expression; op->type is
+                                   //the declared dynamic array type (arrMalloc, element type, scope tag)
 
     //unary
     OPERATION_NOT,

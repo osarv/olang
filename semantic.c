@@ -717,6 +717,43 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     return applyRefMarker(withArrays, refNode, scopeParams);
 }
 
+//"T[expr]" (expr not a compile-time constant) in a var-decl's own type position, with no initializer, is
+//a var-decl-only construct, never a general type: it means "arena-allocate expr zero-valued elements at
+//the point of declaration", not "a type whose own size is a runtime value" - see the report. Detecting it
+//here, before the normal resolveTypeExpr/applyArraySuffixes path (which would otherwise reject the
+//non-constant size with INVALID_ARRAY_SIZE), keeps every other consumer of struct type completely
+//unaware runtime sizes exist at all - arrLen stays exactly what it's always been, a compile-time constant
+//or nothing. Only a single dimension supports this (matching the existing "outermost level, at most,
+//dynamic" restriction on rectangular multi-dimensional arrays) - two or more suffixes, or a suffix that
+//IS a compile-time constant, fall through to the ordinary path unchanged.
+struct syntax* detectRuntimeSizedArrayType(struct syntax* typeExprNode) {
+    struct syntax* actual = partSntx(typeExprNode, 0);
+    if (actual->type != SNTX_TYPE_REF) return NULL;
+    struct list sfx = allPartsOfType(actual, SNTX_ARR_SFX);
+    if (sfx.len != 1) return NULL;
+    struct syntax* onlySfx = *(struct syntax**)ListGetIdx(&sfx, 0);
+    struct syntax* sizeExprNode = firstPartOfType(onlySfx, SNTX_EXPR);
+    if (!sizeExprNode) return NULL; //bare "T[]" - not this case, no size at all
+    long long dummy;
+    if (tryEvalConstIntExpr(sizeExprNode, &dummy)) return NULL; //a real compile-time constant - ordinary T[N]
+    return sizeExprNode;
+}
+
+//the declared TYPE half of a "T[expr]" var-decl (see detectRuntimeSizedArrayType above) - the element type
+//plus whatever "<>"/"<name>" marker was written, wrapped as an ordinary dynamic ("arrMalloc", no arrLen)
+//array - exactly the same shape a bare "T[]" already resolves to. The runtime size itself is consumed
+//separately, as the allocation's own element count (see OperandSizedArrayAlloc) - never folded into the
+//type, so every existing consumer of struct type (TypeGetSize, TypeIsSame, len(), ...) needs no changes.
+struct type resolveRuntimeSizedArrayDeclType(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
+    struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
+    struct type wrapped = (struct type){0};
+    wrapped.bType = BASETYPE_ARRAY;
+    wrapped.arrElem = MallocOrCrash(sizeof(struct type));
+    *wrapped.arrElem = base;
+    wrapped.arrMalloc = true;
+    return applyRefMarker(wrapped, refNode, scopeParams);
+}
+
 //resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
 //lookup as resolveTypeRefBase, minus the "<>" heap-indirect handling: a literal's own trailing "{...}"
 //holds values, not the (always-empty) heap-indirection marker, and constructing a value always requires
@@ -1113,7 +1150,17 @@ void semaResolveModule(struct semaModule* mod) {
             struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
             //":=" (no type node) is resolved later in semaCheckBodies instead, once the initializer
             //operand that its type gets read off exists
-            if (typeExprNode) v->type = resolveTypeExpr(mod, typeExprNode, NULL); //global, no function context
+            if (typeExprNode) {
+                //a "T[expr]" runtime-sized array (see detectRuntimeSizedArrayType) is rejected for globals
+                //in semaCheckBodies (no "own"/enclosing scope exists to arena-allocate into at global-init
+                //time) - resolved here the same shape a bare "T[]" already gets, just so v->type is at
+                //least well-formed in the meantime; the real rejection happens once the (missing)
+                //initializer is checked, where a clearer message can be given.
+                struct syntax* runtimeSizeExprNode = detectRuntimeSizedArrayType(typeExprNode);
+                v->type = runtimeSizeExprNode
+                    ? resolveRuntimeSizedArrayDeclType(mod, partSntx(typeExprNode, 0), NULL)
+                    : resolveTypeExpr(mod, typeExprNode, NULL); //global, no function context
+            }
         }
     }
 }
@@ -1349,7 +1396,14 @@ enum typeFit {
 //much less helpful generic VALUE_TYPE_MISMATCH when that's what actually failed.
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     if (TypeIsSame(target, op->type)) {
-        if (typeIsRefShaped(target) && target.structMAlloc && op->type.structMAlloc) {
+        //a struct or fixed array is reference-shaped only when explicitly "<>"-marked (structMAlloc) - a
+        //plain/embedded value has no scope of its own to check at all. A dynamic array is different: it's
+        //always pointer-backed the moment it's arrMalloc, with or without an explicit marker (there's no
+        //"embedded" shape for a runtime-known length to begin with - see the report), so its scope tag is
+        //always meaningful to check, regardless of structMAlloc.
+        bool needsScopeCheck = (typeIsRefShaped(target) && target.structMAlloc && op->type.structMAlloc)
+            || (target.bType == BASETYPE_ARRAY && target.arrMalloc);
+        if (needsScopeCheck) {
             struct var* effectiveSrc = resolveEffectiveScopeVar(op, op->type.scopeParam);
             if (!scopeCanFlowInto(func, effectiveSrc, target.scopeParam)) return TYPE_FIT_SCOPE_MISMATCH;
         }
@@ -2096,26 +2150,71 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     return result;
 }
 
+//"T[expr]" (expr not constant), no initializer - a dynamic array of expr zero-valued elements, arena-
+//allocated (own by default, or the declared type's own "<name>" tag - see the report). sizeOp is the
+//already-checked-integer size expression; t is the declared type (see resolveRuntimeSizedArrayDeclType).
+struct operand* OperandSizedArrayAlloc(struct operand* sizeOp, struct type t, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_SIZED_ARRAY_ALLOC, t);
+    ListAdd(&op->args, &sizeOp);
+    return op;
+}
+
 struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token nameTok = firstTokOfType(s, TOK_IDEN);
     bool mut = true; //local variables are mutable by default; "mut" is only meaningful on globals
-    struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-
+    struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
+    //ctx->func is NULL for a global initializer, which has no parameter list to tag a "<name>" against
+    struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
+
     struct type declType;
-    if (typeExprNode) {
-        //ctx->func is NULL for a global initializer, which has no parameter list to tag a "<name>" against
-        declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
-        reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
-    } else { // ":=" - type read straight off the (required-to-be-literal) initializer
-        if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
-        declType = rhs->type;
+    struct operand* rhs;
+    if (!exprNode) {
+        //no initializer - the grammar only ever allows this alongside an explicit type (":=" always
+        //requires something to infer from - see parseVarDecl), and only two declared-type shapes actually
+        //mean anything without one: a fixed-size array (zero-filled) or a "T[expr]" runtime-sized one
+        //(arena-allocated and zero-filled) - see the report. Anything else has no way to know what value
+        //to start with at all.
+        struct syntax* actual = partSntx(typeExprNode, 0);
+        struct syntax* runtimeSizeExprNode = detectRuntimeSizedArrayType(typeExprNode);
+        if (runtimeSizeExprNode) {
+            struct operand* sizeOp = buildExprFromSyntax(ctx, runtimeSizeExprNode);
+            if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
+            declType = resolveRuntimeSizedArrayDeclType(ctx->mod, actual, scopeParams);
+            //a bare "T[expr]" (no "<>" at all) is still implicitly own-scoped - see the report - so "own"
+            //has to actually exist here the same way it would for a real "own" expression
+            if (!declType.scopeParam && !ctx->hasOwnScope) ErrMsgSemantic(nameTok, OWN_OUTSIDE_FUNC);
+            rhs = OperandSizedArrayAlloc(sizeOp, declType, nameTok);
+        } else {
+            declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
+            if (declType.bType != BASETYPE_ARRAY || declType.arrMalloc) {
+                ErrMsgSemantic(nameTok, VAR_DECL_MISSING_INITIALIZER);
+                if (declType.bType != BASETYPE_ARRAY) declType = TypeVanilla(BASETYPE_INT32);
+            }
+            rhs = NULL; //zero-fill - see cgVarDecl; nothing to evaluate at all, not even a constant
+        }
+    } else {
+        rhs = buildExprFromSyntax(ctx, exprNode);
+        if (typeExprNode) {
+            declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
+            //a fixed-size target already knows its own size from the literal's own value count - see the
+            //report; restating it on both is redundant, not just harmless, so it's rejected outright
+            //rather than silently accepted whenever the two sizes happen to agree
+            if (declType.bType == BASETYPE_ARRAY && !declType.arrMalloc && rhs->isLiteral) {
+                ErrMsgSemantic(rhs->tok, REDUNDANT_ARRAY_SIZE);
+            }
+            reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
+        } else { // ":=" - type read straight off the (required-to-be-literal) initializer
+            if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+            declType = rhs->type;
+        }
     }
 
     struct var* v = scopeDeclare(ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     //propagated one hop, so a later read of v (OperandReadVar) can still resolve a scope tag that's one of
-    //rhs's own callee's scope params - see resolveEffectiveScopeVar
-    v->scopeBindings = rhs->scopeBindings;
+    //rhs's own callee's scope params - see resolveEffectiveScopeVar. rhs is NULL for a zero-filled fixed
+    //array (nothing to propagate - v->scopeBindings just stays at its zero-initialized default).
+    if (rhs) v->scopeBindings = rhs->scopeBindings;
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_VAR_DECL;
     stmt.var = *v;
@@ -2483,8 +2582,24 @@ void semaCheckBodies(struct semaModule* mod) {
             struct var* v = VarGetList(&mod->vars, strFromTok(nameTok));
             struct checkCtx ctx = {0};
             ctx.mod = mod;
-            struct operand* rhs = buildExprFromSyntax(&ctx, firstPartOfType(actual, SNTX_EXPR));
+            struct syntax* exprNode = firstPartOfType(actual, SNTX_EXPR);
+            if (!exprNode) {
+                //no initializer - only ever valid for a fixed-size ("T[N]") array global, left at the
+                //zero-initialized default emitGlobalDecls already gives every global (real BSS behavior -
+                //nothing further to do here). A dynamic array (bare "T[]", or the "T[expr]" runtime-sized
+                //form - both arrMalloc) has no "own"/enclosing scope to arena-allocate into at global-init
+                //time (same restriction "own" itself has outside a function), so it's rejected here rather
+                //than silently left as a null/empty slice, which would be a different, surprising meaning.
+                if (v->type.bType != BASETYPE_ARRAY || v->type.arrMalloc) {
+                    ErrMsgSemantic(nameTok, VAR_DECL_MISSING_INITIALIZER);
+                }
+                continue;
+            }
+            struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
             if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
+                if (v->type.bType == BASETYPE_ARRAY && !v->type.arrMalloc && rhs->isLiteral) {
+                    ErrMsgSemantic(rhs->tok, REDUNDANT_ARRAY_SIZE);
+                }
                 reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok);
             } else { // ":=" - type read straight off the (required-to-be-literal) initializer
                 if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);

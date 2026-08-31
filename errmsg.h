@@ -64,6 +64,8 @@
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
 #define OPERATION_REQUIRES_BOOL "operand must be a boolean"
 #define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's declared scope - only the exact same scope, or a named scope flowing into a bare '<>' (this function's own scope), are provably safe"
+#define VAR_DECL_MISSING_INITIALIZER "a variable declaration needs an initializer ('= expr' or ':= expr'), unless its declared type is an array with a size ('T[N]', zero-filled, or 'T[expr]', arena-allocated and zero-filled)"
+#define REDUNDANT_ARRAY_SIZE "a fixed-size array target ('T[N]') already knows its own size from the literal's own value count - restating it on both is redundant; either drop the size ('T[]', inferred from the literal) or drop the literal ('T[N]' alone, zero-filled)"
 
 // ---- statements and control flow ----
 

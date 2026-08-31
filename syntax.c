@@ -75,9 +75,17 @@ struct token prevTok(SyntaxCtx sc) {
 //the tail of some larger construct (a var-decl's value, an expression statement, ...) that genuinely
 //needs a terminator right there - so this accepts a real STMNT_END token OR, when the token just consumed
 //was "}", treats that as the terminator too, with nothing extra to consume.
+//a statement's own closing token can implicitly terminate it with no real TOK_STMNT_END at all - TOK_CURLY_C
+//because no grammar rule ever expects a TOK_STMNT_END after one (see stmntEndTriggerType), and TOK_GRT
+//because the tokenizer can't tell a scope-reference marker's closing '<name>>'/'<>' apart from the
+//comparison operator at the token level (both are just TOK_GRT), so it's never added to stmntEndTriggerType
+//either - but the two can never actually be confused here: a genuine comparison '>' can only ever appear
+//mid-expression (parseExpr keeps consuming past it, looking for a right-hand operand), so it can never be
+//the LAST token of an already-fully-parsed statement - only a marker's own closing '>' (parseTypeRef) can.
 bool acceptStmntEnd(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
-    return prevTok(sc).type == TOK_CURLY_C;
+    enum tokenType prev = prevTok(sc).type;
+    return prev == TOK_CURLY_C || prev == TOK_GRT;
 }
 
 // ---- tree-building primitives ----
@@ -601,7 +609,11 @@ struct syntax* parseTestDecl(SyntaxCtx sc) {
 }
 
 //":=" declares with the type read off the (required-to-be-literal) initializer - a distinct token from
-//"=" so this can never be confused with an assignment to an existing variable
+//"=" so this can never be confused with an assignment to an existing variable. An explicit-type decl's
+//own "= EXPR" is optional (unlike ":=", which always needs something to infer from) - semantic.c is the
+//one that decides which declared types can actually go without an initializer (an uninitialized array,
+//zero-filled or arena-allocated - see the report); the grammar just leaves the door open for any type,
+//same "parse liberally, reject semantically" pattern "own" already uses.
 struct syntax* parseVarDecl(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token name = acceptTok(sc, TOK_IDEN);
@@ -614,20 +626,23 @@ struct syntax* parseVarDecl(SyntaxCtx sc) {
 
     int beforeInfer = TokenGetCursor(sc->tc);
     struct token infer = TokenFeed(sc->tc);
+    bool hasNoInitializer = false;
     if (infer.type == TOK_ASS_INFER) {
         addTok(s, infer);
     } else {
         TokenSetCursor(sc->tc, beforeInfer);
         struct syntax* type = parseTypeExpr(sc);
         if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
-        struct token ass = acceptTok(sc, TOK_ASS);
-        if (ass.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
         addSntx(s, type);
-        addTok(s, ass);
+        struct token ass = acceptTok(sc, TOK_ASS);
+        if (ass.type == TOK_NONE) hasNoInitializer = true;
+        else addTok(s, ass);
     }
-    struct syntax* rhs = parseExpr(sc);
-    if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
-    addSntx(s, rhs);
+    if (!hasNoInitializer) {
+        struct syntax* rhs = parseExpr(sc);
+        if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, rhs);
+    }
     if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
     return s;
 }

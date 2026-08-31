@@ -410,18 +410,21 @@ bool typeNeedsDynamicPromotion(struct type dstT, struct type srcT) {
     return dstT.bType == BASETYPE_ARRAY && srcT.bType == BASETYPE_ARRAY && dstT.arrMalloc && !srcT.arrMalloc;
 }
 
-//copies a fixed-size array's own backing storage (srcAddr, its by-ref address) into a fresh malloc'd
-//buffer and returns the resulting { i64, ptr } slice value - element-by-element, same convention every
-//other aggregate-building loop in this file already uses (no memcpy intrinsic, kept consistent with e.g.
-//cgAggregateLiteral's own dynamic-array branch).
-char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* srcAddr) {
+//copies a fixed-size array's own backing storage (srcAddr, its by-ref address) into a fresh buffer -
+//arena-allocated into scopeVal (own by default, or the target's own "<name>" tag - see cgResolveScope),
+//not a bare @malloc: a dynamic array is implicitly reference-shaped for scope-checking purposes even with
+//no explicit "<>" marker, since a runtime-known length can never be embedded - see the report. Returns the
+//resulting { i64, ptr } slice value - element-by-element, same convention every other aggregate-building
+//loop in this file already uses (no memcpy intrinsic, kept consistent with e.g. cgAggregateLiteral's own
+//dynamic-array branch).
+char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* srcAddr, char* scopeVal) {
     struct type elemT = *srcT.arrElem;
     char elemTy[256];
     llvmType(elemT, elemTy, sizeof(elemTy));
     long long elemSize = TypeGetSize(elemT);
     long long count = srcT.arrLen->intLiteralVal;
     char* bytes = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @malloc(i64 %lld)\n", bytes, elemSize * count);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", bytes, scopeVal, elemSize * count);
     char srcStorTy[256];
     llvmType(srcT, srcStorTy, sizeof(srcStorTy)); //"[N x ElemT]"
     for (long long i = 0; i < count; i++) {
@@ -465,7 +468,8 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         return;
     }
     if (typeNeedsDynamicPromotion(dstT, srcT)) {
-        char* slice = cgPromoteFixedArrayToDynamic(ctx, srcT, src);
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
+        char* slice = cgPromoteFixedArrayToDynamic(ctx, srcT, src, scopeVal);
         fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", slice, dstAddr);
         return;
     }
@@ -530,7 +534,10 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         return heap;
     }
     char* v = cgValue(ctx, op);
-    if (typeNeedsDynamicPromotion(dstT, op->type)) return cgPromoteFixedArrayToDynamic(ctx, op->type, v);
+    if (typeNeedsDynamicPromotion(dstT, op->type)) {
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
+        return cgPromoteFixedArrayToDynamic(ctx, op->type, v, scopeVal);
+    }
     if (!typeIsByRef(op->type)) return v;
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
@@ -1056,10 +1063,47 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
     return result;
 }
 
+//"T[expr]" with no initializer (expr not a compile-time constant) - see OPERATION_SIZED_ARRAY_ALLOC and
+//the report. Arena-allocates expr zero-valued elements into op->type's own scope (own by default, or its
+//declared "<name>" tag - same cgResolveScope convention every other reference allocation already uses) and
+//returns the resulting { i64, ptr } slice value, zero-filled via memset (chunk-pool memory is reused, not
+//guaranteed zero, unlike a fresh @malloc - see emitScopeRuntime).
+char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
+    struct operand* sizeOp = *(struct operand**)ListGetIdx(&op->args, 0);
+    char* rawCount = cgValue(ctx, sizeOp);
+    char* count;
+    if (sizeOp->type.bType == BASETYPE_INT64) {
+        count = rawCount;
+    } else {
+        count = cgNewTmp(ctx);
+        char* ext = sizeOp->type.bType == BASETYPE_BYTE ? "zext" : "sext";
+        char sizeTy[64];
+        llvmType(sizeOp->type, sizeTy, sizeof(sizeTy));
+        fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", count, ext, sizeTy, rawCount);
+    }
+
+    struct type elemT = *op->type.arrElem;
+    long long elemSize = TypeGetSize(elemT);
+    char* byteSize = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", byteSize, count, elemSize);
+
+    char* scopeVal = cgResolveScope(ctx, op->type.scopeParam);
+    char* bytes = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
+    fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
+
+    char* agg1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", agg1, count);
+    char* agg2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", agg2, agg1, bytes);
+    return agg2;
+}
+
 char* cgValue(struct cgCtx* ctx, struct operand* op) {
     switch (op->opType) {
         case OPERATION_NONE: return cgLiteral(ctx, op);
         case OPERATION_LEN: return cgLen(ctx, op);
+        case OPERATION_SIZED_ARRAY_ALLOC: return cgSizedArrayAlloc(ctx, op);
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
             //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a
@@ -1100,9 +1144,14 @@ void cgBlock(struct cgCtx* ctx, struct list* block) {
 void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
-    char* rhs = cgValueForTarget(ctx, s->op, s->var.type, NULL);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
+    if (!s->op) {
+        //"T[N]", no initializer - zero-filled, nothing to evaluate at all (see buildVarDeclStmnt)
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, cgZeroValue(s->var.type), slot);
+        return;
+    }
+    char* rhs = cgValueForTarget(ctx, s->op, s->var.type, NULL);
     cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, NULL);
 }
 
@@ -1482,6 +1531,7 @@ void emitRuntimeDecls(FILE* out) {
         "declare void @exit(i32) noreturn\n"
         "declare ptr @malloc(i64)\n"
         "declare void @free(ptr)\n"
+        "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i32 @setjmp(ptr) returns_twice\n"
         "@stderr = external global ptr\n"
         "declare void @longjmp(ptr, i32) noreturn\n"

@@ -290,6 +290,11 @@ func measurementValue(n int32) ValidationError ? int32 {
 
 resourcesClosed mut int32 = 0
 
+## "T[N]" with no initializer - real BSS-style zero-fill (see the report). A global's own storage is
+## already emitted as "zeroinitializer" unconditionally (emitGlobalDecls); leaving initExpr NULL, rather
+## than writing a literal, is the entire mechanism - no dedicated zero-fill codegen exists or is needed.
+zeroGlobal mut int32[5]
+
 ## "destruct { }" is the only other special block a type can declare (see the report - general
 ## "Type.funcName" methods were considered and explicitly dropped in favor of just these two). It has no
 ## error union of its own - same rule as a test{} block - so a fallible call inside must be fully caught
@@ -483,9 +488,9 @@ test "do-while accumulates" {
 }
 
 test "fixed byte arrays compare by value, not identity" {
-    a mut byte[5] = "hello"
-    b mut byte[5] = "hello"
-    c mut byte[5] = "world"
+    a mut byte[] = "hello"
+    b mut byte[] = "hello"
+    c mut byte[] = "world"
     assert(a == b)
     assert(a != c)
 }
@@ -514,7 +519,7 @@ test "nested struct literals" {
 }
 
 test "array literal construction, fixed and dynamic" {
-    fixed mut int32[3] = int32[10, 20, 30]
+    fixed mut int32[] = int32[10, 20, 30]
     dyn mut int32[] = int32[10, 20, 30]
     assert(fixed[0] == 10)
     assert(fixed[2] == 30)
@@ -527,16 +532,16 @@ test "array literal construction, fixed and dynamic" {
 ## suffix, so it got silently swallowed and the whole literal misparsed as indexing instead) - the new
 ## "T[v1, ...]" syntax has no suffix loop to cause that, so both now just work.
 test "a single-value and an empty array literal both parse correctly" {
-    one mut int32[1] = int32[42]
+    one mut int32[] = int32[42]
     assert(one[0] == 42)
-    empty mut int32[0] = int32[]
+    empty mut int32[] = int32[]
     assert(len(empty) == 0)
 }
 
 ## the array literal itself never restates a type - "Point" (a struct type) works exactly like "int32"
 ## does, each element checked against it the same way a struct literal checks each field
 test "an array literal of struct values" {
-    pts mut Point[2] = Point[Point{1, 2}, Point{3, 4}]
+    pts mut Point[] = Point[Point{1, 2}, Point{3, 4}]
     assert(pts[0].x == 1)
     assert(pts[1].y == 4)
 }
@@ -547,7 +552,7 @@ test "an array literal of struct values" {
 ## uninitialized floatLiteralVal and silently produced 0.0 - invisible before now because nothing in the
 ## existing suite passed a bare int literal where a float was expected.
 test "an int literal widens to float inside an array literal" {
-    f mut float32[2] = float32[1, 2.5]
+    f mut float32[] = float32[1, 2.5]
     assert(f[0] == 1.0)
     assert(f[1] == 2.5)
 }
@@ -570,6 +575,17 @@ func makeFixed2DRef(s scope) ? int32[2][3]<s> {
     return int32[[1, 2, 3], [4, 5, 6]]
 }
 
+## "T[expr]" with no initializer (expr not a compile-time constant) - a runtime-sized array, arena-
+## allocated into the declared "<name>" tag rather than "own" (see the report and OPERATION_SIZED_ARRAY_
+## ALLOC): unlike a fixed-size reference, this can never be embedded (no compile-time offset is possible
+## for a runtime-known length), so it's implicitly reference-shaped even here, without writing "<s>" a
+## second time on the local itself.
+func makeSizedArrayRef(s scope, n int32) ? int32[]<s> {
+    result mut int32[n]<s>
+    result[0] = 42
+    return result
+}
+
 test "a fixed-size array reference survives crossing a function boundary via a named scope" {
     a mut int32[3]<> = makeFixedArrayRef(own)
     assert(a[0] == 7)
@@ -586,7 +602,7 @@ test "a 2D fixed array reference - outer dimension first" {
 ## Compile-time-known dimensions (embedded, or a fixed-size "<>" reference) cost nothing at runtime;
 ## only a genuinely dynamic array reads its length from the runtime slice - see OperandLen/cgLen.
 test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic arrays" {
-    embedded mut int32[4] = int32[1, 2, 3, 4]
+    embedded mut int32[] = int32[1, 2, 3, 4]
     assert(len(embedded) == 4)
 
     ref mut int32[3]<> = makeFixedArrayRef(own)
@@ -810,4 +826,44 @@ test "the static scope checker verifies an ordinary function's return-type scope
     p mut Point<> = makePointChecked(own, 5, 6)
     assert(p.x == 5)
     assert(p.y == 6)
+}
+
+## "T[N]" with no initializer - real BSS-style zero-fill (see the report and zeroGlobal's own declaration
+## above). Both a global and a local go through the exact same mechanism: leaving the var-decl's rhs NULL,
+## so codegen (cgVarDecl) stores cgZeroValue's "zeroinitializer" instead of evaluating anything.
+test "'T[N]' with no initializer zero-fills a global (real BSS)" {
+    assert(zeroGlobal[0] == 0)
+    assert(zeroGlobal[4] == 0)
+    zeroGlobal[1] = 3
+    assert(zeroGlobal[1] == 3)
+}
+
+test "'T[N]' with no initializer zero-fills a local" {
+    a mut int32[5]
+    assert(a[0] == 0)
+    assert(a[4] == 0)
+    a[2] = 9
+    assert(a[2] == 9)
+}
+
+## "T[expr]" with no initializer, expr not a compile-time constant - arena-allocated (own by default) and
+## zero-filled, like C's alloca but tied to a scope's FILO lifetime rather than the call stack (see
+## OPERATION_SIZED_ARRAY_ALLOC and the report). "n" is an ordinary mutable local, never folded by
+## tryEvalConstIntExpr, so this always takes the runtime-sized path, never the constant "T[N]" one.
+test "'T[expr]' with no initializer arena-allocates a zero-filled array sized at runtime, own scope by default" {
+    n mut int32 = 4
+    a mut int32[n]
+    assert(len(a) == 4)
+    assert(a[0] == 0)
+    assert(a[3] == 0)
+    a[2] = 7
+    assert(a[2] == 7)
+}
+
+test "a runtime-sized array tagged to a named scope survives a function boundary" {
+    a mut int32[]<> = makeSizedArrayRef(own, 5)
+    assert(len(a) == 5)
+    assert(a[0] == 42)
+    assert(a[1] == 0)
+    assert(a[4] == 0)
 }
