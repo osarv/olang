@@ -594,6 +594,52 @@ of sync with the actual code.
   elements don't register per-element destructors** - `cgRegisterDtorIfNeeded` only ever fires at a
   struct's own heap-promotion site, never walked across an array's elements.
 
+- **A bare `{}` field's scope is now a real, comprehensively-applied rule: "same as whatever contains it" -
+  not just the narrow one-hop `cgAssign` value-level patch from before.** The old patch only handled
+  `base.field = literal` where `base` was itself a plain local var with a `{}`-heap-indirect type - it left
+  two real gaps: a struct/array *literal*'s own nested bare-`{}` fields, built inside `cgAggregateLiteral`,
+  always defaulted to `ctx->ownScopeSlot` (whatever function is generating code right now) regardless of
+  what scope the *whole* literal was itself about to be promoted into; and `cgAssign`'s own resolution only
+  ever looked at the *immediate* base of an assignment target, so a two-or-more-hop chain of bare fields
+  (`outer.mid.leaf = ...` where `mid` is itself bare) silently fell back to the same wrong default. Both are
+  fixed now, still without any form of generics: this remains a *type-level rule/axiom* the compiler applies
+  uniformly at every relevant codegen site, not a concrete per-field scope value stored anywhere (a bare
+  field's `scopeParam` is still just `NULL` - "defer to my container," never a real `struct var*`).
+  **Two complementary mechanisms, matching the two different situations a bare field's scope needs to be
+  decided in:**
+  (1) **`ctx->targetScopeOverride` + `cgValueForTarget`** - for a literal being promoted as a whole into a
+  known target scope (a var-decl, a `for`-loop init, a call argument, a return value, or one field/element
+  of an *enclosing* literal). `cgValueForTarget(ctx, op, dstT, scopeOverride)` resolves dstT's own scope
+  *before* building `op`'s value (not after, the way a bare `cgValue()`+`cgStoreInto` pair used to), and
+  sets it as an ambient override on `ctx` for the duration of that one recursive `cgValue()` call.
+  `cgAggregateLiteral`'s own struct-field and array-element loops now consult this ambient override for any
+  field/element whose own type is bare `{}` (an explicitly-`{name}`-tagged field ignores it and resolves its
+  own named tag as before) - and since the override stays set for the *entire* nested build (only saved/
+  restored once, at the outermost `cgValueForTarget`/`cgBoundaryValue` call), it naturally reaches arbitrary
+  nesting depth (a literal inside a literal inside a literal) with no extra plumbing. `cgBoundaryValue`
+  (call arguments, return values) got the identical reordering internally, so its 3 call sites needed no
+  changes; `cgVarDecl`, the `for`-loop init, and `cgAssign` were updated to call `cgValueForTarget` instead
+  of a bare `cgValue()`. (The one call site deliberately left alone: `cgInitGlobalsFunc`'s global-initializer
+  store - a global has no `own`/enclosing-scope concept at all, out of scope for this fix.)
+  (2) **`cgResolveEffectiveScope`** - for resolving what scope an *already-existing* value's bare-`{}` field
+  lives in, at an assignment site (`cgAssign`'s own `scopeOverride` computation) - not something being built
+  right now, so mechanism (1) doesn't apply. Recursive: a value's own `type.scopeParam` (an explicit
+  `{name}`) is the base case; a bare `{}` value that's itself reached through a member access has no scope
+  of its own, so it inherits its own base's, walking up an arbitrary chain of bare-`{}` member accesses
+  until it either hits an explicitly-scoped ancestor or bottoms out at a plain var (a var, unlike a field,
+  really can be its own root - `ctx->ownScopeSlot` is the correct answer there, same as it always was).
+  This replaces `cgAssign`'s old one-hop-only check outright (which is now provably a special case of the
+  general recursive walk, not a separate rule).
+  **New shared helper, not new behavior:** `typeIsRefShaped(struct type t)` (struct, or fixed-size array -
+  the same "can this be marked `{}`/`{name}`" predicate that was duplicated inline in three places already)
+  factored out and reused by `cgResolveParamScopeOverride`, `cgAssign`, and `cgResolveEffectiveScope`.
+  **Deliberately not extended here, both already-documented gaps from the arrays work:** array-*index*
+  targets (`arr[i] = ...`) still aren't covered by either mechanism - `cgResolveEffectiveScope` only walks
+  `OPERATION_MEMBER` chains, not `OPERATION_INDEX`; and a bare-`{}` field reached only through a chain that
+  passes through a bare-`{}` *parameter* (as opposed to a locally-constructed value or an explicitly-`{name}`
+  -tagged one) still can't be resolved soundly by either mechanism - a bare `{}` parameter's true origin
+  scope genuinely isn't recoverable from its type alone without the static checker described next.
+
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
 - **Struct/array literal syntax: array literal syntax is settled; struct literals moved to `{...}`.** The

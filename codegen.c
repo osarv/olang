@@ -36,6 +36,12 @@ struct cgCtx {
     //(globals, the program-main wrapper, the test harness's own non-per-test code), where "own" is never
     //reachable (checked in semantic.c via ctx->hasOwnScope) so this is never read there.
     char* ownScopeSlot;
+    //ambient "this is the scope a struct/array literal currently under construction is ultimately being
+    //promoted into" - set by cgValueForTarget/cgBoundaryValue around a recursive cgValue() call so a
+    //literal's own nested bare-"{}" fields (built inside cgAggregateLiteral) inherit the *same* scope as
+    //the literal itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
+    //NULL when nothing is currently being promoted (the common case - most values never touch this).
+    char* targetScopeOverride;
     int tmpCtr;
     int lblCtr;
     int strCtr;
@@ -323,7 +329,34 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
     return loaded;
 }
 
+bool typeIsRefShaped(struct type t);
+
+//resolves the scope base's own "{}"-heap-indirect storage lives in - the type-level rule a bare "{}"
+//field is now defined by: its effective scope is always the SAME as whatever contains it, recursively.
+//base->type.scopeParam set (an explicit "{name}") is the base case, resolved the ordinary way. A bare
+//"{}" base that is itself a member access (base.field) has no scope of its own to fall back to - it
+//inherits its own base's, walking up an arbitrary chain of bare-"{}" member accesses until either an
+//explicitly-scoped ancestor is found, or the chain bottoms out at a plain var (a var, unlike a field,
+//really can be its own root - a bare "{}" var means "this var's own enclosing function scope", same as
+//cgResolveScope(ctx, NULL) already means). Only ever called on a structMAlloc value - callers check first.
+char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
+    if (base->type.scopeParam) return cgResolveScope(ctx, base->type.scopeParam);
+    if (base->opType == OPERATION_MEMBER) {
+        struct operand* innerBase = *(struct operand**)ListGetIdx(&base->args, 0);
+        if (typeIsRefShaped(innerBase->type) && innerBase->type.structMAlloc) {
+            return cgResolveEffectiveScope(ctx, innerBase);
+        }
+    }
+    return ctx->ownScopeSlot;
+}
+
 char* cgValue(struct cgCtx* ctx, struct operand* op);
+
+//true for a type that "{}"/"{name}" can mark as a reference - a struct, or a fixed-size ("T[N]") array;
+//a dynamic ("T[]") array is excluded, same reasoning as typeNeedsMallocPromotion.
+bool typeIsRefShaped(struct type t) {
+    return (t.bType == BASETYPE_STRUCT) || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
+}
 
 //a parameter's own declared type may name ANOTHER parameter of the *same* signature as its scope tag
 //(e.g. "func f(s scope, p Point{s})") - fine for type-checking (semantic.c already resolves this), but at
@@ -334,8 +367,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op);
 //caller-local. NULL when paramT's scope tag doesn't need this (bare "{}", or names a scope the caller
 //already has in its own scope, e.g. a scope parameter of the caller itself being passed straight through).
 char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct list* args, struct type paramT) {
-    bool refShaped = (paramT.bType == BASETYPE_STRUCT) || (paramT.bType == BASETYPE_ARRAY && !paramT.arrMalloc);
-    if (!(refShaped && paramT.structMAlloc && paramT.scopeParam)) return NULL;
+    if (!(typeIsRefShaped(paramT) && paramT.structMAlloc && paramT.scopeParam)) return NULL;
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         if (p != paramT.scopeParam) continue;
@@ -407,6 +439,25 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
 char* cgValue(struct cgCtx* ctx, struct operand* op);
 char* cgAddr(struct cgCtx* ctx, struct operand* op);
 
+//wraps cgValue() with the ambient-override threading described on ctx->targetScopeOverride: when op is
+//about to be promoted into dstT ("{}"-heap-indirect, op itself a plain value), the scope that promotion
+//will use is resolved *before* op's own value is built (rather than after, as a bare cgValue()+cgStoreInto
+//pair would), and set as the ambient override for the duration of that build - so if op is itself a
+//struct/array literal, any of ITS OWN bare-"{}" fields (built recursively by cgAggregateLiteral, which
+//consults ctx->targetScopeOverride for exactly this) inherit the *same* scope dstT is being promoted into,
+//instead of each independently defaulting to ctx->ownScopeSlot. This is the general, type-level version of
+//what cgAssign's own scopeOverride computation already did for one narrow case - see the report. A no-op
+//(plain cgValue) when no promotion is needed here at all.
+char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
+    if (!typeNeedsMallocPromotion(dstT, op->type)) return cgValue(ctx, op);
+    char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
+    char* prev = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = scopeVal;
+    char* v = cgValue(ctx, op);
+    ctx->targetScopeOverride = prev;
+    return v;
+}
+
 //converts op's cgValue() (a ptr for by-ref types) into the real value to use at a call-argument/return
 //boundary, where aggregates cross by value rather than by our internal storage-pointer convention.
 //dstT is the declared type of the slot being crossed into (a parameter's type, or the function's declared
@@ -414,12 +465,18 @@ char* cgAddr(struct cgCtx* ctx, struct operand* op);
 //a literal, crossing into a "{}"-heap-indirect parameter/return type): without it, op's own by-ref
 //address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
 //whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
+//Resolves dstT's scope and sets it as the ambient override (see cgValueForTarget) *before* building op's
+//own value, not after - same reordering, same reason: a literal argument/return value's own nested
+//bare-"{}" fields need to see the target scope while they're being built, not once it's too late.
 char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
-    char* v = cgValue(ctx, op);
     if (typeNeedsMallocPromotion(dstT, op->type)) {
         char storTy[256];
         llvmType(op->type, storTy, sizeof(storTy));
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
+        char* prev = ctx->targetScopeOverride;
+        ctx->targetScopeOverride = scopeVal;
+        char* v = cgValue(ctx, op);
+        ctx->targetScopeOverride = prev;
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
         char* loaded = cgNewTmp(ctx);
@@ -428,6 +485,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
         return heap;
     }
+    char* v = cgValue(ctx, op);
     if (!typeIsByRef(op->type)) return v;
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
@@ -582,7 +640,12 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             struct type fieldT = (*(struct var*)ListGetIdx(&op->type.vars, i)).type;
             char* fieldAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
-            cgStoreInto(ctx, fieldT, arg->type, cgValue(ctx, arg), fieldAddr, NULL);
+            //a bare "{}" field (no scopeParam) inherits whatever scope THIS WHOLE literal is itself being
+            //promoted into (ctx->targetScopeOverride, threaded in by cgValueForTarget/cgBoundaryValue) -
+            //an explicitly-tagged "{name}" field ignores it and resolves its own named scope as usual
+            char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
+            char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
+            cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope);
         }
         return slot;
     }
@@ -596,7 +659,10 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
             char* elemAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %d\n", elemAddr, storTy, slot, i);
-            cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr, NULL);
+            struct type elemT = *op->type.arrElem;
+            char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
+            char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
+            cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope);
         }
         return slot;
     }
@@ -611,7 +677,10 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
         char* elemAddr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %d\n", elemAddr, elemTy, bytes, i);
-        cgStoreInto(ctx, *op->type.arrElem, arg->type, cgValue(ctx, arg), elemAddr, NULL);
+        struct type elemT = *op->type.arrElem;
+        char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
+        char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
+        cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope);
     }
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", agg1, op->args.len);
@@ -1008,31 +1077,28 @@ void cgBlock(struct cgCtx* ctx, struct list* block) {
 void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
-    char* rhs = cgValue(ctx, s->op);
+    char* rhs = cgValueForTarget(ctx, s->op, s->var.type, NULL);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
     cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, NULL);
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
-    char* val = cgValue(ctx, s->op);
-    char* addr = cgAddr(ctx, s->target);
-    //a bare "{}" struct field has no declared scope of its own (fields can't carry a "{name}" tag yet -
-    //see the report), so cgStoreInto's default resolution falls back to "whatever function is executing
-    //right now" (ctx->ownScopeSlot) - dangling the instant that function returns if the instance
-    //containing the field escapes further. Narrow fix, not the general one: when the immediate base of
-    //"base.field = ..." is itself a "{}"-heap-indirect value, the freshly-promoted literal inherits
-    //*that* value's own scope instead - same scope as the instance actually containing it. A plain
-    //(embedded) base, or a base that's itself another member/index expression, still falls back to the
-    //old behavior for now - resolving through arbitrary chains of indirection is a separate, harder
-    //problem, not attempted here.
+    //a bare "{}" struct/array field has no declared scope of its own (fields can't carry a "{name}" tag -
+    //see the report) - by rule, its effective scope is always the SAME as whatever contains it. When the
+    //target of "base.field = ..." is itself reached through a "{}"-heap-indirect base, resolve that scope
+    //(walking up an arbitrary chain of bare-"{}" member accesses via cgResolveEffectiveScope - not just
+    //one hop) and use it both for building the rhs (so any of ITS OWN nested bare-"{}" fields inherit the
+    //same scope too, see cgValueForTarget) and for the actual promotion below.
     char* scopeOverride = NULL;
-    if (s->target->opType == OPERATION_MEMBER && s->target->type.bType == BASETYPE_STRUCT && s->target->type.structMAlloc) {
+    if (s->target->opType == OPERATION_MEMBER && typeIsRefShaped(s->target->type) && s->target->type.structMAlloc) {
         struct operand* base = *(struct operand**)ListGetIdx(&s->target->args, 0);
-        if (base->type.bType == BASETYPE_STRUCT && base->type.structMAlloc) {
-            scopeOverride = cgResolveScope(ctx, base->type.scopeParam);
+        if (typeIsRefShaped(base->type) && base->type.structMAlloc) {
+            scopeOverride = cgResolveEffectiveScope(ctx, base);
         }
     }
+    char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
+    char* addr = cgAddr(ctx, s->target);
     cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride);
 }
 
@@ -1065,7 +1131,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     cgPushScope(ctx);
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
-    char* rhs = cgValue(ctx, s->forInit);
+    char* rhs = cgValueForTarget(ctx, s->forInit, s->var.type, NULL);
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
     fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, ty);
     cgStoreInto(ctx, s->var.type, s->forInit->type, rhs, slot, NULL);

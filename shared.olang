@@ -360,6 +360,37 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
     return ScopedBox(outer, Point{x, y})
 }
 
+## the type-level generalization of "a bare '{}' field's scope inherits its container's own scope" - see
+## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "{name}" tag the way
+## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
+## NestedBox instance ends up: when a NestedBox literal is itself being promoted into a "{}" target
+## (cgValueForTarget/cgBoundaryValue set the ambient ctx->targetScopeOverride before building it), a bare
+## field's own malloc now uses that same ambient scope (cgAggregateLiteral) instead of unconditionally
+## defaulting to whatever function happens to be executing right now.
+type NestedBox struct {
+    inner Point{}
+}
+
+func makeNestedBox(s scope, x int32, y int32) ? NestedBox{s} {
+    return NestedBox{Point{x, y}}
+}
+
+## two levels of bare "{}" nesting, to stress cgResolveEffectiveScope's walk past the immediate base -
+## "co.mid.leaf = ..." (see the test below) has "co.mid" (bare - no scope of its own) as its immediate
+## base, which only resolves correctly by walking one hop further, into "co" itself.
+type ChainMid struct {
+    leaf Point{}
+}
+
+type ChainOuter struct {
+    mid ChainMid{}
+}
+
+func setChainLeaf(s scope, co ChainOuter{s}, x int32, y int32) ? int32 {
+    co.mid.leaf = Point{x, y}
+    return 0
+}
+
 ## not constructor-specific - any parameter whose type names an EARLIER parameter of the same signature
 ## as its scope tag (not just a struct field's constructor param) used to crash at every call site that
 ## needed to malloc-promote a plain literal into it: the tag's name ("s") only has meaning inside the
@@ -659,5 +690,44 @@ test "a struct returned entirely by value still compiles fine when its nested re
     box mut ScopedBox = makeScopedBoxPlain(own, 3, 4)
     assert(box.inner.x == 3)
     assert(box.inner.y == 4)
+}
+
+test "a plain struct's bare '{}' field survives a function boundary by inheriting its container's own target scope" {
+    nb mut NestedBox{} = makeNestedBox(own, 11, 22)
+    assert(nb.inner.x == 11)
+    assert(nb.inner.y == 22)
+
+    ## force reuse of makeNestedBox's own now-closed private scope's chunk - would corrupt nb.inner if
+    ## "inner" had actually landed there instead of in the caller's own scope, tagged via "s"
+    noise mut int32 = 0
+    i mut int32 = 0
+    do {
+        noise = noise + noisePoint(i)
+        i++
+    } while i < 20
+
+    assert(nb.inner.x == 11)
+    assert(nb.inner.y == 22)
+}
+
+test "a bare '{}' field assigned through a two-hop chain of bare '{}' bases resolves to the outermost named scope" {
+    co mut ChainOuter{} = ChainOuter{ChainMid{Point{0, 0}}}
+    r mut int32 = setChainLeaf(own, co, 5, 6)
+    assert(r == 0)
+    assert(co.mid.leaf.x == 5)
+    assert(co.mid.leaf.y == 6)
+
+    ## force reuse of setChainLeaf's own now-closed private scope's chunk - would corrupt co.mid.leaf if
+    ## the old one-hop-only resolution (which only ever looked at "co.mid" itself, always bare, and so
+    ## always fell back to "whatever function is executing right now") had actually been used here
+    noise mut int32 = 0
+    i mut int32 = 0
+    do {
+        noise = noise + noisePoint(i)
+        i++
+    } while i < 20
+
+    assert(co.mid.leaf.x == 5)
+    assert(co.mid.leaf.y == 6)
 }
 
