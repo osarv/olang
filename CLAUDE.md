@@ -151,6 +151,13 @@ of sync with the actual code.
   struct at the point a *reference* is directly constructed, as opposed to a plain value that then gets
   promoted) is deliberately not implemented, since it needs the ownership/lifetime model from the
   ownership-scopes entry below to mean anything.
+  **`{...}` as the struct-literal delimiter is confirmed permanent, not just "current."** This was an open
+  question for a while, given `{}`'s own rocky history on the *scope-marker* side (started `{}`/`{name}`,
+  briefly `&`/`&name`, back to `{}`, finally settled on `<>`/`<name>` - see the reference-syntax entry near
+  the end of this section) - worth asking explicitly whether struct literals would follow the marker down
+  the same path once the marker vacated `{}`. Confirmed directly: they won't. `{...}` for struct literals
+  stays as-is; revisit only if a concrete, motivating problem actually comes up, the same way the marker's
+  own moves were each driven by a real issue, not the possibility of one.
 - **The parser is hand-written recursive descent, not a table-driven PEG engine.** Full rewrite: `syntax.c`
   used to store the grammar as data (strings like `"SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O ..."`, interpreted
   by a generic matcher at parse time); it's now one function per grammar rule (`parseIf`, `parseVarDecl`,
@@ -1020,13 +1027,3 @@ of sync with the actual code.
   source (not currently constructible - see the array-index-scope-override entry above for why an array's
   own element shape is hard to make independently reference-typed at all) would need a real runtime loop,
   not this one.
-
-## Open questions (settle before implementing further - don't silently "fix" these)
-
-- **Struct literal delimiter: struct literals moved to `{...}` on a direct instruction - still worth
-  confirming it's pinned as permanent before building further on top of it.** Not "should literals like
-  this exist" (settled, see "Settled decisions" above), just narrowly: is `{...}` *the* answer for structs
-  specifically, long-term. (Array literal syntax was *also* revisited since this question was first
-  written - see the dedicated array-literal-syntax entry above - so "array literals are settled, only
-  struct delimiter is open" is no longer an accurate framing of this question; struct literals are the
-  only piece still genuinely unconfirmed.)
