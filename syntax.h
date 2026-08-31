@@ -59,7 +59,12 @@ enum syntaxType {
     SNTX_EXPR_INDEX,
     SNTX_EXPR_MEMBR,
     SNTX_EXPR_TRY,
-    SNTX_EXPR_LITERAL,        //array literal only now - "T[N][v1, ...]"/"T[][v1, ...]" - see ParseSyntax
+    SNTX_ARR_LIT_ARGS,   //array literal's own argument list - each item is either a plain EXPR or a nested
+                          //SNTX_ARR_LIT_NESTED bracket group (for a 2D+ literal) - see parseArrLiteralArgs
+    SNTX_ARR_LIT_NESTED, //"[" ARR_LIT_ARGS "]" - a nested row with no restated type, only ever valid as one
+                          //item inside an enclosing array literal's own arg list - see parseArrayLiteral
+    SNTX_EXPR_LITERAL,        //array literal only now - "T[v1, ...]" (dimensionality/size come entirely
+                               //from the argument list's own nesting/counts) - see ParseSyntax
     SNTX_EXPR_STRUCT_LITERAL, //struct literal - "Type{v1, ...}" - type-name-aware, see ParseSyntax
     SNTX_EXPR_VOCAB_VALUE,    //"Type.WORD" - a vocab value - type-name-aware, see ParseSyntax
     SNTX_EXPR_PRIMARY,

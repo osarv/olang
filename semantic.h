@@ -78,6 +78,18 @@ struct type {
     struct list errors; //list of struct type*: error types declared in the signature's error list
 };
 
+//one entry of an operand/var's own scope-binding map (see resolveEffectiveScopeVar in semantic.c) - "at
+//this specific call/access, the callee's/type's own scope parameter typeParam was concretely bound to
+//boundTo" (NULL for own/bare). typeParam is always some OTHER function's or type's own declared scope
+//parameter (a function's own return type, or a constructor's own field type); boundTo, when non-NULL, is
+//always one of the CURRENT function's own scope parameters - the only two shapes a "scope"-typed argument
+//can ever have (own, or a direct read of one of the current function's own scope params), so a binding is
+//always a single, already-final hop - never itself needs further resolution through another map.
+struct scopeBinding {
+    struct var* typeParam;
+    struct var* boundTo;
+};
+
 //a variable or function - the two share one namespace/list everywhere they're declared (module scope,
 //function params, struct members), so one struct covers both
 struct var {
@@ -92,6 +104,10 @@ struct var {
     struct var* origin; //where the variable declaration is stored throughout the compilation process
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
+    struct list scopeBindings; //list of struct scopeBinding - propagated one hop from a local's own
+                                //initializing operand at declaration time (see buildVarDeclStmnt), so a
+                                //later read of this var carries the same map its initializer had - see
+                                //the report on extending the static scope checker past one function's frame
 };
 
 enum statementType {
@@ -191,6 +207,11 @@ struct operand {
     double floatLiteralVal; //valid for float literals only
     struct str memberName; //valid for OPERATION_MEMBER
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    struct list scopeBindings; //list of struct scopeBinding - see the type's own comment. Populated for a
+                                //function/constructor call (from its own scope-typed params matched against
+                                //the actual arguments) and for a member access whose field carries a scope
+                                //tag resolvable through the base's own map; empty (the common case) for
+                                //everything else. See resolveEffectiveScopeVar in semantic.c.
 };
 
 struct semaImport {

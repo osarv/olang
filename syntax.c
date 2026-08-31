@@ -155,8 +155,8 @@ struct syntax* parseArrSfx(SyntaxCtx sc) {
     return s;
 }
 
-//"NAME ARR_SFX* (CURLY_O IDEN? CURLY_C)?" - the optional trailing "{name}" names which scope a
-//heap-indirect reference belongs to; bare "{}" means the value's own private scope - see the report.
+//"NAME ARR_SFX* (TOK_LST IDEN? TOK_GRT)?" - the optional trailing "<name>" names which scope a
+//heap-indirect reference belongs to; bare "<>" means the value's own private scope - see the report.
 //Briefly spelled "&" instead (see git history), reverted back to "{}" after further design discussion
 //concluded the two are semantically identical (a plain/embedded value never independently needs a scope
 //tag - it has no separate allocation to tag - so "is this a reference" and "which scope" always travel
@@ -1063,27 +1063,79 @@ struct syntax* parseExprTry(SyntaxCtx sc) {
     return s;
 }
 
-//"NAME ARR_SFX* [ ARGS ]" - array literal, fixed ("T[3][...]") or dynamic ("T[][...]"). Unchanged from
-//before, including its one known gap: a single-value (or empty) value list is indistinguishable from a
-//trailing array suffix, so it gets silently swallowed by the "*" loop below and this whole attempt fails,
-//falling through to plain indexing instead - see CLAUDE.md. Not addressed here on purpose (arrays keep
-//their existing syntax as-is; only struct literals move to type-aware "{...}" - see the report).
-struct syntax* parseArrayLiteral(SyntaxCtx sc) {
+struct syntax* parseArrLiteralArgs(SyntaxCtx sc);
+
+//"[" ARR_LIT_ARGS "]" - a nested row with no restated type, only ever reachable as one item inside an
+//enclosing array literal's own argument list (see parseArrLiteralArgs) - the outer literal states the
+//scalar element type once; nesting depth and each level's size come entirely from the bracket structure
+//and item counts here, not from any restated type/size on the nested group itself.
+struct syntax* parseArrLiteralNestedGroup(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct syntax* name = parseName(sc);
-    if (!name) return NULL;
-    struct syntax* s = newNode(SNTX_EXPR_LITERAL);
-    addSntx(s, name);
-    while (true) {
-        struct syntax* sfx = parseArrSfx(sc);
-        if (!sfx) break;
-        addSntx(s, sfx);
-    }
     struct token open = acceptTok(sc, TOK_SQUARE_O);
-    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct syntax* args = parseExprArgs(sc);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* args = parseArrLiteralArgs(sc);
     struct token close = acceptTok(sc, TOK_SQUARE_C);
     if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_ARR_LIT_NESTED);
+    addTok(s, open);
+    addSntx(s, args);
+    addTok(s, close);
+    return s;
+}
+
+//"(ITEM (COMMA ITEM)*)?" where ITEM is either a nested bracket group (parseArrLiteralNestedGroup, tried
+//first) or a plain EXPR - always succeeds, possibly with zero items. Mirrors parseExprArgs exactly, just
+//with the one extra alternative per item.
+struct syntax* parseArrLiteralArgs(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_ARR_LIT_ARGS);
+    struct syntax* first = parseArrLiteralNestedGroup(sc);
+    if (!first) first = parseExpr(sc);
+    if (!first) return s;
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* e = parseArrLiteralNestedGroup(sc);
+        if (!e) e = parseExpr(sc);
+        if (!e) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, e);
+    }
+    return s;
+}
+
+//"NAME [ ARR_LIT_ARGS ]" - array literal. NAME states the base (scalar) element type once; dimensionality
+//and each level's size come entirely from the argument list's own bracket nesting and item counts (see
+//parseArrLiteralArgs/parseArrLiteralNestedGroup) - no separate "[N]"/"[]" size/dynamic-ness suffix on the
+//literal itself any more (that's now decided by whatever the literal is checked against - see the report).
+//This also incidentally fixes the old gap where a single-value (or empty) value list was indistinguishable
+//from a trailing array suffix and silently swallowed by a suffix loop: there is no more suffix loop here.
+//true for one of the fixed set of built-in primitive type names ("int32[1, 2, 3]" needs this gate just as
+//much as a struct/vocab/error name does - see parseExprPrimary - but primitives were never added to
+//declaredTypeNames/isKnownType, which only ever tracked user "type"/"error" declarations). Mirrors the
+//exact same name set resolveLiteralBaseType (semantic.c) falls back to for a name isKnownType doesn't
+//recognize either. Never alias-qualified - a primitive name is always exactly one identifier.
+bool nameIsPrimitiveTypeName(struct syntax* name) {
+    if (name->parts.len != 1) return false;
+    struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
+    struct str n = p0->tok.str;
+    return StrCmp(n, StrFromCStr("bool")) || StrCmp(n, StrFromCStr("int32")) || StrCmp(n, StrFromCStr("int64"))
+        || StrCmp(n, StrFromCStr("byte")) || StrCmp(n, StrFromCStr("float32")) || StrCmp(n, StrFromCStr("float64"));
+}
+
+//"NAME [ ARR_LIT_ARGS ]" - array literal tail. `name` is already parsed and confirmed by the caller
+//(parseExprPrimary) to be a known type or a primitive name before this is ever reached - see the report
+//for why that's what makes this safe to commit to hard, the same reasoning parseStructLiteralTail already
+//relies on: without it, "NAME [ ARR_LIT_ARGS ]" is structurally identical to ordinary indexing
+//("variable[index]"), since this grammar (unlike the old suffix-then-args shape) is always exactly one
+//bracket group - type-name-awareness is now load-bearing here, not just a convenience.
+struct syntax* parseArrayLiteralTail(SyntaxCtx sc, struct syntax* name, struct token open) {
+    struct syntax* args = parseArrLiteralArgs(sc);
+    struct token close = acceptTok(sc, TOK_SQUARE_C);
+    if (close.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_EXPR_LITERAL);
+    addSntx(s, name);
     addTok(s, open);
     addSntx(s, args);
     addTok(s, close);
@@ -1195,13 +1247,20 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 addSntx(vv, name);
                 addSntx(s, vv);
                 return s;
-            }
-            TokenSetCursor(sc->tc, save);
-            struct syntax* arrLit = parseArrayLiteral(sc);
-            if (arrLit) {
-                struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
-                addSntx(s, arrLit);
-                return s;
+            } else if (after.type == TOK_SQUARE_O && (nameIsKnownType(sc, name) || nameIsPrimitiveTypeName(name))) {
+                //"NAME [ ... ]" is structurally identical to indexing ("variable[index]") now that array
+                //literals no longer restate a size/dynamic-ness suffix before the value list - see
+                //parseArrayLiteralTail. Committed the same way struct literals are: name being a known
+                //type (or a primitive - never a real variable either) here is never a coincidence.
+                struct token open = advanceTok(sc); //consume the "[" now that we're committing
+                struct syntax* lit = parseArrayLiteralTail(sc, name, open);
+                if (lit) {
+                    struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+                    addSntx(s, lit);
+                    return s;
+                }
+                recordFurthestError(sc, peekTok(sc), "']'");
+                return NULL;
             }
             TokenSetCursor(sc->tc, save);
             struct token bare = advanceTok(sc);

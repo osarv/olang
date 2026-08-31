@@ -42,7 +42,7 @@ long long TypeGetAlign(struct type t) {
         case BASETYPE_SCOPE: return PTR_SIZE;
         case BASETYPE_ARRAY:
             if (t.arrMalloc) return PTR_SIZE; //"{ i64, ptr }" slice - both 8-aligned
-            if (t.structMAlloc) return PTR_SIZE; //fixed-size "{}"-heap reference - just a pointer
+            if (t.structMAlloc) return PTR_SIZE; //fixed-size "<>"-heap reference - just a pointer
             return TypeGetAlign(*t.arrElem);
         case BASETYPE_STRUCT: {
             if (t.structMAlloc) return PTR_SIZE;
@@ -64,7 +64,7 @@ long long getArraySize(struct type t) {
     //this specific branch until a struct could actually embed a dynamic-array field and get heap-promoted,
     //so it was invisible until now.
     if (t.arrMalloc) return 16;
-    if (t.structMAlloc) return PTR_SIZE; //fixed-size "{}"-heap reference - just a pointer, size is on the type
+    if (t.structMAlloc) return PTR_SIZE; //fixed-size "<>"-heap reference - just a pointer, size is on the type
     long long n = t.arrLen ? t.arrLen->intLiteralVal : 0;
     return TypeGetSize(*t.arrElem) * n;
 }
@@ -192,6 +192,12 @@ bool TypeIsSame(struct type a, struct type b) {
     switch (a.bType) {
         case BASETYPE_ARRAY:
             if (a.arrMalloc != b.arrMalloc) return false;
+            //a real, previously-latent bug fixed alongside the array-literal rework below: this never
+            //compared the two fixed sizes at all, so e.g. "x mut int32[5] = <an int32[3] value>" silently
+            //type-checked - a buffer over-read the moment cgStoreInto's by-ref load/store pair ran, reading
+            //5 elements' worth out of a 3-element backing store. Both sides are fixed here (arrMalloc
+            //already confirmed equal above and neither is a dynamic slice), so arrLen is always populated.
+            if (!a.arrMalloc && a.arrLen->intLiteralVal != b.arrLen->intLiteralVal) return false;
             return TypeIsSame(*a.arrElem, *b.arrElem);
         case BASETYPE_FUNC: {
             if (a.vars.len != b.vars.len) return false;
@@ -233,6 +239,7 @@ char* TypeDescribe(struct type t) {
 
 struct var* VarAllocSetOrigin() {
     struct var* v = MallocOrCrash(sizeof(struct var));
+    *v = (struct var){0};
     v->origin = v;
     return v;
 }
@@ -302,6 +309,18 @@ struct list allPartsOfType(struct syntax* s, enum syntaxType t) {
     for (int i = 0; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (!p->isToken && p->sntx->type == t) ListAdd(&result, &p->sntx);
+    }
+    return result;
+}
+
+//all direct !isToken children of s, in original parse order, regardless of type - used where an args list
+//can mix item shapes (see buildArrLiteralLevel: each item is either a nested bracket group or a plain
+//SNTX_EXPR), unlike allPartsOfType which only ever collects one uniform type.
+struct list allSyntaxParts(struct syntax* s) {
+    struct list result = ListInit(sizeof(struct syntax*));
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* p = partAt(s, i);
+        if (!p->isToken) ListAdd(&result, &p->sntx);
     }
     return result;
 }
@@ -544,9 +563,9 @@ void semaCollectNames(struct semaModule* mod) {
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
 void resolveTypeDecl(struct type* t);
 
-//resolves a "{name}" heap-indirection tag's optional scope name against scopeParams (the function
+//resolves a "<name>" heap-indirection tag's optional scope name against scopeParams (the function
 //parameters visible at this point in the signature/body being resolved, or NULL where none are - struct
-//fields and globals, which have no such context; see the report). Bare "{}" (no name token at all) is
+//fields and globals, which have no such context; see the report). Bare "<>" (no name token at all) is
 //left as scopeParam == NULL, meaning "this value's own private/local scope".
 struct var* resolveScopeTag(struct syntax* refNode, struct list* scopeParams) {
     struct list nameToks = allTokOfType(refNode, TOK_IDEN);
@@ -699,9 +718,9 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
 }
 
 //resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
-//lookup as resolveTypeRefBase, minus the "{}" heap-indirect handling: a literal's own trailing "{...}"
+//lookup as resolveTypeRefBase, minus the "<>" heap-indirect handling: a literal's own trailing "{...}"
 //holds values, not the (always-empty) heap-indirection marker, and constructing a value always requires
-//the type to be fully resolved (never the "grab it mid-resolution" trick {} exists for)
+//the type to be fully resolved (never the "grab it mid-resolution" trick <> exists for)
 struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNode) {
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
     struct type* found;
@@ -775,8 +794,8 @@ struct type resolveStructBody(struct semaModule* mod, struct token nameTok, stru
         v.tok = memberTok;
         v.mut = true;
         //NULL: a struct field can't reference a scope parameter - that needs the type itself to be
-        //generic over a scope, which olang has no mechanism for yet (see the report). A bare "{}" field
-        //still works fine (structMAlloc, private/local scope); an explicit "{name}" field correctly fails
+        //generic over a scope, which olang has no mechanism for yet (see the report). A bare "<>" field
+        //still works fine (structMAlloc, private/local scope); an explicit "<name>" field correctly fails
         //with UNKNOWN_SCOPE until that generics mechanism exists.
         v.type = resolveTypeExpr(mod, typeExprNode, NULL);
         ListAdd(&t.vars, &v);
@@ -877,7 +896,7 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
     }
 }
 
-//true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "{}"/"{name}" tag, no
+//true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "<>"/"<name>" tag, no
 //namespace. "scope" is deliberately never registered as a real type (unlike int32/bool/etc in
 //resolveTypeRefBase) - it only ever resolves here, in a parameter's type position, so it structurally
 //can't appear as a struct field, return type, or ordinary variable's type, mirroring how error types are
@@ -915,19 +934,19 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         v.tok = nameTok;
         v.mut = hasTokOfType(p, TOK_MUT);
         //"out" doubles as this param list's growing scopeParams: an earlier param's name is visible to a
-        //later param's "{name}" tag (e.g. "func f(s scope, n Node{s})"), not the other way around
+        //later param's "<name>" tag (e.g. "func f(s scope, n Node<s>)"), not the other way around
         v.type = isScopeTypeRef(typeExprNode) ? TypeScope() : resolveTypeExpr(mod, typeExprNode, out);
         ListAdd(out, &v);
     }
 }
 
 //true if t (or anything nested inside it, transitively, through plain/embedded fields only) has a bare
-//"{}" (unnamed) heap-indirect field - the shape that dangles the instant a plain value containing it
+//"<>" (unnamed) heap-indirect field - the shape that dangles the instant a plain value containing it
 //escapes via return, since there's no scope name anywhere in the signature it could have been tied to.
-//Deliberately doesn't chase into a NAMED "{name}" field's own pointee: that field's lifetime is already
+//Deliberately doesn't chase into a NAMED "<name>" field's own pointee: that field's lifetime is already
 //an explicit, independently-checked fact tied to its own name, not something this returning function
-//could be responsible for regardless of how it got here. Never infinite: a plain (non-"{}") struct can
-//never recursively embed itself (that's exactly what "{}" exists to break), so any embedded chain
+//could be responsible for regardless of how it got here. Never infinite: a plain (non-"<>") struct can
+//never recursively embed itself (that's exactly what "<>" exists to break), so any embedded chain
 //through this function alone is guaranteed to bottom out.
 bool structContainsBareScopeField(struct type t) {
     if (t.bType != BASETYPE_STRUCT) return false;
@@ -965,18 +984,18 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         t.hasRetType = true;
         t.retType = MallocOrCrash(sizeof(struct type));
         //full param list (t.vars) is already built above, so a return type may reference any of them,
-        //e.g. "func makeNode(v int32, s scope) Node{s}"
+        //e.g. "func makeNode(v int32, s scope) Node<s>"
         *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
-        //a bare "{}" return type is always wrong, not just sometimes: the function's own private scope
+        //a bare "<>" return type is always wrong, not just sometimes: the function's own private scope
         //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
         //would already be dangling before the caller ever sees it - catching this once, here, covers
         //every return statement in the function (single, multiple, implicit fallthrough, error
-        //propagation) without needing to inspect each one individually. The transitive case - a bare "{}"
+        //propagation) without needing to inspect each one individually. The transitive case - a bare "<>"
         //field nested inside a plain (non-heap-indirect) returned struct - is also caught, below.
         if (t.retType->bType == BASETYPE_STRUCT && t.retType->structMAlloc && !t.retType->scopeParam) {
             ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), BARE_SCOPE_RETURN_TYPE);
         //the transitive case: a PLAIN return type (not itself heap-indirect, so the check above doesn't
-        //fire) that embeds a bare "{}" field somewhere inside it - see structContainsBareScopeField.
+        //fire) that embeds a bare "<>" field somewhere inside it - see structContainsBareScopeField.
         //Conservative on purpose: this rejects some sound code too (a function that only ever passes an
         //already-correctly-scoped value straight through, never allocating into the bare field itself,
         //would be fine at runtime) - but nothing short of real dataflow/escape analysis (not attempted
@@ -1219,6 +1238,7 @@ struct operand* operandNew(struct token tok, enum operation opType, struct type 
     op->opType = opType;
     op->type = type;
     op->args = ListInit(sizeof(struct operand*));
+    op->scopeBindings = ListInit(sizeof(struct scopeBinding));
     return op;
 }
 
@@ -1238,31 +1258,69 @@ static bool typeIsRefShaped(struct type t) {
     return t.bType == BASETYPE_STRUCT || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
 
-//true if scopeVar is one of func's own declared parameters, by identity - the same pattern
-//cgResolveParamScopeOverride (codegen.c) already uses to compare a scope tag against a signature's own
-//param list. func may be NULL (a global initializer or a test{} block, neither of which has a parameter
-//list of its own) - always false there.
+//a function's own parameters get resolved into TWO distinct struct var instances that are never the same
+//pointer: the type-level original (func->type.vars, built once during signature resolution - pass 2) and
+//a fresh copy pushed into the local scope chain for body-checking (semaCheckBodies - pass 3, since a
+//parameter is also an ordinary local as far as expression-building/scopeFindLocal is concerned). A type-
+//level scope tag (a var-decl's declared type, a return type) always resolves against the former; a
+//value-level read (lookupVar, e.g. an argument expression like "own"/"s" inside a call) always resolves
+//against the latter. Comparing the two by raw identity - exactly what a call's own scope-binding map does
+//when it captures an argument's readVar (see OperandFuncCall) - would incorrectly treat them as
+//different scopes. semaCheckBodies sets each copy's own .origin to the type-level original it was copied
+//from (the same field ordinary locals already use to track "where this declaration is stored" - see
+//struct var's own comment in semantic.h), so canonicalVar resolves either shape back to the one, stable,
+//type-level identity varIsOwnParam/scopeCanFlowInto compare against.
+struct var* canonicalVar(struct var* v) {
+    if (!v) return NULL;
+    return v->origin ? v->origin : v;
+}
+
+//true if scopeVar is one of func's own declared parameters, by identity (after canonicalization - see
+//canonicalVar) - the same pattern cgResolveParamScopeOverride (codegen.c) already uses to compare a scope
+//tag against a signature's own param list, generalized here to also handle a value-level copy. func may
+//be NULL (a global initializer or a test{} block, neither of which has a parameter list of its own) -
+//always false there.
 bool varIsOwnParam(struct var* scopeVar, struct var* func) {
     if (!scopeVar || !func) return false;
+    scopeVar = canonicalVar(scopeVar);
     for (int i = 0; i < func->type.vars.len; i++) {
-        if (ListGetIdx(&func->type.vars, i) == scopeVar) return true;
+        if (canonicalVar(ListGetIdx(&func->type.vars, i)) == scopeVar) return true;
     }
     return false;
 }
 
-//can a "{}"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
-//perspective of func (the function currently being checked)? NULL means "bare {} - this function's own
+//resolves scopeVar to whatever it's *effectively* bound to from op's own perspective, one hop through
+//op's own scopeBindings map (populated for a call operand by OperandFuncCall, for a member operand by
+//OperandMember, and propagated onto a var - and so onto every later read of it - by buildVarDeclStmnt) -
+//see the report on extending the static scope checker past one function's own frame. Falls through to
+//scopeVar unchanged when op carries no matching entry (the common case: nothing to substitute, either
+//because op has no map at all or scopeVar isn't one of the keys it knows how to resolve) - always exactly
+//one hop, never recursive: a binding's own boundTo is already a final, caller-frame-relative answer (see
+//struct scopeBinding's own comment in semantic.h), never itself a key needing further resolution.
+struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
+    if (!scopeVar) return NULL;
+    for (int i = 0; i < op->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
+        if (b->typeParam == scopeVar) return b->boundTo;
+    }
+    return scopeVar;
+}
+
+//can a "<>"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
+//perspective of func (the function currently being checked)? NULL means "bare <> - this function's own
 //private scope". olang has no lifetime-bound syntax (no Rust-style "'a: 'b"), so only two relationships
 //are ever provable: the exact same scope (trivially safe - covers own-into-own too), and a named scope
-//flowing into a bare "{}" slot (every scope RECEIVED as a parameter is guaranteed to outlive func's own
+//flowing into a bare "<>" slot (every scope RECEIVED as a parameter is guaranteed to outlive func's own
 //private scope, by construction - own's scope closes when func itself returns, strictly before any scope
 //its caller passed in could close - see the report). The reverse (own flowing into a named slot) is never
 //safe, and two DIFFERENT named scopes are never provably comparable at all.
 //Deliberately conservative outside func's own frame: a scope tag that isn't one of func's own declared
-//parameters (e.g. a struct's constructor's own scope parameter, read back through a field access on an
-//already-built instance - see the report) can't be compared against func's frame at all yet, so it's left
-//unchecked (same as before this feature existed) rather than risking a false rejection of valid code.
+//parameters, and that OperandFitsType's own resolveEffectiveScopeVar call couldn't resolve into one either
+//(a chain deeper than the one hop that mechanism covers - see the report), can't be compared against
+//func's frame at all yet, so it's left unchecked rather than risking a false rejection of valid code.
 bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstScope) {
+    srcScope = canonicalVar(srcScope);
+    dstScope = canonicalVar(dstScope);
     if (srcScope == dstScope) return true;
     if (srcScope && !varIsOwnParam(srcScope, func)) return true;
     if (dstScope && !varIsOwnParam(dstScope, func)) return true;
@@ -1272,7 +1330,8 @@ bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstSco
 enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
-    TYPE_FIT_SCOPE_MISMATCH //SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
+    TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
+    TYPE_FIT_ARRAY_SIZE_MISMATCH //WRONG_ARG_COUNT - same element type, both fixed-size, different sizes
 };
 
 //can op flow into a target-typed slot (assignment, initialization, argument passing)? an int literal
@@ -1280,7 +1339,7 @@ enum typeFit {
 //exactly - general implicit numeric conversion (e.g. int32->int64, or non-literal int->float) is
 //undecided language design, not implemented here.
 //func is the function currently being checked (NULL for a global initializer/test{} block) - only used for
-//the scope-safety check below: when both target and op->type are ALREADY "{}"-heap-indirect (an existing
+//the scope-safety check below: when both target and op->type are ALREADY "<>"-heap-indirect (an existing
 //reference being passed/reassigned, not a fresh literal about to be promoted - see typeNeedsMallocPromotion
 //in codegen.c, the codegen-side mirror of this same "already has a reference" condition), verify the
 //source's scope is provably at least as long-lived as the target's own declared scope - see
@@ -1291,19 +1350,45 @@ enum typeFit {
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     if (TypeIsSame(target, op->type)) {
         if (typeIsRefShaped(target) && target.structMAlloc && op->type.structMAlloc) {
-            if (!scopeCanFlowInto(func, op->type.scopeParam, target.scopeParam)) return TYPE_FIT_SCOPE_MISMATCH;
+            struct var* effectiveSrc = resolveEffectiveScopeVar(op, op->type.scopeParam);
+            if (!scopeCanFlowInto(func, effectiveSrc, target.scopeParam)) return TYPE_FIT_SCOPE_MISMATCH;
         }
         return TYPE_FIT_OK;
     }
     if (op->isLiteral && TypeIsInt(op->type) && TypeIsFloat(target)) {
+        //a real, pre-existing bug fixed alongside the array-literal rework: this widened op's TYPE but
+        //never actually converted its VALUE, leaving floatLiteralVal at its zero-initialized default -
+        //cgFloatConst (codegen.c) reads floatLiteralVal once op->type says float, so e.g. "x mut float32 =
+        //5" silently produced 0.0. Invisible before now because nothing in the existing test suite passed
+        //a bare int literal where a float was expected; surfaced immediately by a mixed int/float array
+        //literal built while testing the array-literal rework.
+        op->floatLiteralVal = (double)op->intLiteralVal;
         op->type = target;
         return TYPE_FIT_OK;
+    }
+    //a fresh fixed-size array literal may flow into a dynamic ("T[]") target regardless of its own size -
+    //malloc-and-copy at the point it's promoted (see typeNeedsDynamicPromotion/cgPromoteFixedArrayToDynamic
+    //in codegen.c). The array-sizing counterpart to the "<>"-reference malloc-promotion above - an
+    //orthogonal axis, not the same mechanism (see the report) - so it's gated on op->isLiteral the same way
+    //the int->float widening above is: an arbitrary *existing* fixed-array value flowing into a dynamic
+    //slot is a different, broader question this doesn't attempt to answer.
+    if (op->isLiteral && op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
+            && !op->type.arrMalloc && target.arrMalloc && TypeIsSame(*op->type.arrElem, *target.arrElem)) {
+        return TYPE_FIT_OK;
+    }
+    //both fixed-size arrays of the same element type, but the sizes differ - report the more specific
+    //WRONG_ARG_COUNT instead of the generic mismatch message. Not gated on op->isLiteral: this is just as
+    //meaningful for an existing fixed-array value as for a fresh literal.
+    if (op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
+            && !op->type.arrMalloc && !target.arrMalloc && TypeIsSame(*op->type.arrElem, *target.arrElem)) {
+        return TYPE_FIT_ARRAY_SIZE_MISMATCH;
     }
     return TYPE_FIT_MISMATCH;
 }
 
 void reportTypeFit(enum typeFit fit, struct token tok) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, WRONG_ARG_COUNT);
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
 }
 
@@ -1323,6 +1408,7 @@ bool OperandIsMutableLvalue(struct operand* op) {
 struct operand* OperandReadVar(struct var* v, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
     op->readVar = v;
+    op->scopeBindings = v->scopeBindings; //propagated one hop at declaration time - see buildVarDeclStmnt
     return op;
 }
 
@@ -1341,6 +1427,22 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
         reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
     }
+    //records, for each of func's own scope-typed parameters, what was concretely passed at this call site
+    //- "own" (bare) or a direct read of one of the CALLER's own scope parameters, the only two shapes a
+    //"scope"-typed argument can ever have (see the report). Lets a later read of this call's own return
+    //value (or, one hop further, a var initialized from it) resolve a scope tag that's one of func's own
+    //params back into something meaningful in the caller's frame - see resolveEffectiveScopeVar/
+    //OperandFitsType. Works identically whether func is an ordinary function or a struct's synthetic
+    //constructor - both are just a BASETYPE_FUNC var, no special-casing needed here either.
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* param = ListGetIdx(&func->type.vars, i);
+        if (param->type.bType != BASETYPE_SCOPE) continue;
+        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        struct scopeBinding b = (struct scopeBinding){0};
+        b.typeParam = param;
+        b.boundTo = arg->opType == OPERATION_READ_VAR ? arg->readVar : NULL;
+        ListAdd(&op->scopeBindings, &b);
+    }
     return op;
 }
 
@@ -1351,7 +1453,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
 //int64's extra range in practice); the underlying runtime slice field is i64, so the dynamic case
 //truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side effects a
 //more complex argument expression might have), but for a compile-time-known dimension (embedded, or a
-//"{}"-tagged fixed-size reference) codegen emits the constant directly rather than computing anything at
+//"<>"-tagged fixed-size reference) codegen emits the constant directly rather than computing anything at
 //runtime - only a genuinely dynamic ("T[]") array reads its length from the runtime slice.
 struct operand* OperandLen(struct operand* arg, struct token tok) {
     if (arg->type.bType != BASETYPE_ARRAY) {
@@ -1389,6 +1491,17 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     struct operand* op = operandNew(tok, OPERATION_MEMBER, memberVar->type);
     op->memberName = member;
     ListAdd(&op->args, &base);
+    //if this field carries a scope tag (only possible for a constructor-bearing type - see the report),
+    //resolve it through base's own scopeBindings map one hop and record the (possibly still-foreign)
+    //result under the same key, so a later OperandFitsType check on THIS member operand resolves it too -
+    //see resolveEffectiveScopeVar. A no-op (empty map on op) when the field has no scope tag, or base
+    //carries no relevant binding for it - falls back to today's "unverifiable, allow" behavior either way.
+    if (memberVar->type.scopeParam) {
+        struct scopeBinding b = (struct scopeBinding){0};
+        b.typeParam = memberVar->type.scopeParam;
+        b.boundTo = resolveEffectiveScopeVar(base, memberVar->type.scopeParam);
+        ListAdd(&op->scopeBindings, &b);
+    }
     return op;
 }
 
@@ -1627,18 +1740,6 @@ struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, stru
 
 //"int32[3][1, 2, 3]" (fixed - value count must match the declared size exactly) or "int32[][1, 2, 3]"
 //(dynamic - mallocd at runtime, see cgAggregateLiteral; size is just however many values are given)
-struct operand* OperandArrayLiteral(struct var* callerFunc, struct type t, struct list args, struct token tok) {
-    struct operand* op = operandNew(tok, OPERATION_NONE, t);
-    op->isLiteral = true;
-    op->args = args;
-    if (!t.arrMalloc && args.len != t.arrLen->intLiteralVal) { ErrMsgSemantic(tok, WRONG_ARG_COUNT); return op; }
-    for (int i = 0; i < args.len; i++) {
-        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
-        reportTypeFit(OperandFitsType(callerFunc, arg, *t.arrElem), arg->tok);
-    }
-    return op;
-}
-
 // ---- expressions ----
 
 enum operation opFromTokType(enum tokenType t) {
@@ -1764,19 +1865,76 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     return callOp;
 }
 
-//"T[N][v1, ...]"/"T[][v1, ...]" (fixed/dynamic array) - see resolveLiteralBaseType/applyArraySuffixes for
-//how the type itself is resolved, and OperandArrayLiteral for the value checks. firstTokOfType finds only
-//this rule's own direct "[" (the one right before the value list) - a preceding SNTX_ARR_SFX's own
-//brackets are nested one level deeper, inside its own sub-node.
+struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType, struct syntax* argsNode, struct token tok);
+
+//one item of an array literal's own SNTX_ARR_LIT_ARGS - either a nested bracket group (recursed into with
+//the same elemType, one array level deeper - see buildArrLiteralLevel) or a plain leaf expression.
+struct operand* buildArrLiteralItem(struct checkCtx* ctx, struct type elemType, struct syntax* item) {
+    if (item->type == SNTX_ARR_LIT_NESTED) {
+        struct token innerTok = firstTokOfType(item, TOK_SQUARE_O);
+        return buildArrLiteralLevel(ctx, elemType, firstPartOfType(item, SNTX_ARR_LIT_ARGS), innerTok);
+    }
+    return buildExprFromSyntax(ctx, item);
+}
+
+//builds one level of a (possibly nested) array literal - see the report. elemType is the one scalar
+//element type stated explicitly at the very front of the whole literal (e.g. "int32" in
+//"int32[[1,2,3],[4,5,6]]"), threaded down unchanged through every level of recursion; a nested row never
+//restates it. A leaf item (a plain value) is always checked against elemType directly - it's explicit and
+//authoritative at every depth, so e.g. an int literal correctly widens to float32 here the same way it
+//would anywhere else. A nested item has no restated type of its own, so instead the first row's own
+//recursively-determined type becomes this level's element type, and every sibling row is checked against
+//that - a differently-shaped or differently-sized sibling row surfaces as an ordinary type-fit error, the
+//same machinery as any other mismatch, no separate "shape" check needed. Always self-describing (fixed
+//size = however many items are given, at every level) regardless of what it's eventually checked against -
+//see OperandFitsType for the one case that's context-dependent (a fixed literal flowing into a dynamic
+//target).
+struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType, struct syntax* argsNode, struct token tok) {
+    struct list items = allSyntaxParts(argsNode);
+    struct list builtArgs = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < items.len; i++) {
+        struct syntax* item = *(struct syntax**)ListGetIdx(&items, i);
+        struct operand* built = buildArrLiteralItem(ctx, elemType, item);
+        ListAdd(&builtArgs, &built);
+    }
+    bool nested = items.len > 0 && (*(struct syntax**)ListGetIdx(&items, 0))->type == SNTX_ARR_LIT_NESTED;
+    struct type levelElemT = nested ? (*(struct operand**)ListGetIdx(&builtArgs, 0))->type : elemType;
+    for (int i = 0; i < builtArgs.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&builtArgs, i);
+        reportTypeFit(OperandFitsType(ctx->func, arg, levelElemT), arg->tok);
+    }
+
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_ARRAY;
+    t.arrElem = MallocOrCrash(sizeof(struct type));
+    *t.arrElem = levelElemT;
+    t.arrMalloc = false;
+    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
+    *lenOp = (struct operand){0};
+    lenOp->type = TypeVanilla(BASETYPE_INT64);
+    lenOp->isLiteral = true;
+    lenOp->intLiteralVal = builtArgs.len;
+    t.arrLen = lenOp;
+
+    struct operand* op = operandNew(tok, OPERATION_NONE, t);
+    op->isLiteral = true;
+    op->args = builtArgs;
+    return op;
+}
+
+//"T[v1, ...]" - see buildArrLiteralLevel for how the type itself is determined (from resolveLiteralBaseType
+//plus the argument list's own nesting/counts) and checked.
 struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
-    struct type t = applyArraySuffixes(resolveLiteralBaseType(ctx->mod, nameNode), s);
-    struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
-
-    if (t.bType == BASETYPE_ARRAY) return OperandArrayLiteral(ctx->func, t, args, tok);
-    ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
-    return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    struct type elemType = resolveLiteralBaseType(ctx->mod, nameNode);
+    //an error type has no constructible values at all - every element would fail to type-check anyway, but
+    //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
+    if (elemType.bType == BASETYPE_ERROR) {
+        ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
+        return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    }
+    return buildArrLiteralLevel(ctx, elemType, firstPartOfType(s, SNTX_ARR_LIT_ARGS), tok);
 }
 
 //"Type{v1, v2, ...}" - the parser only ever produces this node when the name was already confirmed to be
@@ -1946,7 +2104,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
     struct type declType;
     if (typeExprNode) {
-        //ctx->func is NULL for a global initializer, which has no parameter list to tag a "{name}" against
+        //ctx->func is NULL for a global initializer, which has no parameter list to tag a "<name>" against
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
         reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
@@ -1955,6 +2113,9 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
 
     struct var* v = scopeDeclare(ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
+    //propagated one hop, so a later read of v (OperandReadVar) can still resolve a scope tag that's one of
+    //rhs's own callee's scope params - see resolveEffectiveScopeVar
+    v->scopeBindings = rhs->scopeBindings;
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_VAR_DECL;
     stmt.var = *v;
@@ -2061,6 +2222,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType = initVal->type;
     }
     struct var* loopVar = scopeDeclare(innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
+    loopVar->scopeBindings = initVal->scopeBindings; //see buildVarDeclStmnt's identical propagation
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
     struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
@@ -2128,6 +2290,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     else if (val && ctx->func && ctx->func->type.hasRetType) {
         enum typeFit fit = OperandFitsType(ctx->func, val, *ctx->func->type.retType);
         if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(val->tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+        else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(val->tok, WRONG_ARG_COUNT);
         else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
     }
 
@@ -2354,6 +2517,7 @@ void semaCheckBodies(struct semaModule* mod) {
                 struct var* param = ListGetIdx(&t->ctorFunc->type.vars, p);
                 struct var* local = VarAllocSetOrigin();
                 *local = *param;
+                local->origin = param; //canonicalVar traces this copy back to the type-level original
                 local->mayBeInitialized = true;
                 local->mut = true;
                 ListAdd(&ctorScope.localPtrs, &local);
@@ -2405,6 +2569,7 @@ void semaCheckBodies(struct semaModule* mod) {
                 struct var* selfParam = ListGetIdx(&t->destructFunc->type.vars, 0);
                 struct var* selfLocal = VarAllocSetOrigin();
                 *selfLocal = *selfParam;
+                selfLocal->origin = selfParam; //canonicalVar traces this copy back to the type-level original
                 selfLocal->mayBeInitialized = true;
                 selfLocal->mut = true;
                 ListAdd(&dtorScope.localPtrs, &selfLocal);
@@ -2428,6 +2593,7 @@ void semaCheckBodies(struct semaModule* mod) {
             struct var* param = ListGetIdx(&func->type.vars, p);
             struct var* local = VarAllocSetOrigin();
             *local = *param;
+            local->origin = param; //canonicalVar traces this copy back to the type-level original
             local->mayBeInitialized = true;
             local->mut = true; //local variables (including parameters) are mutable by default
             ListAdd(&fnScope.localPtrs, &local);

@@ -124,18 +124,18 @@ of sync with the actual code.
   of these came up while building the test suite that motivated this change, so none were forced - but
   they're the same "capital letter = exported" rule, just not yet wired into their own grammar slot.
 - **Struct/array literal syntax + `:=` type inference.** Struct literals are `Type{v1, v2, ...}`
-  (positional, in member-declaration order); array literals are `T[N][v1, ...]` (fixed) / `T[][v1, ...]`
-  (dynamic/malloc'd) - two different delimiters now, not one shared one (see the parser-rewrite entry
-  below for why `{...}` finally became safe to use for structs). Both are general expressions usable
-  anywhere a value is needed, not just on the right of a var-decl; the type is always restated on the
-  literal itself (`x mut int32[] = int32[][5, 6, 7]`, not `x mut int32[] = [5, 6, 7]`), chosen so a
-  literal is self-describing and var-decl grammar needs no changes at all. `x := <literal>` infers `x`'s
-  type entirely from an initializing literal (locals, for-loop init vars, and globals, via the existing
-  two-phase resolve/check split); a non-literal initializer (`x := f()`) is a compile error
-  (`TYPE_CANNOT_BE_INFERRED`), since only a literal is guaranteed to syntactically carry a full concrete
-  type. `:=` is its own token (`TOK_ASS_INFER`), not reused `=`, because reusing `=` made `SNTX_VAR_DECL`
-  and `SNTX_STMNT_ASSIGN` (e.g. `result = 100`) genuinely ambiguous with no way to prefer one over the
-  other without a distinguishing token.
+  (positional, in member-declaration order); array literals are `T[v1, ...]` (see the dedicated array-
+  literal-syntax entry near the end of this section for the full design and history - the size/dynamic-
+  ness prefix shown in older text throughout this file, `T[N][v1, ...]`/`T[][v1, ...]`, was replaced).
+  Both are general expressions usable anywhere a value is needed, not just on the right of a var-decl; a
+  struct literal's type is always restated on the literal itself (`x mut Point = Point{5, 6}`, not `x mut
+  Point = {5, 6}`), chosen so a literal is self-describing and var-decl grammar needs no changes at all.
+  `x := <literal>` infers `x`'s type entirely from an initializing literal (locals, for-loop init vars,
+  and globals, via the existing two-phase resolve/check split); a non-literal initializer (`x := f()`) is
+  a compile error (`TYPE_CANNOT_BE_INFERRED`), since only a literal is guaranteed to syntactically carry a
+  full concrete type. `:=` is its own token (`TOK_ASS_INFER`), not reused `=`, because reusing `=` made
+  `SNTX_VAR_DECL` and `SNTX_STMNT_ASSIGN` (e.g. `result = 100`) genuinely ambiguous with no way to prefer
+  one over the other without a distinguishing token.
   **Struct literals moved from `[...]` to `{...}`** once the parser rewrite (below) made that safe: type
   names are now known to the parser (via `ScanTopLevelDecls`/`TypeNameLookup`), so `Type{` only ever
   commits to struct-literal parsing when `Type` is an actual declared type - an ordinary variable
@@ -143,12 +143,13 @@ of sync with the actual code.
   also incidentally **closes the old "a literal needs at least two values" gap for structs**: `Wrapper{42}`
   (a genuine single-field struct literal) parses correctly now, and so does `Point{}` (a clean
   `WRONG_ARG_COUNT` semantic error instead of a confusing parse failure) - both were structurally
-  impossible under the old bracket-only design. **Array literals deliberately kept `[...]` and their
-  existing single-value gap unchanged** (`int32[1][5]` still misparses as indexing, `int32[][]` still
-  doesn't work) - arrays were explicitly left alone, not swept into the same fix, so this asymmetry
-  between struct and array literals is intentional, not an oversight.
-  **Still out of scope:** `Type{}[...]` (heap-indirect struct construction - the first real `malloc` for a
-  struct) is deliberately not implemented, since it needs the ownership/lifetime model from the
+  impossible under the old bracket-only design. **Array literals kept their existing single-value gap for
+  a long time after this** (`int32[1][5]` misparsed as indexing) **- since resolved, not by the same
+  type-name-awareness mechanism, but as a side effect of dropping the size/dynamic-ness prefix entirely -
+  see the array-literal-syntax entry.**
+  **Still out of scope:** `Type<>[...]` (heap-indirect struct construction - the first real `malloc` for a
+  struct at the point a *reference* is directly constructed, as opposed to a plain value that then gets
+  promoted) is deliberately not implemented, since it needs the ownership/lifetime model from the
   ownership-scopes entry below to mean anything.
 - **The parser is hand-written recursive descent, not a table-driven PEG engine.** Full rewrite: `syntax.c`
   used to store the grammar as data (strings like `"SNTX_NAME SNTX_ARR_SFX* TOK_SQUARE_O ..."`, interpreted
@@ -705,12 +706,140 @@ of sync with the actual code.
   chain through more than one function's frame, is exactly as unchecked as it was before this feature
   existed - not a new gap, the *same* gap, just not yet closed.
 
+- **The static scope-containment checker, extended past one function's own frame - a bounded scope-
+  substitution mechanism, not a real generics/monomorphization system.** Closes the gap the previous entry
+  left open: a scope tag belonging to *another* frame (a constructor's own scope parameter, read back
+  through a field access; an ordinary function's own scope parameter, referenced in *its own* return type)
+  was previously only ever "foreign, unverifiable, allow" - which isn't just imprecise, it's a real
+  soundness hole. `ScopedBox(b, Point{1, 2})` inside a function with two unrelated scope parameters `a`/`b`,
+  followed by `return box.inner` declared `? Point<a>`, compiled with zero complaint even though `box`'s own
+  `s` is `b`, not `a` - confirmed by test before this fix, and correctly rejected after it.
+  **Mechanism: every operand (and, propagated, every var) may carry a small `scopeBindings` map** (`struct
+  scopeBinding { typeParam; boundTo; }`, semantic.h) - "at this call, the callee's own scope parameter
+  `typeParam` was concretely bound to `boundTo`". Built in `OperandFuncCall` for *any* call (ordinary
+  function or constructor - both are just a `BASETYPE_FUNC` var, no special-casing needed) by walking the
+  callee's own scope-typed params against the actual arguments: a `scope`-typed argument can only ever be
+  `own` (bound to `NULL`) or a direct read of one of the *caller's* own scope parameters (nothing else can
+  produce a `scope` value at all) - so a binding is always exactly one hop, never itself needs further
+  resolution through another map. `OperandMember` uses the same map to resolve a field's own scope tag (only
+  possible for a constructor-bearing type) through the base's map, recording the result under the same key
+  so a later check on *that* member operand can look it up too. `buildVarDeclStmnt`/`buildForStmnt` copy an
+  initializer's map onto the newly-declared var, and `OperandReadVar` copies a var's own map onto every
+  fresh read of it - together, this is the "one hop through a var-decl" the plan called for.
+  `resolveEffectiveScopeVar(op, scopeVar)` does the actual lookup (falls through to `scopeVar` unchanged
+  when nothing matches - the safe, conservative default); `OperandFitsType`'s existing scope-check branch
+  calls it once, on the source side, before handing off to `scopeCanFlowInto` - no new call sites needed,
+  same as every other extension to this one shared gate.
+  **A real, previously-latent bug found and fixed while building this, not really about scope tags at all:
+  a function's own parameters exist as two distinct `struct var` instances that were never the same
+  pointer** - the type-level original (`func->type.vars`, built once during signature resolution) and a
+  fresh copy pushed into the local scope chain for body-checking (`semaCheckBodies`, since a parameter is
+  also an ordinary local as far as `lookupVar`/`scopeFindLocal` are concerned). A type-level scope tag (a
+  var-decl's declared type, a return type) always resolves against the former; a *value-level read* (`own`,
+  or a bare identifier like an argument expression) always resolves against the latter. `varIsOwnParam`
+  comparing these by raw identity - which is exactly what capturing an argument's `readVar` into a
+  `scopeBinding` does - silently treated a function's own parameter as "not mine" the moment it was read as
+  a value rather than named in a type. This was *already true* before this session's own #1 (the original
+  checker only ever compared two type-level tags against each other, so the mismatch never surfaced) -
+  invisible until `scopeBindings` became the first mechanism to compare a value-level read against a
+  type-level list directly. Fixed with `canonicalVar` (semantic.c): `semaCheckBodies`'s three parameter-copy
+  sites (the ordinary-function case, and the constructor/destructor `.self`-style cases) now set the copy's
+  own `.origin` to the type-level original it was copied from (the same field ordinary locals already carry
+  via `VarAllocSetOrigin`, just previously never populated for a parameter copy specifically -
+  `VarAllocSetOrigin` itself also now zero-initializes before setting it, since the copy's own
+  post-`*local = *param` overwrite would otherwise leave `scopeBindings` and every other list field as raw,
+  un-`ListInit`'d garbage memory - a real, if previously harmless, footgun this surfaced too); `varIsOwnParam`
+  and `scopeCanFlowInto`'s own direct comparison both canonicalize through `.origin` before comparing.
+  **Still deliberately bounded, same honest framing as before:** exactly one hop through a var-decl, from a
+  call's own binding map onto the var it initializes, onto a later member access or return check on that
+  var. A second hop (reassigning through another variable, or a field of a field) is not attempted - the
+  same conservative "foreign, unverifiable, allow" default applies beyond this point, not a new gap, just
+  not yet closed further.
+
+- **Array literal syntax: dropped the redundant size/dynamic-ness prefix - `T[N][v1, ...]`/`T[][v1, ...]`
+  became `T[v1, ...]`.** User-driven: the array's own *variable* (or param/return/field type) already
+  states whether it's fixed-size or dynamic (`int32[3]` vs `int32[]`), so restating that on the literal
+  itself was pure redundancy - `a mut int32[] = int32[1, 2, 3, 6]` is now the whole story, matching the
+  same "don't repeat what the target already says" instinct that was never true for `:=` (which has
+  nothing to infer from *except* the literal, so it still can't apply here - see below).
+  **The literal is still fully self-describing, just about less: always a fixed-size array, sized by
+  however many values are given, at every level** - `int32[1, 2, 3]` is intrinsically `int32[3]`, always,
+  regardless of context. What became context-dependent is only what happens when that self-described
+  value is *checked against* a target that wants something else:
+  (1) **A fixed literal flowing into a dynamic (`T[]`) target** is now an implicit promotion - malloc a
+  fresh buffer and copy the fixed value's own elements into it (`cgPromoteFixedArrayToDynamic` in
+  codegen.c, invoked from both `cgStoreInto` and `cgBoundaryValue`, keyed on a new `typeNeedsDynamicPromotion`
+  predicate - the array-*sizing* counterpart to `typeNeedsMallocPromotion`'s array-*referencing* case,
+  an orthogonal axis, not the same mechanism). Gated on `op->isLiteral` in `OperandFitsType` (semantic.c),
+  same restriction the existing int-to-float widening already uses: an arbitrary *existing* fixed-array
+  value flowing into a dynamic slot is a different, broader question, not attempted here.
+  (2) **A fixed literal whose own inferred size doesn't match a fixed target's declared size** is
+  `WRONG_ARG_COUNT` (a new `TYPE_FIT_ARRAY_SIZE_MISMATCH` case in `enum typeFit`), checked against
+  whatever it's flowing into, rather than (as before) checked against a size the literal itself restated.
+  Not gated on `op->isLiteral` - this reuses the same underlying fact for *any* fixed-array size mismatch,
+  literal or not (see the real bug this surfaced, below).
+  Consequently, **`cgAggregateLiteral`'s old dynamic-array-building branch is now dead code and was
+  removed**: an `isLiteral` array operand is *never* `arrMalloc` any more (dynamic is only ever reached via
+  the promotion path above), so the function only ever needs to build a struct or a fixed array.
+  **A real, pre-existing bug found and fixed alongside this, unrelated to arrays specifically:**
+  `TypeIsSame`'s `BASETYPE_ARRAY` case never compared the two sides' actual fixed sizes at all (only
+  `arrMalloc`-ness and the element type) - so e.g. `x mut int32[5] = <some int32[3] value>` type-checked
+  with zero complaint, then read 5 elements' worth out of a 3-element backing store the moment
+  `cgStoreInto`'s by-ref load/store pair ran (a real buffer over-read). Invisible before now because
+  nothing ever needed the target's *declared* size to differ from a literal's *own restated* size, since
+  every literal always restated one; surfaced immediately once literals stopped restating their own size
+  and the "does the target's declared size match" question became load-bearing for the first time. Fixed
+  by comparing `arrLen`'s actual value whenever both sides are fixed - which is also exactly what makes
+  `WRONG_ARG_COUNT` (1 above) reachable at all, since `OperandFitsType`'s first check
+  (`TypeIsSame(target, op->type)`) now correctly falls through to it instead of silently reporting "same
+  type" for a real size mismatch.
+  **A second, separate, pre-existing bug found and fixed while testing this:** the *existing* int-literal-
+  widens-to-float path in `OperandFitsType` only ever updated the operand's *type* (`op->type = target`),
+  never its *value* - `cgFloatConst` (codegen.c) reads `op->floatLiteralVal` once `op->type` says float,
+  which was left at its zero-initialized default, so e.g. `x mut float32 = 5` silently produced `0.0`.
+  Invisible before now because nothing in the existing test suite passed a bare int literal where a float
+  was expected; surfaced immediately by a mixed int/float array literal (`float32[1, 2.5]`) built while
+  testing this feature. Fixed by also setting `op->floatLiteralVal = (double)op->intLiteralVal` at the
+  same point.
+  **Nesting (2D+): the scalar element type is stated exactly once, at the very front - a nested row
+  restates nothing.** `int32[[1, 2, 3], [4, 5, 6]]`, not `int32[int32[1,2,3], int32[4,5,6]]`: user-
+  specified directly. New grammar, syntax-only (never reachable from general expression parsing, so it
+  can't collide with anything): `SNTX_ARR_LIT_ARGS` (an item list where each item is either a plain `EXPR`
+  or a nested `SNTX_ARR_LIT_NESTED` bracket group with no leading name) and `parseArrLiteralNestedGroup`/
+  `parseArrLiteralArgs` (syntax.c), recursively parsed the same way at every depth. Checked the same way
+  recursively in semantic.c (`buildArrLiteralLevel`): a leaf item is always checked against the one
+  explicit scalar type (authoritative at *every* depth, so e.g. an int literal correctly still widens to
+  float32 several levels down); a nested item has no restated type of its own, so the *first* row's own
+  recursively-determined type becomes what every sibling row at that level must fit - a differently-sized
+  or differently-shaped sibling row surfaces as an ordinary type-fit error (now correctly catchable at
+  all, per the `TypeIsSame` fix above), not a separate "shape" check.
+  **A real parsing consequence, not just a simplification: array literals now need type-name-awareness,
+  the same mechanism struct literals already use, and this time it's load-bearing, not just tidiness.**
+  Under the old `T[N][v1,...]`/`T[][v1,...]` shape, `NAME ARR_SFX*` was *greedy* (`parseArrSfx` matches
+  any `[EXPR?]`), so a plain index expression like `a[0]` (exactly one bracket group) always failed to
+  match the *required trailing* value-list bracket and correctly fell back to ordinary indexing - array
+  literals never needed to know `NAME` was a real type, because they structurally needed *at least two*
+  bracket groups to succeed at all. The new `NAME [ ARGS ]` shape needs only *one* bracket group -
+  structurally identical to indexing - so without knowing `NAME` is a type, `a[0]` would now try (and
+  often accidentally succeed) as an attempted array literal. Fixed the same way struct literals already
+  solve this (`nameIsKnownType`, committing hard once matched - see the parser-rewrite entry): array
+  literals now only ever attempt to parse when the leading name is a known type *or* a recognized
+  primitive name (`nameIsPrimitiveTypeName`, syntax.c) - a **new** gate primitives specifically needed
+  that struct literals never did, since `declaredTypeNames`/`isKnownType` only ever tracked user
+  `type`/`error` declarations, never the fixed built-in primitive set (`bool`/`int32`/`int64`/`byte`/
+  `float32`/`float64`) that array literals - unlike struct literals - also have to recognize
+  (`int32[1,2,3]` needs this exactly as much as `Point{1,2}` needs `nameIsKnownType`).
+  **This also incidentally closes the old "single-value/empty array literal" gap** (`int32[1][5]`
+  misparsing as indexing, `int32[][]` not working) documented in the struct/array literal syntax entry
+  above - not via the same type-name-awareness fix that closed the equivalent struct-literal gap, but as a
+  side effect of the suffix loop (the actual source of that ambiguity) no longer existing at all.
+
 ## Open questions (settle before implementing further - don't silently "fix" these)
 
-- **Struct/array literal syntax: array literal syntax is settled; struct literals moved to `{...}`.** The
-  user explicitly confirmed array literals ("fine like they are") and gave the struct-literal delimiter
-  change as a direct instruction - both are implemented as described in the "Settled decisions" entry
-  above, and that instruction reads as continued buy-in on the literal-expression mechanism itself, not
-  renewed doubt about it. What's still genuinely open is narrower than before: not "should literals like
-  this exist," but "is `{...}` this pinned as *the* answer for structs" - still worth checking before
-  building further features on top of it as permanent without confirming.
+- **Struct literal delimiter: struct literals moved to `{...}` on a direct instruction - still worth
+  confirming it's pinned as permanent before building further on top of it.** Not "should literals like
+  this exist" (settled, see "Settled decisions" above), just narrowly: is `{...}` *the* answer for structs
+  specifically, long-term. (Array literal syntax was *also* revisited since this question was first
+  written - see the dedicated array-literal-syntax entry above - so "array literals are settled, only
+  struct delimiter is open" is no longer an accurate framing of this question; struct literals are the
+  only piece still genuinely unconfirmed.)

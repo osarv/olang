@@ -372,6 +372,26 @@ func narrowNamedIntoOwn(s scope) ? int32 {
     return q.x
 }
 
+## extends the static checker past one function's own frame: a call operand (constructor or ordinary
+## function, same mechanism either way) now carries its own scope-binding map - what each of the callee's
+## own scope params was concretely bound to at this call site - propagated one hop through a var-decl, so
+## a later member access (or the call's own return value directly) can be checked against the CALLER's own
+## frame instead of being silently treated as "foreign, unverifiable, allow". "box"'s own "s" is bound to
+## "a" here, so returning "box.inner" against the declared "Point<a>" return type is a real, verified match
+## - not just an unverified pass-through. Swapping "a" for a second, unrelated scope parameter here (i.e.
+## "ScopedBox(otherScope, ...)") is correctly rejected at compile time - not testable here since a rejected
+## program can't run as a test{} block; verified ad hoc during development instead.
+func fillBoxViaCtorChecked(a scope, x int32, y int32) ? Point<a> {
+    box mut ScopedBox<> = ScopedBox(a, Point{x, y})
+    return box.inner
+}
+
+## same extension, for an ordinary function call's own return type rather than a constructor field -
+## "makePoint"'s own "s" is bound to "a" here, so the return type "Point<a>" is a real, verified match.
+func makePointChecked(a scope, x int32, y int32) ? Point<a> {
+    return makePoint(x, y, a)
+}
+
 ## the type-level generalization of "a bare '<>' field's scope inherits its container's own scope" - see
 ## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "<name>" tag the way
 ## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
@@ -494,12 +514,42 @@ test "nested struct literals" {
 }
 
 test "array literal construction, fixed and dynamic" {
-    fixed mut int32[3] = int32[3][10, 20, 30]
-    dyn mut int32[] = int32[][10, 20, 30]
+    fixed mut int32[3] = int32[10, 20, 30]
+    dyn mut int32[] = int32[10, 20, 30]
     assert(fixed[0] == 10)
     assert(fixed[2] == 30)
     assert(dyn[0] == 10)
     assert(dyn[2] == 30)
+}
+
+## a single-value (or empty) array literal was structurally impossible under the old "T[N][v1, ...]"/
+## "T[][v1, ...]" syntax (the mandatory value-list bracket was indistinguishable from a trailing size
+## suffix, so it got silently swallowed and the whole literal misparsed as indexing instead) - the new
+## "T[v1, ...]" syntax has no suffix loop to cause that, so both now just work.
+test "a single-value and an empty array literal both parse correctly" {
+    one mut int32[1] = int32[42]
+    assert(one[0] == 42)
+    empty mut int32[0] = int32[]
+    assert(len(empty) == 0)
+}
+
+## the array literal itself never restates a type - "Point" (a struct type) works exactly like "int32"
+## does, each element checked against it the same way a struct literal checks each field
+test "an array literal of struct values" {
+    pts mut Point[2] = Point[Point{1, 2}, Point{3, 4}]
+    assert(pts[0].x == 1)
+    assert(pts[1].y == 4)
+}
+
+## an int literal correctly widens to float here the same way it does anywhere else an int-to-float fit is
+## checked (OperandFitsType) - also exercises a real, pre-existing bug this surfaced and fixed: widening
+## only ever updated the operand's TYPE, never its VALUE, so cgFloatConst (codegen.c) read an
+## uninitialized floatLiteralVal and silently produced 0.0 - invisible before now because nothing in the
+## existing suite passed a bare int literal where a float was expected.
+test "an int literal widens to float inside an array literal" {
+    f mut float32[2] = float32[1, 2.5]
+    assert(f[0] == 1.0)
+    assert(f[1] == 2.5)
 }
 
 ## "<>"/"<name>" now apply to arrays exactly the same way they already apply to structs - reusing
@@ -509,13 +559,15 @@ test "array literal construction, fixed and dynamic" {
 ## already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
 ## dynamic ("int32[]<>") reference is deliberately not addressed yet - see the report.
 func makeFixedArrayRef(s scope) ? int32[3]<s> {
-    return int32[3][7, 8, 9]
+    return int32[7, 8, 9]
 }
 
 ## array suffixes wrap outer-first: "int32[2][3]" is an array of 2, each element an int32[3] - reading
-## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order.
+## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order. The literal
+## itself never restates this - "int32" (the scalar base) is only ever stated once, at the very front;
+## each nested "[...]" row needs no type of its own - see the report.
 func makeFixed2DRef(s scope) ? int32[2][3]<s> {
-    return int32[2][3][int32[3][1, 2, 3], int32[3][4, 5, 6]]
+    return int32[[1, 2, 3], [4, 5, 6]]
 }
 
 test "a fixed-size array reference survives crossing a function boundary via a named scope" {
@@ -534,7 +586,7 @@ test "a 2D fixed array reference - outer dimension first" {
 ## Compile-time-known dimensions (embedded, or a fixed-size "<>" reference) cost nothing at runtime;
 ## only a genuinely dynamic array reads its length from the runtime slice - see OperandLen/cgLen.
 test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic arrays" {
-    embedded mut int32[4] = int32[4][1, 2, 3, 4]
+    embedded mut int32[4] = int32[1, 2, 3, 4]
     assert(len(embedded) == 4)
 
     ref mut int32[3]<> = makeFixedArrayRef(own)
@@ -544,7 +596,7 @@ test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic ar
     assert(len(m) == 2)
     assert(len(m[0]) == 3)
 
-    dyn mut int32[] = int32[][10, 20, 30]
+    dyn mut int32[] = int32[10, 20, 30]
     assert(len(dyn) == 3)
 }
 
@@ -746,4 +798,16 @@ test "a bare '<>' field assigned through a two-hop chain of bare '<>' bases reso
 test "the static scope checker allows a received named scope to narrow into this function's own bare '<>' scope" {
     r mut int32 = narrowNamedIntoOwn(own)
     assert(r == 7)
+}
+
+test "the static scope checker verifies a constructor field's scope tag through a call's own binding map" {
+    b mut Point<> = fillBoxViaCtorChecked(own, 3, 4)
+    assert(b.x == 3)
+    assert(b.y == 4)
+}
+
+test "the static scope checker verifies an ordinary function's return-type scope tag through a call's own binding map" {
+    p mut Point<> = makePointChecked(own, 5, 6)
+    assert(p.x == 5)
+    assert(p.y == 6)
 }
