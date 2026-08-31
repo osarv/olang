@@ -137,25 +137,25 @@ func classifyPoint(p Point) ? int32 {
 }
 
 ## "scope" is a restricted type (like an error type): only ever a function parameter's type, never a
-## struct field, a return type on its own, or an ordinary variable's type - see CLAUDE.md. A "{name}" tag
-## names which scope-typed parameter a value is allocated into; bare "{}" (unchanged from before) means
+## struct field, a return type on its own, or an ordinary variable's type - see CLAUDE.md. A "<name>" tag
+## names which scope-typed parameter a value is allocated into; bare "<>" (unchanged from before) means
 ## the value's own private scope. "own" is a keyword evaluating to that private scope as a passable value,
 ## so a caller can hand a callee its own scope instead of the callee's default private one.
-func makePoint(x int32, y int32, s scope) ? Point{s} {
-    p mut Point{s} = Point{x, y}
+func makePoint(x int32, y int32, s scope) ? Point<s> {
+    p mut Point<s> = Point{x, y}
     return p
 }
 
-## A plain struct literal (structMAlloc false) fitting a "{}"-heap-indirect target (structMAlloc true) is
+## A plain struct literal (structMAlloc false) fitting a "<>"-heap-indirect target (structMAlloc true) is
 ## allowed by the type checker (TypeIsSame deliberately ignores structMAlloc for structs), so codegen must
 ## malloc-and-copy at every point that promotion can happen - a var-decl, a call argument, and a return
 ## value - rather than just aliasing the literal's own (about-to-be-gone) stack storage. See cgStoreInto/
 ## cgBoundaryValue in codegen.c.
-func takesHeapPoint(p Point{}) ? int32 {
+func takesHeapPoint(p Point<>) ? int32 {
     return p.x
 }
 
-func returnsHeapPoint(s scope) ? Point{s} {
+func returnsHeapPoint(s scope) ? Point<s> {
     return Point{9, 8}
 }
 
@@ -167,14 +167,14 @@ func sumManyPoints(n int32, s scope) ? int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
-        p mut Point{s} = Point{i, i}
+        p mut Point<s> = Point{i, i}
         total = total + p.x
         i++
     } while i < n
     return total
 }
 
-## a bare "{}" struct field (fields can't carry an explicit "{name}" tag yet - no scope-generic struct
+## a bare "<>" struct field (fields can't carry an explicit "<name>" tag yet - no scope-generic struct
 ## types, see the report) has no declared scope of its own; a field write's promoted literal used to
 ## always land in "whatever function is executing right now" regardless of which scope the containing
 ## instance actually belongs to - a real dangling-pointer hazard the instant that function returns, for
@@ -183,13 +183,13 @@ func sumManyPoints(n int32, s scope) ? int32 {
 ## different function than the one that allocated the containing instance.
 type BoxedPoint struct {
     tag int32,
-    inner Point{}
+    inner Point<>
 }
 
 ## the narrow fix (not the general one - see the report): when the base of "base.field = ..." is itself a
-## "{}"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
+## "<>"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
 ## that same scope, instead of this function's own (about-to-close) private scope
-func fillBoxedPoint(s scope, b BoxedPoint{s}, x int32, y int32) ? int32 {
+func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) ? int32 {
     b.inner = Point{x, y}
     return b.inner.x
 }
@@ -198,7 +198,7 @@ func fillBoxedPoint(s scope, b BoxedPoint{s}, x int32, y int32) ? int32 {
 ## allocating something comparably sized right after - if "inner" had dangled into fillBoxedPoint's own
 ## scope instead of the caller's, this corrupts it and the later read in the test below fails
 func noisePoint(n int32) ? int32 {
-    p mut Point{} = Point{n, n}
+    p mut Point<> = Point{n, n}
     return p.x
 }
 
@@ -313,22 +313,22 @@ type Handle struct(id int32) {
     resourcesClosed = resourcesClosed + 1
 }
 
-## a plain (non-"{}") local's destructor runs right before the enclosing function returns - RAII tied to
+## a plain (non-"<>") local's destructor runs right before the enclosing function returns - RAII tied to
 ## the function's own frame, not the scope-arena machinery at all
 func useHandleLocally() ? int32 {
     h mut Handle = Handle(7)
     return h.id
 }
 
-## a "{}"-heap-indirect instance's destructor instead runs when its *owning scope* closes - registered
+## a "<>"-heap-indirect instance's destructor instead runs when its *owning scope* closes - registered
 ## with that scope at allocation time (see __olang_scope_register_dtor in codegen.c) and walked in LIFO
-## order right before that scope's chunks are reclaimed. Bare "{}" here means this function's own private
+## order right before that scope's chunks are reclaimed. Bare "<>" here means this function's own private
 ## scope, so every registration from one call of this function is torn down together the moment it returns.
 func useManyHandlesLocally(n int32) ? int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
-        h mut Handle{} = Handle(i)
+        h mut Handle<> = Handle(i)
         total = total + h.id
         i++
     } while i < n
@@ -338,23 +338,23 @@ func useManyHandlesLocally(n int32) ? int32 {
 ## constructors already give a struct field a real, type-level scope - no generics syntax needed. A
 ## field's type is resolved against the constructor's own parameter list (see resolveStructCtorInto in
 ## semantic.c), the same way a later parameter can already reference an earlier one - so a field can
-## already name a real "{name}" scope tag pointing at one of the constructor's own scope parameters,
+## already name a real "<name>" scope tag pointing at one of the constructor's own scope parameters,
 ## same as any function parameter/return type already could. This only works for constructor-bearing
-## types: a plain "type X struct { ... }" still has no parameter list to resolve a field's "{name}"
+## types: a plain "type X struct { ... }" still has no parameter list to resolve a field's "<name>"
 ## against at all - that half of the scope-generic-struct-types gap is still open.
-type ScopedBox struct(s scope, inner Point{s}) {
+type ScopedBox struct(s scope, inner Point<s>) {
     inner
 }
 
-func fillBoxViaCtor(outer scope) ? Point{outer} {
-    b mut ScopedBox{} = ScopedBox(outer, Point{7, 8})
+func fillBoxViaCtor(outer scope) ? Point<outer> {
+    b mut ScopedBox<> = ScopedBox(outer, Point{7, 8})
     return b.inner
 }
 
 ## the transitive counterpart to BARE_SCOPE_RETURN_TYPE (resolveFuncSig in semantic.c): a PLAIN return
-## type that embeds a bare "{}" field anywhere inside it dangles the same way a bare "{}" return type
-## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "{}" on the
-## return type at all) - allowed, and correctly so, since "inner" carries an explicit "{s}" tag rather
+## type that embeds a bare "<>" field anywhere inside it dangles the same way a bare "<>" return type
+## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "<>" on the
+## return type at all) - allowed, and correctly so, since "inner" carries an explicit "<s>" tag rather
 ## than a bare one; nothing about returning the wrapping struct plain is unsound here.
 func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
     return ScopedBox(outer, Point{x, y})
@@ -362,43 +362,43 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
 
 ## the static scope checker's one positively-provable narrowing rule (scopeCanFlowInto in semantic.c): a
 ## value tagged with a scope RECEIVED as a parameter is always safe to store into a slot tagged with this
-## function's own bare "{}" scope, since every received scope is guaranteed to outlive the function's own
+## function's own bare "<>" scope, since every received scope is guaranteed to outlive the function's own
 ## private one (which closes the instant this function itself returns). The reverse, and two different
 ## named scopes of the same function, are both rejected at compile time - not testable here since a
 ## rejected program can't run as a test{} block; verified ad hoc during development instead.
 func narrowNamedIntoOwn(s scope) ? int32 {
-    p mut Point{s} = fillBoxViaCtor(s)
-    q mut Point{} = p
+    p mut Point<s> = fillBoxViaCtor(s)
+    q mut Point<> = p
     return q.x
 }
 
-## the type-level generalization of "a bare '{}' field's scope inherits its container's own scope" - see
-## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "{name}" tag the way
+## the type-level generalization of "a bare '<>' field's scope inherits its container's own scope" - see
+## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "<name>" tag the way
 ## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
-## NestedBox instance ends up: when a NestedBox literal is itself being promoted into a "{}" target
+## NestedBox instance ends up: when a NestedBox literal is itself being promoted into a "<>" target
 ## (cgValueForTarget/cgBoundaryValue set the ambient ctx->targetScopeOverride before building it), a bare
 ## field's own malloc now uses that same ambient scope (cgAggregateLiteral) instead of unconditionally
 ## defaulting to whatever function happens to be executing right now.
 type NestedBox struct {
-    inner Point{}
+    inner Point<>
 }
 
-func makeNestedBox(s scope, x int32, y int32) ? NestedBox{s} {
+func makeNestedBox(s scope, x int32, y int32) ? NestedBox<s> {
     return NestedBox{Point{x, y}}
 }
 
-## two levels of bare "{}" nesting, to stress cgResolveEffectiveScope's walk past the immediate base -
+## two levels of bare "<>" nesting, to stress cgResolveEffectiveScope's walk past the immediate base -
 ## "co.mid.leaf = ..." (see the test below) has "co.mid" (bare - no scope of its own) as its immediate
 ## base, which only resolves correctly by walking one hop further, into "co" itself.
 type ChainMid struct {
-    leaf Point{}
+    leaf Point<>
 }
 
 type ChainOuter struct {
-    mid ChainMid{}
+    mid ChainMid<>
 }
 
-func setChainLeaf(s scope, co ChainOuter{s}, x int32, y int32) ? int32 {
+func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) ? int32 {
     co.mid.leaf = Point{x, y}
     return 0
 }
@@ -408,7 +408,7 @@ func setChainLeaf(s scope, co ChainOuter{s}, x int32, y int32) ? int32 {
 ## needed to malloc-promote a plain literal into it: the tag's name ("s") only has meaning inside the
 ## callee's own body, not at the caller, so trying to resolve it there via the normal local-lookup path
 ## found nothing and crashed. See cgResolveParamScopeOverride in codegen.c.
-func takesScopedPoint(s scope, p Point{s}) ? int32 {
+func takesScopedPoint(s scope, p Point<s>) ? int32 {
     return p.x
 }
 
@@ -502,45 +502,45 @@ test "array literal construction, fixed and dynamic" {
     assert(dyn[2] == 30)
 }
 
-## "{}"/"{name}" now apply to arrays exactly the same way they already apply to structs - reusing
+## "<>"/"<name>" now apply to arrays exactly the same way they already apply to structs - reusing
 ## structMAlloc/scopeParam generically rather than duplicating the whole marker mechanism (see the
-## report). Only the fixed-size case is wired up so far: a "{}"-heap-indirect array with a known
-## compile-time length ("int32[3]{}") is just a bare pointer, the same free lunch a struct reference
+## report). Only the fixed-size case is wired up so far: a "<>"-heap-indirect array with a known
+## compile-time length ("int32[3]<>") is just a bare pointer, the same free lunch a struct reference
 ## already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
-## dynamic ("int32[]{}") reference is deliberately not addressed yet - see the report.
-func makeFixedArrayRef(s scope) ? int32[3]{s} {
+## dynamic ("int32[]<>") reference is deliberately not addressed yet - see the report.
+func makeFixedArrayRef(s scope) ? int32[3]<s> {
     return int32[3][7, 8, 9]
 }
 
 ## array suffixes wrap outer-first: "int32[2][3]" is an array of 2, each element an int32[3] - reading
 ## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order.
-func makeFixed2DRef(s scope) ? int32[2][3]{s} {
+func makeFixed2DRef(s scope) ? int32[2][3]<s> {
     return int32[2][3][int32[3][1, 2, 3], int32[3][4, 5, 6]]
 }
 
 test "a fixed-size array reference survives crossing a function boundary via a named scope" {
-    a mut int32[3]{} = makeFixedArrayRef(own)
+    a mut int32[3]<> = makeFixedArrayRef(own)
     assert(a[0] == 7)
     assert(a[2] == 9)
 }
 
 test "a 2D fixed array reference - outer dimension first" {
-    m mut int32[2][3]{} = makeFixed2DRef(own)
+    m mut int32[2][3]<> = makeFixed2DRef(own)
     assert(m[0][0] == 1)
     assert(m[1][2] == 6)
 }
 
 ## unlike C, an olang array always carries its own length - len() is the sanctioned way to read it.
-## Compile-time-known dimensions (embedded, or a fixed-size "{}" reference) cost nothing at runtime;
+## Compile-time-known dimensions (embedded, or a fixed-size "<>" reference) cost nothing at runtime;
 ## only a genuinely dynamic array reads its length from the runtime slice - see OperandLen/cgLen.
 test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic arrays" {
     embedded mut int32[4] = int32[4][1, 2, 3, 4]
     assert(len(embedded) == 4)
 
-    ref mut int32[3]{} = makeFixedArrayRef(own)
+    ref mut int32[3]<> = makeFixedArrayRef(own)
     assert(len(ref) == 3)
 
-    m mut int32[2][3]{} = makeFixed2DRef(own)
+    m mut int32[2][3]<> = makeFixed2DRef(own)
     assert(len(m) == 2)
     assert(len(m[0]) == 3)
 
@@ -579,14 +579,14 @@ test "try/catch: SafeDiv reports failure on divide by zero" {
 }
 
 test "own passes a test's own scope down to a scope-parameterized function" {
-    p mut Point{} = makePoint(3, 4, own)
+    p mut Point<> = makePoint(3, 4, own)
     assert(p.x == 3)
     assert(p.y == 4)
 }
 
 test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
     assert(takesHeapPoint(Point{5, 6}) == 5)
-    q mut Point{} = returnsHeapPoint(own)
+    q mut Point<> = returnsHeapPoint(own)
     assert(q.x == 9)
     assert(q.y == 8)
 }
@@ -657,8 +657,8 @@ test "assert without parentheses" {
     assert !(x == 6)
 }
 
-test "a bare '{}' field assigned through a scope-tagged parameter survives the callee's return" {
-    box mut BoxedPoint{} = BoxedPoint{1, Point{0, 0}}
+test "a bare '<>' field assigned through a scope-tagged parameter survives the callee's return" {
+    box mut BoxedPoint<> = BoxedPoint{1, Point{0, 0}}
     result mut int32 = fillBoxedPoint(own, box, 7, 8)
     assert(result == 7)
 
@@ -681,7 +681,7 @@ test "a parameter type may reference an earlier parameter as its scope tag" {
 }
 
 test "a constructor field's scope tag, referencing the constructor's own scope parameter, survives the constructor call returning" {
-    q mut Point{} = fillBoxViaCtor(own)
+    q mut Point<> = fillBoxViaCtor(own)
     assert(q.x == 7)
     assert(q.y == 8)
 
@@ -704,8 +704,8 @@ test "a struct returned entirely by value still compiles fine when its nested re
     assert(box.inner.y == 4)
 }
 
-test "a plain struct's bare '{}' field survives a function boundary by inheriting its container's own target scope" {
-    nb mut NestedBox{} = makeNestedBox(own, 11, 22)
+test "a plain struct's bare '<>' field survives a function boundary by inheriting its container's own target scope" {
+    nb mut NestedBox<> = makeNestedBox(own, 11, 22)
     assert(nb.inner.x == 11)
     assert(nb.inner.y == 22)
 
@@ -722,8 +722,8 @@ test "a plain struct's bare '{}' field survives a function boundary by inheritin
     assert(nb.inner.y == 22)
 }
 
-test "a bare '{}' field assigned through a two-hop chain of bare '{}' bases resolves to the outermost named scope" {
-    co mut ChainOuter{} = ChainOuter{ChainMid{Point{0, 0}}}
+test "a bare '<>' field assigned through a two-hop chain of bare '<>' bases resolves to the outermost named scope" {
+    co mut ChainOuter<> = ChainOuter{ChainMid{Point{0, 0}}}
     r mut int32 = setChainLeaf(own, co, 5, 6)
     assert(r == 0)
     assert(co.mid.leaf.x == 5)
@@ -743,7 +743,7 @@ test "a bare '{}' field assigned through a two-hop chain of bare '{}' bases reso
     assert(co.mid.leaf.y == 6)
 }
 
-test "the static scope checker allows a received named scope to narrow into this function's own bare '{}' scope" {
+test "the static scope checker allows a received named scope to narrow into this function's own bare '<>' scope" {
     r mut int32 = narrowNamedIntoOwn(own)
     assert(r == 7)
 }

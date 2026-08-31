@@ -12,12 +12,12 @@ of sync with the actual code.
 
 - **Value vs. reference semantics.** A struct or fixed/dynamic array is a value type by default -
   `==`/`!=` do a structural (deep, memberwise/elementwise) comparison, not pointer identity. A
-  trailing `{}` on a type reference (e.g. `MyStruct{}`) makes that level heap-indirect - a reference,
-  the same way an object reference works in Java. `==` on a `{}` reference is pointer identity on
-  purpose, and `{}` is also what breaks recursive-embedding cycles (a struct can only embed itself
-  through a `{}` indirection). **Briefly spelled `&`/`&name` instead, then reverted back to
-  `{}`/`{name}`** - see the dedicated "reference syntax: `{}` vs `&`" entry near the end of this
-  section for the full round trip and why `{}` was kept.
+  trailing `<>` on a type reference (e.g. `MyStruct<>`) makes that level heap-indirect - a reference,
+  the same way an object reference works in Java. `==` on a `<>` reference is pointer identity on
+  purpose, and `<>` is also what breaks recursive-embedding cycles (a struct can only embed itself
+  through a `<>` indirection). **Spelling history: `{}`/`{name}`, briefly `&`/`&name`, back to
+  `{}`/`{name}`, now settled on `<>`/`<name>`** - see the dedicated "reference syntax" entry near the
+  end of this section for the full history and why `<>` was the final choice.
 - **`error` statement.** Selects the error part of a function's declared return union, e.g.
   `error MyError.NotFound`. Grammar: `error TypeName.word`. The named error type must appear in the
   enclosing function's signature (`MyError + MyError2 ? T`), and `word` must be one of that error
@@ -219,14 +219,14 @@ of sync with the actual code.
   `func apply(f func(n int32) ? int32) ...)`) was never affected - that genuinely is a real storage slot.
   Fixed in `cgValue` (codegen.c): a bare read of a function that doesn't resolve to a local now returns
   its mangled address directly instead of loading through it.
-- **Ownership scopes (design settled, implementation partial) - `scope` type + `{}`/`{name}` tagging.**
+- **Ownership scopes (design settled, implementation partial) - `scope` type + `<>`/`<name>` tagging.**
   Direction, chosen after a long design discussion: olang moves away from "no free/GC, deliberate leak
   forever" toward compiler-enforced (not runtime-checked, not manually-managed) memory *and* resource
   release, modeled on RAII rather than a tracing GC or Rust's full borrow checker. The core idea: every
-  `{}`-heap-indirect value belongs to a *scope* - a nested, strictly FILO-closing region (implemented as a
+  `<>`-heap-indirect value belongs to a *scope* - a nested, strictly FILO-closing region (implemented as a
   growable, chunked bump allocator: cheap to open, and since nothing inside it is ever freed
-  individually, closing it is an O(1) bulk operation, not a general malloc/free). A bare `{}` means "this
-  value's own private scope, closed when its own call returns"; `{name}` tags a
+  individually, closing it is an O(1) bulk operation, not a general malloc/free). A bare `<>` means "this
+  value's own private scope, closed when its own call returns"; `<name>` tags a
   value to an explicitly-passed `scope`-typed parameter instead, so it can escape into the *caller's*
   scope rather than dying with the callee. Critically, a callee's own private allocations and whatever it
   writes into a passed-in scope are never the same physical arena - each scope is its own independent
@@ -245,7 +245,7 @@ of sync with the actual code.
   scope-generic-struct-fields entry near the end of this section).
   **`own` - the root-scope answer.** A new keyword, usable as an ordinary expression anywhere a
   `scope`-typed value is expected, evaluating to "the enclosing function's own private scope" - the same
-  scope bare `{}` already implicitly means, just now nameable so it can be *passed* (e.g.
+  scope bare `<>` already implicitly means, just now nameable so it can be *passed* (e.g.
   `makeNode(5, own)`), not just used locally. Deliberately not `self`/`this`: those read as "the current
   object instance" in every language that has them, and olang has no general OOP methods (see the
   constructors/destructors entry below) - `own` reads as what it actually is. `main` and every
@@ -258,12 +258,12 @@ of sync with the actual code.
   there's no new way for a scope to escape its origin. `OperandOwn` in semantic.c requires
   `ctx->hasOwnScope` (true inside a function body or a `test { }` block, false for a global initializer,
   which has no enclosing scope at all).
-  **What's implemented:** the grammar (`{}` optionally carrying a `TOK_IDEN`), `scope` as a
-  parameter-only type, `own` as a primary expression, and resolving `{name}` tags in parameter types,
+  **What's implemented:** the grammar (`<>` optionally carrying a `TOK_IDEN`), `scope` as a
+  parameter-only type, `own` as a primary expression, and resolving `<name>` tags in parameter types,
   return types, and local var-decl types, with the resolved parameter recorded on
   `struct type.scopeParam` in semantic.h.
   **A real, pre-existing bug this surfaced and fixed, unrelated to the scope design itself:** a plain
-  struct literal (structMAlloc false) is allowed by the type checker to fit a `{}`-heap-indirect target
+  struct literal (structMAlloc false) is allowed by the type checker to fit a `<>`-heap-indirect target
   (structMAlloc true) - `TypeIsSame` deliberately ignores structMAlloc for structs - but codegen was never
   actually promoting that case to a heap allocation at any of the three places it can happen (a var-decl,
   a call argument, a return value): it just aliased the literal's own about-to-be-gone stack storage,
@@ -291,13 +291,13 @@ of sync with the actual code.
   propagation path, and the implicit fell-off-the-end case) - stress-tested with thousands of allocations
   across many scope open/close cycles, including allocations larger than one default (4096-byte) chunk.
   **New restriction this required, not just an implementation detail: a function's return type can never
-  be a bare `{}` (untagged) heap-indirect struct** (`BARE_SCOPE_RETURN_TYPE`, checked once in
+  be a bare `<>` (untagged) heap-indirect struct** (`BARE_SCOPE_RETURN_TYPE`, checked once in
   `resolveFuncSig`, which covers every return statement in that function for free). Before the real
   allocator existed this was harmless (plain `malloc`, nothing ever got reclaimed); the moment "own"'s
   scope actually closes at return, a value tagged to it would already be dangling before the caller ever
   saw it - the function's own private scope closes at the exact point it returns. Return something tagged
-  to an explicitly-*passed* scope instead (`{s}`, e.g. `func f(s scope) ? Node{s}`), same as escaping to a
-  caller always required. This does **not** catch a bare `{}` field nested inside a plain (non-heap-
+  to an explicitly-*passed* scope instead (`<s>`, e.g. `func f(s scope) ? Node<s>`), same as escaping to a
+  caller always required. This does **not** catch a bare `<>` field nested inside a plain (non-heap-
   indirect) struct that then gets returned - that's the same still-open scope-generics gap below, not
   attempted here.
   **A second, separate, more severe pre-existing bug found and fixed while stress-testing this:**
@@ -310,14 +310,14 @@ of sync with the actual code.
   multiply by the element count.
   **What's deliberately still not implemented, and why each is its own next step:**
   (1) **No scope-generic struct types for *plain* structs specifically** - narrower than originally
-  written here. A struct field like `next Node{s}` needing the *type itself* to be generic over which
+  written here. A struct field like `next Node<s>` needing the *type itself* to be generic over which
   scope its self-referential fields belong to turns out **not to need a new generics mechanism at all for
   a constructor-bearing type** - see the "constructors already give struct fields a real, type-level
   scope" entry below, a real discovery, not something designed in from the start. What's still open is
   narrower: a **plain** `type X struct { ... }` (no `struct(params)`) has no parameter list at all to
-  resolve a field's `{name}` tag against, so it's still limited to a bare `{}` (private-scope); an
-  explicit `{name}` there still correctly fails with `UNKNOWN_SCOPE`. **A plain struct wrapping a
-  bare-`{}` field that then escapes via *return* is now rejected at compile time** instead of silently
+  resolve a field's `<name>` tag against, so it's still limited to a bare `<>` (private-scope); an
+  explicit `<name>` there still correctly fails with `UNKNOWN_SCOPE`. **A plain struct wrapping a
+  bare-`<>` field that then escapes via *return* is now rejected at compile time** instead of silently
   dangling - see `NESTED_BARE_SCOPE_RETURN_TYPE` near the end of this section. (2) **Known, deliberate v1
   simplifications, not bugs:** a failed test's scope never
   closes (the assert-failure longjmp bypasses normal control flow entirely) - its chunks just aren't
@@ -372,11 +372,11 @@ of sync with the actual code.
   in `buildPrimary`'s bare-identifier case, an identifier that isn't a real local but does name a field of
   `ctx.destructSelfVar`'s type, and building `OperandMember` on it instead of failing with `UNKNOWN_VAR`.
   **Two different destructor trigger points, matching the two places a struct value can actually live:**
-  (1) A **plain (non-`{}`) local** has its destructor called right before every real `ret` a function/test
+  (1) A **plain (non-`<>`) local** has its destructor called right before every real `ret` a function/test
   can hit - `cgRunLocalDestructors`, walking the codegen scope chain innermost-first (LIFO, mirroring a
   stack unwind) and invoked from the exact same injection points `cgCloseOwnScope` already uses (explicit
   return, the try/catch error-propagation path, and the implicit fell-off-the-end case). (2) A
-  **`{}`-heap-indirect instance** instead gets its destructor called when its *owning scope* closes, not
+  **`<>`-heap-indirect instance** instead gets its destructor called when its *owning scope* closes, not
   when the local holding it goes out of scope (it may well outlive that) - registered with that scope at
   the exact point it's heap-allocated (`__olang_scope_register_dtor`, called from both malloc-promotion
   sites in codegen.c right after the `__olang_scope_alloc` call) and walked LIFO, then freed, in
@@ -400,27 +400,27 @@ of sync with the actual code.
   (`cgRunLocalDestructors` runs before the return value is handed back), which is a real footgun for that
   specific shape. Not a concern for the motivating file-handle case (used locally, never returned by value),
   and not addressed here since move semantics were never part of the discussion that led to this feature.
-- **A bare `{}` struct field assigned through a scope-tagged base now inherits that base's own scope,
+- **A bare `<>` struct field assigned through a scope-tagged base now inherits that base's own scope,
   instead of always defaulting to whatever function happens to be executing.** Narrow fix, not the general
   one (see the scope-generic-struct-types gap above, which this doesn't close): a struct field can't carry
-  its own `{name}` tag, so a bare `{}` field's promoted literal used to always resolve via
+  its own `<name>` tag, so a bare `<>` field's promoted literal used to always resolve via
   `cgResolveScope(ctx, NULL)` - "this function's own private scope" - regardless of which scope the
   *containing instance* actually lives in. For a self-referential struct (a linked-list node, say) written
   from a different function than the one that allocated the container, that's a real dangling pointer the
   instant the writing function returns. Fixed only for the direct, one-hop case: in `cgAssign`, when the
-  assignment target is `base.field` and `base`'s own type is itself `{}`-heap-indirect, the field's
+  assignment target is `base.field` and `base`'s own type is itself `<>`-heap-indirect, the field's
   malloc-promotion now resolves its scope from `base`'s own declared scope tag (`cgResolveScope(ctx,
   base->type.scopeParam)`) instead of the function's own - so `base` must be tagged to a real, named,
-  passed-in scope (`Type{s}`) for this to help; a bare-`{}` base has no portable scope identity of its own
+  passed-in scope (`Type<s>`) for this to help; a bare-`<>` base has no portable scope identity of its own
   to hand down (asking "whatever function is executing" the *same* question just gives the same wrong
   answer one level removed). **Multi-hop chains (`a.b.c.field = ...`) turn out to already work, confirmed
   by test - not a separate gap**: the fix reads `scopeParam` off whatever type the immediate base operand
   already has, regardless of how deep an expression produced it, so any chain where every intermediate
-  field carries a real `{name}` tag resolves correctly with no further changes. The part that's still
+  field carries a real `<name>` tag resolves correctly with no further changes. The part that's still
   unhandled is narrower than "multi-hop" suggested: a chain where an *intermediate* field is itself a bare
-  `{}` (no name to read `scopeParam` off at all) - which is really the same still-open scope-generic-struct-
-  fields gap, not a distinct bug, and needs that fix (making bare `{}` a real type-level default) rather
-  than anything specific to this one. A plain (embedded, non-`{}`) base remains genuinely unhandled here
+  `<>` (no name to read `scopeParam` off at all) - which is really the same still-open scope-generic-struct-
+  fields gap, not a distinct bug, and needs that fix (making bare `<>` a real type-level default) rather
+  than anything specific to this one. A plain (embedded, non-`<>`) base remains genuinely unhandled here
   too, for the same reason. New
   `cgStoreInto`/`cgRegisterDtorIfNeeded` parameter: an optional `scopeOverride`, NULL at every other call
   site (var-decls, params, returns, aggregate-literal fields), all of which already resolve correctly off
@@ -429,7 +429,7 @@ of sync with the actual code.
   a struct's heap-allocation byte count as a naive sum of its fields' own sizes, with no alignment/padding
   at all - correct only when every field happens to share the same size/alignment (every existing struct
   before this, e.g. `Point { x int32, y int32 }`). The moment a struct mixes field sizes (e.g. `{ tag
-  int32, inner Point{} }` - a 4-byte field followed by an 8-byte-aligned pointer field), LLVM's own default
+  int32, inner Point<> }` - a 4-byte field followed by an 8-byte-aligned pointer field), LLVM's own default
   (unpacked) struct layout inserts real padding that `getStructSize` never accounted for - `TypeGetSize`
   under-counted by exactly the padding, so every `@malloc`/`__olang_scope_alloc` call sized by it allocated
   too few bytes, and the subsequent full-struct `store` silently overran the buffer into adjacent memory.
@@ -443,19 +443,19 @@ of sync with the actual code.
   discovery, not something designed in on purpose: a constructor field's type is resolved via
   `resolveTypeExpr(mod, typeExprNode, &ctorParams)` (`resolveStructCtorInto` in semantic.c) - the exact
   same call already used to let a later *parameter* reference an earlier one (`func f(s scope, p
-  Point{s})`). Since a field's type resolution goes through that same path, a field can *already* carry a
-  real `{name}` tag naming one of the constructor's own scope parameters (`type Box struct(s scope, inner
-  Point{s}) { inner }`) - a genuine, per-instance, type-level scope identity, not the value-level
+  Point<s>)`). Since a field's type resolution goes through that same path, a field can *already* carry a
+  real `<name>` tag naming one of the constructor's own scope parameters (`type Box struct(s scope, inner
+  Point<s>) { inner }`) - a genuine, per-instance, type-level scope identity, not the value-level
   per-assignment-site inference the earlier `cgAssign` fix uses. This resolves the concern that motivated
   reaching for real generics: the value being stored is checked against the *field's own declared type*
-  (`Point{s}`) at construction time, the same as any ordinary parameter - consistent for every instance of
+  (`Point<s>`) at construction time, the same as any ordinary parameter - consistent for every instance of
   that type, not inferred fresh at each write. **Only works for constructor-bearing types** (a plain
-  struct has no parameter list to resolve `{name}` against at all - see the narrowed gap above).
+  struct has no parameter list to resolve `<name>` against at all - see the narrowed gap above).
   **A real, general bug found and fixed while confirming this actually works end-to-end:** any parameter
   whose type names an *earlier parameter of the same signature* as its scope tag - not specific to
   constructors, structs, or even fields; the parameter case above is a plain example of the exact same
   thing - crashed at every call site that needed to malloc-promote a plain literal into it
-  (`func f(s scope, p Point{s})`, called as `f(own, Point{1,2})`). The tag's name (`s`) only has meaning
+  (`func f(s scope, p Point<s>)`, called as `f(own, Point{1,2})`). The tag's name (`s`) only has meaning
   *inside the callee's own body*; at the call site, `cgBoundaryValue`'s malloc-promotion branch tried to
   resolve it via the normal local-variable lookup path, found nothing in the *caller's* own scope chain,
   and fell through to `cgLookupVarAddr`'s "must be a global" fallback, which crashed on a param's `owner`
@@ -466,23 +466,39 @@ of sync with the actual code.
   `cgFuncCall`'s and `cgTryCatch`'s own argument-building loops; `cgRet`'s own call (return-value
   promotion, which always happens *inside* the callee's own body, where the referenced parameter genuinely
   is a real local) is unaffected and passes `NULL`.
-- **Reference syntax: `{}` vs `&` - tried `&`, reverted back to `{}`.** Briefly moved the heap-indirection
-  marker from a trailing `{}`/`{name}` to `&`/`&name` (own grammar/semantic changes, all three `.olang`
-  test files migrated) specifically to stop sharing a delimiter with struct-literal value syntax
-  (`Point{1, 2}`). A long follow-up design discussion then worked through what a static scope-safety
-  checker would actually need, and landed on a real conclusion along the way: **a plain/embedded value
-  never independently needs its own scope tag at all** - it has no separate allocation to tag, its
-  "scope" is trivially wherever its container already lives. So "is this a reference" and "which scope"
-  were never actually separable into two orthogonal markers (an idea seriously explored mid-discussion,
-  under a proposed `Type{scope}&` split) - they always travel together as one fact, meaning one marker
-  carrying both (bare = own scope, named = an explicit other one) is the *minimal* correct design, not an
-  arbitrary choice between two equally-valid options. With the design settled as "one marker, both jobs,"
-  the remaining question was purely spelling, and `{}`/`{name}` was chosen over `&`/`&name` - reverted in
-  `parseTypeRef` (syntax.c, back to `TOK_CURLY_O`/`TOK_IDEN?`/`TOK_CURLY_C`) and
-  `resolveTypeRefBase`/`isScopeTypeRef` (semantic.c, back to `TOK_CURLY_O` checks), and all three
-  `.olang` test files migrated back. This knowingly re-accepts `{}` sharing a delimiter with struct-literal
-  syntax (`Point{1, 2}`) and an unrelated code block, three meanings on two characters, the exact overload
-  the `&` move existed to avoid - a deliberate tradeoff for the preferred spelling, not an oversight.
+- **Reference syntax: `{}` vs `&` vs `<>` - a three-stage spelling history, settled on `<>`.** Started as
+  `{}`/`{name}`. Briefly moved the heap-indirection marker to `&`/`&name` (own grammar/semantic changes,
+  all three `.olang` test files migrated) specifically to stop sharing a delimiter with struct-literal
+  value syntax (`Point{1, 2}`). A long follow-up design discussion then worked through what a static
+  scope-safety checker would actually need, and landed on a real conclusion along the way: **a
+  plain/embedded value never independently needs its own scope tag at all** - it has no separate
+  allocation to tag, its "scope" is trivially wherever its container already lives. So "is this a
+  reference" and "which scope" were never actually separable into two orthogonal markers (an idea
+  seriously explored mid-discussion, under a proposed `Type{scope}&` split) - they always travel together
+  as one fact, meaning one marker carrying both (bare = own scope, named = an explicit other one) is the
+  *minimal* correct design, not an arbitrary choice between two equally-valid options. With the design
+  settled as "one marker, both jobs," the remaining question was purely spelling, and `{}`/`{name}` was
+  chosen back over `&`/`&name` at that point - reverted in `parseTypeRef` (syntax.c) and
+  `resolveTypeRefBase`/`isScopeTypeRef` (semantic.c), and all three `.olang` test files migrated back. That
+  knowingly re-accepted `{}` sharing a delimiter with struct-literal syntax (`Point{1, 2}`) and an
+  unrelated code block, three meanings on two characters, the exact overload the `&` move had existed to
+  avoid - accepted at the time as a deliberate tradeoff for the preferred spelling.
+  **Moved a third time, from `{}`/`{name}` to `<>`/`<name>`, once the array work (see below) made the
+  three-way overload's cost concrete rather than abstract.** The double duty `{}` was still doing - "this
+  is type-level metadata about where a value lives" (`Point<s>`) vs. "this is a value's own data"
+  (`Point{1, 2}`) - meant a reader had to parse *content*, not just *punctuation*, to tell the two apart at
+  a glance, since both look identical in shape. `<>` gives the marker its own visual lane and reads the
+  way a type-parameter/generic annotation does in most other languages (C++/Java/Rust/TypeScript) - a
+  reasonable intuition for what a scope tag actually is. Unlike C++'s notorious `<`/`>` template-parsing
+  ambiguity, this carries no real parsing risk for olang: `parseTypeRef` (syntax.c) is only ever invoked
+  from a position the parser already knows is a type expression (a var-decl's type, a signature, a field
+  declaration), never from general expression parsing, so `<`/`>` here never needs to be disambiguated
+  from the comparison operators the way a bare expression statement would in C++. Mechanically just a
+  token swap (`TOK_LST`/`TOK_IDEN?`/`TOK_GRT` in `parseTypeRef`, same in `resolveTypeRefBase`/
+  `applyRefMarker`/`isScopeTypeRef`), plus every `.olang` test file and every error message mentioning the
+  marker updated to match. This is the third round on this specific spelling; unlike the `&` experiment
+  (which was chasing a real unresolved design question), this last move was a pure notation-clarity call
+  with no new design question behind it, and is meant to be the final one.
   **Other conclusions from the same discussion, worth keeping even though none required a code change:**
   scope identity has to be tied to the *type* to be checkable at all (a variable's scope is only ever a
   consequence of its declared type; a per-literal/per-construction-site scope, which is what the
@@ -491,21 +507,21 @@ of sync with the actual code.
   foundation a real checker could be built on). A struct field's own storage never outlives its
   containing struct, but what it *references* may - the reference and the pointee have independent
   lifetimes on purpose. Only structs and arrays are referenceable - primitives are always by value, no
-  `int32{s}`, unchanged from what's already true. Reference-vs-value is decided *solely* by presence of
-  the marker, never as a free calling-convention/ABI choice: a plain (non-`{}`) parameter must behave as
+  `int32<s>`, unchanged from what's already true. Reference-vs-value is decided *solely* by presence of
+  the marker, never as a free calling-convention/ABI choice: a plain (non-`<>`) parameter must behave as
   an exclusive copy, so the compiler can only implement it via a hidden pointer in the specific case where
   it can prove the callee never mutates it (mutation through a hidden pointer would leak back to the
   caller, breaking value semantics) - otherwise it must actually copy. None of this list is implemented
   as a checker yet; it's the groundwork such a checker would need to be built on.
-- **A plain struct wrapping a bare `{}` field is now rejected at the signature level if it's ever
+- **A plain struct wrapping a bare `<>` field is now rejected at the signature level if it's ever
   returned by value.** The transitive counterpart to `BARE_SCOPE_RETURN_TYPE`: that check only ever
-  looked at the return type *itself* (`? Point{}` directly), not whether a *plain* return type (`?
-  Wrapper`, no `{}` at all) embeds a bare `{}` field somewhere inside its own fields - a real dangling
+  looked at the return type *itself* (`? Point<>` directly), not whether a *plain* return type (`?
+  Wrapper`, no `<>` at all) embeds a bare `<>` field somewhere inside its own fields - a real dangling
   shape whenever the function is the one allocating that field into its own (about-to-close) `own` scope
   before handing the wrapping value back. New `structContainsBareScopeField` (semantic.c) walks a
   struct's fields recursively through plain/embedded members only - never infinite, since a plain struct
-  can't recursively embed itself, that's exactly what `{}` exists to break - and deliberately does *not*
-  chase into a field that already carries an explicit `{name}` tag, since that field's lifetime is
+  can't recursively embed itself, that's exactly what `<>` exists to break - and deliberately does *not*
+  chase into a field that already carries an explicit `<name>` tag, since that field's lifetime is
   already an independently-checked fact tied to its own name, unrelated to whichever function happens to
   be returning it. Checked once in `resolveFuncSig`, same scope as `BARE_SCOPE_RETURN_TYPE` itself
   (signature-level only, covers every return statement in the function for free). **Deliberately
@@ -515,15 +531,15 @@ of sync with the actual code.
   escape analysis (the eventual static checker, not attempted here) can tell that case apart from the
   unsound one using the signature alone. Consistent with the broader conclusion from the scope-checker
   discussion: anything crossing a function boundary needs a type-level, named scope to be checkable at
-  all, so requiring an explicit `{name}` on any field that's going to be involved in a value crossing a
+  all, so requiring an explicit `<name>` on any field that's going to be involved in a value crossing a
   boundary is the correct (if occasionally stricter-than-necessary) rule until real escape analysis
   exists to relax it.
-- **`{}`/`{name}` now apply to arrays too - reusing `structMAlloc`/`scopeParam` generically rather than
+- **`<>`/`<name>` now apply to arrays too - reusing `structMAlloc`/`scopeParam` generically rather than
   building a parallel mechanism.** Only the fixed-size case is wired up so far (see "deliberately not
-  attempted" below for what isn't). `[N]` vs `[]` answers "is the size known at compile time"; `{}`/
-  `{name}` (unchanged from structs) answers "is this embedded or a reference, and if so which scope" -
+  attempted" below for what isn't). `[N]` vs `[]` answers "is the size known at compile time"; `<>`/
+  `<name>` (unchanged from structs) answers "is this embedded or a reference, and if so which scope" -
   the same two orthogonal questions as a struct, with one extra axis (size) that only matters for arrays.
-  `int32[3]{}` is a bare pointer to `[3 x i32]`, heap-allocated via the same scope-arena machinery a
+  `int32[3]<>` is a bare pointer to `[3 x i32]`, heap-allocated via the same scope-arena machinery a
   struct reference already uses (`__olang_scope_alloc`, malloc-promotion, `cgResolveParamScopeOverride`
   for a parameter whose scope tag names an earlier parameter) - none of that machinery needed to change,
   just to stop assuming `BASETYPE_STRUCT` was the only thing that could ever be `structMAlloc`.
@@ -532,7 +548,7 @@ of sync with the actual code.
   any test until this) it wrapped the opposite way. `applyArraySuffixes` (semantic.c) now walks its
   suffixes right-to-left when wrapping so the first-parsed one ends up outermost, matching how the
   dimensions read left-to-right. No grammar change was needed for any of this - `parseTypeRef`'s rule was
-  already `NAME ARR_SFX* (CURLY_O IDEN? CURLY_C)?`, array suffixes already coming before the marker.
+  already `NAME ARR_SFX* (TOK_LST IDEN? TOK_GRT)?`, array suffixes already coming before the marker.
   **The marker's *application point* moved, though - to after array-suffix wrapping, not just to arrays
   existing.** `resolveTypeRefBase` used to read and apply the marker itself, forcing `bType` to
   `BASETYPE_STRUCT` unconditionally; now it only decides (via a flat `hasTokOfType` check, independent of
@@ -541,8 +557,8 @@ of sync with the actual code.
   (`structMAlloc`/`scopeParam`) moved into a new `applyRefMarker`, called *after* `applyArraySuffixes`, so
   it governs the reference as a whole ("a reference to a `[3]Point`") rather than silently attaching to
   the element type underneath an array suffix the way it would have before (a real, if never-yet-
-  triggered, bug in the old ordering). `applyRefMarker` also now rejects `{}` on a primitive type
-  (`INVALID_REFERENCE_TARGET`) - previously silently ignored for a vanilla type like `int32{}`, since
+  triggered, bug in the old ordering). `applyRefMarker` also now rejects `<>` on a primitive type
+  (`INVALID_REFERENCE_TARGET`) - previously silently ignored for a vanilla type like `int32<>`, since
   `resolveTypeRefBase`'s vanilla-type branch never looked at the marker at all.
   **`len(arr)` - unlike C, an olang array always carries its own length.** A compiler builtin
   (`OPERATION_LEN`/`OperandLen` in semantic.c, intercepted by name in the "NAME(args)" call-building path
@@ -553,7 +569,7 @@ of sync with the actual code.
   at all (bare integer literals are always `int32`, no widening path), which would make an
   `int64`-returning `len()` awkward to use anywhere near the rest of the language for no real benefit (an
   array length never needs `int64`'s extra range in practice); the dynamic case truncates in `cgLen`. A
-  compile-time-known dimension (embedded, or a fixed-size `{}` reference) costs nothing at runtime - the
+  compile-time-known dimension (embedded, or a fixed-size `<>` reference) costs nothing at runtime - the
   constant is substituted directly; only a genuinely dynamic (`T[]`) array reads it from the runtime
   slice. Always evaluates its argument (for any side effects a non-trivial expression producing the array
   might have) even when the resulting value goes unused because the dimension turned out to be constant.
@@ -573,31 +589,31 @@ of sync with the actual code.
   the already-heap-allocated pointer directly - same GEP shape needed in both cases, only the pointee-type
   string was wrong).
   **Deliberately not attempted here, and why each is its own next step:** (1) **A genuinely dynamic
-  (`T[]{}`) array reference isn't scope-tracked yet** - `cgAggregateLiteral`'s dynamic-array branch still
-  always calls a bare `@malloc`, unscoped, regardless of what `{}`/`{name}` the target type carries;
-  marking a dynamic array `{}` currently type-checks but has no effect. This needs threading a scope
+  (`T[]<>`) array reference isn't scope-tracked yet** - `cgAggregateLiteral`'s dynamic-array branch still
+  always calls a bare `@malloc`, unscoped, regardless of what `<>`/`<name>` the target type carries;
+  marking a dynamic array `<>` currently type-checks but has no effect. This needs threading a scope
   context into literal construction itself (the allocation happens *inside* building the literal, not as
   a promotion step afterward the way a struct or fixed array's malloc-promotion works), a different
   mechanism from anything built so far, not attempted here to avoid rushing a leak or corruption bug into
   exactly the kind of code this session has spent so much effort hardening. (2) **Embedded (`T[]`, no
-  `{}`) size inference from an assigning literal isn't implemented** - `x mut int32[] = int32[3][1,2,3]`
+  `<>`) size inference from an assigning literal isn't implemented** - `x mut int32[] = int32[3][1,2,3]`
   inferring a fixed size of 3 for `x`'s own type. Bare `T[]` still means exactly what it meant before this
   session's changes (dynamic, unscoped, raw `@malloc`) - not reinterpreted, to avoid a breaking change
   layered on top of everything else here at once. (3) **Jagged (independently-sized-per-row) 2D arrays
-  aren't supported** - the single trailing `{}`/`{name}` marker applies once, to the whole type, so there's
+  aren't supported** - the single trailing `<>`/`<name>` marker applies once, to the whole type, so there's
   no way to mark an *inner* array level as independently referenced; only fully-rectangular multi-
   dimensional arrays (every level either fully fixed or, at most, the outermost level dynamic) are
   expressible with what exists today. (4) **The one-hop `cgAssign` field-scope override doesn't extend to
-  array elements** - `arr[i] = ...` where `arr`'s own element type is a bare `{}` field-like reference
+  array elements** - `arr[i] = ...` where `arr`'s own element type is a bare `<>` field-like reference
   still resolves via `ctx->ownScopeSlot`, the same gap struct fields had before their own one-hop fix;
   same underlying cause, not extended to `OPERATION_INDEX` here. (5) **Arrays of destructor-bearing struct
   elements don't register per-element destructors** - `cgRegisterDtorIfNeeded` only ever fires at a
   struct's own heap-promotion site, never walked across an array's elements.
 
-- **A bare `{}` field's scope is now a real, comprehensively-applied rule: "same as whatever contains it" -
+- **A bare `<>` field's scope is now a real, comprehensively-applied rule: "same as whatever contains it" -
   not just the narrow one-hop `cgAssign` value-level patch from before.** The old patch only handled
-  `base.field = literal` where `base` was itself a plain local var with a `{}`-heap-indirect type - it left
-  two real gaps: a struct/array *literal*'s own nested bare-`{}` fields, built inside `cgAggregateLiteral`,
+  `base.field = literal` where `base` was itself a plain local var with a `<>`-heap-indirect type - it left
+  two real gaps: a struct/array *literal*'s own nested bare-`<>` fields, built inside `cgAggregateLiteral`,
   always defaulted to `ctx->ownScopeSlot` (whatever function is generating code right now) regardless of
   what scope the *whole* literal was itself about to be promoted into; and `cgAssign`'s own resolution only
   ever looked at the *immediate* base of an assignment target, so a two-or-more-hop chain of bare fields
@@ -613,7 +629,7 @@ of sync with the actual code.
   *before* building `op`'s value (not after, the way a bare `cgValue()`+`cgStoreInto` pair used to), and
   sets it as an ambient override on `ctx` for the duration of that one recursive `cgValue()` call.
   `cgAggregateLiteral`'s own struct-field and array-element loops now consult this ambient override for any
-  field/element whose own type is bare `{}` (an explicitly-`{name}`-tagged field ignores it and resolves its
+  field/element whose own type is bare `<>` (an explicitly-`<name>`-tagged field ignores it and resolves its
   own named tag as before) - and since the override stays set for the *entire* nested build (only saved/
   restored once, at the outermost `cgValueForTarget`/`cgBoundaryValue` call), it naturally reaches arbitrary
   nesting depth (a literal inside a literal inside a literal) with no extra plumbing. `cgBoundaryValue`
@@ -621,29 +637,29 @@ of sync with the actual code.
   changes; `cgVarDecl`, the `for`-loop init, and `cgAssign` were updated to call `cgValueForTarget` instead
   of a bare `cgValue()`. (The one call site deliberately left alone: `cgInitGlobalsFunc`'s global-initializer
   store - a global has no `own`/enclosing-scope concept at all, out of scope for this fix.)
-  (2) **`cgResolveEffectiveScope`** - for resolving what scope an *already-existing* value's bare-`{}` field
+  (2) **`cgResolveEffectiveScope`** - for resolving what scope an *already-existing* value's bare-`<>` field
   lives in, at an assignment site (`cgAssign`'s own `scopeOverride` computation) - not something being built
   right now, so mechanism (1) doesn't apply. Recursive: a value's own `type.scopeParam` (an explicit
-  `{name}`) is the base case; a bare `{}` value that's itself reached through a member access has no scope
-  of its own, so it inherits its own base's, walking up an arbitrary chain of bare-`{}` member accesses
+  `<name>`) is the base case; a bare `<>` value that's itself reached through a member access has no scope
+  of its own, so it inherits its own base's, walking up an arbitrary chain of bare-`<>` member accesses
   until it either hits an explicitly-scoped ancestor or bottoms out at a plain var (a var, unlike a field,
   really can be its own root - `ctx->ownScopeSlot` is the correct answer there, same as it always was).
   This replaces `cgAssign`'s old one-hop-only check outright (which is now provably a special case of the
   general recursive walk, not a separate rule).
   **New shared helper, not new behavior:** `typeIsRefShaped(struct type t)` (struct, or fixed-size array -
-  the same "can this be marked `{}`/`{name}`" predicate that was duplicated inline in three places already)
+  the same "can this be marked `<>`/`<name>`" predicate that was duplicated inline in three places already)
   factored out and reused by `cgResolveParamScopeOverride`, `cgAssign`, and `cgResolveEffectiveScope`.
   **Deliberately not extended here, both already-documented gaps from the arrays work:** array-*index*
   targets (`arr[i] = ...`) still aren't covered by either mechanism - `cgResolveEffectiveScope` only walks
-  `OPERATION_MEMBER` chains, not `OPERATION_INDEX`; and a bare-`{}` field reached only through a chain that
-  passes through a bare-`{}` *parameter* (as opposed to a locally-constructed value or an explicitly-`{name}`
-  -tagged one) still can't be resolved soundly by either mechanism - a bare `{}` parameter's true origin
+  `OPERATION_MEMBER` chains, not `OPERATION_INDEX`; and a bare-`<>` field reached only through a chain that
+  passes through a bare-`<>` *parameter* (as opposed to a locally-constructed value or an explicitly-`<name>`
+  -tagged one) still can't be resolved soundly by either mechanism - a bare `<>` parameter's true origin
   scope genuinely isn't recoverable from its type alone without the static checker described next.
 
-- **The static scope-containment checker - a first, deliberately bounded version.** Before this, a `{}`/
-  `{name}` reference's scope tag was checked for absolutely nothing beyond parsing: `TypeIsSame` ignores
+- **The static scope-containment checker - a first, deliberately bounded version.** Before this, a `<>`/
+  `<name>` reference's scope tag was checked for absolutely nothing beyond parsing: `TypeIsSame` ignores
   `structMAlloc`/`scopeParam` entirely for structs and arrays (by design - see the report), so
-  `q mut Point{d} = p` compiled with zero complaint even when `p` was tagged `{s}` and `s`/`d` had no
+  `q mut Point<d> = p` compiled with zero complaint even when `p` was tagged `<s>` and `s`/`d` had no
   known relationship - all of the feature's actual safety came from *runtime* behavior (deferred
   allocation into whatever scope value a call happened to resolve), never from a compile-time proof. This
   adds that proof, for the cases it's actually provable in.
@@ -651,10 +667,10 @@ of sync with the actual code.
   established earlier** (a function's own private scope closes the instant *it* returns, strictly before
   any scope its caller passed in could close - true by construction, no annotation needed): a value tagged
   `srcScope` may flow into a slot tagged `dstScope` exactly when `srcScope == dstScope` (including bare
-  `{}` into bare `{}}` - trivially the same scope), or when `srcScope` is any named parameter and `dstScope`
-  is bare `{}` (narrowing a longer-lived reference into "at least as long as my own scope" is always safe -
+  `<>` into bare `<>` - trivially the same scope), or when `srcScope` is any named parameter and `dstScope`
+  is bare `<>` (narrowing a longer-lived reference into "at least as long as my own scope" is always safe -
   the covariant, safe direction, mirroring how `&'long T` coerces to `&'short T` in Rust). Both directions
-  of the opposite case are rejected: a bare `{}` (own) value flowing into a *named* slot is unsafe (own is
+  of the opposite case are rejected: a bare `<>` (own) value flowing into a *named* slot is unsafe (own is
   the youngest possible scope, so this is the dangerous widening direction), and two *different* named
   scopes of the same function have no provable relationship at all - olang has no lifetime-bound syntax
   (no Rust-style `'a: 'b`), so this is conservatively rejected too, even though some such pairs might be
@@ -664,7 +680,7 @@ of sync with the actual code.
   assignment, return, call arguments, struct/array-literal field values), so no new call sites were needed,
   only threading a `func` parameter (the function currently being checked, for identifying which scope tags
   are *its own* parameters) through it and its two collaborators, `OperandFuncCall`/`OperandStructLiteral`/
-  `OperandArrayLiteral`. The check only fires when *both* sides are already `{}`-heap-indirect (an existing
+  `OperandArrayLiteral`. The check only fires when *both* sides are already `<>`-heap-indirect (an existing
   reference being passed/reassigned) - a fresh literal about to be promoted (`typeNeedsMallocPromotion`'s
   own condition, mirrored here) always starts life directly in the target's own scope, so there's nothing
   to check there. `OperandFitsType` now returns a 3-way `enum typeFit` (`TYPE_FIT_OK`/`_MISMATCH`/
@@ -674,8 +690,8 @@ of sync with the actual code.
   discovering the alternative breaks working code.** `varIsOwnParam(scopeVar, func)` checks `scopeVar`
   against `func->type.vars` by identity (the same pattern `cgResolveParamScopeOverride` already uses) -
   `scopeCanFlowInto` treats a scope tag that *isn't* one of `func`'s own declared parameters as
-  unverifiable-so-allowed, not as a violation. This matters concretely: a struct field's own `{name}` tag
-  (e.g. `ScopedBox`'s constructor field `inner Point{s}`) resolves against the *type's own declaration-site*
+  unverifiable-so-allowed, not as a violation. This matters concretely: a struct field's own `<name>` tag
+  (e.g. `ScopedBox`'s constructor field `inner Point<s>`) resolves against the *type's own declaration-site*
   parameter list, not the checking function's - reading `b.inner` back out gets a `scopeParam` that's a
   *different* `var*` than anything in the current function's frame, even when, at the actual call site, the
   two positions were bound to literally the same scope. Naively comparing by raw identity across this

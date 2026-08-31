@@ -598,32 +598,32 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
     }
 
-    //whether this WHOLE reference will end up "{}"-marked is decided here, once, independent of any
+    //whether this WHOLE reference will end up "<>"-marked is decided here, once, independent of any
     //array suffixes (a flat check on refNode's own direct tokens) - and used only to decide whether to
-    //eagerly resolve the named type. A "{}"-indirect reference is a pointer, not an embedding, so it
+    //eagerly resolve the named type. A "<>"-indirect reference is a pointer, not an embedding, so it
     //must not force full resolution of its target - that's exactly what lets a struct reference itself,
     //directly or through an array of itself, without infinite recursion. The marker's actual *effect*
     //(structMAlloc/scopeParam) is applied later, in applyRefMarker, after array suffixes have been
     //wrapped on - see resolveTypeRef.
-    bool willBeRef = hasTokOfType(refNode, TOK_CURLY_O);
+    bool willBeRef = hasTokOfType(refNode, TOK_LST);
     if (!willBeRef) resolveTypeDecl(found);
     return *found;
 }
 
-//applies the trailing "{}"/"{name}" marker (if present on refNode at all) to t, marking it heap-indirect
+//applies the trailing "<>"/"<name>" marker (if present on refNode at all) to t, marking it heap-indirect
 //- t may be a struct or an array of anything by this point, since this runs AFTER applyArraySuffixes, so
 //the marker governs the reference as a whole ("a reference to a [3]Point", not "an array of 3 Point
 //references"). See resolveTypeRefBase for why *whether* a marker is present has to be known before that
 //point (to avoid eagerly resolving a self-referential type), even though its *effect* is applied after.
 struct type applyRefMarker(struct type t, struct syntax* refNode, struct list* scopeParams) {
-    if (!hasTokOfType(refNode, TOK_CURLY_O)) return t;
+    if (!hasTokOfType(refNode, TOK_LST)) return t;
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_VOID) {
-        ErrMsgSemantic(firstTokOfType(refNode, TOK_CURLY_O), INVALID_REFERENCE_TARGET);
+        ErrMsgSemantic(firstTokOfType(refNode, TOK_LST), INVALID_REFERENCE_TARGET);
         return t;
     }
     t.structMAlloc = true;
     t.scopeParam = resolveScopeTag(refNode, scopeParams);
-    //a "{}"-indirect reference may be grabbed while its (struct) target is still mid-resolution (see
+    //a "<>"-indirect reference may be grabbed while its (struct) target is still mid-resolution (see
     //resolveTypeRefBase) - its placeholder bType (still BASETYPE_VOID at that point) must not leak
     //through; only reachable with zero array suffixes, since applyArraySuffixes always produces a real
     //BASETYPE_ARRAY outer shell regardless of whether its element is still a placeholder
@@ -894,7 +894,7 @@ struct type TypeScope(void) {
 bool isScopeTypeRef(struct syntax* typeExprNode) {
     struct syntax* actual = partSntx(typeExprNode, 0);
     if (actual->type != SNTX_TYPE_REF) return false;
-    if (hasTokOfType(actual, TOK_CURLY_O)) return false;
+    if (hasTokOfType(actual, TOK_LST)) return false;
     if (allPartsOfType(actual, SNTX_ARR_SFX).len != 0) return false;
     struct list idens = allTokOfType(firstPartOfType(actual, SNTX_NAME), TOK_IDEN);
     if (idens.len != 1) return false;

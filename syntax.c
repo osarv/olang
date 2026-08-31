@@ -157,10 +157,17 @@ struct syntax* parseArrSfx(SyntaxCtx sc) {
 
 //"NAME ARR_SFX* (CURLY_O IDEN? CURLY_C)?" - the optional trailing "{name}" names which scope a
 //heap-indirect reference belongs to; bare "{}" means the value's own private scope - see the report.
-//Briefly spelled "&" instead (see git history) - reverted back to "{}" after further design discussion
+//Briefly spelled "&" instead (see git history), reverted back to "{}" after further design discussion
 //concluded the two are semantically identical (a plain/embedded value never independently needs a scope
 //tag - it has no separate allocation to tag - so "is this a reference" and "which scope" always travel
-//together as one marker either way), so the choice came down to spelling only, and "{}" was kept.
+//together as one marker either way). Moved a second time, from "{}"/"{name}" to "<>"/"<name>": "{}" was
+//doing double duty as both this marker AND struct-literal construction ("Point{1, 2}"), so a reader had to
+//parse content, not just punctuation, to tell "type-level scope metadata" from "a value's own data" apart
+//at a glance - "<>" gives the marker its own visual lane, and reads the way a type-parameter/generic
+//annotation does in most other languages. No parsing ambiguity risk the way C++'s "<"/">" template
+//lookahead has: parseTypeRef is only ever called from a position the parser already knows is a type
+//expression (a var-decl's type, a signature, a field declaration), never from general expression parsing,
+//so "<"/">" here never has to be disambiguated from the comparison operators.
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct syntax* name = parseName(sc);
@@ -174,12 +181,12 @@ struct syntax* parseTypeRef(SyntaxCtx sc) {
     }
     int beforeBrace = TokenGetCursor(sc->tc);
     struct token open = TokenFeed(sc->tc);
-    if (open.type == TOK_CURLY_O) {
+    if (open.type == TOK_LST) {
         int beforeIden = TokenGetCursor(sc->tc);
         struct token iden = TokenFeed(sc->tc);
         if (iden.type != TOK_IDEN) TokenSetCursor(sc->tc, beforeIden);
         struct token close = TokenFeed(sc->tc);
-        if (close.type == TOK_CURLY_C) {
+        if (close.type == TOK_GRT) {
             addTok(s, open);
             if (iden.type == TOK_IDEN) addTok(s, iden);
             addTok(s, close);
