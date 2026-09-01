@@ -5,13 +5,22 @@
 
 BaseCount mut int32 = 0
 
-## constructor-bearing (not a plain "{ }" literal), on purpose: a struct/array LITERAL's own type name
-## still only supports at most one alias hop today (the parser's own type-name-awareness that
-## disambiguates "Type{" from an ordinary expression doesn't chase re-exports yet - see the report), but a
-## CONSTRUCTOR CALL is an ordinary call target and already supports a chain of any length, so this is how
-## a re-exported type gets constructed from more than one hop away.
+## constructor-bearing, to exercise a re-exported type constructed via an ordinary CALL (which supports an
+## alias chain of any length the same way any other call target does).
 type BaseThing struct(id int32) {
     id
+}
+
+## plain (no constructor) - to exercise a re-exported type constructed via a "{ }" LITERAL specifically,
+## through a chain. This used to be a real, deliberate boundary: the parser's own type-name-awareness
+## (nameIsKnownType/isKnownTypeForParsing), which disambiguates "Type{" from an ordinary expression while
+## parsing, only ever recognized a single alias hop, so "wk.Base.BasePoint{1, 2}" fell through to a plain
+## parse error rather than being treated as a literal at all. Closed by generalizing that same mechanism to
+## walk a chain of any length (TypeNameLookup's own interface changed from one flat alias string to a
+## struct list of them) - see the report.
+type BasePoint struct {
+    x int32,
+    y int32
 }
 
 error BaseError {

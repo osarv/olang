@@ -1487,24 +1487,63 @@ of sync with the actual code.
   "two unrelated modules both import the same third file directly" diamond (worker.olang and runner.olang
   both importing shared.olang, say) - that's each module's OWN single direct import, never two paths from
   the SAME module, and stays completely unaffected; confirmed by `make verify` continuing to pass unchanged.
-  **Deliberately not extended here, and why:** a struct/array literal's own type name, and a vocab value,
-  still only support at most one alias hop - both need the *parser's* own type-name-awareness
+  **Was deliberately not extended at the time - closed in the entry below** once asked directly whether
+  this specific boundary could be lifted too: a struct/array literal's own type name, and a vocab value,
+  used to only support at most one alias hop, needing the *parser's* own type-name-awareness
   (`nameIsKnownType`/`isKnownTypeForParsing`, a `TypeNameLookup` callback with a flat single-alias
   interface) to disambiguate `Type{`/`Type[` from an ordinary expression *while parsing*, before real
-  semantic analysis with its alias-chain-walking machinery even runs - extending that callback to accept an
-  arbitrary chain is a separate, real undertaking (the interface itself would need to change), not
-  attempted here. Not a silent miscompile either way: a struct/array literal reached through more than one
-  hop just fails to parse as a literal at all (falls through to the ordinary bare-identifier fallback,
-  producing an honest, if less specific, parse error) - confirmed directly, and worked around in the
-  permanent test for this (`Base.olang`'s own `BaseThing` is constructor-bearing specifically so it can be
-  *called*, `wk.Base.BaseThing(9)`, which is an ordinary call target and already supports any chain length,
-  rather than needing literal syntax at all).
+  semantic analysis with its alias-chain-walking machinery even runs.
   **Confirmed with real, permanent project files, not just ad hoc ones:** a new `Base.olang` (a var, a
-  function, a constructor-bearing type, an error type) imported unnamed by `worker.olang` (`import
-  "Base.olang"`, capitalized alias `Base` - automatically re-exported), reached from `runner.olang` two
-  hops away (`wk.Base.*`) through every mechanism - a bare variable read and write, a function call, a
+  function, a constructor-bearing type, a plain type, an error type) imported unnamed by `worker.olang`
+  (`import "Base.olang"`, capitalized alias `Base` - automatically re-exported), reached from `runner.olang`
+  two hops away (`wk.Base.*`) through every mechanism - a bare variable read and write, a function call, a
   constructor call, and both a `catch` and an `error alias.alias.Type.word` statement against its own error
   type. The negative cases (a file imported twice directly, a diamond through re-export, a genuine re-export
   cycle) aren't permanent tests, same convention as every other compile-*rejection* case in this file (a
   rejected program can't run as a `test{}` block) - confirmed ad hoc instead, each producing exactly the
   expected error and no crash.
+
+- **The struct/array-literal-through-a-chain boundary closed: `TypeNameLookup`'s interface changed from one
+  flat alias string to a `struct list` of them, and the two places that build/consume it generalized to
+  match.** `parseName`'s own grammar was already unbounded (see the entry above); the remaining gap was
+  purely that `nameIsKnownType`/`firstIdenIsLocalKnownType` (syntax.c, called *during parsing* to decide
+  whether `Type{`/`Type[` commits to literal syntax) and `isKnownTypeForParsing` (semantic.c, the actual
+  answer) both still assumed at most one alias hop. `nameIsKnownType` now reads `name->parts.len` generically
+  (`2N-1` for `N` identifiers - see `parseName`'s own grammar comment) and splits it into "every identifier
+  but the last is an alias hop, the last is the type name" for any `N`, rather than hardcoding indices 0 and
+  2; `isKnownTypeForParsing` walks that chain hop by hop via `findImport`, the same shape
+  `resolveAliasChain`'s own first-hop-then-however-many-more walk already uses, just without the
+  public/cycle enforcement (irrelevant here - this is only ever a "should I commit to literal syntax" guess,
+  re-checked for real, privacy included, immediately afterward by `resolveLiteralBaseType` once semantic
+  analysis actually runs). `firstIdenIsLocalKnownType` (vocab values) needed no logic change at all, since a
+  vocab value is never alias-qualified in the first place by design - only its one call into the now-
+  list-shaped callback needed updating, passing an empty chain.
+  **A real gap in the semantic-side companion function found and fixed alongside this, not just the
+  parser's own detection:** `resolveLiteralBaseType` (semantic.c, what actually resolves a literal's base
+  type once the parser has already committed) had the *exact same* one-or-two-identifier assumption
+  `resolveTypeRefBase`/`resolveErrorTypeName` already had before *their* entries above - it was never
+  reachable with more than 2 identifiers before this fix (the parser's own old callback would never commit
+  to literal parsing for a longer chain in the first place), so the gap was latent, not yet a live bug,
+  until the parser-side fix made it reachable for the first time. Fixed the identical way, with
+  `resolveAliasChain(mod, idens, 1)`.
+  **A second, separate, genuinely surprising thing found while building the permanent test for this - not a
+  bug in the mechanism itself, but a real demonstration of the "narrow, accepted edge" the earlier entry's
+  own comment already flagged, now concrete rather than theoretical:** the test suite intermittently failed
+  to resolve `wk.Base.BasePoint{...}` (a literal reached through worker.olang's own re-export of
+  `Base.olang`) depending on *which file* `-t` happened to use as its compile root - each listed file is its
+  own independent, isolated compile (see the report on `-t` semantics), and worker.olang's own `imports`
+  list has to be fully built, "Base" included, before runner.olang's own parse can recognize the chain at
+  all. When runner.olang is root, worker.olang's own `semaLoadModule` call (recursed into while resolving
+  runner's own "wk" import) always fully completes - "Base" included - before returning, so this was
+  never visible from that direction. When worker.olang is root instead, its own import list was being
+  processed in SOURCE order - `sh`, then `rn` (runner.olang, recursing right back into worker.olang itself,
+  a genuine raw cycle), then `Base` - so runner.olang's own parse (triggered while still resolving worker's
+  own "rn" entry) ran *before* worker's own "Base" entry had been added at all, at which point `findImport`
+  correctly, honestly returned "not found" for it - exactly the accepted fallback the report already
+  described, just now demonstrated for real rather than assumed. **Fixed the practical way, not by chasing
+  the underlying ordering fragility itself:** reordered worker.olang's own imports so `Base.olang` is
+  declared *before* `rn` - since "rn" is what recurses back into the raw cycle, declaring anything else
+  first guarantees it's fully registered before that recursion's own parse can possibly need it. Confirmed
+  directly: reverting the order reproduces the failure, `make verify`/`-t` with every file taking a turn as
+  root all pass with it in place. A real, if narrow, lesson for anyone writing a re-exporting module with a
+  raw import cycle in its own graph: declare re-exported imports before the cyclic one.

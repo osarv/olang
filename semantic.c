@@ -380,15 +380,26 @@ struct semaModule* findImport(struct semaModule* mod, struct str alias);
 
 //consulted by the parser (see TypeNameLookup in syntax.h) only to tell "Type{values}" (a struct literal)
 //apart from "condition { block }" - never authoritative, semantic analysis proper (below) still does the
-//real name resolution/visibility checks. Safe to call mid-parse because declaredTypeNames is fully
+//real name resolution/visibility checks (including privacy - deliberately not checked here either, same
+//as before this walked a chain at all). Safe to call mid-parse because declaredTypeNames is fully
 //populated for this module *and* every module it imports before ParseSyntax ever runs - see
 //semaLoadModule: each module scans its own top-level names before recursing into its imports, so even a
 //cyclic import pair has both sides' names ready by the time either one's real parse starts.
-bool isKnownTypeForParsing(void* ctxPtr, struct str alias, struct str name) {
+//Walks aliasChain hop by hop via findImport, same as resolveAliasChain's own first-hop-through-however-
+//many-more shape, minus the public/cycle enforcement (irrelevant here - this is only ever a "should I
+//commit to literal syntax" guess, re-checked for real afterward). mod->imports, unlike declaredTypeNames,
+//is only guaranteed complete for a module whose own semaLoadModule call has fully returned by the time
+//this runs - true for every module reachable this way except one, narrow, accepted edge: a literal
+//reached through a chain that passes through the *other* side of a raw import cycle's own further
+//re-exports, mid-load, at the exact moment that side's own parse is what's currently running. Returns
+//false there (same as an unrecognized alias), same honest "falls through to a parse error" fallback as
+//every other not-yet-resolvable case already gets - not a silent misresolution.
+bool isKnownTypeForParsing(void* ctxPtr, struct list aliasChain, struct str name) {
     struct semaModule* mod = ctxPtr;
     struct semaModule* target = mod;
-    if (alias.len > 0) {
-        target = findImport(mod, alias);
+    for (int i = 0; i < aliasChain.len; i++) {
+        struct str* alias = ListGetIdx(&aliasChain, i);
+        target = findImport(target, *alias);
         if (!target) return false;
     }
     for (int i = 0; i < target->declaredTypeNames.len; i++) {
@@ -940,10 +951,9 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
             return TypeVanilla(BASETYPE_INT32);
         }
     } else {
-        struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-        struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
-        struct semaModule* target = findImport(mod, strFromTok(aliasTok));
-        if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return TypeVanilla(BASETYPE_INT32); }
+        struct semaModule* target = resolveAliasChain(mod, idens, 1);
+        if (!target) return TypeVanilla(BASETYPE_INT32); //error already reported
+        struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_TYPE); return TypeVanilla(BASETYPE_INT32); }

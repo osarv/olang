@@ -2,12 +2,19 @@
 ## file right back, forming a genuine import cycle (see runner.olang for the other half).
 
 import sh "shared.olang"
-import rn "runner.olang"
 
 ## unnamed import (see the report) - its own alias is derived from the file name, "Base". Capitalized, so
 ## it's re-exported: a THIRD module importing worker.olang can reach Base.olang through it too, two hops
-## away ("wk.Base.Whatever") - see runner.olang's own tests, which exercise exactly that.
+## away ("wk.Base.Whatever") - see runner.olang's own tests, which exercise exactly that. Declared BEFORE
+## "rn" below on purpose, not just by convention: worker's own "imports" list has to be fully built,
+## "Base" included, before runner.olang's own parse can recognize a "wk.Base.Whatever" literal as one at
+## all (see isKnownTypeForParsing's own comment) - and since "rn" recurses right back into worker.olang
+## itself (the same raw cycle described below), *whichever* of worker's own imports is declared first is
+## the one guaranteed ready by the time that recursion's own parse runs. Confirmed directly: reversing this
+## order breaks exactly the literal-chain tests in runner.olang, only when worker.olang (not runner.olang)
+## is the one used as the compile root - see the report's own honest note on this narrow, accepted edge.
 import "Base.olang"
+import rn "runner.olang"
 
 error WorkerError {
     BAD_INPUT

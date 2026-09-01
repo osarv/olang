@@ -95,12 +95,13 @@ struct syntaxModule {
     struct list decls; //list of struct syntax
 };
 
-//true if `name` (no alias) or `alias.name` (alias.len > 0) names a known struct/vocab/error type -
-//consulted only to disambiguate "Type{values}" (a struct literal) from "condition { block }" while
-//parsing; an alias the lookup doesn't recognize simply isn't treated as a type at the parser level (a
-//real error is reported later, in semantic analysis, which has the authoritative name tables) - see the
-//report for why the parser needs this at all instead of just trying alternatives blindly.
-typedef bool (*TypeNameLookup)(void* ctx, struct str alias, struct str name);
+//true if `name` (aliasChain empty) or an alias chain of any length followed by `name` (e.g. "a.b.name" -
+//aliasChain = ["a", "b"]) names a known struct/vocab/error type - consulted only to disambiguate
+//"Type{values}" (a struct literal) from "condition { block }" while parsing; an alias hop the lookup
+//doesn't recognize simply isn't treated as a type at the parser level (a real error, including privacy,
+//is reported later, in semantic analysis, which has the authoritative name tables) - see the report for
+//why the parser needs this at all instead of just trying alternatives blindly.
+typedef bool (*TypeNameLookup)(void* ctx, struct list aliasChain, struct str name);
 
 struct scannedImport {
     struct str alias; //explicit, or derived from path (deriveImportAlias in syntax.c) if "import "path""

@@ -1194,17 +1194,20 @@ struct syntax* parseStructLiteralTail(SyntaxCtx sc, struct syntax* name, struct 
     return s;
 }
 
+//name->parts is 2N-1 long for N identifiers ("IDEN (DOT IDEN)*" - see parseName): every identifier but the
+//last is an alias hop, the last is the type name itself.
 bool nameIsKnownType(SyntaxCtx sc, struct syntax* name) {
     if (!sc->isKnownType) return false;
-    struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
-    if (name->parts.len == 1) {
-        struct str n = Str(p0->tok.str.ptr, p0->tok.str.len);
-        return sc->isKnownType(sc->typeCtx, (struct str){0}, n);
+    int nIdens = (name->parts.len +1) /2;
+    struct list aliasChain = ListInit(sizeof(struct str));
+    for (int i = 0; i < nIdens -1; i++) {
+        struct syntaxPart* p = ListGetIdx(&name->parts, i *2);
+        struct str a = Str(p->tok.str.ptr, p->tok.str.len);
+        ListAdd(&aliasChain, &a);
     }
-    struct str alias = Str(p0->tok.str.ptr, p0->tok.str.len);
-    struct syntaxPart* p2 = ListGetIdx(&name->parts, 2);
-    struct str n = Str(p2->tok.str.ptr, p2->tok.str.len);
-    return sc->isKnownType(sc->typeCtx, alias, n);
+    struct syntaxPart* pLast = ListGetIdx(&name->parts, (nIdens -1) *2);
+    struct str n = Str(pLast->tok.str.ptr, pLast->tok.str.len);
+    return sc->isKnownType(sc->typeCtx, aliasChain, n);
 }
 
 //true if a qualified name's *first* identifier alone (ignoring the qualification) is a locally-known
@@ -1215,7 +1218,7 @@ bool firstIdenIsLocalKnownType(SyntaxCtx sc, struct syntax* name) {
     if (!sc->isKnownType || name->parts.len != 3) return false;
     struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
     struct str n = Str(p0->tok.str.ptr, p0->tok.str.len);
-    return sc->isKnownType(sc->typeCtx, (struct str){0}, n);
+    return sc->isKnownType(sc->typeCtx, ListInit(sizeof(struct str)), n);
 }
 
 //"TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|TOK_OWN|EXPR_TRY|
