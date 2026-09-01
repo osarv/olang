@@ -323,12 +323,21 @@ of sync with the actual code.
   written here. A struct field like `next Node<s>` needing the *type itself* to be generic over which
   scope its self-referential fields belong to turns out **not to need a new generics mechanism at all for
   a constructor-bearing type** - see the "constructors already give struct fields a real, type-level
-  scope" entry below, a real discovery, not something designed in from the start. What's still open is
-  narrower: a **plain** `type X struct { ... }` (no `struct(params)`) has no parameter list at all to
-  resolve a field's `<name>` tag against, so it's still limited to a bare `<>` (private-scope); an
-  explicit `<name>` there still correctly fails with `UNKNOWN_SCOPE`. **A plain struct wrapping a
-  bare-`<>` field that then escapes via *return* is now rejected at compile time** instead of silently
-  dangling - see `NESTED_BARE_SCOPE_RETURN_TYPE` near the end of this section. (2) **Known, deliberate v1
+  scope" entry below, a real discovery, not something designed in from the start. A **plain**
+  `type X struct { ... }` (no `struct(params)`) has no parameter list at all to resolve a field's `<name>`
+  tag against, so it's still limited to a bare `<>` (private-scope); an explicit `<name>` there still
+  correctly fails with `UNKNOWN_SCOPE`. **This is deliberately staying this way, not a queued next step -
+  confirmed on reflection, not just left alone by default:** nothing forces a type to stay plain
+  (`hasCtor` only ever restricts the reverse direction - once a type has a constructor, the positional
+  literal is rejected - never the other way), so any plain struct that wants a `<name>`-tagged field can
+  already get one by adding a `struct(params)` constructor with every field as a bare pun - identical
+  fields, `Node(s, val, next)` instead of `Node{val, next}`, and the exact same parameter-list resolution
+  a constructor-bearing type already has. A second, parallel mechanism that let plain structs resolve
+  `<name>` tags too would duplicate a capability that already exists at a near-zero switching cost, for no
+  new expressiveness - exactly the kind of premature abstraction this file's own principles warn against.
+  **A plain struct wrapping a bare-`<>` field that then escapes via *return* is now rejected at compile
+  time** instead of silently dangling - see `NESTED_BARE_SCOPE_RETURN_TYPE` near the end of this section.
+  (2) **Known, deliberate v1
   simplifications, not bugs:** a failed test's scope never
   closes (the assert-failure longjmp bypasses normal control flow entirely) - its chunks just aren't
   returned to the pool for reuse, nothing unsafe about it, just slightly less reuse on a failing run; and
