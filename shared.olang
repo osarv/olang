@@ -533,6 +533,34 @@ func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY 
     return h.box.left.inner
 }
 
+## the "deep corner" the entry above left open on paper - "two entries with the exact same fully-popped
+## remaining path colliding if two independently-nested chains happen to converge on it" - turns out, on
+## careful analysis, not to be a reachable gap at all, so there's no further mechanism to add here: see the
+## report for the induction. "one" reaches WrappedPoint's own internal "s" with ONE push ("one"); "two"
+## reaches the SAME typeParam (WrappedPoint is used both times) with TWO pushes ("two" then "leaf") - a
+## constructor's own parameter names are always unique within one signature, so two DIFFERENT arguments of
+## the SAME call can never be pushed with the same frame, which is exactly what guarantees these two chains
+## can never collide, at any depth, without one of them already being SCOPE_AMBIGUOUS at its true origin.
+## "p.one.inner" and "p.two.leaf.inner" below independently resolve to two DIFFERENT, genuinely correct
+## scopes ("a" and "b") despite sharing the exact same innermost typeParam key.
+type LeafWrap struct(s scope, leaf WrappedPoint<s>) {
+    leaf
+}
+
+type SiblingPair struct(s1 scope, s2 scope, one WrappedPoint<s1>, two LeafWrap<s2>) {
+    one, two
+}
+
+func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) ? Point<a> {
+    p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
+    return p.one.inner
+}
+
+func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) ? Point<b> {
+    p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
+    return p.two.leaf.inner
+}
+
 ## reassignment tracking: a var's own scope-binding map used to be set once, at its own declaration, and
 ## never revisited - so "box = ScopedBox(otherScope, ...)" here left box's OWN tracked binding stale,
 ## silently still saying "a" even after box was reassigned to point at something else entirely. A plain
@@ -1048,6 +1076,15 @@ test "the static scope checker resolves a scope tag through three levels of nest
     p mut Point<> = holderFieldChecked(own, 17, 18, 19, 20)
     assert(p.x == 17)
     assert(p.y == 18)
+}
+
+test "two same-typed sibling fields at different nesting depths never collide" {
+    a mut Point<> = siblingPairOneChecked(own, own, 21, 22, 23, 24)
+    assert(a.x == 21)
+    assert(a.y == 22)
+    b mut Point<> = siblingPairTwoLeafChecked(own, own, 21, 22, 23, 24)
+    assert(b.x == 23)
+    assert(b.y == 24)
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {

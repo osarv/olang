@@ -1294,8 +1294,39 @@ of sync with the actual code.
   `SCOPE_AMBIGUOUS`) and one ad hoc rejection (`h.box.right.inner` checked against the *other* field's
   scope, still correctly rejected with `SCOPE_MAY_NOT_OUTLIVE_TARGET`, confirming the generalization adds
   precision without weakening the existing safety net). `make verify` passes with all of this in place.
-  **What's left, and it's now a genuinely deep corner:** two entries with the exact same *fully-popped*
-  remaining path can still collide if two independently-nested chains happen to converge on it (e.g. two
-  siblings at DIFFERENT levels that both happen to bottom out through the same sequence of same-typed
-  bare-pun fields) - still handled by the same `SCOPE_AMBIGUOUS` fallback, not a new gap, just not
-  specifically constructed or tested for since nothing in the current test suite reaches it.
+  **What was left at the time, closed by the entry below, not by a code change:** two entries with the
+  exact same *fully-popped* remaining path colliding if two independently-nested chains happen to converge
+  on it (e.g. two siblings at DIFFERENT levels that both happen to bottom out through the same sequence of
+  same-typed bare-pun fields).
+
+- **The "deep corner" above turns out not to be a reachable gap at all - proven by induction, not patched.**
+  Asked directly whether it could be closed; working through it precisely showed there was nothing left to
+  fix. The argument: two entries can only ever be *compared* against each other (by `viaPathsEqual`) at one
+  of two points - `OperandFuncCall`'s merge loop (comparing entries newly pushed from argument `i` against
+  whatever's already in the call's own map from arguments `0..i-1`) or `OperandMember`'s carry-forward loop
+  (comparing entries popped from the *same* base operand's map against each other). In the first case, a
+  constructor's own parameter names are always unique within one signature (`VAR_NAME_IN_USE` rejects a
+  duplicate), so entries contributed by two *different* arguments are always pushed with two *different*
+  top-of-path frames - they can never collide at the point of merge, only entries *within one argument's
+  own already-merged map* can, and that case is exactly what the existing conflict-check already catches.
+  In the second case, only entries whose *top* frame already matches the field's own `punParam` are popped
+  at all (everything else is filtered out first) - so two entries reaching the popped comparison already
+  agree on their top frame, meaning if their full paths were ever going to collide, they'd have already
+  been equal (as full paths) in the base operand's own map *before* popping - which the same induction
+  (applied one level up, to whatever produced *that* map) already forbids, unless they'd already been
+  consolidated into one `SCOPE_AMBIGUOUS` entry. By induction from the innermost (leaf) construction
+  outward, this holds at every level: an operand's own `scopeBindings` map can never carry two distinct
+  entries with the same `(typeParam, viaPath)` pair and *different* `boundTo` without one of the two
+  existing conflict-checks having already caught and flagged it. The existing checks aren't dead code -
+  they're the base case the induction relies on - just never reachable with a *silently wrong* outcome:
+  every path through the mechanism either lands on a unique key or on one already marked ambiguous at its
+  true point of origin.
+  **Confirmed empirically, not just on paper**, with `SiblingPair`/`siblingPairOneChecked`/
+  `siblingPairTwoLeafChecked` in shared.olang: `one` reaches `WrappedPoint`'s own internal `s` with a
+  one-frame path (`[one]`); `two.leaf` reaches the exact same `typeParam` (the same `WrappedPoint` type,
+  reused) with a two-frame path (`[two, leaf]`) - genuinely different depths, genuinely the same innermost
+  key, and both resolve independently to their own correct, different scopes (`a` and `b`) with no
+  ambiguity and no cross-talk between them, exactly as the induction predicts. A mismatched check
+  (`p.two.leaf.inner` against the *wrong* scope) is still correctly rejected, confirming the checker is
+  actually live here, not vacuously permissive. No code changed for this entry - only the proof and its
+  confirming test.
