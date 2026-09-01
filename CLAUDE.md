@@ -115,16 +115,42 @@ of sync with the actual code.
   `struct type`, which already had `owner`), so a cross-module call mangled its target under the
   *caller's* module by construction - added `struct var.owner`, set at collection time, and codegen now
   mangles a call target under the callee's own module.
-  **Deliberately not done, to keep this change bounded** (all fall under the same "capital letter =
-  exported" rule once implemented, so this is scope, not a rule change): bare cross-module *variable*
-  reads with no call (`x = alias.SomeGlobal`) - genuinely riskier, since a bare `TOK_IDEN` primary can't
-  gain a namespace without colliding with ordinary struct member access (`localVar.field`) at the grammar
-  level, so it needs real semantic-level disambiguation, not just a grammar tweak; the `error` statement
-  raising a *foreign* module's error type directly (`error alias.MyError.word`) - today you can declare a
-  foreign error in your own signature and `try`/`catch` it, but not originate one yourself; and a module
-  transitively re-exporting its own imports (so importing A also reaches through A's import of B). None
-  of these came up while building the test suite that motivated this change, so none were forced - but
-  they're the same "capital letter = exported" rule, just not yet wired into their own grammar slot.
+  **Deliberately not done at the time, to keep this change bounded** (all fall under the same "capital
+  letter = exported" rule once implemented, so this was scope, not a rule change): bare cross-module
+  *variable* reads with no call (`x = alias.SomeGlobal`), the `error` statement raising a *foreign*
+  module's error type directly (`error alias.MyError.word`), and a module transitively re-exporting its
+  own imports (so importing A also reaches through A's import of B). None of these came up while building
+  the test suite that motivated this change, so none were forced. **The first two are now closed - see the
+  entries below.** The third (transitive re-export) is still genuinely open, and unlike the first two it's
+  a real design question, not just an implementation gap: does importing A automatically make every one of
+  A's own imports reachable through it (fully automatic, no per-import opt-in, matching this language's
+  existing "no separate privacy mechanism beyond capitalization" philosophy), or does a module have to
+  explicitly mark which of its own imports it re-exports? The former is the more consistent answer given
+  everything else in this language uses blanket capital-letter visibility with no additional opt-in
+  controls, but it hasn't been decided, and it would also need real grammar work (today's cross-module
+  name resolution tops out at exactly one alias hop - `alias.Name`/`alias.Type.word` - never a chain like
+  `a.b.Name`).
+  **Closed: bare cross-module variable reads.** `buildPostfix`'s new `tryBuildCrossModuleVarRead` looks one
+  postfix part ahead of a bare identifier primary: if it isn't shadowed by a real local, does name a known
+  import alias, and the very next postfix part is specifically a member access, it resolves straight to a
+  cross-module `OperandReadVar` (public-only, mirroring `resolveCallTarget`'s own cross-module lookup)
+  instead of falling through to ordinary struct member access - which is exactly the collision the grammar
+  itself can't disambiguate on its own (see the report on why this was deferred). Anything else (no import
+  alias by that name, or a local shadowing it, or an index/inc-dec instead of a member following) falls
+  through to the unchanged ordinary path, so `localVar.field` is never affected. Works as both an rvalue
+  and an assignment target with no special-casing in `buildAssignStmnt`, and through further chained member
+  access/indexing (`alias.SomeStruct.field = ...`), since the rest of `buildPostfix`'s own postfix loop
+  runs unchanged once the cross-module read is spliced in as the starting operand. Confirmed with
+  `worker.olang`'s new public `AskCount` global, read and written directly from `runner.olang` as
+  `wk.AskCount`, both bare and through a further arithmetic expression.
+  **Closed: originating a foreign module's error type directly.** `error alias.MyError.word`'s grammar
+  (`parseStmntError`) extended from a fixed 2-identifier shape to optionally accept a leading alias (2 or 3
+  identifiers, unambiguous by count alone - unlike a catch clause's own 2-identifier case, an `error`
+  statement always ends in exactly `TYPE.word`, never a bare type). `buildErrorStmnt` mirrors
+  `resolveErrorTypeName`'s own cross-module lookup (target module, public-only) inline, since the two don't
+  share a node shape to call one from the other. Confirmed with `runner.olang` originating
+  `worker.olang`'s own `WorkerError.BAD_INPUT` via a new `alwaysWorkerBadInput` function, caught back in a
+  permanent test.
 - **Struct/array literal syntax + `:=` type inference.** Struct literals are `Type{v1, v2, ...}`
   (positional, in member-declaration order); array literals are `T[v1, ...]` (see the dedicated array-
   literal-syntax entry near the end of this section for the full design and history - the size/dynamic-
@@ -1027,15 +1053,14 @@ of sync with the actual code.
   additional call, `cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, bytes)`, right after that function's own
   element-copy loop, reusing the exact same recursive walk - no new mechanism needed for the second path
   either.
-  **Deliberately not attempted here:** a genuinely dynamic (`T[expr]`) runtime-sized array of destructor-
-  bearing elements - `OPERATION_SIZED_ARRAY_ALLOC`'s own zero-fill (`cgSizedArrayAlloc`) never allocates
-  actual struct instances via a literal at all (it always zero-fills, never copies from a source array), so
-  there's nothing to register a destructor *for* at allocation time there; and the walk is still always a
-  compile-time-unrolled C loop, never an LLVM runtime loop, since both call sites are only ever reached for
-  a fixed (`!arrMalloc`, compile-time-constant-length) source array - a hypothetical future runtime-counted
-  source (not currently constructible - see the array-index-scope-override entry above for why an array's
-  own element shape is hard to make independently reference-typed at all) would need a real runtime loop,
-  not this one.
+  **Deliberately not attempted here at the time:** a genuinely dynamic (`T[expr]`) runtime-sized array of
+  destructor-bearing elements - `OPERATION_SIZED_ARRAY_ALLOC`'s own zero-fill (`cgSizedArrayAlloc`) never
+  allocates actual struct instances via a literal at all (it always zero-fills, never copies from a source
+  array), so there's nothing to register a destructor *for* at allocation time there; and the walk is still
+  always a compile-time-unrolled C loop, never an LLVM runtime loop, since both call sites are only ever
+  reached for a fixed (`!arrMalloc`, compile-time-constant-length) source array - a hypothetical future
+  runtime-counted source would need a real runtime loop, not this one. **This was a real, confirmed bug,
+  not just an unimplemented feature - closed in its own entry near the end of this section.**
 
 - **"return x" now skips x's own destructor - closes the move-semantics gap the constructors/destructors
   entry above flagged as a known limitation.** Before this, `cgRunLocalDestructors` ran unconditionally
@@ -1341,3 +1366,52 @@ of sync with the actual code.
   (`p.two.leaf.inner` against the *wrong* scope) is still correctly rejected, confirming the checker is
   actually live here, not vacuously permissive. No code changed for this entry - only the proof and its
   confirming test.
+
+- **A real, confirmed resource leak fixed: a genuinely runtime-sized (`T[expr]`) array of destructor-
+  bearing elements never ran any of its elements' destructors, even after being filled in.** Not just an
+  unimplemented feature - stress-tested directly (a destructor-bearing type with a side-effect counter,
+  filled via a loop after `arr mut H[n]<>`) and confirmed the counter never moved. `cgSizedArrayAlloc` only
+  ever zero-filled the buffer and returned; nothing registered anything with the owning scope's destructor
+  list, unlike a fixed-size array literal (which walks its own compile-time-known elements at allocation
+  time - see the per-element-destructor entry above). The gap: a runtime-sized array's own elements aren't
+  known at allocation time at all - they're filled in later, by ordinary, separate `arr[i] = ...` statements
+  - so there was no single point that could walk "the elements" the way a fixed array's own literal could.
+  **Fixed by registering all `n` slots up front, at allocation time, unconditionally - not deferred until
+  or gated on each slot actually being individually assigned.** This was a real design fork, surfaced and
+  decided rather than picked silently: should a scope-close destruct only the slots a caller explicitly
+  assigned (needing new runtime "was this slot initialized" tracking), or every slot regardless (meaning
+  `destruct{}` has to treat a zero-filled/never-assigned value as well-defined)? Went with the latter -
+  simpler, and consistent with zero-fill already being this array form's own accepted, documented default
+  state everywhere else. Each destructor call reads whatever's actually at that slot's memory when the
+  scope eventually closes, so a slot that was later assigned a real value destructs that value correctly,
+  and a slot nobody got around to assigning destructs the zero-filled value the initial memset produced.
+  **Mechanism: a new `cgRegisterDtorLoop` (codegen.c), the runtime-counted counterpart to
+  `cgRegisterDtorIfNeeded`'s own fixed-array branch.** A `T[expr]` array's own count is only known at
+  runtime, so it can't be compile-time-unrolled the way a fixed array's compile-time-constant length is -
+  this emits a genuine LLVM loop instead (an `alloca`'d `i64` counter with real `br`/label blocks, using
+  `ctx->lblCtr`/`cgLabel`/`cgBr` the same way `cgFor`'s own loop already does, rather than a hand-written
+  runtime-string function like `emitScopeRuntime`'s other primitives - only one call site needs this, so a
+  dedicated shared runtime helper wasn't worth it), calling `cgRegisterDtorIfNeeded` once per element
+  *inside* the loop body - which still handles a nested fixed-array element type recursively for free,
+  exactly as it already does for a fixed array's own compile-time-unrolled loop. No new registration
+  primitive needed on the runtime side at all - `__olang_scope_register_dtor` already handles "one instance,
+  one destructor function," called `n` times in a row from inside the new loop.
+  **Confirmed both directions**: a permanent test (`useSizedHandleArray` in shared.olang) fills every slot
+  via a loop and checks the destructor count matches; ad hoc (not permanent, nothing further to assert
+  against) confirmed a slot left entirely unassigned still destructs its zero-filled value, and that `n=0`
+  neither crashes nor over-counts.
+
+- **A second, unrelated, small gap closed alongside the above: an existing (non-literal) fixed-array value
+  can now flow into a dynamic (`T[]`) target too, not just a fresh literal.** `OperandFitsType`'s dynamic-
+  promotion branch was gated on `op->isLiteral` - the same gate the int-literal-to-float widening rule
+  uses, but for a genuinely different reason there: widening an int *literal* is pure reinterpretation (no
+  fixed representation to convert from yet), while a non-literal int already has a concrete representation
+  and would need an actual runtime conversion instruction - a real, still-unimplemented mechanism gap. No
+  such split exists for arrays: `cgPromoteFixedArrayToDynamic` only ever needs a source *address* to copy
+  from, and `cgValue`'s by-ref convention already hands one back for any embedded array regardless of
+  whether it came from a fresh literal or an existing variable - confirmed by checking codegen before
+  touching anything, not assumed. So this needed no codegen changes at all, only relaxing the semantic.c
+  check (dropping `op->isLiteral` from this one branch, leaving the unrelated int-to-float gate untouched).
+  Confirmed with a permanent test - a plain local variable, not a literal, copied into a dynamic target and
+  then mutated afterward, proving the promotion is a real independent copy rather than an alias of the
+  source's own storage.

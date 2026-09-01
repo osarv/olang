@@ -48,7 +48,14 @@ func checkRangeOk(n int32) ? bool {
     return ok
 }
 
+## a bare cross-module VARIABLE read ("alias.SomeGlobal", no call) - previously unsupported: a bare
+## TOK_IDEN primary couldn't gain a namespace at the grammar level without colliding with ordinary struct
+## member access ("localVar.field"), so this needed real semantic-level disambiguation (buildPostfix's own
+## tryBuildCrossModuleVarRead) rather than a grammar tweak - see the report.
+AskCount mut int32 = 0
+
 func AskRunner(n int32) ? int32 {
+    AskCount = AskCount + 1
     return rn.DoubleIt(n)
 }
 

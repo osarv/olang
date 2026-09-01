@@ -1504,13 +1504,19 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         op->type = target;
         return TYPE_FIT_OK;
     }
-    //a fresh fixed-size array literal may flow into a dynamic ("T[]") target regardless of its own size -
-    //malloc-and-copy at the point it's promoted (see typeNeedsDynamicPromotion/cgPromoteFixedArrayToDynamic
-    //in codegen.c). The array-sizing counterpart to the "<>"-reference malloc-promotion above - an
-    //orthogonal axis, not the same mechanism (see the report) - so it's gated on op->isLiteral the same way
-    //the int->float widening above is: an arbitrary *existing* fixed-array value flowing into a dynamic
-    //slot is a different, broader question this doesn't attempt to answer.
-    if (op->isLiteral && op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
+    //a fixed-size array value - fresh literal or an already-existing one, either way - may flow into a
+    //dynamic ("T[]") target regardless of its own size: malloc-and-copy at the point it's promoted (see
+    //typeNeedsDynamicPromotion/cgPromoteFixedArrayToDynamic in codegen.c). The array-sizing counterpart to
+    //the "<>"-reference malloc-promotion above - an orthogonal axis, not the same mechanism (see the
+    //report). Unlike the int->float widening above, this is NOT gated on op->isLiteral: that gate exists
+    //there because widening an int LITERAL is pure reinterpretation (no fixed representation yet to
+    //convert from), whereas a non-literal int already has a concrete representation and would need an
+    //actual runtime conversion instruction - a genuinely different, unimplemented mechanism. No such split
+    //exists here: cgPromoteFixedArrayToDynamic only ever needs a source ADDRESS to copy from
+    //(cgValue's by-ref convention already hands one back for any embedded array, literal or not), so a
+    //plain variable already holding a fixed array copies exactly the same way a fresh literal does -
+    //codegen needed no changes at all, only this check relaxing to admit it.
+    if (op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
             && !op->type.arrMalloc && target.arrMalloc && TypeIsSame(*op->type.arrElem, *target.arrElem)) {
         return TYPE_FIT_OK;
     }
@@ -2060,9 +2066,42 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
+//"alias.SomeGlobal" - a bare cross-module VARIABLE read, no call - see the report. Previously unsupported:
+//a bare TOK_IDEN primary can't gain a namespace at the grammar level without colliding with ordinary
+//struct member access ("localVar.field"), so this is real semantic-level disambiguation, done here rather
+//than in buildPrimary since it needs to see one postfix part ahead (whether a "." follows the identifier
+//at all). Recognized only when: the base is a plain identifier; a local of that name doesn't already
+//shadow it (mirrors resolveCallTarget's own precedence - an import and a var live in different
+//namespaces, but a local always wins if both exist); it names a real import alias; and the very next
+//postfix part is specifically a member access (not an index or inc/dec, neither of which make sense
+//directly on a bare alias). Anything else falls through to the ordinary path unchanged. Returns NULL (not
+//found/not applicable) rather than a placeholder operand, so the caller can tell "there was nothing here"
+//from "there was, but it's private/unknown" (buildPostfix itself only calls this once it already knows a
+//"." follows, so it commits to reporting an error rather than falling through on failure past that point).
+struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* s) {
+    struct syntax* primaryNode = partSntx(s, 0);
+    if (primaryNode->parts.len != 1 || !partAt(primaryNode, 0)->isToken) return NULL;
+    struct token aliasTok = partAt(primaryNode, 0)->tok;
+    if (aliasTok.type != TOK_IDEN) return NULL;
+    if (s->parts.len < 2 || partAt(s, 1)->isToken || partAt(s, 1)->sntx->type != SNTX_EXPR_MEMBR) return NULL;
+    struct str aliasName = strFromTok(aliasTok);
+    if (scopeFindLocal(ctx->scope, aliasName)) return NULL;
+    struct semaModule* target = findImport(ctx->mod, aliasName);
+    if (!target) return NULL;
+
+    struct token varTok = firstTokOfType(partSntx(s, 1), TOK_IDEN);
+    struct str name = strFromTok(varTok);
+    struct var* v = VarGetList(&target->vars, name);
+    if (!v) { ErrMsgSemantic(varTok, UNKNOWN_VAR); return OperandIntLiteral(varTok); }
+    if (!isPublic(name)) { ErrMsgSemantic(varTok, VAR_IS_PRIVATE); return OperandIntLiteral(varTok); }
+    return OperandReadVar(v, varTok);
+}
+
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
-    struct operand* result = buildExprFromSyntax(ctx, partSntx(s, 0));
-    for (int i = 1; i < s->parts.len; i++) {
+    struct operand* crossModuleRead = tryBuildCrossModuleVarRead(ctx, s);
+    struct operand* result = crossModuleRead ? crossModuleRead : buildExprFromSyntax(ctx, partSntx(s, 0));
+    int startIdx = crossModuleRead ? 2 : 1;
+    for (int i = startIdx; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) {
             if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
@@ -2794,16 +2833,32 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
 struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_ERROR);
     struct list idens = allTokOfType(s, TOK_IDEN);
-    struct token errTypeTok = *(struct token*)ListGetIdx(&idens, 0);
-    struct token wordTok = *(struct token*)ListGetIdx(&idens, 1);
 
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ERROR;
 
     if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
 
-    struct type* errType = TypeGetList(&ctx->mod->types, strFromTok(errTypeTok));
+    //3 identifiers: "alias.TYPE.word" - originating a foreign module's own error type directly, not just
+    //declaring/catching one already reachable through a signature - see the report. Unambiguous against
+    //the 2-identifier same-module case by count alone (parseStmntError only ever produces 2 or 3).
+    struct semaModule* target = NULL;
+    struct token errTypeTok;
+    struct token wordTok;
+    if (idens.len == 3) {
+        struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
+        errTypeTok = *(struct token*)ListGetIdx(&idens, 1);
+        wordTok = *(struct token*)ListGetIdx(&idens, 2);
+        target = findImport(ctx->mod, strFromTok(aliasTok));
+        if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return stmt; }
+    } else {
+        errTypeTok = *(struct token*)ListGetIdx(&idens, 0);
+        wordTok = *(struct token*)ListGetIdx(&idens, 1);
+    }
+
+    struct type* errType = TypeGetList(target ? &target->types : &ctx->mod->types, strFromTok(errTypeTok));
     if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(errTypeTok, UNKNOWN_ERROR); return stmt; }
+    if (target && !isPublic(strFromTok(errTypeTok))) { ErrMsgSemantic(errTypeTok, TYPE_IS_PRIVATE); return stmt; }
     resolveTypeDecl(errType);
 
     bool declared = false;

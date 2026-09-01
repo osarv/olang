@@ -11,6 +11,13 @@ func DoubleIt(n int32) ? int32 {
     return n * 2
 }
 
+## originating a FOREIGN module's error type directly via "error alias.Type.word" - previously you could
+## only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
+## report. wk.WorkerError is declared over in worker.olang, not here.
+func alwaysWorkerBadInput() wk.WorkerError ? int32 {
+    error wk.WorkerError.BAD_INPUT
+}
+
 func main() RunnerError {
     try sh.SafeDiv(10, 2) catch sh.MathError {
         error RunnerError.STARTUP_FAILED
@@ -36,4 +43,20 @@ test "runner can call worker's cross-module wrapper directly" {
         ok = false
     }
     assert(ok)
+}
+
+test "originating a foreign module's error type directly with 'error alias.Type.word'" {
+    caught mut bool = false
+    try alwaysWorkerBadInput() catch wk.WorkerError.BAD_INPUT {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "a bare cross-module variable read, no call" {
+    before mut int32 = wk.AskCount
+    assert(wk.AskRunner(5) == 10)
+    assert(wk.AskCount == before + 1)
+    wk.AskCount = wk.AskCount + 100
+    assert(wk.AskCount == before + 101)
 }

@@ -435,6 +435,49 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
     }
 }
 
+//the runtime-counted counterpart to cgRegisterDtorIfNeeded's own fixed-array branch above: a "T[expr]"
+//array's own count is only known at runtime (that's the entire point of the sugar - see the report), so
+//it can't be compile-time-unrolled the way a fixed array's own compile-time-constant length is. Emits a
+//genuine LLVM loop instead (an alloca'd i64 counter, matching cgFor's own loop-variable convention rather
+//than a phi node, for consistency with the rest of this file's ordinary codegen), calling
+//cgRegisterDtorIfNeeded once per element inside the loop body - which still handles a nested fixed-array
+//element type recursively for free, exactly as it already does for a fixed array's own unrolled loop.
+//Only ever called when typeMayHaveDestruct(elemT) is already true (see cgSizedArrayAlloc).
+void cgRegisterDtorLoop(struct cgCtx* ctx, struct type elemT, char* scopeVal, char* basePtr, char* countVal) {
+    char elemTy[256];
+    llvmType(elemT, elemTy, sizeof(elemTy));
+
+    int id = ctx->lblCtr++;
+    char condLbl[32], bodyLbl[32], endLbl[32];
+    snprintf(condLbl, sizeof(condLbl), "dtorloop.cond.%d", id);
+    snprintf(bodyLbl, sizeof(bodyLbl), "dtorloop.body.%d", id);
+    snprintf(endLbl, sizeof(endLbl), "dtorloop.end.%d", id);
+
+    char* islot = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = alloca i64\n", islot);
+    fprintf(ctx->fnOut, "  store i64 0, ptr %s\n", islot);
+    cgBr(ctx, condLbl);
+
+    cgLabel(ctx, condLbl);
+    char* i = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", i, islot);
+    char* cond = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ult i64 %s, %s\n", cond, i, countVal);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", cond, bodyLbl, endLbl);
+    ctx->terminated = true;
+
+    cgLabel(ctx, bodyLbl);
+    char* elemAddr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", elemAddr, elemTy, basePtr, i);
+    cgRegisterDtorIfNeeded(ctx, elemT, scopeVal, elemAddr);
+    char* inext = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", inext, i);
+    fprintf(ctx->fnOut, "  store i64 %s, ptr %s\n", inext, islot);
+    cgBr(ctx, condLbl);
+
+    cgLabel(ctx, endLbl);
+}
+
 //true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "<>"-heap-indirect
 //dstT - a struct, or a fixed-size array (same rule either way, see the report on extending scope/"<>" to
 //arrays): dstT wants a reference, srcT doesn't have one yet. Deliberately excludes a dynamic ("T[]")
@@ -451,9 +494,10 @@ bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
 
 //true if a fixed-size array value needs malloc-and-copy to fit a dynamic ("T[]") target - the array-sizing
 //counterpart to typeNeedsMallocPromotion above, an orthogonal axis (arrMalloc, not structMAlloc/"<>" -
-//see the report): dstT wants a dynamic slice, srcT is still a fixed, embedded aggregate. Semantic.c
-//(OperandFitsType) only ever allows this combination through for a fresh literal, but codegen doesn't need
-//to re-check that here - by the time this runs, type-checking has already ensured it's a sound combination.
+//see the report): dstT wants a dynamic slice, srcT is still a fixed, embedded aggregate. Applies equally
+//to a fresh literal or an already-existing fixed-array value (semantic.c's OperandFitsType admits both -
+//see the report), but codegen doesn't need to know or care which one it's looking at here either way -
+//cgPromoteFixedArrayToDynamic only ever needs srcT's own by-ref address to copy from.
 bool typeNeedsDynamicPromotion(struct type dstT, struct type srcT) {
     return dstT.bType == BASETYPE_ARRAY && srcT.bType == BASETYPE_ARRAY && dstT.arrMalloc && !srcT.arrMalloc;
 }
@@ -465,9 +509,10 @@ bool typeNeedsDynamicPromotion(struct type dstT, struct type srcT) {
 //resulting { i64, ptr } slice value - element-by-element, same convention every other aggregate-building
 //loop in this file already uses (no memcpy intrinsic, kept consistent with e.g. cgAggregateLiteral's own
 //dynamic-array branch). Also registers each destructor-bearing element found in the fresh buffer (see
-//cgRegisterDtorIfNeeded) - srcT is always a fixed array here (only a fixed literal is ever promoted to
-//dynamic, never the reverse), so its own element loop is the exact same compile-time-unrolled shape
-//cgRegisterDtorIfNeeded already walks generically; no new mechanism needed, just one more call site.
+//cgRegisterDtorIfNeeded) - srcT is always a FIXED array here (a dynamic one is never itself promoted to
+//dynamic again - see typeNeedsDynamicPromotion), so its own element loop is the exact same compile-time-
+//unrolled shape cgRegisterDtorIfNeeded already walks generically, regardless of whether srcAddr came from
+//a fresh literal or an existing variable; no new mechanism needed, just one more call site.
 char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* srcAddr, char* scopeVal) {
     struct type elemT = *srcT.arrElem;
     char elemTy[256];
@@ -1143,6 +1188,15 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
     fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
+
+    //register every one of this array's N slots for destruction up front, at allocation time - not
+    //deferred until (or gated on) individual elements actually being assigned later. Each destructor call
+    //reads whatever's actually AT that slot's memory when the owning scope eventually closes, so a slot
+    //that was later assigned a real value destructs that value correctly; a slot the caller never got
+    //around to assigning destructs the zero-filled value memset just produced above - a real design call
+    //(surfaced and decided, not just implemented silently - see the report), consistent with zero-fill
+    //already being this array form's own accepted, documented default state.
+    if (typeMayHaveDestruct(elemT)) cgRegisterDtorLoop(ctx, elemT, scopeVal, bytes, count);
 
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", agg1, count);

@@ -896,22 +896,39 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
     return s;
 }
 
+//"error TYPE.word" (same-module) or "error alias.TYPE.word" (cross-module, originating a foreign module's
+//own error type directly - see the report) - unambiguous by identifier count (2 vs 3), unlike a catch
+//clause's own "TYPE.word"/"alias.TYPE" 2-identifier case, since an error statement always ends in exactly
+//"TYPE.word", never a bare type alone.
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type == TOK_NONE) return NULL;
-    struct token type = acceptTok(sc, TOK_IDEN);
-    if (type.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct token dot = acceptTok(sc, TOK_DOT);
-    if (dot.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct token word = acceptTok(sc, TOK_IDEN);
-    if (word.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token first = acceptTok(sc, TOK_IDEN);
+    if (first.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token dot1 = acceptTok(sc, TOK_DOT);
+    if (dot1.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token second = acceptTok(sc, TOK_IDEN);
+    if (second.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_STMNT_ERROR);
     addTok(s, kw);
-    addTok(s, type);
-    addTok(s, dot);
-    addTok(s, word);
+    addTok(s, first);
+    addTok(s, dot1);
+    addTok(s, second);
+    int before = TokenGetCursor(sc->tc);
+    struct token dot2 = TokenFeed(sc->tc);
+    if (dot2.type == TOK_DOT) {
+        struct token third = TokenFeed(sc->tc);
+        if (third.type == TOK_IDEN) {
+            addTok(s, dot2);
+            addTok(s, third);
+        } else {
+            TokenSetCursor(sc->tc, before);
+        }
+    } else {
+        TokenSetCursor(sc->tc, before);
+    }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
     return s;
 }
 

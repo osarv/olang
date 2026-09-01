@@ -369,9 +369,9 @@ func useManyHandlesLocally(n int32) ? int32 {
 ## initializer directly - a fixed-size target paired with a literal initializer at a var-decl is
 ## REDUNDANT_ARRAY_SIZE regardless of "<>", so this is the shape that actually exercises the malloc-
 ## promotion path (typeNeedsMallocPromotion), not the unrelated dynamic-array promotion one ("Handle[]<>"
-## instead would go through cgPromoteFixedArrayToDynamic, which doesn't register destructors at all - a
-## separate, not-yet-attempted gap, since a genuinely dynamic array of destructor-bearing elements needs
-## its own runtime element count, not a compile-time-unrolled loop like this fix uses).
+## instead would go through cgPromoteFixedArrayToDynamic - see "useHandleArrayLocallyDynamic" below for
+## that path, and "useSizedHandleArray" further below for a genuinely runtime-counted "T[expr]" one, which
+## needed a real runtime loop rather than a compile-time-unrolled one - see the report).
 func makeHandleArrayRef(s scope) ? Handle[3]<s> {
     return Handle[Handle(20), Handle(21), Handle(22)]
 }
@@ -389,6 +389,27 @@ func useHandleArrayLocally() ? int32 {
 func useHandleArrayLocallyDynamic() ? int32 {
     arr mut Handle[]<> = Handle[Handle(30), Handle(31), Handle(32)]
     return arr[0].id + arr[1].id + arr[2].id
+}
+
+## a THIRD, previously-unregistered path: a genuinely runtime-sized ("T[expr]") array of destructor-bearing
+## elements. Unlike the two fixed-shape paths above, this one's own element count isn't known until
+## runtime, so cgSizedArrayAlloc can't unroll a C-level loop the way cgRegisterDtorIfNeeded's own fixed-
+## array branch does - it emits a genuine LLVM loop instead (cgRegisterDtorLoop), calling
+## cgRegisterDtorIfNeeded once per element inside it. Registered unconditionally for all n slots at
+## allocation time, not deferred until/gated on each slot actually being individually assigned - a real
+## design call, not just an implementation gap: a slot the caller never gets around to assigning still
+## destructs whatever the zero-fill left there, consistent with zero-fill already being this array form's
+## own accepted default state elsewhere. Confirmed with a slot that's genuinely reassigned via a loop AND
+## (ad hoc, not a permanent test - nothing to assert against beyond the destructor count) one that's left
+## entirely unassigned, both correctly destructing exactly n times.
+func useSizedHandleArray(n int32) ? int32 {
+    arr mut Handle[n]<>
+    i mut int32 = 0
+    do {
+        arr[i] = Handle(40 + i)
+        i++
+    } while i < n
+    return arr[0].id
 }
 
 ## constructors already give a struct field a real, type-level scope - no generics syntax needed. A
@@ -721,6 +742,23 @@ test "array literal construction, fixed and dynamic" {
     assert(dyn[2] == 30)
 }
 
+## the fixed-to-dynamic promotion above used to only fire for a FRESH literal (op->isLiteral in
+## OperandFitsType) - an already-existing fixed-array VALUE (a plain variable, not a literal) flowing into
+## a dynamic target was rejected outright. Relaxed once confirmed there's no real mechanism difference for
+## codegen to worry about (unlike int->float widening, which genuinely needs different instructions for a
+## literal vs. a non-literal): cgPromoteFixedArrayToDynamic only ever needs a source ADDRESS to copy from,
+## which cgValue's by-ref convention already provides for any embedded array regardless of where it came
+## from - see the report. "src" here is a genuine local variable, not a literal; mutating it afterward
+## proves the promotion is a real, independent copy, not an alias of the source's own storage.
+test "an existing (non-literal) fixed-array value promotes into a dynamic target too" {
+    src := int32[10, 20, 30]
+    copied mut int32[] = src
+    src[0] = 999
+    assert(copied[0] == 10)
+    assert(copied[1] == 20)
+    assert(copied[2] == 30)
+}
+
 ## a single-value (or empty) array literal was structurally impossible under the old "T[N][v1, ...]"/
 ## "T[][v1, ...]" syntax (the mandatory value-list bracket was indistinguishable from a trailing size
 ## suffix, so it got silently swallowed and the whole literal misparsed as indexing instead) - the new
@@ -938,6 +976,13 @@ test "destructor runs for every element of a fixed literal promoted into a dynam
     total mut int32 = useHandleArrayLocallyDynamic()
     assert(total == 30 + 31 + 32)
     assert(resourcesClosed == before + 3)
+}
+
+test "destructor runs for every element of a genuinely runtime-sized array" {
+    before mut int32 = resourcesClosed
+    first mut int32 = useSizedHandleArray(4)
+    assert(first == 40)
+    assert(resourcesClosed == before + 4)
 }
 
 ## "assert" is a statement (takes its operand directly like "return" does), not a function call - every
