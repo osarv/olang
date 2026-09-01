@@ -2,7 +2,9 @@
 
 olang is a custom programming language. C-like structure, with quality-of-life improvements over C.
 Error handling is modeled on Zig (explicit error sets/unions, no exceptions). Longer-term direction:
-Rust-like compile-time memory/security guarantees (not started yet - see Open questions).
+Rust-like compile-time memory/security guarantees (underway - see the ownership-scopes/static-checker
+entries in Settled decisions below; scope-containment is checked at compile time, a general borrow
+checker is not).
 
 This file is a living design record, not a spec. Whenever a design decision is made, implemented,
 revised, or reversed, update the relevant section below in the same session - don't let it drift out
