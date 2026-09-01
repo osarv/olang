@@ -242,6 +242,9 @@ struct operand {
 
 struct semaImport {
     struct str alias;
+    struct token aliasTok; //anchors error reporting for anything checked against this one import later
+                            //(unknown-namespace lookups already use their own reference-site token instead,
+                            //but the duplicate/cycle checks below don't have one of those to use)
     struct semaModule* mod;
 };
 
@@ -263,6 +266,11 @@ struct semaModule {
                                     //the parser can tell "Type{...}" (a struct literal) apart from
                                     //"condition { block }" by checking whether a name is a known type -
                                     //see the report
+    //memoization + cycle guard for computePublicClosure (semantic.c) - the set of modules reachable from
+    //this one via zero or more PUBLIC (capitalized-alias) import hops, including itself. See the report.
+    bool publicClosureComputed;
+    bool computingPublicClosure;
+    struct list publicClosure; //list of struct semaModule*, only valid once publicClosureComputed
 };
 
 long long TypeGetSize(struct type t);

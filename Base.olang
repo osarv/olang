@@ -1,0 +1,28 @@
+## a small, standalone module imported (unnamed - see the report) by worker.olang, and re-exported from
+## there since worker's own alias for it ("Base", derived from this file's own name) is capitalized. Used
+## from runner.olang, two hops away ("wk.Base.Whatever"), to exercise transitive re-export end to end -
+## see the tests in runner.olang.
+
+BaseCount mut int32 = 0
+
+## constructor-bearing (not a plain "{ }" literal), on purpose: a struct/array LITERAL's own type name
+## still only supports at most one alias hop today (the parser's own type-name-awareness that
+## disambiguates "Type{" from an ordinary expression doesn't chase re-exports yet - see the report), but a
+## CONSTRUCTOR CALL is an ordinary call target and already supports a chain of any length, so this is how
+## a re-exported type gets constructed from more than one hop away.
+type BaseThing struct(id int32) {
+    id
+}
+
+error BaseError {
+    BROKEN
+}
+
+func BumpBase() ? int32 {
+    BaseCount = BaseCount + 1
+    return BaseCount
+}
+
+func AlwaysBaseBroken() BaseError {
+    error BaseError.BROKEN
+}

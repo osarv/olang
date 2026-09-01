@@ -18,6 +18,15 @@ func alwaysWorkerBadInput() wk.WorkerError ? int32 {
     error wk.WorkerError.BAD_INPUT
 }
 
+## a chain of TWO alias hops ("wk" - runner's own alias for worker.olang, then "Base" - worker's own
+## re-exported alias for Base.olang, see worker.olang) reaching a THIRD module's own error type directly,
+## originated fresh right here - not just declared/caught through a signature. Every cross-module
+## mechanism (type ref, call, bare var read, catch, "error" statement) supports an alias chain of any
+## length now, not just one hop - see the report.
+func alwaysBaseBrokenViaChain() wk.Base.BaseError {
+    error wk.Base.BaseError.BROKEN
+}
+
 func main() RunnerError {
     try sh.SafeDiv(10, 2) catch sh.MathError {
         error RunnerError.STARTUP_FAILED
@@ -59,4 +68,36 @@ test "a bare cross-module variable read, no call" {
     assert(wk.AskCount == before + 1)
     wk.AskCount = wk.AskCount + 100
     assert(wk.AskCount == before + 101)
+}
+
+test "a two-hop alias chain reaches a re-exported module's own function" {
+    before mut int32 = wk.Base.BumpBase()
+    assert(wk.Base.BumpBase() == before + 1)
+}
+
+test "a two-hop alias chain reaches a re-exported module's own variable, read and write" {
+    before mut int32 = wk.Base.BaseCount
+    wk.Base.BaseCount = before + 42
+    assert(wk.Base.BaseCount == before + 42)
+}
+
+test "a two-hop alias chain reaches a re-exported module's own type" {
+    t mut wk.Base.BaseThing = wk.Base.BaseThing(9)
+    assert(t.id == 9)
+}
+
+test "a two-hop alias chain reaches a re-exported module's own error type via catch" {
+    caught mut bool = false
+    try wk.Base.AlwaysBaseBroken() catch wk.Base.BaseError.BROKEN {
+        caught = true
+    }
+    assert(caught)
+}
+
+test "originating a two-hop re-exported error type directly with 'error alias.alias.Type.word'" {
+    caught mut bool = false
+    try alwaysBaseBrokenViaChain() catch wk.Base.BaseError {
+        caught = true
+    }
+    assert(caught)
 }

@@ -120,16 +120,11 @@ of sync with the actual code.
   *variable* reads with no call (`x = alias.SomeGlobal`), the `error` statement raising a *foreign*
   module's error type directly (`error alias.MyError.word`), and a module transitively re-exporting its
   own imports (so importing A also reaches through A's import of B). None of these came up while building
-  the test suite that motivated this change, so none were forced. **The first two are now closed - see the
-  entries below.** The third (transitive re-export) is still genuinely open, and unlike the first two it's
-  a real design question, not just an implementation gap: does importing A automatically make every one of
-  A's own imports reachable through it (fully automatic, no per-import opt-in, matching this language's
-  existing "no separate privacy mechanism beyond capitalization" philosophy), or does a module have to
-  explicitly mark which of its own imports it re-exports? The former is the more consistent answer given
-  everything else in this language uses blanket capital-letter visibility with no additional opt-in
-  controls, but it hasn't been decided, and it would also need real grammar work (today's cross-module
-  name resolution tops out at exactly one alias hop - `alias.Name`/`alias.Type.word` - never a chain like
-  `a.b.Name`).
+  the test suite that motivated this change, so none were forced. **All three are now closed - see the
+  entries below**, the third (transitive re-export) via its own dedicated entry near the end of this
+  section once the design question it raised (automatic, no per-import opt-in, vs. an explicit re-export
+  marker) was actually settled - decided in favor of the former, matching this language's existing "no
+  separate privacy mechanism beyond capitalization" philosophy.
   **Closed: bare cross-module variable reads.** `buildPostfix`'s new `tryBuildCrossModuleVarRead` looks one
   postfix part ahead of a bare identifier primary: if it isn't shadowed by a real local, does name a known
   import alias, and the very next postfix part is specifically a member access, it resolves straight to a
@@ -1415,3 +1410,101 @@ of sync with the actual code.
   Confirmed with a permanent test - a plain local variable, not a literal, copied into a dynamic target and
   then mutated afterward, proving the promotion is a real independent copy rather than an alias of the
   source's own storage.
+
+- **Transitive import re-export, closing the last of the three deliberately-deferred cross-module gaps
+  above - "capital letter = exported" extended to import aliases themselves, plus unnamed imports and a
+  real alias-chain grammar to reach through them.** The design, worked out directly rather than guessed at:
+  privacy of an import is decided by the SAME rule as everything else in this language - a capitalized
+  alias is public (re-exported: a third module importing *this* one can reach through it too), a lowercase
+  one is private (exactly today's behavior, unchanged). `import "Math.olang"` (no alias at all) derives its
+  alias from the file's own base name (`deriveImportAlias`, syntax.c - strips any directory and the
+  `.olang` extension), so its capitalization follows straight from the file's own name; `import m
+  "Math.olang"` still works exactly as before, explicit and unaffected. An invalid derived alias (a
+  filename that isn't a legal identifier shape - a hyphen, a leading digit) is a real, anchored compile
+  error (`INVALID_IMPLICIT_IMPORT_ALIAS`, checked once in `semaLoadModule` via the new `isValidAliasShape`),
+  not a silent fallback.
+  **Chosen over the alternative (a module must explicitly opt in to re-exporting each of its own imports)
+  because this language has no OTHER privacy mechanism anywhere beyond the one blanket capitalization rule
+  - adding a second, separate opt-in mechanism just for re-export would be a new kind of thing, not an
+  application of the existing one.**
+  **Mechanism: `parseName`'s own grammar generalized from "IDEN (DOT IDEN)?" (capped at 2 identifiers) to
+  "IDEN (DOT IDEN)*" (unbounded)** - safe to do broadly because type refs and call targets (`parseTypeRef`/
+  `resolveCallTarget`) are both parsed from positions the parser already knows are unambiguous, with no
+  interaction with the parser's own separate type-name-awareness mechanism (`nameIsKnownType`, used only to
+  disambiguate a struct/array *literal*'s `Type{`/`Type[` from an ordinary expression - see the "deliberately
+  not extended" note below). Three call sites needed to walk the resulting arbitrary-length chain, given a
+  shared `resolveAliasChain(mod, idens, trailingCount)` (semantic.c): the first hop is always allowed (a
+  module's own direct imports are always visible to it, regardless of alias case - that's not new, that's
+  the status quo); every hop after that requires the alias being followed to be PUBLIC in the module
+  declaring it, since it's being reached transitively, not directly. `resolveTypeRefBase`, `resolveCallTarget`,
+  and `resolveErrorTypeName` (function-signature error lists) all now call this with `trailingCount=1` for a
+  plain name, replacing their own old "1 identifier or exactly 2" branching outright - for exactly 2
+  identifiers this reduces to precisely the old single-hop behavior, so nothing regressed.
+  **Two shapes needed their own, slightly different resolvers, since their trailing shape isn't always a
+  fixed count:** the `error` statement (`error alias...TYPE.word`) always ends in exactly `TYPE.word`
+  (parseStmntError's own grammar guarantees it), so it's `resolveAliasChain(mod, idens, 2)` - no
+  disambiguation needed, every identifier before the last two is unambiguously an alias hop. A catch clause
+  is genuinely ambiguous, though - it accepts *either* a whole `TYPE` or a `TYPE.word`, so a chain of any
+  length has to decide, at the point it stops consuming hops, whether 1 or 2 trailing identifiers remain.
+  `resolveCatchAliasChain` generalizes the *original* 2-identifier disambiguation (an import alias and an
+  error type live in different namespaces, so whichever interpretation is *possible* is the intended one)
+  uniformly to every step: greedily treat an identifier as a further alias hop whenever `findImport`
+  recognizes it as one, all the way down to exactly 1 or 2 remaining, which are then the type or type+word
+  to resolve wherever the walk stopped. Confirmed this doesn't change the original 3-identifier
+  `alias.Type.word` case's own meaning (still resolves as 1 hop + `TYPE.word`, not 2 hops + a bare type) for
+  any name that doesn't happen to *also* collide with a real import alias in the target module - the same
+  category of theoretical ambiguity the *original* single-hop version already had, not a new one, and the
+  existing "catching a specific word by its full alias.Type.word name" test still passes unchanged.
+  **The bare cross-module variable read (`tryBuildCrossModuleVarRead`, from the entry above) needed its own
+  greedy walk too, since it operates over `SNTX_EXPR_POSTFIX` parts, not a `SNTX_NAME` node** - consumes
+  further `.further` postfix parts one at a time as long as each names a real (public, past the first hop)
+  import in the module reached so far, stopping at the first one that doesn't (or isn't a plain member
+  access at all), which becomes the real variable name. **A real, found-by-testing off-by-one bug in this
+  walk's first draft:** the loop checked `partAt(s, i+1)` instead of `partAt(s, i)` for whether the *next*
+  part was a further alias hop - meaning it was always looking one postfix part too far ahead, so a genuine
+  2-hop chain (`wk.Base.BaseCount`) silently fell through as if `wk` alone had no re-export target,
+  producing "unknown variable"/"unknown struct member" cascade errors instead of resolving. A single-hop
+  read (`wk.AskCount`) and a 2-hop *call* (`wk.Base.Bump()`, going through the unaffected `SNTX_NAME`-based
+  path) both happened to still work, which is what made this specifically a var-read-chain bug and not a
+  broader regression - caught by testing the 2-hop var-read case directly, not by inspection.
+  **A second, separate thing the same test session surfaced: a downstream `ErrorBugFound()` crash (not just
+  a reported error) that turned out to be a consequence of the off-by-one above, not an independent bug** -
+  gone once the off-by-one was fixed, confirmed by re-running the exact program that had triggered it.
+  **Cycle and duplicate-reachability detection, the "reimporting the same file already imported (through a
+  chain, or in general) is an error" rule, asked for directly alongside the design's core shape:**
+  `computePublicClosure(mod)` (semantic.c) computes, once per module and memoized, the full set of modules
+  reachable from it via zero or more PUBLIC import hops (including itself) - a genuine cycle in this graph
+  (a module publicly re-exporting something that eventually publicly re-exports it back) is caught via a
+  `computingPublicClosure` re-entrancy flag on `struct semaModule`, the same idiom `resolveTypeDecl`'s own
+  `resolving` flag already uses elsewhere in this file, reporting `CYCLIC_IMPORT_REEXPORT` at the offending
+  import rather than recursing forever. `checkDuplicateImportReachability`, run once after the *entire*
+  program has finished loading (not inline during `semaLoadModule`'s own recursion, which can leave a
+  cyclically-imported module's own import list still incomplete mid-load), checks - for every module - that
+  its own direct imports' combined public closures never overlap: if the same underlying file is reachable
+  through two of one module's own *different* direct imports (whether that's the literal same file imported
+  twice under different aliases, or one direct import and a re-export reached through *another* direct
+  import), that's `DUPLICATE_IMPORT_REACHABILITY`. Deliberately does NOT flag the pre-existing, ordinary
+  "two unrelated modules both import the same third file directly" diamond (worker.olang and runner.olang
+  both importing shared.olang, say) - that's each module's OWN single direct import, never two paths from
+  the SAME module, and stays completely unaffected; confirmed by `make verify` continuing to pass unchanged.
+  **Deliberately not extended here, and why:** a struct/array literal's own type name, and a vocab value,
+  still only support at most one alias hop - both need the *parser's* own type-name-awareness
+  (`nameIsKnownType`/`isKnownTypeForParsing`, a `TypeNameLookup` callback with a flat single-alias
+  interface) to disambiguate `Type{`/`Type[` from an ordinary expression *while parsing*, before real
+  semantic analysis with its alias-chain-walking machinery even runs - extending that callback to accept an
+  arbitrary chain is a separate, real undertaking (the interface itself would need to change), not
+  attempted here. Not a silent miscompile either way: a struct/array literal reached through more than one
+  hop just fails to parse as a literal at all (falls through to the ordinary bare-identifier fallback,
+  producing an honest, if less specific, parse error) - confirmed directly, and worked around in the
+  permanent test for this (`Base.olang`'s own `BaseThing` is constructor-bearing specifically so it can be
+  *called*, `wk.Base.BaseThing(9)`, which is an ordinary call target and already supports any chain length,
+  rather than needing literal syntax at all).
+  **Confirmed with real, permanent project files, not just ad hoc ones:** a new `Base.olang` (a var, a
+  function, a constructor-bearing type, an error type) imported unnamed by `worker.olang` (`import
+  "Base.olang"`, capitalized alias `Base` - automatically re-exported), reached from `runner.olang` two
+  hops away (`wk.Base.*`) through every mechanism - a bare variable read and write, a function call, a
+  constructor call, and both a `catch` and an `error alias.alias.Type.word` statement against its own error
+  type. The negative cases (a file imported twice directly, a diamond through re-export, a genuine re-export
+  cycle) aren't permanent tests, same convention as every other compile-*rejection* case in this file (a
+  rejected program can't run as a `test{}` block) - confirmed ad hoc instead, each producing exactly the
+  expected error and no crash.

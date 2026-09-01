@@ -127,23 +127,30 @@ struct syntax* parseCatchErrList(SyntaxCtx sc);
 
 // ---- names, types ----
 
-//"IDEN (DOT IDEN)?" - never fails if a leading IDEN is present; callers check the leading token first
+//"IDEN (DOT IDEN)*" - an arbitrary-length dotted identifier chain (all but the trailing one or two
+//identifiers are alias hops through a chain of re-exports - see resolveAliasChain in semantic.c; that's a
+//semantic question, not a grammar one, so this commits to any dotted chain unconditionally). Never fails
+//if a leading IDEN is present; callers check the leading token first. Used for type refs and call targets,
+//both parsed from a position the parser already knows is unambiguous - NOT used for a struct/array
+//literal's own type name or a vocab value, both of which need the parser's own type-name-awareness
+//(nameIsKnownType) to disambiguate from an ordinary expression while parsing, and that mechanism only
+//ever recognizes a chain of at most 2 - a literal/vocab value reached through more than one re-export hop
+//is accordingly not yet supported (falls through to an ordinary, if less helpful, parse error rather than
+//silently mis-resolving - see the report).
 struct syntax* parseName(SyntaxCtx sc) {
     struct token first = acceptTok(sc, TOK_IDEN);
     if (first.type == TOK_NONE) return NULL;
     struct syntax* s = newNode(SNTX_NAME);
     addTok(s, first);
-    int cur = TokenGetCursor(sc->tc);
-    struct token dot = TokenFeed(sc->tc);
-    if (dot.type == TOK_DOT) {
-        struct token second = TokenFeed(sc->tc);
-        if (second.type == TOK_IDEN) {
-            addTok(s, dot);
-            addTok(s, second);
-            return s;
-        }
+    while (true) {
+        int cur = TokenGetCursor(sc->tc);
+        struct token dot = TokenFeed(sc->tc);
+        if (dot.type != TOK_DOT) { TokenSetCursor(sc->tc, cur); break; }
+        struct token next = TokenFeed(sc->tc);
+        if (next.type != TOK_IDEN) { TokenSetCursor(sc->tc, cur); break; }
+        addTok(s, dot);
+        addTok(s, next);
     }
-    TokenSetCursor(sc->tc, cur);
     return s;
 }
 
@@ -331,17 +338,18 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     return s;
 }
 
+//"import ALIAS "path"" or "import "path"" (alias derived from the file's own name - see
+//deriveImportAlias/the report); the alias token is optional, so this node may carry either 2 or 3 tokens.
 struct syntax* parseImport(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_IMPORT);
     if (kw.type == TOK_NONE) return NULL;
     struct token alias = acceptTok(sc, TOK_IDEN);
-    if (alias.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token path = acceptTok(sc, TOK_STR_LIT);
     if (path.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_IMPORT);
     addTok(s, kw);
-    addTok(s, alias);
+    if (alias.type != TOK_NONE) addTok(s, alias);
     addTok(s, path);
     int beforeEnd = TokenGetCursor(sc->tc);
     struct token end = TokenFeed(sc->tc);
@@ -896,10 +904,10 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
     return s;
 }
 
-//"error TYPE.word" (same-module) or "error alias.TYPE.word" (cross-module, originating a foreign module's
-//own error type directly - see the report) - unambiguous by identifier count (2 vs 3), unlike a catch
-//clause's own "TYPE.word"/"alias.TYPE" 2-identifier case, since an error statement always ends in exactly
-//"TYPE.word", never a bare type alone.
+//"error TYPE.word" (same-module) or "error alias...TYPE.word" (cross-module, through an alias chain of
+//any length, originating a foreign module's own error type directly - see the report) - always ends in
+//exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
+//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity.
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
@@ -915,33 +923,30 @@ struct syntax* parseStmntError(SyntaxCtx sc) {
     addTok(s, first);
     addTok(s, dot1);
     addTok(s, second);
-    int before = TokenGetCursor(sc->tc);
-    struct token dot2 = TokenFeed(sc->tc);
-    if (dot2.type == TOK_DOT) {
-        struct token third = TokenFeed(sc->tc);
-        if (third.type == TOK_IDEN) {
-            addTok(s, dot2);
-            addTok(s, third);
-        } else {
-            TokenSetCursor(sc->tc, before);
-        }
-    } else {
-        TokenSetCursor(sc->tc, before);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token dot = TokenFeed(sc->tc);
+        if (dot.type != TOK_DOT) { TokenSetCursor(sc->tc, before); break; }
+        struct token next = TokenFeed(sc->tc);
+        if (next.type != TOK_IDEN) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, dot);
+        addTok(s, next);
     }
     if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
     return s;
 }
 
-//"IDEN (DOT IDEN)? (DOT IDEN)?" - "MyError"/"alias.MyError" (whole type) or "MyError.Word"/
-//"alias.MyError.Word" (one word); which shape it is gets disambiguated later, in semantic analysis (an
-//import alias and an error type live in different namespaces, see the report)
+//"IDEN (DOT IDEN)*" - an alias chain of any length, then either a whole TYPE or a TYPE.word; which
+//trailing shape it is (and where the alias chain actually ends) gets disambiguated later, in semantic
+//analysis (resolveCatchAliasChain - an import alias and an error type live in different namespaces, see
+//the report), not here - this grammar rule just commits to any dotted chain unconditionally.
 struct syntax* parseCatchErr(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token first = acceptTok(sc, TOK_IDEN);
     if (first.type == TOK_NONE) return NULL;
     struct syntax* s = newNode(SNTX_CATCH_ERR);
     addTok(s, first);
-    for (int i = 0; i < 2; i++) {
+    while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token dot = TokenFeed(sc->tc);
         if (dot.type != TOK_DOT) { TokenSetCursor(sc->tc, before); break; }
@@ -1445,6 +1450,39 @@ struct syntax* parseTopDecl(SyntaxCtx sc) {
     return s;
 }
 
+//derives an import's own alias from its file path when none is given explicitly ("import "Math.olang""
+//instead of "import m "Math.olang"" - see the report): the base filename with any leading directory and
+//the trailing ".olang" extension stripped, so "some/dir/Math.olang" becomes "Math". Doesn't validate the
+//result is a legal identifier shape (a filename with a hyphen, or starting with a digit, isn't) - see
+//isValidAliasShape, checked once real semantic analysis has a token to anchor the error to.
+struct str deriveImportAlias(struct str path) {
+    int start = 0;
+    for (int i = 0; i < path.len; i++) {
+        if (path.ptr[i] == '/') start = i +1;
+    }
+    int end = path.len;
+    struct str suffix = StrFromCStr(".olang");
+    if (end - start >= suffix.len && !strncmp(path.ptr + end - suffix.len, suffix.ptr, suffix.len)) {
+        end -= suffix.len;
+    }
+    if (end < start) end = start;
+    return Str(path.ptr + start, end - start);
+}
+
+//true if alias has the shape of a real identifier (letter/underscore, then letters/digits/underscores) -
+//the same rule the tokenizer's own identifier rule enforces. An EXPLICIT alias is always already valid
+//(it came from a real TOK_IDEN); this only ever matters for a DERIVED one, since an arbitrary filename
+//isn't guaranteed to be one (a leading digit, a hyphen, ...) - such a file needs an explicit alias instead.
+bool isValidAliasShape(struct str alias) {
+    if (alias.len == 0) return false;
+    if (!isLetter(alias.ptr[0]) && alias.ptr[0] != '_') return false;
+    for (int i = 1; i < alias.len; i++) {
+        char c = alias.ptr[i];
+        if (!isLetter(c) && !isDigit(c) && c != '_') return false;
+    }
+    return true;
+}
+
 // ---- declaration scan (see syntax.h) ----
 
 struct scanResult ScanTopLevelDecls(TokenCtx tc) {
@@ -1466,13 +1504,25 @@ struct scanResult ScanTopLevelDecls(TokenCtx tc) {
                 ListAdd(&r.typeNames, &n);
             }
         } else if (t.type == TOK_IMPORT) {
-            struct token alias = TokenFeed(tc);
-            if (alias.type != TOK_IDEN) continue;
-            struct token path = TokenFeed(tc);
+            //"import ALIAS "path"" (explicit) or "import "path"" (alias derived from the file's own name -
+            //see deriveImportAlias/the report) - either shape is accepted here; a real, anchored error for
+            //an invalid derived alias is reported later, once semantic analysis has full context
+            //(semaLoadModule), matching how this scan never reports errors of its own.
+            struct token afterImport = TokenFeed(tc);
+            struct token aliasTok = afterImport;
+            struct token path;
+            bool hasAlias = afterImport.type == TOK_IDEN;
+            if (hasAlias) {
+                path = TokenFeed(tc);
+            } else {
+                path = afterImport;
+            }
             if (path.type != TOK_STR_LIT) continue;
             struct scannedImport imp = {0};
-            imp.alias = Str(alias.str.ptr, alias.str.len);
             imp.path = Str(path.str.ptr +1, path.str.len -2); //strip surrounding quotes
+            imp.pathTok = path;
+            imp.alias = hasAlias ? Str(aliasTok.str.ptr, aliasTok.str.len) : deriveImportAlias(imp.path);
+            imp.aliasTok = hasAlias ? aliasTok : path;
             ListAdd(&r.imports, &imp);
         }
     }

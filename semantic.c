@@ -424,9 +424,11 @@ struct semaModule* semaLoadModule(struct str fileName) {
 
     for (int i = 0; i < scan.imports.len; i++) {
         struct scannedImport* si = ListGetIdx(&scan.imports, i);
+        if (!isValidAliasShape(si->alias)) { ErrMsgSemantic(si->aliasTok, INVALID_IMPLICIT_IMPORT_ALIAS); continue; }
         struct semaModule* target = semaLoadModule(si->path);
         struct semaImport imp = {0};
         imp.alias = si->alias;
+        imp.aliasTok = si->aliasTok;
         imp.mod = target;
         ListAdd(&mod->imports, &imp);
     }
@@ -443,6 +445,148 @@ struct semaModule* findImport(struct semaModule* mod, struct str alias) {
     return NULL;
 }
 
+//walks a chain of alias identifiers - all but the last "trailingCount" of idens - starting from mod's own
+//import list, to find the module a trailing name should actually be resolved in. The first hop is always
+//allowed (mod's own direct imports are always visible to mod itself, regardless of alias capitalization -
+//that's not new, that's the status quo); every hop after that requires the alias being followed to be
+//PUBLIC (capitalized) in the module that declares it, since it's being reached transitively, through
+//re-export, not directly - see the report. Detects a cycle (the same module reached twice along this one
+//walk, e.g. a genuine re-export loop) and rejects it, rather than looping or silently picking one
+//occurrence. Returns mod itself, unchanged, when there are no alias hops at all (idens.len <= trailing
+//Count - the ordinary, unqualified case, needing no lookup); returns NULL on any failure, having already
+//reported the specific error (UNKNOWN_NAMESPACE/IMPORT_IS_PRIVATE/CYCLIC_IMPORT_REEXPORT).
+struct semaModule* resolveAliasChain(struct semaModule* mod, struct list idens, int trailingCount) {
+    struct semaModule* current = mod;
+    int hops = idens.len - trailingCount;
+    struct list visited = ListInit(sizeof(struct semaModule*));
+    ListAdd(&visited, &current);
+    for (int i = 0; i < hops; i++) {
+        struct token aliasTok = *(struct token*)ListGetIdx(&idens, i);
+        struct str aliasName = strFromTok(aliasTok);
+        struct semaModule* next = findImport(current, aliasName);
+        if (!next) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
+        if (i > 0 && !isPublic(aliasName)) { ErrMsgSemantic(aliasTok, IMPORT_IS_PRIVATE); return NULL; }
+        for (int j = 0; j < visited.len; j++) {
+            if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
+                ErrMsgSemantic(aliasTok, CYCLIC_IMPORT_REEXPORT);
+                return NULL;
+            }
+        }
+        ListAdd(&visited, &next);
+        current = next;
+    }
+    return current;
+}
+
+//catch's own "alias chain, then either a whole TYPE or a TYPE.word" ambiguity - an import alias and an
+//error type live in different namespaces (mod->imports vs mod->types), so whenever an identifier COULD be
+//read as a further alias hop, it's treated as one (the same "prefer the alias interpretation when
+//ambiguous" rule the original, single-hop-only version of this disambiguation already used, just applied
+//uniformly at every step instead of only the first - see the report). Greedily consumes hops until either
+//an identifier isn't a real import in the current module (stopping there) or exactly one identifier is
+//left (the walk can never consume its own final identifier - something has to remain to be the type/
+//word). Whatever remains (1 or 2 identifiers) is the type, or type+word, to resolve in whatever module
+//the walk stopped at - written to *outTrailingCount. More than 2 remaining after the walk stops early (an
+//identifier that isn't a further alias, with more than a type/word pair still unconsumed) is a genuine
+//error - there's no valid interpretation left. Same public/cycle checks as resolveAliasChain past the
+//first hop.
+struct semaModule* resolveCatchAliasChain(struct semaModule* mod, struct list idens, int* outTrailingCount) {
+    struct semaModule* current = mod;
+    struct list visited = ListInit(sizeof(struct semaModule*));
+    ListAdd(&visited, &current);
+    int i = 0;
+    while (i < idens.len -1) {
+        struct token aliasTok = *(struct token*)ListGetIdx(&idens, i);
+        struct str aliasName = strFromTok(aliasTok);
+        struct semaModule* next = findImport(current, aliasName);
+        if (!next) break;
+        if (i > 0 && !isPublic(aliasName)) { ErrMsgSemantic(aliasTok, IMPORT_IS_PRIVATE); return NULL; }
+        for (int j = 0; j < visited.len; j++) {
+            if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
+                ErrMsgSemantic(aliasTok, CYCLIC_IMPORT_REEXPORT);
+                return NULL;
+            }
+        }
+        ListAdd(&visited, &next);
+        current = next;
+        i++;
+    }
+    if (idens.len - i > 2) {
+        struct token tok = *(struct token*)ListGetIdx(&idens, i);
+        ErrMsgSemantic(tok, UNKNOWN_NAMESPACE);
+        return NULL;
+    }
+    *outTrailingCount = idens.len - i;
+    return current;
+}
+
+//the set of modules reachable from mod via zero or more PUBLIC (capitalized-alias) import hops, including
+//mod itself as the trivial base case - "everything mod makes visible to a module that imports it."
+//Computed once and memoized (mod->publicClosure/publicClosureComputed - see semantic.h). Detects a genuine
+//cycle in the public-reachability graph (a module publicly re-exporting something that eventually
+//publicly re-exports it back) via mod->computingPublicClosure, the same re-entrancy-guard idiom
+//resolveTypeDecl's own "resolving" flag already uses elsewhere in this file - reports
+//CYCLIC_IMPORT_REEXPORT at the offending import's own token rather than recursing forever.
+struct list computePublicClosure(struct semaModule* mod) {
+    if (mod->publicClosureComputed) return mod->publicClosure;
+    if (mod->computingPublicClosure) return ListInit(sizeof(struct semaModule*)); //cycle - caught below
+    mod->computingPublicClosure = true;
+
+    struct list closure = ListInit(sizeof(struct semaModule*));
+    ListAdd(&closure, &mod);
+    for (int i = 0; i < mod->imports.len; i++) {
+        struct semaImport* imp = ListGetIdx(&mod->imports, i);
+        if (!isPublic(imp->alias)) continue;
+        if (imp->mod->computingPublicClosure) {
+            ErrMsgSemantic(imp->aliasTok, CYCLIC_IMPORT_REEXPORT);
+            continue;
+        }
+        struct list sub = computePublicClosure(imp->mod);
+        for (int j = 0; j < sub.len; j++) {
+            struct semaModule* m = *(struct semaModule**)ListGetIdx(&sub, j);
+            bool already = false;
+            for (int k = 0; k < closure.len; k++) {
+                if (*(struct semaModule**)ListGetIdx(&closure, k) == m) { already = true; break; }
+            }
+            if (!already) ListAdd(&closure, &m);
+        }
+    }
+
+    mod->computingPublicClosure = false;
+    mod->publicClosureComputed = true;
+    mod->publicClosure = closure;
+    return closure;
+}
+
+//"reimporting the same file already imported (through a chain, or in general) is an error" - see the
+//report. For every module's own DIRECT imports (regardless of alias case - a module's own imports are
+//always visible to it, that's not new), the union of that one direct import's own module PLUS everything
+//transitively PUBLIC-reachable through it (computePublicClosure, which already includes the direct
+//import's own module as its base case) must never overlap with what any OTHER of that same module's own
+//direct imports reaches - if it does, the same underlying file is reachable two different ways from one
+//module, which is exactly what's rejected here. Run once, after every module in the whole program has
+//finished loading - semaLoadModule's own recursion can leave an import's own module still mid-load if
+//it's part of a raw import cycle, so this can't safely run inline during loading itself.
+void checkDuplicateImportReachability(void) {
+    for (int m = 0; m < allModules.len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, m);
+        struct list seen = ListInit(sizeof(struct semaModule*));
+        for (int i = 0; i < mod->imports.len; i++) {
+            struct semaImport* imp = ListGetIdx(&mod->imports, i);
+            struct list closure = computePublicClosure(imp->mod);
+            for (int j = 0; j < closure.len; j++) {
+                struct semaModule* reached = *(struct semaModule**)ListGetIdx(&closure, j);
+                bool already = false;
+                for (int k = 0; k < seen.len; k++) {
+                    if (*(struct semaModule**)ListGetIdx(&seen, k) == reached) { already = true; break; }
+                }
+                if (already) ErrMsgSemantic(imp->aliasTok, DUPLICATE_IMPORT_REACHABILITY);
+                else ListAdd(&seen, &reached);
+            }
+        }
+    }
+}
+
 void resolveTypeDecl(struct type* t);
 
 //resolves a possibly-namespaced error-type name node ("MyError" or "alias.MyError", from SNTX_NAME) to
@@ -457,10 +601,9 @@ struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNod
         resolveTypeDecl(errType);
         return errType;
     }
-    struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-    struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
-    struct semaModule* target = findImport(mod, strFromTok(aliasTok));
-    if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
+    struct semaModule* target = resolveAliasChain(mod, idens, 1);
+    if (!target) return NULL; //error already reported
+    struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
     struct str name = strFromTok(nameTok);
     struct type* errType = TypeGetList(&target->types, name);
     if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); return NULL; }
@@ -607,10 +750,9 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
             return TypeVanilla(BASETYPE_INT32);
         }
     } else {
-        struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-        nameTok = *(struct token*)ListGetIdx(&idens, 1);
-        struct semaModule* target = findImport(mod, strFromTok(aliasTok));
-        if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return TypeVanilla(BASETYPE_INT32); }
+        struct semaModule* target = resolveAliasChain(mod, idens, 1);
+        if (!target) return TypeVanilla(BASETYPE_INT32); //error already reported
+        nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_TYPE); return TypeVanilla(BASETYPE_INT32); }
@@ -1266,10 +1408,9 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
         return NULL;
     }
 
-    struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-    struct token nameTok = *(struct token*)ListGetIdx(&idens, 1);
-    struct semaModule* target = findImport(ctx->mod, strFromTok(aliasTok));
-    if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
+    struct semaModule* target = resolveAliasChain(ctx->mod, idens, 1);
+    if (!target) return NULL; //error already reported
+    struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
     struct str name = strFromTok(nameTok);
     struct var* v = VarGetList(&target->vars, name);
     if (v) {
@@ -2078,29 +2219,68 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
 //found/not applicable) rather than a placeholder operand, so the caller can tell "there was nothing here"
 //from "there was, but it's private/unknown" (buildPostfix itself only calls this once it already knows a
 //"." follows, so it commits to reporting an error rather than falling through on failure past that point).
-struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* s) {
+//"alias...SomeGlobal" - a bare cross-module VARIABLE read, no call - see the report. Recognized only when
+//the base is a plain identifier not shadowed by a real local (mirrors resolveAliasChain's own "your own
+//first hop is always allowed" rule) that names a real import; from there, greedily consumes further
+//".further" postfix parts as long as each one is ALSO a real (public, since every hop past the first is a
+//re-export) import in the module reached so far - the same "prefer the alias interpretation when
+//structurally possible" rule resolveCatchAliasChain already uses - stopping at the first identifier that
+//isn't (or isn't a plain member access at all), which is the actual variable name to read. Writes how
+//many of s's own postfix parts were consumed to *outConsumed so buildPostfix knows where to resume its
+//own ordinary loop. Returns NULL (not found/not applicable) only when the very first hop fails, so the
+//caller can tell "there was nothing here at all" from "there was, but it's private/unknown/cyclic" -
+//anything past that first hop commits to reporting an error rather than falling through.
+struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* s, int* outConsumed) {
     struct syntax* primaryNode = partSntx(s, 0);
     if (primaryNode->parts.len != 1 || !partAt(primaryNode, 0)->isToken) return NULL;
-    struct token aliasTok = partAt(primaryNode, 0)->tok;
-    if (aliasTok.type != TOK_IDEN) return NULL;
+    struct token firstTok = partAt(primaryNode, 0)->tok;
+    if (firstTok.type != TOK_IDEN) return NULL;
     if (s->parts.len < 2 || partAt(s, 1)->isToken || partAt(s, 1)->sntx->type != SNTX_EXPR_MEMBR) return NULL;
-    struct str aliasName = strFromTok(aliasTok);
-    if (scopeFindLocal(ctx->scope, aliasName)) return NULL;
-    struct semaModule* target = findImport(ctx->mod, aliasName);
+    if (scopeFindLocal(ctx->scope, strFromTok(firstTok))) return NULL;
+    struct semaModule* target = findImport(ctx->mod, strFromTok(firstTok));
     if (!target) return NULL;
 
-    struct token varTok = firstTokOfType(partSntx(s, 1), TOK_IDEN);
+    struct semaModule* startMod = ctx->mod;
+    struct list visited = ListInit(sizeof(struct semaModule*));
+    ListAdd(&visited, &startMod);
+    ListAdd(&visited, &target);
+
+    //i is the next unexamined postfix part - index 0 (the primary) was already consumed above as the
+    //first hop, so this starts at 1. The loop condition keeps at least one final part unconsumed (the
+    //eventual variable name), so it checks part i itself, not i+1 - a bare "<" against parts.len -1.
+    int i = 1;
+    while (i < s->parts.len -1 && !partAt(s, i)->isToken && partAt(s, i)->sntx->type == SNTX_EXPR_MEMBR) {
+        struct token nextTok = firstTokOfType(partAt(s, i)->sntx, TOK_IDEN);
+        struct str nextName = strFromTok(nextTok);
+        struct semaModule* next = findImport(target, nextName);
+        if (!next) break;
+        if (!isPublic(nextName)) { ErrMsgSemantic(nextTok, IMPORT_IS_PRIVATE); *outConsumed = i +1; return OperandIntLiteral(nextTok); }
+        for (int j = 0; j < visited.len; j++) {
+            if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
+                ErrMsgSemantic(nextTok, CYCLIC_IMPORT_REEXPORT);
+                *outConsumed = i +1;
+                return OperandIntLiteral(nextTok);
+            }
+        }
+        ListAdd(&visited, &next);
+        target = next;
+        i++;
+    }
+
+    struct token varTok = firstTokOfType(partAt(s, i)->sntx, TOK_IDEN);
     struct str name = strFromTok(varTok);
     struct var* v = VarGetList(&target->vars, name);
+    *outConsumed = i +1;
     if (!v) { ErrMsgSemantic(varTok, UNKNOWN_VAR); return OperandIntLiteral(varTok); }
     if (!isPublic(name)) { ErrMsgSemantic(varTok, VAR_IS_PRIVATE); return OperandIntLiteral(varTok); }
     return OperandReadVar(v, varTok);
 }
 
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
-    struct operand* crossModuleRead = tryBuildCrossModuleVarRead(ctx, s);
+    int consumed = 1;
+    struct operand* crossModuleRead = tryBuildCrossModuleVarRead(ctx, s, &consumed);
     struct operand* result = crossModuleRead ? crossModuleRead : buildExprFromSyntax(ctx, partSntx(s, 0));
-    int startIdx = crossModuleRead ? 2 : 1;
+    int startIdx = crossModuleRead ? consumed : 1;
     for (int i = startIdx; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) {
@@ -2839,26 +3019,19 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
 
-    //3 identifiers: "alias.TYPE.word" - originating a foreign module's own error type directly, not just
-    //declaring/catching one already reachable through a signature - see the report. Unambiguous against
-    //the 2-identifier same-module case by count alone (parseStmntError only ever produces 2 or 3).
-    struct semaModule* target = NULL;
-    struct token errTypeTok;
-    struct token wordTok;
-    if (idens.len == 3) {
-        struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-        errTypeTok = *(struct token*)ListGetIdx(&idens, 1);
-        wordTok = *(struct token*)ListGetIdx(&idens, 2);
-        target = findImport(ctx->mod, strFromTok(aliasTok));
-        if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return stmt; }
-    } else {
-        errTypeTok = *(struct token*)ListGetIdx(&idens, 0);
-        wordTok = *(struct token*)ListGetIdx(&idens, 1);
-    }
+    //"alias...TYPE.word" - originating a foreign module's own error type directly, not just declaring/
+    //catching one already reachable through a signature - see the report. Always ends in exactly
+    //"TYPE.word" (parseStmntError's own grammar guarantees this), so every identifier before the last two
+    //is unambiguously an alias hop - no disambiguation needed, unlike a catch clause.
+    struct semaModule* target = resolveAliasChain(ctx->mod, idens, 2);
+    if (!target) return stmt; //error already reported
+    bool crossModule = target != ctx->mod;
+    struct token errTypeTok = *(struct token*)ListGetIdx(&idens, idens.len -2);
+    struct token wordTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
 
-    struct type* errType = TypeGetList(target ? &target->types : &ctx->mod->types, strFromTok(errTypeTok));
+    struct type* errType = TypeGetList(&target->types, strFromTok(errTypeTok));
     if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(errTypeTok, UNKNOWN_ERROR); return stmt; }
-    if (target && !isPublic(strFromTok(errTypeTok))) { ErrMsgSemantic(errTypeTok, TYPE_IS_PRIVATE); return stmt; }
+    if (crossModule && !isPublic(strFromTok(errTypeTok))) { ErrMsgSemantic(errTypeTok, TYPE_IS_PRIVATE); return stmt; }
     resolveTypeDecl(errType);
 
     bool declared = false;
@@ -2921,41 +3094,21 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
         struct list idens = allTokOfType(m, TOK_IDEN);
 
-        //1 identifier: "MyError" (same-module, whole type). 3: "alias.MyError.word" (cross-module, one
-        //word) - unambiguous either way. 2 is the genuinely ambiguous case: "Foo.Bar" could be a same-
-        //module "MyError.word" or a cross-module "alias.MyError" (whole type) - resolved by which
-        //namespace the leading identifier actually belongs to (an import alias and an error type can
-        //never collide, since imports and types are different lists)
-        struct semaModule* target = NULL; //non-NULL iff this match names a foreign module's error type
-        struct token typeTok;
-        bool hasWordTok = false;
-        struct token wordTok = {0};
+        //an alias chain of any length (possibly zero), then either a whole TYPE or a TYPE.word - see
+        //resolveCatchAliasChain for how the trailing shape and where the alias chain ends are
+        //disambiguated (an import alias and an error type live in different namespaces, so whichever
+        //interpretation is possible at each step is the intended one).
+        int trailingCount = 0;
+        struct semaModule* target = resolveCatchAliasChain(ctx->mod, idens, &trailingCount);
+        if (!target) continue; //error already reported
+        bool crossModule = target != ctx->mod;
+        struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - trailingCount);
+        bool hasWordTok = trailingCount == 2;
+        struct token wordTok = hasWordTok ? *(struct token*)ListGetIdx(&idens, idens.len -1) : (struct token){0};
 
-        if (idens.len == 1) {
-            typeTok = *(struct token*)ListGetIdx(&idens, 0);
-        } else if (idens.len == 3) {
-            struct token aliasTok = *(struct token*)ListGetIdx(&idens, 0);
-            typeTok = *(struct token*)ListGetIdx(&idens, 1);
-            wordTok = *(struct token*)ListGetIdx(&idens, 2);
-            hasWordTok = true;
-            target = findImport(ctx->mod, strFromTok(aliasTok));
-            if (!target) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); continue; }
-        } else { //idens.len == 2 - the ambiguous case
-            struct token first = *(struct token*)ListGetIdx(&idens, 0);
-            struct token second = *(struct token*)ListGetIdx(&idens, 1);
-            target = findImport(ctx->mod, strFromTok(first));
-            if (target) {
-                typeTok = second; //alias.MyError - whole type, foreign module
-            } else {
-                typeTok = first; //MyError.word - one word, same module
-                wordTok = second;
-                hasWordTok = true;
-            }
-        }
-
-        struct type* errType = TypeGetList(target ? &target->types : &ctx->mod->types, strFromTok(typeTok));
+        struct type* errType = TypeGetList(&target->types, strFromTok(typeTok));
         if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(typeTok, UNKNOWN_ERROR); continue; }
-        if (target && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); continue; }
+        if (crossModule && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); continue; }
         resolveTypeDecl(errType);
 
         bool produces = false;
@@ -3180,6 +3333,7 @@ void semaCheckBodies(struct semaModule* mod) {
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));
+    checkDuplicateImportReachability();
 
     for (int i = 0; i < allModules.len; i++) semaCollectNames(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));

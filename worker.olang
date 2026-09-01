@@ -4,6 +4,11 @@
 import sh "shared.olang"
 import rn "runner.olang"
 
+## unnamed import (see the report) - its own alias is derived from the file name, "Base". Capitalized, so
+## it's re-exported: a THIRD module importing worker.olang can reach Base.olang through it too, two hops
+## away ("wk.Base.Whatever") - see runner.olang's own tests, which exercise exactly that.
+import "Base.olang"
+
 error WorkerError {
     BAD_INPUT
 }

@@ -103,9 +103,16 @@ struct syntaxModule {
 typedef bool (*TypeNameLookup)(void* ctx, struct str alias, struct str name);
 
 struct scannedImport {
-    struct str alias;
+    struct str alias; //explicit, or derived from path (deriveImportAlias in syntax.c) if "import "path""
+                       //had no alias at all - see the report
+    struct token aliasTok; //the explicit alias's own token, or (when derived) a copy of pathTok - always a
+                            //real token either way, to anchor error reporting in semantic.c
     struct str path; //raw string-literal content, quotes stripped
+    struct token pathTok;
 };
+
+struct str deriveImportAlias(struct str path);
+bool isValidAliasShape(struct str alias);
 
 struct scanResult {
     struct list typeNames; //list of struct str
