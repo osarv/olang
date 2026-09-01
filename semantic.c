@@ -1146,24 +1146,40 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
     }
 }
 
-//true if t (or anything nested inside it, transitively, through plain/embedded fields only) has a bare
-//"<>" (unnamed) heap-indirect field - the shape that dangles the instant a plain value containing it
-//escapes via return, since there's no scope name anywhere in the signature it could have been tied to.
-//Deliberately doesn't chase into a NAMED "<name>" field's own pointee: that field's lifetime is already
-//an explicit, independently-checked fact tied to its own name, not something this returning function
-//could be responsible for regardless of how it got here. Never infinite: a plain (non-"<>") struct can
-//never recursively embed itself (that's exactly what "<>" exists to break), so any embedded chain
-//through this function alone is guaranteed to bottom out.
+static bool typeIsRefShaped(struct type t);
+
+//true if t, considered as a standalone returned value, is tied to a BARE (own) scope - a struct or
+//fixed array explicitly marked "<>" (structMAlloc, no scopeParam), or a dynamic array with no
+//scopeParam at all (T11/O7: a dynamic array is always reference-shaped, with or without an explicit
+//marker, so an unmarked one is just as bare-scoped as an explicitly-"<>"-marked struct/fixed array) -
+//exactly the shape that dangles if the function that allocated it hands it back by plain value, since
+//its own "own" scope closes at the point that function returns.
+static bool typeIsBareRefShaped(struct type t) {
+    if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return !t.scopeParam;
+    if (!typeIsRefShaped(t)) return false;
+    return t.structMAlloc && !t.scopeParam;
+}
+
+//true if t (or anything nested inside it, transitively, through plain/embedded fields/elements only)
+//has a bare "<>" (unnamed) heap-indirect field - the shape that dangles the instant a plain value
+//containing it escapes via return, since there's no scope name anywhere in the signature it could have
+//been tied to. Deliberately doesn't chase into a NAMED "<name>" field's own pointee, nor into any
+//field/element that's itself reference-shaped (bare or named): a bare one is the caller's own concern
+//via typeIsBareRefShaped, a named one's lifetime is already an explicit, independently-checked fact
+//tied to its own name, not something this returning function could be responsible for regardless of how
+//it got here. Never infinite: a plain (non-"<>") struct can never recursively embed itself (that's
+//exactly what "<>" exists to break), so any embedded chain through this function alone is guaranteed to
+//bottom out.
 bool structContainsBareScopeField(struct type t) {
+    if (t.bType == BASETYPE_STRUCT && t.structMAlloc) return false;
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && t.structMAlloc) return false;
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc) return structContainsBareScopeField(*t.arrElem);
     if (t.bType != BASETYPE_STRUCT) return false;
     for (int i = 0; i < t.vars.len; i++) {
         struct type ft = (*(struct var*)ListGetIdx(&t.vars, i)).type;
-        if (ft.bType != BASETYPE_STRUCT) continue;
-        if (ft.structMAlloc) {
-            if (!ft.scopeParam) return true;
-            continue;
-        }
-        if (structContainsBareScopeField(ft)) return true;
+        if (typeIsBareRefShaped(ft)) return true;
+        if ((ft.bType == BASETYPE_STRUCT || ft.bType == BASETYPE_ARRAY) && !ft.structMAlloc
+                && structContainsBareScopeField(ft)) return true;
     }
     return false;
 }
@@ -1196,19 +1212,21 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
         //would already be dangling before the caller ever sees it - catching this once, here, covers
         //every return statement in the function (single, multiple, implicit fallthrough, error
-        //propagation) without needing to inspect each one individually. The transitive case - a bare "<>"
-        //field nested inside a plain (non-heap-indirect) returned struct - is also caught, below.
-        if (t.retType->bType == BASETYPE_STRUCT && t.retType->structMAlloc && !t.retType->scopeParam) {
+        //propagation) without needing to inspect each one individually. Covers structs, fixed arrays, AND
+        //dynamic arrays (typeIsBareRefShaped) - not just structs, since T11/O7 make a dynamic array just
+        //as bare-scoped as an explicitly-"<>"-marked struct/fixed array, with or without a marker. The
+        //transitive case - a bare "<>" field/element nested inside a plain (non-heap-indirect) returned
+        //struct or array - is also caught, below.
+        if (typeIsBareRefShaped(*t.retType)) {
             ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), BARE_SCOPE_RETURN_TYPE);
-        //the transitive case: a PLAIN return type (not itself heap-indirect, so the check above doesn't
-        //fire) that embeds a bare "<>" field somewhere inside it - see structContainsBareScopeField.
+        //the transitive case: a return type that isn't itself bare-ref-shaped (so the check above doesn't
+        //fire) but embeds a bare "<>" field/element somewhere inside it - see structContainsBareScopeField.
         //Conservative on purpose: this rejects some sound code too (a function that only ever passes an
         //already-correctly-scoped value straight through, never allocating into the bare field itself,
         //would be fine at runtime) - but nothing short of real dataflow/escape analysis (not attempted
         //here) can tell that case apart from the unsound one at the signature level alone, and signature-
         //level is as far as this check goes, deliberately, matching BARE_SCOPE_RETURN_TYPE's own scope.
-        } else if (t.retType->bType == BASETYPE_STRUCT && !t.retType->structMAlloc
-                && structContainsBareScopeField(*t.retType)) {
+        } else if (structContainsBareScopeField(*t.retType)) {
             ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), NESTED_BARE_SCOPE_RETURN_TYPE);
         }
     }

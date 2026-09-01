@@ -1569,3 +1569,36 @@ of sync with the actual code.
   or revising the relevant numbered rule(s)) before any implementation work begins**, with this file's own
   entry (recording the *why*, same as every entry above it) still written once the change lands - the two
   documents serve different readers and neither replaces the other.
+- **`BARE_SCOPE_RETURN_TYPE`/`NESTED_BARE_SCOPE_RETURN_TYPE` now cover arrays, not just structs - a real,
+  previously-undiscovered memory-safety hole found while cross-checking the implementation against the new
+  formal `spec/` directory (see this file's own entry on it) for isomorphism.** Both checks
+  (`resolveFuncSig` in semantic.c) were
+  written back when only a struct could be `structMAlloc` at all, and were never revisited once fixed
+  arrays and dynamic arrays independently gained the exact same `<>`/`<name>` reference machinery (see the
+  `<>`/`<name>`-on-arrays entry above) - so a bare (own-scoped) fixed-array return type, a bare-`<>` array
+  field nested inside a plain returned struct/array, and - most severe - a genuinely **unmarked** dynamic
+  array return type (T11 of the new spec: a dynamic array is always reference-shaped, marker or not, so an
+  unmarked `T[]` return is exactly as own-scoped as an explicitly `<>`-marked struct) all compiled and ran
+  with zero complaint, each one a real dangling-pointer return the instant the allocating function's own
+  scope closed. Confirmed concretely, not just by code inspection: three ad hoc test programs (a direct
+  bare `int32[3]<>` return, a direct bare `int32[]` return, and a `Wrapper{ data int32[3]<> }` returned
+  plain) each compiled clean and ran to completion before the fix, and are each correctly rejected after it.
+  **Fixed by finally generalizing both checks the way `typeIsRefShaped` (the struct-or-fixed-array "can
+  this carry a marker" predicate, already used elsewhere in the ownership system) was always meant to be
+  reused**: a new `typeIsBareRefShaped` (semantic.c) folds in the dynamic-array special case
+  (`arrMalloc && !scopeParam` - no `structMAlloc` check needed, since T11 makes marker-presence irrelevant
+  for a dynamic array) alongside `typeIsRefShaped`'s existing struct-or-fixed-array case, and is what
+  `resolveFuncSig`'s direct-return check now calls instead of its old inline `BASETYPE_STRUCT`-only
+  condition. `structContainsBareScopeField` was similarly generalized to recurse through a plain (embedded)
+  array's own element type, not just a plain struct's own fields, and to treat any field/element found via
+  `typeIsBareRefShaped` (struct, fixed array, or dynamic array alike) as a hit - while still correctly
+  refusing to chase into anything already reference-shaped-with-a-name, or into a dynamic array's own
+  (nonexistent) "elements", exactly as before. This is a straightforward extension of an existing,
+  already-uniform design principle (`typeIsRefShaped`/`cgRegisterDtorIfNeeded`/`needsScopeCheck` all already
+  treat structs and fixed arrays alike; this is the last piece of the ownership-checking machinery that
+  hadn't caught up) - not a new rule or a design question, so it needed no discussion, matching the
+  standing "fix bugs found along the way" directive. `make verify` (72 tests total across both `-t` files,
+  plus the `-c` production build/run) passes with no regressions; the three confirmed-bad shapes are
+  documented, not re-added as passing tests (a rejected program can't run as a `test{}` block, the same
+  convention every other compile-error case in this file already follows), in a new comment in shared.olang
+  next to the existing `BARE_SCOPE_RETURN_TYPE`/transitive-case documentation.

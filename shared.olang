@@ -437,6 +437,18 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
     return ScopedBox(outer, Point{x, y})
 }
 
+## BARE_SCOPE_RETURN_TYPE and NESTED_BARE_SCOPE_RETURN_TYPE (resolveFuncSig in semantic.c) used to only
+## ever check BASETYPE_STRUCT, silently letting a bare "<>" fixed array, a bare "<>" field nested inside
+## a plain struct/array, or - worse - an entirely UNMARKED dynamic array (T11/O7: always reference-shaped,
+## marker or not) escape by value with no compile-time check at all, even though a dynamic array is just
+## as own-scoped as an explicitly "<>"-marked struct/fixed array. Fixed by generalizing both checks
+## (typeIsBareRefShaped/structContainsBareScopeField) to treat structs, fixed arrays, and dynamic arrays
+## uniformly. All three shapes below are now correctly rejected at compile time - not testable here since
+## a rejected program can't run as a test{} block; verified ad hoc during development instead:
+##   func bad1(s scope) ? int32[3]<> { ... return <own-scoped array> }
+##   func bad2(s scope, n int32) ? int32[] { ... return <own-scoped dynamic array> }
+##   func bad3(s scope) ? Wrapper { ... return Wrapper{<own-scoped array field>} }
+
 ## the static scope checker's one positively-provable narrowing rule (scopeCanFlowInto in semantic.c): a
 ## value tagged with a scope RECEIVED as a parameter is always safe to store into a slot tagged with this
 ## function's own bare "<>" scope, since every received scope is guaranteed to outlive the function's own
