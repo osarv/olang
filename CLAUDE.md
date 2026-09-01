@@ -1547,3 +1547,25 @@ of sync with the actual code.
   directly: reverting the order reproduces the failure, `make verify`/`-t` with every file taking a turn as
   root all pass with it in place. A real, if narrow, lesson for anyone writing a re-exporting module with a
   raw import cycle in its own graph: declare re-exported imports before the cyclic one.
+- **A formal, modular language specification now exists, in `spec/` (10 files, `spec/README.md` plus one
+  file per major topic in dependency order: lexical structure, types, declarations, modules, expressions,
+  statements, error handling, ownership/scopes, constructors/destructors, compilation model).** Distinct in
+  purpose from this file: CLAUDE.md is a historical, discursive design record (why a decision was made, what
+  was tried and reverted, what bugs were found along the way); `spec/` is normative and current-state-only -
+  no narrative, no history, just the precise rules as they exist right now, numbered per file
+  (`<file-prefix><n>`, e.g. `T24`, `O13`) so other rules can cite one exactly without the whole document
+  needing to be one interconnected whole - each file stands mostly alone, citing another file's rule by
+  number only where a real dependency exists (mirroring this file's own "don't make everything
+  interconnected" instruction, applied to a document meant to be checked mechanically rather than read as
+  a narrative). Written in EBNF-flavored notation for every grammar-shaped rule, cross-checked once for
+  internal correctness (found and fixed 15 real errors: wrong section cross-references, an ambiguous/
+  undefined `type-ref`/`alias-chain` grammar produced a dangling leading dot for the zero-hop case across
+  three files, a shift-operator operand-type rule that didn't match `binOpRules[]`, vague/unstated indexing
+  bounds-check behavior, `catch`'s whole-type-vs-word disambiguation algorithm never actually stated, and
+  more - see the spec's own git history for the full list), then cross-checked against the actual
+  implementation (source of this file's own `BARE_SCOPE_RETURN_TYPE` entry - the spec's own T24/T11/O13
+  correctly described the *intended* uniform struct/array treatment; the implementation was what had fallen
+  behind). **Standing process change, going forward: a language change starts with a `spec/` update (adding
+  or revising the relevant numbered rule(s)) before any implementation work begins**, with this file's own
+  entry (recording the *why*, same as every entry above it) still written once the change lands - the two
+  documents serve different readers and neither replaces the other.
