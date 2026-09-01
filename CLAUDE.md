@@ -1188,4 +1188,64 @@ of sync with the actual code.
   scopeBinding`'s own key space to carry *which parameter/field path* a binding came through, not just
   *which inner ctor param* - a real design question (how should that path be represented and compared?),
   not a straightforward implementation gap, so deliberately left as a known, narrow, safe-but-imprecise
-  edge case rather than attempted here.
+  edge case rather than attempted here. **Closed in the "viaParam"/"punParam" entry near the end of this
+  section, once a concrete answer to that design question was chosen.**
+
+- **Closed the multi-bare-pun-same-type precision gap: `struct scopeBinding` grew a "which path did this
+  flow through" key, `viaParam`, and a bare-pun field grew its own pointer back to the constructor
+  parameter it puns, `struct var.punParam` - together enough to disambiguate two sibling bare-pun fields
+  of the identical constructor-bearing type without ever risking a false accept.** The design question
+  the entry above left open was "how should the path be represented and compared" - answered with the
+  simplest thing that actually works: not a general path/chain type, just one extra `struct var*` recording
+  *which of the current call's own parameters* an entry flowed through, re-tagged (overwritten, not
+  composed) at every call boundary it crosses. A binding only ever needs to answer "does this belong to the
+  field I'm about to access right now," one hop at a time - the same "always a single, already-final hop"
+  property `scopeBinding.boundTo` itself already relies on (see its own comment) - so a flat tag is enough;
+  nothing about this needed a real path/chain representation after all.
+  **Mechanism, two small additions wired into the existing machinery, no new one:** `OperandFuncCall`'s
+  existing "merge a non-scope argument's own map into the call's own map" step (the bare-pun fix above) now
+  tags every entry it merges with `viaParam = canonicalVar(param)` - *this* call's own parameter, always
+  overwriting whatever `viaParam` the entry carried coming in, never composing a longer path. Two different
+  arguments that happen to produce the same inner `typeParam` key (the actual collision) now end up as two
+  *separate* entries distinguished by `viaParam`, instead of one contested entry - no ambiguity to detect
+  at merge time in the common case at all. `resolveStructCtorInto` records, on a bare-pun field's own
+  declared `var` (`struct var.punParam`), exactly which constructor parameter it puns - already resolved
+  there via `VarGetList(&ctorParams, fieldName)`, just not persisted anywhere before this. `OperandMember`'s
+  own bare-pun carry-forward step (the same one from the entry above) now filters base's own entries before
+  copying them onto the field being accessed: an entry is only carried forward if it's unambiguous
+  regardless of path (`viaParam == NULL` - a call's own scope-typed parameter bindings, universal to the
+  whole instance, unaffected by any of this) or if it specifically flowed through *this* field's own
+  `punParam`. Copied entries have `viaParam` reset to `NULL` - from the accessed field's own operand's
+  perspective the path question is now fully answered, so a *further* member access on it needs no more
+  disambiguation, keeping this to one hop per level exactly like the rest of the checker.
+  **A real, if narrow, soundness gap found and fixed while extending this to the checker's existing
+  reassignment/branch-merge tracking, not just the straight-line call/member-access path this was designed
+  for:** `scopeBindingsEqual` and `foldScopeBindingsBranch` (the `if`/`match`/loop merge machinery two
+  entries up) used to compare and key entries by `(typeParam, boundTo)` alone. Once a var's own tracked map
+  can legitimately hold two entries for the same `typeParam` distinguished only by `viaParam` (exactly the
+  shape this fix introduces), two branches that reassign such a var by *swapping which parameter each value
+  flows through* (e.g. `box = Dual(x, own, ...)` in one branch vs. `box = Dual(own, x, ...)` in the other -
+  same *set* of boundTo values either way, `{x, own}`, just attached to different `viaParam`s) could compare
+  as "equal" under the old, `viaParam`-blind comparison, silently accepting a merge that's actually
+  ambiguous - a false accept, and a strictly worse class of bug than the false rejection this whole fix
+  exists to remove. Fixed by folding `viaParam` into both the equality check and the ambiguous-key
+  construction, the same composite key `OperandFuncCall`'s own merge loop already uses.
+  **Confirmed both directions with a permanent test** (`DualWrapped`/`dualWrappedFieldChecked` in
+  shared.olang, the first of this fix's two confirmations that's actually *acceptable* as a permanent
+  test - `t.a.val` used to be a false rejection, now compiles and returns the right value) **and one ad hoc
+  rejection** (the genuinely-unsound sibling access, `d.right.inner` checked against the *other* field's
+  scope, still correctly rejected with `SCOPE_MAY_NOT_OUTLIVE_TARGET` - confirming the fix adds precision
+  without weakening the existing safety net at all). `make verify` passes with both changes in place.
+  **Still deliberately not attempted, the same honest boundary as every other entry in this section:**
+  `viaParam` is a single flat tag, re-tagged (not composed) at each call boundary, so a path deeper than
+  one call's own parameter list - e.g. the *exact* scenario worked through while designing this, a
+  bare-pun-of-a-bare-pun-of-two-same-typed-fields three levels deep - can still collapse two genuinely
+  different origins into the same post-flattening key. This is handled *safely*, not precisely: the
+  conflict-detection added to both `OperandFuncCall`'s merge loop and `OperandMember`'s carry-forward loop
+  catches exactly this case and marks it `SCOPE_AMBIGUOUS` rather than silently picking one, so the honest
+  outcome is "no false accept, but a false rejection can still occur at three-or-more levels of nested
+  same-type bare-pun fields" - a real, deeper version of the same known limitation, not a new gap this fix
+  introduced, and not reachable by anything in the current test suite (the field-of-a-field mechanism this
+  session's checker relies on for *explicit*-initializer nesting doesn't have this problem at all, since
+  each field's own persisted map is already unambiguous by construction - this is specific to chains of
+  bare puns only).

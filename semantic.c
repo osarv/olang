@@ -894,6 +894,9 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
             struct var* param = VarGetList(&ctorParams, fieldName);
             if (!param) { ErrMsgSemantic(fieldNameTok, CTOR_FIELD_NOT_INITIALIZED); continue; }
             v.type = param->type;
+            v.punParam = param; //see struct var.punParam's own comment - lets OperandMember later tell
+                                 //which of the base's own via-tagged scopeBinding entries belong to this
+                                 //field specifically
         }
         ListAdd(&t->vars, &v);
         ListAdd(&t->ctorFieldSyntax, &f);
@@ -1336,6 +1339,18 @@ bool varIsOwnParam(struct var* scopeVar, struct var* func) {
     return false;
 }
 
+//a dedicated, never-otherwise-reachable "known ambiguous" scope identity - see resolveEffectiveScopeVar/
+//foldScopeBindingsBranch/scopeCanFlowInto below. Never equal to any real function's own parameter (no
+//function's own type.vars list can ever contain THIS specific instance), so distinguishing it from an
+//ordinary foreign/untracked scope tag matters: "we never tried to trace this var" (an empty scopeBindings
+//map - the existing, pre-existing "unverifiable, allow" default is correct there) is a fundamentally
+//different fact from "we traced it and found it can be more than one thing" (this sentinel) - the latter
+//must reject, not fall through to the same default, or the whole point of tracking this would be undone
+//the moment two paths disagree. Declared ahead of resolveEffectiveScopeVar (moved up from its original
+//spot right before scopeCanFlowInto) since that function now also needs to return it directly.
+struct var scopeAmbiguousStorage = {0};
+struct var* SCOPE_AMBIGUOUS = &scopeAmbiguousStorage;
+
 //resolves scopeVar to whatever it's *effectively* bound to from op's own perspective, one hop through
 //op's own scopeBindings map (populated for a call operand by OperandFuncCall, for a member operand by
 //OperandMember - which also composes a field's own *persisted* map through this same lookup, letting a
@@ -1346,26 +1361,28 @@ bool varIsOwnParam(struct var* scopeVar, struct var* func) {
 //at all or scopeVar isn't one of the keys it knows how to resolve). Canonicalizes both sides before
 //comparing (see canonicalVar) since a stored key/value may be either a type-level scope param or a
 //function/constructor body's own scope-chain copy of one, depending on which pass produced it.
+//Deliberately ignores viaParam here: a generic caller (OperandFitsType, or either of OperandMember's own
+//two non-carry-forward lookups) never knows which path it wants, so this matches typeParam alone across
+//every entry regardless of viaParam. That's safe/correct as long as op's own map has at most one distinct
+//boundTo per typeParam by the time it reaches here - true for everything except a raw, not-yet-filtered
+//multi-argument call operand (see OperandFuncCall), which nothing calls this on directly. If two entries
+//for the same typeParam genuinely disagree anyway, returns SCOPE_AMBIGUOUS rather than silently picking
+//one - the same "known ambiguous, not just untracked" distinction SCOPE_AMBIGUOUS exists for elsewhere.
 struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
     if (!scopeVar) return NULL;
     struct var* canonScopeVar = canonicalVar(scopeVar);
+    struct var* found = NULL;
+    bool foundAny = false;
     for (int i = 0; i < op->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
-        if (canonicalVar(b->typeParam) == canonScopeVar) return b->boundTo;
+        if (canonicalVar(b->typeParam) != canonScopeVar) continue;
+        struct var* bt = canonicalVar(b->boundTo);
+        if (foundAny && bt != found) return SCOPE_AMBIGUOUS;
+        found = bt;
+        foundAny = true;
     }
-    return scopeVar;
+    return foundAny ? found : scopeVar;
 }
-
-//a dedicated, never-otherwise-reachable "known ambiguous" scope identity - see foldScopeBindingsBranch/
-//scopeCanFlowInto below. Never equal to any real function's own parameter (no function's own type.vars
-//list can ever contain THIS specific instance), so distinguishing it from an ordinary foreign/untracked
-//scope tag matters: "we never tried to trace this var" (an empty scopeBindings map - the existing,
-//pre-existing "unverifiable, allow" default is correct there) is a fundamentally different fact from "we
-//traced it and found it can be more than one thing depending on which branch ran" (this sentinel) - the
-//latter must reject, not fall through to the same default, or the whole point of tracking reassignment
-//across branches would be silently undone the moment two branches disagree.
-struct var scopeAmbiguousStorage = {0};
-struct var* SCOPE_AMBIGUOUS = &scopeAmbiguousStorage;
 
 //can a "<>"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
 //perspective of func (the function currently being checked)? NULL means "bare <> - this function's own
@@ -1521,21 +1538,28 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
             continue;
         }
         //a non-scope-typed argument may itself already carry a real scopeBindings map (e.g. a fresh call
-        //to another constructor, "Leaf3(s, ...)", passed as this argument) - merge it into op's own map so
-        //a BARE-PUN field on the callee's own type (one that just forwards this parameter's value
+        //to another constructor, "WrappedPoint(s, ...)", passed as this argument) - merge it into op's own
+        //map so a BARE-PUN field on the callee's own type (one that just forwards this parameter's value
         //unchanged, with no explicit initializer of its own to persist a map from - see
         //semaCheckBodies/OperandMember's own "carry base's map forward" step) can still resolve through it
-        //later, via whatever this call's own result gets assigned/persisted onto. Conflicting entries for
-        //the same key from two DIFFERENT arguments (a real, if narrow, possibility - two parameters that
-        //each happen to be instances of the same constructor-bearing type, tagged to different scopes) are
-        //marked SCOPE_AMBIGUOUS rather than silently keeping whichever was merged first, which could
-        //otherwise resolve one parameter's own field access using an unrelated parameter's own binding.
+        //later, via whatever this call's own result gets assigned/persisted onto. Every entry merged here
+        //is tagged with viaParam = THIS parameter (param, canonicalized) - overwriting whatever viaParam it
+        //may have carried before - so two DIFFERENT arguments that happen to be instances of the exact same
+        //constructor-bearing type (the same typeParam key) never collide: they end up as two separate
+        //entries distinguished by viaParam, not one ambiguous merge. See struct scopeBinding's own comment
+        //and OperandMember's carry-forward step, which is what actually consumes viaParam to pick the right
+        //one back out. A genuine conflict can still happen WITHIN one argument's own already-merged map
+        //(two of ITS OWN entries ending up with the same (typeParam, viaParam) pair after some deeper
+        //nesting already collapsed a finer distinction - see the report) - marked SCOPE_AMBIGUOUS rather
+        //than silently keeping whichever was merged first, same as everywhere else this sentinel is used.
+        struct var* viaParam = canonicalVar(param);
         for (int j = 0; j < arg->scopeBindings.len; j++) {
             struct scopeBinding* e = ListGetIdx(&arg->scopeBindings, j);
             struct scopeBinding* existing = NULL;
             for (int k = 0; k < op->scopeBindings.len; k++) {
                 struct scopeBinding* have = ListGetIdx(&op->scopeBindings, k);
-                if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { existing = have; break; }
+                if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)
+                        && canonicalVar(have->viaParam) == viaParam) { existing = have; break; }
             }
             if (existing) {
                 if (canonicalVar(existing->boundTo) != canonicalVar(e->boundTo)) existing->boundTo = SCOPE_AMBIGUOUS;
@@ -1543,6 +1567,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
                 struct scopeBinding nb = (struct scopeBinding){0};
                 nb.typeParam = e->typeParam;
                 nb.boundTo = e->boundTo;
+                nb.viaParam = viaParam;
                 ListAdd(&op->scopeBindings, &nb);
             }
         }
@@ -1627,20 +1652,44 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     //scopeBindings above is empty for it even when the field's own type is constructor-bearing - the
     //relevant substitution instead lives on base's own map already, merged in there by OperandFuncCall at
     //whatever call site actually constructed the value base now holds (see OperandFuncCall's own "merge a
-    //non-scope argument's own map" step). Carrying base's own entries forward here (skipping any key
-    //already set above, so the field's own more specific info always wins) makes that reachable through a
-    //further member access on THIS operand - safe unconditionally, not just for bare-pun fields, since
-    //every type's own ctor scope params are their own distinct struct var* (never shared across types), so
-    //an unrelated carried-forward key can never collide with, or be mistaken for, anything a later lookup
-    //actually asks for.
+    //non-scope argument's own map" step). An entry there is only carried forward here if it's either
+    //unambiguous regardless of path (viaParam NULL - e.g. base's own top-level scope-typed param bindings,
+    //universal to the whole instance) or specifically tagged as having flowed through THIS field's own
+    //punned parameter (viaParam == memberVar->punParam, canonicalized) - an entry tagged via a DIFFERENT
+    //sibling parameter (e.g. base's "right" field's own inner scope param, while accessing base's "left")
+    //must never leak across, which is exactly the false accept viaParam exists to prevent. punParam is
+    //NULL for a non-bare-pun field, which correctly narrows this to only the unambiguous viaParam-NULL
+    //entries for it (a field with its own explicit initializer already got its own precise map above -
+    //nothing further to gain from base's here, and every existing "already set above" case is still
+    //skipped exactly as before). Copied entries reset viaParam to NULL: from op's own perspective (this one
+    //specific field's value) the path has now been fully resolved, not still "associated with a sibling" -
+    //a further member access on THIS operand treats op's map as an ordinary, already-disambiguated one. A
+    //genuine remaining conflict (two selected entries sharing a typeParam with different boundTo - possible
+    //after a deeper nesting already collapsed a finer distinction, see the report) is marked SCOPE_AMBIGUOUS
+    //rather than silently keeping whichever was found first - but ONLY among candidates this loop itself is
+    //introducing (preLoop3Count guards that): an entry already set by the two loops above is strictly more
+    //specific than anything base can offer and must win outright, exactly as before, never be overwritten
+    //to ambiguous by a stale/irrelevant base entry that happens to share its key.
+    struct var* punParam = canonicalVar(memberVar->punParam);
+    int preLoop3Count = op->scopeBindings.len;
     for (int i = 0; i < base->scopeBindings.len; i++) {
         struct scopeBinding* e = ListGetIdx(&base->scopeBindings, i);
-        bool already = false;
+        struct var* via = canonicalVar(e->viaParam);
+        if (via != NULL && via != punParam) continue;
+        bool moreSpecificAlready = false;
+        struct scopeBinding* existing = NULL;
         for (int j = 0; j < op->scopeBindings.len; j++) {
             struct scopeBinding* have = ListGetIdx(&op->scopeBindings, j);
-            if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { already = true; break; }
+            if (canonicalVar(have->typeParam) != canonicalVar(e->typeParam)) continue;
+            if (j < preLoop3Count) { moreSpecificAlready = true; break; }
+            existing = have;
+            break;
         }
-        if (already) continue;
+        if (moreSpecificAlready) continue;
+        if (existing) {
+            if (canonicalVar(existing->boundTo) != canonicalVar(e->boundTo)) existing->boundTo = SCOPE_AMBIGUOUS;
+            continue;
+        }
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = e->typeParam;
         b.boundTo = e->boundTo;
@@ -2421,9 +2470,14 @@ void applyScopeBindingsSnapshot(struct list* snap) {
     }
 }
 
-//true if two scopeBindings lists carry the same set of (typeParam, boundTo) pairs, order-independent, both
-//sides canonicalized (see canonicalVar) since either list may hold a type-level original or a function/
-//constructor body's own scope-chain copy of one, depending on which pass produced it.
+//true if two scopeBindings lists carry the same set of (typeParam, viaParam, boundTo) triples, order-
+//independent, all three canonicalized (see canonicalVar) since either list may hold a type-level original
+//or a function/constructor body's own scope-chain copy of one, depending on which pass produced it.
+//viaParam is part of the match, not just typeParam/boundTo: a var whose own map holds two viaParam-tagged
+//entries for the same typeParam (see struct scopeBinding's own comment - a call merging two same-typed
+//bare-pun arguments) could otherwise look "equal" across two branches that actually swapped which
+//parameter each boundTo flowed through - matching as SETS while actually disagreeing on which path leads
+//where, a real false-accept risk once a bare-pun field access later filters by that exact path.
 bool scopeBindingsEqual(struct list a, struct list b) {
     if (a.len != b.len) return false;
     for (int i = 0; i < a.len; i++) {
@@ -2432,6 +2486,7 @@ bool scopeBindingsEqual(struct list a, struct list b) {
         for (int j = 0; j < b.len; j++) {
             struct scopeBinding* bb = ListGetIdx(&b, j);
             if (canonicalVar(ba->typeParam) == canonicalVar(bb->typeParam)
+                    && canonicalVar(ba->viaParam) == canonicalVar(bb->viaParam)
                     && canonicalVar(ba->boundTo) == canonicalVar(bb->boundTo)) {
                 found = true;
                 break;
@@ -2462,11 +2517,14 @@ void foldScopeBindingsBranch(struct list* acc, struct list* next) {
         }
         if (n && scopeBindingsEqual(a->bindings, n->bindings)) continue;
 
+        //keyed by (typeParam, viaParam) - see scopeBindingsEqual's own comment on why viaParam has to be
+        //part of the key here too, not just typeParam.
         struct list ambiguous = ListInit(sizeof(struct scopeBinding));
         for (int j = 0; j < a->bindings.len; j++) {
             struct scopeBinding* e = ListGetIdx(&a->bindings, j);
             struct scopeBinding amb = (struct scopeBinding){0};
             amb.typeParam = e->typeParam;
+            amb.viaParam = e->viaParam;
             amb.boundTo = SCOPE_AMBIGUOUS;
             ListAdd(&ambiguous, &amb);
         }
@@ -2476,11 +2534,13 @@ void foldScopeBindingsBranch(struct list* acc, struct list* next) {
                 bool already = false;
                 for (int k = 0; k < ambiguous.len; k++) {
                     struct scopeBinding* have = ListGetIdx(&ambiguous, k);
-                    if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)) { already = true; break; }
+                    if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)
+                            && canonicalVar(have->viaParam) == canonicalVar(e->viaParam)) { already = true; break; }
                 }
                 if (already) continue;
                 struct scopeBinding amb = (struct scopeBinding){0};
                 amb.typeParam = e->typeParam;
+                amb.viaParam = e->viaParam;
                 amb.boundTo = SCOPE_AMBIGUOUS;
                 ListAdd(&ambiguous, &amb);
             }

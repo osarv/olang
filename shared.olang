@@ -494,6 +494,27 @@ func makePunnedBoxChecked(a scope, x int32, y int32) ? Point<a> {
     return b.wrapped.inner
 }
 
+## a real precision gap the bare-pun fix above left open, closed separately: TWO bare-pun fields at ONE
+## constructor sharing the exact same underlying constructor-bearing type ("WrappedPoint" for both "left"
+## and "right"). WrappedPoint's own internal "s" is the SAME struct var* key regardless of which field it's
+## reached through, so merging both arguments' own scopeBindings into DualWrapped's own map used to collide
+## - with no way to tell "this WrappedPoint.s entry came from left" from "this one came from right," a real
+## disagreement (left tagged to "a", right tagged to "own") forced BOTH "d.left.inner" and "d.right.inner"
+## to SCOPE_AMBIGUOUS, correctly rejecting the truly-unsound access but ALSO the truly-sound one. Fixed by
+## tagging each merged entry with WHICH of DualWrapped's own constructor parameters it flowed through
+## (struct scopeBinding.viaParam, set in OperandFuncCall's merge loop) and, at a bare-pun field access,
+## filtering the base's carried-forward map down to only the entries that flowed through THIS field's own
+## punned parameter (struct var.punParam, OperandMember's carry-forward step) - see the report.
+## "d.left.inner" below is now a real, independently-verified match, not a blanket ambiguous rejection.
+type DualWrapped struct(ls scope, rs scope, left WrappedPoint<ls>, right WrappedPoint<rs>) {
+    left, right
+}
+
+func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) ? Point<a> {
+    d mut DualWrapped<> = DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY}))
+    return d.left.inner
+}
+
 ## reassignment tracking: a var's own scope-binding map used to be set once, at its own declaration, and
 ## never revisited - so "box = ScopedBox(otherScope, ...)" here left box's OWN tracked binding stale,
 ## silently still saying "a" even after box was reassigned to point at something else entirely. A plain
@@ -997,6 +1018,12 @@ test "the static scope checker traces a scope tag through a bare-pun field, not 
     p mut Point<> = makePunnedBoxChecked(own, 11, 12)
     assert(p.x == 11)
     assert(p.y == 12)
+}
+
+test "the static scope checker disambiguates two bare-pun fields of the same type tagged to different scopes" {
+    p mut Point<> = dualWrappedFieldChecked(own, 13, 14, 15, 16)
+    assert(p.x == 13)
+    assert(p.y == 14)
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {
