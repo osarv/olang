@@ -1236,16 +1236,66 @@ of sync with the actual code.
   rejection** (the genuinely-unsound sibling access, `d.right.inner` checked against the *other* field's
   scope, still correctly rejected with `SCOPE_MAY_NOT_OUTLIVE_TARGET` - confirming the fix adds precision
   without weakening the existing safety net at all). `make verify` passes with both changes in place.
-  **Still deliberately not attempted, the same honest boundary as every other entry in this section:**
-  `viaParam` is a single flat tag, re-tagged (not composed) at each call boundary, so a path deeper than
-  one call's own parameter list - e.g. the *exact* scenario worked through while designing this, a
-  bare-pun-of-a-bare-pun-of-two-same-typed-fields three levels deep - can still collapse two genuinely
-  different origins into the same post-flattening key. This is handled *safely*, not precisely: the
-  conflict-detection added to both `OperandFuncCall`'s merge loop and `OperandMember`'s carry-forward loop
-  catches exactly this case and marks it `SCOPE_AMBIGUOUS` rather than silently picking one, so the honest
-  outcome is "no false accept, but a false rejection can still occur at three-or-more levels of nested
-  same-type bare-pun fields" - a real, deeper version of the same known limitation, not a new gap this fix
-  introduced, and not reachable by anything in the current test suite (the field-of-a-field mechanism this
-  session's checker relies on for *explicit*-initializer nesting doesn't have this problem at all, since
-  each field's own persisted map is already unambiguous by construction - this is specific to chains of
-  bare puns only).
+  **Left deliberately bounded at the time to one call boundary:** `viaParam` was a single flat tag,
+  re-tagged (not composed) at each call boundary, so a path deeper than one call's own parameter list could
+  still collapse two genuinely different origins into the same post-flattening key - handled *safely* (the
+  conflict-detection in both merge loops falls back to `SCOPE_AMBIGUOUS` rather than silently picking one),
+  not precisely. **Generalized to arbitrary depth in the next entry below**, once asked directly whether
+  the one-hop bound could be lifted.
+
+- **`viaParam` generalized from a single flat tag into `viaPath`, a real stack - closing the "three-or-more
+  levels of nested bare-pun forwarding" bound the entry above left open, not just documented it more
+  precisely.** The design question was genuinely simple once posed directly: a scalar tag, *overwritten* at
+  each call boundary, necessarily forgets everything more than one hop back; the fix is to *compose*
+  instead of overwrite - `struct scopeBinding.viaParam` (a single `struct var*`) became `viaPath` (`struct
+  list` of `struct var*`, nearest-first) - and thread push/pop through the exact two places that used to
+  read/write the scalar, no new mechanism, no general path/chain type invented for this.
+  **Two small, symmetric helpers, `viaPathPush`/`viaPathPopFront`/`viaPathsEqual` (semantic.c):**
+  `OperandFuncCall`'s bare-pun merge step now *pushes* the current call's own parameter onto whatever path
+  an incoming entry already carried (instead of overwriting), so a chain of nested bare-pun forwarding
+  threads its full history through, one push per call boundary crossed. `OperandMember`'s bare-pun
+  carry-forward step now checks the *top* of an entry's path against `memberVar->punParam` (instead of
+  comparing the whole scalar) and, on a match, *pops* that one frame before copying the entry forward -
+  any remaining frames stay intact for a further member access on the SAME operand to pop in turn. An empty
+  path still means "unambiguous regardless of path," exactly as bare `NULL` did before - the base case is
+  unchanged, only the "one hop then done" limitation is gone. `resolveEffectiveScopeVar`'s own generic,
+  path-agnostic lookup (used by every call site that doesn't know which path it wants) needed no logic
+  change at all, only a comment update - it was already correctly ignoring path information and falling
+  back to `SCOPE_AMBIGUOUS` on genuine disagreement, which remains exactly the right behavior with `viaPath`
+  in place of `viaParam`.
+  **A real soundness gap found and fixed while updating the checker's existing reassignment/branch-merge
+  machinery to match:** `scopeBindingsEqual`/`foldScopeBindingsBranch` had already been keyed on
+  `(typeParam, viaParam)` by the entry above (for exactly this reason), so simply swapping in `viaPathsEqual`
+  in place of a scalar comparison was the direct, mechanical continuation of that same fix, not a new one -
+  called out here only because skipping it would have silently reintroduced the identical false-accept risk
+  (two branches disagreeing on which path a value flows through comparing as "equal") one level deeper.
+  **A second, unrelated, pre-existing bug found and fixed while building the permanent 3-level test for
+  this:** `resolveTypeRefBase`'s eager-resolution guard (`if (!willBeRef) resolveTypeDecl(found)`) skipped
+  resolving a type for *every* `<>`/`<name>`-marked reference, not just a genuinely self-referential one -
+  a much blunter check than what it was actually protecting against (forcing resolution back into a type
+  still mid-resolving itself, which would either recurse or wrongly report `STRUCT_NOT_YET_DEFINED` for a
+  perfectly legitimate `<>`-broken cycle like `next Node<>`). Since `struct type` is copied *by value* at
+  `return *found`, not accessed through a pointer afterward, a `<>`-marked reference that happened to be
+  the *first* thing anywhere to mention its target type permanently baked in a still-placeholder snapshot
+  (empty `.vars`) into that one field's own type - never refreshed even after something else later forced
+  the canonical entry to resolve for real. Invisible in every prior test, since every existing `<>`
+  reference to a given type happened to be preceded, somewhere in resolution order, by at least one other,
+  non-`<>` reference to the same type; surfaced immediately by a cross-module `<name>`-tagged field
+  (`box DualWrapped<hs>` inside `Holder`, referencing a type with no earlier non-`<>` reference anywhere) -
+  `h.box.left.inner` failed with "unknown struct member" because `h.box`'s own snapshot of `DualWrapped`'s
+  type still had zero fields. Fixed by gating on `found->resolving` (the exact fact the old check was
+  approximating) instead of "does this reference carry a marker at all" - `resolveTypeDecl` already has
+  its own precise re-entrancy guard keyed on that same flag, so this loses none of the self-reference
+  safety while eagerly resolving everything else, matching how a plain (non-`<>`) embedded reference has
+  always behaved.
+  **Confirmed with a real 3-level permanent test** (`Holder`/`holderFieldChecked` in shared.olang, chaining
+  `h.box.left.inner` through Holder's own "box", DualWrapped's own "left", and WrappedPoint's own "inner" -
+  three separate bare-pun hops, three separate pushes/pops, resolving to a single verified scope, not
+  `SCOPE_AMBIGUOUS`) and one ad hoc rejection (`h.box.right.inner` checked against the *other* field's
+  scope, still correctly rejected with `SCOPE_MAY_NOT_OUTLIVE_TARGET`, confirming the generalization adds
+  precision without weakening the existing safety net). `make verify` passes with all of this in place.
+  **What's left, and it's now a genuinely deep corner:** two entries with the exact same *fully-popped*
+  remaining path can still collide if two independently-nested chains happen to converge on it (e.g. two
+  siblings at DIFFERENT levels that both happen to bottom out through the same sequence of same-typed
+  bare-pun fields) - still handled by the same `SCOPE_AMBIGUOUS` fallback, not a new gap, just not
+  specifically constructed or tested for since nothing in the current test suite reaches it.

@@ -85,19 +85,24 @@ struct type {
 //always one of the CURRENT function's own scope parameters - the only two shapes a "scope"-typed argument
 //can ever have (own, or a direct read of one of the current function's own scope params), so a binding is
 //always a single, already-final hop - never itself needs further resolution through another map.
-//viaParam disambiguates typeParam when it alone isn't a unique key within one call's own merged map: two
+//viaPath disambiguates typeParam when it alone isn't a unique key within one call's own merged map: two
 //DIFFERENT arguments of a constructor call may themselves be instances of the exact same constructor-
 //bearing type (e.g. two bare-pun fields both "WrappedPoint<...>"), so their own inner scope params share
-//the same typeParam identity even though they're unrelated. viaParam names which of THIS call's own
-//parameters an entry flowed through, so OperandMember's bare-pun carry-forward step (matched against
-//struct var.punParam below) can select only the entries relevant to the field actually being accessed
-//instead of merging them all into one ambiguous bag. NULL means "unambiguous regardless of path" - true
-//for a callee's own scope-typed parameter's direct binding (each such parameter is already a unique key on
-//its own), and for anything already filtered down to one field by that carry-forward step. See the report.
+//the same typeParam identity even though they're unrelated. viaPath is a stack (list of struct var*,
+//nearest/most-recent first) of the call parameters an entry has flowed through so far: OperandFuncCall's
+//bare-pun merge step PUSHES the current call's own parameter onto whatever path an incoming entry already
+//carried, and OperandMember's bare-pun carry-forward step (matched against struct var.punParam below)
+//POPS exactly one frame - the one it's responsible for - when a field access consumes it, so an entry can
+//be threaded correctly through however many levels of nested bare-pun forwarding it passes through, one
+//hop (one push, or one pop) at a time, the same way the rest of this checker only ever resolves one hop
+//per level rather than needing a general path/chain type of its own. An empty path means "unambiguous
+//regardless of path" - true for a callee's own scope-typed parameter's direct binding (each such parameter
+//is already a unique key on its own) and for anything already fully popped down to one field. See the
+//report.
 struct scopeBinding {
     struct var* typeParam;
     struct var* boundTo;
-    struct var* viaParam;
+    struct list viaPath; //list of struct var* - see the comment above
 };
 
 //a variable or function - the two share one namespace/list everywhere they're declared (module scope,
@@ -123,7 +128,7 @@ struct var {
                            //canonical, type-level var from the declaring type's own ctorFunc.type.vars (set
                            //in resolveStructCtorInto). NULL for every other field kind. Lets OperandMember
                            //identify, at a bare-pun field access, which of the base's own scopeBinding
-                           //entries (see viaParam above) actually belong to THIS field - see the report.
+                           //entries (see viaPath above) actually belong to THIS field - see the report.
 };
 
 enum statementType {

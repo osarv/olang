@@ -502,7 +502,7 @@ func makePunnedBoxChecked(a scope, x int32, y int32) ? Point<a> {
 ## disagreement (left tagged to "a", right tagged to "own") forced BOTH "d.left.inner" and "d.right.inner"
 ## to SCOPE_AMBIGUOUS, correctly rejecting the truly-unsound access but ALSO the truly-sound one. Fixed by
 ## tagging each merged entry with WHICH of DualWrapped's own constructor parameters it flowed through
-## (struct scopeBinding.viaParam, set in OperandFuncCall's merge loop) and, at a bare-pun field access,
+## (struct scopeBinding.viaPath, set in OperandFuncCall's merge loop) and, at a bare-pun field access,
 ## filtering the base's carried-forward map down to only the entries that flowed through THIS field's own
 ## punned parameter (struct var.punParam, OperandMember's carry-forward step) - see the report.
 ## "d.left.inner" below is now a real, independently-verified match, not a blanket ambiguous rejection.
@@ -513,6 +513,24 @@ type DualWrapped struct(ls scope, rs scope, left WrappedPoint<ls>, right Wrapped
 func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) ? Point<a> {
     d mut DualWrapped<> = DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY}))
     return d.left.inner
+}
+
+## viaPath (above) was originally a single scalar, overwritten rather than composed at each call boundary -
+## which meant it could disambiguate exactly ONE level of nested bare-pun forwarding and had to fall back to
+## SCOPE_AMBIGUOUS beyond that, even when the deeper access was actually sound. Generalized into a real
+## stack (a list of struct var*, nearest-first): OperandFuncCall's merge step now PUSHES the current call's
+## own parameter onto whatever path an entry already carried instead of overwriting it, and OperandMember's
+## carry-forward step POPS exactly the one frame it's responsible for, leaving any remaining frames intact
+## for a further member access to pop in turn - see the report. "h.box.left.inner" below chains THREE
+## levels of bare-pun forwarding (Holder's own "box", DualWrapped's own "left", WrappedPoint's own "inner")
+## and still resolves to a real, single, verified scope - not an ambiguous rejection.
+type Holder struct(hs scope, box DualWrapped<hs>) {
+    box
+}
+
+func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) ? Point<a> {
+    h mut Holder<> = Holder(a, DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY})))
+    return h.box.left.inner
 }
 
 ## reassignment tracking: a var's own scope-binding map used to be set once, at its own declaration, and
@@ -1024,6 +1042,12 @@ test "the static scope checker disambiguates two bare-pun fields of the same typ
     p mut Point<> = dualWrappedFieldChecked(own, 13, 14, 15, 16)
     assert(p.x == 13)
     assert(p.y == 14)
+}
+
+test "the static scope checker resolves a scope tag through three levels of nested bare-pun forwarding" {
+    p mut Point<> = holderFieldChecked(own, 17, 18, 19, 20)
+    assert(p.x == 17)
+    assert(p.y == 18)
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {

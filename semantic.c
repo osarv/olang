@@ -617,15 +617,29 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
     }
 
-    //whether this WHOLE reference will end up "<>"-marked is decided here, once, independent of any
-    //array suffixes (a flat check on refNode's own direct tokens) - and used only to decide whether to
-    //eagerly resolve the named type. A "<>"-indirect reference is a pointer, not an embedding, so it
-    //must not force full resolution of its target - that's exactly what lets a struct reference itself,
-    //directly or through an array of itself, without infinite recursion. The marker's actual *effect*
-    //(structMAlloc/scopeParam) is applied later, in applyRefMarker, after array suffixes have been
-    //wrapped on - see resolveTypeRef.
-    bool willBeRef = hasTokOfType(refNode, TOK_LST);
-    if (!willBeRef) resolveTypeDecl(found);
+    //eager resolution is skipped only when found is ALREADY mid-resolution right now (found->resolving) -
+    //the genuine self-reference case ("next Node<>", or a mutual cycle through several types), where
+    //forcing it here would either recurse straight back into itself or (since resolveTypeDecl's own
+    //re-entrancy guard treats re-entering as an error) wrongly report STRUCT_NOT_YET_DEFINED for a
+    //perfectly legitimate "<>"-broken cycle. A "<>"-indirect reference is a pointer, so it doesn't NEED its
+    //target fully resolved to know its own size either way - but a fresh, not-yet-mid-resolution target
+    //(including a cross-module one nothing else has referenced yet) is always safe, and needed, to resolve
+    //eagerly right here.
+    //A real bug found and fixed: this used to key off "does refNode carry a '<>' marker at all"
+    //(hasTokOfType(refNode, TOK_LST)) instead - a much blunter check that skipped eager resolution for
+    //EVERY "<>"-marked reference, self-referential or not. struct type is copied BY VALUE at "return
+    //*found" below, not accessed through a pointer thereafter, so a reference that happened to be the
+    //FIRST thing anywhere to mention its target type permanently baked in a still-placeholder snapshot
+    //(empty .vars) into that one field/var/param's own type - never refreshed even after something else
+    //later forced the canonical entry (found itself) to resolve for real. Invisible as long as every "<>"
+    //reference to a given type was preceded, somewhere in resolution order, by at least one OTHER,
+    //non-"<>" reference to the same type (which happened to be true of every existing test); surfaced by a
+    //cross-module "<name>"-tagged field ("box sh.WrappedPoint<hs>") whose target had no such earlier
+    //reference anywhere - "h.box.inner" failed with "unknown struct member" because h.box's own snapshot
+    //of WrappedPoint's type still had zero fields. found->resolving is the precise fact the old check was
+    //really trying to approximate; using it directly fixes this with no loss of the self-reference safety
+    //it was protecting.
+    if (!found->resolving) resolveTypeDecl(found);
     return *found;
 }
 
@@ -1325,6 +1339,42 @@ struct var* canonicalVar(struct var* v) {
     return v->origin ? v->origin : v;
 }
 
+//true if two struct scopeBinding.viaPath lists name the exact same stack of parameters, in the same
+//order, element-wise canonicalized (see canonicalVar). Two empty paths are equal (both "unambiguous").
+bool viaPathsEqual(struct list a, struct list b) {
+    if (a.len != b.len) return false;
+    for (int i = 0; i < a.len; i++) {
+        struct var* pa = canonicalVar(*(struct var**)ListGetIdx(&a, i));
+        struct var* pb = canonicalVar(*(struct var**)ListGetIdx(&b, i));
+        if (pa != pb) return false;
+    }
+    return true;
+}
+
+//pushes param onto the front of path (the top of the stack), canonicalizing it first - see struct
+//scopeBinding's own comment. Used by OperandFuncCall's bare-pun merge step: every entry merged from a
+//non-scope argument's own map gets the CURRENT call's own parameter pushed on top, so the resulting path
+//still remembers the entry's full history through however many nested calls it's passed through.
+struct list viaPathPush(struct var* param, struct list path) {
+    struct list result = ListInit(sizeof(struct var*));
+    struct var* canonParam = canonicalVar(param);
+    ListAdd(&result, &canonParam);
+    ListAddList(&result, path);
+    return result;
+}
+
+//pops the front element (the top of the stack) off path, returning what's left - the counterpart to
+//viaPathPush, used by OperandMember's bare-pun carry-forward step once it's confirmed (by checking the
+//front element - see the same call site) that THIS field is the one the top of the stack refers to.
+//Never called on an empty path (callers check path.len first).
+struct list viaPathPopFront(struct list path) {
+    struct list result = ListInit(sizeof(struct var*));
+    for (int i = 1; i < path.len; i++) {
+        ListAdd(&result, ListGetIdx(&path, i));
+    }
+    return result;
+}
+
 //true if scopeVar is one of func's own declared parameters, by identity (after canonicalization - see
 //canonicalVar) - the same pattern cgResolveParamScopeOverride (codegen.c) already uses to compare a scope
 //tag against a signature's own param list, generalized here to also handle a value-level copy. func may
@@ -1361,13 +1411,14 @@ struct var* SCOPE_AMBIGUOUS = &scopeAmbiguousStorage;
 //at all or scopeVar isn't one of the keys it knows how to resolve). Canonicalizes both sides before
 //comparing (see canonicalVar) since a stored key/value may be either a type-level scope param or a
 //function/constructor body's own scope-chain copy of one, depending on which pass produced it.
-//Deliberately ignores viaParam here: a generic caller (OperandFitsType, or either of OperandMember's own
+//Deliberately ignores viaPath here: a generic caller (OperandFitsType, or either of OperandMember's own
 //two non-carry-forward lookups) never knows which path it wants, so this matches typeParam alone across
-//every entry regardless of viaParam. That's safe/correct as long as op's own map has at most one distinct
+//every entry regardless of viaPath. That's safe/correct as long as op's own map has at most one distinct
 //boundTo per typeParam by the time it reaches here - true for everything except a raw, not-yet-filtered
-//multi-argument call operand (see OperandFuncCall), which nothing calls this on directly. If two entries
-//for the same typeParam genuinely disagree anyway, returns SCOPE_AMBIGUOUS rather than silently picking
-//one - the same "known ambiguous, not just untracked" distinction SCOPE_AMBIGUOUS exists for elsewhere.
+//multi-argument call operand (see OperandFuncCall) or a not-yet-fully-popped bare-pun carry-forward result
+//(see OperandMember), neither of which anything calls this on directly. If two entries for the same
+//typeParam genuinely disagree anyway, returns SCOPE_AMBIGUOUS rather than silently picking one - the same
+//"known ambiguous, not just untracked" distinction SCOPE_AMBIGUOUS exists for elsewhere.
 struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
     if (!scopeVar) return NULL;
     struct var* canonScopeVar = canonicalVar(scopeVar);
@@ -1534,6 +1585,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
             struct scopeBinding b = (struct scopeBinding){0};
             b.typeParam = param;
             b.boundTo = arg->opType == OPERATION_READ_VAR ? canonicalVar(arg->readVar) : NULL;
+            b.viaPath = ListInit(sizeof(struct var*)); //empty - already a unique key on its own, see the report
             ListAdd(&op->scopeBindings, &b);
             continue;
         }
@@ -1543,23 +1595,24 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
         //unchanged, with no explicit initializer of its own to persist a map from - see
         //semaCheckBodies/OperandMember's own "carry base's map forward" step) can still resolve through it
         //later, via whatever this call's own result gets assigned/persisted onto. Every entry merged here
-        //is tagged with viaParam = THIS parameter (param, canonicalized) - overwriting whatever viaParam it
-        //may have carried before - so two DIFFERENT arguments that happen to be instances of the exact same
-        //constructor-bearing type (the same typeParam key) never collide: they end up as two separate
-        //entries distinguished by viaParam, not one ambiguous merge. See struct scopeBinding's own comment
-        //and OperandMember's carry-forward step, which is what actually consumes viaParam to pick the right
-        //one back out. A genuine conflict can still happen WITHIN one argument's own already-merged map
-        //(two of ITS OWN entries ending up with the same (typeParam, viaParam) pair after some deeper
-        //nesting already collapsed a finer distinction - see the report) - marked SCOPE_AMBIGUOUS rather
-        //than silently keeping whichever was merged first, same as everywhere else this sentinel is used.
-        struct var* viaParam = canonicalVar(param);
+        //has THIS parameter (param, canonicalized) PUSHED onto whatever path it already carried (see
+        //viaPathPush) - not overwritten - so a chain of nested bare-pun forwarding threads its full history
+        //through, one push per call boundary crossed, and two DIFFERENT arguments that happen to be
+        //instances of the exact same constructor-bearing type (the same typeParam key) never collide: they
+        //end up as two separate entries whose paths differ at the position this push just added, not one
+        //ambiguous merge. See struct scopeBinding's own comment and OperandMember's carry-forward step,
+        //which POPS one frame at a time to consume this. A genuine conflict can still happen WITHIN one
+        //argument's own already-merged map (two of ITS OWN entries ending up with the exact same resulting
+        //(typeParam, path) pair) - marked SCOPE_AMBIGUOUS rather than silently keeping whichever was merged
+        //first, same as everywhere else this sentinel is used.
         for (int j = 0; j < arg->scopeBindings.len; j++) {
             struct scopeBinding* e = ListGetIdx(&arg->scopeBindings, j);
+            struct list pushedPath = viaPathPush(param, e->viaPath);
             struct scopeBinding* existing = NULL;
             for (int k = 0; k < op->scopeBindings.len; k++) {
                 struct scopeBinding* have = ListGetIdx(&op->scopeBindings, k);
                 if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)
-                        && canonicalVar(have->viaParam) == viaParam) { existing = have; break; }
+                        && viaPathsEqual(have->viaPath, pushedPath)) { existing = have; break; }
             }
             if (existing) {
                 if (canonicalVar(existing->boundTo) != canonicalVar(e->boundTo)) existing->boundTo = SCOPE_AMBIGUOUS;
@@ -1567,7 +1620,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
                 struct scopeBinding nb = (struct scopeBinding){0};
                 nb.typeParam = e->typeParam;
                 nb.boundTo = e->boundTo;
-                nb.viaParam = viaParam;
+                nb.viaPath = pushedPath;
                 ListAdd(&op->scopeBindings, &nb);
             }
         }
@@ -1629,6 +1682,7 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = memberVar->type.scopeParam;
         b.boundTo = resolveEffectiveScopeVar(base, memberVar->type.scopeParam);
+        b.viaPath = ListInit(sizeof(struct var*)); //empty - already a unique key on its own, see the report
         ListAdd(&op->scopeBindings, &b);
     }
     //"field of a field": if this field's own declared type is itself constructor-bearing, memberVar's own
@@ -1640,11 +1694,16 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     //on THIS operand (e.g. the ".leaf" in "o.mid.leaf") resolve correctly - the map on the "mid" operand
     //itself now carries an entry keyed by MID's own "s", not just OUTER's - see the report. A no-op (empty
     //loop) whenever the field's own type has no such map of its own, e.g. an ordinary plain struct field.
+    //(this field itself is never a bare pun here - it has its own explicit initializer, or this loop would
+    //be a no-op - so inner's own viaPath, if any, is carried forward UNCHANGED, not pushed/popped: it
+    //records history from INSIDE this field's own initializer call, which a further member access on THIS
+    //operand may still need intact to disambiguate something nested deeper within it.)
     for (int i = 0; i < memberVar->scopeBindings.len; i++) {
         struct scopeBinding* inner = ListGetIdx(&memberVar->scopeBindings, i);
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = inner->typeParam;
         b.boundTo = resolveEffectiveScopeVar(base, inner->boundTo);
+        b.viaPath = inner->viaPath;
         ListAdd(&op->scopeBindings, &b);
     }
     //a BARE-PUN field (one whose value is literally a constructor parameter, forwarded unchanged - see
@@ -1652,38 +1711,44 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     //scopeBindings above is empty for it even when the field's own type is constructor-bearing - the
     //relevant substitution instead lives on base's own map already, merged in there by OperandFuncCall at
     //whatever call site actually constructed the value base now holds (see OperandFuncCall's own "merge a
-    //non-scope argument's own map" step). An entry there is only carried forward here if it's either
-    //unambiguous regardless of path (viaParam NULL - e.g. base's own top-level scope-typed param bindings,
-    //universal to the whole instance) or specifically tagged as having flowed through THIS field's own
-    //punned parameter (viaParam == memberVar->punParam, canonicalized) - an entry tagged via a DIFFERENT
-    //sibling parameter (e.g. base's "right" field's own inner scope param, while accessing base's "left")
-    //must never leak across, which is exactly the false accept viaParam exists to prevent. punParam is
-    //NULL for a non-bare-pun field, which correctly narrows this to only the unambiguous viaParam-NULL
-    //entries for it (a field with its own explicit initializer already got its own precise map above -
-    //nothing further to gain from base's here, and every existing "already set above" case is still
-    //skipped exactly as before). Copied entries reset viaParam to NULL: from op's own perspective (this one
-    //specific field's value) the path has now been fully resolved, not still "associated with a sibling" -
-    //a further member access on THIS operand treats op's map as an ordinary, already-disambiguated one. A
-    //genuine remaining conflict (two selected entries sharing a typeParam with different boundTo - possible
-    //after a deeper nesting already collapsed a finer distinction, see the report) is marked SCOPE_AMBIGUOUS
-    //rather than silently keeping whichever was found first - but ONLY among candidates this loop itself is
-    //introducing (preLoop3Count guards that): an entry already set by the two loops above is strictly more
-    //specific than anything base can offer and must win outright, exactly as before, never be overwritten
-    //to ambiguous by a stale/irrelevant base entry that happens to share its key.
+    //non-scope argument's own map" step, which PUSHES rather than overwrites - see struct scopeBinding and
+    //viaPathPush's own comments). An entry there is only carried forward here if it's either unambiguous
+    //regardless of path (an EMPTY viaPath - e.g. base's own top-level scope-typed param bindings, universal
+    //to the whole instance) or if the TOP of its path names THIS field's own punned parameter
+    //(memberVar->punParam, canonicalized) - an entry whose top names a DIFFERENT sibling parameter (e.g.
+    //base's "right" field's own inner scope param, while accessing base's "left") must never leak across,
+    //which is exactly the false accept viaPath exists to prevent. punParam is NULL for a non-bare-pun
+    //field, which correctly narrows this to only the unambiguous empty-path entries for it (a field with
+    //its own explicit initializer already got its own precise map above - nothing further to gain from
+    //base's here, and every existing "already set above" case is still skipped exactly as before). A
+    //matching non-empty path has its top frame POPPED (see viaPathPopFront) before being copied forward -
+    //this ONE level of nesting has now been resolved, but any REMAINING frames stay intact for a further
+    //member access on THIS operand to pop in turn, one hop at a time, however many levels deep the actual
+    //nesting goes - this is what makes the whole mechanism recursive rather than bounded to one hop. A
+    //genuine remaining conflict (two selected entries sharing both typeParam AND the same popped path, with
+    //different boundTo - possible after two independently-nested chains happen to collapse to the same
+    //remaining path) is marked SCOPE_AMBIGUOUS rather than silently keeping whichever was found first - but
+    //ONLY among candidates this loop itself is introducing (preLoop3Count guards that): an entry already
+    //set by the two loops above is strictly more specific than anything base can offer and must win
+    //outright, exactly as before, never be overwritten to ambiguous by a stale/irrelevant base entry that
+    //happens to share its key.
     struct var* punParam = canonicalVar(memberVar->punParam);
     int preLoop3Count = op->scopeBindings.len;
     for (int i = 0; i < base->scopeBindings.len; i++) {
         struct scopeBinding* e = ListGetIdx(&base->scopeBindings, i);
-        struct var* via = canonicalVar(e->viaParam);
-        if (via != NULL && via != punParam) continue;
+        bool universal = e->viaPath.len == 0;
+        bool matchesThisField = !universal && punParam != NULL
+            && canonicalVar(*(struct var**)ListGetIdx(&e->viaPath, 0)) == punParam;
+        if (!universal && !matchesThisField) continue;
+        struct list carriedPath = universal ? e->viaPath : viaPathPopFront(e->viaPath);
+
         bool moreSpecificAlready = false;
         struct scopeBinding* existing = NULL;
         for (int j = 0; j < op->scopeBindings.len; j++) {
             struct scopeBinding* have = ListGetIdx(&op->scopeBindings, j);
             if (canonicalVar(have->typeParam) != canonicalVar(e->typeParam)) continue;
             if (j < preLoop3Count) { moreSpecificAlready = true; break; }
-            existing = have;
-            break;
+            if (viaPathsEqual(have->viaPath, carriedPath)) { existing = have; break; }
         }
         if (moreSpecificAlready) continue;
         if (existing) {
@@ -1693,6 +1758,7 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = e->typeParam;
         b.boundTo = e->boundTo;
+        b.viaPath = carriedPath;
         ListAdd(&op->scopeBindings, &b);
     }
     return op;
@@ -2470,14 +2536,15 @@ void applyScopeBindingsSnapshot(struct list* snap) {
     }
 }
 
-//true if two scopeBindings lists carry the same set of (typeParam, viaParam, boundTo) triples, order-
-//independent, all three canonicalized (see canonicalVar) since either list may hold a type-level original
-//or a function/constructor body's own scope-chain copy of one, depending on which pass produced it.
-//viaParam is part of the match, not just typeParam/boundTo: a var whose own map holds two viaParam-tagged
-//entries for the same typeParam (see struct scopeBinding's own comment - a call merging two same-typed
-//bare-pun arguments) could otherwise look "equal" across two branches that actually swapped which
-//parameter each boundTo flowed through - matching as SETS while actually disagreeing on which path leads
-//where, a real false-accept risk once a bare-pun field access later filters by that exact path.
+//true if two scopeBindings lists carry the same set of (typeParam, viaPath, boundTo) triples, order-
+//independent, typeParam/boundTo canonicalized (see canonicalVar) and viaPath compared via viaPathsEqual,
+//since either list may hold a type-level original or a function/constructor body's own scope-chain copy of
+//one, depending on which pass produced it. viaPath is part of the match, not just typeParam/boundTo: a var
+//whose own map holds two path-tagged entries for the same typeParam (see struct scopeBinding's own comment
+//- a call merging two same-typed bare-pun arguments) could otherwise look "equal" across two branches that
+//actually swapped which parameter each boundTo flowed through - matching as SETS while actually disagreeing
+//on which path leads where, a real false-accept risk once a bare-pun field access later filters by that
+//exact path.
 bool scopeBindingsEqual(struct list a, struct list b) {
     if (a.len != b.len) return false;
     for (int i = 0; i < a.len; i++) {
@@ -2486,7 +2553,7 @@ bool scopeBindingsEqual(struct list a, struct list b) {
         for (int j = 0; j < b.len; j++) {
             struct scopeBinding* bb = ListGetIdx(&b, j);
             if (canonicalVar(ba->typeParam) == canonicalVar(bb->typeParam)
-                    && canonicalVar(ba->viaParam) == canonicalVar(bb->viaParam)
+                    && viaPathsEqual(ba->viaPath, bb->viaPath)
                     && canonicalVar(ba->boundTo) == canonicalVar(bb->boundTo)) {
                 found = true;
                 break;
@@ -2517,14 +2584,14 @@ void foldScopeBindingsBranch(struct list* acc, struct list* next) {
         }
         if (n && scopeBindingsEqual(a->bindings, n->bindings)) continue;
 
-        //keyed by (typeParam, viaParam) - see scopeBindingsEqual's own comment on why viaParam has to be
+        //keyed by (typeParam, viaPath) - see scopeBindingsEqual's own comment on why viaPath has to be
         //part of the key here too, not just typeParam.
         struct list ambiguous = ListInit(sizeof(struct scopeBinding));
         for (int j = 0; j < a->bindings.len; j++) {
             struct scopeBinding* e = ListGetIdx(&a->bindings, j);
             struct scopeBinding amb = (struct scopeBinding){0};
             amb.typeParam = e->typeParam;
-            amb.viaParam = e->viaParam;
+            amb.viaPath = e->viaPath;
             amb.boundTo = SCOPE_AMBIGUOUS;
             ListAdd(&ambiguous, &amb);
         }
@@ -2535,12 +2602,12 @@ void foldScopeBindingsBranch(struct list* acc, struct list* next) {
                 for (int k = 0; k < ambiguous.len; k++) {
                     struct scopeBinding* have = ListGetIdx(&ambiguous, k);
                     if (canonicalVar(have->typeParam) == canonicalVar(e->typeParam)
-                            && canonicalVar(have->viaParam) == canonicalVar(e->viaParam)) { already = true; break; }
+                            && viaPathsEqual(have->viaPath, e->viaPath)) { already = true; break; }
                 }
                 if (already) continue;
                 struct scopeBinding amb = (struct scopeBinding){0};
                 amb.typeParam = e->typeParam;
-                amb.viaParam = e->viaParam;
+                amb.viaPath = e->viaPath;
                 amb.boundTo = SCOPE_AMBIGUOUS;
                 ListAdd(&ambiguous, &amb);
             }
