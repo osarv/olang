@@ -8,6 +8,7 @@
 #define EXPECTED_C_OR_T_FLAG "expected -c or -t"
 #define EXPECTED_ONE_COMPILE_FILE "-c takes exactly one file"
 #define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
+#define NOT_A_REGULAR_FILE "not a regular file (is this a directory?)"
 
 // ---- tokenizer ----
 
@@ -94,6 +95,7 @@ int ErrMsgGetNErrors();
 void ErrMsgFinishCompilation();
 void ErrMsgFatal(char* errMsg);
 void ErrMsgUnableToOpenFile(struct str fileName);
+void ErrMsgNotARegularFile(struct str fileName);
 void ErrMsgUnexpectedToken(struct token found, char* expected);
 void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
 void ErrMsgSemantic(struct token tok, char* errMsg);

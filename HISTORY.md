@@ -1619,3 +1619,31 @@ from their original form.
   only the "Structure" section's closing sentence and the "Status" section were trimmed of their own
   CLAUDE.md/commit-history references. The process itself (spec first, then implementation, then a
   CLAUDE.md entry) is unchanged - only where it's documented moved.
+- **Fixed: passing a directory (or any non-regular file) to `-c`/`-t` silently compiled as an empty
+  module instead of reporting an error - in `-t` mode this actually "succeeded" with `0 passed, 0
+  failed` and exit 0.** A CLI robustness bug, not a language design decision, closed the same session
+  the `spec.md`/CLAUDE.md split happened in. Root cause: `readChars` (token.c) only ever checked
+  `fopen`'s own return value; on Linux, `fopen(path, "r")` succeeds for a directory just like it does
+  for a regular file, and the subsequent `fgetc` loop immediately returns `EOF` - indistinguishable
+  from a genuinely empty file - because `fgetc` never separates "clean end of stream" from "a real
+  read error" without an explicit `ferror(fp)` check, which the code never made. Confirmed directly:
+  `fopen()`/`fgetc()` on a directory returns `-1` with `ferror(fp)` true and `errno == EISDIR`, not
+  `feof(fp)` true - the exact condition the old code silently treated the same as end-of-file.
+  **Fixed with two independent checks, addressing two different failure classes:** (1) a `stat()` call
+  before `fopen`, rejecting anything that isn't `S_ISREG` (a directory, device file, FIFO, etc.) with
+  a new, specific `NOT_A_REGULAR_FILE`/`ErrMsgNotARegularFile` message - deliberately only fires when
+  `stat()` itself *succeeds* (the path exists but isn't a plain file); a `stat()` failure (e.g.
+  `ENOENT` - the path doesn't exist at all) falls through unchanged to `fopen`'s own existing
+  `ErrMsgUnableToOpenFile` check, which reports the more accurate "unable to open file" message -
+  getting this ordering backwards was a real mistake caught immediately by testing the nonexistent-
+  file case *after* making the change (it briefly reported "not a regular file" for a file that
+  simply doesn't exist, which is misleading), fixed by gating the `S_ISREG` check on `stat()`'s own
+  return value rather than treating any `stat()` outcome as "not a regular file." (2) an `ferror(fp)`
+  check right after the read loop, as a defensive fallback for a genuine I/O error occurring mid-read
+  after `fopen` already succeeded (rare - e.g. a disk error - but the `stat()` check alone can't catch
+  a failure that only manifests during the read itself), reusing the existing `ErrMsgUnableToOpenFile`
+  message since "open" is close enough for a rare, hard-to-reach case that doesn't warrant its own
+  message. Confirmed by hand for all four cases: a directory and a nonexistent file now report their
+  own distinct, correct messages under both `-c` and `-t`; a permission-denied file and a normal file
+  are both unaffected (still "unable to open file" and success, respectively) - `make verify` (72
+  tests, `-c` build/run) passes with no regressions.

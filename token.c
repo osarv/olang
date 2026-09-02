@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "token.h"
 #include "util.h"
 #include "errmsg.h"
@@ -147,11 +148,21 @@ bool tryFeedChar(TokenCtx tc, char c) {
 void readChars(TokenCtx tc) {
     char buffer[tc->fileName.len +1];
     StrToCStr(tc->fileName, buffer);
+
+    //fopen()/fgetc() alone don't reject a directory - on Linux, opening one for reading succeeds and
+    //fgetc() immediately returns EOF (indistinguishable, to the caller, from a genuinely empty file),
+    //silently compiling it as an empty module instead of reporting a clear error. Reject anything that
+    //isn't a plain file up front - but only once we know it exists at all (a stat() failure here, e.g.
+    //ENOENT, is left to fopen()'s own check below, which reports the more accurate "unable to open").
+    struct stat st;
+    if (stat(buffer, &st) == 0 && !S_ISREG(st.st_mode)) ErrMsgNotARegularFile(tc->fileName);
+
     FILE* fp = fopen(buffer, "r");
     if (!fp) ErrMsgUnableToOpenFile(tc->fileName);
 
     int c;
     while ((c = fgetc(fp)) != EOF) ListAdd(&tc->chars, &c);
+    if (ferror(fp)) ErrMsgUnableToOpenFile(tc->fileName); //e.g. a genuine I/O error mid-read
     c = '\0';
     ListAdd(&tc->chars, &c);
     tc->charLineNr = 1;

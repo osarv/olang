@@ -77,6 +77,15 @@ void ErrMsgUnableToOpenFile(struct str fileName) {
     ErrMsgFatal(buf);
 }
 
+void ErrMsgNotARegularFile(struct str fileName) {
+    char buf[fileName.len + 64];
+    buf[0] = '\0';
+    strcat(buf, "\"");
+    strncat(buf, fileName.ptr, fileName.len);
+    strcat(buf, "\": " NOT_A_REGULAR_FILE "\n");
+    ErrMsgFatal(buf);
+}
+
 void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg) {
     struct str fileName = TokenGetFileName(tc);
     struct str err = StrFromCStr(errMsg);
