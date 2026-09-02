@@ -1610,3 +1610,12 @@ of sync with the actual code.
   `§4.4` where a specific subsection was already being cited) - the "Standing process change" and every
   other still-current instruction referring to `spec/` in the two entries above should now be read as
   referring to `spec.md`.
+- **`spec.md` itself no longer says anything about CLAUDE.md, Claude, or the design process - it is a pure
+  language reference manual, nothing else.** User-requested: the file's own former "Relationship to
+  CLAUDE.md" and "Process for language changes" front-matter sections (self-referential process/meta
+  content, not language rules) are removed from `spec.md` outright, not just reworded - that framing now
+  lives only here, in CLAUDE.md (this entry, and the "Standing process change" note above), which is the
+  correct place for it. The rule content and numbering (§1-§10, all 172 rules) is completely unaffected;
+  only the "Structure" section's closing sentence and the "Status" section were trimmed of their own
+  CLAUDE.md/commit-history references. The process itself (spec first, then implementation, then a
+  CLAUDE.md entry) is unchanged - only where it's documented moved.

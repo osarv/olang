@@ -1,32 +1,6 @@
 # olang Language Specification
 
-This is the normative specification of olang: a precise, current-state description of the
-language, independent of how or why it came to be that way.
-
-## Relationship to CLAUDE.md
-
-`CLAUDE.md` (project root) is the design *history* — a chronological narrative of decisions,
-reversals, bugs found and fixed, and the reasoning behind each. It is discursive by design and
-answers "why is it this way, and what did we try instead."
-
-This specification answers only "what is true right now." It contains no narrative, no rationale,
-no bug stories, and no references to past states of the language. Where the two disagree, this
-specification is wrong and must be corrected — it is derived from CLAUDE.md and the implementation,
-not the other way around.
-
-## Process for language changes
-
-A change to the language is made in this order:
-
-1. Write or edit the relevant section(s) of this specification first, as a concrete, unambiguous
-   definition of the new or changed behavior.
-2. Implement the change so the implementation conforms to what was just written.
-3. Update CLAUDE.md with the design record entry, as before.
-
-The specification is the thing the implementation is checked against — not the reverse. If the
-implementation and this specification disagree at any point outside of a change in progress, that
-is a bug in one of the two, and it should be resolved explicitly (fix the code, or fix the spec)
-rather than left unreconciled.
+This is the reference manual for olang: a precise, current-state description of the language.
 
 ## Structure
 
@@ -48,7 +22,7 @@ depends on concepts already introduced by earlier ones:
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
-name, a struct field) — those belong to CLAUDE.md and the source, not here.
+name, a struct field).
 
 ## Notation
 
@@ -77,10 +51,10 @@ produces a run-time failure instead, it says so explicitly (e.g. "run-time panic
 
 ## Status
 
-This is version 1 of the specification, written against the implementation as of the commit that
-introduced it. It covers the full language as implemented at that point, including the static
-ownership-scope checker. It does not yet cover a general borrow checker, generics, or a standard
-library — none of these exist in the implementation yet either.
+This specification covers the full language, including the static ownership-scope checker. It does
+not cover a general borrow checker, generics, or a standard library — none of these exist in the
+language.
+
 ## 1. Lexical Structure
 
 ### 1.1 Source files
