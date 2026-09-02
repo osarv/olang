@@ -7,10 +7,10 @@ Settled decisions below; scope-containment is checked at compile time, a general
 not).
 
 This file is a living design record, kept terse on purpose - it is not a spec (see `spec.md` for the
-normative, current-state language reference) and not the full story either (see `DESIGN_HISTORY.md`
+normative, current-state language reference) and not the full story either (see `HISTORY.md`
 for the complete discursive record behind every entry below: why each decision was made, what was
 tried and reverted, what bugs were found and fixed along the way). Whenever a design decision is
-made, implemented, revised, or reversed: write or extend the full entry in DESIGN_HISTORY.md in the
+made, implemented, revised, or reversed: write or extend the full entry in HISTORY.md in the
 same session, and keep the short current-state summary below in sync with it - don't let either
 drift out of sync with the actual code.
 
@@ -23,7 +23,7 @@ drift out of sync with the actual code.
   struct can embed itself (breaking an otherwise-infinite-size cycle). A dynamic array (`T[]`) is
   always reference-shaped, marker or not. The marker's spelling went through three iterations
   (`{}` → `&` → `{}` → `<>`) before settling on `<>`/`<name>` for good; full history in
-  DESIGN_HISTORY.md.
+  HISTORY.md.
 - **`error` statement.** `error TypeName.word` selects the error part of a function's declared
   return union. The named error type must appear in the enclosing function's signature, and `word`
   must be one of that type's declared members. Only valid inside an ordinary function body - not in
@@ -73,7 +73,7 @@ drift out of sync with the actual code.
 - **Struct/array literal syntax, `:=` inference, and the parser.** Struct literals:
   `Type{v1, v2, ...}` (positional, field-declaration order). Array literals: `T[v1, ...]` (scalar
   element type stated exactly once, nested `[...]` rows for multi-dimensional, no separate
-  size/dynamic-ness prefix - see DESIGN_HISTORY.md for the syntax's full evolution). Both are
+  size/dynamic-ness prefix - see HISTORY.md for the syntax's full evolution). Both are
   general expressions, usable anywhere a value is needed. `x := <literal>` infers `x`'s type entirely
   from a literal initializer (locals, for-loop init vars, globals); a non-literal initializer
   (`x := f()`) is a compile error. The parser is hand-written recursive descent, not table-driven,
@@ -147,4 +147,4 @@ drift out of sync with the actual code.
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
   process anywhere in it. A language change is made spec-first: write or revise the relevant rule(s)
   in `spec.md`, then implement so the code conforms to what was just written, then record the *why*
-  here (extending DESIGN_HISTORY.md too, if there's a longer story worth keeping).
+  here (extending HISTORY.md too, if there's a longer story worth keeping).
