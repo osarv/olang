@@ -92,6 +92,11 @@
 #define TRY_OUTSIDE_FUNC "try/catch is only valid inside a function, unless every possible error is caught"
 #define CATCH_ERROR_NOT_PRODUCED_BY_CALL "this error is not declared by the function being called"
 
+// ---- external functions ----
+
+#define EXTERN_TYPE_NOT_ALLOWED "an 'extern func' parameter/return type must be a numeric primitive (byte, int32, int64, float32, float64) or an array of one - no structs, references, or error unions cross the C ABI boundary"
+#define EXTERN_FUNC_NOT_FALLIBLE "an 'extern func' call is never fallible - it has no error union, so it can't be the operand of try/try-catch"
+
 int ErrMsgGetNErrors();
 void ErrMsgFinishCompilation();
 void ErrMsgFatal(char* errMsg);

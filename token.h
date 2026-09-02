@@ -42,6 +42,8 @@ enum tokenType {
     TOK_TEST,
     TOK_DESTRUCT, //struct destructor block - "destruct { ... }", trailing a "struct(params) { ... }"
                   //constructor-bearing type declaration - see the report
+    TOK_EXTERN, //"extern func NAME(params) [ret-type]" - a function defined elsewhere, resolved by the
+                //linker at build time; no body, no error-list - see the report
     TOK_ADD,
     TOK_SUB,
     TOK_MUL,

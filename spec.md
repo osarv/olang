@@ -4,8 +4,8 @@ This is the reference manual for olang: a precise, current-state description of 
 
 ## Structure
 
-The specification is organized into ten numbered sections below, ordered so that each section only
-depends on concepts already introduced by earlier ones:
+The specification is organized into eleven numbered sections below, ordered so that each section
+only depends on concepts already introduced by earlier ones:
 
 | § | Covers |
 |---|---|
@@ -19,6 +19,7 @@ depends on concepts already introduced by earlier ones:
 | 8 Ownership and Scopes | The `scope` type, `own`, reference markers, the static scope checker |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
 | 10 Compilation Model | Compilation units, `-c`/`-t` modes, `main`, test blocks, process exit |
+| 11 External Functions | `extern func` declarations, linkage, and the restricted C-ABI type boundary |
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
@@ -40,9 +41,9 @@ Grammar is given in EBNF:
 Each section's normative rules are numbered `<prefix><n>` (e.g. `L1`, `T4`, `S12`) so other
 material — future spec amendments, or implementation comments — can cite a rule precisely. The
 prefix is the first letter of the section's topic (Lexical, Types, Declarations, Modules,
-Expressions, Statements, Errors, Scopes, Constructors, Compilation). A numbered rule is never
-renumbered; a superseded rule is marked superseded in place rather than deleted, so citations never
-dangle.
+Expressions, Statements, Errors, Scopes, Constructors, Compilation, eXternal functions). A numbered
+rule is never renumbered; a superseded rule is marked superseded in place rather than deleted, so
+citations never dangle.
 
 "Implementation-defined" marks behavior that is deliberately not fixed by the language (e.g. exact
 struct layout beyond what's stated). "Unspecified" marks behavior no program should depend on.
@@ -94,6 +95,7 @@ if      else    try     catch   return  done    crash   assert
 for     do      while   match   case    nomatch
 type    struct  vocab   func    error   mut     own
 import  test    destruct
+extern
 compif  compelse
 ```
 
@@ -402,10 +404,11 @@ requires the same type under T27 unless a specific rule elsewhere states an exce
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
+           | extern-func-decl
 ```
 
 `import-decl` is specified in §4; `test-decl` in
-§10.4. The remaining four are covered below.
+§10.4; `extern-func-decl` in §11. The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
 other, declared earlier or later in the same file, and to any name reachable through an import
 (§4).
@@ -416,8 +419,8 @@ other, declared earlier or later in the same file, and to any name reachable thr
 itself:
 
 - **types** — struct, vocab, and error type names (§2.4–§2.6);
-- **vars** — function and global variable names, sharing one set (a function and a global variable
-  may not share a name; see D7);
+- **vars** — function, external function (§11 X1), and global variable names, sharing one set (no
+  two of these may share a name; see D7);
 - **imports** — import alias names (§4.2).
 
 Declaring two entries with the same name in the same set, within the same module, is a compile-time
@@ -1411,3 +1414,44 @@ destructor's body follows (§9.3 C7): every fallible call inside it must be full
 directly declared in. Each test in a run prints its own description together with pass/fail, and
 one test failing (§6.7 S18, inside the block itself) does not stop the remaining tests in the same
 file, or any other listed file, from running.
+
+## 11. External Functions
+
+**X1.** `extern-func-decl ::= "extern" "func" IDEN "(" extern-param-list ")" [ extern-ret-type ]
+STMNT_END` is a top-level declaration (D1) naming a function defined outside this compilation and
+resolved by the platform's linker at build time. Unlike an ordinary `func-decl` (D7), it declares no
+`error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
+ordinary function's body would otherwise begin.
+
+**X2.** `extern-param-list ::= [ extern-param { "," extern-param } ]`, where `extern-param ::= IDEN
+extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
+numeric primitive type (T5 — `byte`, `int32`, `int64`, `float32`, or `float64` — this is also
+exactly `extern-scalar-type`), or an array type (T7, fixed-size or dynamic) whose element type is
+itself one of those five. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
+return type is never valid (see X3 for why). No other type — `bool`, a struct, a vocab type, an
+error type, a function type, `scope`, or an array of any type outside the numeric-primitive set —
+is valid in an `extern-param` or `extern-ret-type` position.
+
+**X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
+only — never its length (a dynamic array's own `{ len, ptr }` representation, T11, is reduced to
+just the pointer half; a fixed array's own embedded address is used directly). This pointer is
+never itself a nameable value or type anywhere in this language — it exists only at this one
+marshalling boundary. If the external function also requires the array's length, the declaration
+states it as a separate `extern-param` (X2) of an integer type, supplied explicitly by the caller
+(`len(arr)`, E23) — an `extern-param-list` never infers one parameter's value from another's. An
+`extern-ret-type` can never be an array (X2) for exactly the reason this same marshalling can't run
+in reverse: a raw pointer an external function returns carries no length anywhere alongside it, so
+there is no sound way to reconstruct a real `{ len, ptr }` value from it — accepting one would mean
+either fabricating a length (silently unsound) or inventing a real pointer-typed value somewhere in
+the language (exactly what X3's own marshalling exists to avoid).
+
+**X4.** An external function declares no errors and is never fallible (§7 R1): calling it always
+produces its declared `extern-ret-type` directly, or nothing if none is declared — never the
+`(code, payload)` pair a fallible ordinary function's own call produces (§7 R6). It is called exactly
+like a non-fallible ordinary function (E13, E14); it can never be the operand of `try` (E24) or a
+`try`-`catch` statement (§7.4 R10), the same restriction R8 already places on any non-fallible call.
+
+**X5.** An external function's own declared name is subject to the same visibility rule as any other
+module-level name (§4.3 M6): capitalized is exported, lowercase is private to its own declaring
+module. The declared name is also the symbol the linker resolves against; this specification does
+not define what happens when no such symbol exists at link time (implementation-defined).

@@ -54,6 +54,7 @@ struct tokRule tokRules[] = {
     {TOK_IMPORT, "import", NULL},
     {TOK_TEST, "test", NULL},
     {TOK_DESTRUCT, "destruct", NULL},
+    {TOK_EXTERN, "extern", NULL},
     {TOK_ADD, "+", NULL},
     {TOK_SUB, "-", NULL},
     {TOK_MUL, "*", NULL},

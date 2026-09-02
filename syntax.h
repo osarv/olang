@@ -35,6 +35,12 @@ enum syntaxType {
     SNTX_FUNC_SIG,
     SNTX_FUNC_TYPE,
     SNTX_FUNC_DEF,
+    SNTX_EXTERN_PARAM,      //"IDEN type-expr" - no "mut", unlike SNTX_PARAM (see the report on §11) -
+                             //the restriction to a numeric-primitive-or-array-of-them type is checked
+                             //semantically, not by a separate type-expr grammar
+    SNTX_EXTERN_PARAM_LIST,
+    SNTX_EXTERN_FUNC_DECL,  //"extern func IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level
+                             //declaration only, no body, no error-list - see the report on §11
     SNTX_VAR_DECL,
     SNTX_ASSIGN_OP,
     SNTX_STMNT_ASSIGN,

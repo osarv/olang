@@ -76,6 +76,9 @@ struct type {
     bool hasRetType;
     struct type* retType; //heap-allocated, valid when hasRetType
     struct list errors; //list of struct type*: error types declared in the signature's error list
+    bool isExtern; //true for an "extern func" decl (§11) - never fallible (errors always empty), params/
+                    //retType restricted to numeric primitives or arrays of them, codegen emits a bare C-ABI
+                    //declare/call instead of the olang {code,payload} convention
 };
 
 //one entry of an operand/var's own scope-binding map (see resolveEffectiveScopeVar in semantic.c) - "at

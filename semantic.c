@@ -726,6 +726,7 @@ void semaCollectNames(struct semaModule* mod) {
                 collectType(mod, firstTokOfType(actual, TOK_IDEN), BASETYPE_ERROR);
                 break;
             case SNTX_FUNC_DEF:
+            case SNTX_EXTERN_FUNC_DECL:
                 collectVar(mod, firstTokOfType(actual, TOK_IDEN), false);
                 break;
             case SNTX_VAR_DECL:
@@ -1292,6 +1293,68 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     return t;
 }
 
+//true if t is one of the five numeric primitives (T5) - the base case of the §11 X2 restriction
+static bool isNumericPrimitive(struct type t) {
+    return t.bType == BASETYPE_BYTE || t.bType == BASETYPE_INT32 || t.bType == BASETYPE_INT64
+        || t.bType == BASETYPE_FLOAT32 || t.bType == BASETYPE_FLOAT64;
+}
+
+//true if t is a valid "extern func" parameter/return type per X2: a numeric primitive itself, or a
+//(fixed or dynamic) array whose element type is one - deliberately flat, not recursive, since X2 only
+//ever allows "an array of one of those five", never an array of arrays
+static bool isExternAllowedType(struct type t) {
+    if (isNumericPrimitive(t)) return true;
+    if (t.bType == BASETYPE_ARRAY) return isNumericPrimitive(*t.arrElem);
+    return false;
+}
+
+//"IDEN type-expr" (COMMA ...)* - mirrors resolveParamList, but for SNTX_EXTERN_PARAM nodes (no "mut" to
+//read) and with every param's type checked against the X2 restriction
+void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out) {
+    *out = ListInit(sizeof(struct var));
+    struct list params = allPartsOfType(paramListNode, SNTX_EXTERN_PARAM);
+    for (int i = 0; i < params.len; i++) {
+        struct syntax* p = *(struct syntax**)ListGetIdx(&params, i);
+        struct token nameTok = firstTokOfType(p, TOK_IDEN);
+        struct str name = strFromTok(nameTok);
+        if (VarGetList(out, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+        struct syntax* typeExprNode = firstPartOfType(p, SNTX_TYPE_EXPR);
+        struct var v = (struct var){0};
+        v.name = name;
+        v.tok = nameTok;
+        //no scope params exist for an extern function - scope/"<>" are never valid extern types anyway
+        v.type = resolveTypeExpr(mod, typeExprNode, NULL);
+        if (!isExternAllowedType(v.type)) ErrMsgSemantic(nameTok, EXTERN_TYPE_NOT_ALLOWED);
+        ListAdd(out, &v);
+    }
+}
+
+//resolves an "extern func" declaration's own signature (SNTX_EXTERN_FUNC_DECL node): its param list and
+//optional return type, both restricted to X2's numeric-primitive-or-array-of-them types, and marks the
+//result isExtern - never fallible (X4: t.errors is always left empty, never populated from any error-list,
+//since an extern-func-decl has none)
+struct type resolveExternFuncSig(struct semaModule* mod, struct syntax* declNode) {
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_FUNC;
+    t.isExtern = true;
+    resolveExternParamList(mod, firstPartOfType(declNode, SNTX_EXTERN_PARAM_LIST), &t.vars);
+    t.errors = ListInit(sizeof(struct type*));
+
+    struct syntax* retTypeNode = firstPartOfType(declNode, SNTX_RET_TYPE);
+    if (retTypeNode) {
+        t.hasRetType = true;
+        t.retType = MallocOrCrash(sizeof(struct type));
+        *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), NULL);
+        //X3: unlike a param, a return type can never be an array - a raw pointer an external function
+        //returns carries no length alongside it, so there's no sound way to rebuild a real "{ len, ptr }"
+        //value from it (isExternAllowedType, deliberately scalar-only here, param-or-array-of-scalar there)
+        if (!isNumericPrimitive(*t.retType)) {
+            ErrMsgSemantic(firstTokAnywhere(retTypeNode), EXTERN_TYPE_NOT_ALLOWED);
+        }
+    }
+    return t;
+}
+
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     struct syntax* actual = partSntx(typeExprNode, 0);
     switch (actual->type) {
@@ -1388,6 +1451,12 @@ void semaResolveModule(struct semaModule* mod) {
             struct var* v = VarGetList(&mod->vars, strFromTok(nameTok));
             struct syntax* sigNode = firstPartOfType(actual, SNTX_FUNC_SIG);
             v->type = resolveFuncSig(mod, sigNode);
+            v->type.owner = mod;
+            v->type.tok = nameTok;
+        } else if (actual->type == SNTX_EXTERN_FUNC_DECL) {
+            struct token nameTok = firstTokOfType(actual, TOK_IDEN);
+            struct var* v = VarGetList(&mod->vars, strFromTok(nameTok));
+            v->type = resolveExternFuncSig(mod, actual);
             v->type.owner = mod;
             v->type.tok = nameTok;
         } else if (actual->type == SNTX_VAR_DECL) {

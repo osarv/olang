@@ -637,6 +637,71 @@ struct syntax* parseFuncDef(SyntaxCtx sc) {
     return s;
 }
 
+//"IDEN type-expr" - unlike parseParam, never accepts "mut" (see the report on §11 X2) - reuses the
+//ordinary type-expr grammar for the type itself; the restriction to a numeric-primitive-or-array-of-
+//them type is checked semantically (resolveExternParamList in semantic.c), not by a separate grammar
+struct syntax* parseExternParam(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_EXTERN_PARAM);
+    addTok(s, name);
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addSntx(s, type);
+    return s;
+}
+
+//"(EXTERN_PARAM (COMMA EXTERN_PARAM)*)?" - always succeeds (possibly with zero params), mirroring
+//parseParamList
+struct syntax* parseExternParamList(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_EXTERN_PARAM_LIST);
+    struct syntax* first = parseExternParam(sc);
+    if (!first) return s;
+    addSntx(s, first);
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* p = parseExternParam(sc);
+        if (!p) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, p);
+    }
+    return s;
+}
+
+//"extern func IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level declaration only (see the
+//report on §11): no error-list (an external function is never fallible in olang's own sense, X4), and
+//no body at all - STMNT_END ends the declaration directly where an ordinary parseFuncDef's own block
+//would begin. Reuses parseRetType as-is (already bare, no marker, see the signature-reorder entry in
+//the report) - identical grammar to an ordinary function's own optional return type.
+struct syntax* parseExternFuncDecl(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kwExtern = acceptTok(sc, TOK_EXTERN);
+    if (kwExtern.type == TOK_NONE) return NULL;
+    struct token kwFunc = acceptTok(sc, TOK_FUNC);
+    if (kwFunc.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token open = acceptTok(sc, TOK_PAREN_O);
+    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* params = parseExternParamList(sc);
+    struct token close = acceptTok(sc, TOK_PAREN_C);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_EXTERN_FUNC_DECL);
+    addTok(s, kwExtern);
+    addTok(s, kwFunc);
+    addTok(s, name);
+    addTok(s, open);
+    addSntx(s, params);
+    addTok(s, close);
+    struct syntax* retType = parseRetType(sc);
+    if (retType) addSntx(s, retType);
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
 struct syntax* parseTestDecl(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_TEST);
@@ -1496,6 +1561,7 @@ struct syntax* parseTopDecl(SyntaxCtx sc) {
     if ((inner = parseTypeDecl(sc))) {}
     else if ((inner = parseImport(sc))) {}
     else if ((inner = parseErrorDecl(sc))) {}
+    else if ((inner = parseExternFuncDecl(sc))) {}
     else if ((inner = parseFuncDef(sc))) {}
     else if ((inner = parseVarDecl(sc))) {}
     else if ((inner = parseTestDecl(sc))) {}

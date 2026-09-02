@@ -1053,8 +1053,11 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
     return r;
 }
 
+char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
+
 char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
+    if (func->type.isExtern) return cgExternFuncCall(ctx, op);
 
     char* target;
     struct cgLocal* local = cgFindLocal(ctx, func->name);
@@ -1140,6 +1143,61 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
         return slot;
     }
     return payload;
+}
+
+//an "extern func" (§11) call: the unmangled name (X5 - it's also the linker symbol, never olang's own
+//module-prefix mangling), never fallible (X4 - a plain call, never the {code,payload} wrapping), and an
+//array-typed argument marshalled down to a bare pointer to its first element (X3) - cgBoundaryValue still
+//does the ordinary promotion work first (a fixed-array literal flowing into a dynamic "byte[]" param, a
+//plain value flowing into a "<>"-marked param), so this only ever has to peel the final boundary-form
+//value (a "{ i64, ptr }" slice, a real "[N x T]" aggregate, or an already-bare "ptr") down to that ptr.
+char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
+    struct var* func = op->readVar;
+    char target[256];
+    snprintf(target, sizeof(target), "@%.*s", func->name.len, func->name.ptr);
+
+    char argsBuf[4096] = "";
+    for (int i = 0; i < op->args.len; i++) {
+        struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
+        struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        char* boundary = cgBoundaryValue(ctx, argOp, paramT, ctx->ownScopeSlot);
+        char piece[512];
+        if (paramT.bType == BASETYPE_ARRAY) {
+            char* ptr;
+            if (paramT.arrMalloc) {
+                ptr = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", ptr, boundary);
+            } else if (paramT.structMAlloc) {
+                ptr = boundary; //already a bare heap ptr value (llvmType: structMAlloc -> "ptr")
+            } else {
+                //plain fixed array: cgBoundaryValue's by-value boundary convention already loaded it into
+                //a real "[N x T]" aggregate - spill it to a fresh stack slot to get a real address from
+                char aty[64];
+                llvmType(paramT, aty, sizeof(aty));
+                char* slot = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, aty);
+                fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", aty, boundary, slot);
+                ptr = slot;
+            }
+            snprintf(piece, sizeof(piece), "%sptr %s", i > 0 ? ", " : "", ptr);
+        } else {
+            char aty[64];
+            llvmType(paramT, aty, sizeof(aty));
+            snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, boundary);
+        }
+        strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
+    }
+
+    if (!func->type.hasRetType) {
+        fprintf(ctx->fnOut, "  call void %s(%s)\n", target, argsBuf);
+        return "";
+    }
+    //X2/X3: an extern-ret-type is always a scalar (numeric primitive) - never an array, never by-ref
+    char retTy[64];
+    llvmType(*func->type.retType, retTy, sizeof(retTy));
+    char* result = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call %s %s(%s)\n", result, retTy, target, argsBuf);
+    return result;
 }
 
 //"len(arr)" - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
@@ -1660,6 +1718,34 @@ void emitGlobalDecls(FILE* out) {
     }
 }
 
+//"declare RETTY @NAME(ARGTYS)" for every "extern func" (§11) in the program - the unmangled name (X5:
+//it's also the linker symbol, no module-prefix mangling like an ordinary olang function gets) and a
+//plain C-ABI signature (llvmType already gives an array-typed param/local its right shape everywhere
+//else; here it's simply overridden to "ptr", matching the marshalling cgExternFuncCall performs at
+//every call site - X3). No body, ever - an extern-func-decl has none to emit.
+void emitExternDecls(FILE* out) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        for (int i = 0; i < mod->vars.len; i++) {
+            struct var* v = ListGetIdx(&mod->vars, i);
+            if (v->type.bType != BASETYPE_FUNC || !v->type.isExtern) continue;
+            char retTy[64];
+            if (v->type.hasRetType) llvmType(*v->type.retType, retTy, sizeof(retTy));
+            else snprintf(retTy, sizeof(retTy), "void");
+            fprintf(out, "declare %s @%.*s(", retTy, v->name.len, v->name.ptr);
+            for (int p = 0; p < v->type.vars.len; p++) {
+                struct var* param = ListGetIdx(&v->type.vars, p);
+                char pty[16];
+                if (param->type.bType == BASETYPE_ARRAY) snprintf(pty, sizeof(pty), "ptr");
+                else llvmType(param->type, pty, sizeof(pty));
+                fprintf(out, "%s%s", p > 0 ? ", " : "", pty);
+            }
+            fputs(")\n", out);
+        }
+    }
+}
+
 void emitScopeRuntime(FILE* out);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
@@ -1934,7 +2020,7 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType != BASETYPE_FUNC) continue;
+            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
             cgFunction(ctx, mod, v);
         }
     }
@@ -1952,6 +2038,7 @@ void cgEmitModuleDecls(FILE* out) {
     emitStructTypeDefs(out);
     fputs("\n", out);
     emitRuntimeDecls(out);
+    emitExternDecls(out);
     emitGlobalDecls(out);
     fputs("\n", out);
 }

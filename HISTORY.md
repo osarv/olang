@@ -2076,3 +2076,146 @@ from their original form.
   get the next sequential integer, appended at the end of their section so reading order stays
   monotonic, not a lettered sub-rule slotted into the middle) - corrected to a properly-appended E26
   before writing the rule itself.
+- **`extern func` - external (C-ABI) function declarations, and the design conversation that led there.**
+  Prompted by "is it time for generics?" once numeric conversions landed with no blockers left. The
+  user's actual stated goal turned out to be broader: generic data structures (`Vec`, `Set`), generic
+  comparison functions (`min`/`max` over anything with the right operators), and I/O (stdin/stdout,
+  file read/write). Proposed splitting these into three independent tracks - I/O first (needs a new
+  capability the language doesn't have at all yet), generics via a `type`-as-parameter-kind mechanism
+  modeled on how `scope` already works as a restricted builtin parameter-only type (not Rust/C++
+  `<T>`, which would collide with this language's own existing `<>` reference-marker syntax), and
+  `Vec`/`Set` as ordinary olang library code once generics exist, exactly matching the "Deferred:
+  generics" entry's own already-settled principle that such a collection belongs in a library, not
+  more special cases inside the compiler.
+
+  **Why I/O isn't "written in olang the same way"** (the user's own next question, and the right one):
+  it isn't that I/O needs new compiler-builtin machinery - it's that talking to the OS at all requires
+  some way to declare and call a function this compilation doesn't define, and no such mechanism
+  existed. `Vec`/`Set` need zero new capability (pure compositions of generics, once those exist);
+  I/O needs exactly one new primitive: a way to declare an externally-defined function and call it.
+  This reframing is what turned "how do we do I/O" into "how do we do FFI," a much smaller and more
+  clearly-scoped question.
+
+  **Rejected: importing C headers directly (`@cImport`-style, Zig's approach).** Explicitly proposed
+  by the user, explicitly recommended against: `@cImport` requires embedding a real C preprocessor and
+  parser (a multi-year engineering effort in Zig's own case) to solve a problem that's actually a dozen
+  or so hand-written function declarations, minutes of manual work. Wildly disproportionate to this
+  project's actual scale and need. Any header-parsing/bindgen tooling is deferred indefinitely, revisited
+  only if it's ever actually needed - plain hand-written `extern func` declarations cover the entire
+  known need today.
+
+  **The ABI mismatch, worked through explicitly before any spec was written** (the user's own next
+  question: "such external functions use a different ABI right?" - yes, three distinct mismatches):
+  (1) this language's own fallible-function return convention (`{ i32 code, T payload }`, locally-
+  scoped error codes - see the Error-union return ABI entry) has no C equivalent at all - resolved by
+  deciding an external function is simply never fallible in olang's own type system; any real error
+  handling for what it might signal has to be a hand-written wrapper in ordinary olang on top of the
+  raw call. (2) this language's dynamic arrays are fat pointers (`{ len, ptr }`, T11) while C wants a
+  raw pointer, often NUL-terminated (which this language's own `STR_LIT` deliberately isn't) - resolved
+  by marshalling an array argument down to just its pointer half as an invisible codegen detail of the
+  call itself, with length (if the external function needs it) stated as a separate, explicit integer
+  parameter the caller supplies via `len(arr)` - no automatic pairing, matching this project's standing
+  "explicit over inferred" convention throughout. (3) struct-by-value C ABI passing (SysV classification
+  rules) was flagged as a genuinely open question with no known answer for this language's own existing
+  calling convention - resolved by simply not allowing structs (or any non-numeric type) in an
+  `extern-param`/`extern-ret-type` position at all, sidestepping the question entirely rather than
+  attempting to answer it: the concrete, actually-needed functions (`open`/`read`/`write`/`close`) only
+  ever need scalars and byte buffers.
+
+  **Extern variables: considered, deliberately not built.** Asked directly whether extern variables
+  were needed too. Answer: depends on the I/O approach - raw POSIX syscalls need none at all (`stdin`/
+  `stdout`/`stderr` are just the integer constants 0/1/2, not linkable symbols), while C's buffered
+  stdio (`fopen`/`FILE*`) would need them. Specific gotcha surfaced and avoided: `errno` on Linux/glibc
+  isn't actually a plain extern variable - it's a macro expanding to `*__errno_location()`, a function
+  call returning a thread-local pointer that's then dereferenced, not something a plain "declare an
+  extern variable" mechanism could ever reach cleanly. Resolved by building I/O on raw syscalls (plain
+  `int32` file-descriptor "handles," no `FILE*`) and reporting failure via the generic-error feature
+  (bare `error`, already built earlier this same session) rather than any per-errno-code detail - a
+  deliberate, honest scope boundary, not a hack. Extern variables remain entirely unsupported; nothing
+  in the current design needs them.
+
+  **The design goal that shaped every detail above, in the user's own words: "I either wanna go all the
+  way or just barely enough with these kinda things. can we do this without the user ever handling
+  pointers?"** Yes, achieved by construction, not by convention: (1) plain `int32` file descriptors as
+  handles, never an opaque `FILE*`/pointer-typed handle anywhere; (2) an array-typed extern parameter's
+  marshalling to a raw C pointer happens *only* as an invisible detail of the call-codegen mechanism
+  itself (`cgExternFuncCall`, codegen.c) - never introducing a real, nameable pointer type anywhere in
+  this language's own type system, for application code or stdlib authors alike; (3) no `errno`/pointer-
+  dereference ever needed, since failure reporting is delegated entirely to a hand-written olang wrapper
+  using the generic error. Confirmed nothing in the shipped design exposes a pointer value or pointer
+  type anywhere an olang program could ever read, store, or name one.
+
+  **Naming: `extern func`, not an invented abbreviation.** The user asked directly, offering `cfunc`/
+  `ntpfunc`-style alternatives; recommended and settled on reusing the existing `func` keyword with an
+  `extern` modifier prefix, matching Zig's `extern fn` and Rust's `extern fn` exactly and this project's
+  own consistent pattern of borrowing established terminology (`own`, `scope`, `error`, `try`/`catch`)
+  rather than inventing new words. Also the cleanest grammar fit: a modifier on the existing func-decl
+  shape, no error-list, `STMNT_END` replacing the block a body would otherwise open.
+
+  **Spec (§11, X1-X5) drafted and approved with no revision requested ("looks good").** One genuine
+  soundness gap found and fixed *during* implementation, not anticipated by the approved spec text as
+  first written: X2 originally restricted an `extern-ret-type` the same way as an `extern-param` (a
+  numeric primitive, or an array of one) - but there's no sound way to marshal an array-typed *return*
+  value at all. X3's own marshalling (drop the length, keep the pointer) has no working reverse
+  direction: a raw pointer an external function returns carries no length anywhere alongside it, so
+  reconstructing a real `{ len, ptr }` value from it would mean either fabricating a length (silently
+  unsound - reading past the real buffer, or truncating it, depending on which way the fabricated
+  length happened to be wrong) or introducing a genuine pointer-typed value into the language (exactly
+  what the whole "no pointers ever surface" design goal above exists to prevent). Fixed by narrowing
+  `extern-ret-type` to a numeric primitive only, splitting what X2 allows for a parameter from what it
+  allows for a return type for the first time, and adding the reasoning as new text in X3. Caught and
+  fixed in-session (per this project's standing convention of surfacing and fixing incidental issues
+  found along the way, not quietly patching around them), not left as a latent gap - `spec.md` reflects
+  the corrected rule, not the originally-approved one.
+
+  **Implementation**, following this project's three-pass semantic-analysis structure end to end:
+  parser (`syntax.h`/`syntax.c` - three new node kinds, `SNTX_EXTERN_PARAM`/`_PARAM_LIST`/
+  `_FUNC_DECL`, and their own parser functions, deliberately *not* reusing `parseParam` since an
+  extern param never accepts `mut`, per X2); `semaCollectNames` (pass 1 - registers into the shared
+  `vars` namespace exactly like an ordinary `func-decl`, per the D2 update below); `semaResolveModule`
+  (pass 2 - new `resolveExternFuncSig`/`resolveExternParamList`, validating every parameter and the
+  return type against the numeric-primitive-or-array-of-them restriction, `isExternAllowedType` for
+  params and the narrower `isNumericPrimitive` alone for the return type per the X2/X3 fix above,
+  leaving `t.errors` empty per X4 and marking a new `struct type.isExtern` flag); `semaCheckBodies`
+  (pass 3 - needed *no* new code at all: its existing `if (actual->type != SNTX_FUNC_DEF) continue;`
+  guard already skips anything that isn't an ordinary function definition, and an extern-func-decl
+  has no body to check in the first place). Codegen: `emitExternDecls` emits one bare LLVM `declare`
+  per extern function at module scope (the unmangled name - X5, it's also the linker symbol, deliberately
+  bypassing `mangleGlobal`'s module-prefix convention - with an array-typed parameter's LLVM type
+  overridden to a bare `ptr`); `cgEmitAllFunctions` now skips `isExtern` vars (nothing to define, only to
+  declare); a new `cgExternFuncCall`, dispatched from the top of the existing `cgFuncCall` before any of
+  its ordinary-call machinery runs, builds the call by first running every argument through the *existing*
+  `cgBoundaryValue` (so a fixed-array literal promoting into a dynamic `byte[]` parameter, or a plain
+  value promoting into a `<>`-marked one, still goes through exactly the same promotion machinery an
+  ordinary call gets), then reduces whatever boundary-form value that produced down to a bare pointer for
+  any array-typed parameter (`extractvalue` the pointer half of a `{ i64, ptr }` for a dynamic array,
+  use a `structMAlloc` value's own pointer directly, or spill a plain fixed array's by-value aggregate to
+  a fresh stack slot to get a real address) - never the `{ code, payload }` wrapping, never a `try`/catch
+  path, since `func->type.isExtern` short-circuits straight past all of that.
+
+  **A real bug caught by the smoke test, worth recording because of how easy it would have been to miss:**
+  an early hand-written test declared `extern func write(fd int32, buf byte[]) int64` - two parameters,
+  omitting the real POSIX `write(2)`'s third `count` argument - and it *compiled, linked, and ran with
+  exit code 0*, but produced inconsistent output between `-O0` (correct) and `-O3` (silently wrong/no
+  output) builds. Root cause confirmed directly by inspecting both the unoptimized and `opt -O3`-optimized
+  LLVM IR: the generated call was `call i64 @write(i32 1, ptr %buf)`, genuinely missing the third `i64`
+  argument libc's real `write` expects - undefined behavior from a caller/callee arity mismatch across
+  the C ABI boundary (whatever happened to be in the register/stack slot the real `write` reads as
+  `count`), not a compiler bug at all: X2/X3 already require the caller to state and pass every argument
+  the real C function needs, length included, with zero automatic inference - this was purely a hand-
+  written test declaration under-declaring the real function's own signature. Confirms the design's own
+  "explicit over inferred" choice is load-bearing here: an `extern func` declaration is a claim the
+  *declarer* is responsible for getting right, matching Zig's own `extern fn` (and C's own header
+  declarations) exactly - the compiler cannot check a declaration against a symbol it never sees the
+  real definition of.
+
+  **Confirmed working end to end**, not just compiling: a real `write(2)` syscall through `extern func`
+  with a `byte[]` buffer, marshalled through `own` scope allocation and the array-to-pointer boundary,
+  producing real visible output at `-O3`, confirmed once the test declaration above was corrected to
+  the real three-argument signature. Two permanent tests added to `shared.olang`: one calling `getpid()`
+  (a real external function taking no arguments, returning a plain scalar - exercises linking and the
+  no-array-args path) and one calling `write(-1, buf, len)` (a real external function called with an
+  intentionally-invalid file descriptor, exercising the `byte[]`-to-pointer marshalling path while
+  staying deterministic and side-effect-free for the test suite - POSIX guarantees `EBADF` immediately,
+  no output, no environment dependency). `make verify` (67 `shared.olang` tests + 13 across the
+  worker/runner import-cycle files, `-c` build/run) passes with no regressions.

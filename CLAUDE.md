@@ -187,6 +187,36 @@ drift out of sync with the actual code.
   (fixed row count, dynamic per-row) with no initializer, then assigning each row separately - which
   doesn't actually exist as a legitimate construction path: it was a zero-fill bug, not a feature.
   There is currently no legitimate way to construct a jagged array at all.
+- **`extern func` - external (C-ABI) function declarations.** `extern func NAME(params) [ret-type]`
+  (no error-list, no body - `STMNT_END` where a block would begin) declares a function defined
+  outside this compilation, resolved by the platform's linker; `NAME` is also the exact linker symbol
+  requested (implementation-defined if it doesn't resolve). A deliberately restricted type vocabulary
+  - each parameter, and the (optional) return type, must be one of the five numeric primitives, or
+  (parameters only, never a return type - see below) an array, fixed or dynamic, of one of those five
+  - guarantees an unambiguous, register-passed ABI with no struct-classification question to ever
+  answer. An array-typed parameter marshals to a raw pointer to its first element only, as a purely
+  invisible codegen detail of the call itself (T3-style dynamic-array `{ len, ptr }` reduced to just
+  the pointer half, a fixed array's own embedded address used directly) - this pointer is never a
+  real, nameable type or value anywhere else in the language, for application code or stdlib authors
+  alike; if the external function also needs the array's length, the declaration states it as a
+  separate integer parameter, and the caller supplies it explicitly via `len(arr)` - no automatic
+  pairing. A return type can never be an array, unlike a parameter: the marshalling has no sound
+  reverse direction (a raw pointer an external function returns carries no length anywhere alongside
+  it, so there's no way to rebuild a real `{ len, ptr }` value from it without either fabricating a
+  length or introducing a real pointer type - both rejected outright). An external function is never
+  fallible in olang's own sense - no error-list, never valid as the operand of `try`/`try-catch` - any
+  real error handling for what it might signal has to be a hand-written wrapper in ordinary olang on
+  top of the raw call (most naturally using the generic-error feature above, sidestepping `errno`
+  entirely, which - being a glibc macro expanding to a thread-local accessor function call, not a
+  plain linkable symbol - was deliberately never supported; extern *variables* aren't supported at
+  all yet, only functions, precisely because the concrete need driving this - raw POSIX I/O syscalls
+  with plain integer file-descriptor "handles" - has no need for one). This is the enabling primitive
+  for I/O (and any other C-library interop): I/O itself is not a compiler builtin and is meant to be
+  ordinary olang code written on top of `extern func`, the same way `Vec`/`Set`/etc. (see the deferred
+  entry just below) are meant to be ordinary olang code on top of the language's existing features -
+  deliberately not a `@cImport`-style C-header-parsing mechanism (Zig's approach), judged wildly
+  disproportionate to the actual need (a handful of hand-written declarations, not a C compiler
+  frontend embedded in this one).
 - **Deferred: generics, user-defined methods, and a real growable `Vec`.** A separate, much larger
   future direction, not started - nothing about the current language design is shaped around it;
   revisit once a concrete need for a resizable collection or generic user code actually arises. Such

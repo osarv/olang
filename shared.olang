@@ -1344,3 +1344,20 @@ test "a runtime-sized array tagged to a named scope survives a function boundary
 ##   x mut int32[2][]                             (a nested dynamic array - "jagged", per-row-sized)
 ##   x mut Point[3]<>                              (the declared type is itself a reference)
 ##   x mut Wrapper[n]                              (Wrapper's own field is "<name>"-tagged, n runtime-sized)
+
+## "extern func" (§11): declares a real libc/POSIX symbol, resolved by the linker at build time - see the
+## report. getpid takes no arguments and returns a plain scalar; write exercises the array-marshalling path
+## (X3: a "byte[]" argument becomes a raw pointer to its first element, length dropped, passed separately).
+extern func getpid() int32
+extern func write(fd int32, buf byte[], count int64) int64
+
+test "'extern func' links against and calls a real external scalar-only function" {
+    pid int32 = getpid()
+    assert(pid > 0)
+}
+
+test "'extern func' marshals a byte[] argument to a raw pointer at the call boundary" {
+    msg mut byte[] = "unused - fd -1 always fails before this is read"
+    n int64 = write(-1, msg, int64(len(msg)))
+    assert(n < 0)
+}
