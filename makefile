@@ -24,6 +24,11 @@ run: build/out
 test: build/out
 	build/out -t $(OLANG_TESTS)
 
+# builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
+usertest: build/out
+	build/out -c usertest.olang
+	./build/usertest
+
 # the one command to run before considering any change done: a from-scratch build with -Werror, the full
 # olang test suite (every test{} block across every .olang file), and an end-to-end smoke test of the -c
 # production compile path (build runner.olang as a real program, then actually run the resulting binary -
@@ -44,4 +49,4 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build run test verify clean
+.PHONY: all build run test usertest verify clean
