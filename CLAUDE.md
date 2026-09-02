@@ -1602,3 +1602,11 @@ of sync with the actual code.
   documented, not re-added as passing tests (a rejected program can't run as a `test{}` block, the same
   convention every other compile-error case in this file already follows), in a new comment in shared.olang
   next to the existing `BARE_SCOPE_RETURN_TYPE`/transitive-case documentation.
+- **The specification moved from `spec/` (a directory of 11 files) to a single `spec.md` at the repository
+  root.** User-requested consolidation, purely a packaging change - no rule was added, removed, or
+  renumbered; every `<prefix><n>` citation (`T24`, `O13`, etc.) still means exactly what it meant before,
+  and every one of the 172 rules present beforehand is still present. Every inter-file markdown link (e.g.
+  `[04-modules.md](04-modules.md)`) was mechanically rewritten to an in-file section reference (`§4`, or
+  `§4.4` where a specific subsection was already being cited) - the "Standing process change" and every
+  other still-current instruction referring to `spec/` in the two entries above should now be read as
+  referring to `spec.md`.
