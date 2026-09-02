@@ -190,6 +190,13 @@ enum operation {
                                    //default, or the declared type's own "<name>" tag) - see the report.
                                    //args[0] is the (already-checked-integer) size expression; op->type is
                                    //the declared dynamic array type (arrMalloc, element type, scope tag)
+    OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
+                                 //(byte/int32/int64/float32/float64) - the explicit conversion builtin (see
+                                 //the report): a real runtime instruction (widen/narrow/int<->float), unlike
+                                 //a numeric LITERAL's own implicit widening (numericLiteralCanWiden in
+                                 //semantic.c), which is pure reinterpretation with no instruction at all.
+                                 //args[0] is the (already-checked-numeric) source operand; op->type is the
+                                 //target numeric type named by TypeName
 
     //unary
     OPERATION_NOT,

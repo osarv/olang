@@ -1160,6 +1160,38 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
     return result;
 }
 
+//"TypeName(x)" - the explicit numeric-conversion builtin (see the report). Picks the one LLVM
+//instruction the (source, target) pair actually needs: same type is a no-op (returns the value
+//unchanged - OperandNumericConversion already lets this through as a harmless identity); float<->float
+//is fpext (widening, float32->float64) or fptrunc (narrowing, the reverse - LLVM requires the matching
+//direction, unlike the integer instructions below, which are each only ever reachable one way); int<-
+//>float is sitofp/fptosi for a signed source/target or uitofp/fptoui for byte, this language's one
+//unsigned integer type (T4); int<->int compares TypeGetSize to decide zext (byte's own unsigned width,
+//never sign-extended) /sext (int32/int64) for widening vs. trunc for narrowing - byte/int32/int64 are
+//the only three integer types, so a size mismatch always means exactly one of those three directions.
+char* cgNumericConvert(struct cgCtx* ctx, struct operand* op) {
+    struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
+    char* val = cgValue(ctx, arg);
+    struct type from = arg->type;
+    struct type to = op->type;
+    if (TypeIsSame(from, to)) return val;
+
+    char fromTy[16], toTy[16];
+    llvmType(from, fromTy, sizeof(fromTy));
+    llvmType(to, toTy, sizeof(toTy));
+    bool fromFloat = TypeIsFloat(from);
+    bool toFloat = TypeIsFloat(to);
+    char* instr;
+    if (fromFloat && toFloat) instr = from.bType == BASETYPE_FLOAT32 ? "fpext" : "fptrunc";
+    else if (fromFloat) instr = to.bType == BASETYPE_BYTE ? "fptoui" : "fptosi";
+    else if (toFloat) instr = from.bType == BASETYPE_BYTE ? "uitofp" : "sitofp";
+    else instr = TypeGetSize(to) > TypeGetSize(from) ? (from.bType == BASETYPE_BYTE ? "zext" : "sext") : "trunc";
+
+    char* result = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", result, instr, fromTy, val, toTy);
+    return result;
+}
+
 //"T[expr]" with no initializer (expr not a compile-time constant) - see OPERATION_SIZED_ARRAY_ALLOC and
 //the report. Arena-allocates expr zero-valued elements into op->type's own scope (own by default, or its
 //declared "<name>" tag - same cgResolveScope convention every other reference allocation already uses) and
@@ -1210,6 +1242,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_NONE: return cgLiteral(ctx, op);
         case OPERATION_LEN: return cgLen(ctx, op);
         case OPERATION_SIZED_ARRAY_ALLOC: return cgSizedArrayAlloc(ctx, op);
+        case OPERATION_NUMERIC_CONVERT: return cgNumericConvert(ctx, op);
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
             //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a

@@ -105,6 +105,19 @@ drift out of sync with the actual code.
   treated as numeric (no arithmetic, ordering, or conversion to/from any integer type); only `==`/
   `!=` and `match`/`case` (structural) apply. Never alias-qualified - always resolved against the
   referencing module's own declared vocab types only.
+- **Numeric conversion: a literal implicitly widens, a non-literal value needs `TypeName(x)`.** A
+  numeric literal (a token literal, or one negated by a single leading unary `-`, which now folds the
+  sign into the literal itself) implicitly widens into whatever numeric type it's used against,
+  wherever exact type-matching would otherwise be required - an assignability context (a var-decl,
+  assignment, argument, return) or a same-type-requiring binary operator (arithmetic, comparison, and
+  bitwise alike, not just `+ - * / %`). Widening is always the safe direction only:
+  `byte`/`int32` → `int64`, any integer type → `float32`/`float64`, `float32` → `float64` - never the
+  reverse. Everything else - a non-literal value crossing numeric types at all, or any narrowing -
+  needs an explicit `TypeName(x)` conversion (`int64(x)`, `byte(x)`, `float32(x)`, ...): a real
+  runtime instruction, never fallible, silently wrapping on narrowing overflow (unchecked, like array
+  indexing). `int64`/`float64` were previously *completely unreachable* - no literal syntax produced
+  either, and nothing implicitly widened into them - this closes that gap along with adding the
+  explicit mechanism.
 - **Ownership scopes: `scope`, `own`, `<>`/`<name>`, and the static scope-containment checker.**
   Every `<>`-heap-indirect value belongs to a nested, FILO-closing `scope` (a chunked bump allocator;
   closing one is O(1), plus O(destructor-bearing instances it holds) to run their destructors).

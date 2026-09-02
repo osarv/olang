@@ -1704,10 +1704,25 @@ enum typeFit {
     TYPE_FIT_ARRAY_SIZE_MISMATCH //WRONG_ARG_COUNT - same element type, both fixed-size, different sizes
 };
 
-//can op flow into a target-typed slot (assignment, initialization, argument passing)? an int literal
-//widens into a float slot since it carries no fixed width of its own yet; anything else must match
-//exactly - general implicit numeric conversion (e.g. int32->int64, or non-literal int->float) is
-//undecided language design, not implemented here.
+//true if a numeric LITERAL of type `from` may implicitly widen into a `to`-typed target - the one
+//exception T6 carves out of "no implicit conversion between distinct types." A literal has no fixed
+//width/representation of its own yet (unlike an already-evaluated non-literal value, which does, and
+//needs an actual runtime conversion instruction instead - see TypeName(x), the explicit conversion
+//builtin, for that case), so this is always safe, lossless reinterpretation, never a narrowing:
+//byte/int32 -> int64 (same family, strictly wider - never int64 -> anything, nothing is wider), any
+//integer type -> float32 or float64 (crossing families, always representable), and float32 -> float64
+//(same family, strictly wider - never the reverse). `from`/`to` are assumed already known to differ
+//(OperandFitsType's own equal-type check runs first).
+bool numericLiteralCanWiden(struct type from, struct type to) {
+    if (TypeIsInt(from) && from.bType != BASETYPE_INT64 && to.bType == BASETYPE_INT64) return true;
+    if (TypeIsInt(from) && TypeIsFloat(to)) return true;
+    if (from.bType == BASETYPE_FLOAT32 && to.bType == BASETYPE_FLOAT64) return true;
+    return false;
+}
+
+//can op flow into a target-typed slot (assignment, initialization, argument passing)? a numeric
+//literal may widen per numericLiteralCanWiden above; anything else must match exactly, unless
+//explicitly converted via TypeName(x) - see OperandNumericConversion.
 //func is the function currently being checked (NULL for a global initializer/test{} block) - only used for
 //the scope-safety check below: when both target and op->type are ALREADY "<>"-heap-indirect (an existing
 //reference being passed/reassigned, not a fresh literal about to be promoted - see typeNeedsMallocPromotion
@@ -1732,14 +1747,18 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         }
         return TYPE_FIT_OK;
     }
-    if (op->isLiteral && TypeIsInt(op->type) && TypeIsFloat(target)) {
-        //a real, pre-existing bug fixed alongside the array-literal rework: this widened op's TYPE but
-        //never actually converted its VALUE, leaving floatLiteralVal at its zero-initialized default -
-        //cgFloatConst (codegen.c) reads floatLiteralVal once op->type says float, so e.g. "x mut float32 =
-        //5" silently produced 0.0. Invisible before now because nothing in the existing test suite passed
-        //a bare int literal where a float was expected; surfaced immediately by a mixed int/float array
-        //literal built while testing the array-literal rework.
-        op->floatLiteralVal = (double)op->intLiteralVal;
+    if (op->isLiteral && numericLiteralCanWiden(op->type, target)) {
+        //byte/int32 -> int64 and float32 -> float64 are pure reinterpretation: intLiteralVal is already
+        //a 64-bit long long and floatLiteralVal is already a double, regardless of the literal's own
+        //"logical" type, so only crossing from the int family into the float family needs an actual
+        //value conversion. Was a real, pre-existing bug for the one case that already existed here
+        //(int -> float): this used to only ever retag op->type, never touch floatLiteralVal, leaving it
+        //at its zero-initialized default - cgFloatConst (codegen.c) reads floatLiteralVal once op->type
+        //says float, so e.g. "x mut float32 = 5" silently produced 0.0. Invisible before now because
+        //nothing in the existing test suite passed a bare int literal where a float was expected;
+        //surfaced immediately by a mixed int/float array literal built while testing the array-literal
+        //rework.
+        if (TypeIsInt(op->type) && TypeIsFloat(target)) op->floatLiteralVal = (double)op->intLiteralVal;
         op->type = target;
         return TYPE_FIT_OK;
     }
@@ -1888,20 +1907,53 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
 }
 
 //"len(arr)" - unlike C, an olang array always carries its own length; this is the one sanctioned way to
-//read it. Returns int32, matching the integer type used everywhere else in the language (there's no way
-//to write an int64 literal at all currently - bare integer literals are always int32 with no widening
-//path - so an int64-returning len() would be awkward to use anywhere, and an array length never needs
-//int64's extra range in practice); the underlying runtime slice field is i64, so the dynamic case
-//truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side effects a
-//more complex argument expression might have), but for a compile-time-known dimension (embedded, or a
-//"<>"-tagged fixed-size reference) codegen emits the constant directly rather than computing anything at
-//runtime - only a genuinely dynamic ("T[]") array reads its length from the runtime slice.
+//read it. Returns int32, matching the integer type used everywhere else in the language - an array
+//length never needs int64's extra range in practice, and int32(len(arr)) is one call away for the rare
+//case that does (see OperandNumericConversion below); the underlying runtime slice field is i64, so the
+//dynamic case truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side
+//effects a more complex argument expression might have), but for a compile-time-known dimension
+//(embedded, or a "<>"-tagged fixed-size reference) codegen emits the constant directly rather than
+//computing anything at runtime - only a genuinely dynamic ("T[]") array reads its length from the
+//runtime slice.
 struct operand* OperandLen(struct operand* arg, struct token tok) {
     if (arg->type.bType != BASETYPE_ARRAY) {
         ErrMsgSemantic(tok, LEN_REQUIRES_ARRAY);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
     struct operand* op = operandNew(tok, OPERATION_LEN, TypeVanilla(BASETYPE_INT32));
+    ListAdd(&op->args, &arg);
+    return op;
+}
+
+//peeks whether name is one of the five numeric primitive type names - never reports an error (unlike
+//resolveLiteralBaseType, which assumes the caller already knows this position names a type); used only
+//to decide whether "NAME(args)" should be treated as the explicit numeric-conversion builtin before
+//falling through to the ordinary call-target lookup, the same way "len" is intercepted just above.
+//Deliberately excludes "bool" - not numeric (T5), nothing to convert to/from.
+bool numericPrimitiveBaseType(struct str name, enum baseType* out) {
+    if (StrCmp(name, StrFromCStr("byte"))) { *out = BASETYPE_BYTE; return true; }
+    if (StrCmp(name, StrFromCStr("int32"))) { *out = BASETYPE_INT32; return true; }
+    if (StrCmp(name, StrFromCStr("int64"))) { *out = BASETYPE_INT64; return true; }
+    if (StrCmp(name, StrFromCStr("float32"))) { *out = BASETYPE_FLOAT32; return true; }
+    if (StrCmp(name, StrFromCStr("float64"))) { *out = BASETYPE_FLOAT64; return true; }
+    return false;
+}
+
+//"TypeName(x)" - the explicit numeric-conversion builtin (see the report): a real runtime instruction,
+//unlike a numeric literal's own implicit widening (numericLiteralCanWiden), which never needed one.
+//Deliberately permissive about direction (widening AND narrowing both go through this one mechanism,
+//never a separate "checked" vs "unchecked" pair) - explicit means the programmer already said what they
+//want, the same trust this language already extends at every other system boundary (E16's own unchecked
+//indexing, for one). Converting a type to itself is accepted as a harmless identity, not a redundant-use
+//error - unlike REDUNDANT_ARRAY_SIZE, there's no second thing here that could disagree with it.
+struct operand* OperandNumericConversion(struct type target, struct operand* arg, struct token tok) {
+    if (!TypeIsNumeric(arg->type)) {
+        ErrMsgSemantic(arg->tok, OPERATION_REQUIRES_NUMBER);
+        return operandNew(tok, OPERATION_NONE, target); //shaped like a successful conversion would be,
+                                                          //so a caller expecting `target` doesn't also
+                                                          //cascade a second, misleading mismatch error
+    }
+    struct operand* op = operandNew(tok, OPERATION_NUMERIC_CONVERT, target);
     ListAdd(&op->args, &arg);
     return op;
 }
@@ -2076,6 +2128,21 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
         case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             return incDec(in, opType, tok);
         case OPERATION_NOT: case OPERATION_BTWSE_INV: case OPERATION_MINUS: {
+            //negating a numeric LITERAL directly (not a general expression) folds the sign into the
+            //literal's own value at compile time instead of building a genuine runtime negation - a
+            //real, pre-existing gap found while testing negative int64 literals specifically: "-5" never
+            //widened into a wider numeric target (numericLiteralCanWiden) the way a bare "5" already
+            //did, nor counted as a literal for ":=" inference (E4/D15), since a unary-minus node was
+            //never itself isLiteral regardless of what it wrapped - matching the same "literal,
+            //optionally negated by one leading unary -" shape T8 already recognizes for a compile-time-
+            //constant array size, just not extended to ordinary numeric literals until now.
+            if (opType == OPERATION_MINUS && in->isLiteral && TypeIsNumeric(in->type)) {
+                struct operand* op = operandNew(tok, OPERATION_NONE, in->type);
+                op->isLiteral = true;
+                if (TypeIsFloat(in->type)) op->floatLiteralVal = -in->floatLiteralVal;
+                else op->intLiteralVal = -in->intLiteralVal;
+                return op;
+            }
             struct unOpRule rule = unOpRules[opType];
             struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : in->type);
             ListAdd(&op->args, &in);
@@ -2116,6 +2183,24 @@ struct binOpRule binOpRules[] = {
 
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType, struct token tok) {
     struct binOpRule rule = binOpRules[opType];
+    //a numeric literal on either side widens to match its non-literal sibling's type (numericLiteralCanWiden -
+    //the same rule already applied at an assignment-context target, OperandFitsType) before the sameType
+    //check below ever runs. A real, pre-existing gap found while testing this: E6 already documented "an
+    //integer literal operand widens to match a float32/float64 operand" for +-*/%% specifically, but no code
+    //anywhere ever implemented it - "x mut float32 = 2.5; y mut float32 = x + 5" failed outright. Applied
+    //uniformly to every sameType-requiring operator here, not just arithmetic: leaving comparisons out while
+    //arithmetic got it would be a real, confusing inconsistency ("x + 5" compiling but "x == 5" not, for the
+    //exact same x) that T6's own general "wherever a float type is expected" wording gives no reason to draw
+    //a line at. Mutates the literal operand's own type/value in place - safe because nothing else has taken
+    //a reference to it yet at this point in the tree.
+    if (rule.sameType && a->isLiteral != b->isLiteral) {
+        struct operand* lit = a->isLiteral ? a : b;
+        struct operand* other = a->isLiteral ? b : a;
+        if (TypeIsNumeric(other->type) && numericLiteralCanWiden(lit->type, other->type)) {
+            if (TypeIsFloat(other->type) && TypeIsInt(lit->type)) lit->floatLiteralVal = (double)lit->intLiteralVal;
+            lit->type = other->type;
+        }
+    }
     struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : a->type);
     ListAdd(&op->args, &a);
     ListAdd(&op->args, &b);
@@ -2640,6 +2725,21 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             if (lenArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
             struct operand* lenArg = *(struct operand**)ListGetIdx(&lenArgs, 0);
             return OperandLen(lenArg, nameTok);
+        }
+        //"int32(x)" etc. - the explicit numeric-conversion builtin (see the report) - intercepted the
+        //same way "len" is, before the normal var/constructor lookup: a primitive type name is never a
+        //valid var/constructor target anyway (TypeGetList never finds a primitive - see
+        //resolveLiteralBaseType), so this can never actually shadow a real declaration either way, but
+        //checking here keeps the dispatch uniform with len's own established pattern.
+        enum baseType convTo;
+        if (nameIdens.len == 1 && numericPrimitiveBaseType(strFromTok(nameTok), &convTo)) {
+            bool allowedConv = ctx->allowFallibleCall;
+            ctx->allowFallibleCall = false;
+            struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            ctx->allowFallibleCall = allowedConv;
+            if (convArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
+            struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
+            return OperandNumericConversion(TypeVanilla(convTo), convArg, nameTok);
         }
         struct var* func = resolveCallTarget(ctx, nameNode);
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr

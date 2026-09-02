@@ -705,6 +705,62 @@ test "bitwise or, and, xor, shift" {
     assert((5 ^ 3) == 6)
 }
 
+## int64/float64 used to be completely unreachable - no literal syntax produced either, and nothing
+## implicitly widened into them (see the report). A numeric literal (including one negated by a single
+## leading unary "-", now itself considered a literal - see the report) implicitly widens into any
+## numeric type it's used against, wherever exact type-matching would otherwise be required: an
+## assignability context (a var-decl, here) or a same-type-requiring binary operator (arithmetic,
+## comparison, and bitwise alike - not just "+ - * / %", which is all the spec originally promised).
+test "a numeric literal widens into int64/float64, including negative ones, everywhere exact matching is required" {
+    a mut int64 = 5
+    assert(a == 5)
+    b mut int64 = -5
+    assert(b == -5)
+    c mut float64 = 5.5
+    assert(c == 5.5)
+    d mut float64 = -5.5
+    assert(d == -5.5)
+    e mut float32 = 5
+    assert(e == 5.0)
+    x mut int64 = 100
+    assert(x + 5 == 105)
+    assert(x - 5 == 95)
+    assert(x % 3 == 1)
+    assert((x & 12) == 4)
+    assert(x < 200)
+    assert(x > 50)
+}
+
+## addLong was declared but never callable at all before this - there was no way to construct an int64
+## value to pass it (see the report).
+test "addLong, previously unreachable for lack of any way to construct an int64, now works" {
+    assert(addLong(3, 4) == 7)
+}
+
+## the explicit TypeName(x) conversion builtin (see the report) - the counterpart to implicit literal
+## widening above, covering every direction that never widens a literal: a non-literal value crossing
+## numeric types (either direction), and narrowing in particular. byte(300) truncates to 44 (300 mod
+## 256) - unchecked, the same well-defined-but-unverified behavior this language already accepts at
+## every other point a value can lose information (e.g. array indexing, E16).
+test "TypeName(x) explicitly converts a non-literal numeric value in either direction" {
+    n mut int32 = 300
+    assert(int64(n) == 300)
+    big mut int64 = 70000
+    assert(int32(big) == 70000)
+    bt mut byte = 'A'
+    assert(int32(bt) == 65)
+    assert(byte(n) == byte(44))
+    f mut float32 = 3.75
+    assert(int32(f) == 3)
+    assert(float32(n) == 300.0)
+    assert(float32(bt) == 65.0)
+    d64 mut float64 = 2.5
+    assert(float32(d64) == 2.5)
+    f32 mut float32 = 2.5
+    assert(float64(f32) == float64(2.5))
+    assert(int32(n) == 300)
+}
+
 test "a function passed by name as a value can be called through the receiving parameter" {
     assert(applyToFive(doubleIt) == 10)
     g mut func(n int32) int32 = doubleIt

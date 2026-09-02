@@ -236,12 +236,19 @@ legal but useless, and exists only because the grammar constructing a named type
 | `float64` | 64-bit IEEE 754 floating point |
 
 **T5.** `byte`, `int32`, `int64` are the integer types; `float32`, `float64` are the float types;
-together these six are the numeric types. `bool` is not numeric.
+together these five are the numeric types. `bool` is not numeric.
 
-**T6.** There is no implicit conversion between any two distinct types, numeric or otherwise, with
-exactly one exception: an integer literal (§2.2, L10) may be used where a float type is expected
-(see §5.2). In particular, `int32` and `int64` do not
-implicitly convert to one another, nor does `byte` to either.
+**T6.** There is no implicit conversion between any two distinct types: never between two non-numeric
+types, and never between two numeric types unless one side is a literal. A **numeric literal** (§5.1
+E4 — a token literal, or one negated
+by a single leading unary `-`, §5.2 E11) is the one exception: it implicitly widens to whatever
+numeric type it is used against, wherever that type would otherwise have to match exactly - an
+assignability context (§5.3 E12: a var-decl initializer, an assignment, an argument, a returned
+value) or a binary operator requiring both operands to be the same type (§5.2 E6, E8, E9, E10). Widening
+is only ever in the safe, lossless direction: `byte`/`int32` → `int64`, any integer type → `float32`
+or `float64`, and `float32` → `float64` - never the reverse, and never `int64` → anything (nothing is
+wider). A non-literal value of a different numeric type, in either direction, requires an **explicit**
+conversion instead - see §5.12 E26.
 
 ### 2.3 Array types
 
@@ -696,8 +703,11 @@ chain; if it resolves as one, ordinary member resolution does not apply to that 
 **E3.** `call-expr ::= alias-chain IDEN "(" [ expr { "," expr } ] ")"` (§4.4 M8), covered in §5.4.
 
 **E4.** `literal ::= BOOL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
-**literal expression** (relevant to D15's `:=` and to §5.6–§5.7) exactly when it is one of these
-token literals, a struct literal (§5.6), or an array literal (§5.7), recursively including one whose
+**literal expression** (relevant to D15's `:=`, to T6's numeric widening, and to §5.6–§5.7) exactly
+when it is one of these token literals, a struct literal (§5.6), an array literal (§5.7), or a
+numeric (`INT_LIT`/`FLOAT_LIT`) token literal negated by a single leading unary `-` (§5.2 E11) — the
+sign folds into the literal's own value at that point, the same way T8's compile-time-constant array
+size already treats this one shape as effectively still a literal - recursively including one whose
 own sub-expressions (struct field values, array elements) are themselves literal expressions where
 required. A parenthesized literal, a variable read, and a function call are never literal
 expressions, even if their value is known at compile time.
@@ -725,24 +735,27 @@ Unary prefix operators (`!`, `-`, `~`, `++`, `--`) bind tighter than every binar
 no ternary/conditional operator.
 
 **E6.** `+ - * / %` require both operands to be the same numeric type (T5, T27) and produce that
-type, except: an integer literal operand widens to match a `float32`/`float64` operand of the same
-expression position (the only implicit conversion in the language, T6). `%` requires both operands
-to be integer types. There is no implicit `int32`↔`int64` or `byte`↔anything conversion; mixing
-distinct numeric types without a literal on at least one side is a compile-time error.
+type, subject to T6's own numeric-literal widening. `%` requires both operands to be integer types.
+Mixing distinct numeric types with neither side a literal (or with a literal that would need to
+*narrow*, not widen, to match) is a compile-time error - see §5.12 E26 for the explicit conversion this
+requires instead.
 
 **E7.** `&& || ^^` require both operands to be `bool` and produce `bool`; they are not
 short-circuiting distinctly from any other olang control construct — both operands are always
 evaluated (olang has no short-circuit boolean evaluation).
 
-**E8.** `& | ^` require both operands to be the same integer type (T5) and produce that type; `~` is
-unary and requires one integer operand, producing that type. `<< >>` each require their *shifted*
-(left) operand and their *shift-amount* (right) operand to independently be integer types, but the
-two need not be the same type as each other; the result is the shifted operand's own type.
+**E8.** `& | ^` require both operands to be the same integer type (T5) and produce that type, subject
+to T6's own numeric-literal widening; `~` is unary and requires one integer operand, producing that
+type. `<< >>` each require their *shifted* (left) operand and their *shift-amount* (right) operand to
+independently be integer types, but the two need not be the same type as each other (T6's widening is
+therefore never relevant between them specifically - there is no "match" requirement to widen into);
+the result is the shifted operand's own type.
 
-**E9.** `< <= > >=` require both operands to be the same numeric type and produce `bool`; there is
-no ordering on any non-numeric type.
+**E9.** `< <= > >=` require both operands to be the same numeric type (subject to T6's own
+numeric-literal widening) and produce `bool`; there is no ordering on any non-numeric type.
 
-**E10.** `== !=` accept operands of any single type `T27`-matching pair and produce `bool`, with
+**E10.** `== !=` accept operands of any single type `T27`-matching pair (subject to T6's own
+numeric-literal widening) and produce `bool`, with
 value semantics that depend on whether `T` is reference-shaped (T24–T26):
 - for a primitive or vocab value: ordinary value equality;
 - for an embedded struct or fixed array: deep, member-wise/element-wise structural equality
@@ -768,7 +781,8 @@ call's argument, §5.4; and a `return`ed value, §6.5) exactly when one of:
 - `S` and `T` are the same type (T27); if both are additionally reference-shaped (T24), an
   additional scope-compatibility rule applies — see
   §8;
-- the value is an integer literal expression and `T` is a float type (E6);
+- the value is a numeric literal expression (E4) and `T` is a numeric type it can implicitly widen
+  into (T6);
 - the value is a fixed-size array whose element type matches `T`'s element type, and `T` is a
   dynamic array of that element type (T7–T8) — the value is copied into a freshly sized dynamic
   array regardless of whether the value itself is a literal;
@@ -859,6 +873,25 @@ specified in §7.
 **E25.** `own-expr ::= "own"`, a primary expression of type `scope` (§2.8), valid only inside a
 function or test body. Its semantics are specified in
 §8.
+
+### 5.12 Explicit numeric conversion
+
+**E26.** `TypeName(x)`, where `TypeName` is one of the five numeric primitive types (T5: `byte`,
+`int32`, `int64`, `float32`, `float64`) and `x` is a single expression of any numeric type, converts
+`x`'s *value* to `TypeName` and produces a value of that type - the explicit counterpart to T6's
+implicit literal-only widening, covering every direction a numeric literal's own implicit widening
+does not: a non-literal value crossing numeric types at all (widening or narrowing), and narrowing in
+general (`int64` → `int32`/`byte`, `float64` → `float32`, any integer type → a narrower one, a float
+type → an integer type). Converting a value to its own type is accepted, producing that same value
+unchanged. Exactly one argument is required; anything else (zero, two or more, or a non-numeric
+argument) is a compile-time error. `TypeName` in this position is never shadowable by another
+declaration of the same name (matching `len`, E23) - a primitive type name is never otherwise a valid
+call target, so this introduces no ambiguity with an ordinary function or constructor call.
+Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
+conversion cannot itself produce an error (a narrowing conversion outside its target type's
+representable range - e.g. `byte(300)` - silently wraps, the same well-defined, unchecked behavior
+this language already accepts at every other point a value can silently lose information, such as
+E16's own unchecked array indexing).
 
 ## 6. Statements
 
