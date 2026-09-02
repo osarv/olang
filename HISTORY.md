@@ -1724,3 +1724,31 @@ from their original form.
   the same "run it and see" verification this whole change was checked with throughout, not a
   code-review catch. `make verify` (72 tests across the four suite files, plus the `-c` production
   build/run of `runner.olang`) passes with no regressions after every fix above.
+- **Fixed: a fatal/syntax error message printed one extra, empty line after itself** - user-reported
+  via `build/out -c sdfsfsfsf` (a nonexistent file), which showed a blank line between "fatal error:
+  unable to open file ..." and "compilation failed with 1 error". A double-newline bug, not specific
+  to that one call site: `ErrMsgFatal` (errmsg.c) already terminates its own output with `puts(...)`,
+  which appends exactly one trailing newline on top of whatever was already written by the preceding
+  `fputs(errMsg, stdout)` - so any caller that builds its own message buffer with a manually-appended
+  `"\n"` at the end (rather than trusting `ErrMsgFatal`/`syntaxErrorHeader` to supply the line's own
+  newline, which every other, simpler caller already does correctly) produces two newlines in a row:
+  one from the message's own content, one from the printing function's own `puts`.
+  **Three call sites had this bug, not just the one reported - found by grepping errmsg.c for every
+  remaining `strcat(buf, "...\n")` once the first instance was understood as a class of bug, not a
+  one-off, per this project's own "fix bugs found along the way, don't just patch the one reported"
+  convention:** `ErrMsgUnableToOpenFile` (the one actually reported), `ErrMsgNotARegularFile` (this
+  session's own earlier file-validation fix - inherited the bug at birth by copying
+  `ErrMsgUnableToOpenFile`'s existing shape without noticing the pre-existing flaw in what was being
+  copied), and `ErrMsgUnexpectedToken` (a genuinely pre-existing bug, present before this session,
+  surfaced by testing a syntax error like `func f( { }` directly - confirmed showing the identical
+  blank-line artifact before the fix). All three fixed the same way: drop the buffer's own trailing
+  `"\n"`, letting the already-correct `puts(COLOR_RESET)` (via `ErrMsgFatal`) or
+  `puts(COLOR_RESET)` (via `syntaxErrorHeader`) supply the line's one and only newline, exactly as
+  every other caller of those two functions (e.g. `NO_FILE_SPECIFIED`, `ErrMsgFile`'s own callers)
+  already did correctly, without ever adding their own. Confirmed by hand for all three: `-c` on a
+  nonexistent file, `-c` on a directory, and a deliberately malformed `.olang` file all now print
+  cleanly, no blank line, immediately followed by the "compilation failed" summary. Left alone,
+  deliberately: `printErrorLine`'s own trailing `puts("\n" COLOR_RESET)` (a genuine, intentional
+  blank spacer line printed *after* a source-code error snippet, visually separating one error's
+  full display from the next) - a different mechanism serving a different, load-bearing purpose, not
+  an instance of this bug. `make verify` (84 tests, `-c` build/run) passes with no regressions.

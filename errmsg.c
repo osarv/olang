@@ -73,7 +73,7 @@ void ErrMsgUnableToOpenFile(struct str fileName) {
     buf[0] = '\0';
     strcat(buf, "unable to open file \"");
     strncat(buf, fileName.ptr, fileName.len);
-    strcat(buf, "\"\n");
+    strcat(buf, "\"");
     ErrMsgFatal(buf);
 }
 
@@ -82,7 +82,7 @@ void ErrMsgNotARegularFile(struct str fileName) {
     buf[0] = '\0';
     strcat(buf, "\"");
     strncat(buf, fileName.ptr, fileName.len);
-    strcat(buf, "\": " NOT_A_REGULAR_FILE "\n");
+    strcat(buf, "\": " NOT_A_REGULAR_FILE);
     ErrMsgFatal(buf);
 }
 
@@ -115,7 +115,7 @@ void ErrMsgUnexpectedToken(struct token found, char* expected) {
     strncat(buf, found.str.ptr, found.str.len);
     strcat(buf, "' expected '");
     strcat(buf, expected);
-    strcat(buf, "'\n");
+    strcat(buf, "'");
     struct str err = StrFromCStr(buf);
     syntaxErrorHeader(found.lineNr, fileName, err);
     if (found.type == TOK_NONE) return;
