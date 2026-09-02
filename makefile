@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Werror -Wextra -Wpedantic -g
 SRC = $(wildcard *.c)
 OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(SRC))))
-OLANG_TESTS = $(wildcard *.olang)
+OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang))
 
 build/%.o: %.c
 	mkdir -p build
@@ -20,6 +20,7 @@ run: build/out
 	build/out -c runner.olang
 
 # picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
+# (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
 test: build/out
 	build/out -t $(OLANG_TESTS)
 
