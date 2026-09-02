@@ -1752,3 +1752,139 @@ from their original form.
   blank spacer line printed *after* a source-code error snippet, visually separating one error's
   full display from the next) - a different mechanism serving a different, load-bearing purpose, not
   an instance of this bug. `make verify` (84 tests, `-c` build/run) passes with no regressions.
+- **Fixed: a no-initializer array var-decl could zero-fill a reference nested anywhere inside its
+  declared type, producing an invisible dangling reference or a phantom, never-actually-allocated
+  dynamic array - user-caught, not self-discovered.** The user pushed back directly on a jagged-array
+  claim from earlier in this same session ("that variable declaration really shouldn't work... it
+  does not declare references at any level") - correctly: `x mut int32[2][]` (a fixed-size-2 outer
+  array whose element type is itself a dynamic `int32[]`) with *no initializer at all* used to compile
+  and zero-fill to two independent, working-looking-but-never-constructed empty dynamic arrays,
+  purely because the existing no-initializer check (`buildVarDeclStmnt`/`semaCheckBodies` in
+  semantic.c) only ever inspected the declared type's own *outermost* shape (`bType != ARRAY ||
+  arrMalloc`) - never anything nested inside it. Investigated (not just patched) by first confirming
+  the user's own counter-proposal for the correct syntax (`T<>[N]`) doesn't even parse - the marker
+  can only ever trail every array suffix (T24), never precede one - and that the "working" syntax
+  (`T[N]<>`) means something different (one heap block of N *embedded* Ts, not N independent
+  references), before tracing the actual root cause to the zero-fill mechanism itself.
+  **Broader than the one case reported, found while scoping the fix, not narrowed to just it:**
+  the identical bug also let a *whole* reference-shaped declared type zero-fill to a **null**
+  reference with no construction at all (`x mut Point[3]<>`, no initializer) - arguably worse than
+  the dynamic-array case, since this language has no `null` literal or null-checkable state anywhere
+  (spec L9/T2), so a null reference produced this way is an invisible, uncatchable dangling pointer
+  the instant anything reads through it, structurally unrelated to the whole ownership/scope-safety
+  model the rest of the language is built on. A third variant - a runtime-sized (`T[expr]`) array
+  whose *element* type (not the array itself) contains a reference, e.g. `type Wrapper
+  struct(s scope, inner Point<s>) { inner }` then `x mut Wrapper[n]` - was also confirmed broken the
+  same way, via `cgSizedArrayAlloc`'s own `llvm.memset` zero-fill, a different codegen mechanism than
+  the "T[N]" case's `zeroinitializer` but the identical underlying defect.
+  **Spec-first this time, unlike the signature-reorder entry above:** D13 (`spec.md`) was rewritten
+  first to state the real rule precisely - a compile-time-constant outermost size is necessary but
+  not sufficient for zero-fill; the declared type must additionally contain no reference (a
+  `<>`/`<name>`-marked struct/fixed array, or, unconditionally, a dynamic array) anywhere within it,
+  at any depth, or an initializer is required regardless of outermost size - before any code changed.
+  **Implementation: one new recursive predicate, `typeContainsReference` (semantic.c, placed beside
+  the structurally similar `structContainsBareScopeField`)**, walking a type through plain/embedded
+  array elements and struct fields exactly the way that function does, but checking for *any*
+  reference (bare or named alike - unlike `structContainsBareScopeField`, which only cares about an
+  unnamed `<>` specifically, since a named reference's own lifetime is independently checked
+  elsewhere; here, neither kind has a real allocation yet, so both are equally illegitimate to
+  zero-fill) rather than one narrow shape. Wired into three call sites: `buildVarDeclStmnt`'s two
+  no-initializer branches (the `T[N]` case, checking the whole declared type; the `T[expr]` case,
+  checking specifically the *element* type, since the outer array itself *is* legitimately
+  constructed via `__olang_scope_alloc` - it's only what fills each of its slots that's in question)
+  and `semaCheckBodies`'s global no-initializer path (`T[expr]` globals were already rejected
+  outright before this, for an unrelated reason - no `own` scope exists at global-init time - so only
+  the `T[N]` global case needed the new check). A new, specific message,
+  `ZERO_FILL_CONTAINS_REFERENCE`, replaces the generic `VAR_DECL_MISSING_INITIALIZER` exactly when
+  the declared type *does* have a compile-time-constant outermost size but fails for this new,
+  different reason - keeping `VAR_DECL_MISSING_INITIALIZER` itself accurate (unchanged) for the two
+  cases it already correctly covered (not an array at all; an array with no compile-time-constant
+  size at all).
+  **Confirmed by hand for all three previously-broken shapes (all three now rejected, with the new
+  message) and every previously-legitimate zero-fill shape (all still accepted and correct):** a
+  fixed array of primitives, a fixed array of plain (no-reference) structs, a 2D fixed array, and a
+  fixed-size global, all with no initializer, plus the two existing permanent tests for `T[N]`/
+  `T[expr]` zero-fill - none of these were affected, confirming the new check is precisely scoped to
+  types that actually contain a reference, not overly broad. The three now-rejected shapes are
+  documented in shared.olang (next to the existing `T[N]`/`T[expr]` zero-fill tests), the same
+  established convention as every other compile-error case in this file - a rejected program can't
+  run as a permanent `test{}` block. **This also corrects this file's own record from earlier in the
+  same session:** the "jagged arrays already work via `T[N][]` + per-row assignment, no Vec needed"
+  claim (added to CLAUDE.md's array bullet in response to the user's original "is this supposed to
+  work?" question) was itself describing this exact bug, not a real capability - CLAUDE.md's bullet
+  is corrected in the same commit as this fix; there is currently no legitimate way to construct a
+  jagged array in this language at all. `make verify` (84 tests, `-c` build/run) passes with no
+  regressions.
+- **Fixed a real soundness hole in the static scope-containment checker: an untraceable scope tag was
+  "unverifiable, so allow," not "unverifiable, so reject" - user-caught, in direct response to being
+  told this was the checker's own existing, deliberate design.** The user's reaction, verbatim: "we
+  are not supposed to have possible dangling pointers. this is not good." Correct, and a fair
+  challenge to a design this file had already recorded as settled (O11's own "not a complete
+  dangling-reference guarantee" caveat) - the honest answer wasn't "that's a known, accepted
+  limitation," it was "that caveat describes a real hole, and it should be closed."
+  **Investigated, not just flipped, before committing to anything - this one genuinely needed research
+  before a spec rule could even be written correctly, unlike the earlier signature-reorder entry's own
+  admitted process shortcut.** `scopeCanFlowInto` (semantic.c) had exactly two lines doing this:
+  `if (srcScope && !varIsOwnParam(srcScope, func)) return true;` and the same for `dstScope` - a scope
+  tag that isn't literally one of the checking function's own declared parameters was let through
+  unconditionally, no matter what it actually was. First step: flip both to `return false` as a pure
+  experiment (clearly marked as such in the diff, not left in) and run the full suite to find out
+  empirically what actually depends on the lenient default, rather than reasoning it out from memory
+  alone (this session's own track record on that front - the alias-chain-depth question, the
+  "jagged arrays work" claim - made "just think about it hard" clearly not trustworthy enough on its
+  own for something this central).
+  **Exactly two currently-passing tests broke, both the same root cause, both genuinely sound
+  programs that were only failing because of a missing substitution, not because they relied on the
+  hole:** `fillBoxedPoint(s scope, b BoxedPoint<s>, ...)` and `setChainLeaf(s scope, co
+  ChainOuter<s>, ...)`, both called with `own` for their own `s` and an `own`-scoped argument for the
+  second parameter. The type-fit check for argument `b`/`co` compares the *raw* callee-declared
+  parameter type (`BoxedPoint<s>`/`ChainOuter<s>`) against the argument - but that `s` names the
+  *callee's own* parameter (D9: a `<name>` can only ever name an earlier parameter of the *same*
+  signature), never anything in the calling function's own frame, so `varIsOwnParam(s, callerFunc)`
+  was always false regardless of whether the call was actually sound. `OperandFuncCall` builds
+  exactly the map needed to resolve this (`scopeBindings`, recording what was concretely passed for
+  each of the callee's own scope parameters) - but only *after* the type-fit-checking loop that
+  needed it, and never applied it to the target side at all, only ever to the source side via
+  `resolveEffectiveScopeVar` elsewhere. **Fixed by reordering the two loops** (the scope-binding
+  collection loop now runs first) **and resolving a parameter's own declared `scopeParam` through
+  the call's own just-built binding, on a local copy of its type, before checking fit** - one new
+  four-line block, no new mechanism, reusing `resolveEffectiveScopeVar` exactly as the source side
+  already does. This is the actual fix that makes the stricter default safe to ship, not an
+  exception carved out around it: without it, every call passing a named-scope reference into a
+  callee's own `<name>`-tagged parameter would have started failing, which would have made the
+  ownership feature nearly unusable the moment it got strict.
+  **Confirmed the flip actually catches something real, not just "rejects everything unprovable
+  including safe things" - a genuine counterexample, not a hypothetical one:** a fixed array of
+  `Wrapper` values (`type Wrapper struct(s scope, inner Point<s>) { inner }`), two instances tagged
+  to two different scope parameters `a`/`b` of the same function, read back out via `arr[1].inner`.
+  `OPERATION_INDEX` (unlike `OPERATION_MEMBER`) composes no `scopeBindings` at all, so the resulting
+  reference reaches the type-fit check with its raw, unresolved `s` - genuinely untraceable, since
+  nothing in this checker's design tracks *which* array element a read came from. Confirmed by
+  temporarily reverting *only* the flip (keeping the `OperandFuncCall` fix) and rebuilding: the exact
+  same program compiled and ran to completion with zero complaint, regardless of which scope `s` was
+  actually supposed to mean - the checker provided no guarantee whatsoever for this shape before,
+  proof rather than assertion that this was a real, exploitable hole, not a theoretical one. The
+  array-index case is now correctly rejected, documented in shared.olang (a rejected program can't be
+  a permanent `test{}` block, same convention as every other compile-error case in this file) right
+  next to the two now-passing-for-the-right-reason tests that prove the fix doesn't overcorrect.
+  **Spec updated to match (O11, O12, spec.md): "unverifiable" is now defined as a compile-time error,
+  the same as a proven-unsafe flow, not a lenient default - with an explicit note that extending what
+  this checker's tracing can follow can only ever accept more genuinely-safe programs, never make an
+  already-rejected one newly unsafe (the correct direction for a checker that's sound but
+  incomplete, as opposed to complete but unsound, which is what this was before).** Every stale
+  "unverifiable, allow" comment found by grepping the file for the phrase (six sites, semantic.c) was
+  rewritten to describe the current behavior, not just the two lines that actually changed -
+  including `SCOPE_AMBIGUOUS`'s own comment, which used to cite the old lenient default as the
+  reason its own stricter handling mattered, and needed to be reframed around a distinction (traced-
+  and-disagreed vs. never-traced-at-all) that's still worth preserving even though both now produce
+  the same outcome. CLAUDE.md's own "Ownership scopes" bullet corrected the same way. `make verify`
+  (84 tests, `-c` build/run) passes with no regressions - every previously-sound program still
+  compiles, and the one deliberately-constructed unsound one, plus its "was this actually a hole"
+  counterfactual check, both confirm the fix does what it's supposed to and nothing more.
+  **What's still true, unchanged by this fix, and worth stating plainly:** this checker remains
+  incomplete by construction - it proves the shapes it can trace and rejects everything else,
+  including some genuinely safe programs it simply cannot see far enough to prove (array indexing
+  being the most concrete current example). That incompleteness is no longer paired with unsoundness,
+  which is the actual property this language's own stated goal ("compile-time-proven memory safety")
+  requires - a checker that occasionally says "no" to a safe program is a usability cost; a checker
+  that occasionally says "yes" to an unsafe one is a broken promise.

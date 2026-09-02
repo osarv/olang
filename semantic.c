@@ -1198,6 +1198,29 @@ bool structContainsBareScopeField(struct type t) {
     return false;
 }
 
+//true if t, or anything nested inside it transitively through a chain of plain/embedded array
+//elements and struct fields, is itself reference-shaped: a "<>"/"<name>"-marked struct or fixed
+//array (structMAlloc), or a dynamic array (arrMalloc, always reference-shaped per T11/O7 regardless
+//of any marker). Unlike structContainsBareScopeField, this doesn't stop at a NAMED "<name>" field or
+//distinguish bare from named at all - both are equally illegitimate to zero-fill, since neither has
+//a real allocation yet (there is no null literal anywhere in this language, so a zero-filled
+//reference is an invisible dangling pointer, not a safe default) - see D13's own note on why a
+//no-initializer array var-decl (buildVarDeclStmnt, semaCheckBodies) must reject any declared type
+//containing one anywhere, not just at the type's own outermost level. Never infinite, same
+//termination argument as structContainsBareScopeField: a plain struct can't recursively embed
+//itself without passing through a "<>" boundary, which this stops at just as that function does.
+bool typeContainsReference(struct type t) {
+    if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return true;
+    if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY) && t.structMAlloc) return true;
+    if (t.bType == BASETYPE_ARRAY) return typeContainsReference(*t.arrElem);
+    if (t.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < t.vars.len; i++) {
+        struct type ft = (*(struct var*)ListGetIdx(&t.vars, i)).type;
+        if (typeContainsReference(ft)) return true;
+    }
+    return false;
+}
+
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
@@ -1575,12 +1598,13 @@ bool varIsOwnParam(struct var* scopeVar, struct var* func) {
 //a dedicated, never-otherwise-reachable "known ambiguous" scope identity - see resolveEffectiveScopeVar/
 //foldScopeBindingsBranch/scopeCanFlowInto below. Never equal to any real function's own parameter (no
 //function's own type.vars list can ever contain THIS specific instance), so distinguishing it from an
-//ordinary foreign/untracked scope tag matters: "we never tried to trace this var" (an empty scopeBindings
-//map - the existing, pre-existing "unverifiable, allow" default is correct there) is a fundamentally
-//different fact from "we traced it and found it can be more than one thing" (this sentinel) - the latter
-//must reject, not fall through to the same default, or the whole point of tracking this would be undone
-//the moment two paths disagree. Declared ahead of resolveEffectiveScopeVar (moved up from its original
-//spot right before scopeCanFlowInto) since that function now also needs to return it directly.
+//ordinary foreign/untracked scope tag still matters even though scopeCanFlowInto now rejects both: "we
+//never tried to trace this var, or found nothing" (an empty scopeBindings map - now correctly rejected as
+//unverifiable, not allowed through) is still a different fact from "we traced it and found it can be more
+//than one thing" (this sentinel, checked first, explicitly) - collapsing the two into one code path would
+//obscure which one actually happened when reading the logic, even though both now produce the same
+//outcome. Declared ahead of resolveEffectiveScopeVar (moved up from its original spot right before
+//scopeCanFlowInto) since that function now also needs to return it directly.
 struct var scopeAmbiguousStorage = {0};
 struct var* SCOPE_AMBIGUOUS = &scopeAmbiguousStorage;
 
@@ -1626,18 +1650,28 @@ struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
 //private scope, by construction - own's scope closes when func itself returns, strictly before any scope
 //its caller passed in could close - see the report). The reverse (own flowing into a named slot) is never
 //safe, and two DIFFERENT named scopes are never provably comparable at all.
-//Deliberately conservative outside func's own frame: a scope tag that isn't one of func's own declared
-//parameters, and that OperandFitsType's own resolveEffectiveScopeVar call couldn't resolve into one either
-//(a chain deeper than the one hop that mechanism covers - see the report), can't be compared against
-//func's frame at all yet, so it's left unchecked rather than risking a false rejection of valid code. A
-//SCOPE_AMBIGUOUS srcScope is the one deliberate exception to that leniency - see its own comment above.
+//Fails CLOSED, not open, outside func's own frame: a scope tag that isn't one of func's own declared
+//parameters, and that the caller's own resolveEffectiveScopeVar call couldn't resolve into one either, is
+//REJECTED - not silently allowed. An earlier version of this function treated that case as "unverifiable,
+//so allow" on the theory that nothing currently expressible could actually exploit it; that theory was
+//wrong (see the report on the array-index smuggling counterexample: a scope tag read back out through
+//OPERATION_INDEX, which composes no scopeBindings at all, is untraceable and was silently accepted
+//regardless of whether the two scopes involved actually agreed) - "can't prove it's safe" must reject, not
+//optimistically pass, for a checker whose entire point is a compile-time safety proof. Every call site that
+//could produce a target-side scope tag foreign to func's own frame (a callee's own parameter type, in an
+//ordinary call or a constructor call - the two are the same code path) now resolves it through that call's
+//own binding map first (OperandFuncCall), so the common, actually-sound cases don't spuriously reject; what
+//still reaches this branch is either genuinely unsound or beyond what this checker can currently trace -
+//both are correctly indistinguishable from here, and both are rejected. A SCOPE_AMBIGUOUS srcScope is
+//handled first, above, for the same reason - "traced it and found two different things" is not
+//"unverifiable" and must never fall through to any lenient default either.
 bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstScope) {
     if (srcScope == SCOPE_AMBIGUOUS) return false;
     srcScope = canonicalVar(srcScope);
     dstScope = canonicalVar(dstScope);
     if (srcScope == dstScope) return true;
-    if (srcScope && !varIsOwnParam(srcScope, func)) return true;
-    if (dstScope && !varIsOwnParam(dstScope, func)) return true;
+    if (srcScope && !varIsOwnParam(srcScope, func)) return false;
+    if (dstScope && !varIsOwnParam(dstScope, func)) return false;
     return srcScope != NULL && dstScope == NULL;
 }
 
@@ -1749,18 +1783,20 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
         ErrMsgSemantic(tok, WRONG_ARG_COUNT);
         return op;
     }
-    for (int i = 0; i < args.len; i++) {
-        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
-        struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
-    }
     //records, for each of func's own scope-typed parameters, what was concretely passed at this call site
     //- "own" (bare) or a direct read of one of the CALLER's own scope parameters, the only two shapes a
-    //"scope"-typed argument can ever have (see the report). Lets a later read of this call's own return
-    //value (or, one hop further, a var initialized from it) resolve a scope tag that's one of func's own
-    //params back into something meaningful in the caller's frame - see resolveEffectiveScopeVar/
-    //OperandFitsType. Works identically whether func is an ordinary function or a struct's synthetic
-    //constructor - both are just a BASETYPE_FUNC var, no special-casing needed here either.
+    //"scope"-typed argument can ever have (see the report). Built *before* the type-fit-checking loop
+    //below (moved up from its original spot after it) - that loop needs it to resolve a later
+    //parameter's own "<name>" tag: by D9/O4, that tag can only ever name one of func's OWN earlier
+    //parameters, never anything in the calling function's own frame, so comparing it against callerFunc's
+    //own parameters directly (scopeCanFlowInto's ordinary "is this one of func's own params" test) would
+    //always fail as unverifiable-and-therefore-rejected otherwise - see the report on why "unverifiable"
+    //now means reject, not allow, and why that made this substitution load-bearing rather than optional.
+    //Lets a later read of this call's own return value (or, one hop further, a var initialized from it)
+    //resolve a scope tag that's one of func's own params back into something meaningful in the caller's
+    //frame too - see resolveEffectiveScopeVar. Works identically whether func is an ordinary function or a
+    //struct's synthetic constructor - both are just a BASETYPE_FUNC var, no special-casing needed here
+    //either.
     //boundTo is stored canonicalized (see canonicalVar): this call may be checked inside a body where the
     //argument's own readVar is a scope-chain copy (an ordinary function/constructor's own parameter, read
     //back as a value - see canonicalVar's own comment), and when this map ends up *persisted* past this
@@ -1814,6 +1850,18 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
             }
         }
     }
+    for (int i = 0; i < args.len; i++) {
+        struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        //a parameter's own "<name>" tag names one of THIS SAME signature's earlier scope parameters
+        //(D9/O4), never anything in callerFunc's own frame - resolve it through this call's own
+        //just-built binding map (above) before checking fit, so scopeCanFlowInto compares against what
+        //was actually passed for it at this call, not the callee's own otherwise-foreign parameter
+        //identity (never one of callerFunc's own params, so always unverifiable, and unverifiable now
+        //means reject - see the report).
+        if (paramType.scopeParam) paramType.scopeParam = resolveEffectiveScopeVar(op, paramType.scopeParam);
+        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
+    }
     return op;
 }
 
@@ -1866,7 +1914,9 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     //resolve it through base's own scopeBindings map one hop and record the (possibly still-foreign)
     //result under the same key, so a later OperandFitsType check on THIS member operand resolves it too -
     //see resolveEffectiveScopeVar. A no-op (empty map on op) when the field has no scope tag, or base
-    //carries no relevant binding for it - falls back to today's "unverifiable, allow" behavior either way.
+    //carries no relevant binding for it - the field's own raw, unresolved scope tag is what scopeCanFlowInto
+    //sees in that case, correctly rejected as unverifiable rather than allowed through (see the report on
+    //why "unverifiable" now means reject).
     if (memberVar->type.scopeParam) {
         struct scopeBinding b = (struct scopeBinding){0};
         b.typeParam = memberVar->type.scopeParam;
@@ -2650,12 +2700,23 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             //a bare "T[expr]" (no "<>" at all) is still implicitly own-scoped - see the report - so "own"
             //has to actually exist here the same way it would for a real "own" expression
             if (!declType.scopeParam && !ctx->hasOwnScope) ErrMsgSemantic(nameTok, OWN_OUTSIDE_FUNC);
+            //every one of the runtime-many elements is zero-filled at allocation time (cgSizedArrayAlloc),
+            //same "no valid zero value for a reference" problem D13 rules out for a fixed-size array - see
+            //typeContainsReference
+            if (typeContainsReference(*declType.arrElem)) {
+                ErrMsgSemantic(nameTok, ZERO_FILL_CONTAINS_REFERENCE);
+            }
             rhs = OperandSizedArrayAlloc(sizeOp, declType, nameTok);
         } else {
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
+            //a compile-time-constant size alone isn't enough to zero-fill: a nested reference (or the
+            //declared type itself being one - "int32[3]<>", say) has no valid zero value either - see
+            //typeContainsReference/D13
             if (declType.bType != BASETYPE_ARRAY || declType.arrMalloc) {
                 ErrMsgSemantic(nameTok, VAR_DECL_MISSING_INITIALIZER);
                 if (declType.bType != BASETYPE_ARRAY) declType = TypeVanilla(BASETYPE_INT32);
+            } else if (typeContainsReference(declType)) {
+                ErrMsgSemantic(nameTok, ZERO_FILL_CONTAINS_REFERENCE);
             }
             rhs = NULL; //zero-fill - see cgVarDecl; nothing to evaluate at all, not even a constant
         }
@@ -2828,8 +2889,10 @@ bool scopeBindingsEqual(struct list a, struct list b) {
 //folds next's own outcome into acc (both snapshots of the same var set, taken from the same starting
 //baseline): a var whose recorded bindings agree between the two is left alone in acc; a var that disagrees
 //has every key either side ever tracked for it marked SCOPE_AMBIGUOUS - deliberately NOT reset to plain
-//empty/never-tracked, which would silently fall back to the pre-existing "foreign, unverifiable, allow"
-//default and undo the whole point of tracking this at all (see SCOPE_AMBIGUOUS's own comment). Call once
+//empty/never-tracked, which would collapse a definite "we know this can be more than one thing" fact into
+//the weaker "we just never tracked this at all" one and undo the whole point of tracking this in the first
+//place (see SCOPE_AMBIGUOUS's own comment - both are now rejected by scopeCanFlowInto either way, but the
+//distinction is still worth preserving for anyone reading the logic later). Call once
 //per branch beyond the first to fold an arbitrary number of alternatives (if/else, or match's N cases plus
 //an implicit/explicit "nothing matched" possibility) into one final, honestly-merged result. Monotonic by
 //construction: once a key is marked ambiguous, every later fold that touches it rebuilds from acc's own
@@ -3232,8 +3295,13 @@ void semaCheckBodies(struct semaModule* mod) {
                 //form - both arrMalloc) has no "own"/enclosing scope to arena-allocate into at global-init
                 //time (same restriction "own" itself has outside a function), so it's rejected here rather
                 //than silently left as a null/empty slice, which would be a different, surprising meaning.
+                //A reference nested anywhere within an otherwise-fixed-size global (or the global's own
+                //declared type itself being one, e.g. "x Point[3]<>") is rejected the same way, for the
+                //same reason - see typeContainsReference/D13.
                 if (v->type.bType != BASETYPE_ARRAY || v->type.arrMalloc) {
                     ErrMsgSemantic(nameTok, VAR_DECL_MISSING_INITIALIZER);
+                } else if (typeContainsReference(v->type)) {
+                    ErrMsgSemantic(nameTok, ZERO_FILL_CONTAINS_REFERENCE);
                 }
                 continue;
             }

@@ -1159,6 +1159,31 @@ test "the static scope checker merges two branches that reassign a var to the sa
     assert(q.y == 13)
 }
 
+## scopeCanFlowInto used to treat a scope tag it couldn't trace back to the current function's own
+## parameters as "unverifiable, so allow" - optimistic, not sound. User-caught: a fixed array whose element
+## type is itself constructor-bearing with a "<name>"-tagged field (e.g. "Wrapper struct(s scope, inner
+## Point<s>) { inner }") lets two Wrapper values, each tagged to a genuinely different scope, live side by
+## side in one array; reading one back out via an index ("arr[1].inner") composes no scope-tracing at all
+## (OPERATION_INDEX, unlike OPERATION_MEMBER, carries no scopeBindings forward), so the resulting reference
+## reaches OperandFitsType with its *raw*, unresolved "s" tag - "unverifiable" under the old rule, so it was
+## silently accepted regardless of whether the two scopes involved actually agreed. Confirmed by temporarily
+## reverting just this one default back to "allow": the array-index example below compiled and ran with no
+## complaint at all - a real, exploitable hole, not a hypothetical one.
+## Fixed at the root: scopeCanFlowInto now rejects anything it cannot trace, the same as an actually-proven-
+## unsafe flow (semantic.c) - "can't prove it's safe" must mean reject, not optimistically pass, for a
+## checker whose whole point is a compile-time proof. This did require a real, separate fix alongside the
+## flip, not just the flip alone: a callee's own parameter type can carry a "<name>" tag naming one of
+## *that callee's own* scope parameters (never the caller's, e.g. fillBoxedPoint/setChainLeaf above, both
+## already exercised by permanent tests) - OperandFuncCall now resolves that tag through the call's own
+## argument-to-parameter binding before checking fit, so the common, actually-sound case doesn't spuriously
+## reject once "unverifiable" stopped meaning "allow."
+## The array-index shape is now correctly rejected at compile time - not testable here since a rejected
+## program can't run as a test{} block; verified ad hoc during development instead:
+##   wa mut Wrapper = Wrapper(a, Point{1, 2})
+##   wb mut Wrapper = Wrapper(b, Point{3, 4})
+##   arr mut Wrapper[] = Wrapper[wa, wb]
+##   leaked mut Point<a> = arr[1].inner   ## rejected: arr[1]'s own scope tag is untraceable, not "a"
+
 ## "T[N]" with no initializer - real BSS-style zero-fill (see the report and zeroGlobal's own declaration
 ## above). Both a global and a local go through the exact same mechanism: leaving the var-decl's rhs NULL,
 ## so codegen (cgVarDecl) stores cgZeroValue's "zeroinitializer" instead of evaluating anything.
@@ -1198,3 +1223,17 @@ test "a runtime-sized array tagged to a named scope survives a function boundary
     assert(a[1] == 0)
     assert(a[4] == 0)
 }
+
+## The zero-fill above is only sound because int32/Point/etc. have a real, meaningful zero value at every
+## level. A reference ("<>"/"<name>", or a dynamic array, T11's "always reference-shaped, marker or not")
+## has none - there is no null literal anywhere in this language, so zero-filling one would silently
+## produce an invisible dangling/null reference (a struct or fixed array's own marker) or a phantom "empty"
+## array that was never actually allocated (a dynamic array nested somewhere inside an otherwise
+## zero-fillable fixed-size declaration). typeContainsReference (semantic.c) now rejects any no-initializer
+## array var-decl - fixed-size or runtime-sized alike - whose declared type contains a reference anywhere
+## within it, not just at its own outermost level. All three shapes below are now correctly rejected at
+## compile time - not testable here since a rejected program can't run as a test{} block; verified ad hoc
+## during development instead:
+##   x mut int32[2][]                             (a nested dynamic array - "jagged", per-row-sized)
+##   x mut Point[3]<>                              (the declared type is itself a reference)
+##   x mut Wrapper[n]                              (Wrapper's own field is "<name>"-tagged, n runtime-sized)

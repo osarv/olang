@@ -503,7 +503,17 @@ declared type (assignability, defined per-context in
 (`T[N]`, T8) is zero-filled: every element recursively set to its type's zero value (`false` for
 `bool`, `0`/`0.0` for numeric types, all-zero for a struct, the first-declared word for a vocab —
 vocab and error types have no other meaningful "zero", so a zero-filled vocab field's value is its
-type's first word by representation, not by any declared meaning).
+type's first word by representation, not by any declared meaning) — **provided** the declared type
+contains no reference anywhere within it (T24: a `<>`/`<name>`-marked struct or fixed array, or,
+unconditionally, a dynamic array, T11), at any depth through a chain of plain embedded array
+elements and struct fields. None of these have a valid zero value — a reference has no allocation to
+point to yet (there is no null literal or null-checkable state anywhere in this language, T2, so a
+zero-filled reference would be an invisible dangling pointer, not a safe default), and a dynamic
+array has no length-appropriate backing allocation to zero-fill in the first place (only a genuinely
+empty, zero-length one, which is a different, surprising meaning to produce silently). A declared
+array type containing a reference anywhere within it therefore requires an initializer unconditionally,
+regardless of its own outermost size — the same error as an array with no compile-time-constant
+outermost size at all (D12).
 
 **D14.** `T[expr]`, where `expr` is present but is *not* a compile-time constant, is recognized as a
 distinct, var-decl-only grammatical case in exactly one position: a **local** var-decl with no
@@ -516,7 +526,11 @@ since evaluating `expr` and allocating into a scope both require an enclosing `o
 initializer has); and not a `for-stmnt`'s own init clause (§6.3 S9), whose grammar has no
 no-initializer form at all — an initializer is always required there. Recognized in its one valid
 position, it declares a **run-time-sized array**: `expr` is evaluated once, must be of an integer
-type, and the array is allocated with that many zero-filled elements; the declared variable's own
+type, and the array is allocated with that many zero-filled elements. As with `T[N]` (D13), a
+compile-time-constant size is not sufficient on its own: the element type must contain no reference
+anywhere within it, or this is a compile-time error instead — the outer array itself is always
+legitimately constructed (by allocation into a scope, below), it is only what would fill each of its
+elements that is in question. The declared variable's own
 type becomes an ordinary dynamic array type (T7's `T[]`, no compile-time length) — the same shape
 D13's `T[]` sibling has, just sized by a runtime value instead of an initializing literal's item
 count. This form's allocation semantics (which scope it belongs to) are specified in
@@ -1147,21 +1161,28 @@ lifetime-relationship annotation, which olang does not have.
 
 **O11.** O10 applies only when both sides are traceable, at compile time, to a scope parameter of
 the function currently being checked (following, where applicable: a call's own argument-to-
-parameter binding; one hop through a variable's own declaration; a chain of member accesses through
-constructor-declared fields; straight-line reassignment; and branches of `if`/`match`/loops, merged
-— agreeing branches keep the agreed tag, disagreeing branches are treated as O12). A scope tag this
-specification's own tracing cannot resolve back to one of the current function's own parameters is
-treated as **unverifiable** and is allowed to flow anywhere — this check proves the specific unsound
-shapes described in O10 are absent for the cases it can trace; it is not a complete guarantee that
-every program it accepts is free of dangling references, only that the shapes it can see are sound.
+parameter binding — including resolving a *callee's* own parameter-declared scope tag through that
+same call's binding before comparing, since a callee's `<name>` always names one of *its own*
+parameters, D9, never anything in the calling function's frame; one hop through a variable's own
+declaration; a chain of member accesses through constructor-declared fields; straight-line
+reassignment; and branches of `if`/`match`/loops, merged — agreeing branches keep the agreed tag,
+disagreeing branches are treated as O12). A scope tag this specification's own tracing cannot
+resolve back to one of the current function's own parameters — including one read back through an
+array index (E16), which this tracing does not follow at all — is treated as **unverifiable** and is
+a compile-time error, the same as an actually-proven-unsafe flow under O10: this checker's guarantee
+is only as complete as what it can trace, but it is sound within that limit, rejecting anything it
+cannot prove safe rather than optimistically accepting it. Extending what this tracing can follow can
+only ever accept more programs that are genuinely safe; it can never turn an already-rejected program
+newly unsafe.
 
 **O12.** A variable whose scope tag becomes genuinely ambiguous — reassigned to different scopes on
 different branches that are merged back together, or (for a constructor field) forwarded from two
 different same-typed sibling arguments in a way that cannot be told apart — is treated as
-**definitely incompatible** with anything (never allowed to flow, unlike O11's "unverifiable, so
-allowed"): once a value's own scope is known to be one of several different things depending on
-which branch ran, no further use of it can be proven safe, so it is rejected outright rather than
-silently guessing.
+**definitely incompatible** with anything, rejected the same way an unverifiable tag is (O11) but for
+a distinct reason worth telling apart: this one was actually traced, and found to disagree, rather
+than simply never resolved at all. Once a value's own scope is known to be one of several different
+things depending on which branch ran, no further use of it can be proven safe, so it is rejected
+outright rather than silently guessing.
 
 ### 8.5 Return-type restrictions
 

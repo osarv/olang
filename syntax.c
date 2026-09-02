@@ -131,12 +131,12 @@ struct syntax* parseCatchErrList(SyntaxCtx sc);
 //identifiers are alias hops through a chain of re-exports - see resolveAliasChain in semantic.c; that's a
 //semantic question, not a grammar one, so this commits to any dotted chain unconditionally). Never fails
 //if a leading IDEN is present; callers check the leading token first. Used for type refs and call targets,
-//both parsed from a position the parser already knows is unambiguous - NOT used for a struct/array
-//literal's own type name or a vocab value, both of which need the parser's own type-name-awareness
-//(nameIsKnownType) to disambiguate from an ordinary expression while parsing, and that mechanism only
-//ever recognizes a chain of at most 2 - a literal/vocab value reached through more than one re-export hop
-//is accordingly not yet supported (falls through to an ordinary, if less helpful, parse error rather than
-//silently mis-resolving - see the report).
+//both parsed from a position the parser already knows is unambiguous, and also for a struct/array
+//literal's own type name (parseExprPrimary's TOK_IDEN case) - there, the parser's own type-name-awareness
+//(nameIsKnownType/isKnownTypeForParsing) decides whether to commit to literal syntax, and walks this same
+//chain hop by hop to any depth (not limited to one or two hops) before answering. A vocab value
+//(firstIdenIsLocalKnownType) is the one exception: it's never alias-qualified by design (M12), so only
+//this chain's own first identifier is ever consulted there, regardless of what follows it.
 struct syntax* parseName(SyntaxCtx sc) {
     struct token first = acceptTok(sc, TOK_IDEN);
     if (first.type == TOK_NONE) return NULL;

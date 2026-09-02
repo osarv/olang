@@ -112,14 +112,19 @@ drift out of sync with the actual code.
   parameters: a value may flow into a same-tagged target; a named-scope value may narrow into a bare
   `<>` (own) target (own is always the shortest-lived scope reachable from inside a function);
   anything else (a bare/own value into a named target, or two different named scopes) is rejected.
-  Tracing composes through a call's own argument-to-parameter binding, one or more hops through a
-  var-decl or straight-line reassignment, member-access chains through constructor-declared fields
-  (bare-pun fields included, disambiguated across same-typed sibling fields by which constructor
-  parameter each value flowed through), and merged `if`/`match`/loop branches (agreeing branches keep
-  the agreed tag; disagreeing branches are marked definitely ambiguous, never silently guessed). A
-  scope tag the checker can't trace back to one of the current function's own parameters is treated
-  as unverifiable and allowed through - this proves the specific unsound shapes above are absent for
-  the cases it can see, not a complete dangling-reference guarantee.
+  Tracing composes through a call's own argument-to-parameter binding (including a callee's own
+  parameter type naming one of *that callee's own* scope parameters, resolved through the call's own
+  binding before comparing - never the caller's), one or more hops through a var-decl or
+  straight-line reassignment, member-access chains through constructor-declared fields (bare-pun
+  fields included, disambiguated across same-typed sibling fields by which constructor parameter each
+  value flowed through), and merged `if`/`match`/loop branches (agreeing branches keep the agreed
+  tag; disagreeing branches are marked definitely ambiguous, never silently guessed). **A scope tag
+  the checker can't trace back to one of the current function's own parameters - including one read
+  back through an array index, which composes no tracing at all - is a compile-time error**, exactly
+  as an actually-proven-unsafe flow is: unverifiable now means reject, never optimistically allow.
+  This makes the checker sound (nothing it accepts can be disproven safe) though still incomplete
+  (some genuinely-safe programs it can't yet trace are rejected too) - the correct tradeoff for a
+  checker whose entire point is a compile-time safety proof, not a best-effort hint.
 - **Constructors and destructors - the only two special blocks a struct type can declare** (no
   general user-defined methods, deliberately, to sidestep field/method name collisions).
   `type Name struct(params) [errors] { fields } [destruct { stmts }]`; a field is a bare pun (binds a
@@ -144,7 +149,17 @@ drift out of sync with the actual code.
   global); and, *local-only*, `x T[expr]` with a non-constant `expr` and no initializer (a
   runtime-sized, zero-filled array, arena-allocated into `own` or a named scope like any other
   reference). Pairing `T[N]` with an initializing literal, or leaving a dynamic `T[]`/scalar with no
-  initializer at all, is a compile error.
+  initializer at all, is a compile error. **None of these three forms can produce a reference with no
+  real construction behind it:** a no-initializer array var-decl (`T[N]` or `T[expr]`) is rejected if
+  its declared type contains a reference (`<>`/`<name>`, or a dynamic array, always reference-shaped
+  per T11) anywhere within it, at any depth - not just at its own outermost level - since none of
+  those have a valid zero value (there is no null literal in this language, so a zero-filled reference
+  would be an invisible dangling pointer, and a zero-filled dynamic array would be a phantom "empty"
+  array that never went through real allocation). This closes off what looked like a fourth,
+  accidental way to construct a **jagged** (independently-sized-per-row) array - `x mut T[N][]`
+  (fixed row count, dynamic per-row) with no initializer, then assigning each row separately - which
+  doesn't actually exist as a legitimate construction path: it was a zero-fill bug, not a feature.
+  There is currently no legitimate way to construct a jagged array at all.
 - **Deferred: generics, user-defined methods, and a real growable `Vec`.** A separate, much larger
   future direction, not started - nothing about the current language design is shaped around it;
   revisit once a concrete need for a resizable collection or generic user code actually arises. Such
