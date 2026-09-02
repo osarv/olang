@@ -25,7 +25,7 @@ error InputError {
     TOO_BIG
 }
 
-func Classify(n int32) sh.RangeError + WorkerError ? int32 {
+func Classify(n int32) int32 ? sh.RangeError + WorkerError {
     if n < 0 {
         error WorkerError.BAD_INPUT
     }
@@ -35,7 +35,7 @@ func Classify(n int32) sh.RangeError + WorkerError ? int32 {
 ## combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
 ## re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
 ## ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
-func classifyInput(n int32) WorkerError + InputError ? int32 {
+func classifyInput(n int32) int32 ? WorkerError + InputError {
     if n < 0 {
         error InputError.NEGATIVE
     }
@@ -48,11 +48,11 @@ func classifyInput(n int32) WorkerError + InputError ? int32 {
     return n
 }
 
-func reclassifyInput(n int32) InputError + WorkerError ? int32 {
+func reclassifyInput(n int32) int32 ? InputError + WorkerError {
     return try classifyInput(n)
 }
 
-func checkRangeOk(n int32) ? bool {
+func checkRangeOk(n int32) bool {
     ok mut bool = true
     try sh.CheckRange(n, 0, 100) catch sh.RangeError {
         ok = false
@@ -66,7 +66,7 @@ func checkRangeOk(n int32) ? bool {
 ## tryBuildCrossModuleVarRead) rather than a grammar tweak - see the report.
 AskCount mut int32 = 0
 
-func AskRunner(n int32) ? int32 {
+func AskRunner(n int32) int32 {
     AskCount = AskCount + 1
     return rn.DoubleIt(n)
 }

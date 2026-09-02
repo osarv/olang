@@ -78,7 +78,7 @@
 #define RETURN_MISSING_VALUE "this function's declared return type requires a return value"
 #define RETURN_TYPE_MISMATCH "return value's type doesn't match the function's declared return type"
 #define MAIN_FUNC_NOT_FOUND "could not find the main function"
-#define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare at least one error, e.g. 'func main() MyError { ... }'"
+#define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare at least one error, e.g. 'func main() ? MyError { ... }'"
 
 // ---- errors, try/catch ----
 

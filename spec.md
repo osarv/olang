@@ -326,8 +326,8 @@ error-union return convention, `try`/`catch`, and the `error` statement — are 
 
 ### 2.7 Function types
 
-**T21.** `func-type ::= "func" func-sig`, where `func-sig` is the parameter list, optional error
-list, and optional return type described in §3.4. A
+**T21.** `func-type ::= "func" func-sig`, where `func-sig` is the parameter list, optional return
+type, and optional error list described in §3.4. A
 function type is usable as a variable's, field's, or parameter's declared type, making a function
 (named or, wherever a value of function type is otherwise obtained, referenced by that value) a
 first-class value that can be passed and called through it.
@@ -445,21 +445,25 @@ reference any other type (T17, T19).
 **D7.** `func-decl ::= "func" IDEN func-sig block`. The declared name enters the module's `vars` set
 (D2). `block` is specified in §6.1.
 
-**D8.** `func-sig ::= "(" param-list ")" [ error-list ] [ ret-type ]`, where:
+**D8.** `func-sig ::= "(" param-list ")" [ ret-type ] [ "?" error-list ]`, where:
 
 ```
 param-list ::= [ param { "," param } ]
 param      ::= IDEN [ "mut" ] type-expr
+ret-type   ::= type-expr
 error-list ::= alias-chain IDEN { "+" alias-chain IDEN }
-ret-type   ::= "?" type-expr
 ```
 
+The return value comes first (`ret-type`, bare - no marker of its own), and the error set (if any)
+follows it, marked with a leading `?`: the marker attaches to the error set, not the return type, so
+`func f(...) T { }` (a return value, no errors) and `func f(...) ? ErrA { }` (errors, no return
+value) are both unambiguous with nothing but an optional bare type-expr ever appearing before the
+`?`. `ret-type`, when present, is the function's success type (the type of a normal `return`ed
+value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-entry in `error-list` must name a declared error type (§2.6); see
-§7 for what the combined set means. `ret-type`, when
-present, is the function's success type (the type of a normal `return`ed value); a function with no
-`ret-type` returns no value (bare `return`/fall-through only).
+entry in `error-list` must name a declared error type (§2.6); see §7 for what the combined set
+means.
 
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. A parameter's type may be `scope` (§2.8) only in this position. A later
@@ -1291,7 +1295,7 @@ prevent the others from being checked and run.
 
 **P4.** In `-c` mode, the root module must declare a function named `main` with exactly this shape:
 no parameters, no success type, and at least one declared error
-(§3 D8) — `func main() SomeError [+ ...] { ... }`. Any other
+(§3 D8) — `func main() ? SomeError [+ ...] { ... }`. Any other
 shape (parameters, a `ret-type`, or no declared error at all) is a compile-time error. There is no
 other valid `main` signature; in particular, there is no "return an int/bool status" convention.
 

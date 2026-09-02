@@ -38,6 +38,14 @@ drift out of sync with the actual code.
   parens are just an ordinary parenthesized sub-expression). Outside `-t`, a failing assert hard-
   aborts (like C's `assert()`); inside a `test { }` block it's a soft, recoverable failure - that one
   test is marked failed and the rest keep running.
+- **Function signature order: return value first, then `?` error set.** `func f(params) [RetType]
+  [? ErrA [+ ErrB ...]] { }` - the return type, when present, is bare (no marker of its own) and
+  comes first; the error set, when present, is what the `?` now marks, and comes after. `main`
+  follows the same rule (`func main() ? SomeError { }`, no return type ever). A constructor's own
+  error-list is unaffected - still bare, no `?`, directly after its parameter list - since a
+  constructor never had a `ret-type` slot to disambiguate against in the first place. Reversed from
+  the original order (`[ErrList] [? RetType]`, error set first, return type marked); user-driven,
+  purely a syntax change, no effect on the error-union return ABI below or on any other semantics.
 - **Error-union return ABI.** Zig-style, but with *locally*-scoped codes: a fallible function's LLVM
   return is `{ i32 code, T payload }` (bare `i32` with no success type); `code == 0` means success. A
   nonzero code packs `(typeOrdinal << 16) | wordOrdinal`, both ordinals computed purely from *this
@@ -54,7 +62,7 @@ drift out of sync with the actual code.
   `test { }` block, or a function declaring no errors at all, as long as everything the tried call
   can produce is fully caught right there.
 - **`main`'s signature is fixed:** no parameters, no success type, at least one declared error -
-  `func main() SomeError [+ ...] { ... }`, no other shape valid. Process exit is exactly two values:
+  `func main() ? SomeError [+ ...] { ... }`, no other shape valid. Process exit is exactly two values:
   a normal return is OS exit 0; an error escaping `main` uncaught prints
   `unhandled error: TypeName.Word` to stderr and exits 1. There is no "return a status" convention.
 - **`done`/`crash`.** Bare statements (no operand), valid in any function or test body: `done` is an

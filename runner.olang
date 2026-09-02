@@ -7,14 +7,14 @@ error RunnerError {
     STARTUP_FAILED
 }
 
-func DoubleIt(n int32) ? int32 {
+func DoubleIt(n int32) int32 {
     return n * 2
 }
 
 ## originating a FOREIGN module's error type directly via "error alias.Type.word" - previously you could
 ## only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
 ## report. wk.WorkerError is declared over in worker.olang, not here.
-func alwaysWorkerBadInput() wk.WorkerError ? int32 {
+func alwaysWorkerBadInput() int32 ? wk.WorkerError {
     error wk.WorkerError.BAD_INPUT
 }
 
@@ -23,11 +23,11 @@ func alwaysWorkerBadInput() wk.WorkerError ? int32 {
 ## originated fresh right here - not just declared/caught through a signature. Every cross-module
 ## mechanism (type ref, call, bare var read, catch, "error" statement) supports an alias chain of any
 ## length now, not just one hop - see the report.
-func alwaysBaseBrokenViaChain() wk.Base.BaseError {
+func alwaysBaseBrokenViaChain() ? wk.Base.BaseError {
     error wk.Base.BaseError.BROKEN
 }
 
-func main() RunnerError {
+func main() ? RunnerError {
     try sh.SafeDiv(10, 2) catch sh.MathError {
         error RunnerError.STARTUP_FAILED
     }

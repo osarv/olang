@@ -27,11 +27,11 @@ error BaseError {
     BROKEN
 }
 
-func BumpBase() ? int32 {
+func BumpBase() int32 {
     BaseCount = BaseCount + 1
     return BaseCount
 }
 
-func AlwaysBaseBroken() BaseError {
+func AlwaysBaseBroken() ? BaseError {
     error BaseError.BROKEN
 }

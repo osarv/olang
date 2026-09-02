@@ -390,12 +390,10 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-struct syntax* parseErrorList(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct syntax* first = parseName(sc);
-    if (!first) return NULL;
-    struct syntax* s = newNode(SNTX_ERROR_LIST);
-    addSntx(s, first);
+//appends "(+ IDEN)*" onto s, whose first name has already been parsed and added by the caller - shared by
+//both a bare (constructor, parseErrorList) and '?'-marked (ordinary function, parseFuncErrorList) error
+//list, which differ only in what, if anything, precedes the first name
+void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
     while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token plus = TokenFeed(sc->tc);
@@ -405,18 +403,43 @@ struct syntax* parseErrorList(SyntaxCtx sc) {
         addTok(s, plus);
         addSntx(s, name);
     }
-    (void)cur;
+}
+
+//a constructor's own error-list, e.g. "struct(params) ErrA + ErrB { ... }" - bare, no leading marker,
+//since a constructor has no ret-type of its own to disambiguate against (see parseFuncErrorList for an
+//ordinary function's '?'-marked counterpart)
+struct syntax* parseErrorList(SyntaxCtx sc) {
+    struct syntax* first = parseName(sc);
+    if (!first) return NULL;
+    struct syntax* s = newNode(SNTX_ERROR_LIST);
+    addSntx(s, first);
+    addErrorListTail(sc, s);
     return s;
 }
 
-struct syntax* parseRetType(SyntaxCtx sc) {
+//an ordinary function's error-list is marked with a leading '?' - the marker moved here (from ret-type,
+//see parseRetType) so a signature reads "(params) [ret-type] [? errors]": the return value first, then,
+//if there is one, the error set
+struct syntax* parseFuncErrorList(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token q = acceptTok(sc, TOK_QSNTMRK);
     if (q.type == TOK_NONE) return NULL;
-    struct syntax* type = parseTypeExpr(sc);
-    if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct syntax* s = newNode(SNTX_RET_TYPE);
+    struct syntax* first = parseName(sc);
+    if (!first) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_ERROR_LIST);
     addTok(s, q);
+    addSntx(s, first);
+    addErrorListTail(sc, s);
+    return s;
+}
+
+//bare, no marker - unlike before, nothing here distinguishes it from a following error-list positionally
+//other than trying it first (see parseFuncSig): a type-expr can never itself start with '?', so there's no
+//ambiguity between "this is the ret-type" and "this is actually the error-list"
+struct syntax* parseRetType(SyntaxCtx sc) {
+    struct syntax* type = parseTypeExpr(sc);
+    if (!type) return NULL;
+    struct syntax* s = newNode(SNTX_RET_TYPE);
     addSntx(s, type);
     return s;
 }
@@ -465,10 +488,10 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* errs = parseErrorList(sc);
-    if (errs) addSntx(s, errs);
     struct syntax* ret = parseRetType(sc);
     if (ret) addSntx(s, ret);
+    struct syntax* errs = parseFuncErrorList(sc);
+    if (errs) addSntx(s, errs);
     return s;
 }
 

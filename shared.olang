@@ -36,34 +36,34 @@ error RangeError {
     TOO_LARGE
 }
 
-func add(a int32, b int32) ? int32 {
+func add(a int32, b int32) int32 {
     return a + b
 }
 
-func factorial(n int32) ? int32 {
+func factorial(n int32) int32 {
     if n <= 1 {
         return 1
     }
     return n * factorial(n - 1)
 }
 
-func addLong(a int64, b int64) ? int64 {
+func addLong(a int64, b int64) int64 {
     return a + b
 }
 
-func average(a float32, b float32) ? float32 {
+func average(a float32, b float32) float32 {
     return (a + b) / 2.0
 }
 
-func isDigit(c byte) ? bool {
+func isDigit(c byte) bool {
     return c >= '0' && c <= '9'
 }
 
-func setBit(flags int32, bit int32) ? int32 {
+func setBit(flags int32, bit int32) int32 {
     return flags | (1 << bit)
 }
 
-func doubleIt(n int32) ? int32 {
+func doubleIt(n int32) int32 {
     return n * 2
 }
 
@@ -72,7 +72,7 @@ func doubleIt(n int32) ? int32 {
 ## address already (an LLVM `define`, not a `global`) - so loading "through" it read the function's own
 ## machine code as if it were a stored pointer, segfaulting the instant it was called. See cgValue in
 ## codegen.c.
-func applyToFive(f func(n int32) ? int32) ? int32 {
+func applyToFive(f func(n int32) int32) int32 {
     return f(5)
 }
 
@@ -80,7 +80,7 @@ func applyToFive(f func(n int32) ? int32) ? int32 {
 ## no ordering/arithmetic (rejected the same way any non-numeric type is, see TypeIsNumeric/TypeIsInt),
 ## only equality/inequality and match/case, both already generic over every type with no vocab-specific
 ## codegen needed.
-func opposite(d Direction) ? Direction {
+func opposite(d Direction) Direction {
     result mut Direction = Direction.NORTH
     match d {
         case Direction.NORTH {
@@ -102,7 +102,7 @@ func opposite(d Direction) ? Direction {
     return result
 }
 
-func describe(n int32) ? int32 {
+func describe(n int32) int32 {
     result mut int32 = 0
     match n {
         case 1 {
@@ -120,7 +120,7 @@ func describe(n int32) ? int32 {
 
 ## match's case values may be struct/array literals, not just scalars - a case value is checked
 ## structurally against the matched expression (cgDeepEq in codegen.c), not by identity
-func classifyPoint(p Point) ? int32 {
+func classifyPoint(p Point) int32 {
     result mut int32 = 0
     match p {
         case Point{1, 2} {
@@ -141,7 +141,7 @@ func classifyPoint(p Point) ? int32 {
 ## names which scope-typed parameter a value is allocated into; bare "<>" (unchanged from before) means
 ## the value's own private scope. "own" is a keyword evaluating to that private scope as a passable value,
 ## so a caller can hand a callee its own scope instead of the callee's default private one.
-func makePoint(x int32, y int32, s scope) ? Point<s> {
+func makePoint(x int32, y int32, s scope) Point<s> {
     p mut Point<s> = Point{x, y}
     return p
 }
@@ -151,11 +151,11 @@ func makePoint(x int32, y int32, s scope) ? Point<s> {
 ## malloc-and-copy at every point that promotion can happen - a var-decl, a call argument, and a return
 ## value - rather than just aliasing the literal's own (about-to-be-gone) stack storage. See cgStoreInto/
 ## cgBoundaryValue in codegen.c.
-func takesHeapPoint(p Point<>) ? int32 {
+func takesHeapPoint(p Point<>) int32 {
     return p.x
 }
 
-func returnsHeapPoint(s scope) ? Point<s> {
+func returnsHeapPoint(s scope) Point<s> {
     return Point{9, 8}
 }
 
@@ -163,7 +163,7 @@ func returnsHeapPoint(s scope) ? Point<s> {
 ## allocations into one still-open scope forces chunk growth (linking on more than one chunk), and calling
 ## this repeatedly forces __olang_scope_close/__olang_scope_alloc to actually recycle chunks through the
 ## free pool rather than just malloc-and-leak.
-func sumManyPoints(n int32, s scope) ? int32 {
+func sumManyPoints(n int32, s scope) int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
@@ -189,7 +189,7 @@ type BoxedPoint struct {
 ## the narrow fix (not the general one - see the report): when the base of "base.field = ..." is itself a
 ## "<>"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
 ## that same scope, instead of this function's own (about-to-close) private scope
-func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) ? int32 {
+func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) int32 {
     b.inner = Point{x, y}
     return b.inner.x
 }
@@ -197,12 +197,12 @@ func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) ? int32 {
 ## forces reuse of whatever arena chunk fillBoxedPoint's own (now-closed) private scope just freed, by
 ## allocating something comparably sized right after - if "inner" had dangled into fillBoxedPoint's own
 ## scope instead of the caller's, this corrupts it and the later read in the test below fails
-func noisePoint(n int32) ? int32 {
+func noisePoint(n int32) int32 {
     p mut Point<> = Point{n, n}
     return p.x
 }
 
-func sumUntil(n int32) ? int32 {
+func sumUntil(n int32) int32 {
     total mut int32 = 0
     i mut int32 = 1
     do {
@@ -212,14 +212,14 @@ func sumUntil(n int32) ? int32 {
     return total
 }
 
-func SafeDiv(a int32, b int32) MathError ? int32 {
+func SafeDiv(a int32, b int32) int32 ? MathError {
     if b == 0 {
         error MathError.DIV_BY_ZERO
     }
     return a / b
 }
 
-func CheckRange(n int32, lo int32, hi int32) RangeError ? int32 {
+func CheckRange(n int32, lo int32, hi int32) int32 ? RangeError {
     if n < lo {
         error RangeError.TOO_SMALL
     }
@@ -232,7 +232,7 @@ func CheckRange(n int32, lo int32, hi int32) RangeError ? int32 {
 ## combines both of this file's error types in one signature, in declaration order (MathError first) -
 ## worker.olang re-declares the same pair in the OPPOSITE order when it propagates this, exercising the
 ## error-union ABI's ordinal remap across two differently-ordered signatures
-func ComputeChecked(a int32, b int32, lo int32, hi int32) MathError + RangeError ? int32 {
+func ComputeChecked(a int32, b int32, lo int32, hi int32) int32 ? MathError + RangeError {
     if b == 0 {
         error MathError.DIV_BY_ZERO
     }
@@ -268,7 +268,7 @@ error ValidationError {
     NEGATIVE
 }
 
-func checkNonNegative(n int32) ValidationError ? int32 {
+func checkNonNegative(n int32) int32 ? ValidationError {
     if n < 0 {
         error ValidationError.NEGATIVE
     }
@@ -283,7 +283,7 @@ type Measurement struct(n int32) ValidationError {
     n
 }
 
-func measurementValue(n int32) ValidationError ? int32 {
+func measurementValue(n int32) int32 ? ValidationError {
     m mut Measurement = try Measurement(n)
     return m.v
 }
@@ -304,7 +304,7 @@ error CloseError {
     FAIL
 }
 
-func alwaysCloses() CloseError ? bool {
+func alwaysCloses() bool ? CloseError {
     return true
 }
 
@@ -320,7 +320,7 @@ type Handle struct(id int32) {
 
 ## a plain (non-"<>") local's destructor runs right before the enclosing function returns - RAII tied to
 ## the function's own frame, not the scope-arena machinery at all
-func useHandleLocally() ? int32 {
+func useHandleLocally() int32 {
     h mut Handle = Handle(7)
     return h.id
 }
@@ -331,7 +331,7 @@ func useHandleLocally() ? int32 {
 ## destructor releases) was already released out from under it. cgSkipLocalForReturn/cgRunLocalDestructors
 ## in codegen.c - see the report. Not general move semantics: only this exact "return <bare local>" shape
 ## is recognized.
-func makeHandle(n int32) ? Handle {
+func makeHandle(n int32) Handle {
     h mut Handle = Handle(n)
     return h
 }
@@ -339,7 +339,7 @@ func makeHandle(n int32) ? Handle {
 ## the returned local's own destructor is skipped in makeHandle, but a DIFFERENT local that ISN'T returned
 ## still gets destructed normally right there, before makeHandle even returns - proves the skip is scoped
 ## to exactly the one local named by "return", not a blanket "no destructors fire on any return" escape.
-func makeAndDiscardOne(n int32) ? Handle {
+func makeAndDiscardOne(n int32) Handle {
     keep mut Handle = Handle(n)
     discard mut Handle = Handle(n + 100)
     return keep
@@ -349,7 +349,7 @@ func makeAndDiscardOne(n int32) ? Handle {
 ## with that scope at allocation time (see __olang_scope_register_dtor in codegen.c) and walked in LIFO
 ## order right before that scope's chunks are reclaimed. Bare "<>" here means this function's own private
 ## scope, so every registration from one call of this function is torn down together the moment it returns.
-func useManyHandlesLocally(n int32) ? int32 {
+func useManyHandlesLocally(n int32) int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
@@ -372,11 +372,11 @@ func useManyHandlesLocally(n int32) ? int32 {
 ## instead would go through cgPromoteFixedArrayToDynamic - see "useHandleArrayLocallyDynamic" below for
 ## that path, and "useSizedHandleArray" further below for a genuinely runtime-counted "T[expr]" one, which
 ## needed a real runtime loop rather than a compile-time-unrolled one - see the report).
-func makeHandleArrayRef(s scope) ? Handle[3]<s> {
+func makeHandleArrayRef(s scope) Handle[3]<s> {
     return Handle[Handle(20), Handle(21), Handle(22)]
 }
 
-func useHandleArrayLocally() ? int32 {
+func useHandleArrayLocally() int32 {
     arr mut Handle[3]<> = makeHandleArrayRef(own)
     return arr[0].id + arr[1].id + arr[2].id
 }
@@ -386,7 +386,7 @@ func useHandleArrayLocally() ? int32 {
 ## the identical fix, for the identical reason - it built a fresh buffer via the same "GEP per element"
 ## shape but never registered a single destructor. cgRegisterDtorIfNeeded already walked that generically,
 ## so this took one extra call, not a new mechanism - see the report.
-func useHandleArrayLocallyDynamic() ? int32 {
+func useHandleArrayLocallyDynamic() int32 {
     arr mut Handle[]<> = Handle[Handle(30), Handle(31), Handle(32)]
     return arr[0].id + arr[1].id + arr[2].id
 }
@@ -402,7 +402,7 @@ func useHandleArrayLocallyDynamic() ? int32 {
 ## own accepted default state elsewhere. Confirmed with a slot that's genuinely reassigned via a loop AND
 ## (ad hoc, not a permanent test - nothing to assert against beyond the destructor count) one that's left
 ## entirely unassigned, both correctly destructing exactly n times.
-func useSizedHandleArray(n int32) ? int32 {
+func useSizedHandleArray(n int32) int32 {
     arr mut Handle[n]<>
     i mut int32 = 0
     do {
@@ -423,7 +423,7 @@ type ScopedBox struct(s scope, inner Point<s>) {
     inner
 }
 
-func fillBoxViaCtor(outer scope) ? Point<outer> {
+func fillBoxViaCtor(outer scope) Point<outer> {
     b mut ScopedBox<> = ScopedBox(outer, Point{7, 8})
     return b.inner
 }
@@ -433,7 +433,7 @@ func fillBoxViaCtor(outer scope) ? Point<outer> {
 ## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "<>" on the
 ## return type at all) - allowed, and correctly so, since "inner" carries an explicit "<s>" tag rather
 ## than a bare one; nothing about returning the wrapping struct plain is unsound here.
-func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
+func makeScopedBoxPlain(outer scope, x int32, y int32) ScopedBox {
     return ScopedBox(outer, Point{x, y})
 }
 
@@ -445,9 +445,9 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
 ## (typeIsBareRefShaped/structContainsBareScopeField) to treat structs, fixed arrays, and dynamic arrays
 ## uniformly. All three shapes below are now correctly rejected at compile time - not testable here since
 ## a rejected program can't run as a test{} block; verified ad hoc during development instead:
-##   func bad1(s scope) ? int32[3]<> { ... return <own-scoped array> }
-##   func bad2(s scope, n int32) ? int32[] { ... return <own-scoped dynamic array> }
-##   func bad3(s scope) ? Wrapper { ... return Wrapper{<own-scoped array field>} }
+##   func bad1(s scope) int32[3]<> { ... return <own-scoped array> }
+##   func bad2(s scope, n int32) int32[] { ... return <own-scoped dynamic array> }
+##   func bad3(s scope) Wrapper { ... return Wrapper{<own-scoped array field>} }
 
 ## the static scope checker's one positively-provable narrowing rule (scopeCanFlowInto in semantic.c): a
 ## value tagged with a scope RECEIVED as a parameter is always safe to store into a slot tagged with this
@@ -455,7 +455,7 @@ func makeScopedBoxPlain(outer scope, x int32, y int32) ? ScopedBox {
 ## private one (which closes the instant this function itself returns). The reverse, and two different
 ## named scopes of the same function, are both rejected at compile time - not testable here since a
 ## rejected program can't run as a test{} block; verified ad hoc during development instead.
-func narrowNamedIntoOwn(s scope) ? int32 {
+func narrowNamedIntoOwn(s scope) int32 {
     p mut Point<s> = fillBoxViaCtor(s)
     q mut Point<> = p
     return q.x
@@ -470,14 +470,14 @@ func narrowNamedIntoOwn(s scope) ? int32 {
 ## - not just an unverified pass-through. Swapping "a" for a second, unrelated scope parameter here (i.e.
 ## "ScopedBox(otherScope, ...)") is correctly rejected at compile time - not testable here since a rejected
 ## program can't run as a test{} block; verified ad hoc during development instead.
-func fillBoxViaCtorChecked(a scope, x int32, y int32) ? Point<a> {
+func fillBoxViaCtorChecked(a scope, x int32, y int32) Point<a> {
     box mut ScopedBox<> = ScopedBox(a, Point{x, y})
     return box.inner
 }
 
 ## same extension, for an ordinary function call's own return type rather than a constructor field -
 ## "makePoint"'s own "s" is bound to "a" here, so the return type "Point<a>" is a real, verified match.
-func makePointChecked(a scope, x int32, y int32) ? Point<a> {
+func makePointChecked(a scope, x int32, y int32) Point<a> {
     return makePoint(x, y, a)
 }
 
@@ -499,7 +499,7 @@ type Outer struct(s scope, x int32, y int32) {
 
 ## Outer's own "s" is bound to "a" here, so "o.mid.leaf" is really "a"-scoped - a chain through TWO levels
 ## of constructor-declared scope params (Outer's own field tag, then Mid's own internal one), not just one.
-func fieldOfFieldChecked(a scope, x int32, y int32) ? Point<a> {
+func fieldOfFieldChecked(a scope, x int32, y int32) Point<a> {
     o mut Outer<> = Outer(a, x, y)
     return o.mid.leaf
 }
@@ -522,7 +522,7 @@ type PunnedBox struct(s scope, wrapped WrappedPoint<s>) {
     wrapped
 }
 
-func makePunnedBoxChecked(a scope, x int32, y int32) ? Point<a> {
+func makePunnedBoxChecked(a scope, x int32, y int32) Point<a> {
     b mut PunnedBox<> = PunnedBox(a, WrappedPoint(a, Point{x, y}))
     return b.wrapped.inner
 }
@@ -543,7 +543,7 @@ type DualWrapped struct(ls scope, rs scope, left WrappedPoint<ls>, right Wrapped
     left, right
 }
 
-func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) ? Point<a> {
+func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point<a> {
     d mut DualWrapped<> = DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY}))
     return d.left.inner
 }
@@ -561,7 +561,7 @@ type Holder struct(hs scope, box DualWrapped<hs>) {
     box
 }
 
-func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) ? Point<a> {
+func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point<a> {
     h mut Holder<> = Holder(a, DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY})))
     return h.box.left.inner
 }
@@ -584,12 +584,12 @@ type SiblingPair struct(s1 scope, s2 scope, one WrappedPoint<s1>, two LeafWrap<s
     one, two
 }
 
-func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) ? Point<a> {
+func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point<a> {
     p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
     return p.one.inner
 }
 
-func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) ? Point<b> {
+func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point<b> {
     p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
     return p.two.leaf.inner
 }
@@ -602,7 +602,7 @@ func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y
 ## reassignment here, so "return box.inner" is a real, verified match, not a stale leftover. Reassigning
 ## "box" to an UNRELATED scope ("ScopedBox(otherScope, ...)") is correctly rejected at compile time - not
 ## testable here since a rejected program can't run as a test{} block; verified ad hoc during development.
-func reassignSameScopeChecked(a scope, x int32, y int32) ? Point<a> {
+func reassignSameScopeChecked(a scope, x int32, y int32) Point<a> {
     box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
     box = ScopedBox(a, Point{x, y})
     return box.inner
@@ -614,7 +614,7 @@ func reassignSameScopeChecked(a scope, x int32, y int32) ? Point<a> {
 ## keeps that agreed value rather than conservatively giving up the moment ANY branching is involved -
 ## buildIfStmnt's own snapshot/merge (see the report) proves this, not just an in-place update that would
 ## only ever see whichever branch happened to run last during the check.
-func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) ? Point<a> {
+func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) Point<a> {
     box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
     if cond {
         box = ScopedBox(a, Point{x, y})
@@ -635,7 +635,7 @@ type NestedBox struct {
     inner Point<>
 }
 
-func makeNestedBox(s scope, x int32, y int32) ? NestedBox<s> {
+func makeNestedBox(s scope, x int32, y int32) NestedBox<s> {
     return NestedBox{Point{x, y}}
 }
 
@@ -650,7 +650,7 @@ type ChainOuter struct {
     mid ChainMid<>
 }
 
-func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) ? int32 {
+func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) int32 {
     co.mid.leaf = Point{x, y}
     return 0
 }
@@ -660,7 +660,7 @@ func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) ? int32 {
 ## needed to malloc-promote a plain literal into it: the tag's name ("s") only has meaning inside the
 ## callee's own body, not at the caller, so trying to resolve it there via the normal local-lookup path
 ## found nothing and crashed. See cgResolveParamScopeOverride in codegen.c.
-func takesScopedPoint(s scope, p Point<s>) ? int32 {
+func takesScopedPoint(s scope, p Point<s>) int32 {
     return p.x
 }
 
@@ -692,7 +692,7 @@ test "bitwise or, and, xor, shift" {
 
 test "a function passed by name as a value can be called through the receiving parameter" {
     assert(applyToFive(doubleIt) == 10)
-    g mut func(n int32) ? int32 = doubleIt
+    g mut func(n int32) int32 = doubleIt
     assert(g(3) == 6)
 }
 
@@ -807,7 +807,7 @@ test "an int literal widens to float inside an array literal" {
 ## compile-time length ("int32[3]<>") is just a bare pointer, the same free lunch a struct reference
 ## already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
 ## dynamic ("int32[]<>") reference is deliberately not addressed yet - see the report.
-func makeFixedArrayRef(s scope) ? int32[3]<s> {
+func makeFixedArrayRef(s scope) int32[3]<s> {
     return int32[7, 8, 9]
 }
 
@@ -815,7 +815,7 @@ func makeFixedArrayRef(s scope) ? int32[3]<s> {
 ## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order. The literal
 ## itself never restates this - "int32" (the scalar base) is only ever stated once, at the very front;
 ## each nested "[...]" row needs no type of its own - see the report.
-func makeFixed2DRef(s scope) ? int32[2][3]<s> {
+func makeFixed2DRef(s scope) int32[2][3]<s> {
     return int32[[1, 2, 3], [4, 5, 6]]
 }
 
@@ -824,7 +824,7 @@ func makeFixed2DRef(s scope) ? int32[2][3]<s> {
 ## ALLOC): unlike a fixed-size reference, this can never be embedded (no compile-time offset is possible
 ## for a runtime-known length), so it's implicitly reference-shaped even here, without writing "<s>" a
 ## second time on the local itself.
-func makeSizedArrayRef(s scope, n int32) ? int32[]<s> {
+func makeSizedArrayRef(s scope, n int32) int32[]<s> {
     result mut int32[n]<s>
     result[0] = 42
     return result

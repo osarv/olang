@@ -342,6 +342,20 @@ struct token firstTokOfType(struct syntax* s, enum tokenType t) {
     return (struct token){0};
 }
 
+//unlike firstTokOfType, doesn't care which token type it lands on and recurses into nested nodes - for
+//pointing an error message at "wherever this subtree starts", when there's no single token guaranteed to
+//exist as a direct child (e.g. a ret-type node, which - since the '?' marker moved to the error-list, see
+//D8's own history - now wraps nothing but a type-expr, itself possibly several syntax levels deep)
+struct token firstTokAnywhere(struct syntax* s) {
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* p = partAt(s, i);
+        if (p->isToken) return p->tok;
+        struct token found = firstTokAnywhere(p->sntx);
+        if (found.type != TOK_NONE) return found;
+    }
+    return (struct token){0};
+}
+
 struct list allTokOfType(struct syntax* s, enum tokenType t) {
     struct list result = ListInit(sizeof(struct token));
     for (int i = 0; i < s->parts.len; i++) {
@@ -1218,7 +1232,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //transitive case - a bare "<>" field/element nested inside a plain (non-heap-indirect) returned
         //struct or array - is also caught, below.
         if (typeIsBareRefShaped(*t.retType)) {
-            ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), BARE_SCOPE_RETURN_TYPE);
+            ErrMsgSemantic(firstTokAnywhere(retTypeNode), BARE_SCOPE_RETURN_TYPE);
         //the transitive case: a return type that isn't itself bare-ref-shaped (so the check above doesn't
         //fire) but embeds a bare "<>" field/element somewhere inside it - see structContainsBareScopeField.
         //Conservative on purpose: this rejects some sound code too (a function that only ever passes an
@@ -1227,7 +1241,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //here) can tell that case apart from the unsound one at the signature level alone, and signature-
         //level is as far as this check goes, deliberately, matching BARE_SCOPE_RETURN_TYPE's own scope.
         } else if (structContainsBareScopeField(*t.retType)) {
-            ErrMsgSemantic(firstTokOfType(retTypeNode, TOK_QSNTMRK), NESTED_BARE_SCOPE_RETURN_TYPE);
+            ErrMsgSemantic(firstTokAnywhere(retTypeNode), NESTED_BARE_SCOPE_RETURN_TYPE);
         }
     }
     return t;
