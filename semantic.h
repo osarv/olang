@@ -293,5 +293,8 @@ bool StatementCatchCoversType(struct list* matches, struct type errType);
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode);
 struct list* SemanticAllModules(void); //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+struct type* SemanticGenericErrorType(void); //the generic error singleton (§7.6 R15) - codegen uses this
+                                              //only to print a cleaner "unhandled error: error" message,
+                                              //never for ordinal encoding (already generic, see the report)
 
 #endif //SEMANTIC_H

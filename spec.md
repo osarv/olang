@@ -166,7 +166,7 @@ tokenizer under L18.
 
 ```
 IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, own,
-++, --, ), ], return, done, crash
+++, --, ), ], return, done, crash, error
 ```
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
@@ -448,10 +448,11 @@ reference any other type (T17, T19).
 **D8.** `func-sig ::= "(" param-list ")" [ ret-type ] [ "?" error-list ]`, where:
 
 ```
-param-list ::= [ param { "," param } ]
-param      ::= IDEN [ "mut" ] type-expr
-ret-type   ::= type-expr
-error-list ::= alias-chain IDEN { "+" alias-chain IDEN }
+param-list      ::= [ param { "," param } ]
+param           ::= IDEN [ "mut" ] type-expr
+ret-type        ::= type-expr
+error-list      ::= error-list-item { "+" error-list-item }
+error-list-item ::= alias-chain IDEN | "error"
 ```
 
 The return value comes first (`ret-type`, bare - no marker of its own), and the error set (if any)
@@ -462,8 +463,9 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-entry in `error-list` must name a declared error type (§2.6); see §7 for what the combined set
-means.
+`error-list-item` naming an `alias-chain IDEN` must name a declared error type (§2.6); the bare `"error"`
+alternative is **the generic error** — see §7.6 for what it means and R15 for its own grammar note.
+See §7 for what a `error-list`'s combined set means.
 
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. A parameter's type may be `scope` (§2.8) only in this position. A later
@@ -1069,6 +1071,41 @@ block, or a function that declares no errors), as long as nothing actually escap
 `error-list` (R1): if a callee declares a whole error type, the caller must treat every one of that
 type's words as possible, even if the callee happens to only ever actually produce a subset of them
 internally.
+
+### 7.6 The generic error
+
+**R15.** `error-list-item`'s bare `"error"` alternative (D8) is **the generic error**: a member of a
+function or constructor's own error union (R1) that names no declared error type at all. It stands
+for "this may also fail without identifying which specific error occurred," and is written as the
+bare keyword `error` wherever an `error-list-item` is expected — combinable with ordinary named error
+types via `+`, in either order, the same as any two named error types combine (`func f(...)
+? MathError + error { ... }`, or `error` alone, or several named types plus `error`). Declaring it
+more than once in the same `error-list` is redundant in exactly the way R2 already permits for a
+named type, and for the same reason.
+
+**R16.** `error-stmnt`'s grammar (R3) gains a second form: bare `"error" STMNT_END`, with no
+`alias-chain IDEN "." IDEN` operand at all. Valid under exactly the same conditions as R3's own form —
+inside an ordinary function's own body, whose signature's error union includes the generic error
+(R15) — and, like R4, immediately ends the enclosing function, producing the generic error as its
+result in place of a normal `return`ed value.
+
+**R17.** The generic error participates in `try` propagation (§7.4) and `catch` coverage (§7.5)
+exactly as a named error type with exactly one, unnamed word does: R6's ordinal scheme applies to it
+unchanged (it occupies whatever position it was declared at in the `error-list`, R1, left to right,
+with its own "word" always at ordinal 0); R9's "every error type the called function may produce"
+requirement is satisfied for it the same way as for any named type; R13's coverage rule treats it as
+fully handled the moment a `catch` clause matches it at all, since it has only the one word to match.
+
+**R18.** `catch-item` (R11) gains the bare keyword `"error"` as an alternative to `IDEN { "." IDEN }`,
+matching only the generic error (R15) — never any named error type the same call might also produce,
+and never itself followed by a further `.WORD` (it has no addressable word of its own to select). A
+`catch` clause covering both the generic error and one or more named types combines them with `+`,
+exactly as R11 already describes for named types alone (`catch MathError + error { ... }`).
+
+**R19.** The generic error carries no information beyond the fact that a failure occurred: no
+identifying type, no word, no payload. Where the generic error escapes uncaught all the way past
+`main` (P5), the printed diagnostic identifies it as such rather than naming a type and word that do
+not exist.
 
 ## 8. Ownership and Scopes
 

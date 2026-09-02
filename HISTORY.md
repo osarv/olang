@@ -1888,3 +1888,109 @@ from their original form.
   which is the actual property this language's own stated goal ("compile-time-proven memory safety")
   requires - a checker that occasionally says "no" to a safe program is a usability cost; a checker
   that occasionally says "yes" to an unsafe one is a broken promise.
+- **The generic error: bare `error`, reused (not a new keyword), standing for "this failed, no
+  further detail is tracked" - reachable as an error-list item, an `error` statement's own bare
+  operand, and a `catch-item`.** Arrived at through a long design conversation, not requested in this
+  final shape from the start - worth recording the path, since several earlier ideas were seriously
+  considered and rejected for concrete reasons, not just style preference.
+  **What was considered and rejected first, and why:** (1) a single, ordinary, user-declared error
+  type reused across many functions (`error Fail { yes }`, declared once, imported everywhere) - this
+  actually already solves the *boilerplate* problem with zero new language surface, and remains the
+  right answer whenever a real, named, single-word error type is wanted; it just doesn't solve the
+  narrower thing the user asked for next. (2) A genuinely *anonymous inline* error-set declaration
+  (`func f() ? error { err }`, mirroring how struct/vocab bodies can be anonymous type-expr shapes,
+  T2/T3) - rejected on inspection: error type identity is by declared name (T27), so two functions
+  each writing their own anonymous shape would get two distinct, non-interoperable types, unable to
+  propagate to each other under either signature - the opposite of reusable, and actively worse than
+  useless (an anonymous struct/vocab shape is merely inert; an anonymous error type would be a trap).
+  (3) A brand-new keyword (`fail`, seriously drafted at one point, including a naming rationale
+  deliberately avoiding Zig's own `anyerror` - that type has real, whole-program-unique identity
+  under the hood, which is a different, stronger guarantee than "carries zero information," so
+  reusing its name would have set the wrong expectation). (4) A "true wildcard" catch - matching
+  *anything* a called function could produce regardless of what it actually declared - an imprecise
+  early description of the feature that the user's own later clarification ("it is supposed to simply
+  catch and send 'the error union is in the error state'... func () ? key_word would simply say
+  'there can be an error'") correctly narrowed: the marker is a real, declared member of a function's
+  own error union, used and caught with the *same* mechanics as any named type - never an
+  ambient wildcard that bypasses declaring anything at all.
+  **The keyword question resolved itself once the right question was asked: "what if we reuse
+  `error`?"** Reusing the existing keyword bare - already reserved (L7), already meaning "this is
+  about a function's own declared error union" in the two places it already appears - turned out
+  strictly better than introducing a new word: zero grammar-vocabulary growth, no possible collision
+  with a real declared type's name (a keyword can never be a valid IDEN), and it sidesteps a real
+  worry about a bare `fail` statement reading like `done`/`crash` (unconditional process exit,
+  explicitly unrelated to the enclosing error union) when it would in fact be the opposite -
+  still bound to the enclosing function's own declared errors, same as `error TypeName.word` always
+  has been.
+  **Representation: the generic error is one program-wide singleton `struct type`
+  (`genericErrorType`, semantic.c), built as an ordinary `BASETYPE_ERROR` value with exactly one
+  synthetic word, not a new kind of thing the rest of the compiler has to learn about.** This was the
+  key design choice that made the whole feature small: `errorTypeOrdinal`/`errorCode`
+  (codegen.c), `cgPropagateError`'s ordinal remap, `checkTrySuperset`, and `StatementCatchCoversType`
+  are all *already* written generically over "any declared error type in `t.errors`," compared via
+  `TypeIsSame` (owner+name identity) - since every reference to the generic error is the exact same
+  shared struct, `TypeIsSame` already treats every use of it as the same type, program-wide, with
+  zero code changes to any of those functions. The only genuinely new logic is recognizing the bare
+  keyword at the three places a real name would otherwise be resolved: `resolveFuncSig` and
+  `resolveStructCtorInto`'s own separate, independently-duplicated error-list loops (an ordinary
+  function's signature and a constructor's own share the same grammar, D8, but were already resolved
+  by two distinct pieces of code before this - both needed the identical fix), `buildErrorStmnt`'s new
+  bare-form branch, and `buildTryCatchStmnt`'s catch-item loop - each now walks `allSyntaxParts` instead of
+  `allPartsOfType(..., SNTX_NAME)`/`allPartsOfType(..., SNTX_CATCH_ERR)`, since an error-list or
+  catch-list can now genuinely mix ordinary named items with the new `SNTX_GENERIC_ERROR` node, and
+  dispatches per-item on which shape it actually is. A new accessor, `SemanticGenericErrorType()`
+  (semantic.h), exposes the singleton to codegen.c for exactly one purpose: printing a clean
+  `unhandled error: error` instead of the technically-correct-but-redundant `unhandled error:
+  error.error` that falls out of treating it as "a type with one word" everywhere else.
+  **Two real, confirmed bugs found and fixed while building this - both in code this feature never
+  intended to touch, surfaced only by exercising a syntax position nothing had ever put the `error`
+  keyword in before:**
+  (1) **The tokenizer's automatic-statement-termination trigger set (`stmntEndTriggerType`, token.c)
+  didn't include `TOK_ERROR`**, so a bare `error` statement with nothing else on its line never got an
+  implicit `STMNT_END` synthesized after it - the exact same class of bug a prior session found and
+  fixed for a trailing `<>`/`<name>` marker. Fixed by adding `TOK_ERROR` alongside `TOK_RET`/
+  `TOK_DONE`/`TOK_CRASH`, which it now behaves identically to: the trigger only ever fires when the
+  token is immediately followed by a newline, so `error TypeName.word` (more tokens on the same line)
+  is completely unaffected.
+  (2) **A real, previously-latent bug in `ScanTopLevelDecls`'s own name-collection pre-pass, far more
+  serious than the first - found only because a permanent test in shared.olang happened to put the
+  bare marker at the end of a function's own error-list, immediately before that function's opening
+  `{`.** `ScanTopLevelDecls` walks the whole token stream once, tracking `{`/`}` depth to skip
+  function bodies, and - on seeing `TOK_TYPE` *or* `TOK_ERROR` - unconditionally consumed the next
+  token looking for an `IDEN` to register as a declared type name (correct for `TOK_TYPE`, which is
+  never used any other way, and previously correct for `TOK_ERROR` too, since a real `error-decl` was
+  the *only* thing `error` could ever start). Once the generic error could appear immediately before a
+  function's own `{` (`func f() ? RangeError + error { ... }`), that unconditional "consume whatever
+  comes next" swallowed the function's own opening brace - not an `IDEN`, so silently discarded as "no
+  type here" - which meant that `{` never reached the depth-tracking check at the top of the loop at
+  all, permanently desyncing `depth` by one for the rest of the file. Every top-level declaration after
+  that point was misjudged as being one brace level off from where it actually was, cascading into
+  wildly unrelated, seemingly-random parse errors dozens of lines later in completely untouched,
+  previously-passing code (`unexpected token ',' expected ']'` inside an existing array literal,
+  `'own' is only valid inside a function` inside an existing, working test block) - a genuinely
+  confusing failure mode to debug from the symptom alone, only resolved by bisecting the actual
+  change down to the exact insertion point and re-deriving what `ScanTopLevelDecls` does with each
+  token type from scratch. Fixed by only *actually* consuming the peeked token when it turns out to
+  be a real `IDEN`; otherwise the cursor is restored (`TokenGetCursor`/`TokenSetCursor`, the same
+  save/restore pattern every other speculative parse in this codebase already uses) so the main loop
+  sees the token fresh, exactly as it would for any token this narrow scan doesn't care about.
+  **Confirmed extensively, not just the shapes originally discussed:** mixing a named type with the
+  marker in one signature (`? RangeError + error`) and in one `catch` clause (`catch error +
+  RangeError`); the bare statement form, including its own destructor/scope-close codegen path
+  (unchanged, since `cgError` was already fully generic); propagation across a function boundary with
+  differently-ordered signatures on each side (the existing ordinal-remap machinery, untouched);
+  propagation *across a module boundary*, confirmed working with zero special-casing needed (the
+  singleton has no owning module at all, so cross-module visibility checks - which only ever apply to
+  named, module-owned types - never even run against it); usable inside a `test { }` block with full
+  local coverage, the same as any named type (R13); a constructor declaring it
+  (`struct(params) error { ... }`, bare, no `?` - constructors never had one to begin with, see the
+  earlier signature-reorder entry); selectivity - `catch error` proven, by construction rather than by
+  testing a wrong answer, to never also match a named type sharing the same union (a wrapper function
+  that fully handles the named type itself, leaving only the generic error able to escape, confirms
+  `catch error` alone is sufficient to cover what's left - which it provably would not be if it
+  matched the named type too). `make verify` (87 tests, `-c` build/run) passes with no regressions;
+  spec.md gained a new §7.6 (R15-R19) plus updates to D8, L18, and T21's own prose, all written before
+  any implementation code changed, this time genuinely spec-first from the start - the exploratory
+  "flip a check and see what breaks" methodology from the scope-checker entry above was appropriate
+  there because the correct *behavior* was itself in question; here, the design conversation had
+  already settled the behavior precisely enough to write the rules first.

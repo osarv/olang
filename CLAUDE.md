@@ -61,6 +61,20 @@ drift out of sync with the actual code.
   *callee's declared signature* level, not what it happens to handle internally. Usable inside a
   `test { }` block, or a function declaring no errors at all, as long as everything the tried call
   can produce is fully caught right there.
+- **The generic error: bare `error` reused as an error-list item, an `error` statement's own operand,
+  and a `catch-item` - no new keyword.** Stands for "this failed, no further detail is tracked" - a
+  real member of a function or constructor's own error union that names no declared error type at
+  all. `func f(...) ? MathError + error { }` mixes it with named types via `+`, same as any two named
+  types; bare `error` (no `TYPE.word` operand) as a whole statement produces it; `catch error { }`
+  matches only it, never a named type sharing the same union, and never takes a further `.word` (it
+  has no addressable word of its own). Internally it's an ordinary error type with exactly one
+  synthetic word, so ordinal encoding, propagation, and `try`/`catch` coverage need no special-casing
+  at all - the entire feature reuses the existing generic machinery unchanged, needing only a handful
+  of dispatch points in the parser and `resolveFuncSig`/`buildErrorStmnt`/catch-item resolution to
+  recognize the bare keyword. Deliberately narrower than it might look: it is *not* a wildcard that
+  catches whatever a callee happens to produce regardless of its declared signature - a callee must
+  actually declare `error` for a caller's `catch error` to match anything at all, the same as for any
+  named type.
 - **`main`'s signature is fixed:** no parameters, no success type, at least one declared error -
   `func main() ? SomeError [+ ...] { ... }`, no other shape valid. Process exit is exactly two values:
   a normal return is OS exit 0; an error escaping `main` uncaught prints

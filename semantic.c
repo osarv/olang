@@ -11,6 +11,20 @@
 static struct list allModules; //list of struct semaModule*
 static struct semaModule* rootModule;
 
+//the generic error (see the report): a single, program-wide BASETYPE_ERROR singleton with no owning
+//module and exactly one synthetic word, standing in for "an error occurred, no further detail is
+//tracked." Represented as an ordinary error type (with one word) specifically so it needs zero special
+//casing anywhere ordinal encoding (errorTypeOrdinal/errorCode in codegen.c), try/catch coverage
+//(checkTrySuperset/StatementCatchCoversType), or propagation (cgPropagateError) already handle any
+//declared error type generically - TypeIsSame's own owner+name identity check already treats every use
+//of this one shared instance as the same type, since it's always the exact same struct, never per-module
+//like a real declared error type. Initialized once, in SemanticAnalyzeFile, before any module is loaded.
+static struct type genericErrorType;
+
+struct type* SemanticGenericErrorType(void) {
+    return &genericErrorType;
+}
+
 struct list* SemanticAllModules(void) {
     return &allModules;
 }
@@ -1036,10 +1050,14 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
     struct list ctorErrors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(ctorNode, SNTX_ERROR_LIST);
     if (errListNode) {
-        struct list names = allPartsOfType(errListNode, SNTX_NAME);
-        for (int i = 0; i < names.len; i++) {
-            struct syntax* nameNode = *(struct syntax**)ListGetIdx(&names, i);
-            struct type* errType = resolveErrorTypeName(mod, nameNode);
+        //each item is either an ordinary SNTX_NAME or the bare generic-error marker (SNTX_GENERIC_ERROR,
+        //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME), mirroring resolveFuncSig's
+        //own identical fix
+        struct list items = allSyntaxParts(errListNode);
+        for (int i = 0; i < items.len; i++) {
+            struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
+            struct type* errType = itemNode->type == SNTX_GENERIC_ERROR
+                ? &genericErrorType : resolveErrorTypeName(mod, itemNode);
             if (!errType) continue;
             ListAdd(&ctorErrors, &errType);
         }
@@ -1229,10 +1247,14 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     t.errors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(sigNode, SNTX_ERROR_LIST);
     if (errListNode) {
-        struct list names = allPartsOfType(errListNode, SNTX_NAME);
-        for (int i = 0; i < names.len; i++) {
-            struct syntax* nameNode = *(struct syntax**)ListGetIdx(&names, i);
-            struct type* errType = resolveErrorTypeName(mod, nameNode);
+        //each item is either an ordinary SNTX_NAME (resolveErrorTypeName) or the bare generic-error
+        //marker (SNTX_GENERIC_ERROR, see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME),
+        //since this list can now genuinely mix both node shapes
+        struct list items = allSyntaxParts(errListNode);
+        for (int i = 0; i < items.len; i++) {
+            struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
+            struct type* errType = itemNode->type == SNTX_GENERIC_ERROR
+                ? &genericErrorType : resolveErrorTypeName(mod, itemNode);
             if (!errType) continue;
             ListAdd(&t.errors, &errType);
         }
@@ -3124,6 +3146,21 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
 
+    //bare "error" - the generic error (see the report on §7.6 R16), no TYPE.word operand at all;
+    //parseStmntError's own bare-form grammar guarantees idens is empty exactly when this is the case
+    if (idens.len == 0) {
+        bool declared = false;
+        for (int i = 0; i < ctx->func->type.errors.len; i++) {
+            if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == &genericErrorType) {
+                declared = true;
+                break;
+            }
+        }
+        if (!declared) { ErrMsgSemantic(tok, ERROR_NOT_DECLARED_IN_SIG); return stmt; }
+        stmt.op = OperandErrorLiteral(genericErrorType, tok);
+        return stmt;
+    }
+
     //"alias...TYPE.word" - originating a foreign module's own error type directly, not just declaring/
     //catching one already reachable through a signature - see the report. Always ends in exactly
     //"TYPE.word" (parseStmntError's own grammar guarantees this), so every identifier before the last two
@@ -3194,9 +3231,29 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
 
     struct syntax* errListNode = firstPartOfType(catchNode, SNTX_CATCH_ERR_LIST);
-    struct list matchNodes = allPartsOfType(errListNode, SNTX_CATCH_ERR);
+    //each item is either an ordinary SNTX_CATCH_ERR or the bare generic-error marker (SNTX_GENERIC_ERROR,
+    //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_CATCH_ERR), since this list can now
+    //genuinely mix both node shapes
+    struct list matchNodes = allSyntaxParts(errListNode);
     for (int i = 0; i < matchNodes.len; i++) {
         struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
+
+        //the generic error - matches only itself, never a further ".word" (it has no addressable word of
+        //its own - parseCatchErr's own grammar guarantees this shape never carries one)
+        if (m->type == SNTX_GENERIC_ERROR) {
+            struct token genericTok = firstTokOfType(m, TOK_ERROR);
+            bool produces = false;
+            for (int j = 0; j < callOp->readVar->type.errors.len; j++) {
+                struct type* e = *(struct type**)ListGetIdx(&callOp->readVar->type.errors, j);
+                if (e == &genericErrorType) { produces = true; break; }
+            }
+            if (!produces) { ErrMsgSemantic(genericTok, CATCH_ERROR_NOT_PRODUCED_BY_CALL); continue; }
+            struct catchMatch cm = (struct catchMatch){0};
+            cm.errType = genericErrorType;
+            ListAdd(&stmt.catchMatches, &cm);
+            continue;
+        }
+
         struct list idens = allTokOfType(m, TOK_IDEN);
 
         //an alias chain of any length (possibly zero), then either a whole TYPE or a TYPE.word - see
@@ -3441,6 +3498,15 @@ void semaCheckBodies(struct semaModule* mod) {
 // ---- entry point ----
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
+    genericErrorType = (struct type){0};
+    genericErrorType.bType = BASETYPE_ERROR;
+    genericErrorType.name = StrFromCStr("error");
+    genericErrorType.words = ListInit(sizeof(struct token));
+    struct token genericErrorWord = (struct token){0};
+    genericErrorWord.type = TOK_IDEN;
+    genericErrorWord.str = StrFromCStr("error");
+    ListAdd(&genericErrorType.words, &genericErrorWord);
+
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));
     checkDuplicateImportReachability();

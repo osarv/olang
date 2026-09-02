@@ -1950,14 +1950,21 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     //pick the message matching this specific (declared error type, word) via a chain of selects, same
     //shape as cgPropagateError's ordinal remap - main's declared error set is small and fully known here
     char* msg = cgGlobalStringConst(ctx, "unhandled error\n"); //defensive fallback, never actually selected
+    struct type* genericErr = SemanticGenericErrorType();
     for (int i = 0; i < mainFunc->type.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&mainFunc->type.errors, i);
         int typeOrdinal = i +1;
         for (int w = 0; w < e->words.len; w++) {
-            struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
             char text[300];
-            snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
-                e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
+            //the generic error (R19) carries no real type/word to name - print it plainly instead of the
+            //otherwise-generic "TypeName.word" shape, which would read as the redundant "error.error"
+            if (e == genericErr) {
+                snprintf(text, sizeof(text), "unhandled error: error\n");
+            } else {
+                struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
+                snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
+                    e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
+            }
             char* candidate = cgGlobalStringConst(ctx, text);
             long long exact = ((long long)typeOrdinal << 16) | w;
             char* cmp = cgNewTmp(ctx);

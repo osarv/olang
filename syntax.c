@@ -390,18 +390,31 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-//appends "(+ IDEN)*" onto s, whose first name has already been parsed and added by the caller - shared by
-//both a bare (constructor, parseErrorList) and '?'-marked (ordinary function, parseFuncErrorList) error
-//list, which differ only in what, if anything, precedes the first name
+//one "error-list-item" (see the report on "the generic error"): either an ordinary declared error
+//type's name, or the bare "error" keyword standing in for it, matching literally (never a valid IDEN,
+//L7) so it can never be confused with a real type name in this position
+struct syntax* parseErrorListItem(SyntaxCtx sc) {
+    struct token kw = acceptTok(sc, TOK_ERROR);
+    if (kw.type != TOK_NONE) {
+        struct syntax* s = newNode(SNTX_GENERIC_ERROR);
+        addTok(s, kw);
+        return s;
+    }
+    return parseName(sc);
+}
+
+//appends "(+ error-list-item)*" onto s, whose first item has already been parsed and added by the
+//caller - shared by both a bare (constructor, parseErrorList) and '?'-marked (ordinary function,
+//parseFuncErrorList) error list, which differ only in what, if anything, precedes the first item
 void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
     while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token plus = TokenFeed(sc->tc);
         if (plus.type != TOK_ADD) { TokenSetCursor(sc->tc, before); break; }
-        struct syntax* name = parseName(sc);
-        if (!name) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* item = parseErrorListItem(sc);
+        if (!item) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, plus);
-        addSntx(s, name);
+        addSntx(s, item);
     }
 }
 
@@ -409,7 +422,7 @@ void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
 //since a constructor has no ret-type of its own to disambiguate against (see parseFuncErrorList for an
 //ordinary function's '?'-marked counterpart)
 struct syntax* parseErrorList(SyntaxCtx sc) {
-    struct syntax* first = parseName(sc);
+    struct syntax* first = parseErrorListItem(sc);
     if (!first) return NULL;
     struct syntax* s = newNode(SNTX_ERROR_LIST);
     addSntx(s, first);
@@ -424,7 +437,7 @@ struct syntax* parseFuncErrorList(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token q = acceptTok(sc, TOK_QSNTMRK);
     if (q.type == TOK_NONE) return NULL;
-    struct syntax* first = parseName(sc);
+    struct syntax* first = parseErrorListItem(sc);
     if (!first) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_ERROR_LIST);
     addTok(s, q);
@@ -930,13 +943,20 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
 //"error TYPE.word" (same-module) or "error alias...TYPE.word" (cross-module, through an alias chain of
 //any length, originating a foreign module's own error type directly - see the report) - always ends in
 //exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
-//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity.
+//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity. A bare "error", with no
+//operand at all, is the generic error (see the report) - a separate, simpler shape entirely, so it's
+//tried first, before committing to the ordinary TYPE.word grammar below.
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type == TOK_NONE) return NULL;
     struct token first = acceptTok(sc, TOK_IDEN);
-    if (first.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (first.type == TOK_NONE) {
+        struct syntax* bare = newNode(SNTX_STMNT_ERROR);
+        addTok(bare, kw);
+        if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+        return bare;
+    }
     struct token dot1 = acceptTok(sc, TOK_DOT);
     if (dot1.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token second = acceptTok(sc, TOK_IDEN);
@@ -965,6 +985,15 @@ struct syntax* parseStmntError(SyntaxCtx sc) {
 //the report), not here - this grammar rule just commits to any dotted chain unconditionally.
 struct syntax* parseCatchErr(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
+    //the generic error (see the report) - bare "error", never followed by ".word" (it has no addressable
+    //word of its own), so this commits without looking for a trailing dot at all, unlike the ordinary
+    //IDEN-chain shape below
+    struct token generic = acceptTok(sc, TOK_ERROR);
+    if (generic.type != TOK_NONE) {
+        struct syntax* s = newNode(SNTX_GENERIC_ERROR);
+        addTok(s, generic);
+        return s;
+    }
     struct token first = acceptTok(sc, TOK_IDEN);
     if (first.type == TOK_NONE) return NULL;
     struct syntax* s = newNode(SNTX_CATCH_ERR);
@@ -1523,11 +1552,32 @@ struct scanResult ScanTopLevelDecls(TokenCtx tc) {
         if (t.type == TOK_CURLY_O) { depth++; continue; }
         if (t.type == TOK_CURLY_C) { depth--; continue; }
         if (depth != 0) continue;
-        if (t.type == TOK_TYPE || t.type == TOK_ERROR) {
+        if (t.type == TOK_TYPE) {
             struct token name = TokenFeed(tc);
             if (name.type == TOK_IDEN) {
                 struct str n = Str(name.str.ptr, name.str.len);
                 ListAdd(&r.typeNames, &n);
+            }
+        } else if (t.type == TOK_ERROR) {
+            //a real error-decl ("error IDEN { ... }") registers a type name; the bare generic error
+            //(see the report) is never followed by an IDEN at all (it's always immediately followed by
+            //"{", "+", or a statement end, in an error-list/error-stmnt/catch-item) - a real, confirmed
+            //bug found here: naively always consuming "whatever comes after error" the way TOK_TYPE's
+            //own branch does swallowed a function's own opening "{" whenever its error-list ended in the
+            //bare marker ("? RangeError + error {"), silently discarding it as "not an IDEN, never mind" -
+            //but that consumed token then never reached the depth-tracking check above, permanently
+            //desyncing "depth" for the rest of the scan (every following declaration misjudged as still
+            //being inside a function body, or not, one level off). Fixed by only actually consuming the
+            //peeked token when it turns out to be a real name; otherwise the cursor is restored so the
+            //main loop sees it fresh, exactly like every other token that isn't part of this scan's own
+            //narrow pattern.
+            int before = TokenGetCursor(tc);
+            struct token name = TokenFeed(tc);
+            if (name.type == TOK_IDEN) {
+                struct str n = Str(name.str.ptr, name.str.len);
+                ListAdd(&r.typeNames, &n);
+            } else {
+                TokenSetCursor(tc, before);
             }
         } else if (t.type == TOK_IMPORT) {
             //"import ALIAS "path"" (explicit) or "import "path"" (alias derived from the file's own name -

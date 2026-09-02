@@ -383,7 +383,7 @@ bool stmntEndTriggerType(enum tokenType type) {
         case TOK_STR_LIT: case TOK_BOOL_LIT: case TOK_OWN:
         case TOK_INC: case TOK_DEC:
         case TOK_PAREN_C: case TOK_SQUARE_C:
-        case TOK_RET: case TOK_DONE: case TOK_CRASH:
+        case TOK_RET: case TOK_DONE: case TOK_CRASH: case TOK_ERROR:
             return true;
         default: return false;
     }
