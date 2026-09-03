@@ -805,6 +805,43 @@ func initializerWithNoCompileTimeLength(s scope, n int32) int32 {
     return len(z) + z[0]
 }
 
+## exercises the scope runtime under load: every allocation is rounded up to 8 bytes so the next one
+## starts aligned (a raw byte bump left a 12-byte "int32[3]" followed by an i64- or pointer-bearing
+## allocation misaligned - UB at the LLVM level even where the hardware tolerates it); destructor list
+## nodes are bump-allocated from the scope's own arena rather than each getting its own malloc/free; and
+## closing splices the chunk list onto the global pool in O(1) via a recorded tail rather than walking to
+## find it. 200 scope closes x 50 iterations, mixing all three allocation shapes.
+type Wide struct {
+    a int64,
+    b int64
+}
+
+func mixedAlignment(n int32) int32 {
+    total mut int64 = 0
+    for i mut int32 = 0, i < n, i++ {
+        odd mut int32[]& = int32[1, 2, 3]
+        w mut Wide& = Wide{7, 8}
+        h mut Handle& = Handle(i)
+        total = total + w.a + int64(odd[0]) + int64(h.id)
+    }
+    return int32(total)
+}
+
+func manyChunks(rounds int32, per int32) int32 {
+    acc mut int32 = 0
+    for r mut int32 = 0, r < rounds, r++ {
+        acc = acc + mixedAlignment(per)
+    }
+    return acc
+}
+
+test "scope runtime: mixed-alignment allocations interleaved across many scope closes" {
+    resourcesClosed = 0
+    n int32 = manyChunks(200, 50)
+    assert(n == 200 * (50 * 8 + 49 * 50 / 2))
+    assert(resourcesClosed == 200 * 50)
+}
+
 ## "&" on a parameter names the CALLER's own instance, and "mut" means what it means everywhere else
 ## (this can be assigned to). The two are independent axes: "&" says whose instance it is, "mut" says
 ## whether it can be written. So mutation visibility is readable from the signature alone, with no

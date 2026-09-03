@@ -2537,3 +2537,41 @@ from their original form.
   **Deliberately not done:** an explicit address-of operator at the call site. The parameter type already
   carries the information, so `&v` would be a second place to state the same fact, and the user was
   right to be reluctant to add syntax for it. `make verify`: 77/13/12.
+
+- **Scope runtime: O(1) close, arena-allocated destructor nodes, and an alignment bug found doing it.**
+  The two items identified while working out where the frontend should optimize and where LLVM already
+  does. The dividing line established first, empirically: LLVM handles anything that is local dataflow in
+  one function - it eliminates the stack temporary and writes struct fields straight into the arena slot
+  at -O3, and it deletes the whole scope struct for a function that never allocates (`valueStruct`
+  reduces to `ret i32 1`). So building directly into the arena in our own codegen would have been work for
+  nothing. What LLVM cannot touch is anything that *escapes*, which is exactly these two.
+  **1. `__olang_scope_close` is now genuinely O(1).** It used to walk the chunk list head-to-tail on every
+  close purely to find the node to splice onto the global pool - the codegen.c comment already conceded
+  this ("in one O(1) operation (after an O(chunks-in-this-scope) walk to find the tail)"). `%olang.scope`
+  gained a third field holding the tail, appended rather than inserted so the dtor-list head stays at
+  index 1 and no existing GEP had to be renumbered. Chunks are prepended, so the tail is whichever chunk
+  the scope took first: set once in `scope_alloc` when the list goes from empty to non-empty, never
+  touched again.
+  **2. Destructor list nodes are bump-allocated from the scope's own arena**, replacing a `malloc(24)` per
+  registration and a matching `free` per node at close with a pointer bump and nothing at all. Safe
+  because the arena strictly outlives every node it holds - the dtor walk runs before any chunk is
+  reclaimed - and the chunks go back to the pool wholesale. LLVM could never do this itself: the node
+  escapes into a list reachable from the scope, so no local analysis can prove anything about it.
+  **3. And the bug this turned up: the arena never aligned anything.** `%newused = add i64 %curused,
+  %size` is a raw byte sum, so a 12-byte `int32[3]` left the *next* allocation starting at offset 12 -
+  fine for an i32, misaligned for any i64 or pointer field, which is UB at the LLVM level even on x86-64
+  where the hardware tolerates it. Latent before, since it needed a specific size sequence; near-certain
+  once every destructor registration started bump-allocating a 24-byte three-pointer node. Fixed by
+  rounding every allocation up to 8 bytes at the top of `scope_alloc`. The chunk's own data area was
+  already fine (malloc is at least 16-aligned, the header is exactly 24 bytes).
+  **Verified under load, not just by the existing suite**: a permanent test interleaves all three
+  allocation shapes (a 12-byte array, a 16-byte two-i64 struct, and a destructor-bearing instance) across
+  200 scope closes of 50 iterations each, checking both the arithmetic and that all 10,000 destructors
+  ran. `make verify`: 78/13/12.
+  **Still open, deliberately:** escape analysis so a non-escaping bare-`&` local lives in the frame with
+  no arena call at all. LLVM cannot infer it (the pointer is handed to our runtime, so it escapes as far
+  as any analysis can see), and the checker already proves such values cannot escape - `return p`,
+  returning it as `&s`, embedding it in a returned struct, and storing it into a named scope are all
+  rejected. The catch is bounding it: the arena spills to heap chunks while the stack does not, and an
+  `alloca` in a loop is not reclaimed per iteration, so a million-iteration loop that works today would
+  overflow the stack. Wants a size-and-loop heuristic, not a blanket rule.

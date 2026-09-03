@@ -1688,7 +1688,13 @@ void emitScopeRuntime(FILE* out) {
     fputs(
         "%olang.chunk = type { ptr, i64, i64 }\n"  //next, used, cap - data follows immediately after
         "%olang.dtornode = type { ptr, ptr, ptr }\n" //next, instance, dtorFn - see __olang_scope_register_dtor
-        "%olang.scope = type { ptr, ptr }\n"       //head chunk, head dtor-list node (both null if unused)
+        "%olang.scope = type { ptr, ptr, ptr }\n"  //head chunk, head dtor-list node, TAIL chunk (all null
+                                                    //if unused). The tail is tracked so closing can splice
+                                                    //the whole chunk list onto the pool in O(1) instead of
+                                                    //walking to find it - chunks are PREPENDED, so the tail
+                                                    //is whichever chunk this scope allocated first, set
+                                                    //once when the list goes from empty to non-empty and
+                                                    //never touched again.
         "@__olang_chunk_pool = global ptr null\n"
         "\n"
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
@@ -1724,8 +1730,16 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n"
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
         //doesn't have room
-        "define ptr @__olang_scope_alloc(ptr %scope, i64 %size) {\n"
+        "define ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
         "entry:\n"
+        //every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
+        //raw byte sum, so without this a 12-byte "int32[3]" left the following allocation at offset 12 -
+        //fine for an i32 but misaligned for any i64 or pointer field, which is UB at the LLVM level even
+        //where the hardware tolerates it. Latent before; the dtor nodes below (24 bytes, three pointers,
+        //one per registered instance) made it near-certain to be hit. The chunk's own data area is
+        //already 8-aligned: malloc is at least 16-aligned and the header is exactly 24 bytes.
+        "  %sizeup = add i64 %rawsize, 7\n"
+        "  %size = and i64 %sizeup, -8\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %headnull = icmp eq ptr %head, null\n"
@@ -1744,6 +1758,13 @@ void emitScopeRuntime(FILE* out) {
         "  %newnextptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 0\n"
         "  store ptr %oldhead, ptr %newnextptr\n"
         "  store ptr %newchunk, ptr %headptr\n"
+        //first chunk in this scope: it is the tail, and stays the tail for the scope's whole life, since
+        //every later chunk is prepended ahead of it
+        "  %wasempty = icmp eq ptr %oldhead, null\n"
+        "  br i1 %wasempty, label %settail, label %alloc\n"
+        "settail:\n"
+        "  %tailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
+        "  store ptr %newchunk, ptr %tailptr\n"
         "  br label %alloc\n"
         "alloc:\n"
         "  %curhead = load ptr, ptr %headptr\n"
@@ -1756,13 +1777,16 @@ void emitScopeRuntime(FILE* out) {
         "  ret ptr %result\n"
         "}\n\n", out);
     fputs(
-        //prepends one { instance, dtorFn } node onto scope's own dtor list - walked (and freed) in
+        //prepends one { instance, dtorFn } node onto scope's own dtor list - walked in
         //@__olang_scope_close below, in the same LIFO order registration happens in, right before that
-        //scope's chunks are reclaimed. Each node is its own small @malloc (not carved out of the scope's
-        //own bump arena) purely to keep this independent of the arena's own alloc/close bookkeeping.
+        //scope's chunks are reclaimed. The node is bump-allocated out of the scope's OWN arena rather than
+        //given its own @malloc: the arena strictly outlives every node it holds (the dtor walk runs before
+        //any chunk is reclaimed) and is returned to the pool wholesale, so this turns a malloc/free pair
+        //per registered instance into a pointer bump and nothing at all. LLVM cannot make this change
+        //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
         "define void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
-        "  %node = call ptr @malloc(i64 24)\n"
+        "  %node = call ptr @__olang_scope_alloc(ptr %scope, i64 24)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %oldhead = load ptr, ptr %dheadptr\n"
         "  %nextptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 0\n"
@@ -1794,25 +1818,27 @@ void emitScopeRuntime(FILE* out) {
         "  call void %fn(ptr %inst)\n"
         "  %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0\n"
         "  %dnext = load ptr, ptr %dnextptr\n"
-        "  call void @free(ptr %dcur)\n"
+        //no free: the node lives in this scope's own arena and goes back to the pool with its chunk below
+
         "  %datend = icmp eq ptr %dnext, null\n"
         "  br i1 %datend, label %chunks, label %dwalk\n"
         "chunks:\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %empty = icmp eq ptr %head, null\n"
-        "  br i1 %empty, label %done, label %walk\n"
-        "walk:\n"
-        "  %cur = phi ptr [ %head, %chunks ], [ %next, %walk ]\n"
-        "  %tailnextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
-        "  %next = load ptr, ptr %tailnextptr\n"
-        "  %atend = icmp eq ptr %next, null\n"
-        "  br i1 %atend, label %linkpool, label %walk\n"
+        "  br i1 %empty, label %done, label %linkpool\n"
+        //genuinely O(1) now: the tail was recorded when the first chunk was taken (see scope_alloc), so
+        //there is nothing to walk - splice the whole list onto the pool by pointing the known tail at the
+        //current pool head. Previously this walked head-to-tail on every close purely to find this node.
         "linkpool:\n"
+        "  %ctailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
+        "  %tail = load ptr, ptr %ctailptr\n"
+        "  %tailnextptr = getelementptr %olang.chunk, ptr %tail, i32 0, i32 0\n"
         "  %poolhead = load ptr, ptr @__olang_chunk_pool\n"
         "  store ptr %poolhead, ptr %tailnextptr\n"
         "  store ptr %head, ptr @__olang_chunk_pool\n"
         "  store ptr null, ptr %headptr\n"
+        "  store ptr null, ptr %ctailptr\n"
         "  br label %done\n"
         "done:\n"
         "  ret void\n"

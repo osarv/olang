@@ -128,7 +128,10 @@ drift out of sync with the actual code.
   explicit mechanism.
 - **Ownership scopes: `scope`, `own`, `&`/`&name`, and the static scope-containment checker.**
   Every `&`-heap-indirect value belongs to a nested, FILO-closing `scope` (a chunked bump allocator;
-  closing one is O(1), plus O(destructor-bearing instances it holds) to run their destructors).
+  closing one is genuinely O(1) - the scope records its tail chunk so the whole list splices onto a
+  global free-list with no walk - plus O(destructor-bearing instances it holds) to run their
+  destructors). Every allocation is rounded up to 8 bytes so the next one starts aligned, and destructor
+  list nodes are bump-allocated from the scope's own arena rather than individually malloc'd/freed.
   `scope` is a restricted builtin type usable only as a function parameter's declared type. `own`
   evaluates to the enclosing function/test's own private scope; a bare `&` marker means "my own
   scope" (implicitly `own`), a named `&name` marker tags a value to an explicitly-passed `scope`
