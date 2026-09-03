@@ -60,6 +60,7 @@
 #define BARE_SCOPE_CTOR_ARRAY_FIELD "a run-time-sized constructor field must be tagged to a scope parameter of this same constructor (e.g. 'data byte[cap]&s', with 's scope' among the parameters) - an untagged one would be allocated into the constructor's own scope, which closes before the constructed value ever reaches its caller, exactly as a bare '&' return type would"
 #define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
 #define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
+#define TYPE_MATCH_NOT_EXHAUSTIVE "no 'case' of this 'match' covers the type this generic was instantiated with, and there is no 'nomatch' clause - unlike a match over a value, a match over a type must cover every instantiation, or the generic would silently do nothing for some of them"
 #define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----

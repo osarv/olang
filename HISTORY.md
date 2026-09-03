@@ -2639,3 +2639,34 @@ from their original form.
   **Still to come:** generic struct types are declared and validated but their type arguments are not yet
   substituted at a use site (`Pair<int32, int64>` resolves, ignoring the arguments), and `match <T>`
   (§12.5) is not implemented. `make verify`: 84/13/12.
+
+- **Generics complete: generic struct types and `match <T>`.** The remaining two pieces of §12.
+  **Generic struct type instantiation.** `Pair<int32, int64>` now substitutes. G10 needed no code at
+  all: struct identity is owner+name (TypeIsSame), and an instantiation's name carries its own arguments,
+  so two instantiations are the same type exactly when their arguments are. Codegen mangles that name
+  like any other, so each copy gets its own LLVM aggregate for free. A generic type's constructor is
+  monomorphized alongside the type - otherwise `Vec<int32>(10)` would call a constructor whose parameters
+  and fields still mentioned `T`.
+  **The literal form needed its own parser branch, and it is the one genuinely ambiguous position for
+  type arguments** - the C++ problem, exactly: inside a call, `f(Pair<int32, int64>{1, 2})` could read
+  its commas as argument separators. It commits only once the whole `<...>` list has parsed *and* a `{`
+  or `[` follows, so `a < b` stays a comparison. A generic *function* call needs no such branch at all,
+  since its arguments are inferred and never written - a second, unplanned payoff from choosing inference
+  over explicit type arguments for functions.
+  **A prerequisite discovered while implementing `match <T>`:** a type variable written *inside* a
+  generic's body (`x mut <T> = a`, or the match operand itself) has to resolve to the bound type, because
+  the body syntax still says `<T>` - it is the same syntax checked again per instantiation. Solved with a
+  `currentBindings` static consulted by the type-var resolution path, saved and restored around each
+  instantiation's body check so nesting works. Needed for far more than `match`.
+  **`match <T>` (G13-G15)** is resolved at instantiation: only the selected arm's block is built, spliced
+  in as an `if true { ... }` (cheaper than teaching codegen a new statement kind, and LLVM folds it).
+  G14 then needed no separate mechanism - the operand's variable already resolves to the bound type, so a
+  value declared with it *is* a value of the concrete type throughout the arm; and because unselected
+  arms are never built, each arm can be valid for only its own type. Confirmed by a test where `v + 1`
+  compiles only in the `int32` arm and `v.x` only in the `Point` arm. G15's exhaustiveness check reports
+  at the instantiation that produced the unmatched type.
+  **What did not need changing is the notable part.** Nothing downstream of instantiation is
+  generic-aware: destructor registration, the scope-containment checker, structural `==`, promotion,
+  boundary values. That is G16 working as specified - once substituted there is nothing generic left, so
+  every existing rule applies to the copy exactly as if it had been written by hand. `make verify`:
+  89/13/12.

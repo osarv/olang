@@ -979,11 +979,15 @@ struct syntax* parseStmntDo(SyntaxCtx sc) {
     return s;
 }
 
-struct syntax* parseStmntCase(SyntaxCtx sc) {
+//"case <expr|type-expr> block". A type match (G13) writes types where a value match writes values, so
+//when the enclosing match's operand was a type variable the case items are parsed as type expressions -
+//the flag is passed down rather than guessed here, since "case int32" is a perfectly good expression
+//shape too (a bare name) and only the operand can settle which reading is meant.
+struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_CASE);
     if (kw.type == TOK_NONE) return NULL;
-    struct syntax* val = parseExpr(sc);
+    struct syntax* val = typeMatch ? parseTypeExpr(sc) : parseExpr(sc);
     if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* block = parseBlock(sc);
     if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
@@ -1010,7 +1014,10 @@ struct syntax* parseStmntMatch(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_MATCH);
     if (kw.type == TOK_NONE) return NULL;
-    struct syntax* val = parseExpr(sc);
+    //"match <T>" (G13) - the operand is a type variable, not a value. Unambiguous: "<" never opens an
+    //expression, so seeing one here settles that this is a type match and that the cases are types too.
+    struct syntax* typeOperand = parseTypeVar(sc);
+    struct syntax* val = typeOperand ? typeOperand : parseExpr(sc);
     if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token open = acceptTok(sc, TOK_CURLY_O);
     if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
@@ -1019,7 +1026,7 @@ struct syntax* parseStmntMatch(SyntaxCtx sc) {
     addSntx(s, val);
     addTok(s, open);
     while (true) {
-        struct syntax* c = parseStmntCase(sc);
+        struct syntax* c = parseStmntCaseKind(sc, typeOperand != NULL);
         if (!c) break;
         addSntx(s, c);
     }

@@ -931,7 +931,13 @@ static struct list instantiations;
 //monomorphized copies of generic STRUCT types (G10/G16), kept as struct type* so their addresses are
 //stable: mod->types stores struct type BY VALUE, so adding to it during resolution would realloc and
 //invalidate every pointer already handed out, exactly as for mod->vars.
-static struct list typeInstantiations;   //struct instantiation
+static struct list typeInstantiations;
+//the bindings of the instantiation whose body is being checked right now, or NULL outside one. A type
+//variable written INSIDE a generic's body ("x mut <T> = a", or a "match <T>" operand) has to resolve to
+//the concrete type that instantiation supplied - the body syntax still says "<T>", since it is the same
+//syntax being checked again per instantiation (G16). Threaded as a static rather than through every
+//type-resolution signature, and cleared on the way out so nothing outside an instantiation sees it.
+static struct list* currentBindings;   //struct instantiation
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
 
 bool bindingsMatch(struct list* a, struct list* b) {
@@ -1058,7 +1064,13 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     struct syntax* varNode = firstPartOfType(refNode, SNTX_TYPE_VAR);
     if (varNode) {
         struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
-        return TypeVar(strFromTok(nameTok), nameTok);
+        struct str vname = strFromTok(nameTok);
+        //inside an instantiation, a type variable IS its bound type - see currentBindings
+        if (currentBindings) {
+            struct type* bound = bindingGet(currentBindings, vname);
+            if (bound) return *bound;
+        }
+        return TypeVar(vname, nameTok);
     }
     (void)scopeParams; //no longer used to resolve a scope tag here - see applyRefMarker
     struct syntax* nameNode = firstPartOfType(refNode, SNTX_NAME);
@@ -3760,7 +3772,73 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct t
     return stmt;
 }
 
+//the selected arm is spliced in as an "if true { ... }" with no else: there is nothing to branch on at
+//run time (the selection already happened), and an always-true condition costs nothing once LLVM folds
+//it. Cheaper than adding a STATEMENT_BLOCK kind that codegen would have to learn.
+struct operand* typeMatchAlwaysTrue(struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_BOOL));
+    op->isLiteral = true;
+    op->intLiteralVal = 1;
+    return op;
+}
+
+//an "if true { }" with an empty body - the shape a type match collapses to when nothing was selected
+//and a diagnostic was already reported, so the rest of the body still gets checked
+struct statement buildEmptyIfStmnt(struct checkCtx* ctx, struct token tok) {
+    (void)ctx;
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_IF;
+    stmt.op = typeMatchAlwaysTrue(tok);
+    stmt.block = ListInit(sizeof(struct statement));
+    return stmt;
+}
+
+//G13-G15: "match <T> { case int32 { ... } ... }". Resolved when the enclosing generic is instantiated,
+//not at run time - there is no comparison and no branch in the generated code, only the selected arm's
+//statements. G14 needs no separate mechanism: the operand's type variable already resolves to the bound
+//type inside an instantiation (see currentBindings), so a value declared with that variable's type IS a
+//value of the concrete type throughout the selected block. Unselected arms are never built at all, which
+//is what lets each of them be valid for only its own type.
+//Unlike a value match (S13) this is exhaustiveness-checked (G15): falling through silently would compile
+//a generic that does nothing for some of its instantiations.
+struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode) {
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_MATCH;
+    struct token opTok = firstTokAnywhere(varNode);
+    //the operand is a bare SNTX_TYPE_VAR, not wrapped in a SNTX_TYPE_EXPR, so it is resolved directly
+    //against the instantiation's own bindings rather than through the general type-expression path
+    struct str vname = strFromTok(firstTokOfType(varNode, TOK_IDEN));
+    struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
+    if (!bound) { ErrMsgSemantic(opTok, UNKNOWN_TYPE_VAR); return buildEmptyIfStmnt(ctx, opTok); }
+    struct type operandT = *bound;
+
+    struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
+    for (int i = 0; i < cases.len; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        struct syntax* caseTypeNode = firstPartOfType(c, SNTX_TYPE_EXPR);
+        if (!caseTypeNode) continue;
+        struct type caseT = resolveTypeExpr(ctx->mod, caseTypeNode, ctx->func ? &ctx->func->type.vars : NULL);
+        if (!TypeIsSame(operandT, caseT)) continue;
+        //selected: this arm's block IS the statement, spliced in place of the match itself
+        stmt.sType = STATEMENT_IF;
+        stmt.op = typeMatchAlwaysTrue(opTok);
+        stmt.block = buildBlock(ctx, firstPartOfType(c, SNTX_BLOCK));
+        return stmt;
+    }
+    struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
+    if (nomatchNode) {
+        stmt.sType = STATEMENT_IF;
+        stmt.op = typeMatchAlwaysTrue(opTok);
+        stmt.block = buildBlock(ctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
+        return stmt;
+    }
+    ErrMsgSemantic(opTok, TYPE_MATCH_NOT_EXHAUSTIVE);
+    return buildEmptyIfStmnt(ctx, opTok);
+}
+
 struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
+    if (varNode) return buildTypeMatchStmnt(ctx, s, varNode);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
@@ -4037,7 +4115,10 @@ void checkInstantiationBody(struct instantiation* inst) {
     ctx.scope = &fnScope;
     ctx.func = spec;
     ctx.hasOwnScope = true;
+    struct list* savedBindings = currentBindings;
+    currentBindings = &inst->bindings;
     spec->codeBlock = buildBlock(&ctx, spec->bodySyntax);
+    currentBindings = savedBindings; //restored, not nulled: instantiations can nest
 }
 
 //drains the instantiation queue to a fixed point. Checking one copy's body can create more (a generic

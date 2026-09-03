@@ -274,11 +274,28 @@ drift out of sync with the actual code.
   deliberately not a `@cImport`-style C-header-parsing mechanism (Zig's approach), judged wildly
   disproportionate to the actual need (a handful of hand-written declarations, not a C compiler
   frontend embedded in this one).
-- **Deferred: generics, user-defined methods, and a real growable `Vec`.** A separate, much larger
-  future direction, not started - nothing about the current language design is shaped around it;
-  revisit once a concrete need for a resizable collection or generic user code actually arises. Such
-  a collection, once built, belongs in a standard library on top of the language, not as more special
-  cases inside the compiler.
+- **Generics (`<T>`) - type parameters on functions and struct types, monomorphized.** Spec'd in §12
+  (G1-G17). A **function** is generic exactly when a type variable appears in its signature - there is
+  no declaration list, the set *is* whatever appears (`func max(a<T>, b<T>) <T>`), and its type
+  arguments are **never written**: they are inferred by matching the actual argument types against the
+  declared parameter types, which is total because every variable must appear in at least one parameter
+  (G4). A **struct type** does declare a list, after the name (`type Vec<T> struct(...)`), and for a
+  reason that isn't arbitrary: a type's arguments can't be inferred, so they're written positionally,
+  and only a declared list makes "positional" mean anything. That asymmetry tracks inferability exactly.
+  **`match <T>`** dispatches on a type parameter, resolved at instantiation - no runtime comparison or
+  branch, only the selected arm's code; inside that arm the variable *is* the concrete type (so each arm
+  is checked only for its own instantiation), and unlike a value `match` it is exhaustiveness-checked,
+  since falling through silently would compile a generic that does nothing for some instantiations.
+  **Monomorphization**: one ordinary function or type per distinct argument set, after which every other
+  rule applies unchanged - destructors, scope containment and structural `==` all needed no
+  generic-aware version. Type identity falls out for free, since an instantiation's name carries its
+  arguments and struct identity is owner+name. Two implementation constraints worth keeping: a type
+  argument may carry no reference marker (the §8.4 checker can't trace a tag through an instantiation),
+  and instantiations live in their own stable lists rather than in `mod->vars`/`mod->types`, which store
+  by value and would invalidate every live pointer on growth.
+- **Deferred: user-defined methods, and a real growable `Vec`.** Generics exist now (above), so a
+  resizable collection is finally expressible; it belongs in a standard library on top of the language,
+  not as more special cases inside the compiler.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

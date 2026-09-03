@@ -888,6 +888,44 @@ test "a generic instantiated with another generic's instantiation" {
     assert(nestedGeneric() == 9)
 }
 
+## "match <T>" (G13-G15) dispatches on a type parameter. It is resolved when the generic is instantiated,
+## not at run time: there is no comparison and no branch in the generated code, only the selected arm's
+## statements. Two properties make it more than a runtime switch. G14: inside the selected arm the type
+## variable IS the concrete type, so "v + 1" below is valid only in the int32 arm and "v.x" only in the
+## Point arm - unselected arms are never built at all. G15: unlike a match over a value (S13), a match
+## over a type is exhaustiveness-checked at the instantiation, since falling through silently would
+## compile a generic that does nothing for some of its instantiations.
+func describeType(v<T>) int32 {
+    match <T> {
+        case int32 {
+            return v + 1
+        }
+        case int64 {
+            return 64
+        }
+        case Point {
+            return v.x
+        }
+    }
+}
+
+test "a type match selects a different arm per instantiation" {
+    assert(describeType(41) == 42)
+    assert(describeType(int64(1)) == 64)
+    assert(describeType(Point{7, 8}) == 7)
+}
+
+## a type variable is usable as an ordinary type inside a generic body, not only in the signature
+func copyThrough(a<T>) <T> {
+    x mut <T> = a
+    return x
+}
+
+test "a type variable used as a type inside the body" {
+    assert(copyThrough(42) == 42)
+    assert(copyThrough(int64(7)) == int64(7))
+}
+
 ## D14a: a constructor field may be a run-time-sized array, sized by an expression that can name the
 ## constructor's own parameters. This is what makes a struct able to OWN a buffer at all - before it,
 ## "T[expr]" was var-decl-only and nothing produced a runtime-sized array as a value, so no struct could
