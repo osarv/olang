@@ -752,6 +752,9 @@ void semaCollectNames(struct semaModule* mod) {
 // ---- pass 2: resolve type shapes and function signatures ----
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
+bool typeContainsReference(struct type t);
+struct syntax* detectRuntimeSizedArrayType(struct syntax* typeExprNode);
+struct type resolveRuntimeSizedArrayDeclType(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams);
 void resolveTypeDecl(struct type* t);
 
 //resolves a "&name" heap-indirection tag's optional scope name against scopeParams (the function
@@ -1280,7 +1283,25 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
         v.tok = fieldNameTok;
         v.mut = hasTokOfType(f, TOK_MUT);
 
-        if (typeExprNode) {
+        if (typeExprNode && detectRuntimeSizedArrayType(typeExprNode)) {
+            //D14a: "data byte[cap]" - a run-time-sized array field, sized per construction. The size
+            //expression itself is checked in pass 3 (it may name the constructor's own parameters, which
+            //are only in scope there); here the field just takes the runtime-length array type the same
+            //shape a local "T[expr]" var-decl resolves to. No initializer is expected or allowed - the
+            //allocation IS the initialization, exactly as for the local form.
+            v.type = resolveRuntimeSizedArrayDeclType(mod, partSntx(typeExprNode, 0), &ctorParams);
+            if (hasTokOfType(f, TOK_ASS)) ErrMsgSemantic(fieldNameTok, REDUNDANT_ARRAY_SIZE);
+            //the allocation happens inside the constructor, whose own scope closes before the value it
+            //built reaches anyone - so an untagged field would hand the caller a dangling pointer, and
+            //(worse, being silent) the freed chunk is immediately reused for the constructed struct
+            //itself, so a later write through the field lands on the struct's own bytes. Exactly the
+            //hazard O13 rejects for a bare "&" return type, and rejected the same way: name a scope
+            //parameter of this same constructor.
+            if (!v.type.scopeParam) ErrMsgSemantic(fieldNameTok, BARE_SCOPE_CTOR_ARRAY_FIELD);
+            if (typeContainsReference(*v.type.arrElem)) {
+                ErrMsgSemantic(fieldNameTok, ZERO_FILL_CONTAINS_REFERENCE);
+            }
+        } else if (typeExprNode) {
             //explicit type - "= expr"/":= expr" is checked for real in pass 3 (needs ctor params in
             //scope); a type with no initializer at all never has anywhere to get a value from
             v.type = resolveTypeExpr(mod, typeExprNode, &ctorParams);
@@ -3873,6 +3894,14 @@ void semaCheckBodies(struct semaModule* mod) {
                         if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
                         field->type = fieldOp->type;
                     }
+                } else if (typeExprNode && detectRuntimeSizedArrayType(typeExprNode)) {
+                    //D14a: "data byte[cap]" - the field's value IS the allocation. The size expression is
+                    //built here, in pass 3, because it may name the constructor's own parameters, which
+                    //only exist in this scope; it is evaluated once per construction, in field order.
+                    struct syntax* sizeExprNode = detectRuntimeSizedArrayType(typeExprNode);
+                    struct operand* sizeOp = buildExprFromSyntax(&cctx, sizeExprNode);
+                    if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
+                    fieldOp = OperandSizedArrayAlloc(sizeOp, field->type, field->tok);
                 } else if (typeExprNode) {
                     //no initializer at all - CTOR_FIELD_NOT_INITIALIZED already reported in pass 2;
                     //fabricate a placeholder so the rest of the file still gets checked

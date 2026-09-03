@@ -572,11 +572,12 @@ regardless of its own outermost size — the same error as an array with no comp
 outermost size at all (D12).
 
 **D14.** `T[expr]`, where `expr` is present but is *not* a compile-time constant, is recognized as a
-distinct, var-decl-only grammatical case in exactly one position: a **local** var-decl with no
-initializer, inside a function, `test { }`, or `destruct { }` body (§6.1, §9.3 C7, §10.4) — anywhere
-`own` (E25) is itself valid. It is not an instance of the general `array-type-suffix` production (T8,
-which requires a compile-time constant), and this shape has no meaning in any other position a
-`type-expr` is written: not a field, parameter, or return type; not a global var-decl (a module-level
+distinct grammatical case in exactly two positions: a **local** var-decl with no initializer, inside a
+function, `test { }`, or `destruct { }` body (§6.1, §9.3 C7, §10.4) — anywhere `own` (E25) is itself
+valid — and a **constructor field**'s declared type (§9.2 C2, see D14a). It is not an instance of the
+general `array-type-suffix` production (T8, which requires a compile-time constant), and this shape
+has no meaning in any other position a `type-expr` is written: not a plain (T13) struct's field, not a
+parameter or return type; not a global var-decl (a module-level
 declaration with this shape is rejected the same way a bare `T[]` global with no initializer is,
 since evaluating `expr` and allocating into a scope both require an enclosing `own`, which no global
 initializer has); and not a `for-stmnt`'s own init clause (§6.3 S9), whose grammar has no
@@ -593,6 +594,30 @@ count. This form's allocation semantics (which scope it belongs to) are specifie
 §8. Combining a `T[N]` (constant-size) type
 with an initializer that already restates the same count is a compile-time error, not merely
 redundant — see D16.
+
+**D14a.** A **constructor field** (C2) may declare this shape: `items T[expr]&name`, with no
+initializer. `expr` is evaluated once per construction, in field-declaration order like any other
+field initializer (C6), and may name the constructor's own parameters and any earlier field. The
+array is allocated with that many zero-filled elements, into the scope named by the field's own
+reference marker.
+
+That marker is **required**: the field must be tagged to a `scope`-typed parameter of this same
+constructor (T24, C2). An untagged one would be allocated into the constructor's own private scope,
+which closes before the constructed value ever reaches its caller — precisely the hazard O13 rejects
+for a bare `&` return type — so it is rejected the same way, at the field's declaration.
+
+```
+type Buffer struct(s scope, cap int64) {
+    data mut byte[cap]&s,
+    used int64 = 0
+}
+```
+
+This is the only position other than a local var-decl where the shape is meaningful, and for the same
+reason it is meaningful there: it needs a definite point at which to allocate, and a constructor call
+is one. A plain (T13) struct has no such point — its literal (E18) performs no allocation step — so
+the shape remains rejected there. The element-type restriction of D13 applies unchanged: a
+zero-filled element type may contain no reference, at any depth, since none has a valid zero value.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read entirely from
 `expr`, which must itself be a literal (a struct literal, array literal, or primitive literal — see
@@ -1376,6 +1401,7 @@ one of:
 ```
 IDEN [ "mut" ] ":=" expr           # inferred: type read from a required-to-be-literal expr
 IDEN [ "mut" ] type-expr [ "=" expr ]   # explicit type, optional initializer
+IDEN [ "mut" ] T "[" expr "]"          # run-time-sized array, no initializer (D14a)
 IDEN [ "mut" ]                     # bare pun (§9.2) — valid only when no type/initializer follows
 ```
 

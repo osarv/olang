@@ -218,7 +218,7 @@ drift out of sync with the actual code.
   declared element type and any `&`/`&name` marker, so it interchanges with any other `T[N]`; an
   initializer that is itself runtime-length carries no length to adopt and leaves the declaration
   runtime-length); `x T[N]` with no initializer (zero-filled, real BSS for a
-  global); and, *local-only*, `x T[expr]` with a non-constant `expr` and no initializer (a
+  global); and `x T[expr]` with a non-constant `expr` and no initializer (a
   runtime-sized, zero-filled array, arena-allocated into `own` or a named scope like any other
   reference). Pairing `T[N]` with an initializing literal, or leaving a runtime-length `T[]`/scalar with no
   initializer at all, is a compile error. **None of these three forms can produce a reference with no
@@ -232,6 +232,18 @@ drift out of sync with the actual code.
   (compile-time-length row count, runtime-length per-row) with no initializer, then assigning each row separately - which
   doesn't actually exist as a legitimate construction path: it was a zero-fill bug, not a feature.
   There is currently no legitimate way to construct a jagged array at all.
+- **Run-time-sized constructor fields (`data T[expr]&s`).** The `T[expr]` form is valid in two
+  positions, not one: a local var-decl, and a constructor field (D14a). Both need a definite point at
+  which to allocate, and a constructor call is one; a plain (T13) struct's literal performs no
+  allocation step, so it stays rejected there. **This is what lets a struct own a buffer at all** -
+  before it, `T[expr]` was var-decl-only and no expression produced a runtime-sized array as a value, so
+  no struct could hold one (no Vec, no buffer, no hash table). Exposed by writing the first `Vec<T>`
+  while implementing generics, but not a generics problem. The field's **scope tag is required**: an
+  untagged one allocates into the constructor's own scope, which closes before the constructed value
+  reaches its caller - the same hazard O13 rejects for a bare `&` return type, and now rejected the same
+  way. That failure was silent and vicious rather than merely leaky: the freed chunk was immediately
+  reused for the constructed struct itself, so a later write through the field landed on the struct's
+  own length word.
 - **`extern func` - external (C-ABI) function declarations.** `extern func NAME(params) [ret-type]`
   (no error-list, no body - `STMNT_END` where a block would begin) declares a function defined
   outside this compilation, resolved by the platform's linker; `NAME` is also the exact linker symbol

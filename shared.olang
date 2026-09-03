@@ -805,6 +805,40 @@ func initializerWithNoCompileTimeLength(s scope, n int32) int32 {
     return len(z) + z[0]
 }
 
+## D14a: a constructor field may be a run-time-sized array, sized by an expression that can name the
+## constructor's own parameters. This is what makes a struct able to OWN a buffer at all - before it,
+## "T[expr]" was var-decl-only and nothing produced a runtime-sized array as a value, so no struct could
+## hold one. The field's scope tag is required, not optional: an untagged one is allocated into the
+## constructor's own scope, which closes before the constructed value reaches its caller. That was not
+## merely a leak - the freed chunk was immediately reused for the constructed struct itself, so a later
+## write through the field landed on the struct's own length word and corrupted it.
+type Buffer struct(s scope, cap int64) {
+    data mut byte[cap]&s,
+    used int64 = 0
+}
+
+func bufferLenAfterWrite(n int64) int64 {
+    b mut Buffer& = Buffer(own, n)
+    b.data[0] = byte(65)
+    return int64(len(b.data))
+}
+
+func bufferReadAfterWrite(n int64) int64 {
+    b mut Buffer& = Buffer(own, n)
+    b.data[0] = byte(65)
+    return int64(b.data[0])
+}
+
+test "a run-time-sized constructor field is sized per construction" {
+    assert(bufferLenAfterWrite(10) == 10)
+    assert(bufferLenAfterWrite(3) == 3)
+}
+
+test "writing through a run-time-sized constructor field does not corrupt its length" {
+    assert(bufferReadAfterWrite(10) == 65)
+    assert(bufferLenAfterWrite(10) == 10)
+}
+
 ## exercises the scope runtime under load: every allocation is rounded up to 8 bytes so the next one
 ## starts aligned (a raw byte bump left a 12-byte "int32[3]" followed by an i64- or pointer-bearing
 ## allocation misaligned - UB at the LLVM level even where the hardware tolerates it); destructor list

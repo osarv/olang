@@ -2575,3 +2575,39 @@ from their original form.
   rejected. The catch is bounding it: the arena spills to heap chunks while the stack does not, and an
   `alloca` in a loop is not reclaimed per iteration, so a million-iteration loop that works today would
   overflow the stack. Wants a size-and-loop heuristic, not a blanket rule.
+
+- **Run-time-sized constructor fields (D14a) - the gap that stopped a struct owning a buffer.** Found
+  while writing the spec's own `Vec<T>` example during generics work, and initially misread as a
+  generics problem. It is not. `T[expr]` with a non-constant `expr` is not a *type* at all - it is a
+  var-decl-only construct meaning "allocate expr zero-filled elements here, now", deliberately kept
+  invisible to every other consumer of `struct type` (`detectRuntimeSizedArrayType`'s own comment says
+  so). There are only two array types, `T[N]` and `T[]`. So a field could not be `T[expr]`, and no
+  *expression* form existed either - no `make(T, n)` - so nothing could produce a runtime-sized array to
+  initialize a `T[]` field with. **The consequence was much broader than Vec: no struct could own a
+  runtime-sized buffer of any kind.** Generics merely made it visible, because `Vec<T>` is the first
+  thing anyone writes.
+  **Fixed by extending the existing form to one more position rather than inventing a second one.** A
+  constructor field has exactly the property that makes `T[expr]` meaningful for a local var-decl: a
+  definite point at which to allocate, namely the constructor call. A plain (T13) struct has no such
+  point - its literal performs no allocation step - so the form stays rejected there. Same
+  `detectRuntimeSizedArrayType`, same `resolveRuntimeSizedArrayDeclType`, same
+  `OPERATION_SIZED_ARRAY_ALLOC`; the size expression is built in pass 3, where the constructor's own
+  parameters are in scope, and evaluated once per construction in field order.
+  **A silent, vicious bug found while testing it, and the reason the scope tag is now mandatory.** The
+  first version allocated into whatever scope the field's type named, which for an untagged field is the
+  *constructor's own* - and that closes before the constructed value reaches its caller. Not merely a
+  dangling read: the chunk went straight back to the global pool, the caller's very next
+  `__olang_scope_alloc` (for the constructed struct itself) got the same chunk back, and the field's
+  data pointer therefore aimed at the struct's own bytes. `b.data[0] = 65` then overwrote the slice's
+  own length word - which is exactly how it surfaced, as `len(b.data)` changing after an unrelated
+  write. Bisected by IR inspection: the constructor's `scope_alloc` took `%t1`, its own scope, and
+  `scope_close(%t1)` ran on the line before `ret`. Now rejected at the field's declaration, with the
+  same reasoning O13 already applies to a bare `&` return type - name a scope parameter of this same
+  constructor. Two permanent tests cover both the sizing and, specifically, that a write no longer
+  corrupts the length. `make verify`: 80/13/12.
+  **Raised alongside and deliberately deferred:** the user noted a real symmetry between constructors
+  and functions that the language only half commits to (a constructor is already called `Type(args)`,
+  is already a synthetic `BASETYPE_FUNC` var, and already has its own parameter and error lists - but
+  is parsed and resolved by an entirely separate path, marks its error list differently, and has a
+  field list where a function has a body). Whether syntax and implementation should converge further is
+  its own design conversation, to be had in isolation rather than settled in passing.
