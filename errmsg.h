@@ -33,8 +33,8 @@
 #define NOT_A_SCOPE "this name does not refer to a scope"
 #define SCOPE_NOT_ALLOWED_HERE "'scope' may only be used as a function parameter's type"
 #define OWN_OUTSIDE_FUNC "'own' is only valid inside a function"
-#define BARE_SCOPE_RETURN_TYPE "a bare '<>' return type would always be dangling the instant this function returns - its own private scope closes at that exact point; tag it to a passed-in scope instead, e.g. '<s>'"
-#define NESTED_BARE_SCOPE_RETURN_TYPE "this return type embeds a bare '<>' field somewhere inside it - if this function is the one allocating that field, it would dangle the instant this function returns for the same reason a bare '<>' return type would; give the field an explicit '<name>' tag instead"
+#define BARE_SCOPE_RETURN_TYPE "a bare '&' return type would always be dangling the instant this function returns - its own private scope closes at that exact point; tag it to a passed-in scope instead, e.g. '&s'"
+#define NESTED_BARE_SCOPE_RETURN_TYPE "this return type embeds a bare '&' field somewhere inside it - if this function is the one allocating that field, it would dangle the instant this function returns for the same reason a bare '&' return type would; give the field an explicit '&name' tag instead"
 #define UNKNOWN_NAMESPACE "unknown namespace"
 #define UNKNOWN_STRUCT_MEMBER "unknown struct member"
 #define TYPE_IS_PRIVATE "this type is private - only a capitalized name is visible outside its own module"
@@ -45,7 +45,10 @@
 #define DUPLICATE_IMPORT_REACHABILITY "this file is already reachable through another one of this module's own imports (directly, or via re-export) - the same file may only be reachable one way"
 #define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
 #define INVALID_ARRAY_SIZE "invalid array size"
-#define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '<>' - primitives are always by value"
+#define DESTRUCT_TYPE_MUST_BE_REFERENCE "this type declares a 'destruct' block, so it is reference-only - write it with a reference marker ('&' or '&name'). A destructor asserts an instance owns something releasable exactly once, which needs a well-defined instance count; a value type is compared structurally and copied freely, so no copy is identifiably the owner"
+#define NAMED_SCOPE_ON_ELEMENT "an element-position reference marker can't carry a scope name - a reference nested inside a larger value always belongs to its container's own scope, never an independent one, so this tag could never be honoured; write a bare '&' and tag the array itself instead"
+#define VALUE_ARG_FOR_REFERENCE_PARAM "this parameter is declared as a reference ('&'), so it names the caller's own instance - a value can't be silently promoted into one here, or '&' in a signature would stop meaning \"your instance\" and a 'mut' parameter would write to a copy you never see. Declare it as a reference first, then pass that"
+#define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----
 
@@ -55,6 +58,7 @@
 #define NOT_AN_LVALUE "must be a variable, index, or member"
 #define VAR_IMMUTABLE "variable is immutable"
 #define WRONG_ARG_COUNT "wrong number of arguments"
+#define ARRAY_SIZE_MISMATCH "this compile-time-length array has a different length than the target's declared one - a compile-time-length array's length is part of its type, and is never silently truncated or padded to fit"
 #define INVALID_ARRAY_LITERAL_TYPE "only an array type can be constructed with a [ ] literal"
 #define INVALID_STRUCT_LITERAL_TYPE "only a struct type can be constructed with a { } literal"
 #define TYPE_REQUIRES_CONSTRUCTOR_CALL "this type declares a constructor - construct it with Type(...), not Type{...}"
@@ -68,10 +72,10 @@
 #define OPERATION_REQUIRES_INT "operand must be an integer"
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
 #define OPERATION_REQUIRES_BOOL "operand must be a boolean"
-#define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's declared scope - only the exact same scope, or a named scope flowing into a bare '<>' (this function's own scope), are provably safe"
+#define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's declared scope - only the exact same scope, or a named scope flowing into a bare '&' (this function's own scope), are provably safe"
 #define VAR_DECL_MISSING_INITIALIZER "a variable declaration needs an initializer ('= expr' or ':= expr'), unless its declared type is an array with a size ('T[N]', zero-filled, or 'T[expr]', arena-allocated and zero-filled)"
-#define ZERO_FILL_CONTAINS_REFERENCE "this array's element type contains a reference ('<>'/'<name>') or a dynamic array ('T[]') somewhere within it - neither has a valid zero value (there is no null literal in this language), so a compile-time-constant size alone isn't enough to zero-fill it; give it an initializer instead"
-#define REDUNDANT_ARRAY_SIZE "a fixed-size array target ('T[N]') already knows its own size from the literal's own value count - restating it on both is redundant; either drop the size ('T[]', inferred from the literal) or drop the literal ('T[N]' alone, zero-filled)"
+#define ZERO_FILL_CONTAINS_REFERENCE "this array's element type contains a reference ('&'/'&name') or a runtime-length array ('T[]') somewhere within it - neither has a valid zero value (there is no null literal in this language), so a compile-time-constant size alone isn't enough to zero-fill it; give it an initializer instead"
+#define REDUNDANT_ARRAY_SIZE "a compile-time-length array target ('T[N]') already knows its own size from the literal's own value count - restating it on both is redundant; either drop the size ('T[]', inferred from the literal) or drop the literal ('T[N]' alone, zero-filled)"
 
 // ---- statements and control flow ----
 

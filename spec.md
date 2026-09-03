@@ -130,7 +130,7 @@ a compile-time error.
 - any single byte other than `"`, `\`, or newline (including `'`, which needs no escaping here), or
 - an escape sequence: `\n`, `\t`, `\\`, or `\"`.
 
-A `STR_LIT` is of type `byte[N]`, a fixed-size array of `byte` (see
+A `STR_LIT` is of type `byte[N]`, a compile-time-length array of `byte` (see
 §2.3), where `N` is the number of bytes after escape processing. A
 `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
 newline-containing `STR_LIT` is a compile-time error.
@@ -190,11 +190,12 @@ x := 1
 **L20.** Two further, narrower positions accept a statement's end with no `STMNT_END` token at all,
 because the grammar never expects one there and L18 never produces one there either:
 - immediately after a `}` that closes a block, struct/vocab/error body, or struct literal;
-- immediately after the `>` that closes a reference marker (`<>`/`<name>`, see
-  §8), when that `>` is the last token of an
-  otherwise-complete statement. (A `>` used as the greater-than comparison operator can never be
-  the last token of a complete statement, since a binary operator is always followed by an operand;
-  the two are therefore never ambiguous in this position.)
+- immediately after the `&` of a bare reference marker (§8),
+  when that `&` is the last token of an otherwise-complete statement. (An `&` used as the bitwise-and
+  operator can never be the last token of a complete statement, since a binary operator is always
+  followed by an operand; the two are therefore never ambiguous in this position. A *named* marker
+  (`&name`) ends in an identifier, which does trigger a synthesized `STMNT_END` under L18, so this
+  exception concerns the bare form only.)
 
 ## 2. Types
 
@@ -262,11 +263,11 @@ multi-dimensional array):
 elem-type array-type-suffix { array-type-suffix }
 ```
 
-**T8.** A suffix with an expression (`[N]`) is a **fixed-size** array of exactly `N` elements; `N`
+**T8.** A suffix with an expression (`[N]`) is a **compile-time-length** array of exactly `N` elements; `N`
 must be a compile-time-constant, non-negative integer expression (an integer literal, optionally
 negated by a single leading unary `-`; see §5.1 for the
 general expression grammar this is a restricted case of). A suffix with no expression (`[]`) is a
-**dynamic** array, whose length is determined at the point a value of that type is produced and is
+**runtime-length** array, whose length is determined at the point a value of that type is produced and is
 not part of the type itself. (One further, narrower shape — `[expr]` with a non-constant `expr` — is
 recognized *only* as a special case of a *local* var-decl with no initializer, with no general
 `type-expr` meaning; see §3 D14, which is not an instance of
@@ -277,17 +278,17 @@ this production.)
 right-to-left internally so that the first-parsed one ends up outermost; the observable rule is
 simply left-to-right reading order.)
 
-**T10.** Every array value, fixed or dynamic, has a length that is queryable at run time via the
-`len(...)` built-in (see §5.9); a fixed array's length is
+**T10.** Every array value, compile-time-length or runtime-length, has a length that is queryable at run time via the
+`len(...)` built-in (see §5.9); a compile-time-length array's length is
 additionally known at compile time.
 
-**T11.** A dynamic array (`T[]`) is always reference-shaped — see §2.9 — regardless of whether it
+**T11.** A runtime-length array (`T[]`) is always reference-shaped — see §2.9 — regardless of whether it
 carries an explicit reference marker; there is no embedded representation for a runtime-determined
-length. A fixed array (`T[N]`) is embedded by default and reference-shaped only with an explicit
+length. A compile-time-length array (`T[N]`) is embedded by default and reference-shaped only with an explicit
 marker, exactly like a struct (§2.4, §2.9).
 
-**T12.** Two array types are the same type (§2.10) only if they agree on: dynamic-ness at every
-dimension, size at every fixed dimension, and (recursively) element type.
+**T12.** Two array types are the same type (§2.10) only if they agree on: length-kind at every
+dimension, size at every compile-time-length dimension, and (recursively) element type.
 
 ### 2.4 Struct types
 
@@ -354,16 +355,36 @@ semantics are specified in §8.
 
 ### 2.9 Type references and reference markers
 
-**T24.** `type-ref ::= alias-chain IDEN { array-type-suffix } [ reference-marker ]`, where
-`reference-marker ::= "<" [ IDEN ] ">"` and `alias-chain IDEN` (§4.4 M8) names a primitive type, or
+**T24.** `type-ref ::= alias-chain IDEN [ reference-marker ] { array-type-suffix } [ reference-marker ]`,
+where `reference-marker ::= "&" [ IDEN ]` and `alias-chain IDEN` (§4.4 M8) names a primitive type, or
 a struct/vocab/error type declared in the referencing module or reached through an import alias
-chain. This is the `type-ref` alternative of `type-expr` (T2). A struct or (fixed-size) array type
+chain. This is the `type-ref` alternative of `type-expr` (T2). A struct or (compile-time-length) array type
 expression may carry a trailing reference marker, immediately after any array suffixes (T7), making
 that type **reference-shaped** instead of embedded. A primitive type may never carry a reference
-marker; doing so is a compile-time error. A dynamic array (T11) is reference-shaped unconditionally,
+marker; doing so is a compile-time error. A runtime-length array (T11) is reference-shaped unconditionally,
 with or without an explicit marker.
 
-**T25.** A bare marker (`<>`) and a named marker (`<name>`) both make the type reference-shaped; the
+A marker written **before** the array suffixes applies to the *element* type; one written **after** them
+applies to the array as a whole. The two are different types and both are meaningful:
+
+```
+Point&[3]     an array of 3 references to Point   — 3 allocations, elements have identity
+Point[3]&     one reference to an array of 3 Point values — 1 allocation, elements are inline
+Point&[3]&    one reference to an array of 3 references to Point
+```
+
+With no array suffix at all the two positions describe the same type, and a single marker is read as the
+element one.
+
+An element-position marker (one with array suffixes following it) may **not** carry a scope name: a
+reference nested inside a larger value always belongs to its container's own scope (§8 O5), never an
+independent one, so such a tag could never be honoured. Writing one is a compile-time error. A marker
+with no suffix after it is the whole type's own marker and takes a scope name normally. The Each marker's optional `IDEN` must begin on the same source line as
+that `&`; an identifier on a later line is not part of the marker, which therefore reads as bare.
+(Without this, a bare marker ending a line would silently absorb the identifier opening the next one,
+since `&` triggers no `STMNT_END` under L18 — see L20.)
+
+**T25.** A bare marker (`&`) and a named marker (`&name`) both make the type reference-shaped; the
 distinction between the two (which region of memory the reference belongs to) is an ownership
 concept with no effect on type identity (T12, T27) or on which operations are valid — see
 §8.
@@ -371,7 +392,7 @@ concept with no effect on type identity (T12, T27) or on which operations are va
 **T26.** A reference-shaped struct or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
 pointer identity rather than structural content (see
-§5.2 E10). An embedded (unmarked, non-dynamic-array) struct
+§5.2 E10). An embedded (unmarked, non-runtime-length-array) struct
 or array is a plain value, self-contained wherever it lives.
 
 ### 2.10 Type identity
@@ -379,7 +400,7 @@ or array is a plain value, self-contained wherever it lives.
 **T27.** Two types are the **same type** if and only if:
 - both are the same primitive (T4), or
 - both are `scope`, or
-- both are array types and satisfy T12 (dynamic-ness, fixed sizes, and element type all agree) —
+- both are array types and satisfy T12 (length-kind, lengths, and element type all agree) —
   reference-shapedness (T24) is *not* part of array identity, or
 - both are function types and satisfy T22, or
 - both are struct, vocab, or error types declared with the same name in the same module —
@@ -478,7 +499,12 @@ alternative is **the generic error** — see §7.6 for what it means and R15 for
 See §7 for what a `error-list`'s combined set means.
 
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
-a local variable. A parameter's type may be `scope` (§2.8) only in this position. A later
+a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
+parameter's type rather than modifying it: for a value parameter it makes the callee's own copy
+writable, leaving the caller unaffected either way; for a reference parameter (T24) it makes the
+**caller's own instance** writable, so the caller observes the write. Whether a call writes to the
+caller's value is therefore readable from the signature alone: `&` says whose instance it is, `mut`
+says whether it may be written, and the two are independent. A parameter's type may be `scope` (§2.8) only in this position. A later
 parameter's reference-marker name (T24) may name any *earlier* parameter of the same signature that
 is itself of type `scope`; see §8.
 
@@ -505,22 +531,33 @@ no effect. There is no way to declare an immutable local variable.
 **D12.** In the first form (explicit type), `= expr` is optional only when the declared type-expr's
 outermost array suffix (T7) carries an expression — either a compile-time-constant one (`T[N]`,
 zero-filled, D13; valid for a global or a local alike) or, for a *local* var-decl only (D14), a
-non-constant one (`T[expr]`, run-time-sized); every other declared type — including a dynamic `T[]`
+non-constant one (`T[expr]`, run-time-sized); every other declared type — including a runtime-length `T[]`
 (empty brackets, no size expression at all) written with no initializer, and a global using the
 non-constant `T[expr]` shape — requires an initializer. When present, `expr`'s type must fit the
 declared type (assignability, defined per-context in
 §5 and §8).
+
+**D12a.** A declared **runtime-length** array type (`T[]`, T9) whose initializer has a *compile-time*
+length adopts that length: the declared variable's type is `T[N]`, where `N` is the initializer's own
+length. The declared element type and any reference marker (T24) are kept as written — only the
+length-kind and the length come from the initializer — so `x T[]&s = ...` remains allocated into `s`,
+while a bare `x T[] = ...` becomes an ordinary embedded compile-time-length array, exactly as the
+`:=` form (D11) would have produced from the same initializer. An initializer that is itself
+runtime-length (a call's result, say) carries no length to adopt, and leaves the declaration
+runtime-length. This is what makes `T[]` in a declaration mean "infer the length" rather than "discard
+it": without it, `len(x)` would compile to a run-time read even for a visibly 3-item literal, and a
+`T[]` holding 3 would be the same type (T12) as one holding 4.
 
 **D13.** A declared array type with no initializer and a compile-time-constant outermost size
 (`T[N]`, T8) is zero-filled: every element recursively set to its type's zero value (`false` for
 `bool`, `0`/`0.0` for numeric types, all-zero for a struct, the first-declared word for a vocab —
 vocab and error types have no other meaningful "zero", so a zero-filled vocab field's value is its
 type's first word by representation, not by any declared meaning) — **provided** the declared type
-contains no reference anywhere within it (T24: a `<>`/`<name>`-marked struct or fixed array, or,
-unconditionally, a dynamic array, T11), at any depth through a chain of plain embedded array
+contains no reference anywhere within it (T24: a `&`/`&name`-marked struct or compile-time-length array, or,
+unconditionally, a runtime-length array, T11), at any depth through a chain of plain embedded array
 elements and struct fields. None of these have a valid zero value — a reference has no allocation to
 point to yet (there is no null literal or null-checkable state anywhere in this language, T2, so a
-zero-filled reference would be an invisible dangling pointer, not a safe default), and a dynamic
+zero-filled reference would be an invisible dangling pointer, not a safe default), and a runtime-length
 array has no length-appropriate backing allocation to zero-fill in the first place (only a genuinely
 empty, zero-length one, which is a different, surprising meaning to produce silently). A declared
 array type containing a reference anywhere within it therefore requires an initializer unconditionally,
@@ -543,7 +580,7 @@ compile-time-constant size is not sufficient on its own: the element type must c
 anywhere within it, or this is a compile-time error instead — the outer array itself is always
 legitimately constructed (by allocation into a scope, below), it is only what would fill each of its
 elements that is in question. The declared variable's own
-type becomes an ordinary dynamic array type (T7's `T[]`, no compile-time length) — the same shape
+type becomes an ordinary runtime-length array type (T7's `T[]`, no compile-time length) — the same shape
 D13's `T[]` sibling has, just sized by a runtime value instead of an initializing literal's item
 count. This form's allocation semantics (which scope it belongs to) are specified in
 §8. Combining a `T[N]` (constant-size) type
@@ -556,9 +593,9 @@ redundant — see D16.
 call or a variable read) in this form — see §5.1 for what
 counts as a literal for this purpose.
 
-**D16.** In the first form, if the declared type is a fixed-size array (`T[N]`) and the initializer
+**D16.** In the first form, if the declared type is a compile-time-length array (`T[N]`) and the initializer
 is an array literal, that is a compile-time error regardless of whether `N` matches the literal's
-own element count: a fixed-size target's size is always exactly its initializing literal's own
+own element count: a compile-time-length target's size is always exactly its initializing literal's own
 element count, so restating it via an explicit `[N]` is redundant by construction, not merely
 redundant when the two happen to agree. Write `T[]` (inferred size) or omit the initializer
 entirely (D13) instead.
@@ -688,6 +725,7 @@ and only overlaps *within one module's own reachable set* (M16) are restricted.
 expr     ::= binary
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
 unary    ::= { unary-op } postfix
+unary-op ::= "-" | "!" | "~" | "++" | "--"
 postfix  ::= primary { index | member | "++" | "--" }
 primary  ::= literal | own-expr | try-expr | call-expr | struct-literal
            | array-literal | vocab-value | IDEN | "(" expr ")"
@@ -761,9 +799,9 @@ numeric-literal widening) and produce `bool`; there is no ordering on any non-nu
 numeric-literal widening) and produce `bool`, with
 value semantics that depend on whether `T` is reference-shaped (T24–T26):
 - for a primitive or vocab value: ordinary value equality;
-- for an embedded struct or fixed array: deep, member-wise/element-wise structural equality
+- for an embedded struct or compile-time-length array: deep, member-wise/element-wise structural equality
   (recursively applying this same rule to every field/element);
-- for a reference-shaped struct or array (a `<>`/`<name>`-marked type, or any dynamic array): pointer
+- for a reference-shaped struct or array (a `&`/`&name`-marked type, or any runtime-length array): pointer
   identity — two references compare equal only if they refer to the same underlying storage, never
   by comparing what they point to.
 
@@ -786,13 +824,22 @@ call's argument, §5.4; and a `return`ed value, §6.5) exactly when one of:
   §8;
 - the value is a numeric literal expression (E4) and `T` is a numeric type it can implicitly widen
   into (T6);
-- the value is a fixed-size array whose element type matches `T`'s element type, and `T` is a
-  dynamic array of that element type (T7–T8) — the value is copied into a freshly sized dynamic
+- the value is a compile-time-length array whose element type matches `T`'s element type, and `T` is a
+  runtime-length array of that element type (T7–T8) — the value is copied into a freshly sized runtime-length
   array regardless of whether the value itself is a literal;
-- `S` and `T` are both fixed-size arrays of the same element type but different sizes — this is
+- `S` and `T` are both compile-time-length arrays of the same element type but different sizes — this is
   specifically rejected (a "wrong size" error distinct from a general type mismatch), not accepted.
 
 Any other pairing does not fit, and is a compile-time error.
+
+**E12a.** In a **call argument** position specifically, a value may not be promoted into a
+reference-shaped (`&`-marked, T24) parameter when the argument is an lvalue (a variable read, index,
+or member access — §6.2). Such a call is a compile-time error; declare the value as a reference and
+pass that. Without this, `&` in a signature would mean "the caller's own instance" at some call sites
+and "a copy of it" at others, and a `mut` reference parameter (D9) could write to a copy the caller
+never sees. A freshly built temporary — a literal, or a constructor call's own result — has no
+caller-side instance to preserve and promotes as usual, exactly as at a variable declaration or a
+return, which are unaffected by this rule.
 
 ### 5.4 Function calls
 
@@ -836,15 +883,18 @@ this way; use a call (E13) instead.
 ### 5.7 Array literals
 
 **E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } ] "]"`, where
-`elem-type ::= PRIMITIVE-NAME | alias-chain IDEN` (§4.4 M8) names the literal's scalar element type,
-stated exactly once regardless of nesting depth (E21).
+`elem-type ::= PRIMITIVE-NAME | alias-chain IDEN [ reference-marker ]` (§4.4 M8) names the literal's
+scalar element type, stated exactly once regardless of nesting depth (E21). The optional
+`reference-marker` (T24) makes each element a separately allocated reference rather than a value laid
+out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
+tag. A primitive element type may never carry one (T24).
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` — a plain expression, or a nested
 bracketed group with no restated type, for a multi-dimensional literal.
 
-**E20.** The literal's own type is always a fixed-size array (T8): its size, at each level, is
+**E20.** The literal's own type is always a compile-time-length array (T8): its size, at each level, is
 exactly the number of items written at that level; a literal with zero items is `elem-type[0]`. This
 holds regardless of what the literal is subsequently checked against — sizing from item count is
-intrinsic to the literal itself, and E12's dynamic-array and fixed-size-target rules apply
+intrinsic to the literal itself, and E12's runtime-length-array and compile-time-length-target rules apply
 afterward, against a target, if there is one.
 
 **E21.** For a nested (multi-dimensional) literal, every leaf item is checked against the single
@@ -861,7 +911,7 @@ declared in the *same* module (never alias-qualified, §4.4 M12) and
 ### 5.9 Built-in functions
 
 **E23.** `len(arr)` — `arr` must be an array type (any dimensionality, embedded or reference-shaped,
-fixed or dynamic); result is `int32`, the length of `arr`'s outermost dimension. `len` is not an
+compile-time-length or runtime-length); result is `int32`, the length of `arr`'s outermost dimension. `len` is not an
 ordinary function: it cannot be referenced as a value, shadowed by a same-named declaration used as
 a call target, or passed a non-array argument.
 
@@ -1145,10 +1195,16 @@ not exist.
 
 ## 8. Ownership and Scopes
 
-This section specifies the `scope` type, the `<>`/`<name>` reference marker's ownership meaning
+This section specifies the `scope` type, the `&`/`&name` reference marker's ownership meaning
 (distinct from its purely type-level effect, §2.9), the allocation model
 for reference-shaped values, and the static compile-time check that constrains how a scope tag may
 flow from one place to another.
+
+The marker's `&` denotes scope-tagged heap indirection. It is not an address-of operator and not a
+borrow: this language exposes no pointer type and no way to take the address of a value (there is no
+unary `&`, E5), and the check specified in §8.4 is a scope-containment check, not a general borrow
+check — it constrains which scope a value may flow into, never how many live readers or writers a
+value has.
 
 ### 8.1 Scopes
 
@@ -1168,8 +1224,8 @@ along as an argument.
 
 ### 8.2 Scope tags
 
-**O4.** A reference-shaped type (T24) carries a **scope tag**: bare (`<>`) or named (`<name>`).
-`<name>` names a `scope`-typed parameter visible at the point the type is written — an earlier
+**O4.** A reference-shaped type (T24) carries a **scope tag**: bare (`&`) or named (`&name`).
+`&name` names a `scope`-typed parameter visible at the point the type is written — an earlier
 parameter of the same function or constructor signature
 (§3 D9), or, for a constructor's own field
 (§9), any parameter of that
@@ -1183,24 +1239,24 @@ and where a reference to it may subsequently flow (§8.4).
 
 ### 8.3 Allocation
 
-**O6.** A plain (not-yet-reference-shaped) struct or fixed-array value is promoted into
+**O6.** A plain (not-yet-reference-shaped) struct or compile-time-length-array value is promoted into
 reference-shaped storage — allocated into a scope — at the point it is stored into a
 reference-shaped slot: a variable declaration, an assignment, a function argument, a return value,
 or a field/element of a larger literal being itself promoted this way. The scope it is allocated
 into is:
 
-- for a **named** (`<name>`) target: the scope value bound to that parameter at the relevant call
+- for a **named** (`&name`) target: the scope value bound to that parameter at the relevant call
   (the argument passed for it, tracing back through however many call boundaries are needed to find
   a concrete `own` or passed-in scope — see §8.4 for what is and is not provable about this
   statically);
-- for a **bare** (`<>`) target that is itself a top-level declared type (a variable, parameter,
+- for a **bare** (`&`) target that is itself a top-level declared type (a variable, parameter,
   field, or return type written with a bare marker directly): the current function's own private
   scope (`own`);
 - for a **bare** field or element nested inside a larger value that is itself being allocated into
   some scope `S` (named or bare): the same scope `S` — a bare nested field's scope is never
   independent of its immediate container's own scope.
 
-**O7.** A dynamic array (T11) is always allocated this way regardless of whether it carries an
+**O7.** A runtime-length array (T11) is always allocated this way regardless of whether it carries an
 explicit marker, since a runtime-determined length has no embedded representation to begin with; a
 `T[expr]` variable declaration with no initializer (§3 D14)
 is allocated the same way, into its own declared scope tag (bare, meaning `own`, if none is
@@ -1223,7 +1279,7 @@ the perspective of the function currently being checked, exactly when one of:
 
 - `src` and `dst` name the exact same scope (including: both bare, meaning both mean that same
   function's own `own`);
-- `dst` is bare (`<>`) and `src` names any scope parameter of the *current* function — a value
+- `dst` is bare (`&`) and `src` names any scope parameter of the *current* function — a value
   received from a longer-lived, named scope may always narrow into "at least as long as my own
   scope," since a function's own `own` scope is always the shortest-lived scope reachable from
   inside it.
@@ -1235,7 +1291,7 @@ lifetime-relationship annotation, which olang does not have.
 **O11.** O10 applies only when both sides are traceable, at compile time, to a scope parameter of
 the function currently being checked (following, where applicable: a call's own argument-to-
 parameter binding — including resolving a *callee's* own parameter-declared scope tag through that
-same call's binding before comparing, since a callee's `<name>` always names one of *its own*
+same call's binding before comparing, since a callee's `&name` always names one of *its own*
 parameters, D9, never anything in the calling function's frame; one hop through a variable's own
 declaration; a chain of member accesses through constructor-declared fields; straight-line
 reassignment; and branches of `if`/`match`/loops, merged — agreeing branches keep the agreed tag,
@@ -1259,14 +1315,14 @@ outright rather than silently guessing.
 
 ### 8.5 Return-type restrictions
 
-**O13.** A function's declared return type may never be a bare (`<>`) reference-shaped type
+**O13.** A function's declared return type may never be a bare (`&`) reference-shaped type
 directly: the function's own `own` scope closes at the instant it returns, strictly before the
 caller could ever observe a value allocated into it. A bare return type must instead be tagged to an
-explicitly-received scope parameter (`<name>`).
+explicitly-received scope parameter (`&name`).
 
 **O14.** The same restriction extends through embedding: a *plain* (non-reference) struct return
-type that itself contains a bare (`<>`) reference-shaped field, anywhere within its own field chain
-(not chasing into a field that already carries its own explicit `<name>` tag, whose lifetime is
+type that itself contains a bare (`&`) reference-shaped field, anywhere within its own field chain
+(not chasing into a field that already carries its own explicit `&name` tag, whose lifetime is
 independently governed by that name), is also a compile-time error, for the same underlying reason
 as O13. This check is conservative: it also rejects some code that would in fact be safe at run time
 (a function that only ever passes an already-correctly-scoped value straight through, never
@@ -1275,13 +1331,18 @@ require dataflow analysis this specification's checker does not perform.
 
 ### 8.6 Destructors and scope closing
 
-**O15.** If a reference-shaped struct type declares a destructor
-(§9), every instance of it
-allocated into a given scope (§8.3) has its destructor invoked when that scope closes (O1), in the
-reverse order the instances were allocated. See
-§9.3 for the corresponding
-rule for a *plain* (non-reference) local variable, which is governed by its own enclosing function's
-return rather than by scope closing.
+**O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
+scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
+instances were allocated. A destructor-declaring type is reference-only (C11), so this is the sole
+rule governing when a destructor runs: there is no plain-local, function-return-governed case.
+
+**O16.** An instance is registered with its scope at the point its **constructor call** completes
+(C6) — not at any later assignment, copy, or binding of the resulting reference. Registration is
+therefore one-per-construction: a value that reaches a variable, field, or array element by being
+copied from an already-constructed instance is the same instance, registers nothing further, and is
+destructed exactly once (C10). No storage location is registered on its own account, and no
+never-constructed storage is registered at all — in particular, a zero-filled aggregate (D13)
+contains no instances and causes no destructor to run.
 
 ## 9. Constructors and Destructors
 
@@ -1341,31 +1402,36 @@ it; only a constructor call constructs a value of that type.
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5), the same rule a `test { }` block follows,
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
-error to.
+error to. Declaring this block also makes the type reference-only — see C11.
 
 **C8.** Inside a `destruct` block, a bare identifier that names one of the type's own fields (and is
 not itself shadowed by a local of the same name) reads that field of the instance being destructed
 — there is no `self`/`this` qualifier.
 
-**C9.** A destructor runs, for a given instance, exactly once:
-- if the instance is a **plain** (non-reference-shaped) local variable, immediately before the
-  enclosing function or test returns (however it returns — explicit `return`, falling off the end,
-  or propagating an error) — never merely at the closing `}` of the inner block it happens to be
-  declared in (S1): a local declared inside a nested block and still live when the *function* returns
-  is destructed then, at that point, not any earlier. Where more than one plain local is destructed at
-  the same return, the order is innermost-block-first, and, within one block, last-declared-first —
-  the reverse of declaration order, mirroring a stack unwind. The one exception: when the returning
-  local variable is itself the bare operand of a `return` statement (`return x`, where `x` is a plain
-  variable read and nothing else — not `return x.field` or any other expression that merely reads
-  through `x`) — in that one case, the local's destructor does not run in the returning function,
-  since the value is being handed to the caller intact, not discarded;
-- if the instance is **reference-shaped** (allocated into a scope,
-  §8.3), when that scope closes
-  (§8.6 O15), regardless of which function allocated it or which function happens to be executing
-  at that point.
+**C9.** A destructor runs, for a given instance, exactly once: when the scope the instance was
+allocated into closes (§8.3, §8.6 O15), regardless of which function allocated it or which function
+happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
+an instance always has a scope of its own and this is the only case; the enclosing function's return
+governs nothing here beyond closing that function's own scope (O1).
 
-**C10.** A destructor never runs for a struct type that declares no `destruct` block, and never runs
-more than once for the same instance.
+**C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
+than once for the same instance, and never runs for storage no constructor call ever produced an
+instance in (O16).
+
+**C11.** A struct type that declares a `destruct` block is **reference-only**: every `type-ref` (T24)
+naming it must carry a reference marker, and a bare `type-ref` naming it is a compile-time error —
+as a variable's declared type, a parameter type, a return type, a struct field's type, or an array's
+element type alike. The type may therefore never be embedded by value in any aggregate, and never
+passed or returned by value.
+
+A destructor asserts that an instance owns something releasable exactly once, which requires a
+well-defined instance count. A value type has no such count: it is compared structurally (T26, E10)
+and copied freely, so two copies are indistinguishable and neither is identifiably the owner.
+Reference-shaped types are the ones this language gives identity to (`==` on a reference is pointer
+identity, T26), so a type needing identity must be one. The marker is nonetheless written at every
+use, exactly as for any other reference: declaring a destructor makes the type reference-*only*, it
+does not make the marker implicit, so reading a `type-ref` never requires knowing whether the named
+type happens to declare a destructor.
 
 ## 10. Compilation Model
 
@@ -1426,15 +1492,15 @@ ordinary function's body would otherwise begin.
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
 numeric primitive type (T5 — `byte`, `int32`, `int64`, `float32`, or `float64` — this is also
-exactly `extern-scalar-type`), or an array type (T7, fixed-size or dynamic) whose element type is
+exactly `extern-scalar-type`), or an array type (T7, compile-time-length or runtime-length) whose element type is
 itself one of those five. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
 return type is never valid (see X3 for why). No other type — `bool`, a struct, a vocab type, an
 error type, a function type, `scope`, or an array of any type outside the numeric-primitive set —
 is valid in an `extern-param` or `extern-ret-type` position.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
-only — never its length (a dynamic array's own `{ len, ptr }` representation, T11, is reduced to
-just the pointer half; a fixed array's own embedded address is used directly). This pointer is
+only — never its length (a runtime-length array's own `{ len, ptr }` representation, T11, is reduced to
+just the pointer half; a compile-time-length array's own embedded address is used directly). This pointer is
 never itself a nameable value or type anywhere in this language — it exists only at this one
 marshalling boundary. If the external function also requires the array's length, the declaration
 states it as a separate `extern-param` (X2) of an integer type, supplied explicitly by the caller

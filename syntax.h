@@ -9,6 +9,12 @@ enum syntaxType {
     SNTX_IMPORT,
     SNTX_NAME,
     SNTX_ARR_SFX,
+    SNTX_ELEM_REF_MARKER, //"&" / "&name" written BEFORE any array suffixes - marks the ELEMENT type as a
+                           //reference ("Point&[3]" is an array of 3 references to Point)
+    SNTX_REF_MARKER,      //"&" / "&name" written AFTER any array suffixes - marks the type as a whole
+                           //("Point[3]&" is one reference to an array of 3 Point values). With no array
+                           //suffix at all the two positions coincide and the marker is parsed as the
+                           //element one, which is the same type either way
     SNTX_TYPE_REF,
     SNTX_VOCAB_BODY,
     SNTX_STRUCT_MEMBR,

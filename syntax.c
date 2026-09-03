@@ -76,16 +76,17 @@ struct token prevTok(SyntaxCtx sc) {
 //needs a terminator right there - so this accepts a real STMNT_END token OR, when the token just consumed
 //was "}", treats that as the terminator too, with nothing extra to consume.
 //a statement's own closing token can implicitly terminate it with no real TOK_STMNT_END at all - TOK_CURLY_C
-//because no grammar rule ever expects a TOK_STMNT_END after one (see stmntEndTriggerType), and TOK_GRT
-//because the tokenizer can't tell a scope-reference marker's closing '<name>>'/'<>' apart from the
-//comparison operator at the token level (both are just TOK_GRT), so it's never added to stmntEndTriggerType
-//either - but the two can never actually be confused here: a genuine comparison '>' can only ever appear
+//because no grammar rule ever expects a TOK_STMNT_END after one (see stmntEndTriggerType), and
+//TOK_BTWSE_AND because the tokenizer can't tell a bare reference marker ('&') apart from the bitwise-and
+//operator at the token level (both are just TOK_BTWSE_AND), so it's never added to stmntEndTriggerType
+//either - but the two can never actually be confused here: a genuine bitwise '&' can only ever appear
 //mid-expression (parseExpr keeps consuming past it, looking for a right-hand operand), so it can never be
-//the LAST token of an already-fully-parsed statement - only a marker's own closing '>' (parseTypeRef) can.
+//the LAST token of an already-fully-parsed statement - only a bare marker's own '&' (parseTypeRef) can. A
+//named marker ('&name') ends in TOK_IDEN, which is an ordinary stmntEndTriggerType, so it never gets here.
 bool acceptStmntEnd(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
     enum tokenType prev = prevTok(sc).type;
-    return prev == TOK_CURLY_C || prev == TOK_GRT;
+    return prev == TOK_CURLY_C || prev == TOK_BTWSE_AND;
 }
 
 // ---- tree-building primitives ----
@@ -170,47 +171,59 @@ struct syntax* parseArrSfx(SyntaxCtx sc) {
     return s;
 }
 
-//"NAME ARR_SFX* (TOK_LST IDEN? TOK_GRT)?" - the optional trailing "<name>" names which scope a
-//heap-indirect reference belongs to; bare "<>" means the value's own private scope - see the report.
-//Briefly spelled "&" instead (see git history), reverted back to "{}" after further design discussion
-//concluded the two are semantically identical (a plain/embedded value never independently needs a scope
-//tag - it has no separate allocation to tag - so "is this a reference" and "which scope" always travel
-//together as one marker either way). Moved a second time, from "{}"/"{name}" to "<>"/"<name>": "{}" was
-//doing double duty as both this marker AND struct-literal construction ("Point{1, 2}"), so a reader had to
-//parse content, not just punctuation, to tell "type-level scope metadata" from "a value's own data" apart
-//at a glance - "<>" gives the marker its own visual lane, and reads the way a type-parameter/generic
-//annotation does in most other languages. No parsing ambiguity risk the way C++'s "<"/">" template
-//lookahead has: parseTypeRef is only ever called from a position the parser already knows is a type
-//expression (a var-decl's type, a signature, a field declaration), never from general expression parsing,
-//so "<"/">" here never has to be disambiguated from the comparison operators.
+//"NAME ARR_SFX* (TOK_BTWSE_AND IDEN?)?" - the optional trailing "&name" names which scope a heap-indirect
+//reference belongs to; bare "&" means the value's own private scope - see the report. Fourth and final
+//spelling: "{}"/"{name}", briefly "&"/"&name", back to "{}", then "<>"/"<name>", now "&"/"&name" again -
+//see HISTORY.md for the full story. The move back off "<>" is what frees "<>" for generic type
+//parameters/arguments; "<>"'s own justification was that it "reads the way a type-parameter annotation
+//does in most other languages", which stops being a helpful intuition the moment this language has real
+//ones, and that parseTypeRef "is only ever called from a position the parser already knows is a type
+//expression, never from general expression parsing" - a premise generics void outright, since generic
+//calls and literals do live in expression position. "&" has no such collision: there is no unary "&" in
+//olang (no pointers, so no address-of operator), so a marker's postfix-on-a-type position never overlaps
+//the binary bitwise-and, and "&&"/"&=" can only mislex on "Point&&..."/"Point&=...", neither ever legal.
+//Note "&" here marks scope-tagged heap indirection, NOT a borrow or an address - olang has no pointer that
+//ever surfaces and no general borrow checker, only the static scope-containment checker (see the report).
+//"&" IDEN? as its own node - there is nothing to backtrack over, since a "&" in a type position is always
+//a marker (olang has no unary "&", no pointers, so no address-of operator), so the optional scope name is
+//the only thing left to look for.
+struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
+    int before = TokenGetCursor(sc->tc);
+    struct token marker = TokenFeed(sc->tc);
+    if (marker.type != TOK_BTWSE_AND) { TokenSetCursor(sc->tc, before); return NULL; }
+    struct syntax* s = newNode(nodeType);
+    addTok(s, marker);
+    int beforeIden = TokenGetCursor(sc->tc);
+    struct token iden = TokenFeed(sc->tc);
+    //the scope name must sit on the marker's own line. "&" is not a stmntEndTriggerType (it can't be, see
+    //acceptStmntEnd), so no STMNT_END is synthesized after a bare marker and an IDEN opening the NEXT line
+    //would otherwise be swallowed as this marker's scope name - "x Point&" followed by a line starting
+    //"q := 5" would silently parse as "x Point&q". No valid program reaches that (a no-initializer
+    //reference var-decl is rejected outright), but without this the diagnostic would point somewhere
+    //baffling. The old "<...>" spelling got this for free from its closing ">".
+    if (iden.type == TOK_IDEN && iden.lineNr == marker.lineNr) addTok(s, iden);
+    else TokenSetCursor(sc->tc, beforeIden);
+    return s;
+}
+
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct syntax* name = parseName(sc);
     if (!name) return NULL;
     struct syntax* s = newNode(SNTX_TYPE_REF);
     addSntx(s, name);
+    //a marker BEFORE the array suffixes binds to the element type ("Point&[3]" - 3 references to Point);
+    //one AFTER binds to the whole type ("Point[3]&" - one reference to an array of 3 Points). With no
+    //suffix between them the two positions describe the same type, and the first one wins, harmlessly.
+    struct syntax* elemMarker = parseRefMarker(sc, SNTX_ELEM_REF_MARKER);
+    if (elemMarker) addSntx(s, elemMarker);
     while (true) {
         struct syntax* sfx = parseArrSfx(sc);
         if (!sfx) break;
         addSntx(s, sfx);
     }
-    int beforeBrace = TokenGetCursor(sc->tc);
-    struct token open = TokenFeed(sc->tc);
-    if (open.type == TOK_LST) {
-        int beforeIden = TokenGetCursor(sc->tc);
-        struct token iden = TokenFeed(sc->tc);
-        if (iden.type != TOK_IDEN) TokenSetCursor(sc->tc, beforeIden);
-        struct token close = TokenFeed(sc->tc);
-        if (close.type == TOK_GRT) {
-            addTok(s, open);
-            if (iden.type == TOK_IDEN) addTok(s, iden);
-            addTok(s, close);
-        } else {
-            TokenSetCursor(sc->tc, beforeBrace);
-        }
-    } else {
-        TokenSetCursor(sc->tc, beforeBrace);
-    }
+    struct syntax* marker = parseRefMarker(sc, SNTX_REF_MARKER);
+    if (marker) addSntx(s, marker);
     (void)cur;
     return s;
 }
@@ -1261,7 +1274,7 @@ struct syntax* parseArrLiteralArgs(SyntaxCtx sc) {
 
 //"NAME [ ARR_LIT_ARGS ]" - array literal. NAME states the base (scalar) element type once; dimensionality
 //and each level's size come entirely from the argument list's own bracket nesting and item counts (see
-//parseArrLiteralArgs/parseArrLiteralNestedGroup) - no separate "[N]"/"[]" size/dynamic-ness suffix on the
+//parseArrLiteralArgs/parseArrLiteralNestedGroup) - no separate "[N]"/"[]" size/length-kind suffix on the
 //literal itself any more (that's now decided by whatever the literal is checked against - see the report).
 //This also incidentally fixes the old gap where a single-value (or empty) value list was indistinguishable
 //from a trailing array suffix and silently swallowed by a suffix loop: there is no more suffix loop here.
@@ -1404,9 +1417,30 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 addSntx(vv, name);
                 addSntx(s, vv);
                 return s;
+            } else if (after.type == TOK_BTWSE_AND && nameIsKnownType(sc, name)) {
+                //"Handle&[...]" - an array literal whose ELEMENT type is a reference. Only committed once
+                //a "[" is confirmed to follow the marker: a bare "Handle&" in expression position is not a
+                //literal at all, and "x & y" must still parse as bitwise-and, so this backtracks cleanly
+                //when the marker turns out not to introduce a literal. (No primitive case: a primitive can
+                //never carry a reference marker - see INVALID_REFERENCE_TARGET.)
+                int save = TokenGetCursor(sc->tc);
+                struct syntax* elemMarker = parseRefMarker(sc, SNTX_ELEM_REF_MARKER);
+                struct token open = acceptTok(sc, TOK_SQUARE_O);
+                if (elemMarker && open.type == TOK_SQUARE_O) {
+                    struct syntax* lit = parseArrayLiteralTail(sc, name, open);
+                    if (lit) {
+                        addSntx(lit, elemMarker);
+                        struct syntax* s2 = newNode(SNTX_EXPR_PRIMARY);
+                        addSntx(s2, lit);
+                        return s2;
+                    }
+                    recordFurthestError(sc, peekTok(sc), "']'");
+                    return NULL;
+                }
+                TokenSetCursor(sc->tc, save);
             } else if (after.type == TOK_SQUARE_O && (nameIsKnownType(sc, name) || nameIsPrimitiveTypeName(name))) {
                 //"NAME [ ... ]" is structurally identical to indexing ("variable[index]") now that array
-                //literals no longer restate a size/dynamic-ness suffix before the value list - see
+                //literals no longer restate a size/length-kind suffix before the value list - see
                 //parseArrayLiteralTail. Committed the same way struct literals are: name being a known
                 //type (or a primitive - never a real variable either) here is never a coincidence.
                 struct token open = advanceTok(sc); //consume the "[" now that we're committing

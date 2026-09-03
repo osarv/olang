@@ -56,7 +56,7 @@ long long TypeGetAlign(struct type t) {
         case BASETYPE_SCOPE: return PTR_SIZE;
         case BASETYPE_ARRAY:
             if (t.arrMalloc) return PTR_SIZE; //"{ i64, ptr }" slice - both 8-aligned
-            if (t.structMAlloc) return PTR_SIZE; //fixed-size "<>"-heap reference - just a pointer
+            if (t.structMAlloc) return PTR_SIZE; //compile-time-length "&"-heap reference - just a pointer
             return TypeGetAlign(*t.arrElem);
         case BASETYPE_STRUCT: {
             if (t.structMAlloc) return PTR_SIZE;
@@ -72,13 +72,13 @@ long long TypeGetAlign(struct type t) {
 }
 
 long long getArraySize(struct type t) {
-    //a dynamic array VALUE is the full "{ i64 len, ptr data }" slice (16 bytes), not just the pointer -
-    //fixed here alongside the new fixed-size-reference case below; a real pre-existing undersizing bug,
+    //a runtime-length array VALUE is the full "{ i64 len, ptr data }" slice (16 bytes), not just the pointer -
+    //fixed here alongside the new compile-time-length-reference case below; a real pre-existing undersizing bug,
     //same class as getStructSize's own padding bug (see the report): nothing sized a struct's malloc off
-    //this specific branch until a struct could actually embed a dynamic-array field and get heap-promoted,
+    //this specific branch until a struct could actually embed a runtime-length-array field and get heap-promoted,
     //so it was invisible until now.
     if (t.arrMalloc) return 16;
-    if (t.structMAlloc) return PTR_SIZE; //fixed-size "<>"-heap reference - just a pointer, size is on the type
+    if (t.structMAlloc) return PTR_SIZE; //compile-time-length "&"-heap reference - just a pointer, size is on the type
     long long n = t.arrLen ? t.arrLen->intLiteralVal : 0;
     return TypeGetSize(*t.arrElem) * n;
 }
@@ -210,7 +210,7 @@ bool TypeIsSame(struct type a, struct type b) {
             //compared the two fixed sizes at all, so e.g. "x mut int32[5] = <an int32[3] value>" silently
             //type-checked - a buffer over-read the moment cgStoreInto's by-ref load/store pair ran, reading
             //5 elements' worth out of a 3-element backing store. Both sides are fixed here (arrMalloc
-            //already confirmed equal above and neither is a dynamic slice), so arrLen is always populated.
+            //already confirmed equal above and neither is a runtime-length slice), so arrLen is always populated.
             if (!a.arrMalloc && a.arrLen->intLiteralVal != b.arrLen->intLiteralVal) return false;
             return TypeIsSame(*a.arrElem, *b.arrElem);
         case BASETYPE_FUNC: {
@@ -746,12 +746,31 @@ void semaCollectNames(struct semaModule* mod) {
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
 void resolveTypeDecl(struct type* t);
 
-//resolves a "<name>" heap-indirection tag's optional scope name against scopeParams (the function
+//resolves a "&name" heap-indirection tag's optional scope name against scopeParams (the function
 //parameters visible at this point in the signature/body being resolved, or NULL where none are - struct
-//fields and globals, which have no such context; see the report). Bare "<>" (no name token at all) is
+//fields and globals, which have no such context; see the report). Bare "&" (no name token at all) is
 //left as scopeParam == NULL, meaning "this value's own private/local scope".
-struct var* resolveScopeTag(struct syntax* refNode, struct list* scopeParams) {
-    struct list nameToks = allTokOfType(refNode, TOK_IDEN);
+//"x T[] = <initializer>" adopts the initializer's own length into the declared type, turning a
+//runtime-length declaration into a compile-time-length one - "size inferred from the literal" meaning the
+//size actually reaches the TYPE, not just the allocation. Without this the length was inferred for the
+//copy and then immediately discarded: len(x) compiled to a runtime load even for a visible 3-item
+//literal, and "int32[]" holding 3 was type-identical to one holding 4, since TypeIsSame skips the length
+//whenever arrMalloc is set. Only fires when the initializer genuinely HAS a compile-time length; an
+//initializer that is itself runtime-length (a call's result, say) leaves the declaration runtime-length,
+//which is the only shape that could have carried a length worth keeping in the first place.
+//The declared element type and any "&"/"&name" marker are kept as written - only the length-kind and the
+//length itself come from the initializer - so "x int32[]&s = ..." stays scope-s-allocated, and a bare
+//"x int32[] = ..." becomes an ordinary embedded array exactly as ":=" would have produced.
+struct type inferArrayLenFromInit(struct type declType, struct type initType) {
+    if (declType.bType != BASETYPE_ARRAY || !declType.arrMalloc) return declType;
+    if (initType.bType != BASETYPE_ARRAY || initType.arrMalloc || !initType.arrLen) return declType;
+    declType.arrMalloc = false;
+    declType.arrLen = initType.arrLen;
+    return declType;
+}
+
+struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeParams) {
+    struct list nameToks = allTokOfType(markerNode, TOK_IDEN);
     if (nameToks.len == 0) return NULL;
     struct token nameTok = *(struct token*)ListGetIdx(&nameToks, 0);
     struct var* found = scopeParams ? VarGetList(scopeParams, strFromTok(nameTok)) : NULL;
@@ -803,20 +822,20 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     //the genuine self-reference case ("next Node<>", or a mutual cycle through several types), where
     //forcing it here would either recurse straight back into itself or (since resolveTypeDecl's own
     //re-entrancy guard treats re-entering as an error) wrongly report STRUCT_NOT_YET_DEFINED for a
-    //perfectly legitimate "<>"-broken cycle. A "<>"-indirect reference is a pointer, so it doesn't NEED its
+    //perfectly legitimate "&"-broken cycle. A "&"-indirect reference is a pointer, so it doesn't NEED its
     //target fully resolved to know its own size either way - but a fresh, not-yet-mid-resolution target
     //(including a cross-module one nothing else has referenced yet) is always safe, and needed, to resolve
     //eagerly right here.
-    //A real bug found and fixed: this used to key off "does refNode carry a '<>' marker at all"
-    //(hasTokOfType(refNode, TOK_LST)) instead - a much blunter check that skipped eager resolution for
-    //EVERY "<>"-marked reference, self-referential or not. struct type is copied BY VALUE at "return
+    //A real bug found and fixed: this used to key off "does refNode carry a '&' marker at all"
+    //(hasTokOfType(refNode, TOK_BTWSE_AND)) instead - a much blunter check that skipped eager resolution for
+    //EVERY "&"-marked reference, self-referential or not. struct type is copied BY VALUE at "return
     //*found" below, not accessed through a pointer thereafter, so a reference that happened to be the
     //FIRST thing anywhere to mention its target type permanently baked in a still-placeholder snapshot
     //(empty .vars) into that one field/var/param's own type - never refreshed even after something else
-    //later forced the canonical entry (found itself) to resolve for real. Invisible as long as every "<>"
+    //later forced the canonical entry (found itself) to resolve for real. Invisible as long as every "&"
     //reference to a given type was preceded, somewhere in resolution order, by at least one OTHER,
-    //non-"<>" reference to the same type (which happened to be true of every existing test); surfaced by a
-    //cross-module "<name>"-tagged field ("box sh.WrappedPoint<hs>") whose target had no such earlier
+    //non-"&" reference to the same type (which happened to be true of every existing test); surfaced by a
+    //cross-module "&name"-tagged field ("box sh.WrappedPoint<hs>") whose target had no such earlier
     //reference anywhere - "h.box.inner" failed with "unknown struct member" because h.box's own snapshot
     //of WrappedPoint's type still had zero fields. found->resolving is the precise fact the old check was
     //really trying to approximate; using it directly fixes this with no loss of the self-reference safety
@@ -825,20 +844,20 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     return *found;
 }
 
-//applies the trailing "<>"/"<name>" marker (if present on refNode at all) to t, marking it heap-indirect
+//applies the trailing "&"/"&name" marker (if present on refNode at all) to t, marking it heap-indirect
 //- t may be a struct or an array of anything by this point, since this runs AFTER applyArraySuffixes, so
 //the marker governs the reference as a whole ("a reference to a [3]Point", not "an array of 3 Point
 //references"). See resolveTypeRefBase for why *whether* a marker is present has to be known before that
 //point (to avoid eagerly resolving a self-referential type), even though its *effect* is applied after.
-struct type applyRefMarker(struct type t, struct syntax* refNode, struct list* scopeParams) {
-    if (!hasTokOfType(refNode, TOK_LST)) return t;
+struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list* scopeParams) {
+    if (!markerNode) return t;
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_VOID) {
-        ErrMsgSemantic(firstTokOfType(refNode, TOK_LST), INVALID_REFERENCE_TARGET);
+        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND), INVALID_REFERENCE_TARGET);
         return t;
     }
     t.structMAlloc = true;
-    t.scopeParam = resolveScopeTag(refNode, scopeParams);
-    //a "<>"-indirect reference may be grabbed while its (struct) target is still mid-resolution (see
+    t.scopeParam = resolveScopeTag(markerNode, scopeParams);
+    //a "&"-indirect reference may be grabbed while its (struct) target is still mid-resolution (see
     //resolveTypeRefBase) - its placeholder bType (still BASETYPE_VOID at that point) must not leak
     //through; only reachable with zero array suffixes, since applyArraySuffixes always produces a real
     //BASETYPE_ARRAY outer shell regardless of whether its element is still a placeholder
@@ -847,7 +866,7 @@ struct type applyRefMarker(struct type t, struct syntax* refNode, struct list* s
 }
 
 //attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
-//negated by a single leading unary '-') - used for fixed array sizes, which must be known at compile time
+//negated by a single leading unary '-') - used for compile-time-length array sizes, which must be known at compile time
 bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
     bool negate = false;
     while (true) {
@@ -875,7 +894,7 @@ bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
 }
 
 //wraps `base` in one array level per SNTX_ARR_SFX child of `node` (fixed size from a compile-time-const
-//int expr, or dynamic if the brackets are empty) - shared by type references and literal expressions,
+//int expr, or runtime-length if the brackets are empty) - shared by type references and literal expressions,
 //which both spell array suffixes the same way ("T[3]", "T[]"). Walked right-to-left (last-written suffix
 //wrapped first) so the FIRST-written suffix ends up outermost - "int32[3][4]" is an array of 3, each
 //element an "int32[4]", matching how the dimensions read left-to-right.
@@ -907,10 +926,43 @@ struct type applyArraySuffixes(struct type base, struct syntax* node) {
     return base;
 }
 
+//true if t is - or contains, at any depth through plain embedded array elements - a struct that declares
+//a destructor but is not itself reference-shaped. Such a type is reference-only (C11): a destructor
+//asserts an instance owns something releasable exactly once, which needs a well-defined instance count,
+//and a value type (structurally compared, freely copied) has none. Stops at a reference: an already-"&"
+//element/field is a separate instance with its own allocation and its own scope registration (O16), which
+//is exactly the shape that IS allowed.
+bool typeHasBareDestructStruct(struct type t) {
+    if (t.bType == BASETYPE_STRUCT) return t.hasDestruct && !t.structMAlloc;
+    //always recurse into an array's element type, marker or not: a "&" on an array makes the array as a
+    //whole reference-shaped ("a reference to a [3]Point"), never its elements individually - so a
+    //"Handle[3]&s" is still three Handle *values* sharing one allocation, exactly what C11 forbids
+    if (t.bType == BASETYPE_ARRAY) return typeHasBareDestructStruct(*t.arrElem);
+    return false;
+}
+
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
+    //an element-position marker applies to the base BEFORE the array suffixes wrap it, so "Point&[3]" is
+    //an array of 3 Point references; the trailing one applies after, so "Point[3]&" is one reference to an
+    //array of 3 Point values. With no suffixes the two are the same type and only the first node exists.
+    struct syntax* elemMarker = firstPartOfType(refNode, SNTX_ELEM_REF_MARKER);
+    //an element-position marker only means "element" when array suffixes actually follow it; with none,
+    //it IS the whole type's marker and a scope name on it is perfectly ordinary. When it does sit under a
+    //suffix, a name on it can never be honoured: a reference nested inside a larger value always inherits
+    //its container's scope (see the report), so codegen allocates every element into the array's own
+    //scope regardless. Rejected rather than silently ignored - "Handle&s[3]" and "Handle&[3]" otherwise
+    //compile identically, which is exactly the kind of accepted-but-meaningless tag that hides a bug.
+    if (elemMarker && hasTokOfType(elemMarker, TOK_IDEN) && allPartsOfType(refNode, SNTX_ARR_SFX).len != 0) {
+        ErrMsgSemantic(firstTokOfType(elemMarker, TOK_IDEN), NAMED_SCOPE_ON_ELEMENT);
+    }
+    base = applyRefMarker(base, elemMarker, scopeParams);
     struct type withArrays = applyArraySuffixes(base, refNode);
-    return applyRefMarker(withArrays, refNode, scopeParams);
+    struct type t = applyRefMarker(withArrays, firstPartOfType(refNode, SNTX_REF_MARKER), scopeParams);
+    if (typeHasBareDestructStruct(t)) {
+        ErrMsgSemantic(firstTokAnywhere(refNode), DESTRUCT_TYPE_MUST_BE_REFERENCE);
+    }
+    return t;
 }
 
 //"T[expr]" (expr not a compile-time constant) in a var-decl's own type position, with no initializer, is
@@ -920,7 +972,7 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
 //non-constant size with INVALID_ARRAY_SIZE), keeps every other consumer of struct type completely
 //unaware runtime sizes exist at all - arrLen stays exactly what it's always been, a compile-time constant
 //or nothing. Only a single dimension supports this (matching the existing "outermost level, at most,
-//dynamic" restriction on rectangular multi-dimensional arrays) - two or more suffixes, or a suffix that
+//runtime-length" restriction on rectangular multi-dimensional arrays) - two or more suffixes, or a suffix that
 //IS a compile-time constant, fall through to the ordinary path unchanged.
 struct syntax* detectRuntimeSizedArrayType(struct syntax* typeExprNode) {
     struct syntax* actual = partSntx(typeExprNode, 0);
@@ -936,22 +988,26 @@ struct syntax* detectRuntimeSizedArrayType(struct syntax* typeExprNode) {
 }
 
 //the declared TYPE half of a "T[expr]" var-decl (see detectRuntimeSizedArrayType above) - the element type
-//plus whatever "<>"/"<name>" marker was written, wrapped as an ordinary dynamic ("arrMalloc", no arrLen)
+//plus whatever "&"/"&name" marker was written, wrapped as an ordinary runtime-length ("arrMalloc", no arrLen)
 //array - exactly the same shape a bare "T[]" already resolves to. The runtime size itself is consumed
 //separately, as the allocation's own element count (see OperandSizedArrayAlloc) - never folded into the
 //type, so every existing consumer of struct type (TypeGetSize, TypeIsSame, len(), ...) needs no changes.
 struct type resolveRuntimeSizedArrayDeclType(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
+    //same two-level marker handling as resolveTypeRef: an element-position marker applies to the element
+    //type, the trailing one to the array as a whole (which, being runtime-sized, is reference-shaped
+    //regardless - see the header comment)
+    base = applyRefMarker(base, firstPartOfType(refNode, SNTX_ELEM_REF_MARKER), scopeParams);
     struct type wrapped = (struct type){0};
     wrapped.bType = BASETYPE_ARRAY;
     wrapped.arrElem = MallocOrCrash(sizeof(struct type));
     *wrapped.arrElem = base;
     wrapped.arrMalloc = true;
-    return applyRefMarker(wrapped, refNode, scopeParams);
+    return applyRefMarker(wrapped, firstPartOfType(refNode, SNTX_REF_MARKER), scopeParams);
 }
 
 //resolves a literal's base type name node ("MyError" or "alias.MyError", from SNTX_NAME) - the same
-//lookup as resolveTypeRefBase, minus the "<>" heap-indirect handling: a literal's own trailing "{...}"
+//lookup as resolveTypeRefBase, minus the "&" heap-indirect handling: a literal's own trailing "{...}"
 //holds values, not the (always-empty) heap-indirection marker, and constructing a value always requires
 //the type to be fully resolved (never the "grab it mid-resolution" trick <> exists for)
 struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNode) {
@@ -1026,8 +1082,8 @@ struct type resolveStructBody(struct semaModule* mod, struct token nameTok, stru
         v.tok = memberTok;
         v.mut = true;
         //NULL: a struct field can't reference a scope parameter - that needs the type itself to be
-        //generic over a scope, which olang has no mechanism for yet (see the report). A bare "<>" field
-        //still works fine (structMAlloc, private/local scope); an explicit "<name>" field correctly fails
+        //generic over a scope, which olang has no mechanism for yet (see the report). A bare "&" field
+        //still works fine (structMAlloc, private/local scope); an explicit "&name" field correctly fails
         //with UNKNOWN_SCOPE until that generics mechanism exists.
         v.type = resolveTypeExpr(mod, typeExprNode, NULL);
         ListAdd(&t.vars, &v);
@@ -1135,7 +1191,7 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
     }
 }
 
-//true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "<>"/"<name>" tag, no
+//true iff typeExprNode is a bare, unsuffixed "scope" name - no array suffix, no "&"/"&name" tag, no
 //namespace. "scope" is deliberately never registered as a real type (unlike int32/bool/etc in
 //resolveTypeRefBase) - it only ever resolves here, in a parameter's type position, so it structurally
 //can't appear as a struct field, return type, or ordinary variable's type, mirroring how error types are
@@ -1152,7 +1208,7 @@ struct type TypeScope(void) {
 bool isScopeTypeRef(struct syntax* typeExprNode) {
     struct syntax* actual = partSntx(typeExprNode, 0);
     if (actual->type != SNTX_TYPE_REF) return false;
-    if (hasTokOfType(actual, TOK_LST)) return false;
+    if (firstPartOfType(actual, SNTX_ELEM_REF_MARKER) || firstPartOfType(actual, SNTX_REF_MARKER)) return false;
     if (allPartsOfType(actual, SNTX_ARR_SFX).len != 0) return false;
     struct list idens = allTokOfType(firstPartOfType(actual, SNTX_NAME), TOK_IDEN);
     if (idens.len != 1) return false;
@@ -1173,7 +1229,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         v.tok = nameTok;
         v.mut = hasTokOfType(p, TOK_MUT);
         //"out" doubles as this param list's growing scopeParams: an earlier param's name is visible to a
-        //later param's "<name>" tag (e.g. "func f(s scope, n Node<s>)"), not the other way around
+        //later param's "&name" tag (e.g. "func f(s scope, n Node<s>)"), not the other way around
         v.type = isScopeTypeRef(typeExprNode) ? TypeScope() : resolveTypeExpr(mod, typeExprNode, out);
         ListAdd(out, &v);
     }
@@ -1182,9 +1238,9 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
 static bool typeIsRefShaped(struct type t);
 
 //true if t, considered as a standalone returned value, is tied to a BARE (own) scope - a struct or
-//fixed array explicitly marked "<>" (structMAlloc, no scopeParam), or a dynamic array with no
-//scopeParam at all (T11/O7: a dynamic array is always reference-shaped, with or without an explicit
-//marker, so an unmarked one is just as bare-scoped as an explicitly-"<>"-marked struct/fixed array) -
+//compile-time-length array explicitly marked "&" (structMAlloc, no scopeParam), or a runtime-length array with no
+//scopeParam at all (T11/O7: a runtime-length array is always reference-shaped, with or without an explicit
+//marker, so an unmarked one is just as bare-scoped as an explicitly-"&"-marked struct/compile-time-length array) -
 //exactly the shape that dangles if the function that allocated it hands it back by plain value, since
 //its own "own" scope closes at the point that function returns.
 static bool typeIsBareRefShaped(struct type t) {
@@ -1194,14 +1250,14 @@ static bool typeIsBareRefShaped(struct type t) {
 }
 
 //true if t (or anything nested inside it, transitively, through plain/embedded fields/elements only)
-//has a bare "<>" (unnamed) heap-indirect field - the shape that dangles the instant a plain value
+//has a bare "&" (unnamed) heap-indirect field - the shape that dangles the instant a plain value
 //containing it escapes via return, since there's no scope name anywhere in the signature it could have
-//been tied to. Deliberately doesn't chase into a NAMED "<name>" field's own pointee, nor into any
+//been tied to. Deliberately doesn't chase into a NAMED "&name" field's own pointee, nor into any
 //field/element that's itself reference-shaped (bare or named): a bare one is the caller's own concern
 //via typeIsBareRefShaped, a named one's lifetime is already an explicit, independently-checked fact
 //tied to its own name, not something this returning function could be responsible for regardless of how
-//it got here. Never infinite: a plain (non-"<>") struct can never recursively embed itself (that's
-//exactly what "<>" exists to break), so any embedded chain through this function alone is guaranteed to
+//it got here. Never infinite: a plain (non-"&") struct can never recursively embed itself (that's
+//exactly what "&" exists to break), so any embedded chain through this function alone is guaranteed to
 //bottom out.
 bool structContainsBareScopeField(struct type t) {
     if (t.bType == BASETYPE_STRUCT && t.structMAlloc) return false;
@@ -1218,16 +1274,16 @@ bool structContainsBareScopeField(struct type t) {
 }
 
 //true if t, or anything nested inside it transitively through a chain of plain/embedded array
-//elements and struct fields, is itself reference-shaped: a "<>"/"<name>"-marked struct or fixed
-//array (structMAlloc), or a dynamic array (arrMalloc, always reference-shaped per T11/O7 regardless
-//of any marker). Unlike structContainsBareScopeField, this doesn't stop at a NAMED "<name>" field or
+//elements and struct fields, is itself reference-shaped: a "&"/"&name"-marked struct or fixed
+//array (structMAlloc), or a runtime-length array (arrMalloc, always reference-shaped per T11/O7 regardless
+//of any marker). Unlike structContainsBareScopeField, this doesn't stop at a NAMED "&name" field or
 //distinguish bare from named at all - both are equally illegitimate to zero-fill, since neither has
 //a real allocation yet (there is no null literal anywhere in this language, so a zero-filled
 //reference is an invisible dangling pointer, not a safe default) - see D13's own note on why a
 //no-initializer array var-decl (buildVarDeclStmnt, semaCheckBodies) must reject any declared type
 //containing one anywhere, not just at the type's own outermost level. Never infinite, same
 //termination argument as structContainsBareScopeField: a plain struct can't recursively embed
-//itself without passing through a "<>" boundary, which this stops at just as that function does.
+//itself without passing through a "&" boundary, which this stops at just as that function does.
 bool typeContainsReference(struct type t) {
     if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return true;
     if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY) && t.structMAlloc) return true;
@@ -1268,19 +1324,19 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //full param list (t.vars) is already built above, so a return type may reference any of them,
         //e.g. "func makeNode(v int32, s scope) Node<s>"
         *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
-        //a bare "<>" return type is always wrong, not just sometimes: the function's own private scope
+        //a bare "&" return type is always wrong, not just sometimes: the function's own private scope
         //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
         //would already be dangling before the caller ever sees it - catching this once, here, covers
         //every return statement in the function (single, multiple, implicit fallthrough, error
-        //propagation) without needing to inspect each one individually. Covers structs, fixed arrays, AND
-        //dynamic arrays (typeIsBareRefShaped) - not just structs, since T11/O7 make a dynamic array just
-        //as bare-scoped as an explicitly-"<>"-marked struct/fixed array, with or without a marker. The
-        //transitive case - a bare "<>" field/element nested inside a plain (non-heap-indirect) returned
+        //propagation) without needing to inspect each one individually. Covers structs, compile-time-length arrays, AND
+        //runtime-length arrays (typeIsBareRefShaped) - not just structs, since T11/O7 make a runtime-length array just
+        //as bare-scoped as an explicitly-"&"-marked struct/compile-time-length array, with or without a marker. The
+        //transitive case - a bare "&" field/element nested inside a plain (non-heap-indirect) returned
         //struct or array - is also caught, below.
         if (typeIsBareRefShaped(*t.retType)) {
             ErrMsgSemantic(firstTokAnywhere(retTypeNode), BARE_SCOPE_RETURN_TYPE);
         //the transitive case: a return type that isn't itself bare-ref-shaped (so the check above doesn't
-        //fire) but embeds a bare "<>" field/element somewhere inside it - see structContainsBareScopeField.
+        //fire) but embeds a bare "&" field/element somewhere inside it - see structContainsBareScopeField.
         //Conservative on purpose: this rejects some sound code too (a function that only ever passes an
         //already-correctly-scoped value straight through, never allocating into the bare field itself,
         //would be fine at runtime) - but nothing short of real dataflow/escape analysis (not attempted
@@ -1300,7 +1356,7 @@ static bool isNumericPrimitive(struct type t) {
 }
 
 //true if t is a valid "extern func" parameter/return type per X2: a numeric primitive itself, or a
-//(fixed or dynamic) array whose element type is one - deliberately flat, not recursive, since X2 only
+//(compile-time-length or runtime-length) array whose element type is one - deliberately flat, not recursive, since X2 only
 //ever allows "an array of one of those five", never an array of arrays
 static bool isExternAllowedType(struct type t) {
     if (isNumericPrimitive(t)) return true;
@@ -1322,7 +1378,7 @@ void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode
         struct var v = (struct var){0};
         v.name = name;
         v.tok = nameTok;
-        //no scope params exist for an extern function - scope/"<>" are never valid extern types anyway
+        //no scope params exist for an extern function - scope/"&" are never valid extern types anyway
         v.type = resolveTypeExpr(mod, typeExprNode, NULL);
         if (!isExternAllowedType(v.type)) ErrMsgSemantic(nameTok, EXTERN_TYPE_NOT_ALLOWED);
         ListAdd(out, &v);
@@ -1733,11 +1789,11 @@ struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
     return foundAny ? found : scopeVar;
 }
 
-//can a "<>"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
+//can a "&"-heap-indirect value tagged srcScope be safely stored into a slot tagged dstScope, from the
 //perspective of func (the function currently being checked)? NULL means "bare <> - this function's own
 //private scope". olang has no lifetime-bound syntax (no Rust-style "'a: 'b"), so only two relationships
 //are ever provable: the exact same scope (trivially safe - covers own-into-own too), and a named scope
-//flowing into a bare "<>" slot (every scope RECEIVED as a parameter is guaranteed to outlive func's own
+//flowing into a bare "&" slot (every scope RECEIVED as a parameter is guaranteed to outlive func's own
 //private scope, by construction - own's scope closes when func itself returns, strictly before any scope
 //its caller passed in could close - see the report). The reverse (own flowing into a named slot) is never
 //safe, and two DIFFERENT named scopes are never provably comparable at all.
@@ -1770,7 +1826,7 @@ enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
-    TYPE_FIT_ARRAY_SIZE_MISMATCH //WRONG_ARG_COUNT - same element type, both fixed-size, different sizes
+    TYPE_FIT_ARRAY_SIZE_MISMATCH //ARRAY_SIZE_MISMATCH - same element type, both compile-time-length, different sizes
 };
 
 //true if a numeric LITERAL of type `from` may implicitly widen into a `to`-typed target - the one
@@ -1793,7 +1849,7 @@ bool numericLiteralCanWiden(struct type from, struct type to) {
 //literal may widen per numericLiteralCanWiden above; anything else must match exactly, unless
 //explicitly converted via TypeName(x) - see OperandNumericConversion.
 //func is the function currently being checked (NULL for a global initializer/test{} block) - only used for
-//the scope-safety check below: when both target and op->type are ALREADY "<>"-heap-indirect (an existing
+//the scope-safety check below: when both target and op->type are ALREADY "&"-heap-indirect (an existing
 //reference being passed/reassigned, not a fresh literal about to be promoted - see typeNeedsMallocPromotion
 //in codegen.c, the codegen-side mirror of this same "already has a reference" condition), verify the
 //source's scope is provably at least as long-lived as the target's own declared scope - see
@@ -1803,8 +1859,8 @@ bool numericLiteralCanWiden(struct type from, struct type to) {
 //much less helpful generic VALUE_TYPE_MISMATCH when that's what actually failed.
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     if (TypeIsSame(target, op->type)) {
-        //a struct or fixed array is reference-shaped only when explicitly "<>"-marked (structMAlloc) - a
-        //plain/embedded value has no scope of its own to check at all. A dynamic array is different: it's
+        //a struct or compile-time-length array is reference-shaped only when explicitly "&"-marked (structMAlloc) - a
+        //plain/embedded value has no scope of its own to check at all. A runtime-length array is different: it's
         //always pointer-backed the moment it's arrMalloc, with or without an explicit marker (there's no
         //"embedded" shape for a runtime-known length to begin with - see the report), so its scope tag is
         //always meaningful to check, regardless of structMAlloc.
@@ -1831,25 +1887,28 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         op->type = target;
         return TYPE_FIT_OK;
     }
-    //a fixed-size array value - fresh literal or an already-existing one, either way - may flow into a
-    //dynamic ("T[]") target regardless of its own size: malloc-and-copy at the point it's promoted (see
-    //typeNeedsDynamicPromotion/cgPromoteFixedArrayToDynamic in codegen.c). The array-sizing counterpart to
-    //the "<>"-reference malloc-promotion above - an orthogonal axis, not the same mechanism (see the
+    //a compile-time-length array value - fresh literal or an already-existing one, either way - may flow into a
+    //runtime-length ("T[]") target regardless of its own size: malloc-and-copy at the point it's promoted (see
+    //typeNeedsRuntimeLengthPromotion/cgPromoteFixedToRuntimeLength in codegen.c). The array-sizing counterpart to
+    //the "&"-reference malloc-promotion above - an orthogonal axis, not the same mechanism (see the
     //report). Unlike the int->float widening above, this is NOT gated on op->isLiteral: that gate exists
     //there because widening an int LITERAL is pure reinterpretation (no fixed representation yet to
     //convert from), whereas a non-literal int already has a concrete representation and would need an
     //actual runtime conversion instruction - a genuinely different, unimplemented mechanism. No such split
-    //exists here: cgPromoteFixedArrayToDynamic only ever needs a source ADDRESS to copy from
+    //exists here: cgPromoteFixedToRuntimeLength only ever needs a source ADDRESS to copy from
     //(cgValue's by-ref convention already hands one back for any embedded array, literal or not), so a
-    //plain variable already holding a fixed array copies exactly the same way a fresh literal does -
+    //plain variable already holding a compile-time-length array copies exactly the same way a fresh literal does -
     //codegen needed no changes at all, only this check relaxing to admit it.
     if (op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
             && !op->type.arrMalloc && target.arrMalloc && TypeIsSame(*op->type.arrElem, *target.arrElem)) {
         return TYPE_FIT_OK;
     }
-    //both fixed-size arrays of the same element type, but the sizes differ - report the more specific
-    //WRONG_ARG_COUNT instead of the generic mismatch message. Not gated on op->isLiteral: this is just as
-    //meaningful for an existing fixed-array value as for a fresh literal.
+    //both compile-time-length arrays of the same element type, but the sizes differ - report the more specific
+    //ARRAY_SIZE_MISMATCH instead of the generic mismatch message. Not gated on op->isLiteral: this is just
+    //as meaningful for an existing compile-time-length-array value as for a fresh literal. Previously reported as
+    //WRONG_ARG_COUNT ("wrong number of arguments"), which was actively misleading - the argument count is
+    //correct in the case that reaches this, it's the array's own length that differs - and made no sense
+    //at all at the non-argument call site below (a var-decl/assignment).
     if (op->type.bType == BASETYPE_ARRAY && target.bType == BASETYPE_ARRAY
             && !op->type.arrMalloc && !target.arrMalloc && TypeIsSame(*op->type.arrElem, *target.arrElem)) {
         return TYPE_FIT_ARRAY_SIZE_MISMATCH;
@@ -1859,7 +1918,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
 
 void reportTypeFit(enum typeFit fit, struct token tok) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
-    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, WRONG_ARG_COUNT);
+    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, ARRAY_SIZE_MISMATCH);
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
 }
 
@@ -1871,7 +1930,13 @@ bool OperandIsMutableLvalue(struct operand* op) {
     switch (op->opType) {
         case OPERATION_READ_VAR: return op->readVar->mut;
         case OPERATION_INDEX: return OperandIsMutableLvalue(*(struct operand**)ListGetIdx(&op->args, 0));
-        case OPERATION_MEMBER: return OperandIsMutableLvalue(*(struct operand**)ListGetIdx(&op->args, 0));
+        //C3: a field is mutable only if declared "mut" - checked here alongside the base's own
+        //mutability, not instead of it, so writing through an immutable base stays rejected too. This used
+        //to recurse on the base alone, which never consulted the field's own flag at all and so let every
+        //field of a mutable variable be written regardless of how it was declared. A plain (T13) struct's
+        //fields carry mut = true (there is no "mut" in that grammar at all), so they are unaffected.
+        case OPERATION_MEMBER:
+            return op->memberMut && OperandIsMutableLvalue(*(struct operand**)ListGetIdx(&op->args, 0));
         default: return false;
     }
 }
@@ -1897,7 +1962,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     //- "own" (bare) or a direct read of one of the CALLER's own scope parameters, the only two shapes a
     //"scope"-typed argument can ever have (see the report). Built *before* the type-fit-checking loop
     //below (moved up from its original spot after it) - that loop needs it to resolve a later
-    //parameter's own "<name>" tag: by D9/O4, that tag can only ever name one of func's OWN earlier
+    //parameter's own "&name" tag: by D9/O4, that tag can only ever name one of func's OWN earlier
     //parameters, never anything in the calling function's own frame, so comparing it against callerFunc's
     //own parameters directly (scopeCanFlowInto's ordinary "is this one of func's own params" test) would
     //always fail as unverifiable-and-therefore-rejected otherwise - see the report on why "unverifiable"
@@ -1963,7 +2028,7 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        //a parameter's own "<name>" tag names one of THIS SAME signature's earlier scope parameters
+        //a parameter's own "&name" tag names one of THIS SAME signature's earlier scope parameters
         //(D9/O4), never anything in callerFunc's own frame - resolve it through this call's own
         //just-built binding map (above) before checking fit, so scopeCanFlowInto compares against what
         //was actually passed for it at this call, not the callee's own otherwise-foreign parameter
@@ -1971,6 +2036,23 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
         //means reject - see the report).
         if (paramType.scopeParam) paramType.scopeParam = resolveEffectiveScopeVar(op, paramType.scopeParam);
         reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
+        //A "&"-marked parameter names the CALLER's own instance, so a value may not be silently promoted
+        //into one at a call boundary - otherwise "&" in a signature would not reliably mean "your
+        //instance", and "mut Point&" would write to a copy the caller never sees. Deliberately narrow:
+        //only an explicit "&" marker (structMAlloc), never the compile-time-to-runtime-length array
+        //promotion (arrMalloc), which changes no instance identity and is how "T[]" parameters accept a
+        //"T[N]" argument. Promotion at a var-decl or a return is untouched - there is no caller-side
+        //instance to preserve there, that IS how a reference gets created.
+        //...and only when the caller actually NAMED the argument (OperandIsLvalue: a variable read, an
+        //index, or a member access). A freshly built temporary - a literal, or a constructor call's own
+        //result - has no caller-side instance to preserve, so promoting one is construction rather than a
+        //silent copy of something the caller holds, exactly as at a var-decl or a return. That is what
+        //keeps "PunnedBox(a, WrappedPoint(a, Point{x, y}))" working while still rejecting the case this
+        //rule exists for: passing a named value where the signature promised to use the caller's own.
+        if (paramType.structMAlloc && !arg->type.structMAlloc && OperandIsLvalue(arg)
+                && (arg->type.bType == BASETYPE_STRUCT || arg->type.bType == BASETYPE_ARRAY)) {
+            ErrMsgSemantic(arg->tok, VALUE_ARG_FOR_REFERENCE_PARAM);
+        }
     }
     return op;
 }
@@ -1979,10 +2061,10 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
 //read it. Returns int32, matching the integer type used everywhere else in the language - an array
 //length never needs int64's extra range in practice, and int32(len(arr)) is one call away for the rare
 //case that does (see OperandNumericConversion below); the underlying runtime slice field is i64, so the
-//dynamic case truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side
+//runtime-length case truncates - see cgLen. Always evaluates arg (kept as this operand's own arg, for any side
 //effects a more complex argument expression might have), but for a compile-time-known dimension
-//(embedded, or a "<>"-tagged fixed-size reference) codegen emits the constant directly rather than
-//computing anything at runtime - only a genuinely dynamic ("T[]") array reads its length from the
+//(embedded, or a "&"-tagged compile-time-length reference) codegen emits the constant directly rather than
+//computing anything at runtime - only a genuinely runtime-length ("T[]") array reads its length from the
 //runtime slice.
 struct operand* OperandLen(struct operand* arg, struct token tok) {
     if (arg->type.bType != BASETYPE_ARRAY) {
@@ -2052,6 +2134,7 @@ struct operand* OperandMember(struct operand* base, struct str member, struct to
     }
     struct operand* op = operandNew(tok, OPERATION_MEMBER, memberVar->type);
     op->memberName = member;
+    op->memberMut = memberVar->mut;
     ListAdd(&op->args, &base);
     //if this field carries a scope tag (only possible for a constructor-bearing type - see the report),
     //resolve it through base's own scopeBindings map one hop and record the (possibly still-foreign)
@@ -2413,7 +2496,7 @@ struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, stru
 }
 
 //"int32[3][1, 2, 3]" (fixed - value count must match the declared size exactly) or "int32[][1, 2, 3]"
-//(dynamic - mallocd at runtime, see cgAggregateLiteral; size is just however many values are given)
+//(runtime-length - mallocd at runtime, see cgAggregateLiteral; length is just however many values given)
 // ---- expressions ----
 
 enum operation opFromTokType(enum tokenType t) {
@@ -2633,7 +2716,7 @@ struct operand* buildArrLiteralItem(struct checkCtx* ctx, struct type elemType, 
 //that - a differently-shaped or differently-sized sibling row surfaces as an ordinary type-fit error, the
 //same machinery as any other mismatch, no separate "shape" check needed. Always self-describing (fixed
 //size = however many items are given, at every level) regardless of what it's eventually checked against -
-//see OperandFitsType for the one case that's context-dependent (a fixed literal flowing into a dynamic
+//see OperandFitsType for the one case that's context-dependent (a compile-time-length literal flowing into a runtime-length
 //target).
 struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType, struct syntax* argsNode, struct token tok) {
     struct list items = allSyntaxParts(argsNode);
@@ -2674,6 +2757,10 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
     struct type elemType = resolveLiteralBaseType(ctx->mod, nameNode);
+    //"Handle&[...]" - the literal's element type carries its own reference marker, so each element is a
+    //separately allocated instance rather than a value laid out inline in the array
+    elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER),
+                              ctx->func ? &ctx->func->type.vars : NULL);
     //an error type has no constructible values at all - every element would fail to type-check anyway, but
     //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
     if (elemType.bType == BASETYPE_ERROR) {
@@ -2857,8 +2944,8 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     return result;
 }
 
-//"T[expr]" (expr not constant), no initializer - a dynamic array of expr zero-valued elements, arena-
-//allocated (own by default, or the declared type's own "<name>" tag - see the report). sizeOp is the
+//"T[expr]" (expr not constant), no initializer - a runtime-length array of expr zero-valued elements, arena-
+//allocated (own by default, or the declared type's own "&name" tag - see the report). sizeOp is the
 //already-checked-integer size expression; t is the declared type (see resolveRuntimeSizedArrayDeclType).
 struct operand* OperandSizedArrayAlloc(struct operand* sizeOp, struct type t, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_SIZED_ARRAY_ALLOC, t);
@@ -2871,7 +2958,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool mut = true; //local variables are mutable by default; "mut" is only meaningful on globals
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
-    //ctx->func is NULL for a global initializer, which has no parameter list to tag a "<name>" against
+    //ctx->func is NULL for a global initializer, which has no parameter list to tag a "&name" against
     struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
 
     struct type declType;
@@ -2879,7 +2966,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!exprNode) {
         //no initializer - the grammar only ever allows this alongside an explicit type (":=" always
         //requires something to infer from - see parseVarDecl), and only two declared-type shapes actually
-        //mean anything without one: a fixed-size array (zero-filled) or a "T[expr]" runtime-sized one
+        //mean anything without one: a compile-time-length array (zero-filled) or a "T[expr]" runtime-sized one
         //(arena-allocated and zero-filled) - see the report. Anything else has no way to know what value
         //to start with at all.
         struct syntax* actual = partSntx(typeExprNode, 0);
@@ -2888,11 +2975,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct operand* sizeOp = buildExprFromSyntax(ctx, runtimeSizeExprNode);
             if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
             declType = resolveRuntimeSizedArrayDeclType(ctx->mod, actual, scopeParams);
-            //a bare "T[expr]" (no "<>" at all) is still implicitly own-scoped - see the report - so "own"
+            //a bare "T[expr]" (no "&" at all) is still implicitly own-scoped - see the report - so "own"
             //has to actually exist here the same way it would for a real "own" expression
             if (!declType.scopeParam && !ctx->hasOwnScope) ErrMsgSemantic(nameTok, OWN_OUTSIDE_FUNC);
             //every one of the runtime-many elements is zero-filled at allocation time (cgSizedArrayAlloc),
-            //same "no valid zero value for a reference" problem D13 rules out for a fixed-size array - see
+            //same "no valid zero value for a reference" problem D13 rules out for a compile-time-length array - see
             //typeContainsReference
             if (typeContainsReference(*declType.arrElem)) {
                 ErrMsgSemantic(nameTok, ZERO_FILL_CONTAINS_REFERENCE);
@@ -2915,13 +3002,14 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         rhs = buildExprFromSyntax(ctx, exprNode);
         if (typeExprNode) {
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
-            //a fixed-size target already knows its own size from the literal's own value count - see the
+            //a compile-time-length target already knows its own size from the literal's own value count - see the
             //report; restating it on both is redundant, not just harmless, so it's rejected outright
             //rather than silently accepted whenever the two sizes happen to agree
             if (declType.bType == BASETYPE_ARRAY && !declType.arrMalloc && rhs->isLiteral) {
                 ErrMsgSemantic(rhs->tok, REDUNDANT_ARRAY_SIZE);
             }
             reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
+            declType = inferArrayLenFromInit(declType, rhs->type);
         } else { // ":=" - type read straight off the (required-to-be-literal) initializer
             if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
             declType = rhs->type;
@@ -3191,6 +3279,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (typeExprNode) {
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
         reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok);
+        declType = inferArrayLenFromInit(declType, initVal->type);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         if (!initVal->isLiteral) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
         declType = initVal->type;
@@ -3296,7 +3385,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     else if (val && ctx->func && ctx->func->type.hasRetType) {
         enum typeFit fit = OperandFitsType(ctx->func, val, *ctx->func->type.retType);
         if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(val->tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
-        else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(val->tok, WRONG_ARG_COUNT);
+        else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(val->tok, ARRAY_SIZE_MISMATCH);
         else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
     }
 
@@ -3515,13 +3604,13 @@ void semaCheckBodies(struct semaModule* mod) {
             ctx.mod = mod;
             struct syntax* exprNode = firstPartOfType(actual, SNTX_EXPR);
             if (!exprNode) {
-                //no initializer - only ever valid for a fixed-size ("T[N]") array global, left at the
+                //no initializer - only ever valid for a compile-time-length ("T[N]") array global, left at the
                 //zero-initialized default emitGlobalDecls already gives every global (real BSS behavior -
-                //nothing further to do here). A dynamic array (bare "T[]", or the "T[expr]" runtime-sized
+                //nothing further to do here). A runtime-length array (bare "T[]", or the "T[expr]" runtime-sized
                 //form - both arrMalloc) has no "own"/enclosing scope to arena-allocate into at global-init
                 //time (same restriction "own" itself has outside a function), so it's rejected here rather
                 //than silently left as a null/empty slice, which would be a different, surprising meaning.
-                //A reference nested anywhere within an otherwise-fixed-size global (or the global's own
+                //A reference nested anywhere within an otherwise-compile-time-length global (or the global's own
                 //declared type itself being one, e.g. "x Point[3]<>") is rejected the same way, for the
                 //same reason - see typeContainsReference/D13.
                 if (v->type.bType != BASETYPE_ARRAY || v->type.arrMalloc) {
@@ -3570,7 +3659,8 @@ void semaCheckBodies(struct semaModule* mod) {
                 *local = *param;
                 local->origin = param; //canonicalVar traces this copy back to the type-level original
                 local->mayBeInitialized = true;
-                local->mut = true;
+                //D9, same as the function-body case above: a constructor parameter is immutable unless
+                //declared "mut"
                 ListAdd(&ctorScope.localPtrs, &local);
             }
             struct checkCtx cctx = {0};
@@ -3651,7 +3741,9 @@ void semaCheckBodies(struct semaModule* mod) {
             *local = *param;
             local->origin = param; //canonicalVar traces this copy back to the type-level original
             local->mayBeInitialized = true;
-            local->mut = true; //local variables (including parameters) are mutable by default
+            //D9: a parameter is immutable unless declared "mut" - unlike an ordinary local (D11), where
+            //"mut" is accepted but has no effect. This used to force mut = true for parameters too, which
+            //made D9 unenforced: any parameter was assignable regardless of how it was declared.
             ListAdd(&fnScope.localPtrs, &local);
         }
 

@@ -32,13 +32,13 @@ struct cgCtx {
     struct var* curFunc; //function currently being generated; NULL outside a real function body (globals/tests)
     struct cgScope* scope;
     //the current function's own private scope - an alloca'd %olang.scope, lazily-empty until the first
-    //"<>"/"own" allocation actually touches it (see the report). NULL outside a real function/test body
+    //"&"/"own" allocation actually touches it (see the report). NULL outside a real function/test body
     //(globals, the program-main wrapper, the test harness's own non-per-test code), where "own" is never
     //reachable (checked in semantic.c via ctx->hasOwnScope) so this is never read there.
     char* ownScopeSlot;
     //ambient "this is the scope a struct/array literal currently under construction is ultimately being
     //promoted into" - set by cgValueForTarget/cgBoundaryValue around a recursive cgValue() call so a
-    //literal's own nested bare-"<>" fields (built inside cgAggregateLiteral) inherit the *same* scope as
+    //literal's own nested bare-"&" fields (built inside cgAggregateLiteral) inherit the *same* scope as
     //the literal itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
     //NULL when nothing is currently being promoted (the common case - most values never touch this).
     char* targetScopeOverride;
@@ -91,12 +91,12 @@ void structAggSpelling(struct type t, char* buf, size_t n) {
 /* the LLVM type of a value of type t, used everywhere: alloca operands, function signatures, GEP pointee
  * types. Struct types are always represented by-pointer at the value level (ptr when structMAlloc, the
  * named aggregate itself otherwise - both cases point at memory laid out per structAggSpelling); a fixed
- * array is the real aggregate [N x ElemT] when embedded, or a bare ptr when "<>"-heap-indirect (same
+ * array is the real aggregate [N x ElemT] when embedded, or a bare ptr when "&"-heap-indirect (same
  * "ptr when referenced" rule a struct already gets, since its own size is compile-time-known either way -
- * see the report on extending scope/"<>" to arrays); a dynamic ("T[]") array is always the two-word slice
+ * see the report on extending scope/"&" to arrays); a runtime-length ("T[]") array is always the two-word slice
  * { i64, ptr } regardless of structMAlloc - a genuinely runtime-sized array always needs to carry its own
  * length somewhere, so "arrMalloc" wins the shape question over "structMAlloc" for that one case (whether
- * scope-tracking a dynamic array's own backing store is a separate, not-yet-implemented step - see the
+ * scope-tracking a runtime-length array's own backing store is a separate, not-yet-implemented step - see the
  * report). */
 void llvmType(struct type t, char* buf, size_t n) {
     switch (t.bType) {
@@ -205,46 +205,7 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
 
 struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name);
 
-//destructs every currently-live PLAIN (non-"<>") local of a hasDestruct-bearing struct type, in LIFO order
-//(innermost/most-recently-declared first, across the whole active scope chain) - called right before every
-//real "ret" a function/test can hit, mirroring cgCloseOwnScope's own injection points exactly (a destructor
-//can never fail/propagate - see the report - so there's no error-path interaction to worry about here). A
-//"<>"-heap-indirect local's destructor runs later instead, when its owning scope closes - see
-//__olang_scope_register_dtor/emitScopeRuntime. skipLocal, when non-NULL, is the one local whose destructor
-//must NOT run here - see cgSkipLocalForReturn: not general move semantics (still not attempted - see the
-//report), just the one narrow, common case ("return x" handing x's own value straight to the caller) that
-//a plain "skip this one" check can resolve without any real dataflow tracking.
-void cgRunLocalDestructors(struct cgCtx* ctx, struct cgLocal* skipLocal) {
-    for (struct cgScope* sc = ctx->scope; sc; sc = sc->parent) {
-        for (int i = sc->locals.len -1; i >= 0; i--) {
-            struct cgLocal* l = ListGetIdx(&sc->locals, i);
-            if (l == skipLocal) continue;
-            if (l->type.bType != BASETYPE_STRUCT || l->type.structMAlloc || !l->type.hasDestruct) continue;
-            //don't re-destruct the instance a destructor is already running on - this is exactly ".self"
-            //while generating that very destructor's own body (see resolveStructCtorInto in semantic.c)
-            if (l->type.destructFunc == ctx->curFunc) continue;
-            char dtorSym[256];
-            mangleGlobal(l->type.destructFunc->owner, l->type.destructFunc->name, dtorSym, sizeof(dtorSym));
-            char ty[256];
-            llvmType(l->type, ty, sizeof(ty));
-            char* loaded = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, ty, l->llvmVal);
-            fprintf(ctx->fnOut, "  call void %s(%s %s)\n", dtorSym, ty, loaded);
-        }
-    }
-}
 
-//"return x" where x is a bare read of a currently-live local hands that local's own VALUE to the caller -
-//its destructor must not fire in cgRunLocalDestructors below, the same way a "<>"-heap-indirect value's
-//destructor is never run here either: ownership of the value is passing to the caller, who becomes
-//responsible for it once their own copy (a var-decl, another return, ...) eventually goes out of scope in
-//turn. Deliberately narrow, not real move semantics: only a bare local read is recognized - "return
-//x.field", "return arr[i]", or any other expression that merely reads *through* a local still destructs
-//every local it reads from exactly as before, since none of those hand the local's OWN value out whole.
-struct cgLocal* cgSkipLocalForReturn(struct cgCtx* ctx, struct operand* op) {
-    if (op->opType != OPERATION_READ_VAR) return NULL;
-    return cgFindLocal(ctx, op->readVar->name);
-}
 
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* calleeOrd = cgNewTmp(ctx);
@@ -275,7 +236,6 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* newCode = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
-    cgRunLocalDestructors(ctx, NULL);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %s\n", newCode);
@@ -347,14 +307,14 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam) {
 
 static bool typeIsRefShaped(struct type t);
 
-//resolves the scope base's own "<>"-heap-indirect storage lives in - the type-level rule a bare "<>"
+//resolves the scope base's own "&"-heap-indirect storage lives in - the type-level rule a bare "&"
 //field/element is now defined by: its effective scope is always the SAME as whatever contains it,
-//recursively. base->type.scopeParam set (an explicit "<name>") is the base case, resolved the ordinary
-//way. A bare "<>" base that is itself a member access (base.field) OR an index (base[i]) has no scope of
-//its own to fall back to - it inherits its own base's, walking up an arbitrary chain of bare-"<>" member
+//recursively. base->type.scopeParam set (an explicit "&name") is the base case, resolved the ordinary
+//way. A bare "&" base that is itself a member access (base.field) OR an index (base[i]) has no scope of
+//its own to fall back to - it inherits its own base's, walking up an arbitrary chain of bare-"&" member
 //accesses/indexes (freely mixed - "a[i].b[j]" resolves exactly the same way as "a.b.c") until either an
 //explicitly-scoped ancestor is found, or the chain bottoms out at a plain var (a var, unlike a field or
-//element, really can be its own root - a bare "<>" var means "this var's own enclosing function scope",
+//element, really can be its own root - a bare "&" var means "this var's own enclosing function scope",
 //same as cgResolveScope(ctx, NULL) already means). Only ever called on a structMAlloc value - callers
 //check first.
 char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
@@ -370,8 +330,8 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
 
 char* cgValue(struct cgCtx* ctx, struct operand* op);
 
-//true for a type that "<>"/"<name>" can mark as a reference - a struct, or a fixed-size ("T[N]") array;
-//a dynamic ("T[]") array is excluded, same reasoning as typeNeedsMallocPromotion.
+//true for a type that "&"/"&name" can mark as a reference - a struct, or a compile-time-length ("T[N]") array;
+//a runtime-length ("T[]") array is excluded, same reasoning as typeNeedsMallocPromotion.
 static bool typeIsRefShaped(struct type t) {
     return (t.bType == BASETYPE_STRUCT) || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
@@ -382,7 +342,7 @@ static bool typeIsRefShaped(struct type t) {
 //scope value THIS call happens to be passing as its own "s" argument. Returns that value directly - found
 //by locating which parameter index paramT's scope tag names, then evaluating the caller's own argument
 //expression for that same index - instead of letting cgResolveScope try (and fail) to look "s" up as a
-//caller-local. NULL when paramT's scope tag doesn't need this (bare "<>", or names a scope the caller
+//caller-local. NULL when paramT's scope tag doesn't need this (bare "&", or names a scope the caller
 //already has in its own scope, e.g. a scope parameter of the caller itself being passed straight through).
 char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct list* args, struct type paramT) {
     if (!(typeIsRefShaped(paramT) && paramT.structMAlloc && paramT.scopeParam)) return NULL;
@@ -395,25 +355,12 @@ char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct li
     return NULL;
 }
 
-//true if t is a struct that declares a destructor, or a fixed-size array whose own element type
-//(recursively) is - the exact shape cgRegisterDtorIfNeeded below walks. Pure lookup, no codegen: used to
-//skip emitting a pointless GEP loop when nothing within t needs one.
-static bool typeMayHaveDestruct(struct type t) {
-    if (t.bType == BASETYPE_STRUCT) return t.hasDestruct;
-    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc) return typeMayHaveDestruct(*t.arrElem);
-    return false;
-}
-
-//if t declares a destructor (a struct), or is a fixed-size array whose own elements (recursively) do,
-//registers each destructor-bearing instance found within heapPtr's own storage with scopeVal, so it runs
-//when that scope closes rather than being lost - see __olang_scope_register_dtor/emitScopeRuntime. Called
-//from both malloc-promotion sites below, on whatever srcT/op->type was just heap-allocated. A fixed array
-//is always compile-time-sized here (typeNeedsMallocPromotion only ever reaches this for "!arrMalloc"), so
-//its own element loop is unrolled directly at codegen time, one registration call per element/instance -
-//matching the same "getelementptr elemTy, ptr base, i64 i" convention cgPromoteFixedArrayToDynamic's own
-//element-copy loop already uses for a flat, freshly-allocated buffer. Recurses through nested fixed
-//arrays for free: a nested array's own element type is just handed back to this same function one level
-//down, registering each individual leaf struct instance regardless of nesting depth.
+//if t declares a destructor, registers the instance at heapPtr with scopeVal so it runs when that scope
+//closes - see __olang_scope_register_dtor/emitScopeRuntime. Called from the malloc-promotion sites below,
+//each of which has just heap-allocated storage for a freshly constructed instance: that allocation IS the
+//construction site, which is exactly where O16 says registration belongs. A destructor-declaring type
+//is reference-only (C11), so it is never an array element or an embedded field and this never needs to
+//walk into an aggregate - one instance, one allocation, one registration.
 void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
     if (t.bType == BASETYPE_STRUCT) {
         if (!t.hasDestruct) return;
@@ -422,66 +369,16 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
         fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
         return;
     }
-    if (t.bType != BASETYPE_ARRAY || t.arrMalloc) return;
-    struct type elemT = *t.arrElem;
-    if (!typeMayHaveDestruct(elemT)) return;
-    char elemTy[256];
-    llvmType(elemT, elemTy, sizeof(elemTy));
-    long long count = t.arrLen->intLiteralVal;
-    for (long long i = 0; i < count; i++) {
-        char* elemAddr = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %lld\n", elemAddr, elemTy, heapPtr, i);
-        cgRegisterDtorIfNeeded(ctx, elemT, scopeVal, elemAddr);
-    }
+    //no array walk, and no struct-field walk: a destructor-declaring type is reference-only (C11), so it
+    //can never be an element or an embedded field in the first place. Every instance has its own
+    //allocation and registers itself here, once, at its own construction (O16).
 }
 
-//the runtime-counted counterpart to cgRegisterDtorIfNeeded's own fixed-array branch above: a "T[expr]"
-//array's own count is only known at runtime (that's the entire point of the sugar - see the report), so
-//it can't be compile-time-unrolled the way a fixed array's own compile-time-constant length is. Emits a
-//genuine LLVM loop instead (an alloca'd i64 counter, matching cgFor's own loop-variable convention rather
-//than a phi node, for consistency with the rest of this file's ordinary codegen), calling
-//cgRegisterDtorIfNeeded once per element inside the loop body - which still handles a nested fixed-array
-//element type recursively for free, exactly as it already does for a fixed array's own unrolled loop.
-//Only ever called when typeMayHaveDestruct(elemT) is already true (see cgSizedArrayAlloc).
-void cgRegisterDtorLoop(struct cgCtx* ctx, struct type elemT, char* scopeVal, char* basePtr, char* countVal) {
-    char elemTy[256];
-    llvmType(elemT, elemTy, sizeof(elemTy));
 
-    int id = ctx->lblCtr++;
-    char condLbl[32], bodyLbl[32], endLbl[32];
-    snprintf(condLbl, sizeof(condLbl), "dtorloop.cond.%d", id);
-    snprintf(bodyLbl, sizeof(bodyLbl), "dtorloop.body.%d", id);
-    snprintf(endLbl, sizeof(endLbl), "dtorloop.end.%d", id);
-
-    char* islot = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = alloca i64\n", islot);
-    fprintf(ctx->fnOut, "  store i64 0, ptr %s\n", islot);
-    cgBr(ctx, condLbl);
-
-    cgLabel(ctx, condLbl);
-    char* i = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", i, islot);
-    char* cond = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = icmp ult i64 %s, %s\n", cond, i, countVal);
-    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", cond, bodyLbl, endLbl);
-    ctx->terminated = true;
-
-    cgLabel(ctx, bodyLbl);
-    char* elemAddr = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", elemAddr, elemTy, basePtr, i);
-    cgRegisterDtorIfNeeded(ctx, elemT, scopeVal, elemAddr);
-    char* inext = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", inext, i);
-    fprintf(ctx->fnOut, "  store i64 %s, ptr %s\n", inext, islot);
-    cgBr(ctx, condLbl);
-
-    cgLabel(ctx, endLbl);
-}
-
-//true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "<>"-heap-indirect
-//dstT - a struct, or a fixed-size array (same rule either way, see the report on extending scope/"<>" to
-//arrays): dstT wants a reference, srcT doesn't have one yet. Deliberately excludes a dynamic ("T[]")
-//array target even when structMAlloc: a dynamic array's own backing store already gets a fresh @malloc
+//true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "&"-heap-indirect
+//dstT - a struct, or a compile-time-length array (same rule either way, see the report on extending scope/"&" to
+//arrays): dstT wants a reference, srcT doesn't have one yet. Deliberately excludes a runtime-length ("T[]")
+//array target even when structMAlloc: a runtime-length array's own backing store already gets a fresh @malloc
 //at the point its literal is built (cgAggregateLiteral), before this promotion step would even run -
 //scope-tracking *that* allocation is a separate, not-yet-implemented step, not attempted here.
 bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
@@ -492,28 +389,28 @@ bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
     return false;
 }
 
-//true if a fixed-size array value needs malloc-and-copy to fit a dynamic ("T[]") target - the array-sizing
-//counterpart to typeNeedsMallocPromotion above, an orthogonal axis (arrMalloc, not structMAlloc/"<>" -
-//see the report): dstT wants a dynamic slice, srcT is still a fixed, embedded aggregate. Applies equally
-//to a fresh literal or an already-existing fixed-array value (semantic.c's OperandFitsType admits both -
+//true if a compile-time-length array value needs malloc-and-copy to fit a runtime-length ("T[]") target - the array-sizing
+//counterpart to typeNeedsMallocPromotion above, an orthogonal axis (arrMalloc, not structMAlloc/"&" -
+//see the report): dstT wants a runtime-length slice, srcT is still a compile-time-length, embedded aggregate. Applies equally
+//to a fresh literal or an already-existing compile-time-length-array value (semantic.c's OperandFitsType admits both -
 //see the report), but codegen doesn't need to know or care which one it's looking at here either way -
-//cgPromoteFixedArrayToDynamic only ever needs srcT's own by-ref address to copy from.
-bool typeNeedsDynamicPromotion(struct type dstT, struct type srcT) {
+//cgPromoteFixedToRuntimeLength only ever needs srcT's own by-ref address to copy from.
+bool typeNeedsRuntimeLengthPromotion(struct type dstT, struct type srcT) {
     return dstT.bType == BASETYPE_ARRAY && srcT.bType == BASETYPE_ARRAY && dstT.arrMalloc && !srcT.arrMalloc;
 }
 
-//copies a fixed-size array's own backing storage (srcAddr, its by-ref address) into a fresh buffer -
-//arena-allocated into scopeVal (own by default, or the target's own "<name>" tag - see cgResolveScope),
-//not a bare @malloc: a dynamic array is implicitly reference-shaped for scope-checking purposes even with
-//no explicit "<>" marker, since a runtime-known length can never be embedded - see the report. Returns the
+//copies a compile-time-length array's own backing storage (srcAddr, its by-ref address) into a fresh buffer -
+//arena-allocated into scopeVal (own by default, or the target's own "&name" tag - see cgResolveScope),
+//not a bare @malloc: a runtime-length array is implicitly reference-shaped for scope-checking purposes even with
+//no explicit "&" marker, since a runtime-known length can never be embedded - see the report. Returns the
 //resulting { i64, ptr } slice value - element-by-element, same convention every other aggregate-building
 //loop in this file already uses (no memcpy intrinsic, kept consistent with e.g. cgAggregateLiteral's own
-//dynamic-array branch). Also registers each destructor-bearing element found in the fresh buffer (see
-//cgRegisterDtorIfNeeded) - srcT is always a FIXED array here (a dynamic one is never itself promoted to
-//dynamic again - see typeNeedsDynamicPromotion), so its own element loop is the exact same compile-time-
+//runtime-length-array branch). Also registers each destructor-bearing element found in the fresh buffer (see
+//cgRegisterDtorIfNeeded) - srcT is always a COMPILE-TIME-LENGTH array here (a runtime-length one is never itself promoted
+//again - see typeNeedsRuntimeLengthPromotion), so its own element loop is the exact same compile-time-
 //unrolled shape cgRegisterDtorIfNeeded already walks generically, regardless of whether srcAddr came from
 //a fresh literal or an existing variable; no new mechanism needed, just one more call site.
-char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* srcAddr, char* scopeVal) {
+char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type srcT, char* srcAddr, char* scopeVal) {
     struct type elemT = *srcT.arrElem;
     char elemTy[256];
     llvmType(elemT, elemTy, sizeof(elemTy));
@@ -542,13 +439,13 @@ char* cgPromoteFixedArrayToDynamic(struct cgCtx* ctx, struct type srcT, char* sr
 
 //srcT is the value's own checked type (which OperandFitsType allows to differ from dstT only in
 //structMAlloc-ness - TypeIsSame deliberately ignores that flag for structs, see the report). A plain
-//struct value (e.g. "Point[1, 2]") stored into a "<>"-heap-indirect target is exactly that case: src is
+//struct value (e.g. "Point[1, 2]") stored into a "&"-heap-indirect target is exactly that case: src is
 //a stack address (cgValue()'s by-ref convention), and storing it as-is into a structMAlloc slot would
 //leave a dangling pointer the moment src's own stack frame is gone - so that combination gets its own
 //malloc-and-copy branch instead of a raw pointer store. The heap storage itself now comes from dstT's own
 //scope (cgResolveScope), not a bare @malloc - see emitScopeRuntime. scopeOverride, when non-NULL, is used
 //instead of resolving dstT's own scope - see cgAssign for the one case that needs this (a struct field's
-//own scope isn't declared anywhere - see the report). Applies identically to a fixed-size array target -
+//own scope isn't declared anywhere - see the report). Applies identically to a compile-time-length array target -
 //see typeNeedsMallocPromotion.
 void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src, char* dstAddr, char* scopeOverride) {
     if (typeNeedsMallocPromotion(dstT, srcT)) {
@@ -564,9 +461,9 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, heap);
         return;
     }
-    if (typeNeedsDynamicPromotion(dstT, srcT)) {
+    if (typeNeedsRuntimeLengthPromotion(dstT, srcT)) {
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
-        char* slice = cgPromoteFixedArrayToDynamic(ctx, srcT, src, scopeVal);
+        char* slice = cgPromoteFixedToRuntimeLength(ctx, srcT, src, scopeVal);
         fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", slice, dstAddr);
         return;
     }
@@ -585,10 +482,10 @@ char* cgValue(struct cgCtx* ctx, struct operand* op);
 char* cgAddr(struct cgCtx* ctx, struct operand* op);
 
 //wraps cgValue() with the ambient-override threading described on ctx->targetScopeOverride: when op is
-//about to be promoted into dstT ("<>"-heap-indirect, op itself a plain value), the scope that promotion
+//about to be promoted into dstT ("&"-heap-indirect, op itself a plain value), the scope that promotion
 //will use is resolved *before* op's own value is built (rather than after, as a bare cgValue()+cgStoreInto
 //pair would), and set as the ambient override for the duration of that build - so if op is itself a
-//struct/array literal, any of ITS OWN bare-"<>" fields (built recursively by cgAggregateLiteral, which
+//struct/array literal, any of ITS OWN bare-"&" fields (built recursively by cgAggregateLiteral, which
 //consults ctx->targetScopeOverride for exactly this) inherit the *same* scope dstT is being promoted into,
 //instead of each independently defaulting to ctx->ownScopeSlot. This is the general, type-level version of
 //what cgAssign's own scopeOverride computation already did for one narrow case - see the report. A no-op
@@ -607,12 +504,12 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
 //boundary, where aggregates cross by value rather than by our internal storage-pointer convention.
 //dstT is the declared type of the slot being crossed into (a parameter's type, or the function's declared
 //return type) - needed for the same malloc-promotion case cgStoreInto handles (a plain struct value, e.g.
-//a literal, crossing into a "<>"-heap-indirect parameter/return type): without it, op's own by-ref
+//a literal, crossing into a "&"-heap-indirect parameter/return type): without it, op's own by-ref
 //address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
 //whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
 //Resolves dstT's scope and sets it as the ambient override (see cgValueForTarget) *before* building op's
 //own value, not after - same reordering, same reason: a literal argument/return value's own nested
-//bare-"<>" fields need to see the target scope while they're being built, not once it's too late.
+//bare-"&" fields need to see the target scope while they're being built, not once it's too late.
 char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     if (typeNeedsMallocPromotion(dstT, op->type)) {
         char storTy[256];
@@ -631,9 +528,9 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         return heap;
     }
     char* v = cgValue(ctx, op);
-    if (typeNeedsDynamicPromotion(dstT, op->type)) {
+    if (typeNeedsRuntimeLengthPromotion(dstT, op->type)) {
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam);
-        return cgPromoteFixedArrayToDynamic(ctx, op->type, v, scopeVal);
+        return cgPromoteFixedToRuntimeLength(ctx, op->type, v, scopeVal);
     }
     if (!typeIsByRef(op->type)) return v;
     char ty[256];
@@ -773,9 +670,9 @@ char* cgFloatConst(double v, bool isF32) {
 
 //"Type[v1, v2, ...]" (struct) or "T[v1, ...]" (array) - constructs a value inline. Both are by-ref (see
 //typeIsByRef): allocate storage, store each value into its slot, and return the address, exactly like
-//reading an existing by-ref variable would. A literal is always fixed-size now, at every array level -
-//see buildArrLiteralLevel in semantic.c; a dynamic ("T[]") target is reached only via a separate promotion
-//step (cgPromoteFixedArrayToDynamic), never by building one directly here.
+//reading an existing by-ref variable would. A literal is always compile-time-length now, at every array level -
+//see buildArrLiteralLevel in semantic.c; a runtime-length ("T[]") target is reached only via a separate promotion
+//step (cgPromoteFixedToRuntimeLength), never by building one directly here.
 char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
     if (op->type.bType == BASETYPE_STRUCT) {
         char storTy[256];
@@ -784,14 +681,14 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         fprintf(ctx->fnOut, "  %s = alloca %s\n", slot, storTy);
         for (int i = 0; i < op->args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
-            //the field's own declared type (not arg->type) is what decides malloc-promotion - a "<>"
+            //the field's own declared type (not arg->type) is what decides malloc-promotion - a "&"
             //field is exactly where a plain struct literal argument needs one (see cgStoreInto)
             struct type fieldT = (*(struct var*)ListGetIdx(&op->type.vars, i)).type;
             char* fieldAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
-            //a bare "<>" field (no scopeParam) inherits whatever scope THIS WHOLE literal is itself being
+            //a bare "&" field (no scopeParam) inherits whatever scope THIS WHOLE literal is itself being
             //promoted into (ctx->targetScopeOverride, threaded in by cgValueForTarget/cgBoundaryValue) -
-            //an explicitly-tagged "<name>" field ignores it and resolves its own named scope as usual
+            //an explicitly-tagged "&name" field ignores it and resolves its own named scope as usual
             char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
             char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
             cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope);
@@ -799,7 +696,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         return slot;
     }
 
-    //fixed array - the only shape a literal ever builds directly now (see buildArrLiteralLevel)
+    //compile-time-length array - the only shape a literal ever builds directly now (see buildArrLiteralLevel)
     char storTy[256];
     llvmType(op->type, storTy, sizeof(storTy));
     char* slot = cgNewTmp(ctx);
@@ -873,7 +770,7 @@ char* cgIncDec(struct cgCtx* ctx, struct operand* op, bool prefix, bool inc) {
 
 char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal);
 
-//dynamic arrays carry no compile-time length, so equality needs a runtime length-check + elementwise loop
+//runtime-length arrays carry no compile-time length, so equality needs a runtime length-check + elementwise loop
 //(everything else cgDeepEq handles is compile-time-bounded and can be unrolled straight-line)
 char* cgDeepEqSlice(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     char elemTy[256];
@@ -949,7 +846,7 @@ char* cgDeepEqSlice(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
 }
 
 /* structural equality for struct/array value types; aVal/bVal are exactly what cgValue() would produce for
- * an operand of type t (an address for by-ref types - embedded structs and fixed arrays - or an already-
+ * an operand of type t (an address for by-ref types - embedded structs and compile-time-length arrays - or an already-
  * loaded value otherwise). A <>-indirect struct is deliberately excluded from the "struct" case below and
  * falls through to the plain pointer-compare leaf: <> means "this is a reference", so identity is the
  * semantically correct meaning of "==" there, same as comparing object references in Java. */
@@ -1074,7 +971,7 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         //the parameter's own declared type (not argOp->type) decides malloc-promotion and the LLVM type
-        //word at the call site - a "<>" parameter is exactly where a plain struct argument needs one
+        //word at the call site - a "&" parameter is exactly where a plain struct argument needs one
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, &op->args, paramT);
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
@@ -1148,8 +1045,8 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
 //an "extern func" (§11) call: the unmangled name (X5 - it's also the linker symbol, never olang's own
 //module-prefix mangling), never fallible (X4 - a plain call, never the {code,payload} wrapping), and an
 //array-typed argument marshalled down to a bare pointer to its first element (X3) - cgBoundaryValue still
-//does the ordinary promotion work first (a fixed-array literal flowing into a dynamic "byte[]" param, a
-//plain value flowing into a "<>"-marked param), so this only ever has to peel the final boundary-form
+//does the ordinary promotion work first (a compile-time-length-array literal flowing into a runtime-length "byte[]" param, a
+//plain value flowing into a "&"-marked param), so this only ever has to peel the final boundary-form
 //value (a "{ i64, ptr }" slice, a real "[N x T]" aggregate, or an already-bare "ptr") down to that ptr.
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
@@ -1170,7 +1067,7 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
             } else if (paramT.structMAlloc) {
                 ptr = boundary; //already a bare heap ptr value (llvmType: structMAlloc -> "ptr")
             } else {
-                //plain fixed array: cgBoundaryValue's by-value boundary convention already loaded it into
+                //plain compile-time-length array: cgBoundaryValue's by-value boundary convention already loaded it into
                 //a real "[N x T]" aggregate - spill it to a fresh stack slot to get a real address from
                 char aty[64];
                 llvmType(paramT, aty, sizeof(aty));
@@ -1252,7 +1149,7 @@ char* cgNumericConvert(struct cgCtx* ctx, struct operand* op) {
 
 //"T[expr]" with no initializer (expr not a compile-time constant) - see OPERATION_SIZED_ARRAY_ALLOC and
 //the report. Arena-allocates expr zero-valued elements into op->type's own scope (own by default, or its
-//declared "<name>" tag - same cgResolveScope convention every other reference allocation already uses) and
+//declared "&name" tag - same cgResolveScope convention every other reference allocation already uses) and
 //returns the resulting { i64, ptr } slice value, zero-filled via memset (chunk-pool memory is reused, not
 //guaranteed zero, unlike a fresh @malloc - see emitScopeRuntime).
 char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
@@ -1281,12 +1178,8 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
 
     //register every one of this array's N slots for destruction up front, at allocation time - not
     //deferred until (or gated on) individual elements actually being assigned later. Each destructor call
-    //reads whatever's actually AT that slot's memory when the owning scope eventually closes, so a slot
-    //that was later assigned a real value destructs that value correctly; a slot the caller never got
-    //around to assigning destructs the zero-filled value memset just produced above - a real design call
-    //(surfaced and decided, not just implemented silently - see the report), consistent with zero-fill
-    //already being this array form's own accepted, documented default state.
-    if (typeMayHaveDestruct(elemT)) cgRegisterDtorLoop(ctx, elemT, scopeVal, bytes, count);
+    //nothing to register: zero-filling constructs no instances (O16), and a destructor-declaring element
+    //type is reference-only (C11) so it can't be zero-filled into existence here at all.
 
     char* agg1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", agg1, count);
@@ -1353,13 +1246,13 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
-    //a bare "<>" struct field or array element has no declared scope of its own (neither a field nor an
-    //array's own element type can carry a "<name>" tag independently of the whole array - see the report)
+    //a bare "&" struct field or array element has no declared scope of its own (neither a field nor an
+    //array's own element type can carry a "&name" tag independently of the whole array - see the report)
     //- by rule, its effective scope is always the SAME as whatever contains it. When the target of
-    //"base.field = ..." or "base[i] = ..." is itself reached through a "<>"-heap-indirect base, resolve
-    //that scope (walking up an arbitrary chain of bare-"<>" member accesses/indexes via
+    //"base.field = ..." or "base[i] = ..." is itself reached through a "&"-heap-indirect base, resolve
+    //that scope (walking up an arbitrary chain of bare-"&" member accesses/indexes via
     //cgResolveEffectiveScope - not just one hop) and use it both for building the rhs (so any of ITS OWN
-    //nested bare-"<>" fields/elements inherit the same scope too, see cgValueForTarget) and for the actual
+    //nested bare-"&" fields/elements inherit the same scope too, see cgValueForTarget) and for the actual
     //promotion below.
     char* scopeOverride = NULL;
     bool targetIsMemberOrIndex = s->target->opType == OPERATION_MEMBER || s->target->opType == OPERATION_INDEX;
@@ -1479,7 +1372,6 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
 void cgRet(struct cgCtx* ctx, struct statement* s) {
     bool fallible = ctx->curFunc && ctx->curFunc->type.errors.len > 0;
     if (!s->op) {
-        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
@@ -1487,13 +1379,12 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     }
     //the function's own declared return type (not s->op->type) decides malloc-promotion and the LLVM
     //type word here, same reasoning as the parameter case in cgFuncCall. Computed before closing this
-    //function's own scope below: a bare "<>" return type is rejected at the signature level (see
+    //function's own scope below: a bare "&" return type is rejected at the signature level (see
     //resolveFuncSig), so this can never itself resolve to the own scope that's about to close.
     struct type retT = *ctx->curFunc->type.retType;
     char ty[256];
     llvmType(retT, ty, sizeof(ty));
     char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
-    cgRunLocalDestructors(ctx, cgSkipLocalForReturn(ctx, s->op));
     cgCloseOwnScope(ctx);
     if (!fallible) {
         fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
@@ -1553,7 +1444,6 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
-    cgRunLocalDestructors(ctx, NULL);
     cgCloseOwnScope(ctx);
     if (!ctx->curFunc->type.hasRetType) {
         fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
@@ -1783,7 +1673,7 @@ void emitRuntimeDecls(FILE* out) {
     emitScopeRuntime(out);
 }
 
-/* the real backing for "scope"/"own"/"<name>" (see the report): every scope is a growable, chunked
+/* the real backing for "scope"/"own"/"&name" (see the report): every scope is a growable, chunked
  * bump allocator. A chunk is { next, used, cap } followed immediately by cap bytes of data; a scope is
  * just a chunk-list head, lazily null until first use. Allocating only ever bumps a cursor or links on
  * one more chunk - nothing is ever freed individually. Closing a scope doesn't return memory to the OS at
@@ -1983,7 +1873,7 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
 
     //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the
     //sense that no chunk is grabbed until something actually allocates into it) until "own" or a bare
-    //"<>" allocation touches it; harmless and cheap to always set up even when never used.
+    //"&" allocation touches it; harmless and cheap to always set up even when never used.
     char* ownScope = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = alloca %%olang.scope\n", ownScope);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
@@ -1995,7 +1885,6 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     }
 
     if (!ctx->terminated) {
-        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
@@ -2149,7 +2038,7 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
 
         cgLabel(ctx, runLbl);
         //this test's own private scope, same as any real function gets (see cgFunction) - a test body may
-        //use "own"/bare "<>" exactly like a function body can (see ctx->hasOwnScope in semantic.c). Not
+        //use "own"/bare "&" exactly like a function body can (see ctx->hasOwnScope in semantic.c). Not
         //closed on the assert-failure path (the longjmp above bypasses this normal control flow entirely)
         //- a known, deliberate v1 simplification: those chunks just aren't returned to the pool for reuse
         //on a failed test, nothing unsafe about it (see the report).
@@ -2158,7 +2047,6 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", testScope);
         ctx->ownScopeSlot = testScope;
         cgBlock(ctx, &t->codeBlock);
-        cgRunLocalDestructors(ctx, NULL);
         cgCloseOwnScope(ctx);
         ctx->ownScopeSlot = NULL;
         cgBr(ctx, passLbl);

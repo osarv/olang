@@ -137,25 +137,25 @@ func classifyPoint(p Point) int32 {
 }
 
 ## "scope" is a restricted type (like an error type): only ever a function parameter's type, never a
-## struct field, a return type on its own, or an ordinary variable's type - see CLAUDE.md. A "<name>" tag
-## names which scope-typed parameter a value is allocated into; bare "<>" (unchanged from before) means
+## struct field, a return type on its own, or an ordinary variable's type - see CLAUDE.md. A "&name" tag
+## names which scope-typed parameter a value is allocated into; bare "&" (unchanged from before) means
 ## the value's own private scope. "own" is a keyword evaluating to that private scope as a passable value,
 ## so a caller can hand a callee its own scope instead of the callee's default private one.
-func makePoint(x int32, y int32, s scope) Point<s> {
-    p mut Point<s> = Point{x, y}
+func makePoint(x int32, y int32, s scope) Point&s {
+    p mut Point&s = Point{x, y}
     return p
 }
 
-## A plain struct literal (structMAlloc false) fitting a "<>"-heap-indirect target (structMAlloc true) is
+## A plain struct literal (structMAlloc false) fitting a "&"-heap-indirect target (structMAlloc true) is
 ## allowed by the type checker (TypeIsSame deliberately ignores structMAlloc for structs), so codegen must
 ## malloc-and-copy at every point that promotion can happen - a var-decl, a call argument, and a return
 ## value - rather than just aliasing the literal's own (about-to-be-gone) stack storage. See cgStoreInto/
 ## cgBoundaryValue in codegen.c.
-func takesHeapPoint(p Point<>) int32 {
+func takesHeapPoint(p Point&) int32 {
     return p.x
 }
 
-func returnsHeapPoint(s scope) Point<s> {
+func returnsHeapPoint(s scope) Point&s {
     return Point{9, 8}
 }
 
@@ -167,14 +167,14 @@ func sumManyPoints(n int32, s scope) int32 {
     total mut int32 = 0
     i mut int32 = 0
     do {
-        p mut Point<s> = Point{i, i}
+        p mut Point&s = Point{i, i}
         total = total + p.x
         i++
     } while i < n
     return total
 }
 
-## a bare "<>" struct field (fields can't carry an explicit "<name>" tag yet - no scope-generic struct
+## a bare "&" struct field (fields can't carry an explicit "&name" tag yet - no scope-generic struct
 ## types, see the report) has no declared scope of its own; a field write's promoted literal used to
 ## always land in "whatever function is executing right now" regardless of which scope the containing
 ## instance actually belongs to - a real dangling-pointer hazard the instant that function returns, for
@@ -183,13 +183,13 @@ func sumManyPoints(n int32, s scope) int32 {
 ## different function than the one that allocated the containing instance.
 type BoxedPoint struct {
     tag int32,
-    inner Point<>
+    inner Point&
 }
 
 ## the narrow fix (not the general one - see the report): when the base of "base.field = ..." is itself a
-## "<>"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
+## "&"-heap-indirect value tagged to an explicit scope "s", the freshly-promoted literal now inherits
 ## that same scope, instead of this function's own (about-to-close) private scope
-func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) int32 {
+func fillBoxedPoint(s scope, b mut BoxedPoint&s, x int32, y int32) int32 {
     b.inner = Point{x, y}
     return b.inner.x
 }
@@ -198,7 +198,7 @@ func fillBoxedPoint(s scope, b BoxedPoint<s>, x int32, y int32) int32 {
 ## allocating something comparably sized right after - if "inner" had dangled into fillBoxedPoint's own
 ## scope instead of the caller's, this corrupts it and the later read in the test below fails
 func noisePoint(n int32) int32 {
-    p mut Point<> = Point{n, n}
+    p mut Point& = Point{n, n}
     return p.x
 }
 
@@ -333,146 +333,113 @@ type Handle struct(id int32) {
     resourcesClosed = resourcesClosed + 1
 }
 
-## a plain (non-"<>") local's destructor runs right before the enclosing function returns - RAII tied to
-## the function's own frame, not the scope-arena machinery at all
+## a destructor-declaring type is reference-only (C11), so every instance lives in some scope and its
+## destructor runs when that scope closes (C9/O15) - there is no plain-local, function-return-governed
+## case any more. Bare "&" means this function's own private scope, so this instance is torn down the
+## moment useHandleLocally returns.
 func useHandleLocally() int32 {
-    h mut Handle = Handle(7)
+    h mut Handle& = Handle(7)
     return h.id
 }
 
-## the one narrow exception to the rule above: "return h" (a BARE read of the local, not a field/index
-## read through it like "h.id" above) hands h's own VALUE to the caller rather than discarding it - h's
-## destructor must NOT run here, or the caller would receive a copy whose backing resource (whatever the
-## destructor releases) was already released out from under it. cgSkipLocalForReturn/cgRunLocalDestructors
-## in codegen.c - see the report. Not general move semantics: only this exact "return <bare local>" shape
-## is recognized.
-func makeHandle(n int32) Handle {
-    h mut Handle = Handle(n)
+## an instance tagged to a PASSED-IN scope outlives the function that constructed it - it was registered
+## with the caller's scope at construction (O16), not with makeHandle's own, so nothing fires when
+## makeHandle returns. This replaces the old "return <bare local> skips its own destructor" special case:
+## the scope tag now expresses that fact directly, so no dataflow exception is needed for it at all.
+func makeHandle(n int32, s scope) Handle&s {
+    h mut Handle&s = Handle(n)
     return h
 }
 
-## the returned local's own destructor is skipped in makeHandle, but a DIFFERENT local that ISN'T returned
-## still gets destructed normally right there, before makeHandle even returns - proves the skip is scoped
-## to exactly the one local named by "return", not a blanket "no destructors fire on any return" escape.
-func makeAndDiscardOne(n int32) Handle {
-    keep mut Handle = Handle(n)
-    discard mut Handle = Handle(n + 100)
+## proves the deferral is scoped to exactly the instance tagged to the caller's scope, not a blanket "no
+## destructors fire in this function": "discard" is tagged to makeAndDiscardOne's OWN scope, so it is
+## destructed when that function returns, while "keep" survives into the caller's.
+func makeAndDiscardOne(n int32, s scope) Handle&s {
+    keep mut Handle&s = Handle(n)
+    discard mut Handle& = Handle(n + 100)
     return keep
 }
 
-## a "<>"-heap-indirect instance's destructor instead runs when its *owning scope* closes - registered
-## with that scope at allocation time (see __olang_scope_register_dtor in codegen.c) and walked in LIFO
-## order right before that scope's chunks are reclaimed. Bare "<>" here means this function's own private
-## scope, so every registration from one call of this function is torn down together the moment it returns.
+## every "&" instance constructed in a loop registers with the enclosing scope individually, and all of
+## them are torn down together in LIFO order the moment that scope closes.
 func useManyHandlesLocally(n int32) int32 {
     total mut int32 = 0
-    i mut int32 = 0
-    do {
-        h mut Handle<> = Handle(i)
+    for i mut int32 = 0, i < n, i++ {
+        h mut Handle& = Handle(i)
         total = total + h.id
-        i++
-    } while i < n
+    }
     return total
 }
 
-## a plain fixed-size array of destructor-bearing struct VALUES (not "<>" instances individually - just one
-## array, promoted as a whole into "<>"-heap-indirect storage) needs its OWN element-by-element destructor
-## registration: cgRegisterDtorIfNeeded used to only ever check hasDestruct on the type just heap-promoted,
-## which for an array is the array type itself (never hasDestruct - that field only ever means anything for
-## a struct) - so every element's own destructor was silently dropped. Now walked recursively per element -
-## see the report. Routed through a return value (mirroring makeFixedArrayRef), not a var-decl literal
-## initializer directly - a fixed-size target paired with a literal initializer at a var-decl is
-## REDUNDANT_ARRAY_SIZE regardless of "<>", so this is the shape that actually exercises the malloc-
-## promotion path (typeNeedsMallocPromotion), not the unrelated dynamic-array promotion one ("Handle[]<>"
-## instead would go through cgPromoteFixedArrayToDynamic - see "useHandleArrayLocallyDynamic" below for
-## that path, and "useSizedHandleArray" further below for a genuinely runtime-counted "T[expr]" one, which
-## needed a real runtime loop rather than a compile-time-unrolled one - see the report).
-func makeHandleArrayRef(s scope) Handle[3]<s> {
-    return Handle[Handle(20), Handle(21), Handle(22)]
+## an ARRAY of destructor-bearing instances. A destructor-declaring type can never be an array element by
+## VALUE (C11), so this needs an array OF references - the marker written BEFORE the array suffix
+## ("Handle&[3]") rather than after it ("Handle[3]&", one reference to an array of values). Each Handle is
+## constructed and registered individually (O16); no per-element destructor walk is involved anywhere,
+## that machinery is gone.
+func makeHandleArrayRef(s scope) Handle&[3]&s {
+    return Handle&[Handle(20), Handle(21), Handle(22)]
 }
 
 func useHandleArrayLocally() int32 {
-    arr mut Handle[3]<> = makeHandleArrayRef(own)
+    arr mut Handle&[3]& = makeHandleArrayRef(own)
     return arr[0].id + arr[1].id + arr[2].id
 }
 
-## the OTHER array-promotion path (a fixed literal flowing into a genuinely dynamic "T[]" target -
-## cgPromoteFixedArrayToDynamic, an orthogonal mechanism from the fixed-array-reference one above) needed
-## the identical fix, for the identical reason - it built a fresh buffer via the same "GEP per element"
-## shape but never registered a single destructor. cgRegisterDtorIfNeeded already walked that generically,
-## so this took one extra call, not a new mechanism - see the report.
-func useHandleArrayLocallyDynamic() int32 {
-    arr mut Handle[]<> = Handle[Handle(30), Handle(31), Handle(32)]
+## the same through the OTHER array-promotion path (a compile-time-length literal flowing into a genuinely runtime-length
+## "T[]" target - cgPromoteFixedToRuntimeLength, an orthogonal mechanism from the compile-time-length-array-reference
+## one above). Still no destructor registration in the promotion itself: the three Handles registered
+## themselves when they were constructed, wherever the references to them later end up.
+func useHandleArrayLocallyRuntimeLength() int32 {
+    arr mut Handle&[]& = Handle&[Handle(30), Handle(31), Handle(32)]
     return arr[0].id + arr[1].id + arr[2].id
-}
-
-## a THIRD, previously-unregistered path: a genuinely runtime-sized ("T[expr]") array of destructor-bearing
-## elements. Unlike the two fixed-shape paths above, this one's own element count isn't known until
-## runtime, so cgSizedArrayAlloc can't unroll a C-level loop the way cgRegisterDtorIfNeeded's own fixed-
-## array branch does - it emits a genuine LLVM loop instead (cgRegisterDtorLoop), calling
-## cgRegisterDtorIfNeeded once per element inside it. Registered unconditionally for all n slots at
-## allocation time, not deferred until/gated on each slot actually being individually assigned - a real
-## design call, not just an implementation gap: a slot the caller never gets around to assigning still
-## destructs whatever the zero-fill left there, consistent with zero-fill already being this array form's
-## own accepted default state elsewhere. Confirmed with a slot that's genuinely reassigned via a loop AND
-## (ad hoc, not a permanent test - nothing to assert against beyond the destructor count) one that's left
-## entirely unassigned, both correctly destructing exactly n times.
-func useSizedHandleArray(n int32) int32 {
-    arr mut Handle[n]<>
-    i mut int32 = 0
-    do {
-        arr[i] = Handle(40 + i)
-        i++
-    } while i < n
-    return arr[0].id
 }
 
 ## constructors already give a struct field a real, type-level scope - no generics syntax needed. A
 ## field's type is resolved against the constructor's own parameter list (see resolveStructCtorInto in
 ## semantic.c), the same way a later parameter can already reference an earlier one - so a field can
-## already name a real "<name>" scope tag pointing at one of the constructor's own scope parameters,
+## already name a real "&name" scope tag pointing at one of the constructor's own scope parameters,
 ## same as any function parameter/return type already could. This only works for constructor-bearing
-## types: a plain "type X struct { ... }" still has no parameter list to resolve a field's "<name>"
+## types: a plain "type X struct { ... }" still has no parameter list to resolve a field's "&name"
 ## against at all - that half of the scope-generic-struct-types gap is still open.
-type ScopedBox struct(s scope, inner Point<s>) {
+type ScopedBox struct(s scope, inner Point&s) {
     inner
 }
 
-func fillBoxViaCtor(outer scope) Point<outer> {
-    b mut ScopedBox<> = ScopedBox(outer, Point{7, 8})
+func fillBoxViaCtor(outer scope) Point&outer {
+    b mut ScopedBox& = ScopedBox(outer, Point{7, 8})
     return b.inner
 }
 
 ## the transitive counterpart to BARE_SCOPE_RETURN_TYPE (resolveFuncSig in semantic.c): a PLAIN return
-## type that embeds a bare "<>" field anywhere inside it dangles the same way a bare "<>" return type
-## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "<>" on the
-## return type at all) - allowed, and correctly so, since "inner" carries an explicit "<s>" tag rather
+## type that embeds a bare "&" field anywhere inside it dangles the same way a bare "&" return type
+## itself would, and is now also rejected. ScopedBox is returned here entirely by value (no "&" on the
+## return type at all) - allowed, and correctly so, since "inner" carries an explicit "&s" tag rather
 ## than a bare one; nothing about returning the wrapping struct plain is unsound here.
 func makeScopedBoxPlain(outer scope, x int32, y int32) ScopedBox {
     return ScopedBox(outer, Point{x, y})
 }
 
 ## BARE_SCOPE_RETURN_TYPE and NESTED_BARE_SCOPE_RETURN_TYPE (resolveFuncSig in semantic.c) used to only
-## ever check BASETYPE_STRUCT, silently letting a bare "<>" fixed array, a bare "<>" field nested inside
-## a plain struct/array, or - worse - an entirely UNMARKED dynamic array (T11/O7: always reference-shaped,
-## marker or not) escape by value with no compile-time check at all, even though a dynamic array is just
-## as own-scoped as an explicitly "<>"-marked struct/fixed array. Fixed by generalizing both checks
-## (typeIsBareRefShaped/structContainsBareScopeField) to treat structs, fixed arrays, and dynamic arrays
+## ever check BASETYPE_STRUCT, silently letting a bare "&" compile-time-length array, a bare "&" field nested inside
+## a plain struct/array, or - worse - an entirely UNMARKED runtime-length array (T11/O7: always reference-shaped,
+## marker or not) escape by value with no compile-time check at all, even though a runtime-length array is just
+## as own-scoped as an explicitly "&"-marked struct/compile-time-length array. Fixed by generalizing both checks
+## (typeIsBareRefShaped/structContainsBareScopeField) to treat structs, compile-time-length arrays, and runtime-length arrays
 ## uniformly. All three shapes below are now correctly rejected at compile time - not testable here since
 ## a rejected program can't run as a test{} block; verified ad hoc during development instead:
-##   func bad1(s scope) int32[3]<> { ... return <own-scoped array> }
-##   func bad2(s scope, n int32) int32[] { ... return <own-scoped dynamic array> }
+##   func bad1(s scope) int32[3]& { ... return <own-scoped array> }
+##   func bad2(s scope, n int32) int32[] { ... return <own-scoped runtime-length array> }
 ##   func bad3(s scope) Wrapper { ... return Wrapper{<own-scoped array field>} }
 
 ## the static scope checker's one positively-provable narrowing rule (scopeCanFlowInto in semantic.c): a
 ## value tagged with a scope RECEIVED as a parameter is always safe to store into a slot tagged with this
-## function's own bare "<>" scope, since every received scope is guaranteed to outlive the function's own
+## function's own bare "&" scope, since every received scope is guaranteed to outlive the function's own
 ## private one (which closes the instant this function itself returns). The reverse, and two different
 ## named scopes of the same function, are both rejected at compile time - not testable here since a
 ## rejected program can't run as a test{} block; verified ad hoc during development instead.
 func narrowNamedIntoOwn(s scope) int32 {
-    p mut Point<s> = fillBoxViaCtor(s)
-    q mut Point<> = p
+    p mut Point&s = fillBoxViaCtor(s)
+    q mut Point& = p
     return q.x
 }
 
@@ -481,18 +448,18 @@ func narrowNamedIntoOwn(s scope) int32 {
 ## own scope params was concretely bound to at this call site - propagated one hop through a var-decl, so
 ## a later member access (or the call's own return value directly) can be checked against the CALLER's own
 ## frame instead of being silently treated as "foreign, unverifiable, allow". "box"'s own "s" is bound to
-## "a" here, so returning "box.inner" against the declared "Point<a>" return type is a real, verified match
+## "a" here, so returning "box.inner" against the declared "Point&a" return type is a real, verified match
 ## - not just an unverified pass-through. Swapping "a" for a second, unrelated scope parameter here (i.e.
 ## "ScopedBox(otherScope, ...)") is correctly rejected at compile time - not testable here since a rejected
 ## program can't run as a test{} block; verified ad hoc during development instead.
-func fillBoxViaCtorChecked(a scope, x int32, y int32) Point<a> {
-    box mut ScopedBox<> = ScopedBox(a, Point{x, y})
+func fillBoxViaCtorChecked(a scope, x int32, y int32) Point&a {
+    box mut ScopedBox& = ScopedBox(a, Point{x, y})
     return box.inner
 }
 
 ## same extension, for an ordinary function call's own return type rather than a constructor field -
-## "makePoint"'s own "s" is bound to "a" here, so the return type "Point<a>" is a real, verified match.
-func makePointChecked(a scope, x int32, y int32) Point<a> {
+## "makePoint"'s own "s" is bound to "a" here, so the return type "Point&a" is a real, verified match.
+func makePointChecked(a scope, x int32, y int32) Point&a {
     return makePoint(x, y, a)
 }
 
@@ -504,18 +471,18 @@ func makePointChecked(a scope, x int32, y int32) Point<a> {
 ## "leaf" actually ends up in. Persisted once, at Outer's own declaration (see semaCheckBodies), onto
 ## Outer's "mid" field itself (struct var.scopeBindings, reused from the same field a local var-decl's own
 ## initializer already populates) - not recomputed per call site.
-type Mid struct(s scope, leaf Point<s>) {
+type Mid struct(s scope, leaf Point&s) {
     leaf
 }
 
 type Outer struct(s scope, x int32, y int32) {
-    mid Mid<s> = Mid(s, Point{x, y})
+    mid Mid&s = Mid(s, Point{x, y})
 }
 
 ## Outer's own "s" is bound to "a" here, so "o.mid.leaf" is really "a"-scoped - a chain through TWO levels
 ## of constructor-declared scope params (Outer's own field tag, then Mid's own internal one), not just one.
-func fieldOfFieldChecked(a scope, x int32, y int32) Point<a> {
-    o mut Outer<> = Outer(a, x, y)
+func fieldOfFieldChecked(a scope, x int32, y int32) Point&a {
+    o mut Outer& = Outer(a, x, y)
     return o.mid.leaf
 }
 
@@ -529,16 +496,16 @@ func fieldOfFieldChecked(a scope, x int32, y int32) Point<a> {
 ## "WrappedPoint(a, ...)" argument already carries survives the "PunnedBox(...)" call boundary), and
 ## OperandMember carries a base's own map forward onto a further member access (since a bare-pun field has
 ## no persisted map of its own to compose through) - see the report.
-type WrappedPoint struct(s scope, inner Point<s>) {
+type WrappedPoint struct(s scope, inner Point&s) {
     inner
 }
 
-type PunnedBox struct(s scope, wrapped WrappedPoint<s>) {
+type PunnedBox struct(s scope, wrapped WrappedPoint&s) {
     wrapped
 }
 
-func makePunnedBoxChecked(a scope, x int32, y int32) Point<a> {
-    b mut PunnedBox<> = PunnedBox(a, WrappedPoint(a, Point{x, y}))
+func makePunnedBoxChecked(a scope, x int32, y int32) Point&a {
+    b mut PunnedBox& = PunnedBox(a, WrappedPoint(a, Point{x, y}))
     return b.wrapped.inner
 }
 
@@ -554,12 +521,12 @@ func makePunnedBoxChecked(a scope, x int32, y int32) Point<a> {
 ## filtering the base's carried-forward map down to only the entries that flowed through THIS field's own
 ## punned parameter (struct var.punParam, OperandMember's carry-forward step) - see the report.
 ## "d.left.inner" below is now a real, independently-verified match, not a blanket ambiguous rejection.
-type DualWrapped struct(ls scope, rs scope, left WrappedPoint<ls>, right WrappedPoint<rs>) {
+type DualWrapped struct(ls scope, rs scope, left WrappedPoint&ls, right WrappedPoint&rs) {
     left, right
 }
 
-func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point<a> {
-    d mut DualWrapped<> = DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY}))
+func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point&a {
+    d mut DualWrapped& = DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY}))
     return d.left.inner
 }
 
@@ -572,12 +539,12 @@ func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, ri
 ## for a further member access to pop in turn - see the report. "h.box.left.inner" below chains THREE
 ## levels of bare-pun forwarding (Holder's own "box", DualWrapped's own "left", WrappedPoint's own "inner")
 ## and still resolves to a real, single, verified scope - not an ambiguous rejection.
-type Holder struct(hs scope, box DualWrapped<hs>) {
+type Holder struct(hs scope, box DualWrapped&hs) {
     box
 }
 
-func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point<a> {
-    h mut Holder<> = Holder(a, DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY})))
+func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point&a {
+    h mut Holder& = Holder(a, DualWrapped(a, own, WrappedPoint(a, Point{leftX, leftY}), WrappedPoint(own, Point{rightX, rightY})))
     return h.box.left.inner
 }
 
@@ -591,21 +558,21 @@ func holderFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY 
 ## can never collide, at any depth, without one of them already being SCOPE_AMBIGUOUS at its true origin.
 ## "p.one.inner" and "p.two.leaf.inner" below independently resolve to two DIFFERENT, genuinely correct
 ## scopes ("a" and "b") despite sharing the exact same innermost typeParam key.
-type LeafWrap struct(s scope, leaf WrappedPoint<s>) {
+type LeafWrap struct(s scope, leaf WrappedPoint&s) {
     leaf
 }
 
-type SiblingPair struct(s1 scope, s2 scope, one WrappedPoint<s1>, two LeafWrap<s2>) {
+type SiblingPair struct(s1 scope, s2 scope, one WrappedPoint&s1, two LeafWrap&s2) {
     one, two
 }
 
-func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point<a> {
-    p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
+func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point&a {
+    p mut SiblingPair& = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
     return p.one.inner
 }
 
-func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point<b> {
-    p mut SiblingPair<> = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
+func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point&b {
+    p mut SiblingPair& = SiblingPair(a, b, WrappedPoint(a, Point{x1, y1}), LeafWrap(b, WrappedPoint(b, Point{x2, y2})))
     return p.two.leaf.inner
 }
 
@@ -617,8 +584,8 @@ func siblingPairTwoLeafChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y
 ## reassignment here, so "return box.inner" is a real, verified match, not a stale leftover. Reassigning
 ## "box" to an UNRELATED scope ("ScopedBox(otherScope, ...)") is correctly rejected at compile time - not
 ## testable here since a rejected program can't run as a test{} block; verified ad hoc during development.
-func reassignSameScopeChecked(a scope, x int32, y int32) Point<a> {
-    box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
+func reassignSameScopeChecked(a scope, x int32, y int32) Point&a {
+    box mut ScopedBox& = ScopedBox(a, Point{1, 2})
     box = ScopedBox(a, Point{x, y})
     return box.inner
 }
@@ -629,8 +596,8 @@ func reassignSameScopeChecked(a scope, x int32, y int32) Point<a> {
 ## keeps that agreed value rather than conservatively giving up the moment ANY branching is involved -
 ## buildIfStmnt's own snapshot/merge (see the report) proves this, not just an in-place update that would
 ## only ever see whichever branch happened to run last during the check.
-func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) Point<a> {
-    box mut ScopedBox<> = ScopedBox(a, Point{1, 2})
+func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) Point&a {
+    box mut ScopedBox& = ScopedBox(a, Point{1, 2})
     if cond {
         box = ScopedBox(a, Point{x, y})
     } else {
@@ -639,33 +606,33 @@ func reassignBothBranchesAgreeChecked(a scope, cond bool, x int32, y int32) Poin
     return box.inner
 }
 
-## the type-level generalization of "a bare '<>' field's scope inherits its container's own scope" - see
-## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "<name>" tag the way
+## the type-level generalization of "a bare '&' field's scope inherits its container's own scope" - see
+## the report. NestedBox is a plain type (no constructor, so "inner" can't carry a "&name" tag the way
 ## ScopedBox's field can - see the note above), yet "inner" still needs to survive wherever the whole
-## NestedBox instance ends up: when a NestedBox literal is itself being promoted into a "<>" target
+## NestedBox instance ends up: when a NestedBox literal is itself being promoted into a "&" target
 ## (cgValueForTarget/cgBoundaryValue set the ambient ctx->targetScopeOverride before building it), a bare
 ## field's own malloc now uses that same ambient scope (cgAggregateLiteral) instead of unconditionally
 ## defaulting to whatever function happens to be executing right now.
 type NestedBox struct {
-    inner Point<>
+    inner Point&
 }
 
-func makeNestedBox(s scope, x int32, y int32) NestedBox<s> {
+func makeNestedBox(s scope, x int32, y int32) NestedBox&s {
     return NestedBox{Point{x, y}}
 }
 
-## two levels of bare "<>" nesting, to stress cgResolveEffectiveScope's walk past the immediate base -
+## two levels of bare "&" nesting, to stress cgResolveEffectiveScope's walk past the immediate base -
 ## "co.mid.leaf = ..." (see the test below) has "co.mid" (bare - no scope of its own) as its immediate
 ## base, which only resolves correctly by walking one hop further, into "co" itself.
 type ChainMid struct {
-    leaf Point<>
+    leaf Point&
 }
 
 type ChainOuter struct {
-    mid ChainMid<>
+    mid ChainMid&
 }
 
-func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) int32 {
+func setChainLeaf(s scope, co mut ChainOuter&s, x int32, y int32) int32 {
     co.mid.leaf = Point{x, y}
     return 0
 }
@@ -675,7 +642,7 @@ func setChainLeaf(s scope, co ChainOuter<s>, x int32, y int32) int32 {
 ## needed to malloc-promote a plain literal into it: the tag's name ("s") only has meaning inside the
 ## callee's own body, not at the caller, so trying to resolve it there via the normal local-lookup path
 ## found nothing and crashed. See cgResolveParamScopeOverride in codegen.c.
-func takesScopedPoint(s scope, p Point<s>) int32 {
+func takesScopedPoint(s scope, p Point&s) int32 {
     return p.x
 }
 
@@ -816,7 +783,107 @@ test "nested struct literals" {
     assert(l.b.y == 4)
 }
 
-test "array literal construction, fixed and dynamic" {
+## a declared runtime-length type ("T[]") whose initializer has a compile-time length adopts it into the
+## TYPE, not just the allocation (D12a) - so this is really an int32[3] and interchanges with one. Before
+## this the length was inferred for the copy and then discarded: len() compiled to a runtime read even
+## here, and an "int32[]" holding 3 was type-identical to one holding 4 (TypeIsSame skips the length
+## whenever arrMalloc is set). An initializer with no compile-time length of its own leaves the
+## declaration runtime-length, which is the only shape that had a length worth keeping to begin with.
+func takesExactlyThree(a int32[3]) int32 {
+    return a[0] + a[1] + a[2]
+}
+
+func declaredRuntimeLengthAdoptsIt() int32 {
+    y mut int32[] = int32[4, 5, 6]
+    return takesExactlyThree(y)
+}
+
+func initializerWithNoCompileTimeLength(s scope, n int32) int32 {
+    src mut int32[n]&s
+    src[0] = 11
+    z mut int32[] = src
+    return len(z) + z[0]
+}
+
+## "&" on a parameter names the CALLER's own instance, and "mut" means what it means everywhere else
+## (this can be assigned to). The two are independent axes: "&" says whose instance it is, "mut" says
+## whether it can be written. So mutation visibility is readable from the signature alone, with no
+## reasoning about scopes or durability at the call site.
+##   p Point       a copy;                  caller unaffected either way
+##   p mut Point   a copy the callee writes; caller still unaffected
+##   p Point&      the caller's instance, read-only
+##   p mut Point&  the caller's instance, writable - the caller sees it
+## This only holds because a VALUE may no longer be silently promoted into a "&" parameter when the
+## caller named it (an lvalue): otherwise "&" would sometimes mean "your instance" and sometimes "a copy
+## of it", and a "mut" parameter could write to a copy the caller never sees. A freshly built temporary
+## (a literal, or a constructor call's result) has no caller-side instance to preserve and still promotes.
+func writesThroughRef(p mut Point&) int32 {
+    p.x = 99
+    return p.x
+}
+
+func readsThroughRef(p Point&) int32 {
+    return p.x
+}
+
+func callerSeesTheWrite() int32 {
+    r mut Point& = Point{1, 2}
+    n int32 = writesThroughRef(r)
+    return r.x + n * 0
+}
+
+test "a 'mut &' parameter writes to the caller's own instance" {
+    assert(callerSeesTheWrite() == 99)
+}
+
+test "a non-mut '&' parameter still reads it" {
+    r mut Point& = Point{5, 6}
+    assert(readsThroughRef(r) == 5)
+}
+
+## C3: a constructor field is mutable only if declared "mut". This was recorded correctly at declaration
+## but never checked: OperandIsMutableLvalue's OPERATION_MEMBER case recursed on the BASE alone, so every
+## field of a mutable variable was writable regardless of how it was declared. A plain (T13) struct's
+## fields carry mut = true (that grammar has no "mut" at all) and are unaffected - both are covered here.
+type MutFields struct(locked int32, open int32) {
+    locked,
+    open mut
+}
+
+type PlainFields struct {
+    a int32,
+    b int32
+}
+
+func writesMutCtorField() int32 {
+    c mut MutFields = MutFields(1, 2)
+    c.open = 99
+    return c.open + c.locked
+}
+
+func writesPlainField() int32 {
+    p mut PlainFields = PlainFields{1, 2}
+    p.a = 99
+    return p.a
+}
+
+test "a 'mut' constructor field is writable" {
+    assert(writesMutCtorField() == 100)
+}
+
+test "a plain struct's fields stay writable" {
+    assert(writesPlainField() == 99)
+}
+
+test "a declared 'T[]' adopts its initializer's compile-time length into the type" {
+    assert(declaredRuntimeLengthAdoptsIt() == 15)
+}
+
+test "a 'T[]' initialized from a runtime-length value stays runtime-length" {
+    assert(initializerWithNoCompileTimeLength(own, 4) == 15)
+}
+
+test "array literal construction, compile-time- and runtime-length" {
     fixed mut int32[] = int32[10, 20, 30]
     dyn mut int32[] = int32[10, 20, 30]
     assert(fixed[0] == 10)
@@ -825,15 +892,15 @@ test "array literal construction, fixed and dynamic" {
     assert(dyn[2] == 30)
 }
 
-## the fixed-to-dynamic promotion above used to only fire for a FRESH literal (op->isLiteral in
-## OperandFitsType) - an already-existing fixed-array VALUE (a plain variable, not a literal) flowing into
-## a dynamic target was rejected outright. Relaxed once confirmed there's no real mechanism difference for
+## the compile-time-to-runtime-length promotion above used to only fire for a FRESH literal (op->isLiteral in
+## OperandFitsType) - an already-existing compile-time-length-array VALUE (a plain variable, not a literal) flowing into
+## a runtime-length target was rejected outright. Relaxed once confirmed there's no real mechanism difference for
 ## codegen to worry about (unlike int->float widening, which genuinely needs different instructions for a
-## literal vs. a non-literal): cgPromoteFixedArrayToDynamic only ever needs a source ADDRESS to copy from,
+## literal vs. a non-literal): cgPromoteFixedToRuntimeLength only ever needs a source ADDRESS to copy from,
 ## which cgValue's by-ref convention already provides for any embedded array regardless of where it came
 ## from - see the report. "src" here is a genuine local variable, not a literal; mutating it afterward
 ## proves the promotion is a real, independent copy, not an alias of the source's own storage.
-test "an existing (non-literal) fixed-array value promotes into a dynamic target too" {
+test "an existing (non-literal) compile-time-length-array value promotes into a runtime-length target too" {
     src := int32[10, 20, 30]
     copied mut int32[] = src
     src[0] = 999
@@ -872,13 +939,13 @@ test "an int literal widens to float inside an array literal" {
     assert(f[1] == 2.5)
 }
 
-## "<>"/"<name>" now apply to arrays exactly the same way they already apply to structs - reusing
+## "&"/"&name" now apply to arrays exactly the same way they already apply to structs - reusing
 ## structMAlloc/scopeParam generically rather than duplicating the whole marker mechanism (see the
-## report). Only the fixed-size case is wired up so far: a "<>"-heap-indirect array with a known
-## compile-time length ("int32[3]<>") is just a bare pointer, the same free lunch a struct reference
+## report). Only the compile-time-length case is wired up so far: a "&"-heap-indirect array with a known
+## compile-time length ("int32[3]&") is just a bare pointer, the same free lunch a struct reference
 ## already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
-## dynamic ("int32[]<>") reference is deliberately not addressed yet - see the report.
-func makeFixedArrayRef(s scope) int32[3]<s> {
+## runtime-length ("int32[]&") reference is deliberately not addressed yet - see the report.
+func makeFixedArrayRef(s scope) int32[3]&s {
     return int32[7, 8, 9]
 }
 
@@ -886,44 +953,44 @@ func makeFixedArrayRef(s scope) int32[3]<s> {
 ## the dimensions left to right, not the old (pre-this-feature) inside-out wrapping order. The literal
 ## itself never restates this - "int32" (the scalar base) is only ever stated once, at the very front;
 ## each nested "[...]" row needs no type of its own - see the report.
-func makeFixed2DRef(s scope) int32[2][3]<s> {
+func makeFixed2DRef(s scope) int32[2][3]&s {
     return int32[[1, 2, 3], [4, 5, 6]]
 }
 
 ## "T[expr]" with no initializer (expr not a compile-time constant) - a runtime-sized array, arena-
-## allocated into the declared "<name>" tag rather than "own" (see the report and OPERATION_SIZED_ARRAY_
-## ALLOC): unlike a fixed-size reference, this can never be embedded (no compile-time offset is possible
-## for a runtime-known length), so it's implicitly reference-shaped even here, without writing "<s>" a
+## allocated into the declared "&name" tag rather than "own" (see the report and OPERATION_SIZED_ARRAY_
+## ALLOC): unlike a compile-time-length reference, this can never be embedded (no compile-time offset is possible
+## for a runtime-known length), so it's implicitly reference-shaped even here, without writing "&s" a
 ## second time on the local itself.
-func makeSizedArrayRef(s scope, n int32) int32[]<s> {
-    result mut int32[n]<s>
+func makeSizedArrayRef(s scope, n int32) int32[]&s {
+    result mut int32[n]&s
     result[0] = 42
     return result
 }
 
-test "a fixed-size array reference survives crossing a function boundary via a named scope" {
-    a mut int32[3]<> = makeFixedArrayRef(own)
+test "a compile-time-length array reference survives crossing a function boundary via a named scope" {
+    a mut int32[3]& = makeFixedArrayRef(own)
     assert(a[0] == 7)
     assert(a[2] == 9)
 }
 
-test "a 2D fixed array reference - outer dimension first" {
-    m mut int32[2][3]<> = makeFixed2DRef(own)
+test "a 2D compile-time-length array reference - outer dimension first" {
+    m mut int32[2][3]& = makeFixed2DRef(own)
     assert(m[0][0] == 1)
     assert(m[1][2] == 6)
 }
 
 ## unlike C, an olang array always carries its own length - len() is the sanctioned way to read it.
-## Compile-time-known dimensions (embedded, or a fixed-size "<>" reference) cost nothing at runtime;
-## only a genuinely dynamic array reads its length from the runtime slice - see OperandLen/cgLen.
-test "len() works uniformly across embedded, fixed-reference, 2D, and dynamic arrays" {
+## Compile-time-known dimensions (embedded, or a compile-time-length "&" reference) cost nothing at runtime;
+## only a genuinely runtime-length array reads its length from the runtime slice - see OperandLen/cgLen.
+test "len() works uniformly across embedded, fixed-reference, 2D, and runtime-length arrays" {
     embedded mut int32[] = int32[1, 2, 3, 4]
     assert(len(embedded) == 4)
 
-    ref mut int32[3]<> = makeFixedArrayRef(own)
+    ref mut int32[3]& = makeFixedArrayRef(own)
     assert(len(ref) == 3)
 
-    m mut int32[2][3]<> = makeFixed2DRef(own)
+    m mut int32[2][3]& = makeFixed2DRef(own)
     assert(len(m) == 2)
     assert(len(m[0]) == 3)
 
@@ -998,14 +1065,14 @@ test "the generic error: catch matches only the generic error, not a real named 
 }
 
 test "own passes a test's own scope down to a scope-parameterized function" {
-    p mut Point<> = makePoint(3, 4, own)
+    p mut Point& = makePoint(3, 4, own)
     assert(p.x == 3)
     assert(p.y == 4)
 }
 
 test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
     assert(takesHeapPoint(Point{5, 6}) == 5)
-    q mut Point<> = returnsHeapPoint(own)
+    q mut Point& = returnsHeapPoint(own)
     assert(q.x == 9)
     assert(q.y == 8)
 }
@@ -1051,27 +1118,27 @@ test "constructor: a fallible field initializer propagates through the construct
     assert(!failed2)
 }
 
-test "destructor runs when a plain local goes out of scope at function return" {
+test "destructor runs when the instance's own scope closes at function return" {
     before mut int32 = resourcesClosed
     result mut int32 = useHandleLocally()
     assert(result == 7)
     assert(resourcesClosed == before + 1)
 }
 
-test "returning a destructor-bearing local by value defers its destructor to the caller" {
+test "an instance tagged to a passed-in scope outlives the function that constructed it" {
     before mut int32 = resourcesClosed
-    h mut Handle = makeHandle(42)
-    ## makeHandle has already returned - if its own local's destructor had incorrectly fired before
-    ## returning, resourcesClosed would already be before+1 here, one call too early
+    h mut Handle& = makeHandle(42, own)
+    ## makeHandle has already returned - h was registered with the caller's scope at construction, so
+    ## nothing fired when makeHandle returned; if it had, resourcesClosed would be before+1 here
     assert(resourcesClosed == before)
     assert(h.id == 42)
 }
 
-test "the skip is scoped to exactly the returned local, not every local in that function" {
+test "deferral is scoped to exactly the caller-tagged instance, not every instance in that function" {
     before mut int32 = resourcesClosed
-    kept mut Handle = makeAndDiscardOne(1)
-    ## "discard" (never returned) is already destructed by the time makeAndDiscardOne returns; "kept"'s
-    ## own destructor is still deferred to here, so exactly one destructor has fired so far
+    kept mut Handle& = makeAndDiscardOne(1, own)
+    ## "discard" (tagged to makeAndDiscardOne's own scope) is already destructed by the time that
+    ## function returns; "kept" survives into this scope, so exactly one destructor has fired so far
     assert(resourcesClosed == before + 1)
     assert(kept.id == 1)
 }
@@ -1083,25 +1150,104 @@ test "destructor runs for every heap-indirect instance when their scope closes, 
     assert(resourcesClosed == before + 5)
 }
 
-test "destructor runs for every element of an array of destructor-bearing struct values" {
+## the two marker POSITIONS are different types, and both are meaningful: "Point&[3]" is 3 separately
+## allocated references (elements have identity), "Point[3]&" is one reference to 3 inline values. Before
+## the pre-suffix position existed, an array of references was not expressible at all - for any type, not
+## just destructor-bearing ones - and this had to be faked with a value struct wrapping a reference.
+func makePointsRef(s scope) Point&[2]&s {
+    return Point&[Point{1, 2}, Point{3, 4}]
+}
+
+## an element-position marker may not carry a scope NAME: a reference nested inside a larger value always
+## inherits its container's scope (never an independent tag), so codegen allocates every element into the
+## array's own scope regardless of what the element marker says. Accepting a name would compile
+## "Handle&s[3]" and "Handle&[3]" identically - an accepted-but-meaningless tag - so it is rejected.
+## Confirmed by construction: a bare-"&"-element array returned as "&s" has its elements survive into s,
+## not die with the callee's own scope, which is exactly why an independent element tag is meaningless.
+func elementsFollowTheArraysScope(s scope) Handle&[2]&s {
+    return Handle&[Handle(50), Handle(51)]
+}
+
+test "elements of a returned array follow the array's own scope, not the callee's" {
+    before mut int32 = resourcesClosed
+    arr mut Handle&[2]& = elementsFollowTheArraysScope(own)
+    ## elementsFollowTheArraysScope has returned and its own scope has closed; if the bare-"&" elements
+    ## had been allocated there they would already be destructed rather than still readable here
+    assert(resourcesClosed == before)
+    assert(arr[0].id == 50)
+}
+
+test "an array of references and a reference to an array of values are both expressible" {
+    refs mut Point&[2]& = makePointsRef(own)
+    assert(refs[0].x == 1)
+    assert(refs[1].y == 4)
+    vals mut int32[3]& = makeFixedArrayRef(own)
+    assert(vals[0] == 7)
+}
+
+test "destructor runs for every handle held through an array of references" {
     before mut int32 = resourcesClosed
     total mut int32 = useHandleArrayLocally()
     assert(total == 20 + 21 + 22)
     assert(resourcesClosed == before + 3)
 }
 
-test "destructor runs for every element of a fixed literal promoted into a dynamic array" {
+test "destructor runs for every handle in a fixed literal promoted into a runtime-length array" {
     before mut int32 = resourcesClosed
-    total mut int32 = useHandleArrayLocallyDynamic()
+    total mut int32 = useHandleArrayLocallyRuntimeLength()
     assert(total == 30 + 31 + 32)
     assert(resourcesClosed == before + 3)
 }
 
-test "destructor runs for every element of a genuinely runtime-sized array" {
+## the old "every slot of a runtime-sized ('T[expr]') array of destructor-bearing elements registers a
+## destructor up front, zero-filled or not" behaviour is deliberately gone: zero-filling constructs no
+## instances (O16), so there is nothing to destruct, and a destructor-declaring element type is
+## reference-only (C11) - which the existing zero-fill rule already rejects outright, since a reference
+## has no zero value. Both halves are covered: this file's ZERO_FILL_CONTAINS_REFERENCE cases cover the
+## rejection, and the two array tests above cover the shape that does work.
+## the three bugs the reference-only rule closed, kept as permanent regression coverage. All three were
+## the same root cause - a destructor is an identity claim, and value semantics has no instance count:
+## (1) passing by value destructed the CALLEE's copy at its return, releasing the caller's resource while
+## the caller's own variable was still live (then destructing it again later); (2) a destructor-bearing
+## field of a plain struct never destructed at all, while the constructor's own parameter copy destructed
+## early; (3) a plain local array of destructor-bearing values registered nothing whatsoever. None are
+## expressible any more - a destructor-declaring type is reference-only - so what these now check is that
+## the surviving shapes count instances, not storage locations.
+func consumeHandle(h Handle&) int32 {
+    return h.id
+}
+
+func passAndCheck() int32 {
+    local mut Handle& = Handle(3)
+    n int32 = consumeHandle(local)
+    ## read while local is still live: nothing may have fired yet
+    return resourcesClosed + n * 0
+}
+
+func copyHandleAround() int32 {
+    a mut Handle& = Handle(9)
+    b mut Handle& = a
+    return b.id
+}
+
+test "passing an instance to a function does not release the caller's resource" {
+    resourcesClosed = 0
+    seen int32 = passAndCheck()
+    assert(seen == 0)
+}
+
+test "copying a reference is the same instance, destructed exactly once" {
     before mut int32 = resourcesClosed
-    first mut int32 = useSizedHandleArray(4)
-    assert(first == 40)
-    assert(resourcesClosed == before + 4)
+    n int32 = copyHandleAround()
+    assert(n == 9)
+    assert(resourcesClosed == before + 1)
+}
+
+test "constructing zero instances runs zero destructors" {
+    before mut int32 = resourcesClosed
+    total mut int32 = useManyHandlesLocally(0)
+    assert(total == 0)
+    assert(resourcesClosed == before)
 }
 
 ## "assert" is a statement (takes its operand directly like "return" does), not a function call - every
@@ -1115,8 +1261,8 @@ test "assert without parentheses" {
     assert !(x == 6)
 }
 
-test "a bare '<>' field assigned through a scope-tagged parameter survives the callee's return" {
-    box mut BoxedPoint<> = BoxedPoint{1, Point{0, 0}}
+test "a bare '&' field assigned through a scope-tagged parameter survives the callee's return" {
+    box mut BoxedPoint& = BoxedPoint{1, Point{0, 0}}
     result mut int32 = fillBoxedPoint(own, box, 7, 8)
     assert(result == 7)
 
@@ -1139,7 +1285,7 @@ test "a parameter type may reference an earlier parameter as its scope tag" {
 }
 
 test "a constructor field's scope tag, referencing the constructor's own scope parameter, survives the constructor call returning" {
-    q mut Point<> = fillBoxViaCtor(own)
+    q mut Point& = fillBoxViaCtor(own)
     assert(q.x == 7)
     assert(q.y == 8)
 
@@ -1162,8 +1308,8 @@ test "a struct returned entirely by value still compiles fine when its nested re
     assert(box.inner.y == 4)
 }
 
-test "a plain struct's bare '<>' field survives a function boundary by inheriting its container's own target scope" {
-    nb mut NestedBox<> = makeNestedBox(own, 11, 22)
+test "a plain struct's bare '&' field survives a function boundary by inheriting its container's own target scope" {
+    nb mut NestedBox& = makeNestedBox(own, 11, 22)
     assert(nb.inner.x == 11)
     assert(nb.inner.y == 22)
 
@@ -1180,8 +1326,8 @@ test "a plain struct's bare '<>' field survives a function boundary by inheritin
     assert(nb.inner.y == 22)
 }
 
-test "a bare '<>' field assigned through a two-hop chain of bare '<>' bases resolves to the outermost named scope" {
-    co mut ChainOuter<> = ChainOuter{ChainMid{Point{0, 0}}}
+test "a bare '&' field assigned through a two-hop chain of bare '&' bases resolves to the outermost named scope" {
+    co mut ChainOuter& = ChainOuter{ChainMid{Point{0, 0}}}
     r mut int32 = setChainLeaf(own, co, 5, 6)
     assert(r == 0)
     assert(co.mid.leaf.x == 5)
@@ -1201,75 +1347,75 @@ test "a bare '<>' field assigned through a two-hop chain of bare '<>' bases reso
     assert(co.mid.leaf.y == 6)
 }
 
-test "the static scope checker allows a received named scope to narrow into this function's own bare '<>' scope" {
+test "the static scope checker allows a received named scope to narrow into this function's own bare '&' scope" {
     r mut int32 = narrowNamedIntoOwn(own)
     assert(r == 7)
 }
 
 test "the static scope checker verifies a constructor field's scope tag through a call's own binding map" {
-    b mut Point<> = fillBoxViaCtorChecked(own, 3, 4)
+    b mut Point& = fillBoxViaCtorChecked(own, 3, 4)
     assert(b.x == 3)
     assert(b.y == 4)
 }
 
 test "the static scope checker verifies an ordinary function's return-type scope tag through a call's own binding map" {
-    p mut Point<> = makePointChecked(own, 5, 6)
+    p mut Point& = makePointChecked(own, 5, 6)
     assert(p.x == 5)
     assert(p.y == 6)
 }
 
 test "the static scope checker traces a scope tag through a field of a field, not just one level" {
-    p mut Point<> = fieldOfFieldChecked(own, 9, 10)
+    p mut Point& = fieldOfFieldChecked(own, 9, 10)
     assert(p.x == 9)
     assert(p.y == 10)
 }
 
 test "the static scope checker traces a scope tag through a bare-pun field, not just an explicit one" {
-    p mut Point<> = makePunnedBoxChecked(own, 11, 12)
+    p mut Point& = makePunnedBoxChecked(own, 11, 12)
     assert(p.x == 11)
     assert(p.y == 12)
 }
 
 test "the static scope checker disambiguates two bare-pun fields of the same type tagged to different scopes" {
-    p mut Point<> = dualWrappedFieldChecked(own, 13, 14, 15, 16)
+    p mut Point& = dualWrappedFieldChecked(own, 13, 14, 15, 16)
     assert(p.x == 13)
     assert(p.y == 14)
 }
 
 test "the static scope checker resolves a scope tag through three levels of nested bare-pun forwarding" {
-    p mut Point<> = holderFieldChecked(own, 17, 18, 19, 20)
+    p mut Point& = holderFieldChecked(own, 17, 18, 19, 20)
     assert(p.x == 17)
     assert(p.y == 18)
 }
 
 test "two same-typed sibling fields at different nesting depths never collide" {
-    a mut Point<> = siblingPairOneChecked(own, own, 21, 22, 23, 24)
+    a mut Point& = siblingPairOneChecked(own, own, 21, 22, 23, 24)
     assert(a.x == 21)
     assert(a.y == 22)
-    b mut Point<> = siblingPairTwoLeafChecked(own, own, 21, 22, 23, 24)
+    b mut Point& = siblingPairTwoLeafChecked(own, own, 21, 22, 23, 24)
     assert(b.x == 23)
     assert(b.y == 24)
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {
-    p mut Point<> = reassignSameScopeChecked(own, 11, 12)
+    p mut Point& = reassignSameScopeChecked(own, 11, 12)
     assert(p.x == 11)
     assert(p.y == 12)
 }
 
 test "the static scope checker merges two branches that reassign a var to the same agreed scope" {
-    p mut Point<> = reassignBothBranchesAgreeChecked(own, true, 13, 14)
+    p mut Point& = reassignBothBranchesAgreeChecked(own, true, 13, 14)
     assert(p.x == 13)
     assert(p.y == 14)
-    q mut Point<> = reassignBothBranchesAgreeChecked(own, false, 13, 14)
+    q mut Point& = reassignBothBranchesAgreeChecked(own, false, 13, 14)
     assert(q.x == 14)
     assert(q.y == 13)
 }
 
 ## scopeCanFlowInto used to treat a scope tag it couldn't trace back to the current function's own
-## parameters as "unverifiable, so allow" - optimistic, not sound. User-caught: a fixed array whose element
-## type is itself constructor-bearing with a "<name>"-tagged field (e.g. "Wrapper struct(s scope, inner
-## Point<s>) { inner }") lets two Wrapper values, each tagged to a genuinely different scope, live side by
+## parameters as "unverifiable, so allow" - optimistic, not sound. User-caught: a compile-time-length array whose element
+## type is itself constructor-bearing with a "&name"-tagged field (e.g. "Wrapper struct(s scope, inner
+## Point&s) { inner }") lets two Wrapper values, each tagged to a genuinely different scope, live side by
 ## side in one array; reading one back out via an index ("arr[1].inner") composes no scope-tracing at all
 ## (OPERATION_INDEX, unlike OPERATION_MEMBER, carries no scopeBindings forward), so the resulting reference
 ## reaches OperandFitsType with its *raw*, unresolved "s" tag - "unverifiable" under the old rule, so it was
@@ -1279,7 +1425,7 @@ test "the static scope checker merges two branches that reassign a var to the sa
 ## Fixed at the root: scopeCanFlowInto now rejects anything it cannot trace, the same as an actually-proven-
 ## unsafe flow (semantic.c) - "can't prove it's safe" must mean reject, not optimistically pass, for a
 ## checker whose whole point is a compile-time proof. This did require a real, separate fix alongside the
-## flip, not just the flip alone: a callee's own parameter type can carry a "<name>" tag naming one of
+## flip, not just the flip alone: a callee's own parameter type can carry a "&name" tag naming one of
 ## *that callee's own* scope parameters (never the caller's, e.g. fillBoxedPoint/setChainLeaf above, both
 ## already exercised by permanent tests) - OperandFuncCall now resolves that tag through the call's own
 ## argument-to-parameter binding before checking fit, so the common, actually-sound case doesn't spuriously
@@ -1289,7 +1435,7 @@ test "the static scope checker merges two branches that reassign a var to the sa
 ##   wa mut Wrapper = Wrapper(a, Point{1, 2})
 ##   wb mut Wrapper = Wrapper(b, Point{3, 4})
 ##   arr mut Wrapper[] = Wrapper[wa, wb]
-##   leaked mut Point<a> = arr[1].inner   ## rejected: arr[1]'s own scope tag is untraceable, not "a"
+##   leaked mut Point&a = arr[1].inner   ## rejected: arr[1]'s own scope tag is untraceable, not "a"
 
 ## "T[N]" with no initializer - real BSS-style zero-fill (see the report and zeroGlobal's own declaration
 ## above). Both a global and a local go through the exact same mechanism: leaving the var-decl's rhs NULL,
@@ -1324,7 +1470,7 @@ test "'T[expr]' with no initializer arena-allocates a zero-filled array sized at
 }
 
 test "a runtime-sized array tagged to a named scope survives a function boundary" {
-    a mut int32[]<> = makeSizedArrayRef(own, 5)
+    a mut int32[]& = makeSizedArrayRef(own, 5)
     assert(len(a) == 5)
     assert(a[0] == 42)
     assert(a[1] == 0)
@@ -1332,18 +1478,18 @@ test "a runtime-sized array tagged to a named scope survives a function boundary
 }
 
 ## The zero-fill above is only sound because int32/Point/etc. have a real, meaningful zero value at every
-## level. A reference ("<>"/"<name>", or a dynamic array, T11's "always reference-shaped, marker or not")
+## level. A reference ("&"/"&name", or a runtime-length array, T11's "always reference-shaped, marker or not")
 ## has none - there is no null literal anywhere in this language, so zero-filling one would silently
-## produce an invisible dangling/null reference (a struct or fixed array's own marker) or a phantom "empty"
-## array that was never actually allocated (a dynamic array nested somewhere inside an otherwise
-## zero-fillable fixed-size declaration). typeContainsReference (semantic.c) now rejects any no-initializer
-## array var-decl - fixed-size or runtime-sized alike - whose declared type contains a reference anywhere
+## produce an invisible dangling/null reference (a struct or compile-time-length array's own marker) or a phantom "empty"
+## array that was never actually allocated (a runtime-length array nested somewhere inside an otherwise
+## zero-fillable compile-time-length declaration). typeContainsReference (semantic.c) now rejects any no-initializer
+## array var-decl - compile-time-length or runtime-sized alike - whose declared type contains a reference anywhere
 ## within it, not just at its own outermost level. All three shapes below are now correctly rejected at
 ## compile time - not testable here since a rejected program can't run as a test{} block; verified ad hoc
 ## during development instead:
-##   x mut int32[2][]                             (a nested dynamic array - "jagged", per-row-sized)
-##   x mut Point[3]<>                              (the declared type is itself a reference)
-##   x mut Wrapper[n]                              (Wrapper's own field is "<name>"-tagged, n runtime-sized)
+##   x mut int32[2][]                             (a nested runtime-length array - "jagged", per-row-sized)
+##   x mut Point[3]&                              (the declared type is itself a reference)
+##   x mut Wrapper[n]                              (Wrapper's own field is "&name"-tagged, n runtime-sized)
 
 ## "extern func" (§11): declares a real libc/POSIX symbol, resolved by the linker at build time - see the
 ## report. getpid takes no arguments and returns a plain scalar; write exercises the array-marshalling path

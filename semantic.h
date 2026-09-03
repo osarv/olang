@@ -35,7 +35,7 @@ struct type {
 
     //BASETYPE_ARRAY
     struct type* arrElem; //heap-allocated element type; int32[][-2] = array[-2] of (array of int32)
-    bool arrMalloc;        //true if this level has no fixed size (dynamically allocated)
+    bool arrMalloc;        //true if this level has no compile-time length (allocated with a runtime one)
     struct operand* arrLen; //size expression for this level, NULL when arrMalloc
 
     //BASETYPE_STRUCT
@@ -189,10 +189,10 @@ enum operation {
                     //array type regardless of element type/dimensionality, which no user-space signature
                     //can express without generics) - see the report
     OPERATION_SIZED_ARRAY_ALLOC, //an uninitialized "T[expr]" var-decl (expr not a compile-time constant) -
-                                   //a dynamic array of expr zero-valued elements, arena-allocated (own by
-                                   //default, or the declared type's own "<name>" tag) - see the report.
+                                   //a runtime-length array of expr zero-valued elements, arena-allocated (own by
+                                   //default, or the declared type's own "&name" tag) - see the report.
                                    //args[0] is the (already-checked-integer) size expression; op->type is
-                                   //the declared dynamic array type (arrMalloc, element type, scope tag)
+                                   //the declared runtime-length array type (arrMalloc, element type, scope tag)
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
                                  //(byte/int32/int64/float32/float64) - the explicit conversion builtin (see
                                  //the report): a real runtime instruction (widen/narrow/int<->float), unlike
@@ -242,6 +242,9 @@ struct operand {
     long long intLiteralVal;
     double floatLiteralVal; //valid for float literals only
     struct str memberName; //valid for OPERATION_MEMBER
+    bool memberMut;        //valid for OPERATION_MEMBER: the FIELD's own mutability (C3), separate from
+                            //whether the base is mutable - a constructor field is mutable only if declared
+                            //"mut", while a plain (T13) struct's fields are always mutable
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     struct list scopeBindings; //list of struct scopeBinding - see the type's own comment. Populated for a
                                 //function/constructor call (from its own scope-typed params matched against

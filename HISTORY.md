@@ -12,7 +12,7 @@ from their original form.
 
 ## Settled decisions
 
-- **Value vs. reference semantics.** A struct or fixed/dynamic array is a value type by default -
+- **Value vs. reference semantics.** A struct or fixed/runtime-length array is a value type by default -
   `==`/`!=` do a structural (deep, memberwise/elementwise) comparison, not pointer identity. A
   trailing `<>` on a type reference (e.g. `MyStruct<>`) makes that level heap-indirect - a reference,
   the same way an object reference works in Java. `==` on a `<>` reference is pointer identity on
@@ -148,7 +148,7 @@ from their original form.
   permanent test.
 - **Struct/array literal syntax + `:=` type inference.** Struct literals are `Type{v1, v2, ...}`
   (positional, in member-declaration order); array literals are `T[v1, ...]` (see the dedicated array-
-  literal-syntax entry near the end of this section for the full design and history - the size/dynamic-
+  literal-syntax entry near the end of this section for the full design and history - the size/length-kind
   ness prefix shown in older text throughout this file, `T[N][v1, ...]`/`T[][v1, ...]`, was replaced).
   Both are general expressions usable anywhere a value is needed, not just on the right of a var-decl; a
   struct literal's type is always restated on the literal itself (`x mut Point = Point{5, 6}`, not `x mut
@@ -168,7 +168,7 @@ from their original form.
   `WRONG_ARG_COUNT` semantic error instead of a confusing parse failure) - both were structurally
   impossible under the old bracket-only design. **Array literals kept their existing single-value gap for
   a long time after this** (`int32[1][5]` misparsed as indexing) **- since resolved, not by the same
-  type-name-awareness mechanism, but as a side effect of dropping the size/dynamic-ness prefix entirely -
+  type-name-awareness mechanism, but as a side effect of dropping the size/length-kind prefix entirely -
   see the array-literal-syntax entry.**
   **Still out of scope:** `Type<>[...]` (heap-indirect struct construction - the first real `malloc` for a
   struct at the point a *reference* is directly constructed, as opposed to a plain value that then gets
@@ -332,8 +332,8 @@ from their original form.
   indirect) struct that then gets returned - that's the same still-open scope-generics gap below, not
   attempted here.
   **A second, separate, more severe pre-existing bug found and fixed while stress-testing this:**
-  `TypeGetSize`'s fixed-array case (`getArraySize` in semantic.c) computed only *one element's* size,
-  completely ignoring the array's length - so any struct or array containing a fixed-size array field was
+  `TypeGetSize`'s compile-time-length-array case (`getArraySize` in semantic.c) computed only *one element's* size,
+  completely ignoring the array's length - so any struct or array containing a compile-time-length array field was
   under-sized at every point `TypeGetSize` drives a `malloc`/`__olang_scope_alloc` call, a real heap
   buffer overflow. Invisible before this session (nothing sized a struct's malloc off `TypeGetSize` at all
   until the boundary-crossing fix earlier in this file's history, and that fix's own test structs happened
@@ -573,7 +573,7 @@ from their original form.
   boundary is the correct (if occasionally stricter-than-necessary) rule until real escape analysis
   exists to relax it.
 - **`<>`/`<name>` now apply to arrays too - reusing `structMAlloc`/`scopeParam` generically rather than
-  building a parallel mechanism.** Only the fixed-size case is wired up so far (see "deliberately not
+  building a parallel mechanism.** Only the compile-time-length case is wired up so far (see "deliberately not
   attempted" below for what isn't). `[N]` vs `[]` answers "is the size known at compile time"; `<>`/
   `<name>` (unchanged from structs) answers "is this embedded or a reference, and if so which scope" -
   the same two orthogonal questions as a struct, with one extra axis (size) that only matters for arrays.
@@ -606,41 +606,41 @@ from their original form.
   own length field is `i64` - deliberately, since there's currently no way to *write* an `int64` literal
   at all (bare integer literals are always `int32`, no widening path), which would make an
   `int64`-returning `len()` awkward to use anywhere near the rest of the language for no real benefit (an
-  array length never needs `int64`'s extra range in practice); the dynamic case truncates in `cgLen`. A
-  compile-time-known dimension (embedded, or a fixed-size `<>` reference) costs nothing at runtime - the
-  constant is substituted directly; only a genuinely dynamic (`T[]`) array reads it from the runtime
+  array length never needs `int64`'s extra range in practice); the runtime-length case truncates in `cgLen`. A
+  compile-time-known dimension (embedded, or a compile-time-length `<>` reference) costs nothing at runtime - the
+  constant is substituted directly; only a genuinely runtime-length (`T[]`) array reads it from the runtime
   slice. Always evaluates its argument (for any side effects a non-trivial expression producing the array
   might have) even when the resulting value goes unused because the dimension turned out to be constant.
   **Two real bugs found and fixed while building this, same class as two earlier ones this session:**
-  (1) `getArraySize` returned `PTR_SIZE` (8) for a dynamic array's own value size - but a dynamic array
+  (1) `getArraySize` returned `PTR_SIZE` (8) for a runtime-length array's own value size - but a runtime-length array
   VALUE is the full `{ i64 len, ptr data }` slice, 16 bytes, not just the pointer. Any struct embedding a
-  dynamic-array field that then got heap-promoted would have under-allocated by 8 bytes and corrupted
-  adjacent memory - invisible until now because nothing exercised a struct with a dynamic-array field
-  being heap-promoted before. Fixed to return 16. (2) `cgIndexAddr`'s embedded/fixed-array branch computed
+  runtime-length-array field that then got heap-promoted would have under-allocated by 8 bytes and corrupted
+  adjacent memory - invisible until now because nothing exercised a struct with a runtime-length-array field
+  being heap-promoted before. Fixed to return 16. (2) `cgIndexAddr`'s embedded/compile-time-length-array branch computed
   its GEP pointee type via `llvmType(base->type, ...)` - correct when arrays could never be `structMAlloc`,
   but once they can, that call now returns `"ptr"` instead of the real `[N x ElemT]` aggregate shape GEP
-  actually needs, producing invalid IR for any fixed-size array reference. Fixed by GEP-ing off a copy of
+  actually needs, producing invalid IR for any compile-time-length array reference. Fixed by GEP-ing off a copy of
   the type with `structMAlloc` forced false (mirroring how `structAggSpelling` already spells a struct's
   aggregate layout "regardless of structMAlloc") - the pointer value itself was already correct either way
   (`cgValue`'s by-ref convention hands back the embedded array's own address when embedded, and
   `typeIsByRef` is now false for a `structMAlloc` array, so `cgValue` there instead loads and hands back
   the already-heap-allocated pointer directly - same GEP shape needed in both cases, only the pointee-type
   string was wrong).
-  **Deliberately not attempted here, and why each is its own next step:** (1) **A genuinely dynamic
-  (`T[]<>`) array reference isn't scope-tracked yet** - `cgPromoteFixedArrayToDynamic` (the sole place a
-  dynamic array's backing store is ever built - see the array-literal-syntax entry below, which made
-  `cgAggregateLiteral`'s own dynamic-array branch dead code and removed it entirely) still always calls a
-  bare `@malloc`, unscoped, regardless of what `<>`/`<name>` the target type carries; marking a dynamic
-  array `<>` currently type-checks but has no effect. **Closed in the dynamic-arrays-as-arena-values entry
+  **Deliberately not attempted here, and why each is its own next step:** (1) **A genuinely runtime-length
+  (`T[]<>`) array reference isn't scope-tracked yet** - `cgPromoteFixedToRuntimeLength` (the sole place a
+  runtime-length array's backing store is ever built - see the array-literal-syntax entry below, which made
+  `cgAggregateLiteral`'s own runtime-length-array branch dead code and removed it entirely) still always calls a
+  bare `@malloc`, unscoped, regardless of what `<>`/`<name>` the target type carries; marking a runtime-length
+  array `<>` currently type-checks but has no effect. **Closed in the runtime-length-arrays-as-arena-values entry
   further below**, once the var-decl work made this the natural next step rather than a standalone fix.
   (2) **Embedded (`T[]`, no
   `<>`) size inference from an assigning literal isn't implemented** - `x mut int32[] = int32[3][1,2,3]`
   inferring a fixed size of 3 for `x`'s own type. Bare `T[]` still means exactly what it meant before this
-  session's changes (dynamic, unscoped, raw `@malloc`) - not reinterpreted, to avoid a breaking change
+  session's changes (runtime-length, unscoped, raw `@malloc`) - not reinterpreted, to avoid a breaking change
   layered on top of everything else here at once. (3) **Jagged (independently-sized-per-row) 2D arrays
   aren't supported** - the single trailing `<>`/`<name>` marker applies once, to the whole type, so there's
   no way to mark an *inner* array level as independently referenced; only fully-rectangular multi-
-  dimensional arrays (every level either fully fixed or, at most, the outermost level dynamic) are
+  dimensional arrays (every level either fully compile-time-length or, at most, the outermost level runtime-length) are
   expressible with what exists today. (4) **The one-hop `cgAssign` field-scope override doesn't extend to
   array elements** - `arr[i] = ...` where `arr`'s own element type is a bare `<>` field-like reference
   still resolves via `ctx->ownScopeSlot`, the same gap struct fields had before their own one-hop fix;
@@ -690,7 +690,7 @@ from their original form.
   really can be its own root - `ctx->ownScopeSlot` is the correct answer there, same as it always was).
   This replaces `cgAssign`'s old one-hop-only check outright (which is now provably a special case of the
   general recursive walk, not a separate rule).
-  **New shared helper, not new behavior:** `typeIsRefShaped(struct type t)` (struct, or fixed-size array -
+  **New shared helper, not new behavior:** `typeIsRefShaped(struct type t)` (struct, or compile-time-length array -
   the same "can this be marked `<>`/`<name>`" predicate that was duplicated inline in three places already)
   factored out and reused by `cgResolveParamScopeOverride`, `cgAssign`, and `cgResolveEffectiveScope`.
   **Deliberately not extended here, one already-documented gap from the arrays work (the other, array-
@@ -798,31 +798,31 @@ from their original form.
   same conservative "foreign, unverifiable, allow" default applies beyond this point, not a new gap, just
   not yet closed further. **Both closed in the two entries below.**
 
-- **Array literal syntax: dropped the redundant size/dynamic-ness prefix - `T[N][v1, ...]`/`T[][v1, ...]`
+- **Array literal syntax: dropped the redundant size/length-kind prefix - `T[N][v1, ...]`/`T[][v1, ...]`
   became `T[v1, ...]`.** User-driven: the array's own *variable* (or param/return/field type) already
-  states whether it's fixed-size or dynamic (`int32[3]` vs `int32[]`), so restating that on the literal
+  states whether it's compile-time-length or runtime-length (`int32[3]` vs `int32[]`), so restating that on the literal
   itself was pure redundancy - `a mut int32[] = int32[1, 2, 3, 6]` is now the whole story, matching the
   same "don't repeat what the target already says" instinct that was never true for `:=` (which has
   nothing to infer from *except* the literal, so it still can't apply here - see below).
-  **The literal is still fully self-describing, just about less: always a fixed-size array, sized by
+  **The literal is still fully self-describing, just about less: always a compile-time-length array, sized by
   however many values are given, at every level** - `int32[1, 2, 3]` is intrinsically `int32[3]`, always,
   regardless of context. What became context-dependent is only what happens when that self-described
   value is *checked against* a target that wants something else:
-  (1) **A fixed literal flowing into a dynamic (`T[]`) target** is now an implicit promotion - malloc a
-  fresh buffer and copy the fixed value's own elements into it (`cgPromoteFixedArrayToDynamic` in
-  codegen.c, invoked from both `cgStoreInto` and `cgBoundaryValue`, keyed on a new `typeNeedsDynamicPromotion`
+  (1) **A fixed literal flowing into a runtime-length (`T[]`) target** is now an implicit promotion - malloc a
+  fresh buffer and copy the fixed value's own elements into it (`cgPromoteFixedToRuntimeLength` in
+  codegen.c, invoked from both `cgStoreInto` and `cgBoundaryValue`, keyed on a new `typeNeedsRuntimeLengthPromotion`
   predicate - the array-*sizing* counterpart to `typeNeedsMallocPromotion`'s array-*referencing* case,
   an orthogonal axis, not the same mechanism). Gated on `op->isLiteral` in `OperandFitsType` (semantic.c),
-  same restriction the existing int-to-float widening already uses: an arbitrary *existing* fixed-array
-  value flowing into a dynamic slot is a different, broader question, not attempted here.
+  same restriction the existing int-to-float widening already uses: an arbitrary *existing* compile-time-length-array
+  value flowing into a runtime-length slot is a different, broader question, not attempted here.
   (2) **A fixed literal whose own inferred size doesn't match a fixed target's declared size** is
   `WRONG_ARG_COUNT` (a new `TYPE_FIT_ARRAY_SIZE_MISMATCH` case in `enum typeFit`), checked against
   whatever it's flowing into, rather than (as before) checked against a size the literal itself restated.
-  Not gated on `op->isLiteral` - this reuses the same underlying fact for *any* fixed-array size mismatch,
+  Not gated on `op->isLiteral` - this reuses the same underlying fact for *any* compile-time-length-array size mismatch,
   literal or not (see the real bug this surfaced, below).
-  Consequently, **`cgAggregateLiteral`'s old dynamic-array-building branch is now dead code and was
-  removed**: an `isLiteral` array operand is *never* `arrMalloc` any more (dynamic is only ever reached via
-  the promotion path above), so the function only ever needs to build a struct or a fixed array.
+  Consequently, **`cgAggregateLiteral`'s old runtime-length-array-building branch is now dead code and was
+  removed**: an `isLiteral` array operand is *never* `arrMalloc` any more (runtime-length is only ever reached via
+  the promotion path above), so the function only ever needs to build a struct or a compile-time-length array.
   **A real, pre-existing bug found and fixed alongside this, unrelated to arrays specifically:**
   `TypeIsSame`'s `BASETYPE_ARRAY` case never compared the two sides' actual fixed sizes at all (only
   `arrMalloc`-ness and the element type) - so e.g. `x mut int32[5] = <some int32[3] value>` type-checked
@@ -876,7 +876,7 @@ from their original form.
   above - not via the same type-name-awareness fix that closed the equivalent struct-literal gap, but as a
   side effect of the suffix loop (the actual source of that ambiguity) no longer existing at all.
 
-- **Dynamic arrays: no growable/resizable `Vec` - "dynamic" only ever means "sized once, at
+- **Runtime-length arrays: no growable/resizable `Vec` - a runtime length only ever means "sized once, at
   construction, then fixed" - and three, no-overlap var-decl forms for how a var's initial content is
   determined.** A real design fork was considered and explicitly deferred: generics, methods, and a
   resizable `Vec`-like type are a *much* larger, separate direction (see the dedicated "generics/methods/
@@ -911,9 +911,9 @@ from their original form.
   **Stack vs. arena, resolved by asking what a runtime-sized array actually needs, not by default:** a
   real LLVM `alloca`/VLA was the first instinct, then dropped in favor of routing through the *existing*
   scope-arena machinery (`__olang_scope_alloc`) instead - own by default, or the declared type's own
-  `<name>` tag, exactly the same convention a struct/fixed-array reference already uses. The reasoning:
+  `<name>` tag, exactly the same convention a struct/compile-time-length-array reference already uses. The reasoning:
   a stack-overflow argument against a runtime size doesn't actually hold up on its own - a large
-  *compile-time-constant* fixed array already has the identical risk today with no guard, so runtime
+  *compile-time-constant* compile-time-length array already has the identical risk today with no guard, so runtime
   sizing isn't a new risk category, just a new way to reach an old one. The real, narrower distinction is
   that a runtime-sized array can *never* be embedded (no compile-time offset is possible for a
   runtime-known length), so - unlike a plain/embedded local, which deliberately keeps a real, near-free
@@ -921,28 +921,28 @@ from their original form.
   do we still need the stack" list) - there is no "cheap embedded slot" benefit a runtime-sized array
   could ever have claimed in the first place. Routing it through the arena instead sidesteps the
   stack-overflow surface entirely (the arena grows via `__olang_new_chunk`'s existing pool-then-`malloc`
-  fallback, never a fixed-size stack region) while giving it the exact same FILO/scope-tied lifetime
+  fallback, never a compile-time-length stack region) while giving it the exact same FILO/scope-tied lifetime
   semantics `<>`/`<name>` already provide everywhere else - not a special case, just the ordinary
   mechanism applied to a shape that happens to need pointer indirection unconditionally.
-  **This is also what closes the "genuinely dynamic array reference isn't scope-tracked yet" gap noted in
+  **This is also what closes the "genuinely runtime-length array reference isn't scope-tracked yet" gap noted in
   the `<>`/`<name>`-on-arrays entry above** - not a separate fix, the natural consequence of building this
-  at all: `cgPromoteFixedArrayToDynamic` (the sole remaining place a dynamic array's backing store is ever
-  built, once the array-literal-syntax entry above made `cgAggregateLiteral`'s own dynamic-array branch
+  at all: `cgPromoteFixedToRuntimeLength` (the sole remaining place a runtime-length array's backing store is ever
+  built, once the array-literal-syntax entry above made `cgAggregateLiteral`'s own runtime-length-array branch
   dead code) now takes an explicit `scopeVal` parameter and allocates via `__olang_scope_alloc` instead of
   a bare `@malloc`, resolved the same way every other reference allocation already is
   (`cgResolveScope(ctx, dstT.scopeParam)` at both of its call sites, `cgStoreInto`/`cgBoundaryValue`) - so
-  a fixed-literal-promoted-to-dynamic value is now scope-tracked exactly as soundly as a fresh
-  `OPERATION_SIZED_ARRAY_ALLOC` one is, through the same underlying mechanism. **Every dynamic array is
+  a compile-time-length-literal-promoted-to-runtime-length value is now scope-tracked exactly as soundly as a fresh
+  `OPERATION_SIZED_ARRAY_ALLOC` one is, through the same underlying mechanism. **Every runtime-length array is
   now implicitly reference-shaped for scope-checking purposes, even with no explicit `<>` at all** -
   because there is no "embedded" shape possible for a runtime-known length in the first place. This
   required widening `OperandFitsType`'s scope-check gate: previously scope-checking only fired when
   *both* sides were `structMAlloc` (an explicit `<>`/`<name>`), which is the right gate for structs/fixed
-  arrays (where embedding is a real, valid alternative) but wrong for a dynamic array, where a bare `T[]`
+  arrays (where embedding is a real, valid alternative) but wrong for a runtime-length array, where a bare `T[]`
   with no marker at all still needs exactly the same "does this scope provably outlive the target"
   check - `needsScopeCheck` now also covers any `arrMalloc` array regardless of `structMAlloc`.
   **Zero-fill mechanism, new and shared by both no-initializer local forms:** `cgVarDecl` now branches on
   `s->op == NULL` (no rhs to evaluate at all, not even a constant) and stores `cgZeroValue(s->var.type)`
-  directly - already correctly `"zeroinitializer"` for a plain embedded fixed array, no changes needed
+  directly - already correctly `"zeroinitializer"` for a plain embedded compile-time-length array, no changes needed
   there. The runtime-sized form additionally needs an *explicit* zero-fill at the point of allocation
   (`cgSizedArrayAlloc`, via `llvm.memset.p0.i64`, newly declared alongside the other runtime decls) since,
   unlike a fresh `@malloc`, arena memory is recycled from the chunk pool and is **not** guaranteed to
@@ -975,7 +975,7 @@ from their original form.
   file fails to compile" from within a `.olang` file, only to run one that already compiles.
 
 - **Deferred: generics, methods, and a real growable `Vec` - a separate, much larger future direction,
-  not started.** Surfaced directly by the dynamic-arrays design discussion above: once a user wants
+  not started.** Surfaced directly by the runtime-length-arrays design discussion above: once a user wants
   `insert()`/`add()`/arbitrary methods on a "some kind of set dtype" the user might define, or an `alloc()`/
   `calloc()`-style API generic over an "any" element type, that's a different, much bigger question than
   "how big is this array's backing store" - a real generics mechanism (something no part of the type
@@ -985,7 +985,7 @@ from their original form.
   constructors/destructors - see that entry above - specifically to sidestep the field/method name-collision
   question; reopening methods for a stdlib collection type would have to either accept that same collision
   risk for stdlib types specifically, or find a different mechanism, e.g. free functions namespaced by
-  type). The user's own framing: dynamic arrays as built here should stay "static but unknown at compile
+  type). The user's own framing: runtime-length arrays as built here should stay "static but unknown at compile
   time," C-alloca-flavored, not the start of a `Vec`; a real resizable/growable collection - and whatever
   generics mechanism it would need to be written once, generically, rather than special-cased per element
   type - belongs in a *standard library* built on top of the language once it exists, not as more special
@@ -1026,29 +1026,29 @@ from their original form.
 - **Arrays of destructor-bearing struct elements now register a destructor per element, not zero.**
   `cgRegisterDtorIfNeeded(ctx, t, scopeVal, heapPtr)` used to check `t.hasDestruct` directly - correct when
   `t` is a struct, but silently wrong when `t` is an array (`hasDestruct` is a struct-only field, always
-  false on an array type's own value), so heap-promoting a fixed array of `destruct{}`-declaring struct
+  false on an array type's own value), so heap-promoting a compile-time-length array of `destruct{}`-declaring struct
   values registered nothing at all - a real resource leak (e.g. a `FileHandle[3]` never closing any of its
   three handles), not just a missed optimization. Fixed by making the function dispatch on `t.bType`: a
-  struct registers itself as before; a fixed array (`!arrMalloc` - the only shape that ever reaches this
-  function, since `typeNeedsMallocPromotion`/`cgPromoteFixedArrayToDynamic`'s own source is always fixed)
+  struct registers itself as before; a compile-time-length array (`!arrMalloc` - the only shape that ever reaches this
+  function, since `typeNeedsMallocPromotion`/`cgPromoteFixedToRuntimeLength`'s own source is always fixed)
   walks its `count` elements via a compile-time-unrolled loop (`count` is always a literal here, from
   `arrLen`), GEP-ing each element's own address the same "`getelementptr elemTy, ptr base, i64 i`" way
-  `cgPromoteFixedArrayToDynamic`'s own element-copy loop already does, and recurses `cgRegisterDtorIfNeeded`
-  on each - which, for free, also handles a nested fixed array of structs (`Handle[2][3]`), since a nested
+  `cgPromoteFixedToRuntimeLength`'s own element-copy loop already does, and recurses `cgRegisterDtorIfNeeded`
+  on each - which, for free, also handles a nested compile-time-length array of structs (`Handle[2][3]`), since a nested
   array's own element type is just handed back to the same function one level down. A new `typeMayHaveDestruct`
   (pure lookup, no codegen) skips emitting the loop entirely when neither the element type nor anything
   nested inside it could possibly need it.
   **Both promotion paths needed the identical fix, since both build a fresh heap buffer via the same
-  per-element GEP shape:** the fixed-array-to-`<>`-reference path (`cgStoreInto`/`cgBoundaryValue`'s
+  per-element GEP shape:** the compile-time-length-array-to-`<>`-reference path (`cgStoreInto`/`cgBoundaryValue`'s
   `typeNeedsMallocPromotion` branch, already calling `cgRegisterDtorIfNeeded` on the whole promoted type -
   no call-site change needed there, since `t` could already correctly be an array once the function itself
-  learned to handle one) and the fixed-literal-to-dynamic-`T[]` path (`cgPromoteFixedArrayToDynamic`, which
+  learned to handle one) and the compile-time-length-literal-to-runtime-length-`T[]` path (`cgPromoteFixedToRuntimeLength`, which
   registered nothing at all before this - a second, separate instance of the same underlying gap, found
   while testing the first fix, not something the original request called out specifically). Fixed with one
   additional call, `cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, bytes)`, right after that function's own
   element-copy loop, reusing the exact same recursive walk - no new mechanism needed for the second path
   either.
-  **Deliberately not attempted here at the time:** a genuinely dynamic (`T[expr]`) runtime-sized array of
+  **Deliberately not attempted here at the time:** a genuinely runtime-length (`T[expr]`) array of
   destructor-bearing elements - `OPERATION_SIZED_ARRAY_ALLOC`'s own zero-fill (`cgSizedArrayAlloc`) never
   allocates actual struct instances via a literal at all (it always zero-fills, never copies from a source
   array), so there's nothing to register a destructor *for* at allocation time there; and the walk is still
@@ -1367,10 +1367,10 @@ from their original form.
   unimplemented feature - stress-tested directly (a destructor-bearing type with a side-effect counter,
   filled via a loop after `arr mut H[n]<>`) and confirmed the counter never moved. `cgSizedArrayAlloc` only
   ever zero-filled the buffer and returned; nothing registered anything with the owning scope's destructor
-  list, unlike a fixed-size array literal (which walks its own compile-time-known elements at allocation
+  list, unlike a compile-time-length array literal (which walks its own compile-time-known elements at allocation
   time - see the per-element-destructor entry above). The gap: a runtime-sized array's own elements aren't
   known at allocation time at all - they're filled in later, by ordinary, separate `arr[i] = ...` statements
-  - so there was no single point that could walk "the elements" the way a fixed array's own literal could.
+  - so there was no single point that could walk "the elements" the way a compile-time-length array's own literal could.
   **Fixed by registering all `n` slots up front, at allocation time, unconditionally - not deferred until
   or gated on each slot actually being individually assigned.** This was a real design fork, surfaced and
   decided rather than picked silently: should a scope-close destruct only the slots a caller explicitly
@@ -1381,14 +1381,14 @@ from their original form.
   scope eventually closes, so a slot that was later assigned a real value destructs that value correctly,
   and a slot nobody got around to assigning destructs the zero-filled value the initial memset produced.
   **Mechanism: a new `cgRegisterDtorLoop` (codegen.c), the runtime-counted counterpart to
-  `cgRegisterDtorIfNeeded`'s own fixed-array branch.** A `T[expr]` array's own count is only known at
-  runtime, so it can't be compile-time-unrolled the way a fixed array's compile-time-constant length is -
+  `cgRegisterDtorIfNeeded`'s own compile-time-length-array branch.** A `T[expr]` array's own count is only known at
+  runtime, so it can't be compile-time-unrolled the way a compile-time-length array's compile-time-constant length is -
   this emits a genuine LLVM loop instead (an `alloca`'d `i64` counter with real `br`/label blocks, using
   `ctx->lblCtr`/`cgLabel`/`cgBr` the same way `cgFor`'s own loop already does, rather than a hand-written
   runtime-string function like `emitScopeRuntime`'s other primitives - only one call site needs this, so a
   dedicated shared runtime helper wasn't worth it), calling `cgRegisterDtorIfNeeded` once per element
-  *inside* the loop body - which still handles a nested fixed-array element type recursively for free,
-  exactly as it already does for a fixed array's own compile-time-unrolled loop. No new registration
+  *inside* the loop body - which still handles a nested compile-time-length-array element type recursively for free,
+  exactly as it already does for a compile-time-length array's own compile-time-unrolled loop. No new registration
   primitive needed on the runtime side at all - `__olang_scope_register_dtor` already handles "one instance,
   one destructor function," called `n` times in a row from inside the new loop.
   **Confirmed both directions**: a permanent test (`useSizedHandleArray` in shared.olang) fills every slot
@@ -1396,18 +1396,18 @@ from their original form.
   against) confirmed a slot left entirely unassigned still destructs its zero-filled value, and that `n=0`
   neither crashes nor over-counts.
 
-- **A second, unrelated, small gap closed alongside the above: an existing (non-literal) fixed-array value
-  can now flow into a dynamic (`T[]`) target too, not just a fresh literal.** `OperandFitsType`'s dynamic-
+- **A second, unrelated, small gap closed alongside the above: an existing (non-literal) compile-time-length-array value
+  can now flow into a runtime-length (`T[]`) target too, not just a fresh literal.** `OperandFitsType`'s runtime-length-
   promotion branch was gated on `op->isLiteral` - the same gate the int-literal-to-float widening rule
   uses, but for a genuinely different reason there: widening an int *literal* is pure reinterpretation (no
   fixed representation to convert from yet), while a non-literal int already has a concrete representation
   and would need an actual runtime conversion instruction - a real, still-unimplemented mechanism gap. No
-  such split exists for arrays: `cgPromoteFixedArrayToDynamic` only ever needs a source *address* to copy
+  such split exists for arrays: `cgPromoteFixedToRuntimeLength` only ever needs a source *address* to copy
   from, and `cgValue`'s by-ref convention already hands one back for any embedded array regardless of
   whether it came from a fresh literal or an existing variable - confirmed by checking codegen before
   touching anything, not assumed. So this needed no codegen changes at all, only relaxing the semantic.c
   check (dropping `op->isLiteral` from this one branch, leaving the unrelated int-to-float gate untouched).
-  Confirmed with a permanent test - a plain local variable, not a literal, copied into a dynamic target and
+  Confirmed with a permanent test - a plain local variable, not a literal, copied into a runtime-length target and
   then mutated afterward, proving the promotion is a real independent copy rather than an alias of the
   source's own storage.
 
@@ -1574,28 +1574,28 @@ from their original form.
   formal `spec/` directory (see this file's own entry on it) for isomorphism.** Both checks
   (`resolveFuncSig` in semantic.c) were
   written back when only a struct could be `structMAlloc` at all, and were never revisited once fixed
-  arrays and dynamic arrays independently gained the exact same `<>`/`<name>` reference machinery (see the
-  `<>`/`<name>`-on-arrays entry above) - so a bare (own-scoped) fixed-array return type, a bare-`<>` array
-  field nested inside a plain returned struct/array, and - most severe - a genuinely **unmarked** dynamic
-  array return type (T11 of the new spec: a dynamic array is always reference-shaped, marker or not, so an
+  arrays and runtime-length arrays independently gained the exact same `<>`/`<name>` reference machinery (see the
+  `<>`/`<name>`-on-arrays entry above) - so a bare (own-scoped) compile-time-length-array return type, a bare-`<>` array
+  field nested inside a plain returned struct/array, and - most severe - a genuinely **unmarked** runtime-length
+  array return type (T11 of the new spec: a runtime-length array is always reference-shaped, marker or not, so an
   unmarked `T[]` return is exactly as own-scoped as an explicitly `<>`-marked struct) all compiled and ran
   with zero complaint, each one a real dangling-pointer return the instant the allocating function's own
   scope closed. Confirmed concretely, not just by code inspection: three ad hoc test programs (a direct
   bare `int32[3]<>` return, a direct bare `int32[]` return, and a `Wrapper{ data int32[3]<> }` returned
   plain) each compiled clean and ran to completion before the fix, and are each correctly rejected after it.
-  **Fixed by finally generalizing both checks the way `typeIsRefShaped` (the struct-or-fixed-array "can
+  **Fixed by finally generalizing both checks the way `typeIsRefShaped` (the struct-or-compile-time-length-array "can
   this carry a marker" predicate, already used elsewhere in the ownership system) was always meant to be
-  reused**: a new `typeIsBareRefShaped` (semantic.c) folds in the dynamic-array special case
+  reused**: a new `typeIsBareRefShaped` (semantic.c) folds in the runtime-length-array special case
   (`arrMalloc && !scopeParam` - no `structMAlloc` check needed, since T11 makes marker-presence irrelevant
-  for a dynamic array) alongside `typeIsRefShaped`'s existing struct-or-fixed-array case, and is what
+  for a runtime-length array) alongside `typeIsRefShaped`'s existing struct-or-compile-time-length-array case, and is what
   `resolveFuncSig`'s direct-return check now calls instead of its old inline `BASETYPE_STRUCT`-only
   condition. `structContainsBareScopeField` was similarly generalized to recurse through a plain (embedded)
   array's own element type, not just a plain struct's own fields, and to treat any field/element found via
-  `typeIsBareRefShaped` (struct, fixed array, or dynamic array alike) as a hit - while still correctly
-  refusing to chase into anything already reference-shaped-with-a-name, or into a dynamic array's own
+  `typeIsBareRefShaped` (struct, compile-time-length array, or runtime-length array alike) as a hit - while still correctly
+  refusing to chase into anything already reference-shaped-with-a-name, or into a runtime-length array's own
   (nonexistent) "elements", exactly as before. This is a straightforward extension of an existing,
   already-uniform design principle (`typeIsRefShaped`/`cgRegisterDtorIfNeeded`/`needsScopeCheck` all already
-  treat structs and fixed arrays alike; this is the last piece of the ownership-checking machinery that
+  treat structs and compile-time-length arrays alike; this is the last piece of the ownership-checking machinery that
   hadn't caught up) - not a new rule or a design question, so it needed no discussion, matching the
   standing "fix bugs found along the way" directive. `make verify` (72 tests total across both `-t` files,
   plus the `-c` production build/run) passes with no regressions; the three confirmed-bad shapes are
@@ -1754,11 +1754,11 @@ from their original form.
   an instance of this bug. `make verify` (84 tests, `-c` build/run) passes with no regressions.
 - **Fixed: a no-initializer array var-decl could zero-fill a reference nested anywhere inside its
   declared type, producing an invisible dangling reference or a phantom, never-actually-allocated
-  dynamic array - user-caught, not self-discovered.** The user pushed back directly on a jagged-array
+  runtime-length array - user-caught, not self-discovered.** The user pushed back directly on a jagged-array
   claim from earlier in this same session ("that variable declaration really shouldn't work... it
-  does not declare references at any level") - correctly: `x mut int32[2][]` (a fixed-size-2 outer
-  array whose element type is itself a dynamic `int32[]`) with *no initializer at all* used to compile
-  and zero-fill to two independent, working-looking-but-never-constructed empty dynamic arrays,
+  does not declare references at any level") - correctly: `x mut int32[2][]` (a compile-time-length-2 outer
+  array whose element type is itself a runtime-length `int32[]`) with *no initializer at all* used to compile
+  and zero-fill to two independent, working-looking-but-never-constructed empty runtime-length arrays,
   purely because the existing no-initializer check (`buildVarDeclStmnt`/`semaCheckBodies` in
   semantic.c) only ever inspected the declared type's own *outermost* shape (`bType != ARRAY ||
   arrMalloc`) - never anything nested inside it. Investigated (not just patched) by first confirming
@@ -1769,7 +1769,7 @@ from their original form.
   **Broader than the one case reported, found while scoping the fix, not narrowed to just it:**
   the identical bug also let a *whole* reference-shaped declared type zero-fill to a **null**
   reference with no construction at all (`x mut Point[3]<>`, no initializer) - arguably worse than
-  the dynamic-array case, since this language has no `null` literal or null-checkable state anywhere
+  the runtime-length-array case, since this language has no `null` literal or null-checkable state anywhere
   (spec L9/T2), so a null reference produced this way is an invisible, uncatchable dangling pointer
   the instant anything reads through it, structurally unrelated to the whole ownership/scope-safety
   model the rest of the language is built on. A third variant - a runtime-sized (`T[expr]`) array
@@ -1780,7 +1780,7 @@ from their original form.
   **Spec-first this time, unlike the signature-reorder entry above:** D13 (`spec.md`) was rewritten
   first to state the real rule precisely - a compile-time-constant outermost size is necessary but
   not sufficient for zero-fill; the declared type must additionally contain no reference (a
-  `<>`/`<name>`-marked struct/fixed array, or, unconditionally, a dynamic array) anywhere within it,
+  `<>`/`<name>`-marked struct/compile-time-length array, or, unconditionally, a runtime-length array) anywhere within it,
   at any depth, or an initializer is required regardless of outermost size - before any code changed.
   **Implementation: one new recursive predicate, `typeContainsReference` (semantic.c, placed beside
   the structurally similar `structContainsBareScopeField`)**, walking a type through plain/embedded
@@ -1802,8 +1802,8 @@ from their original form.
   size at all).
   **Confirmed by hand for all three previously-broken shapes (all three now rejected, with the new
   message) and every previously-legitimate zero-fill shape (all still accepted and correct):** a
-  fixed array of primitives, a fixed array of plain (no-reference) structs, a 2D fixed array, and a
-  fixed-size global, all with no initializer, plus the two existing permanent tests for `T[N]`/
+  compile-time-length array of primitives, a compile-time-length array of plain (no-reference) structs, a 2D compile-time-length array, and a
+  compile-time-length global, all with no initializer, plus the two existing permanent tests for `T[N]`/
   `T[expr]` zero-fill - none of these were affected, confirming the new check is precisely scoped to
   types that actually contain a reference, not overly broad. The three now-rejected shapes are
   documented in shared.olang (next to the existing `T[N]`/`T[expr]` zero-fill tests), the same
@@ -1854,7 +1854,7 @@ from their original form.
   callee's own `<name>`-tagged parameter would have started failing, which would have made the
   ownership feature nearly unusable the moment it got strict.
   **Confirmed the flip actually catches something real, not just "rejects everything unprovable
-  including safe things" - a genuine counterexample, not a hypothetical one:** a fixed array of
+  including safe things" - a genuine counterexample, not a hypothetical one:** a compile-time-length array of
   `Wrapper` values (`type Wrapper struct(s scope, inner Point<s>) { inner }`), two instances tagged
   to two different scope parameters `a`/`b` of the same function, read back out via `arr[1].inner`.
   `OPERATION_INDEX` (unlike `OPERATION_MEMBER`) composes no `scopeBindings` at all, so the resulting
@@ -2110,7 +2110,7 @@ from their original form.
   scoped error codes - see the Error-union return ABI entry) has no C equivalent at all - resolved by
   deciding an external function is simply never fallible in olang's own type system; any real error
   handling for what it might signal has to be a hand-written wrapper in ordinary olang on top of the
-  raw call. (2) this language's dynamic arrays are fat pointers (`{ len, ptr }`, T11) while C wants a
+  raw call. (2) this language's runtime-length arrays are fat pointers (`{ len, ptr }`, T11) while C wants a
   raw pointer, often NUL-terminated (which this language's own `STR_LIT` deliberately isn't) - resolved
   by marshalling an array argument down to just its pointer half as an invisible codegen detail of the
   call itself, with length (if the external function needs it) stated as a separate, explicit integer
@@ -2185,11 +2185,11 @@ from their original form.
   overridden to a bare `ptr`); `cgEmitAllFunctions` now skips `isExtern` vars (nothing to define, only to
   declare); a new `cgExternFuncCall`, dispatched from the top of the existing `cgFuncCall` before any of
   its ordinary-call machinery runs, builds the call by first running every argument through the *existing*
-  `cgBoundaryValue` (so a fixed-array literal promoting into a dynamic `byte[]` parameter, or a plain
+  `cgBoundaryValue` (so a compile-time-length-array literal promoting into a runtime-length `byte[]` parameter, or a plain
   value promoting into a `<>`-marked one, still goes through exactly the same promotion machinery an
   ordinary call gets), then reduces whatever boundary-form value that produced down to a bare pointer for
-  any array-typed parameter (`extractvalue` the pointer half of a `{ i64, ptr }` for a dynamic array,
-  use a `structMAlloc` value's own pointer directly, or spill a plain fixed array's by-value aggregate to
+  any array-typed parameter (`extractvalue` the pointer half of a `{ i64, ptr }` for a runtime-length array,
+  use a `structMAlloc` value's own pointer directly, or spill a plain compile-time-length array's by-value aggregate to
   a fresh stack slot to get a real address) - never the `{ code, payload }` wrapping, never a `try`/catch
   path, since `func->type.isExtern` short-circuits straight past all of that.
 
@@ -2219,3 +2219,321 @@ from their original form.
   staying deterministic and side-effect-free for the test suite - POSIX guarantees `EBADF` immediately,
   no output, no environment dependency). `make verify` (67 `shared.olang` tests + 13 across the
   worker/runner import-cycle files, `-c` build/run) passes with no regressions.
+
+- **Reference syntax, round four: `<>`/`<name>` → `&`/`&name`, to free `<>` for generics.** Settled during
+  the design discussion that opened the generics work (see the entry above for where that discussion
+  started: what `Print`/`WriteVal` actually need on top of `extern func`). The generics design landed on
+  `<T>` for type parameters and arguments - the user's explicit preference over the `(type T, ...)`
+  parameter-kind spelling first proposed - which put it in direct collision with the reference marker,
+  since `Vec<int32>` and `Point<myscope>` are the same token shape (`IDEN "<" IDEN ">"`).
+  **Both of `<>`'s original justifications expire under generics**, which is what made moving the marker
+  the right side of the collision to give way on rather than a coin flip. The reference-syntax entry above
+  argued `<>` "reads the way a type-parameter/generic annotation does in most other languages" - a
+  reasonable intuition for a scope tag only while the language has no real type parameters, and actively
+  misleading the moment it does. It also argued there was "no parsing ambiguity risk the way C++'s
+  `<`/`>` template lookahead has: `parseTypeRef` is only ever called from a position the parser already
+  knows is a type expression... never from general expression parsing" - a premise generics void outright,
+  because generic *calls* (`Max<int32>(a, b)`) and *literals* (`Pair<int32, int64>{1, 2}`) do live in
+  expression position, and the second of those reproduces the exact C++ comma ambiguity (read without
+  knowing `Pair` is generic, it is two arguments: `Pair < int32` and `int64 > {1, 2}`).
+  **Options weighed:** (a) move the marker off brackets entirely onto a single sigil, (b) move generics off
+  `<>` instead - rejected, since every bracket shape is already taken (`[]` arrays, `{}` struct literals,
+  `()` calls, the last already rejected by the user) leaving only turbofish-style ugliness that taxes the
+  more frequently written construct, (c) keep both on `<>` and disambiguate by content (`Point<@>`) -
+  rejected as strictly more characters than the status quo while still leaving `><` adjacent, so the
+  parser work does not actually go away. (a) won on the observation that **the marker is not a list**: it
+  is at most one optional identifier, so a bracket *pair* was always overkill, and the pair was the entire
+  source of the collision.
+  **`&` vs `@`, and why the earlier `&` experiment is not a precedent against it.** The initial
+  recommendation was `@`, on three grounds: `&` imports the address-of/borrow mental model from C/C++/Rust
+  that this language has explicitly rejected (no pointer ever surfaces, no unary `&`, and the checker is
+  scope-containment, not a borrow check); `@` names the half of the marker that actually varies between
+  two markers (always the scope, never the is-a-reference part, which per the earlier entry is
+  inseparable); and `@` is entirely unused in the lexer, where `&` is live as `TOK_BTWSE_AND` alongside
+  `&&`, `&=` and `&&=`. The user chose `&` on **keyboard ergonomics** - decisive for a marker typed
+  constantly, and on a Nordic layout `@` is AltGr+2 against `&` at Shift+6. Worth recording that the
+  earlier `&` round (see the reference-syntax entry above) is *not* evidence against `&`: it was never
+  rejected on its merits, it was introduced for exactly today's motivation ("to stop sharing a delimiter
+  with struct-literal value syntax") and abandoned as collateral when an unrelated design question (one
+  marker or two) resolved, at which point `{}` was chosen back as a preference call that knowingly
+  re-accepted the overload - a call the third round then reversed.
+  **The parsing objection was checked properly before being conceded, and does not survive.** There is no
+  unary `&` in olang (`isUnaryOpTok`, syntax.c: `!`, `-`, `~`, `++`, `--` only), because there are no
+  pointers and so no address-of operator - therefore the marker's postfix-on-a-type position never
+  overlaps binary infix `&`. Type-argument lists are safe (`Vec<Point&>`, `Vec<Point&, int32>`: neither
+  `&>` nor `&,` is a token). The one expression-position case, an array literal of a marked element type
+  (`Point&[p1, p2]`), resolves because the parser has already committed `Point` as a known type via the
+  existing `ScanTopLevelDecls` pre-pass before it reaches the `&`. Maximal munch never bites in a valid
+  program: `&&`/`&=` could only mislex on `Point&&...`/`Point&=...`, neither ever legal syntax.
+  **One genuinely new hazard, found while implementing and closed.** Unlike `<...>`, the new marker has no
+  closing token, and `&` is not a `stmntEndTriggerType` (it cannot be - see `acceptStmntEnd`, which treats
+  a trailing `&` as an implicit statement terminator for exactly the same reason it used to treat `>` that
+  way). So a bare marker ending a line would silently swallow the identifier opening the *next* line as
+  its scope name: `x Point&` followed by `q := 5` parsing as `x Point&q`. No valid program reaches it (a
+  no-initializer reference var-decl is rejected outright), but the diagnostic would have pointed somewhere
+  baffling. Closed by requiring the marker's optional `IDEN` to begin on the marker's own line
+  (`iden.lineNr == marker.lineNr` in `parseTypeRef`), written into T24 as a normative rule rather than
+  left as an implementation detail. Verified: the case now reports the real error (a var-decl needing an
+  initializer) pointing at the declaration, not at a phantom unknown scope.
+  **Mechanically** this was smaller than the third round, because the marker got *simpler*: `parseTypeRef`
+  drops its backtrack-the-whole-thing path entirely (a `&` in a type position is always a marker, there
+  being no unary `&` to confuse it with, where `<` had to be un-read if no `>` followed);
+  `acceptStmntEnd`'s `TOK_GRT` becomes `TOK_BTWSE_AND`; the three real marker sites in semantic.c
+  (`applyRefMarker`'s presence check and its error token, and `isScopeTypeRef`'s rejection check) swap
+  `TOK_LST` for `TOK_BTWSE_AND`; `token.c` needed **no change at all**, since `>` was never a statement-end
+  trigger either and `&` inherits that position unchanged. Plus five error messages in errmsg.h, the
+  marker's spelling throughout spec.md (T24's production, L20's implicit-statement-end exception rewritten
+  for the bare form, and ~28 prose mentions), and 128 marker occurrences across the `.olang` test files.
+  `make verify` passes unchanged at 67/12/13 tests - this was a pure notation change with no semantic
+  content, which is precisely why it was worth doing now, before generics exist and before the marker
+  acquires a second meaning.
+  **Incidental fix found along the way:** `unary-op` was referenced by the E1 grammar block in spec.md but
+  never actually defined anywhere - the operator set only appeared in E5/E9/E11 prose. Added the missing
+  production (`"-" | "!" | "~" | "++" | "--"`), verified against `isUnaryOpTok` in syntax.c.
+
+- **Destructors are an identity claim, so a type declaring one is now reference-only - and registration
+  moved from storage locations to constructor calls.** Found while working out how a future generic
+  `Vec<T>` would handle a destructor-bearing `T`. The user's position throughout - "destructors are tied
+  to scopes; when a struct is created on a scope it is registered to destruct when that scope closes;
+  there is nothing more to it" - turned out to be the correct design, and the implementation was not it.
+  **Three real bugs, all measured, all one root cause.** (1) A plain local compile-time-length array of
+  destructor-bearing values ran *zero* destructors: `cgRunLocalDestructors` filtered on
+  `l->type.bType != BASETYPE_STRUCT || !l->type.hasDestruct`, so an array local was skipped outright.
+  (2) A plain struct with a destructor-bearing *field* never destructed the field at all; the single
+  destructor call observed was the *constructor's own parameter copy* firing at the constructor's
+  return - confirmed by reading the counter while the owning struct was still live and in scope, which
+  already showed 1. (3) The same thing on any ordinary function: passing a destructor-bearing struct by
+  value released the *caller's* resource when the callee returned, while the caller's variable was still
+  live and would destruct it again later - use-after-release plus double-release on entirely ordinary
+  code. The arena path (`cgRegisterDtorIfNeeded`) recursed through array elements, having been taught to
+  by an earlier bug fix, but never through struct fields; the stack path recursed through neither.
+  **The wrong fix, considered and dropped: a structural walk.** The obvious repair is to make destructor
+  discovery recurse the whole type - struct with `destruct{}` registers, struct recurses its fields,
+  array recurses its elements. That is wrong under value semantics, and the user's pushback is what
+  surfaced why: registering per *storage location* double-frees. `h2 mut Handle = h` is a copy, not a new
+  resource; two storage locations holding the same file descriptor must close it once, not twice.
+  Registration per *construction* gets that right, and it is also what makes by-value parameters correct
+  for free (a parameter is not a construction, so it registers nothing) with no "parameters never
+  destruct" special case needed.
+  **Then the real question, and the conclusion.** Registration-at-construction still leaves aliasing:
+  `arr[0] = Handle(1)` then `arr[0] = Handle(2)` gives two registrations pointing at one address, so the
+  slot destructs twice with the second value and the first is lost. The user first read this as an
+  occupancy problem ("no simple way to know if there is anything stored without initializing arrays to
+  null") - but occupancy is not the defect. Two constructions genuinely happened and two destructors
+  genuinely should run; what is broken is that both registrations point at *mutable shared storage*, and
+  no null flag fixes aliasing. Registration is correct exactly when a construction owns storage nothing
+  else writes to - which is already true of every `&` instance, and false of every case that broke.
+  Hence: **a type declaring `destruct{}` is reference-only.** The user then named the underlying thing
+  directly - "I am envisioning more of an object oriented, object is created and stored somewhere system
+  instead of C's structs are declared and laid out in memory system" - which is exactly the split. A
+  destructor asserts an instance owns something releasable exactly once, which requires a well-defined
+  instance count; a value type is compared structurally and copied freely and has none. **The language
+  had already drawn this line and `&` is where it sits** (`==` on a reference is pointer identity, on a
+  value structural), so the rule is two settled decisions composed rather than a new axiom.
+  **A much larger alternative was weighed and rejected: making all structs and arrays references.** It
+  would delete `structMAlloc`/`arrMalloc`, the promotion paths, and the value/reference split entirely.
+  Three costs sank it. Returns stop working without a scope - `func makePoint(...) Point` is safe today
+  only because the value is copied out, so every struct-returning function would need a `scope`
+  parameter and an `&s` return, or a hidden implicit one. It is not "one ptr redirect": it is one per
+  nesting level per access plus an allocation per object, and a 1000-element `Point` array goes from 8KB
+  contiguous to 8KB of pointers plus 1000 scattered allocations - the array-of-structs-to-
+  array-of-pointers cliff, not a slight overhead. And `==` would have to stop meaning structural
+  comparison or stop lining up with reference-ness. The half-measure (containers are references,
+  contents inline) does not fix destructors at all, so the two halves do not compose. Decisive point:
+  the narrow rule already buys the entire destructor fix, so the large change would cost returns,
+  locality and `==` for nothing. Empirically the languages that went all-reference (Java, Python) added
+  value types back, and C# shipped with both from the start.
+  **Spec:** C11 added (reference-only, with the identity rationale and the "marker still written at
+  every use" clause - declaring a destructor makes the type reference-*only*, never the marker
+  implicit, so reading a `type-ref` never requires knowing whether the named type declares a
+  destructor). C9 collapsed from two cases to one (scope close), losing the plain-local case and the
+  `return x` exception. C10 extended to "never for storage no constructor produced an instance in".
+  O15 rewritten, O16 added for registration-at-construction.
+  **Implementation:** a `typeHasBareDestructStruct` check in `resolveTypeRef` (semantic.c) - which must
+  recurse into an array's element type *regardless of the array's own marker*, since `&` on an array
+  makes the array as a whole reference-shaped, never its elements individually (caught in testing: the
+  first version skipped `Handle[3]&s`, which is still three Handle values sharing one allocation).
+  Deleted from codegen.c: `cgRunLocalDestructors`, `cgSkipLocalForReturn`, `cgRegisterDtorLoop`,
+  `typeMayHaveDestruct`, `cgRegisterDtorIfNeeded`'s entire array-walk branch, and the zero-fill
+  registration in `cgSizedArrayAlloc` - the function reduces to "if this struct declares a destructor,
+  register it", once, at the malloc-promotion site that *is* the construction site.
+  **A gap the rule exposed, closed immediately after in its own change (see the entry below).**
+  **Tests:** the destructor suite migrated rather than dropped - `useHandleLocally` to `Handle&`;
+  the `return x` skip test replaced by the scope-tagged equivalent (`makeHandle(n, s scope) Handle&s`),
+  which expresses the same fact directly and needs no dataflow exception; `makeAndDiscardOne` now proves
+  the same "deferral is scoped to exactly one instance" point via two different scope tags; both array
+  tests moved to the `Slot` wrapper shape. `useSizedHandleArray` was retired - the behaviour it covered
+  ("every slot of a runtime-sized array registers up front, zero-filled or not") is deliberately gone,
+  since zero-filling constructs no instances and a reference has no zero value, which the existing
+  zero-fill rule already rejects. Three new permanent regression tests cover the three bugs above in
+  their surviving shapes. `make verify`: 69/13/12, all passing.
+
+- **The reference marker may now be written before the array suffixes as well as after, making an array
+  *of* references expressible for the first time.** Fell out of the destructor work above: a
+  destructor-declaring type is reference-only, so an array of them has to be an array of references - and
+  T24 put the marker strictly *after* the array suffixes, meaning `Handle&[3]` did not parse and never
+  had, for any type at all. The capability had to be faked with a plain value struct wrapping a reference
+  (`type Slot struct(h Handle&) { h }`, then `Slot[3]`), which the destructor tests briefly used.
+  **The two positions are genuinely different data layouts, not two spellings of one thing** - which is
+  why this is a new position rather than a reinterpretation of the existing one. `Point&[3]` is three
+  pointers to three separate allocations: elements have identity, two loads to reach one, and each can be
+  separately constructed, owned and destructed. `Point[3]&` is one pointer to one allocation of three
+  inline values: one load to reach an element, and the whole block copies or aliases as a unit. Both
+  already had real uses - the second is what `makeFixedArrayRef(s scope) int32[3]&s` in shared.olang does
+  (hand back a pointer into the caller's scope instead of copying the elements out), and is also how you
+  keep a large array inside a struct without inlining it. Neither subsumes the other.
+  **The size question that came up while specifying this, and its answer:** what happens if a function
+  declares `Point[3]` and the array cannot be guaranteed to be 3, e.g. one built from a runtime
+  expression? Nothing, because a runtime-sized `T[expr]` is *never a compile-time-length type* - it resolves to a
+  runtime-length array, exactly as `detectRuntimeSizedArrayType`'s own comment says ("arrLen stays exactly what
+  it's always been, a compile-time constant or nothing"). Conversion runs one way only, compile-time- to
+  runtime-length; there is no runtime-to-compile-time-length at all, checked or otherwise, and two
+  compile-time lengths differing is
+  its own rejection. So the only things that can have type `Point[3]` are 3-item literals and other
+  `Point[3]` values, and the static guarantee holds by construction rather than by analysis. The practical
+  consequence, worth knowing: `T[]` is the general-purpose parameter type (it accepts a compile-time-length array too,
+  via promotion), and `T[N]` means "I require exactly N" and is rare and deliberate. The escape hatch for
+  runtime data you know is N long is to rebuild it - an array literal's items are ordinary expressions, so
+  `int32[d[0], d[1], d[2]]` works and costs a copy.
+  **Implementation.** `parseRefMarker` factored out of `parseTypeRef` and parameterized by node type;
+  markers now live in their own child nodes (`SNTX_ELEM_REF_MARKER` / `SNTX_REF_MARKER`) rather than as
+  loose tokens on the type-ref, so the two positions are distinguishable. `applyRefMarker` and
+  `resolveScopeTag` take a marker node instead of the whole type-ref; `resolveTypeRef` applies the element
+  marker to the base *before* `applyArraySuffixes` and the trailing one after. Two call sites needed the
+  same two-level treatment and one was missed on the first pass - `resolveRuntimeSizedArrayDeclType`
+  still passed the whole type-ref, which silently produced a bare (own-scope) tag instead of the declared
+  `&s` and surfaced as a scope-containment error on `makeSizedArrayRef`; `isScopeTypeRef` also had to stop
+  looking for a loose `TOK_BTWSE_AND` token that no longer exists there.
+  **Array literals needed it too, or the feature would have been inert** - `Handle&[3]` was expressible as
+  a *type* but nothing could construct one, since `elem-type` in E19 was a bare name. `parseExprPrimary`
+  gained a branch for "known type, then `&`, then `[`", committing only once the `[` is confirmed so a
+  bare `Handle&` in expression position and ordinary bitwise-and both still backtrack cleanly, and
+  `buildArrayLiteralExpr` applies the marker to the element type. No primitive case: a primitive can never
+  carry a marker.
+  **Spec:** T24's production gains the pre-suffix position with a table of the three shapes; E19's
+  `elem-type` gains the optional marker. Tests: the destructor array tests dropped the `Slot` wrapper for
+  real `Handle&[3]&`/`Handle&[]&`, and a new test covers both positions side by side. `make verify`:
+  70/13/12.
+
+- **Terminology: "fixed-size" and "dynamic" arrays renamed to "compile-time-length" and
+  "runtime-length".** User-driven, purely a documentation change - no syntax, semantics or code behaviour
+  altered. "Dynamic" was actively wrong: it promises growth, and this language has none (the entry above
+  spells out that a runtime length means "sized once, at construction, then fixed" - there is no
+  growable `Vec`). "Slice" was considered and rejected for misleading in a different direction: in Go and
+  Rust a slice is a *view* into storage someone else owns, where these own their allocation. The real
+  distinction was never dynamism at all but *when the length is known* - `T[N]` carries it in the type at
+  compile time, `T[]` carries it at runtime alongside the pointer in the `{ i64, ptr }` value - and the
+  new pair names exactly that, with the user's own observation that both are static as the deciding
+  argument. Renamed throughout spec.md, CLAUDE.md, HISTORY.md (including older entries, since they
+  describe the same concepts), every code comment, the one error message that mentioned it, and the
+  `.olang` test comments; `typeNeedsDynamicPromotion`/`cgPromoteFixedArrayToDynamic` became
+  `typeNeedsRuntimeLengthPromotion`/`cgPromoteFixedToRuntimeLength`. `arrMalloc` was deliberately left
+  alone - it is named after the representation (allocated, not embedded), which is still accurate and
+  orthogonal to what the length-kind is called.
+
+- **`x T[] = <initializer>` now infers the length into the TYPE, not just the allocation.** User-spotted,
+  immediately after the compile-time-/runtime-length rename above: if `T[]` is "runtime-length", why does
+  `x int32[] = int32[1, 2, 3]` count as one, when the length is plainly visible at the declaration? The
+  answer was that the length *was* inferred - for the copy - and then thrown away from the type.
+  Confirmed both directions before changing anything: `cgLen` emits a runtime `extractvalue`/`trunc` for
+  any `arrMalloc` operand, even one initialized from a visible 3-item literal, where a compile-time-length
+  array's `len()` is a literal constant; and `TypeIsSame` skips the length comparison entirely whenever
+  `arrMalloc` is set, so an `int32[]` holding 3 and one holding 4 were *the same type*. The form that did
+  keep the length already existed (`x := int32[1, 2, 3]` infers `int32[3]`, verified by passing it to an
+  `int32[3]` parameter while the explicit `int32[]` form was rejected), so the two declaration forms
+  disagreed for no stated reason.
+  **Treated as a conformance bug rather than a design change**, because CLAUDE.md had documented this form
+  as "`x T[] = <literal>` (size inferred from the literal)" all along - the implementation simply did not
+  make the inferred size reach the type. `mut` was checked first and is unaffected: `x mut := <literal>`
+  is valid (D11's grammar allows it), so nothing was reachable only through the old behaviour.
+  **Rule (D12a):** a declared `T[]` whose initializer has a compile-time length adopts it, becoming
+  `T[N]`. The declared element type and any `&`/`&name` marker are kept as written - only the length-kind
+  and length come from the initializer - so `x T[]&s = ...` stays allocated into `s`, and a bare
+  `x T[] = ...` becomes an ordinary embedded array, exactly what `:=` would have produced. An initializer
+  that is itself runtime-length carries no length to adopt and leaves the declaration runtime-length,
+  which is the only shape that ever had a length worth keeping.
+  **Implementation:** one helper, `inferArrayLenFromInit`, applied at both sites where a declared type
+  meets its initializer (`buildVarDeclStmnt` and the `for`-init path), immediately after the existing
+  fit check so a genuine mismatch is still reported against the type as written. No codegen change at
+  all - the resulting type is one the backend already handles.
+  **Consequence worth knowing:** reassigning such a variable to a differently-sized array is now a
+  compile error rather than silently working, since its type carries a length. That is the intended
+  effect (it catches a real mistake), and a genuinely varying-length local is still expressible via
+  `T[expr]` or a runtime-length initializer. Two permanent tests cover both directions. `make verify`:
+  72/13/12.
+
+- **An element-position scope NAME is now rejected instead of silently ignored.** Found by the user
+  questioning whether `Handle&s[Handle(1), ...]` was an example of scoping the *creation* rather than the
+  type - i.e. whether the element-marker feature had quietly reintroduced the per-construction-site scope
+  the ownership design had already rejected. It had not: `elem-type` in E19 is a type expression, so the
+  literal restates the element *type* and the target's declared type still supplies every scope. But
+  checking that claim properly turned up a real wart in the element-marker work.
+  **A correction worth recording, since the first check was reported before it was sound:** the test
+  originally used to "confirm" that a named element tag put elements in `s` passed `own` as `s` from the
+  caller, so `s` *was* the caller's own scope and both possible allocations survived identically - the
+  test could not distinguish the two outcomes at all and established nothing. A three-level version
+  (`outer` -> `middle(own)` -> `makeIt(s)`, observing from `middle` after `makeIt`'s own scope has closed
+  but while `s` is still open) does distinguish, and shows elements marked bare `&` surviving into `s`.
+  **So the element marker's scope name was accepted and ignored.** Codegen allocates every element into
+  the *array's* own scope, which is the settled rule (a reference nested inside a larger value always
+  inherits its container's scope, never an independent tag) - so `Handle&s[3]`, `Handle&anything[3]` and
+  `Handle&[3]` all compiled to exactly the same thing. Not unsound - nothing dangles, since elements
+  follow the array's scope rather than the callee's own - but an accepted-but-meaningless tag is precisely
+  the shape that hides a later bug, so it is now a compile-time error (NAMED_SCOPE_ON_ELEMENT), gated on
+  array suffixes actually following the marker (with none, the marker IS the whole type's own and takes a
+  scope name normally). Spec'd in T24; a permanent test covers the surviving behaviour by construction.
+
+- **C3 (a constructor field is mutable only if declared `mut`) was never actually enforced - fixed.**
+  Surfaced sideways: while demonstrating that a value flowing into a `&` parameter is copied rather than
+  aliased, the demo struct's field had to have its `mut` removed to parse, and `p.x = 99` still compiled.
+  `OperandIsMutableLvalue`'s `OPERATION_MEMBER` case recursed on the *base* alone
+  (`return OperandIsMutableLvalue(base)`), consulting the base variable's mutability and never the
+  field's own flag - so every field of any mutable variable was writable regardless of how it was
+  declared, and C3 was documentation with nothing behind it.
+  **The flag was already recorded correctly on both sides**, which made the fix small and safe: a ctor
+  field gets `v.mut = hasTokOfType(f, TOK_MUT)` (resolveStructCtorInto), while a plain (T13) struct's
+  fields get `v.mut = true` explicitly, since that grammar has no `mut` at all. So checking the field's
+  flag ANDed with the base's enforces C3 exactly and leaves plain structs untouched. `OperandMember` now
+  records `memberMut` on the operand (the field var is right there but was not being carried forward),
+  and the check consults it alongside the base rather than instead of it, so writing through an immutable
+  base stays rejected too.
+  **Worth noting the `mut` goes on the FIELD, not the parameter** - `IDEN [ "mut" ]` for a bare pun
+  (C2), so `open mut`, not `struct(open mut int32)`. Got this wrong in the first regression test and the
+  newly-working check caught it, which is a small piece of evidence the enforcement is real. Two
+  permanent tests cover both sides (a `mut` ctor field stays writable; a plain struct's fields stay
+  writable). `make verify`: 75/13/12.
+
+- **Parameter mutability enforced (D9), and a value may no longer be promoted into a `&` parameter it was
+  named for (E12a).** Driven by the user working through the `mutateThrough` example, where the same
+  function with one prototype mutated the caller's value in one call and silently didn't in the other.
+  My first answer defended it as required for soundness; that was too strong, and the user's pushback
+  ("whether mutation happens should be obvious from the function signature", and later "the
+  copying/mutate in place behaviour should not be dependent on what scope is given - this is not
+  human-workable") was right on both counts.
+  **A design I proposed and the user correctly rejected**, recorded because the rejection is the useful
+  part: I first made mutation-visibility a consequence of the scope tag (bare `&` can't outlive the call
+  so pass by address; `&s` might be retained so copy). That is sound but unusable - it means reasoning
+  about durability at every call site to know whether your variable changes. I had also imported "borrow"
+  vocabulary from Rust, which this language explicitly does not implement.
+  **What landed instead is simpler and needed no new concepts:** `mut` means what it means everywhere
+  (this can be assigned to) and `&` means whose instance it is. For a value parameter `mut` makes the
+  callee's own copy writable, leaving the caller unaffected; for a reference parameter it makes the
+  caller's instance writable. Independent axes, readable from the signature alone.
+  **Both halves turned out to be conformance bugs, not design changes.** D9 already said "a parameter is
+  immutable unless declared with `mut`" and pointed at D11 for how that differs from a local - but the
+  body-scope setup forced `local->mut = true` for every parameter with the comment "local variables
+  (including parameters) are mutable by default", so D9 was unenforced. Exactly the same shape as C3's
+  unenforced field mutability found an hour earlier, and in the same function-family. Only two call sites
+  in the entire test suite needed `mut` added (`fillBoxedPoint`, `setChainLeaf`, both writing *through* a
+  reference parameter), which is decent evidence the rule matches how the code was already written.
+  **E12a took three attempts to scope correctly, each narrowing on real evidence.** First cut rejected any
+  value flowing into a `&` parameter: that broke every constructor call initializing a reference field
+  from a fresh value (`ScopedBox(outer, Point{7, 8})`). Second cut exempted literals: still broke *nested*
+  constructor calls (`PunnedBox(a, WrappedPoint(a, Point{x, y}))`), since a constructor's result is a
+  temporary but not a literal. Third cut is the right predicate - `OperandIsLvalue`: reject only when the
+  caller actually *named* the argument (a variable read, index, or member access). A freshly built
+  temporary has no caller-side instance to preserve, so promoting one is construction rather than a silent
+  copy of something the caller holds - which is also exactly why var-decls and returns are untouched.
+  **Deliberately not done:** an explicit address-of operator at the call site. The parameter type already
+  carries the information, so `&v` would be a second place to state the same fact, and the user was
+  right to be reluctant to add syntax for it. `make verify`: 77/13/12.
