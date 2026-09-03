@@ -58,6 +58,8 @@
 #define TYPE_ARG_HAS_REFERENCE_MARKER "a type argument may not carry a reference marker - the scope checker could not trace its tag through the instantiation, and an untraceable tag is rejected rather than assumed safe"
 #define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
 #define BARE_SCOPE_CTOR_ARRAY_FIELD "a run-time-sized constructor field must be tagged to a scope parameter of this same constructor (e.g. 'data byte[cap]&s', with 's scope' among the parameters) - an untagged one would be allocated into the constructor's own scope, which closes before the constructed value ever reaches its caller, exactly as a bare '&' return type would"
+#define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
+#define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
 #define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----

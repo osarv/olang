@@ -2611,3 +2611,31 @@ from their original form.
   is parsed and resolved by an entirely separate path, marks its error list differently, and has a
   field list where a function has a body). Whether syntax and implementation should converge further is
   its own design conversation, to be had in isolation rather than settled in passing.
+
+- **Generics: monomorphization working end to end for generic functions.** A generic function now
+  infers its type arguments at each call, is compiled once per distinct set of them, and runs.
+  **Inference (G9)** happens at the top of `OperandFuncCall`, before anything else: `TypeUnify` matches
+  each argument's type structurally against the declared parameter type, binding variables as it goes and
+  rejecting the case where one variable is reached twice with two different types. Doing it first means
+  every existing check below it - arity, fit, scope bindings, the return type - sees an ordinary
+  non-generic function, because the instantiation *is* one. Nothing downstream needed a generic-aware
+  version.
+  **The instantiation registry is deliberately NOT stored in the owning module's own vars list.** That
+  list holds `struct var` by value, so growing it during body checking would realloc its backing array
+  and invalidate every `struct var*` already handed out - every `op->readVar`, every parameter origin.
+  Instantiations live in one global list of heap-allocated vars whose addresses are stable, and codegen
+  walks that list separately. This was a real hazard spotted before it bit, not after.
+  **Body checking is a worklist, not a pass.** Checking one copy can create more (a generic calling
+  another generic, or itself with different arguments), so `semaDrainInstantiations` runs to a fixed
+  point after all ordinary bodies are checked. G17's depth cap is what guarantees it terminates.
+  **The copy is checked by the same code path as any other function** - a scope of its parameters, a
+  checkCtx, `buildBlock` - against its own substituted types. That is the whole content of G16: once
+  substituted there is nothing generic left, so destructors, scope containment and structural comparison
+  all apply unchanged. Confirmed by a test instantiating a generic over a user-defined struct and
+  comparing with `==`, which needed no generic-specific handling at all.
+  **Verified in the emitted IR**, not just by tests passing: one symbol per distinct type-argument set
+  (`@m0_maxOf$int32`, `@m0_maxOf$int64`, `@m0_maxOf$float64`, `@m0_maxOfThree$int32`,
+  `@m0_same$Point`), with repeated calls on the same types reusing one copy.
+  **Still to come:** generic struct types are declared and validated but their type arguments are not yet
+  substituted at a use site (`Pair<int32, int64>` resolves, ignoring the arguments), and `match <T>`
+  (§12.5) is not implemented. `make verify`: 84/13/12.

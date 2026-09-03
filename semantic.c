@@ -919,6 +919,94 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     return true;
 }
 
+// ---- generic instantiation (G16) ----
+
+//one monomorphized copy of a generic function: the generic it came from, the type arguments it was
+//instantiated with, and the ordinary non-generic var that was generated for it. Kept in one global list
+//rather than per-module because a call can instantiate a generic declared in another module, and the
+//copy has to live somewhere codegen will find it - it is added to the GENERIC's own module, so its
+//mangled name is stable regardless of which module first triggered it.
+//struct instantiation itself is declared in semantic.h, so codegen can walk the list
+static struct list instantiations;   //struct instantiation
+static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
+
+bool bindingsMatch(struct list* a, struct list* b) {
+    if (a->len != b->len) return false;
+    for (int i = 0; i < a->len; i++) {
+        struct typeBinding* ba = ListGetIdx(a, i);
+        struct type* bb = bindingGet(b, ba->name);
+        if (!bb || !TypeIsSame(ba->type, *bb)) return false;
+    }
+    return true;
+}
+
+//a short printable name for a type, used only to build a unique instantiation name below
+struct str typeShortName(struct type t) {
+    switch (t.bType) {
+        case BASETYPE_BOOL: return StrFromCStr("bool");
+        case BASETYPE_BYTE: return StrFromCStr("byte");
+        case BASETYPE_INT32: return StrFromCStr("int32");
+        case BASETYPE_INT64: return StrFromCStr("int64");
+        case BASETYPE_FLOAT32: return StrFromCStr("float32");
+        case BASETYPE_FLOAT64: return StrFromCStr("float64");
+        case BASETYPE_ARRAY: return StrFromCStr("arr");
+        default: return t.name.len ? t.name : StrFromCStr("t");
+    }
+}
+
+//"max$int32", "pairUp$int32$byte" - one name per distinct type-argument set, in the generic's own
+//declared parameter order so the same arguments always produce the same name. Only has to be unique
+//and stable; it is mangled again by codegen under the owning module like any other name.
+struct str instantiationName(struct var* generic, struct list* bindings) {
+    char buf[512];
+    int n = snprintf(buf, sizeof(buf), "%.*s", generic->name.len, generic->name.ptr);
+    for (int i = 0; i < generic->type.typeParams.len; i++) {
+        struct str pname = *(struct str*)ListGetIdx(&generic->type.typeParams, i);
+        struct type* bound = bindingGet(bindings, pname);
+        struct str tn = bound ? typeShortName(*bound) : StrFromCStr("x");
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "$%.*s", tn.len, tn.ptr);
+        if (n >= (int)sizeof(buf)) break;
+    }
+    struct str out = (struct str){0};
+    out.len = (int)strlen(buf);
+    out.ptr = MallocOrCrash((size_t)out.len + 1);
+    memcpy(out.ptr, buf, (size_t)out.len + 1);
+    return out;
+}
+
+//finds or creates the monomorphized copy of `generic` for `bindings` (G16). Identical type arguments
+//always reuse one copy, so a generic called a hundred times with int32 is compiled once. A newly created
+//one is queued rather than checked here: checking its body can discover further instantiations (a
+//generic calling another generic), so the queue is drained to a fixed point after the main pass - see
+//semaDrainInstantiations.
+struct var* instantiateFunc(struct var* generic, struct list* bindings) {
+    for (int i = 0; i < instantiations.len; i++) {
+        struct instantiation* inst = ListGetIdx(&instantiations, i);
+        if (inst->generic == generic && bindingsMatch(&inst->bindings, bindings)) return inst->specialized;
+    }
+    struct var* spec = VarAllocSetOrigin();
+    *spec = *generic;
+    spec->name = instantiationName(generic, bindings);
+    spec->type = TypeSubstitute(generic->type, bindings);
+    spec->type.typeParams = ListInit(sizeof(struct str)); //the copy is not generic - that is the point
+    spec->origin = spec;
+    spec->codeBlock = ListInit(sizeof(struct statement));
+
+    struct instantiation inst = (struct instantiation){0};
+    inst.generic = generic;
+    inst.bindings = *bindings;
+    inst.specialized = spec;
+    ListAdd(&instantiations, &inst);
+    int idx = instantiations.len -1;
+    ListAdd(&pendingInstances, &idx);
+
+    //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
+    //growing it during body checking would realloc its backing array and invalidate every struct var*
+    //already handed out (every op->readVar, every parameter origin). The instantiation list holds
+    //heap-allocated vars whose addresses are stable, and codegen walks it separately.
+    return spec;
+}
+
 //base type a name resolves to, before any array suffixes on the reference are applied
 struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     //a type-var head short-circuits every name lookup below: there is nothing to resolve, the variable
@@ -2159,6 +2247,30 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
 }
 
 struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct list args, struct token tok) {
+    //G9: a call to a generic never writes its type arguments - each is inferred by matching the actual
+    //argument types against the declared parameter types, which G4 guarantees reaches every variable.
+    //Done before anything else here, so everything below (arity, fit checking, scope bindings, the return
+    //type) sees an ordinary non-generic function: the instantiation IS one.
+    if (func->type.typeParams.len != 0) {
+        struct list bindings = ListInit(sizeof(struct typeBinding));
+        bool ok = args.len == func->type.vars.len;
+        for (int i = 0; ok && i < args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+            struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            if (!TypeUnify(paramT, arg->type, &bindings)) ok = false;
+        }
+        for (int i = 0; ok && i < func->type.typeParams.len; i++) {
+            if (!bindingGet(&bindings, *(struct str*)ListGetIdx(&func->type.typeParams, i))) ok = false;
+        }
+        if (!ok) {
+            ErrMsgSemantic(tok, TYPE_ARGS_NOT_INFERABLE);
+            struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
+            bad->readVar = func;
+            bad->args = args;
+            return bad;
+        }
+        func = instantiateFunc(func, &bindings);
+    }
     struct type ret = func->type.hasRetType ? *func->type.retType : TypeVanilla(BASETYPE_VOID);
     struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
     op->readVar = func;
@@ -3802,6 +3914,51 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
     }
 }
 
+//checks one monomorphized copy's body: the same syntax the generic declared, against the copy's own
+//substituted parameter types (G16). Identical to the ordinary function-body path in semaCheckBodies -
+//that is the whole point, the copy is not special in any way once its types are concrete.
+void checkInstantiationBody(struct instantiation* inst) {
+    struct var* spec = inst->specialized;
+    if (!spec->bodySyntax) return;
+    struct scope fnScope = scopePush(NULL);
+    for (int p = 0; p < spec->type.vars.len; p++) {
+        struct var* param = ListGetIdx(&spec->type.vars, p);
+        struct var* local = VarAllocSetOrigin();
+        *local = *param;
+        local->origin = param;
+        local->mayBeInitialized = true;
+        ListAdd(&fnScope.localPtrs, &local);
+    }
+    struct checkCtx ctx = {0};
+    ctx.mod = inst->generic->type.owner;
+    ctx.scope = &fnScope;
+    ctx.func = spec;
+    ctx.hasOwnScope = true;
+    spec->codeBlock = buildBlock(&ctx, spec->bodySyntax);
+}
+
+//drains the instantiation queue to a fixed point. Checking one copy's body can create more (a generic
+//calling another generic, or itself with different arguments), so this is a worklist rather than one
+//pass. G17's termination guarantee is what stops it: a generic whose instantiation needs an
+//ever-growing set of further instantiations is rejected, here, by a depth cap.
+struct list* SemanticAllInstantiations(void) { return &instantiations; }
+
+void semaDrainInstantiations(void) {
+    int rounds = 0;
+    while (pendingInstances.len != 0) {
+        if (++rounds > 1000) { //G17 - implementation-defined depth
+            struct instantiation* inst = ListGetIdx(&instantiations, *(int*)ListGetIdx(&pendingInstances, 0));
+            ErrMsgSemantic(inst->generic->tok, UNBOUNDED_INSTANTIATION);
+            return;
+        }
+        struct list batch = pendingInstances;
+        pendingInstances = ListInit(sizeof(int));
+        for (int i = 0; i < batch.len; i++) {
+            checkInstantiationBody(ListGetIdx(&instantiations, *(int*)ListGetIdx(&batch, i)));
+        }
+    }
+}
+
 void semaCheckBodies(struct semaModule* mod) {
     for (int i = 0; i < mod->syn.decls.len; i++) {
         struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
@@ -3956,6 +4113,9 @@ void semaCheckBodies(struct semaModule* mod) {
         //variables with no size, no fields and no operations, so almost anything the body does would
         //either crash the checker or produce a meaningless diagnostic. The body is checked once per
         //instantiation instead, against real types, exactly as if it had been written out by hand.
+        //kept before the skip below: an instantiation checks this same body again, against its own
+        //substituted parameter types, so the syntax has to outlive the pass that declined to check it
+        func->bodySyntax = firstPartOfType(actual, SNTX_BLOCK);
         if (func->type.typeParams.len != 0) continue;
 
         struct scope fnScope = scopePush(NULL);
@@ -3992,6 +4152,8 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     bareErrorWord.str = StrFromCStr("error");
     ListAdd(&bareErrorType.words, &bareErrorWord);
 
+    instantiations = ListInit(sizeof(struct instantiation));
+    pendingInstances = ListInit(sizeof(int));
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));
     checkDuplicateImportReachability();
@@ -3999,6 +4161,8 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     for (int i = 0; i < allModules.len; i++) semaCollectNames(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
+    //every instantiation discovered while checking those bodies, plus everything those discover in turn
+    semaDrainInstantiations();
 
     if (!testMode) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));

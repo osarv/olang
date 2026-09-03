@@ -805,6 +805,51 @@ func initializerWithNoCompileTimeLength(s scope, n int32) int32 {
     return len(z) + z[0]
 }
 
+## generics (§12): a function is generic exactly when a type variable appears in its signature - there is
+## no declaration list, the set IS whatever appears. Type arguments are never written at a call; they are
+## inferred by matching the actual argument types against the declared parameter types (G9), which is
+## sound because every variable must appear in at least one parameter (G4). Each distinct set of type
+## arguments produces one monomorphized copy (G16) - an ordinary function with the variables substituted
+## away, to which every other rule in the language then applies unchanged.
+func maxOf(a<T>, b<T>) <T> {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+## a generic calling a generic: checking one copy's body discovers further instantiations, so the
+## instantiation queue is drained to a fixed point rather than in a single pass
+func maxOfThree(a<T>, b<T>, c<T>) <T> {
+    return maxOf(maxOf(a, b), c)
+}
+
+## instantiated over a user-defined struct - "==" is the ordinary structural comparison, needing no
+## generic-aware version, precisely because by codegen time nothing generic is left
+func sameValue(a<T>, b<T>) bool {
+    return a == b
+}
+
+test "one generic instantiated over several types" {
+    assert(maxOf(3, 7) == 7)
+    assert(maxOf(int64(3), int64(9)) == int64(9))
+    assert(maxOf(float64(1), float64(2)) == float64(2))
+}
+
+test "a generic calling a generic cascades instantiation" {
+    assert(maxOfThree(1, 5, 3) == 5)
+}
+
+test "a generic over a struct type uses ordinary structural equality" {
+    assert(sameValue(Point{1, 2}, Point{1, 2}))
+    assert(!sameValue(Point{1, 2}, Point{3, 4}))
+}
+
+test "the same type arguments reuse one instantiation" {
+    assert(maxOf(1, 2) == 2)
+    assert(maxOf(8, 4) == 8)
+}
+
 ## D14a: a constructor field may be a run-time-sized array, sized by an expression that can name the
 ## constructor's own parameters. This is what makes a struct able to OWN a buffer at all - before it,
 ## "T[expr]" was var-decl-only and nothing produced a runtime-sized array as a value, so no struct could

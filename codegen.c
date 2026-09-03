@@ -1947,11 +1947,19 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
-        //G16: an uninstantiated generic has no code of its own - only its monomorphized copies are
-        //emitted, each a separate ordinary function with every type variable substituted away
-        if (v->type.typeParams.len != 0) continue;
+            //G16: an uninstantiated generic has no code of its own - only its monomorphized copies are
+            //emitted, each a separate ordinary function with every type variable substituted away
+            if (v->type.typeParams.len != 0) continue;
             cgFunction(ctx, mod, v);
         }
+    }
+    //...and those copies, each an ordinary function by this point. Emitted under the module that
+    //DECLARED the generic, not whichever one instantiated it, so one set of type arguments always
+    //produces one symbol however many modules call it.
+    struct list* insts = SemanticAllInstantiations();
+    for (int i = 0; i < insts->len; i++) {
+        struct instantiation* inst = ListGetIdx(insts, i);
+        cgFunction(ctx, inst->generic->type.owner, inst->specialized);
     }
 }
 

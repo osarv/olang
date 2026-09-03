@@ -134,6 +134,9 @@ struct var {
                                 //initializing operand at declaration time (see buildVarDeclStmnt), so a
                                 //later read of this var carries the same map its initializer had - see
                                 //the report on extending the static scope checker past one function's frame
+    struct syntax* bodySyntax; //generic functions only: the SNTX_BLOCK of the declaration, kept so each
+                                //instantiation can check the same body again against its own concrete
+                                //parameter types (G16). NULL for everything else.
     struct var* punParam; //fields only: for a bare-pun field ("{ name }" alone, forwarding a same-named
                            //constructor parameter unchanged), the constructor parameter it puns - the
                            //canonical, type-level var from the declaring type's own ctorFunc.type.vars (set
@@ -313,7 +316,12 @@ void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode);
-struct list* SemanticAllModules(void); //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+struct list* SemanticAllModules(void);
+//list of struct instantiation - every monomorphized copy of a generic (G16). Held separately from any
+//module's own vars because that list stores struct var BY VALUE, and growing it during body checking
+//would invalidate every struct var* already handed out.
+struct list* SemanticAllInstantiations(void);
+struct instantiation { struct var* generic; struct list bindings; struct var* specialized; }; //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void); //the bare error singleton (§7.6 R15) - codegen uses this
                                               //only to print a cleaner "unhandled error: error" message,
                                               //never for ordinal encoding (already generic, see the report)
