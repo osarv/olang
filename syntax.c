@@ -1478,6 +1478,42 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 addSntx(vv, name);
                 addSntx(s, vv);
                 return s;
+            } else if (after.type == TOK_LST && nameIsKnownType(sc, name)) {
+                //"Pair<int32, int64>{...}" or "Vec<int32>[...]" - a literal of an instantiated generic
+                //type. This is the one genuinely ambiguous position for type arguments (a bare "a < b" is
+                //a comparison, and inside a call "f(Pair<int32, int64>{1,2})" the commas could be argument
+                //separators - the exact C++ ambiguity), so it commits only once the whole "<...>" list has
+                //parsed AND a "{" or "[" follows it. Anything else backtracks and leaves "<" as an
+                //operator. A generic FUNCTION call needs no such branch: its arguments are inferred (G9)
+                //and are never written.
+                int save = TokenGetCursor(sc->tc);
+                struct syntax* targs = parseTypeArgs(sc);
+                if (targs) {
+                    struct token open2 = TokenFeed(sc->tc);
+                    if (open2.type == TOK_CURLY_O) {
+                        struct syntax* lit = parseStructLiteralTail(sc, name, open2);
+                        if (lit) {
+                            addSntx(lit, targs);
+                            struct syntax* s2 = newNode(SNTX_EXPR_PRIMARY);
+                            addSntx(s2, lit);
+                            return s2;
+                        }
+                        recordFurthestError(sc, peekTok(sc), "'}'");
+                        return NULL;
+                    }
+                    if (open2.type == TOK_SQUARE_O) {
+                        struct syntax* lit = parseArrayLiteralTail(sc, name, open2);
+                        if (lit) {
+                            addSntx(lit, targs);
+                            struct syntax* s2 = newNode(SNTX_EXPR_PRIMARY);
+                            addSntx(s2, lit);
+                            return s2;
+                        }
+                        recordFurthestError(sc, peekTok(sc), "']'");
+                        return NULL;
+                    }
+                }
+                TokenSetCursor(sc->tc, save);
             } else if (after.type == TOK_BTWSE_AND && nameIsKnownType(sc, name)) {
                 //"Handle&[...]" - an array literal whose ELEMENT type is a reference. Only committed once
                 //a "[" is confirmed to follow the marker: a bare "Handle&" in expression position is not a

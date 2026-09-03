@@ -321,6 +321,9 @@ struct list* SemanticAllModules(void);
 //module's own vars because that list stores struct var BY VALUE, and growing it during body checking
 //would invalidate every struct var* already handed out.
 struct list* SemanticAllInstantiations(void);
+//list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
+//the same stability reason as the function instantiations above.
+struct list* SemanticAllTypeInstantiations(void);
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized; }; //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void); //the bare error singleton (§7.6 R15) - codegen uses this
                                               //only to print a cleaner "unhandled error: error" message,

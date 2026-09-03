@@ -927,7 +927,11 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
 //copy has to live somewhere codegen will find it - it is added to the GENERIC's own module, so its
 //mangled name is stable regardless of which module first triggered it.
 //struct instantiation itself is declared in semantic.h, so codegen can walk the list
-static struct list instantiations;   //struct instantiation
+static struct list instantiations;
+//monomorphized copies of generic STRUCT types (G10/G16), kept as struct type* so their addresses are
+//stable: mod->types stores struct type BY VALUE, so adding to it during resolution would realloc and
+//invalidate every pointer already handed out, exactly as for mod->vars.
+static struct list typeInstantiations;   //struct instantiation
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
 
 bool bindingsMatch(struct list* a, struct list* b) {
@@ -957,11 +961,11 @@ struct str typeShortName(struct type t) {
 //"max$int32", "pairUp$int32$byte" - one name per distinct type-argument set, in the generic's own
 //declared parameter order so the same arguments always produce the same name. Only has to be unique
 //and stable; it is mangled again by codegen under the owning module like any other name.
-struct str instantiationName(struct var* generic, struct list* bindings) {
+struct str instantiationNameFor(struct str base, struct list* typeParams, struct list* bindings) {
     char buf[512];
-    int n = snprintf(buf, sizeof(buf), "%.*s", generic->name.len, generic->name.ptr);
-    for (int i = 0; i < generic->type.typeParams.len; i++) {
-        struct str pname = *(struct str*)ListGetIdx(&generic->type.typeParams, i);
+    int n = snprintf(buf, sizeof(buf), "%.*s", base.len, base.ptr);
+    for (int i = 0; i < typeParams->len; i++) {
+        struct str pname = *(struct str*)ListGetIdx(typeParams, i);
         struct type* bound = bindingGet(bindings, pname);
         struct str tn = bound ? typeShortName(*bound) : StrFromCStr("x");
         n += snprintf(buf + n, sizeof(buf) - (size_t)n, "$%.*s", tn.len, tn.ptr);
@@ -972,6 +976,10 @@ struct str instantiationName(struct var* generic, struct list* bindings) {
     out.ptr = MallocOrCrash((size_t)out.len + 1);
     memcpy(out.ptr, buf, (size_t)out.len + 1);
     return out;
+}
+
+struct str instantiationName(struct var* generic, struct list* bindings) {
+    return instantiationNameFor(generic->name, &generic->type.typeParams, bindings);
 }
 
 //finds or creates the monomorphized copy of `generic` for `bindings` (G16). Identical type arguments
@@ -1004,6 +1012,42 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     //growing it during body checking would realloc its backing array and invalidate every struct var*
     //already handed out (every op->readVar, every parameter origin). The instantiation list holds
     //heap-allocated vars whose addresses are stable, and codegen walks it separately.
+    return spec;
+}
+
+//finds or creates the monomorphized copy of a generic struct type for the given type arguments. The
+//copy's NAME carries its arguments ("Pair$int32$int64"), which is what makes G10 fall out for free:
+//struct identity is owner+name (TypeIsSame), so two instantiations are the same type exactly when their
+//arguments are - no separate comparison needed. Codegen mangles that name like any other, so each copy
+//gets its own LLVM aggregate.
+struct type* instantiateType(struct type* generic, struct list* bindings) {
+    struct str name = instantiationNameFor(generic->name, &generic->typeParams, bindings);
+    for (int i = 0; i < typeInstantiations.len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(&typeInstantiations, i);
+        if (t->owner == generic->owner && StrCmp(t->name, name)) return t;
+    }
+    struct type* spec = MallocOrCrash(sizeof(struct type));
+    *spec = TypeSubstitute(*generic, bindings);
+    spec->name = name;
+    spec->typeParams = ListInit(sizeof(struct str)); //the copy is not generic
+    ListAdd(&typeInstantiations, &spec);
+
+    //a generic type's constructor is generic too, and has to be monomorphized alongside it - otherwise
+    //"Vec<int32>(10)" would call a constructor whose parameters and fields still mention T
+    if (generic->ctorFunc) {
+        struct var* ctor = VarAllocSetOrigin();
+        *ctor = *generic->ctorFunc;
+        ctor->name = instantiationNameFor(generic->ctorFunc->name, &generic->typeParams, bindings);
+        ctor->type = TypeSubstitute(generic->ctorFunc->type, bindings);
+        ctor->type.typeParams = ListInit(sizeof(struct str));
+        if (ctor->type.hasRetType) {
+            struct type* ret = MallocOrCrash(sizeof(struct type));
+            *ret = *spec;
+            ctor->type.retType = ret;
+        }
+        ctor->origin = ctor;
+        spec->ctorFunc = ctor;
+    }
     return spec;
 }
 
@@ -1076,7 +1120,35 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     //really trying to approximate; using it directly fixes this with no loss of the self-reference safety
     //it was protecting.
     if (!found->resolving) resolveTypeDecl(found);
-    return *found;
+
+    //G8: a generic type is instantiated by writing its arguments, and is never valid without them. The
+    //argument list is positional against the type's own declared parameter order (G7) - the reason a type
+    //needs a declared list where a function, whose arguments are inferred, does not.
+    struct syntax* argsNode = firstPartOfType(refNode, SNTX_TYPE_ARGS);
+    if (found->typeParams.len == 0) {
+        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        return *found;
+    }
+    if (!argsNode) { ErrMsgSemantic(nameTok, MISSING_TYPE_ARGS); return *found; }
+    struct list argNodes = allSyntaxParts(argsNode);
+    if (argNodes.len != found->typeParams.len) {
+        ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
+        return *found;
+    }
+    struct list bindings = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < argNodes.len; i++) {
+        struct typeBinding b = (struct typeBinding){0};
+        b.name = *(struct str*)ListGetIdx(&found->typeParams, i);
+        b.type = resolveTypeExpr(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
+        //G11: the checker of §8.4 reasons only about tags naming the current function's own scope
+        //parameters, and could not trace one that arrived through an instantiation - untraceable means
+        //reject (O11), not optimistically allow
+        if (b.type.structMAlloc) {
+            ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&argNodes, i)), TYPE_ARG_HAS_REFERENCE_MARKER);
+        }
+        ListAdd(&bindings, &b);
+    }
+    return *instantiateType(found, &bindings);
 }
 
 //applies the trailing "&"/"&name" marker (if present on refNode at all) to t, marking it heap-indirect
@@ -3073,12 +3145,43 @@ struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType,
     return op;
 }
 
+//applies a literal's own type-argument list, if it has one: "Pair<int32, int64>{...}" names an
+//instantiation, not the generic itself. Same instantiation path a type reference takes (G8), so the two
+//spellings of the same instantiated type are one type by identity (G10).
+struct type applyLiteralTypeArgs(struct checkCtx* ctx, struct type base, struct syntax* litNode) {
+    struct syntax* argsNode = firstPartOfType(litNode, SNTX_TYPE_ARGS);
+    if (base.typeParams.len == 0) {
+        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        return base;
+    }
+    if (!argsNode) { ErrMsgSemantic(firstTokAnywhere(litNode), MISSING_TYPE_ARGS); return base; }
+    struct list argNodes = allSyntaxParts(argsNode);
+    if (argNodes.len != base.typeParams.len) {
+        ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
+        return base;
+    }
+    struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
+    struct list bindings = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < argNodes.len; i++) {
+        struct typeBinding b = (struct typeBinding){0};
+        b.name = *(struct str*)ListGetIdx(&base.typeParams, i);
+        b.type = resolveTypeExpr(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
+        if (b.type.structMAlloc) {
+            ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&argNodes, i)), TYPE_ARG_HAS_REFERENCE_MARKER);
+        }
+        ListAdd(&bindings, &b);
+    }
+    struct type* found = TypeGetList(&ctx->mod->types, base.name);
+    if (!found) return base;
+    return *instantiateType(found, &bindings);
+}
+
 //"T[v1, ...]" - see buildArrLiteralLevel for how the type itself is determined (from resolveLiteralBaseType
 //plus the argument list's own nesting/counts) and checked.
 struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
-    struct type elemType = resolveLiteralBaseType(ctx->mod, nameNode);
+    struct type elemType = applyLiteralTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode), s);
     //"Handle&[...]" - the literal's element type carries its own reference marker, so each element is a
     //separately allocated instance rather than a value laid out inline in the array
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER),
@@ -3098,7 +3201,7 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
 struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_CURLY_O);
-    struct type t = resolveLiteralBaseType(ctx->mod, nameNode);
+    struct type t = applyLiteralTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode), s);
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
     if (t.bType == BASETYPE_STRUCT) {
@@ -3942,6 +4045,7 @@ void checkInstantiationBody(struct instantiation* inst) {
 //pass. G17's termination guarantee is what stops it: a generic whose instantiation needs an
 //ever-growing set of further instantiations is rejected, here, by a depth cap.
 struct list* SemanticAllInstantiations(void) { return &instantiations; }
+struct list* SemanticAllTypeInstantiations(void) { return &typeInstantiations; }
 
 void semaDrainInstantiations(void) {
     int rounds = 0;
@@ -4153,6 +4257,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     ListAdd(&bareErrorType.words, &bareErrorWord);
 
     instantiations = ListInit(sizeof(struct instantiation));
+    typeInstantiations = ListInit(sizeof(struct type*));
     pendingInstances = ListInit(sizeof(int));
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));

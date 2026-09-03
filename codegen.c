@@ -1581,6 +1581,21 @@ static bool typeIsUninstantiatedGeneric(struct type t) {
     return t.bType == BASETYPE_STRUCT && t.typeParams.len != 0;
 }
 
+//one "%m<n>.Name = type { ... }" for a struct type. Shared by the ordinary and the instantiated paths -
+//an instantiation is an ordinary struct type by this point, its name already carrying its arguments.
+static void emitOneStructTypeDef(FILE* out, struct semaModule* mod, struct type* t) {
+    char nameBuf[256];
+    mangleTypeName(mod, t->name, nameBuf, sizeof(nameBuf));
+    fprintf(out, "%%%s = type { ", nameBuf);
+    for (int j = 0; j < t->vars.len; j++) {
+        struct var* mv = ListGetIdx(&t->vars, j);
+        char fbuf[256];
+        llvmType(mv->type, fbuf, sizeof(fbuf));
+        fprintf(out, "%s%s", fbuf, j < t->vars.len -1 ? ", " : " ");
+    }
+    fputs("}\n", out);
+}
+
 void emitStructTypeDefs(FILE* out) {
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
@@ -1589,17 +1604,15 @@ void emitStructTypeDefs(FILE* out) {
             struct type* t = ListGetIdx(&mod->types, i);
             if (t->bType != BASETYPE_STRUCT) continue;
             if (typeIsUninstantiatedGeneric(*t)) continue;
-            char nameBuf[256];
-            mangleTypeName(mod, t->name, nameBuf, sizeof(nameBuf));
-            fprintf(out, "%%%s = type { ", nameBuf);
-            for (int j = 0; j < t->vars.len; j++) {
-                struct var* mv = ListGetIdx(&t->vars, j);
-                char fbuf[256];
-                llvmType(mv->type, fbuf, sizeof(fbuf));
-                fprintf(out, "%s%s", fbuf, j < t->vars.len -1 ? ", " : " ");
-            }
-            fputs("}\n", out);
+            emitOneStructTypeDef(out, mod, t);
         }
+    }
+    //...and one layout per instantiation of a generic type (G10), emitted under the module that declared
+    //the generic. Their names already carry their type arguments, so mangling keeps them distinct.
+    struct list* insts = SemanticAllTypeInstantiations();
+    for (int i = 0; i < insts->len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(insts, i);
+        emitOneStructTypeDef(out, t->owner, t);
     }
 }
 

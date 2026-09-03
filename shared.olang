@@ -850,6 +850,44 @@ test "the same type arguments reuse one instantiation" {
     assert(maxOf(8, 4) == 8)
 }
 
+## a generic STRUCT type declares its parameters in a "<...>" list after the name (G6). Unlike a
+## function's, that list is required, because a type's arguments cannot be inferred - nothing at
+## "Pair<int32, int64>" determines them but the writing - so they are supplied positionally, and the
+## declared order is what makes positional meaningful (G7). Each distinct argument set is a distinct type
+## (G10), which falls out for free: struct identity is owner+name, and an instantiation's name carries
+## its own arguments.
+type Pair<A, B> struct {
+    first <A>,
+    second <B>
+}
+
+type Box<T> struct {
+    v <T>
+}
+
+func pairSum(p Pair<int32, int32>) int32 {
+    return p.first + p.second
+}
+
+func nestedGeneric() int32 {
+    n mut Box<Pair<int32, int32>> = Box<Pair<int32, int32>>{Pair<int32, int32>{4, 5}}
+    return n.v.first + n.v.second
+}
+
+test "a generic struct type instantiates, and its fields take the argument types" {
+    p mut Pair<int32, int64> = Pair<int32, int64>{7, int64(9)}
+    assert(p.first == 7)
+    assert(p.second == int64(9))
+}
+
+test "an instantiated generic type crosses a function boundary" {
+    assert(pairSum(Pair<int32, int32>{8, 1}) == 9)
+}
+
+test "a generic instantiated with another generic's instantiation" {
+    assert(nestedGeneric() == 9)
+}
+
 ## D14a: a constructor field may be a run-time-sized array, sized by an expression that can name the
 ## constructor's own parameters. This is what makes a struct able to OWN a buffer at all - before it,
 ## "T[expr]" was var-decl-only and nothing produced a runtime-sized array as a value, so no struct could
