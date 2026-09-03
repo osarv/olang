@@ -80,6 +80,10 @@ struct type {
     bool hasRetType;
     struct type* retType; //heap-allocated, valid when hasRetType
     struct list errors; //list of struct type*: error types declared in the signature's error list
+    struct list typeParams; //list of struct str: for BASETYPE_FUNC, every distinct type variable in this
+                             //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
+                             //declared in its own "<...>" list, whose ORDER is what a type-argument list
+                             //supplies positionally (G6/G7). Empty for anything non-generic.
     bool isExtern; //true for an "extern func" decl (§11) - never fallible (errors always empty), params/
                     //retType restricted to numeric primitives or arrays of them, codegen emits a bare C-ABI
                     //declare/call instead of the olang {code,payload} convention

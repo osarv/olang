@@ -48,6 +48,15 @@
 #define DESTRUCT_TYPE_MUST_BE_REFERENCE "this type declares a 'destruct' block, so it is reference-only - write it with a reference marker ('&' or '&name'). A destructor asserts an instance owns something releasable exactly once, which needs a well-defined instance count; a value type is compared structurally and copied freely, so no copy is identifiably the owner"
 #define NAMED_SCOPE_ON_ELEMENT "an element-position reference marker can't carry a scope name - a reference nested inside a larger value always belongs to its container's own scope, never an independent one, so this tag could never be honoured; write a bare '&' and tag the array itself instead"
 #define VALUE_ARG_FOR_REFERENCE_PARAM "this parameter is declared as a reference ('&'), so it names the caller's own instance - a value can't be silently promoted into one here, or '&' in a signature would stop meaning \"your instance\" and a 'mut' parameter would write to a copy you never see. Declare it as a reference first, then pass that"
+#define TYPE_VAR_SHADOWS_TYPE "a type variable may not be named after a type that already exists - '<Point>' would read as parameterizing over something already concrete"
+#define TYPE_VAR_NOT_INFERABLE "this type variable appears only in the return type or the error list, so nothing at a call site could determine it - use it in at least one parameter's type"
+#define TYPE_VAR_IN_ERROR_LIST "a generic function's error set is the same for every instantiation, so it may not mention a type variable"
+#define UNKNOWN_TYPE_VAR "unknown type variable - a generic type's parameters are declared in its own '<...>' list, after the type name"
+#define TYPE_ARGS_ON_NON_GENERIC "this type is not generic, so it takes no type arguments"
+#define MISSING_TYPE_ARGS "this type is generic and must be instantiated with a type argument list, e.g. 'Vec<int32>'"
+#define WRONG_TYPE_ARG_COUNT "wrong number of type arguments for this generic type"
+#define TYPE_ARG_HAS_REFERENCE_MARKER "a type argument may not carry a reference marker - the scope checker could not trace its tag through the instantiation, and an untraceable tag is rejected rather than assumed safe"
+#define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
 #define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----

@@ -1354,6 +1354,8 @@ bool isScopeTypeRef(struct syntax* typeExprNode) {
     if (actual->type != SNTX_TYPE_REF) return false;
     if (firstPartOfType(actual, SNTX_ELEM_REF_MARKER) || firstPartOfType(actual, SNTX_REF_MARKER)) return false;
     if (allPartsOfType(actual, SNTX_ARR_SFX).len != 0) return false;
+    //a type-var head ("<T>") has no SNTX_NAME child at all, and is never the "scope" type
+    if (firstPartOfType(actual, SNTX_TYPE_VAR)) return false;
     struct list idens = allTokOfType(firstPartOfType(actual, SNTX_NAME), TOK_IDEN);
     if (idens.len != 1) return false;
     return StrCmp(strFromTok(*(struct token*)ListGetIdx(&idens, 0)), StrFromCStr("scope"));
@@ -1461,6 +1463,12 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         }
     }
 
+    //G3: this function is generic exactly when a type variable appears anywhere in its signature - there
+    //is no declaration list to consult, the set IS whatever appears. Collected from the parameters first
+    //so first-appearance order is parameter order, then checked against the return type below.
+    t.typeParams = ListInit(sizeof(struct str));
+    for (int i = 0; i < t.vars.len; i++) TypeCollectVars((*(struct var*)ListGetIdx(&t.vars, i)).type, &t.typeParams);
+
     struct syntax* retTypeNode = firstPartOfType(sigNode, SNTX_RET_TYPE);
     if (retTypeNode) {
         t.hasRetType = true;
@@ -1468,6 +1476,19 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //full param list (t.vars) is already built above, so a return type may reference any of them,
         //e.g. "func makeNode(v int32, s scope) Node<s>"
         *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
+        //G4: a variable reachable only through the return type could never be determined at a call, since
+        //inference matches arguments against parameters and nothing else. Reported here, at the
+        //declaration, rather than at every call that fails to resolve it.
+        struct list retVars = ListInit(sizeof(struct str));
+        TypeCollectVars(*t.retType, &retVars);
+        for (int i = 0; i < retVars.len; i++) {
+            struct str v = *(struct str*)ListGetIdx(&retVars, i);
+            bool inParams = false;
+            for (int j = 0; j < t.typeParams.len; j++) {
+                if (StrCmp(*(struct str*)ListGetIdx(&t.typeParams, j), v)) { inParams = true; break; }
+            }
+            if (!inParams) ErrMsgSemantic(firstTokAnywhere(retTypeNode), TYPE_VAR_NOT_INFERABLE);
+        }
         //a bare "&" return type is always wrong, not just sometimes: the function's own private scope
         //closes at the exact point it returns (see cgCloseOwnScope in codegen.c), so a value tagged to it
         //would already be dangling before the caller ever sees it - catching this once, here, covers
@@ -1613,11 +1634,34 @@ void resolveTypeDecl(struct type* t) {
         struct token declNameTok = firstTokOfType(actual, TOK_IDEN);
         if (!StrCmp(strFromTok(declNameTok), t->name)) continue;
 
+        //G6: "type Vec<T> struct(...)" - the parameter list sits after the name and scopes over the whole
+        //declaration. Its ORDER is what a type-argument list supplies positionally (G7), which is the
+        //entire reason a type needs a declared list where a function (whose arguments are inferred) does
+        //not. Captured before the body is resolved, so the body's own "<T>" references have something to
+        //be checked against.
+        struct list declaredParams = ListInit(sizeof(struct str));
+        struct syntax* paramsNode = firstPartOfType(actual, SNTX_TYPE_PARAMS);
+        if (paramsNode) {
+            struct list items = allSyntaxParts(paramsNode);
+            for (int i = 0; i < items.len; i++) {
+                struct syntax* item = *(struct syntax**)ListGetIdx(&items, i);
+                struct token nameTok = firstTokAnywhere(item);
+                struct str pname = strFromTok(nameTok);
+                bool dup = false;
+                for (int j = 0; j < declaredParams.len; j++) {
+                    if (StrCmp(*(struct str*)ListGetIdx(&declaredParams, j), pname)) { dup = true; break; }
+                }
+                if (dup) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+                ListAdd(&declaredParams, &pname);
+            }
+        }
+
         struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
         if (ctorNode) {
             //mutates *t in place - see resolveStructCtorInto for why this can't go through the generic
             //build-then-copy path below
             resolveStructCtorInto(owner, t, ctorNode);
+            t->typeParams = declaredParams;
             break;
         }
 
@@ -1630,6 +1674,7 @@ void resolveTypeDecl(struct type* t) {
         t->name = name;
         t->tok = tok;
         t->owner = ownerSave;
+        t->typeParams = declaredParams;
         break;
     }
     t->placeholder = false;
@@ -3877,6 +3922,12 @@ void semaCheckBodies(struct semaModule* mod) {
 
         struct token nameTok = firstTokOfType(actual, TOK_IDEN);
         struct var* func = VarGetList(&mod->vars, strFromTok(nameTok));
+
+        //G16: an uninstantiated generic's body is never checked as written - its parameter types are type
+        //variables with no size, no fields and no operations, so almost anything the body does would
+        //either crash the checker or produce a meaningless diagnostic. The body is checked once per
+        //instantiation instead, against real types, exactly as if it had been written out by hand.
+        if (func->type.typeParams.len != 0) continue;
 
         struct scope fnScope = scopePush(NULL);
         for (int p = 0; p < func->type.vars.len; p++) {

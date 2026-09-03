@@ -100,6 +100,9 @@ void structAggSpelling(struct type t, char* buf, size_t n) {
  * report). */
 void llvmType(struct type t, char* buf, size_t n) {
     switch (t.bType) {
+        //a type variable never reaches codegen: monomorphization (G16) substitutes every one away before
+        //a copy is emitted, so being asked to lower one means an instantiation was missed - a bug here
+        case BASETYPE_TYPEVAR: ErrorBugFound(); return;
         case BASETYPE_VOID: snprintf(buf, n, "void"); return;
         case BASETYPE_BOOL: snprintf(buf, n, "i1"); return;
         case BASETYPE_BYTE: snprintf(buf, n, "i8"); return;
@@ -1571,6 +1574,13 @@ void cgStatement(struct cgCtx* ctx, struct statement* s) {
 
 // ---- top-level structure ----
 
+//G16: a generic struct type has no single layout - only its instantiations do, each emitted as its own
+//"%m<n>.Name<args>" aggregate. Skipping it here is the type-level counterpart of skipping an
+//uninstantiated generic function in cgEmitAllFunctions.
+static bool typeIsUninstantiatedGeneric(struct type t) {
+    return t.bType == BASETYPE_STRUCT && t.typeParams.len != 0;
+}
+
 void emitStructTypeDefs(FILE* out) {
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
@@ -1578,6 +1588,7 @@ void emitStructTypeDefs(FILE* out) {
         for (int i = 0; i < mod->types.len; i++) {
             struct type* t = ListGetIdx(&mod->types, i);
             if (t->bType != BASETYPE_STRUCT) continue;
+            if (typeIsUninstantiatedGeneric(*t)) continue;
             char nameBuf[256];
             mangleTypeName(mod, t->name, nameBuf, sizeof(nameBuf));
             fprintf(out, "%%%s = type { ", nameBuf);
@@ -1936,6 +1947,9 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
+        //G16: an uninstantiated generic has no code of its own - only its monomorphized copies are
+        //emitted, each a separate ordinary function with every type variable substituted away
+        if (v->type.typeParams.len != 0) continue;
             cgFunction(ctx, mod, v);
         }
     }
