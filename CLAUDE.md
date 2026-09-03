@@ -69,7 +69,7 @@ drift out of sync with the actual code.
   *callee's declared signature* level, not what it happens to handle internally. Usable inside a
   `test { }` block, or a function declaring no errors at all, as long as everything the tried call
   can produce is fully caught right there.
-- **The generic error: bare `error` reused as an error-list item, an `error` statement's own operand,
+- **The bare error: bare `error` reused as an error-list item, an `error` statement's own operand,
   and a `catch-item` - no new keyword.** Stands for "this failed, no further detail is tracked" - a
   real member of a function or constructor's own error union that names no declared error type at
   all. `func f(...) ? MathError + error { }` mixes it with named types via `+`, same as any two named
@@ -251,7 +251,7 @@ drift out of sync with the actual code.
   length or introducing a real pointer type - both rejected outright). An external function is never
   fallible in olang's own sense - no error-list, never valid as the operand of `try`/`try-catch` - any
   real error handling for what it might signal has to be a hand-written wrapper in ordinary olang on
-  top of the raw call (most naturally using the generic-error feature above, sidestepping `errno`
+  top of the raw call (most naturally using the bare-error feature above, sidestepping `errno`
   entirely, which - being a glibc macro expanding to a thread-local accessor function call, not a
   plain linkable symbol - was deliberately never supported; extern *variables* aren't supported at
   all yet, only functions, precisely because the concrete need driving this - raw POSIX I/O syscalls

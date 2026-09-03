@@ -1888,7 +1888,7 @@ from their original form.
   which is the actual property this language's own stated goal ("compile-time-proven memory safety")
   requires - a checker that occasionally says "no" to a safe program is a usability cost; a checker
   that occasionally says "yes" to an unsafe one is a broken promise.
-- **The generic error: bare `error`, reused (not a new keyword), standing for "this failed, no
+- **The bare error: bare `error`, reused (not a new keyword), standing for "this failed, no
   further detail is tracked" - reachable as an error-list item, an `error` statement's own bare
   operand, and a `catch-item`.** Arrived at through a long design conversation, not requested in this
   final shape from the start - worth recording the path, since several earlier ideas were seriously
@@ -1922,13 +1922,13 @@ from their original form.
   explicitly unrelated to the enclosing error union) when it would in fact be the opposite -
   still bound to the enclosing function's own declared errors, same as `error TypeName.word` always
   has been.
-  **Representation: the generic error is one program-wide singleton `struct type`
-  (`genericErrorType`, semantic.c), built as an ordinary `BASETYPE_ERROR` value with exactly one
+  **Representation: the bare error is one program-wide singleton `struct type`
+  (`bareErrorType`, semantic.c), built as an ordinary `BASETYPE_ERROR` value with exactly one
   synthetic word, not a new kind of thing the rest of the compiler has to learn about.** This was the
   key design choice that made the whole feature small: `errorTypeOrdinal`/`errorCode`
   (codegen.c), `cgPropagateError`'s ordinal remap, `checkTrySuperset`, and `StatementCatchCoversType`
   are all *already* written generically over "any declared error type in `t.errors`," compared via
-  `TypeIsSame` (owner+name identity) - since every reference to the generic error is the exact same
+  `TypeIsSame` (owner+name identity) - since every reference to the bare error is the exact same
   shared struct, `TypeIsSame` already treats every use of it as the same type, program-wide, with
   zero code changes to any of those functions. The only genuinely new logic is recognizing the bare
   keyword at the three places a real name would otherwise be resolved: `resolveFuncSig` and
@@ -1937,7 +1937,7 @@ from their original form.
   by two distinct pieces of code before this - both needed the identical fix), `buildErrorStmnt`'s new
   bare-form branch, and `buildTryCatchStmnt`'s catch-item loop - each now walks `allSyntaxParts` instead of
   `allPartsOfType(..., SNTX_NAME)`/`allPartsOfType(..., SNTX_CATCH_ERR)`, since an error-list or
-  catch-list can now genuinely mix ordinary named items with the new `SNTX_GENERIC_ERROR` node, and
+  catch-list can now genuinely mix ordinary named items with the new `SNTX_BARE_ERROR` node, and
   dispatches per-item on which shape it actually is. A new accessor, `SemanticGenericErrorType()`
   (semantic.h), exposes the singleton to codegen.c for exactly one purpose: printing a clean
   `unhandled error: error` instead of the technically-correct-but-redundant `unhandled error:
@@ -1959,7 +1959,7 @@ from their original form.
   function bodies, and - on seeing `TOK_TYPE` *or* `TOK_ERROR` - unconditionally consumed the next
   token looking for an `IDEN` to register as a declared type name (correct for `TOK_TYPE`, which is
   never used any other way, and previously correct for `TOK_ERROR` too, since a real `error-decl` was
-  the *only* thing `error` could ever start). Once the generic error could appear immediately before a
+  the *only* thing `error` could ever start). Once the bare error could appear immediately before a
   function's own `{` (`func f() ? RangeError + error { ... }`), that unconditional "consume whatever
   comes next" swallowed the function's own opening brace - not an `IDEN`, so silently discarded as "no
   type here" - which meant that `{` never reached the depth-tracking check at the top of the loop at
@@ -1986,7 +1986,7 @@ from their original form.
   (`struct(params) error { ... }`, bare, no `?` - constructors never had one to begin with, see the
   earlier signature-reorder entry); selectivity - `catch error` proven, by construction rather than by
   testing a wrong answer, to never also match a named type sharing the same union (a wrapper function
-  that fully handles the named type itself, leaving only the generic error able to escape, confirms
+  that fully handles the named type itself, leaving only the bare error able to escape, confirms
   `catch error` alone is sufficient to cover what's left - which it provably would not be if it
   matched the named type too). `make verify` (87 tests, `-c` build/run) passes with no regressions;
   spec.md gained a new §7.6 (R15-R19) plus updates to D8, L18, and T21's own prose, all written before
@@ -2129,7 +2129,7 @@ from their original form.
   isn't actually a plain extern variable - it's a macro expanding to `*__errno_location()`, a function
   call returning a thread-local pointer that's then dereferenced, not something a plain "declare an
   extern variable" mechanism could ever reach cleanly. Resolved by building I/O on raw syscalls (plain
-  `int32` file-descriptor "handles," no `FILE*`) and reporting failure via the generic-error feature
+  `int32` file-descriptor "handles," no `FILE*`) and reporting failure via the bare-error feature
   (bare `error`, already built earlier this same session) rather than any per-errno-code detail - a
   deliberate, honest scope boundary, not a hack. Extern variables remain entirely unsupported; nothing
   in the current design needs them.
@@ -2142,7 +2142,7 @@ from their original form.
   itself (`cgExternFuncCall`, codegen.c) - never introducing a real, nameable pointer type anywhere in
   this language's own type system, for application code or stdlib authors alike; (3) no `errno`/pointer-
   dereference ever needed, since failure reporting is delegated entirely to a hand-written olang wrapper
-  using the generic error. Confirmed nothing in the shipped design exposes a pointer value or pointer
+  using the bare error. Confirmed nothing in the shipped design exposes a pointer value or pointer
   type anywhere an olang program could ever read, store, or name one.
 
   **Naming: `extern func`, not an invented abbreviation.** The user asked directly, offering `cfunc`/

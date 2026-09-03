@@ -20,6 +20,10 @@ enum baseType {
     BASETYPE_VOCAB,
     BASETYPE_FUNC,
     BASETYPE_ERROR,
+    BASETYPE_TYPEVAR, //a generic type variable ("<T>", §12.1 G1) - carries only its own name, and is
+                       //replaced by a concrete type when the enclosing generic is instantiated (G16). No
+                       //value ever has this type at run time; it exists purely between declaration and
+                       //monomorphization.
     BASETYPE_SCOPE, //an ownership scope - see the report; only ever a function parameter's type, never
                      //resolved through the general resolveTypeExpr/resolveTypeRef path (mirrors how error
                      //types have their own dedicated resolveErrorTypeName lookup, not the general one)
@@ -306,7 +310,7 @@ bool StatementCatchCoversType(struct list* matches, struct type errType);
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode);
 struct list* SemanticAllModules(void); //list of struct semaModule*, in load order; index is used for codegen symbol mangling
-struct type* SemanticGenericErrorType(void); //the generic error singleton (§7.6 R15) - codegen uses this
+struct type* SemanticGenericErrorType(void); //the bare error singleton (§7.6 R15) - codegen uses this
                                               //only to print a cleaner "unhandled error: error" message,
                                               //never for ordinal encoding (already generic, see the report)
 

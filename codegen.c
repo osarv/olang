@@ -1991,7 +1991,7 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
         int typeOrdinal = i +1;
         for (int w = 0; w < e->words.len; w++) {
             char text[300];
-            //the generic error (R19) carries no real type/word to name - print it plainly instead of the
+            //the bare error (R19) carries no real type/word to name - print it plainly instead of the
             //otherwise-generic "TypeName.word" shape, which would read as the redundant "error.error"
             if (e == genericErr) {
                 snprintf(text, sizeof(text), "unhandled error: error\n");

@@ -11,7 +11,7 @@
 static struct list allModules; //list of struct semaModule*
 static struct semaModule* rootModule;
 
-//the generic error (see the report): a single, program-wide BASETYPE_ERROR singleton with no owning
+//the bare error (see the report): a single, program-wide BASETYPE_ERROR singleton with no owning
 //module and exactly one synthetic word, standing in for "an error occurred, no further detail is
 //tracked." Represented as an ordinary error type (with one word) specifically so it needs zero special
 //casing anywhere ordinal encoding (errorTypeOrdinal/errorCode in codegen.c), try/catch coverage
@@ -19,10 +19,10 @@ static struct semaModule* rootModule;
 //declared error type generically - TypeIsSame's own owner+name identity check already treats every use
 //of this one shared instance as the same type, since it's always the exact same struct, never per-module
 //like a real declared error type. Initialized once, in SemanticAnalyzeFile, before any module is loaded.
-static struct type genericErrorType;
+static struct type bareErrorType;
 
 struct type* SemanticGenericErrorType(void) {
-    return &genericErrorType;
+    return &bareErrorType;
 }
 
 struct list* SemanticAllModules(void) {
@@ -43,6 +43,9 @@ long long TypeGetSize(struct type t);
 //lays that same aggregate out at, padding included. See the report for the heap-corruption bug this fixes.
 long long TypeGetAlign(struct type t) {
     switch (t.bType) {
+        //a type variable never survives to codegen (G16 substitutes it away), so being asked for its
+        //size or alignment means something failed to instantiate - a bug here, not a bad program
+        case BASETYPE_TYPEVAR: ErrorBugFound(); return 1;
         case BASETYPE_VOID: return 1;
         case BASETYPE_BOOL: return 1;
         case BASETYPE_BYTE: return 1;
@@ -102,6 +105,7 @@ long long getStructSize(struct type t) {
 
 long long TypeGetSize(struct type t) {
     switch (t.bType) {
+        case BASETYPE_TYPEVAR: ErrorBugFound(); return 0; //see TypeGetAlign
         case BASETYPE_VOID: return 0;
         case BASETYPE_BOOL: return 1;
         case BASETYPE_BYTE: return 1;
@@ -204,6 +208,10 @@ bool TypeIsSame(struct type a, struct type b) {
     if (a.bType != b.bType) return false;
     if (isTypeVanilla(a.bType)) return true;
     switch (a.bType) {
+        //two type variables are the same type only if they are the same variable. Only ever reached while
+        //checking an uninstantiated generic's own declaration against itself; after instantiation (G16)
+        //neither side is a variable any more.
+        case BASETYPE_TYPEVAR: return StrCmp(a.name, b.name);
         case BASETYPE_ARRAY:
             if (a.arrMalloc != b.arrMalloc) return false;
             //a real, previously-latent bug fixed alongside the array-literal rework below: this never
@@ -779,8 +787,144 @@ struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeParams)
     return found;
 }
 
+//"<T>" - a type variable (G1). Carries its own name and nothing else; substituted for a real type when
+//the enclosing generic is instantiated. Whether the name is legal (not shadowing a declared type, and
+//actually declared by the enclosing generic) is checked by the caller, which knows the declaration it
+//sits in - this only builds the type.
+struct type TypeVar(struct str name, struct token tok) {
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_TYPEVAR;
+    t.name = name;
+    t.tok = tok;
+    return t;
+}
+
+//one type variable bound to a concrete type - the result of inference (G9) or of an explicit type
+//argument list (G8), and the input to substitution below
+struct typeBinding {
+    struct str name;
+    struct type type;
+};
+
+struct type* bindingGet(struct list* bindings, struct str name) {
+    for (int i = 0; i < bindings->len; i++) {
+        struct typeBinding* b = ListGetIdx(bindings, i);
+        if (StrCmp(b->name, name)) return &b->type;
+    }
+    return NULL;
+}
+
+//replaces every type variable in t with whatever it is bound to, recursively through arrays, function
+//signatures and struct fields. This is the whole of G16's "with every type variable replaced by its
+//argument" - the result contains no BASETYPE_TYPEVAR anywhere and is an ordinary type from that point on.
+//An unbound variable is left as-is: the caller reports it (a signature mentioning a variable nothing
+//could determine is G4's error, caught at the declaration, not silently substituted here).
+struct type TypeSubstitute(struct type t, struct list* bindings) {
+    if (t.bType == BASETYPE_TYPEVAR) {
+        struct type* bound = bindingGet(bindings, t.name);
+        if (!bound) return t;
+        struct type out = *bound;
+        //the variable's own array suffixes and markers were applied to the VARIABLE, not to what it is
+        //bound to, so they have already been folded into t by applyArraySuffixes/applyRefMarker; carry
+        //the reference marker across so "<T>&" stays a reference once T is known
+        if (t.structMAlloc) { out.structMAlloc = true; out.scopeParam = t.scopeParam; }
+        return out;
+    }
+    if (t.bType == BASETYPE_ARRAY) {
+        struct type* elem = MallocOrCrash(sizeof(struct type));
+        *elem = TypeSubstitute(*t.arrElem, bindings);
+        t.arrElem = elem;
+        return t;
+    }
+    if (t.bType == BASETYPE_FUNC || t.bType == BASETYPE_STRUCT) {
+        struct list out = ListInit(sizeof(struct var));
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var v = *(struct var*)ListGetIdx(&t.vars, i);
+            v.type = TypeSubstitute(v.type, bindings);
+            ListAdd(&out, &v);
+        }
+        t.vars = out;
+        if (t.bType == BASETYPE_FUNC && t.hasRetType) {
+            struct type* ret = MallocOrCrash(sizeof(struct type));
+            *ret = TypeSubstitute(*t.retType, bindings);
+            t.retType = ret;
+        }
+        return t;
+    }
+    return t;
+}
+
+//true if t mentions any type variable at all, at any depth - i.e. "is this still generic?"
+bool TypeIsGeneric(struct type t) {
+    if (t.bType == BASETYPE_TYPEVAR) return true;
+    if (t.bType == BASETYPE_ARRAY) return TypeIsGeneric(*t.arrElem);
+    if (t.bType == BASETYPE_FUNC || t.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < t.vars.len; i++) {
+            if (TypeIsGeneric((*(struct var*)ListGetIdx(&t.vars, i)).type)) return true;
+        }
+        if (t.bType == BASETYPE_FUNC && t.hasRetType && TypeIsGeneric(*t.retType)) return true;
+    }
+    return false;
+}
+
+//collects every distinct type-variable name mentioned in t, in first-appearance order
+void TypeCollectVars(struct type t, struct list* out) {
+    if (t.bType == BASETYPE_TYPEVAR) {
+        for (int i = 0; i < out->len; i++) {
+            if (StrCmp(*(struct str*)ListGetIdx(out, i), t.name)) return;
+        }
+        ListAdd(out, &t.name);
+        return;
+    }
+    if (t.bType == BASETYPE_ARRAY) { TypeCollectVars(*t.arrElem, out); return; }
+    if (t.bType == BASETYPE_FUNC || t.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < t.vars.len; i++) TypeCollectVars((*(struct var*)ListGetIdx(&t.vars, i)).type, out);
+        if (t.bType == BASETYPE_FUNC && t.hasRetType) TypeCollectVars(*t.retType, out);
+    }
+}
+
+//structurally matches a declared (possibly generic) parameter type against a concrete argument type,
+//binding each variable it meets (G9). Returns false on a genuine mismatch, including the case where one
+//variable is reached twice with two different types - "max(a<T>, b<T>)" called with an int32 and a
+//float64 is a real error, not a widening. Deliberately shallow about everything a type variable does NOT
+//appear in: a non-generic parameter is checked by the ordinary OperandFitsType path afterwards, so this
+//only has to be exact where a binding is actually being extracted.
+bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
+    if (param.bType == BASETYPE_TYPEVAR) {
+        struct type* bound = bindingGet(bindings, param.name);
+        if (bound) return TypeIsSame(*bound, arg);
+        struct typeBinding b = (struct typeBinding){0};
+        b.name = param.name;
+        b.type = arg;
+        b.type.structMAlloc = false; //the marker belongs to the use of the variable, not to what it binds
+        b.type.scopeParam = NULL;
+        ListAdd(bindings, &b);
+        return true;
+    }
+    if (!TypeIsGeneric(param)) return true; //nothing to bind here; ordinary fit-checking covers it
+    if (param.bType != arg.bType) return false;
+    if (param.bType == BASETYPE_ARRAY) return TypeUnify(*param.arrElem, *arg.arrElem, bindings);
+    if (param.bType == BASETYPE_STRUCT || param.bType == BASETYPE_FUNC) {
+        if (param.vars.len != arg.vars.len) return false;
+        for (int i = 0; i < param.vars.len; i++) {
+            struct type pt = (*(struct var*)ListGetIdx(&param.vars, i)).type;
+            struct type at = (*(struct var*)ListGetIdx(&arg.vars, i)).type;
+            if (!TypeUnify(pt, at, bindings)) return false;
+        }
+        return true;
+    }
+    return true;
+}
+
 //base type a name resolves to, before any array suffixes on the reference are applied
 struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
+    //a type-var head short-circuits every name lookup below: there is nothing to resolve, the variable
+    //stands for whatever the instantiation supplies
+    struct syntax* varNode = firstPartOfType(refNode, SNTX_TYPE_VAR);
+    if (varNode) {
+        struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
+        return TypeVar(strFromTok(nameTok), nameTok);
+    }
     (void)scopeParams; //no longer used to resolve a scope tag here - see applyRefMarker
     struct syntax* nameNode = firstPartOfType(refNode, SNTX_NAME);
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
@@ -1107,14 +1251,14 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
     struct list ctorErrors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(ctorNode, SNTX_ERROR_LIST);
     if (errListNode) {
-        //each item is either an ordinary SNTX_NAME or the bare generic-error marker (SNTX_GENERIC_ERROR,
+        //each item is either an ordinary SNTX_NAME or the bare bare-error marker (SNTX_BARE_ERROR,
         //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME), mirroring resolveFuncSig's
         //own identical fix
         struct list items = allSyntaxParts(errListNode);
         for (int i = 0; i < items.len; i++) {
             struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
-            struct type* errType = itemNode->type == SNTX_GENERIC_ERROR
-                ? &genericErrorType : resolveErrorTypeName(mod, itemNode);
+            struct type* errType = itemNode->type == SNTX_BARE_ERROR
+                ? &bareErrorType : resolveErrorTypeName(mod, itemNode);
             if (!errType) continue;
             ListAdd(&ctorErrors, &errType);
         }
@@ -1304,14 +1448,14 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     t.errors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(sigNode, SNTX_ERROR_LIST);
     if (errListNode) {
-        //each item is either an ordinary SNTX_NAME (resolveErrorTypeName) or the bare generic-error
-        //marker (SNTX_GENERIC_ERROR, see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME),
+        //each item is either an ordinary SNTX_NAME (resolveErrorTypeName) or the bare bare-error
+        //marker (SNTX_BARE_ERROR, see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME),
         //since this list can now genuinely mix both node shapes
         struct list items = allSyntaxParts(errListNode);
         for (int i = 0; i < items.len; i++) {
             struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
-            struct type* errType = itemNode->type == SNTX_GENERIC_ERROR
-                ? &genericErrorType : resolveErrorTypeName(mod, itemNode);
+            struct type* errType = itemNode->type == SNTX_BARE_ERROR
+                ? &bareErrorType : resolveErrorTypeName(mod, itemNode);
             if (!errType) continue;
             ListAdd(&t.errors, &errType);
         }
@@ -3404,18 +3548,18 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
 
-    //bare "error" - the generic error (see the report on §7.6 R16), no TYPE.word operand at all;
+    //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
     //parseStmntError's own bare-form grammar guarantees idens is empty exactly when this is the case
     if (idens.len == 0) {
         bool declared = false;
         for (int i = 0; i < ctx->func->type.errors.len; i++) {
-            if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == &genericErrorType) {
+            if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == &bareErrorType) {
                 declared = true;
                 break;
             }
         }
         if (!declared) { ErrMsgSemantic(tok, ERROR_NOT_DECLARED_IN_SIG); return stmt; }
-        stmt.op = OperandErrorLiteral(genericErrorType, tok);
+        stmt.op = OperandErrorLiteral(bareErrorType, tok);
         return stmt;
     }
 
@@ -3489,25 +3633,25 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
 
     struct syntax* errListNode = firstPartOfType(catchNode, SNTX_CATCH_ERR_LIST);
-    //each item is either an ordinary SNTX_CATCH_ERR or the bare generic-error marker (SNTX_GENERIC_ERROR,
+    //each item is either an ordinary SNTX_CATCH_ERR or the bare bare-error marker (SNTX_BARE_ERROR,
     //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_CATCH_ERR), since this list can now
     //genuinely mix both node shapes
     struct list matchNodes = allSyntaxParts(errListNode);
     for (int i = 0; i < matchNodes.len; i++) {
         struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
 
-        //the generic error - matches only itself, never a further ".word" (it has no addressable word of
+        //the bare error - matches only itself, never a further ".word" (it has no addressable word of
         //its own - parseCatchErr's own grammar guarantees this shape never carries one)
-        if (m->type == SNTX_GENERIC_ERROR) {
+        if (m->type == SNTX_BARE_ERROR) {
             struct token genericTok = firstTokOfType(m, TOK_ERROR);
             bool produces = false;
             for (int j = 0; j < callOp->readVar->type.errors.len; j++) {
                 struct type* e = *(struct type**)ListGetIdx(&callOp->readVar->type.errors, j);
-                if (e == &genericErrorType) { produces = true; break; }
+                if (e == &bareErrorType) { produces = true; break; }
             }
             if (!produces) { ErrMsgSemantic(genericTok, CATCH_ERROR_NOT_PRODUCED_BY_CALL); continue; }
             struct catchMatch cm = (struct catchMatch){0};
-            cm.errType = genericErrorType;
+            cm.errType = bareErrorType;
             ListAdd(&stmt.catchMatches, &cm);
             continue;
         }
@@ -3759,14 +3903,14 @@ void semaCheckBodies(struct semaModule* mod) {
 // ---- entry point ----
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
-    genericErrorType = (struct type){0};
-    genericErrorType.bType = BASETYPE_ERROR;
-    genericErrorType.name = StrFromCStr("error");
-    genericErrorType.words = ListInit(sizeof(struct token));
-    struct token genericErrorWord = (struct token){0};
-    genericErrorWord.type = TOK_IDEN;
-    genericErrorWord.str = StrFromCStr("error");
-    ListAdd(&genericErrorType.words, &genericErrorWord);
+    bareErrorType = (struct type){0};
+    bareErrorType.bType = BASETYPE_ERROR;
+    bareErrorType.name = StrFromCStr("error");
+    bareErrorType.words = ListInit(sizeof(struct token));
+    struct token bareErrorWord = (struct token){0};
+    bareErrorWord.type = TOK_IDEN;
+    bareErrorWord.str = StrFromCStr("error");
+    ListAdd(&bareErrorType.words, &bareErrorWord);
 
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));

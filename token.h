@@ -108,6 +108,7 @@ struct str TokenGetFileName(TokenCtx tc);
 bool isLetter(char c);
 bool isDigit(char c);
 struct token TokenFeed(TokenCtx tc);
+bool TokenSplitShiftRight(TokenCtx tc);
 struct token TokenFeedUntil(TokenCtx tc, enum tokenType type);
 void TokenFeedPast(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);

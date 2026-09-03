@@ -519,6 +519,29 @@ struct token TokenMergeFromList(struct list l) {
     return TokenMerge(head, tail);
 }
 
+//">>" closing a nested type-argument list ("Vec<Vec<int32>>") lexes as one TOK_BTSFT_R, since maximal
+//munch can't know it is two closers rather than a shift. If the token at the cursor is one, rewrite it
+//in place as two TOK_GRT tokens and return true, leaving the cursor on the first - the same fix C++11,
+//Rust, Java and C# all make. Rewriting the stored token list rather than tracking a "half-consumed"
+//cursor keeps every existing cursor save/restore in the parser correct with no changes: a restore to a
+//point before the split simply re-reads the two ">"s, which parse identically to the original ">>"
+//everywhere the parser could legitimately have been (a shift operator is never valid in a type
+//position, and a type-argument list is never valid in an expression one).
+bool TokenSplitShiftRight(TokenCtx tc) {
+    if (tc->tokIdx >= tc->tokens.len) return false;
+    struct token* tok = ListGetIdx(&tc->tokens, tc->tokIdx);
+    if (tok->type != TOK_BTSFT_R) return false;
+    struct token first = *tok;
+    first.type = TOK_GRT;
+    first.str.len = 1;
+    struct token second = first;
+    second.str.ptr = first.str.ptr + 1;
+    second.tokId = tokIdCtrCount();
+    *tok = first;
+    ListInsertIdx(&tc->tokens, tc->tokIdx + 1, &second);
+    return true;
+}
+
 int TokenGetCursor(TokenCtx tc) {
     return tc->tokIdx;
 }

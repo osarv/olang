@@ -9,6 +9,12 @@ enum syntaxType {
     SNTX_IMPORT,
     SNTX_NAME,
     SNTX_ARR_SFX,
+    SNTX_TYPE_VAR,        //"<T>" standing where a whole type-expr would go - a generic type variable
+                           //(§12.1 G1). Distinct from SNTX_TYPE_ARGS by position: a type-var opens a type
+                           //expression, type-args always follow a name
+    SNTX_TYPE_PARAMS,     //"<A, B>" after a type declaration's name - declares its parameters and, by
+                           //their order, what a type-args list supplies positionally (§12.3 G6)
+    SNTX_TYPE_ARGS,       //"<int32, T>" after a type name in a type-ref - instantiates a generic (G8)
     SNTX_ELEM_REF_MARKER, //"&" / "&name" written BEFORE any array suffixes - marks the ELEMENT type as a
                            //reference ("Point&[3]" is an array of 3 references to Point)
     SNTX_REF_MARKER,      //"&" / "&name" written AFTER any array suffixes - marks the type as a whole
@@ -32,8 +38,8 @@ enum syntaxType {
     SNTX_TEST_DECL,
     SNTX_ERROR_DECL,
     SNTX_ERROR_LIST,
-    SNTX_GENERIC_ERROR,   //bare "error" keyword, standing in for a real name - see the report on "the
-                          //generic error": valid as an error-list item, an error-stmnt's own bare form
+    SNTX_BARE_ERROR,   //bare "error" keyword, standing in for a real name - see the report on "the
+                          //bare error": valid as an error-list item, an error-stmnt's own bare form
                           //(where it's the whole SNTX_STMNT_ERROR node, not a child of it), and a catch-item
     SNTX_RET_TYPE,
     SNTX_PARAM,

@@ -20,6 +20,7 @@ only depends on concepts already introduced by earlier ones:
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
 | 10 Compilation Model | Compilation units, `-c`/`-t` modes, `main`, test blocks, process exit |
 | 11 External Functions | `extern func` declarations, linkage, and the restricted C-ABI type boundary |
+| 12 Generics | Type parameters on functions and struct types, inference, `match` over a type, monomorphization |
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
@@ -41,7 +42,8 @@ Grammar is given in EBNF:
 Each section's normative rules are numbered `<prefix><n>` (e.g. `L1`, `T4`, `S12`) so other
 material — future spec amendments, or implementation comments — can cite a rule precisely. The
 prefix is the first letter of the section's topic (Lexical, Types, Declarations, Modules,
-Expressions, Statements, Errors, Scopes, Constructors, Compilation, eXternal functions). A numbered
+Expressions, Statements, Errors, Scopes, Constructors, Compilation, eXternal functions, Generics). A
+numbered
 rule is never renumbered; a superseded rule is marked superseded in place rather than deleted, so
 citations never dangle.
 
@@ -52,8 +54,8 @@ produces a run-time failure instead, it says so explicitly (e.g. "run-time panic
 
 ## Status
 
-This specification covers the full language, including the static ownership-scope checker. It does
-not cover a general borrow checker, generics, or a standard library — none of these exist in the
+This specification covers the full language, including the static ownership-scope checker and
+generics. It does not cover a general borrow checker or a standard library — neither exists in the
 language.
 
 ## 1. Lexical Structure
@@ -210,13 +212,14 @@ type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= vocab-body | struct-body | func-type | type-ref
+type-expr ::= vocab-body | struct-body | func-type | type-ref | type-var
 ```
 
 `vocab-body`, `struct-body`, and `func-type` are anonymous type *shapes*, constructible inline
 anywhere a type expression is expected (§2.4, §2.5, §2.7). `type-ref` (§2.9) names an existing
 primitive, or a previously declared struct, vocab, or error type, with an optional array suffix and
-reference marker.
+reference marker. `type-var` (§12.1 G1) names a type parameter and is valid only inside a generic
+declaration.
 
 **T3.** An anonymous struct or vocab shape (written inline rather than through a `type` declaration)
 is a valid type, but has no name and so can never be the target of struct-literal or vocab-value
@@ -355,8 +358,10 @@ semantics are specified in §8.
 
 ### 2.9 Type references and reference markers
 
-**T24.** `type-ref ::= alias-chain IDEN [ reference-marker ] { array-type-suffix } [ reference-marker ]`,
-where `reference-marker ::= "&" [ IDEN ]` and `alias-chain IDEN` (§4.4 M8) names a primitive type, or
+**T24.** `type-ref ::= alias-chain IDEN [ type-args ] [ reference-marker ] { array-type-suffix }
+[ reference-marker ]`, where `reference-marker ::= "&" [ IDEN ]`, `type-args` is defined in
+§12.3 G8 (required when, and only when, the named type is
+generic), and `alias-chain IDEN` (§4.4 M8) names a primitive type, or
 a struct/vocab/error type declared in the referencing module or reached through an import alias
 chain. This is the `type-ref` alternative of `type-expr` (T2). A struct or (compile-time-length) array type
 expression may carry a trailing reference marker, immediately after any array suffixes (T7), making
@@ -457,7 +462,9 @@ for the remainder of its own scope.
 
 ### 3.3 Type and error declarations
 
-**D4.** `type-decl ::= "type" IDEN type-expr [ STMNT_END ]`, where `type-expr` is defined in
+**D4.** `type-decl ::= "type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where `type-params`
+(§12.3 G6) declares type parameters and is valid only for a
+struct type, and `type-expr` is defined in
 §2.1; the constructor-bearing struct shape (T15) is specified fully in
 §9. The declared name enters
 the module's `types` set (D2) and is visible throughout the module, and, per §4.3, outside it if
@@ -495,7 +502,7 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
 `error-list-item` naming an `alias-chain IDEN` must name a declared error type (§2.6); the bare `"error"`
-alternative is **the generic error** — see §7.6 for what it means and R15 for its own grammar note.
+alternative is **the bare error** — see §7.6 for what it means and R15 for its own grammar note.
 See §7 for what a `error-list`'s combined set means.
 
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
@@ -883,7 +890,8 @@ this way; use a call (E13) instead.
 ### 5.7 Array literals
 
 **E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } ] "]"`, where
-`elem-type ::= PRIMITIVE-NAME | alias-chain IDEN [ reference-marker ]` (§4.4 M8) names the literal's
+`elem-type ::= PRIMITIVE-NAME | alias-chain IDEN [ reference-marker ] | type-var [ reference-marker ]`
+(§4.4 M8, §12.1 G1) names the literal's
 scalar element type, stated exactly once regardless of nesting depth (E21). The optional
 `reference-marker` (T24) makes each element a separately allocated reference rather than a value laid
 out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
@@ -1016,7 +1024,8 @@ compared against it using the same equality rule as `==` (E10) and must be the s
 the matched value. The block belonging to the first matching `case` runs, and no other `case` or
 the `nomatch` block runs. If no `case` matches and a `nomatch` clause is present, its block runs. If
 no `case` matches and there is no `nomatch` clause, no block runs at all — this is not a
-compile-time error; `match` performs no exhaustiveness checking over any type, including a vocab
+compile-time error; `match` over a *value* performs no exhaustiveness checking over any type,
+including a vocab
 type's own closed word set.
 
 **S14.** A `match` may be used on a value of any type that supports `==` (E10) — numeric, `bool`,
@@ -1158,9 +1167,9 @@ block, or a function that declares no errors), as long as nothing actually escap
 type's words as possible, even if the callee happens to only ever actually produce a subset of them
 internally.
 
-### 7.6 The generic error
+### 7.6 The bare error
 
-**R15.** `error-list-item`'s bare `"error"` alternative (D8) is **the generic error**: a member of a
+**R15.** `error-list-item`'s bare `"error"` alternative (D8) is **the bare error**: a member of a
 function or constructor's own error union (R1) that names no declared error type at all. It stands
 for "this may also fail without identifying which specific error occurred," and is written as the
 bare keyword `error` wherever an `error-list-item` is expected — combinable with ordinary named error
@@ -1171,11 +1180,11 @@ named type, and for the same reason.
 
 **R16.** `error-stmnt`'s grammar (R3) gains a second form: bare `"error" STMNT_END`, with no
 `alias-chain IDEN "." IDEN` operand at all. Valid under exactly the same conditions as R3's own form —
-inside an ordinary function's own body, whose signature's error union includes the generic error
-(R15) — and, like R4, immediately ends the enclosing function, producing the generic error as its
+inside an ordinary function's own body, whose signature's error union includes the bare error
+(R15) — and, like R4, immediately ends the enclosing function, producing the bare error as its
 result in place of a normal `return`ed value.
 
-**R17.** The generic error participates in `try` propagation (§7.4) and `catch` coverage (§7.5)
+**R17.** The bare error participates in `try` propagation (§7.4) and `catch` coverage (§7.5)
 exactly as a named error type with exactly one, unnamed word does: R6's ordinal scheme applies to it
 unchanged (it occupies whatever position it was declared at in the `error-list`, R1, left to right,
 with its own "word" always at ordinal 0); R9's "every error type the called function may produce"
@@ -1183,13 +1192,13 @@ requirement is satisfied for it the same way as for any named type; R13's covera
 fully handled the moment a `catch` clause matches it at all, since it has only the one word to match.
 
 **R18.** `catch-item` (R11) gains the bare keyword `"error"` as an alternative to `IDEN { "." IDEN }`,
-matching only the generic error (R15) — never any named error type the same call might also produce,
+matching only the bare error (R15) — never any named error type the same call might also produce,
 and never itself followed by a further `.WORD` (it has no addressable word of its own to select). A
-`catch` clause covering both the generic error and one or more named types combines them with `+`,
+`catch` clause covering both the bare error and one or more named types combines them with `+`,
 exactly as R11 already describes for named types alone (`catch MathError + error { ... }`).
 
-**R19.** The generic error carries no information beyond the fact that a failure occurred: no
-identifying type, no word, no payload. Where the generic error escapes uncaught all the way past
+**R19.** The bare error carries no information beyond the fact that a failure occurred: no
+identifying type, no word, no payload. Where the bare error escapes uncaught all the way past
 `main` (P5), the printed diagnostic identifies it as such rather than naming a type and word that do
 not exist.
 
@@ -1521,3 +1530,126 @@ like a non-fallible ordinary function (E13, E14); it can never be the operand of
 module-level name (§4.3 M6): capitalized is exported, lowercase is private to its own declaring
 module. The declared name is also the symbol the linker resolves against; this specification does
 not define what happens when no such symbol exists at link time (implementation-defined).
+
+## 12. Generics
+
+A function or a struct type may be **generic**: parameterized over one or more types, with a separate
+copy compiled for each distinct set of type arguments it is used with. Vocab and error types can
+never be generic — neither may reference any other type at all (T17, T19), so there is nothing to
+parameterize.
+
+### 12.1 Type variables
+
+**G1.** `type-var ::= "<" IDEN ">"`, written where an entire `type-expr` (T2) would otherwise
+appear. It names a **type variable**: a type that is not known at the declaration and is supplied
+per instantiation. `IDEN` must not name a type declared in the referencing module (D2); writing a
+declared type's name inside a `type-var` is a compile-time error, since `<Point>` would otherwise
+read as parameterizing over something already concrete.
+
+**G2.** A `type-var` may carry array suffixes and a reference marker exactly as a `type-ref` does
+(T24) — `<T>[3]`, `<T>&`, `<T>&[3]&` are all well-formed — and the marker rules of §2.9 apply to it
+unchanged once the variable is bound to a concrete type by instantiation.
+
+### 12.2 Generic functions
+
+**G3.** A function is generic exactly when a `type-var` (G1) appears anywhere in its signature
+(`func-sig`, D8). It declares no type-parameter list: its set of type parameters is every *distinct*
+`type-var` name appearing in that signature, and repeating a name binds those positions to one and
+the same type.
+
+```
+func max(a<T>, b<T>) <T> { ... }
+func pairUp(a<A>, b<B>) <A> { ... }
+```
+
+**G4.** Every type variable of a generic function must appear in at least one *parameter's* type. A
+variable appearing only in the return type or only in the error list is a compile-time error, since
+nothing at a call could determine it.
+
+**G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
+is the same for every instantiation.
+
+### 12.3 Generic struct types
+
+**G6.** `type-decl` (D4) is extended to
+`"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
+`type-params ::= "<" IDEN { "," IDEN } ">"`. Each `IDEN` declares a type parameter, unique within
+the list, in scope throughout the whole declaration: the constructor's own `param-list` and error
+list (C1), every field, and the `destruct` block (C7).
+
+```
+type Vec<T> struct(cap int64) {
+    items <T>[cap],
+    len int64 = 0
+}
+```
+
+**G7.** Within such a declaration a type parameter is written as a `type-var` (G1) — `<T>` — exactly
+as in a generic function. The `type-params` list fixes the parameters' **order**, which is what a
+type argument list (G8) supplies positionally; a function needs no such list because its arguments
+are inferred (G9) and order therefore never arises.
+
+**G8.** `type-ref` (T24) is extended to accept a **type argument list**:
+`type-args ::= "<" type-expr { "," type-expr } ">"`, written immediately after the name and before
+any array suffixes. The count must equal the named type's own `type-params` count exactly. A generic
+type is never valid without one — a bare reference to a generic type name is a compile-time error.
+Within a `type-args` list, a bare `IDEN` names either a declared type or a type parameter in scope at
+that point, so a generic declaration may instantiate another generic with its own parameter
+(`Vec<T>` inside a declaration that declares `T`).
+
+### 12.4 Inference and instantiation
+
+**G9.** At a call to a generic function, type arguments are never written: each is determined by
+matching the actual argument types structurally against the declared parameter types. G4 guarantees
+every variable is reachable this way. If two positions bound to one variable are matched against
+different types, the call is a compile-time error.
+
+**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<int32>`
+and `Vec<int64>` are different types (T27); two instantiations are the same type exactly when the
+named type and every type argument are the same.
+
+**G11.** A type argument may not carry a reference marker (T24). Its scope tag could not be traced by
+the checker of §8.4, which reasons only about tags naming the current function's own scope
+parameters, and an untraceable tag is rejected rather than optimistically allowed (O11).
+
+**G12.** An uninstantiated generic name is not a value: a generic function may be called or
+instantiated but never read as a `func-type` value (T2). A fully instantiated one is an ordinary
+value and may be used wherever a function value is expected.
+
+### 12.5 Dispatching on a type parameter
+
+**G13.** `match` (S12) accepts a `type-var` as its own operand, with each `case` naming a
+`type-expr` instead of a value expression. This form is resolved when the enclosing generic is
+instantiated, not at run time.
+
+```
+func writeVal(fd int32, v<T>) int64 ? error {
+    match <T> {
+        case int32  { return write(fd, i32Bytes(v)) }
+        case byte[] { return write(fd, v) }
+    }
+}
+```
+
+**G14.** Within the selected `case`'s block, the type variable **is** the matched type: a value
+declared with that variable's type may be used exactly as a value of the concrete type. Blocks
+belonging to other cases are not checked against this instantiation at all.
+
+**G15.** Unlike a value `match` (S13), a type `match` is exhaustiveness-checked: if no `case` matches
+and no `nomatch` clause is present, it is a compile-time error reported at the **instantiation**
+that produced the unmatched type, naming both the type and the generic. A value `match` performs no
+such check; the difference is deliberate, since a silently empty type `match` would compile a
+generic that does nothing for some of its instantiations.
+
+### 12.6 Compilation
+
+**G16.** A generic is compiled by **monomorphization**: one separate function or type is generated
+per distinct set of type arguments it is used with, with every type variable replaced by its
+argument. Every rule of this specification then applies to each generated copy exactly as if it had
+been written out by hand — including destructor registration (§9.3), scope containment (§8.4), and
+structural comparison (E10).
+
+**G17.** Instantiation may not be unbounded: a generic whose own instantiation requires an
+ever-growing set of further instantiations is a compile-time error. The depth at which this is
+reported is implementation-defined.
+

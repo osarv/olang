@@ -49,6 +49,7 @@ struct list {
 struct list ListInit(int elemSize);
 void ListDestroy(struct list l);
 void ListAdd(struct list* l, void* elem);
+void ListInsertIdx(struct list* l, int idx, void* elem);
 void ListAddList(struct list* head, struct list tail);
 void ListRetract(struct list* l, int newLen);
 void* ListGetIdx(struct list* l, int idx);

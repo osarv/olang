@@ -85,6 +85,17 @@ void ListAdd(struct list* l, void* elem) {
     l->len++;
 }
 
+//inserts elem at idx, shifting everything from idx onward one slot up. Grows via ListAdd first (so the
+//capacity/geometric-growth logic lives in exactly one place), then memmoves the tail into position.
+void ListInsertIdx(struct list* l, int idx, void* elem) {
+    if (idx < 0 || idx > l->len) ErrorBugFound();
+    ListAdd(l, elem); //grows if needed; the value lands at the end, moved into place below
+    if (idx == l->len -1) return;
+    char* base = (char*)l->ptr;
+    memmove(base + (idx + 1) * l->elemSize, base + idx * l->elemSize, (size_t)(l->len -1 - idx) * l->elemSize);
+    memcpy(base + idx * l->elemSize, elem, l->elemSize);
+}
+
 void ListAddList(struct list* head, struct list tail) {
     if (head->elemSize != tail.elemSize) ErrorBugFound();
     for (int i = 0; i < tail.len; i++) {

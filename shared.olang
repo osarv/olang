@@ -246,12 +246,12 @@ func ComputeChecked(a int32, b int32, lo int32, hi int32) int32 ? MathError + Ra
     return result
 }
 
-## the generic error ("error" reused bare, wherever a real error type's name would otherwise go - see
+## the bare error ("error" reused bare, wherever a real error type's name would otherwise go - see
 ## CLAUDE.md): a member of a function's own error union that names no declared type at all, standing for
 ## "this failed, no further detail is tracked." Mixes with a real named type via "+" the same way two named
 ## types combine; the bare "error" statement (no "TYPE.word" operand) produces it, and "catch error"
 ## matches only it - never RangeError, even though both are declared here.
-func mightFailGenerically(n int32) int32 ? RangeError + error {
+func mightFailWithBareError(n int32) int32 ? RangeError + error {
     if n < 0 {
         error
     }
@@ -1065,35 +1065,35 @@ test "try/catch: SafeDiv reports failure on divide by zero" {
     assert(failed)
 }
 
-test "the generic error: success path is unaffected by the mixed error union" {
+test "the bare error: success path is unaffected by the mixed error union" {
     failed mut bool = false
-    try mightFailGenerically(5) catch error + RangeError {
+    try mightFailWithBareError(5) catch error + RangeError {
         failed = true
     }
     assert(!failed)
 }
 
-test "the generic error: a real named type sharing the same union is still caught separately" {
+test "the bare error: a real named type sharing the same union is still caught separately" {
     result mut int32 = 0
-    try mightFailGenerically(200) catch error + RangeError {
+    try mightFailWithBareError(200) catch error + RangeError {
         result = -1
     }
     assert(result == -1)
 }
 
-## "catch error" matches only the generic error, never a real named type sharing the same union - proven
+## "catch error" matches only the bare error, never a real named type sharing the same union - proven
 ## by construction, not by testing a wrong answer: onlyGenericEscapes handles RangeError fully itself
-## (never needs to appear in its own signature, R13), leaving only the generic error to actually escape -
+## (never needs to appear in its own signature, R13), leaving only the bare error to actually escape -
 ## so "catch error" alone is sufficient to cover it below, which it provably would NOT be if the generic
 ## marker matched RangeError too (RangeError would then need declaring here as well, and doesn't).
 func onlyGenericEscapes(n int32) int32 ? error {
-    try mightFailGenerically(n) catch RangeError {
+    try mightFailWithBareError(n) catch RangeError {
         return -2
     }
     return n
 }
 
-test "the generic error: catch matches only the generic error, not a real named type also in the union" {
+test "the bare error: catch matches only the bare error, not a real named type also in the union" {
     result mut int32 = 0
     try onlyGenericEscapes(-1) catch error {
         result = -99

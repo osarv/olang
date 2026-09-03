@@ -118,6 +118,8 @@ struct syntax* parseName(SyntaxCtx sc);
 struct syntax* parseArrSfx(SyntaxCtx sc);
 struct syntax* parseTypeRef(SyntaxCtx sc);
 struct syntax* parseTypeExpr(SyntaxCtx sc);
+struct syntax* parseTypeVar(SyntaxCtx sc);
+struct syntax* parseTypeArgs(SyntaxCtx sc);
 struct syntax* parseBlock(SyntaxCtx sc);
 struct syntax* parseStmnt(SyntaxCtx sc);
 struct syntax* parseExpr(SyntaxCtx sc);
@@ -171,6 +173,50 @@ struct syntax* parseArrSfx(SyntaxCtx sc) {
     return s;
 }
 
+//"<" IDEN ">" - a generic type variable written where a whole type expression would go (G1). Only ever
+//tried at the START of a type expression, so it can never be confused with a type-args list (which always
+//follows a name) or with the reference marker (now "&", see below).
+struct syntax* parseTypeVar(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_LST);
+    if (open.type == TOK_NONE) return NULL;
+    struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token close = acceptTok(sc, TOK_GRT);
+    if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_TYPE_VAR);
+    addTok(s, name);
+    return s;
+}
+
+//"<" type-expr ("," type-expr)* ">" - a type-argument list instantiating a generic (G8), or, with
+//IDEN-only items, a type-parameter list on a declaration (G6 - same shape, so one parser serves both,
+//with the node type telling them apart). Nested generics ("Vec<Vec<int32>>") close with a single ">>"
+//token, so a TOK_BTSFT_R at the end of an argument list is split into two ">"s - the same fix C++11,
+//Rust, Java and C# all make, and the only place this grammar needs it.
+struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token open = acceptTok(sc, TOK_LST);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(nodeType);
+    while (true) {
+        struct syntax* item = parseTypeExpr(sc);
+        if (!item) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, item);
+        if (acceptTok(sc, TOK_COMMA).type != TOK_NONE) continue;
+        if (acceptTok(sc, TOK_GRT).type != TOK_NONE) return s;
+        if (TokenSplitShiftRight(sc->tc)) { //">>" closing a nested list - consume one ">", leave the other
+            if (acceptTok(sc, TOK_GRT).type != TOK_NONE) return s;
+        }
+        TokenSetCursor(sc->tc, cur);
+        return NULL;
+    }
+}
+
+struct syntax* parseTypeArgs(SyntaxCtx sc) {
+    return parseTypeArgsInto(sc, SNTX_TYPE_ARGS);
+}
+
 //"NAME ARR_SFX* (TOK_BTWSE_AND IDEN?)?" - the optional trailing "&name" names which scope a heap-indirect
 //reference belongs to; bare "&" means the value's own private scope - see the report. Fourth and final
 //spelling: "{}"/"{name}", briefly "&"/"&name", back to "{}", then "<>"/"<name>", now "&"/"&name" again -
@@ -208,10 +254,20 @@ struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
 
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct syntax* name = parseName(sc);
-    if (!name) return NULL;
+    //the head is either a type variable ("<T>") or a name, optionally instantiated ("Vec<int32>"). Both
+    //then share the identical tail below - array suffixes and reference markers apply to a type variable
+    //exactly as to a named type (G2), so "<T>&[3]&" is well-formed and needs no separate grammar.
+    struct syntax* head = parseTypeVar(sc);
+    if (!head) head = parseName(sc);
+    if (!head) return NULL;
     struct syntax* s = newNode(SNTX_TYPE_REF);
-    addSntx(s, name);
+    addSntx(s, head);
+    if (head->type == SNTX_NAME) {
+        //"Vec<int32>" - a type-args list instantiating a generic, always immediately after the name and
+        //before any marker or array suffix (G8)
+        struct syntax* args = parseTypeArgs(sc);
+        if (args) addSntx(s, args);
+    }
     //a marker BEFORE the array suffixes binds to the element type ("Point&[3]" - 3 references to Point);
     //one AFTER binds to the whole type ("Point[3]&" - one reference to an array of 3 Points). With no
     //suffix between them the two positions describe the same type, and the first one wins, harmlessly.
@@ -335,6 +391,10 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    //"type Vec<T> struct(...)" - the parameter list sits after the NAME, mirroring the use site
+    //("Vec<int32>") rather than attaching to "struct"; it also scopes over the whole declaration, not
+    //just the body (G6), and keeps type parameters out of the anonymous struct-shape grammar (T3)
+    struct syntax* typeParams = parseTypeArgsInto(sc, SNTX_TYPE_PARAMS);
     //a constructor-bearing struct ("struct(params) { ... }") is only ever reachable here, never as a
     //general type expression - disambiguated purely by "(" immediately following "struct", so a plain
     //"struct { ... }" (parseTypeExpr's path, unchanged) never even attempts this
@@ -344,6 +404,7 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_TYPE_DECL);
     addTok(s, kw);
     addTok(s, name);
+    if (typeParams) addSntx(s, typeParams);
     addSntx(s, type);
     int beforeEnd = TokenGetCursor(sc->tc);
     struct token end = TokenFeed(sc->tc);
@@ -403,13 +464,13 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-//one "error-list-item" (see the report on "the generic error"): either an ordinary declared error
+//one "error-list-item" (see the report on "the bare error"): either an ordinary declared error
 //type's name, or the bare "error" keyword standing in for it, matching literally (never a valid IDEN,
 //L7) so it can never be confused with a real type name in this position
 struct syntax* parseErrorListItem(SyntaxCtx sc) {
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type != TOK_NONE) {
-        struct syntax* s = newNode(SNTX_GENERIC_ERROR);
+        struct syntax* s = newNode(SNTX_BARE_ERROR);
         addTok(s, kw);
         return s;
     }
@@ -1022,7 +1083,7 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
 //any length, originating a foreign module's own error type directly - see the report) - always ends in
 //exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
 //an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity. A bare "error", with no
-//operand at all, is the generic error (see the report) - a separate, simpler shape entirely, so it's
+//operand at all, is the bare error (see the report) - a separate, simpler shape entirely, so it's
 //tried first, before committing to the ordinary TYPE.word grammar below.
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -1063,12 +1124,12 @@ struct syntax* parseStmntError(SyntaxCtx sc) {
 //the report), not here - this grammar rule just commits to any dotted chain unconditionally.
 struct syntax* parseCatchErr(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    //the generic error (see the report) - bare "error", never followed by ".word" (it has no addressable
+    //the bare error (see the report) - bare "error", never followed by ".word" (it has no addressable
     //word of its own), so this commits without looking for a trailing dot at all, unlike the ordinary
     //IDEN-chain shape below
     struct token generic = acceptTok(sc, TOK_ERROR);
     if (generic.type != TOK_NONE) {
-        struct syntax* s = newNode(SNTX_GENERIC_ERROR);
+        struct syntax* s = newNode(SNTX_BARE_ERROR);
         addTok(s, generic);
         return s;
     }
@@ -1659,7 +1720,7 @@ struct scanResult ScanTopLevelDecls(TokenCtx tc) {
                 ListAdd(&r.typeNames, &n);
             }
         } else if (t.type == TOK_ERROR) {
-            //a real error-decl ("error IDEN { ... }") registers a type name; the bare generic error
+            //a real error-decl ("error IDEN { ... }") registers a type name; the bare bare error
             //(see the report) is never followed by an IDEN at all (it's always immediately followed by
             //"{", "+", or a statement end, in an error-list/error-stmnt/catch-item) - a real, confirmed
             //bug found here: naively always consuming "whatever comes after error" the way TOK_TYPE's
