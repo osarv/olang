@@ -2813,3 +2813,47 @@ from their original form.
   `parseFuncErrorList` instead of `parseErrorList`, and the latter, left with no callers at all, is
   deleted. One site in the whole corpus needed updating, which is itself a fair measure of how little the
   saving was worth. `make verify`: 96/13/12.
+
+- **Default parameter values, the `default` argument keyword, and named arguments rejected.** Came out of
+  a three-part conversation - operator overloading, defaults, variadics - of which this is the part that
+  got built.
+  **Operator overloading: rejected**, for a reason specific to this language rather than taste. An
+  overloaded operator has nowhere to write a scope tag. Every heap-indirect value here is tagged
+  (`&`, `&s`, `own`), so `Vec + Vec` must allocate its result somewhere and `a + b` has no syntactic slot
+  to say where - leaving "operators may return value types only", which excludes exactly the types the
+  feature is wanted for (Vec, String, Matrix, BigInt: all `&`-shaped by C11 or T11). Two further
+  problems: a fallible operator would need `try` extended from calls to operator expressions (R8), and
+  `==` is *already* defined for every user type by E10, so overloading it would give a type two meanings
+  for one operator. Worth recording what does NOT argue against it: operators are not identifiers, so
+  they never reintroduce the field/method name collision that killed user-defined methods.
+  **Variadics: rejected.** The one real motivator is printf, and a variadic C function cannot be declared
+  through `extern func` at all (fixed list, five numeric primitives plus arrays), so that was never the
+  path. "Many arguments of one type" is already an array literal. Tested what a println actually looks
+  like without them: a non-generic `print(byte[])` works today (string literals promote into it), and a
+  generic `print(v<T>)` with `match <T>` works for scalars - but **a single `case byte[]` does not catch
+  an array literal**, since `byte[byte(1), byte(2)]` is `byte[2]` and every length is its own type, so no
+  finite set of cases covers "any byte array". Also `describe(2.5)` instantiates `T` as `float32`, not
+  `float64`. So multi-value output is multiple calls, with no one-line formatted print. That cost is
+  accepted deliberately: if it proves intolerable once a standard library exists, the answer is
+  compile-time argument packs (monomorphization already provides most of the machinery), not C variadics.
+  **Named arguments: rejected, and `default` is what replaced them.** The argument against: they would
+  permanently make every parameter name of every exported function part of its API, where names are
+  currently internal and free to change. The readability they buy is better served by distinct types -
+  `makeRect(Point{0,0}, Size{100,50})` rejects a transposition at compile time where
+  `makeRect(x=.., y=.., w=.., h=..)` cannot. And the ordering argument is decisive under uncertainty:
+  adding positional defaults now does not foreclose named arguments later, while shipping named arguments
+  forecloses removing them. The one genuine loss conceded was reaching a later parameter without
+  restating the earlier ones - which the user then closed by proposing a `default` keyword in argument
+  position. It fixes exactly that, keeps names internal, and has a property worth naming: the syntax gets
+  uglier in proportion to the design smell, so `f(a, default, default, default, x)` looks as bad as a
+  function with four optional knobs deserves, where named arguments would hide it.
+  **A latent build bug this exposed, since fixed.** Adding a field to `struct var` in semantic.h and
+  rebuilding incrementally produced a compiler that segfaulted on valid input: `sizeof(struct statement)`
+  was 616 in the freshly built `semantic.o` and 624 in the stale `codegen.o`, because `build/%.o: %.c`
+  declared **no header dependencies** - editing a .h rebuilt nothing that included it. `make verify`
+  always runs `make clean` first, which is exactly why this never surfaced in a check and only ever
+  appeared mid-edit. Fixed with `-MMD -MP` plus `-include $(DEP)`. The fix has its own trap, hit once
+  while making it: `-include` splices the .d files' explicit rules into the makefile, and the first
+  explicit rule read becomes make's default goal - placed above `build/out`, plain `make` silently began
+  building one object file instead of the compiler. It belongs at the very end of the file.
+  `make verify`: 100/13/12.

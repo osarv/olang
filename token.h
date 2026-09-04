@@ -44,6 +44,9 @@ enum tokenType {
                   //constructor-bearing type declaration - see the report
     TOK_EXTERN, //"extern func NAME(params) [ret-type]" - a function defined elsewhere, resolved by the
                 //linker at build time; no body, no error-list - see the report
+    TOK_DEFAULT, //a call argument standing for the corresponding parameter's declared default (E14a),
+                 //so a call can reach a later parameter without restating the values before it. Only
+                 //ever valid as a direct call argument - never an expression of its own
     TOK_ADD,
     TOK_SUB,
     TOK_MUL,

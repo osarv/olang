@@ -532,6 +532,16 @@ struct syntax* parseParam(SyntaxCtx sc) {
     struct syntax* type = parseTypeExpr(sc);
     if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
     addSntx(s, type);
+    //D8a: an optional "= expr" default. Parsed as an ordinary expression and restricted to a literal in
+    //semantic.c, so a bad default gets a real diagnostic instead of a parse failure pointing elsewhere
+    int beforeAss = TokenGetCursor(sc->tc);
+    struct token ass = TokenFeed(sc->tc);
+    if (ass.type == TOK_ASS) {
+        struct syntax* def = parseExpr(sc);
+        if (!def) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addTok(s, ass);
+        addSntx(s, def);
+    } else TokenSetCursor(sc->tc, beforeAss);
     return s;
 }
 
@@ -1244,16 +1254,34 @@ struct syntax* parseBlock(SyntaxCtx sc) {
 // ---- expressions ----
 
 //"(EXPR (COMMA EXPR)*)?" - always succeeds (possibly with zero args)
+//one argument: an ordinary expression, or the bare "default" keyword (E14a). The keyword is wrapped in a
+//SNTX_EXPR so it occupies an argument slot positionally like any other - the whole point, since it stands
+//in for one particular parameter - while being reachable ONLY from here, so it can never turn up inside a
+//larger expression
+struct syntax* parseExprArg(SyntaxCtx sc) {
+    int before = TokenGetCursor(sc->tc);
+    struct token kw = TokenFeed(sc->tc);
+    if (kw.type == TOK_DEFAULT) {
+        struct syntax* d = newNode(SNTX_EXPR_DEFAULT);
+        addTok(d, kw);
+        struct syntax* e = newNode(SNTX_EXPR);
+        addSntx(e, d);
+        return e;
+    }
+    TokenSetCursor(sc->tc, before);
+    return parseExpr(sc);
+}
+
 struct syntax* parseExprArgs(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_EXPR_ARGS);
-    struct syntax* first = parseExpr(sc);
+    struct syntax* first = parseExprArg(sc);
     if (!first) return s;
     addSntx(s, first);
     while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token comma = TokenFeed(sc->tc);
         if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
-        struct syntax* e = parseExpr(sc);
+        struct syntax* e = parseExprArg(sc);
         if (!e) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, comma);
         addSntx(s, e);

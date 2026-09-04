@@ -754,6 +754,7 @@ void semaCollectNames(struct semaModule* mod) {
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
 bool typeContainsReference(struct type t);
 struct syntax* detectRuntimeSizedArrayType(struct syntax* typeExprNode);
+struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
 struct type resolveRuntimeSizedArrayDeclType(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams);
 void resolveTypeDecl(struct type* t);
 
@@ -1596,7 +1597,19 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         //"out" doubles as this param list's growing scopeParams: an earlier param's name is visible to a
         //later param's "&name" tag (e.g. "func f(s scope, n Node<s>)"), not the other way around
         v.type = isScopeTypeRef(typeExprNode) ? TypeScope() : resolveTypeExpr(mod, typeExprNode, out);
+        //D8a: an "= expr" default, built here in the DECLARING module's own context (a caller's context
+        //would resolve a struct-literal's type name against the wrong module). Restricted to a literal,
+        //so there is nothing call-site-dependent to get wrong - no allocation, no scope, no failure.
+        struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
+        if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
         ListAdd(out, &v);
+    }
+    //D8b: defaults must be trailing, so that omitting arguments from the end is unambiguous
+    bool seenDefault = false;
+    for (int i = 0; i < out->len; i++) {
+        struct var* v = ListGetIdx(out, i);
+        if (v->defaultVal) { seenDefault = true; continue; }
+        if (seenDefault) ErrMsgSemantic(v->tok, DEFAULT_NOT_TRAILING);
     }
 }
 
@@ -2379,6 +2392,21 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
     return op;
 }
 
+struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s);
+
+//D8a: builds a parameter's declared default. Deliberately checked in the DECLARING module's own context
+//- a caller's context would resolve a struct literal's type name against the wrong module - and
+//restricted to a literal, so there is nothing call-site-dependent left to get wrong: no allocation, no
+//scope to name, no way to fail. That restriction is why one operand can serve every call site.
+struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
+    struct checkCtx dctx = {0};
+    dctx.mod = mod;
+    struct operand* def = buildExprFromSyntax(&dctx, defNode);
+    if (!def->isLiteral) { ErrMsgSemantic(def->tok, DEFAULT_NOT_LITERAL); return def; }
+    reportTypeFit(OperandFitsType(NULL, def, paramType), def->tok);
+    return def;
+}
+
 struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct list args, struct token tok) {
     //G9: a call to a generic never writes its type arguments - each is inferred by matching the actual
     //argument types against the declared parameter types, which G4 guarantees reaches every variable.
@@ -2409,10 +2437,25 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     op->readVar = func;
     op->args = args;
 
-    if (args.len != func->type.vars.len) {
+    //E14: the count is a range once parameters may declare defaults (D8a) - at least the undefaulted
+    //ones, at most all of them. Every slot the caller left off, and every one written as the "default"
+    //keyword (E14a), is filled in here with that parameter's own declared literal, so everything below
+    //this point sees an ordinary, fully-populated argument list and needs no notion of defaults at all.
+    int required = func->type.vars.len;
+    while (required > 0 && (*(struct var*)ListGetIdx(&func->type.vars, required -1)).defaultVal) required--;
+    if (args.len < required || args.len > func->type.vars.len) {
         ErrMsgSemantic(tok, WRONG_ARG_COUNT);
         return op;
     }
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* param = ListGetIdx(&func->type.vars, i);
+        if (i >= args.len) { ListAdd(&args, &param->defaultVal); continue; }
+        struct operand* a = *(struct operand**)ListGetIdx(&args, i);
+        if (!a->isDefaultArg) continue;
+        if (!param->defaultVal) { ErrMsgSemantic(a->tok, DEFAULT_ARG_NO_DEFAULT); return op; }
+        *(struct operand**)ListGetIdx(&args, i) = param->defaultVal;
+    }
+    op->args = args;
     //records, for each of func's own scope-typed parameters, what was concretely passed at this call site
     //- "own" (bare) or a direct read of one of the CALLER's own scope parameters, the only two shapes a
     //"scope"-typed argument can ever have (see the report). Built *before* the type-fit-checking loop
@@ -3115,6 +3158,16 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
     return result;
 }
 
+//E14a: "default" stands for a PARAMETER's declared value, so it means nothing in an argument list that
+//isn't binding parameters - a struct literal's field list, or a builtin like len()/int32(). Called by
+//each of those to reject it with a real message rather than letting a void marker operand flow onward.
+void rejectDefaultArgs(struct list args) {
+    for (int i = 0; i < args.len; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&args, i);
+        if (a->isDefaultArg) ErrMsgSemantic(a->tok, DEFAULT_ARG_NOT_ALLOWED);
+    }
+}
+
 //every error type a `try`'d call can produce must appear in the enclosing function's own declared error
 //list, so an unhandled/uncaught error always has somewhere valid to propagate to. Required even for error
 //types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
@@ -3291,6 +3344,7 @@ struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct type t = applyTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode),
                                      firstPartOfType(s, SNTX_TYPE_ARGS), firstTokAnywhere(s));
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
+    rejectDefaultArgs(args);
 
     if (t.bType == BASETYPE_STRUCT) {
         //a constructor-bearing type is buildable BOTH ways (E18/C6): the literal assembles it field by
@@ -3394,6 +3448,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             bool allowedLen = ctx->allowFallibleCall;
             ctx->allowFallibleCall = false;
             struct list lenArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            rejectDefaultArgs(lenArgs);
             ctx->allowFallibleCall = allowedLen;
             if (lenArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
             struct operand* lenArg = *(struct operand**)ListGetIdx(&lenArgs, 0);
@@ -3409,6 +3464,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             bool allowedConv = ctx->allowFallibleCall;
             ctx->allowFallibleCall = false;
             struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            rejectDefaultArgs(convArgs);
             ctx->allowFallibleCall = allowedConv;
             if (convArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
@@ -3440,6 +3496,14 @@ struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
         //that shape (just recurse into part[0] and return it) covers both uniformly - see the report
         case SNTX_EXPR: case SNTX_EXPR_BINARY:
             return buildBinChain(ctx, s);
+        //E14a: only ever reachable from a call's own argument list (parseExprArg builds it nowhere else).
+        //OperandFuncCall replaces it with the parameter's declared default; every other consumer of an
+        //argument list rejects it, so it can never reach codegen.
+        case SNTX_EXPR_DEFAULT: {
+            struct operand* op = operandNew(firstTokAnywhere(s), OPERATION_NONE, TypeVanilla(BASETYPE_VOID));
+            op->isDefaultArg = true;
+            return op;
+        }
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);
         case SNTX_EXPR_PRIMARY: return buildPrimary(ctx, s);

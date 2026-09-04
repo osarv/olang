@@ -134,6 +134,10 @@ struct var {
                                 //initializing operand at declaration time (see buildVarDeclStmnt), so a
                                 //later read of this var carries the same map its initializer had - see
                                 //the report on extending the static scope checker past one function's frame
+    struct operand* defaultVal; //parameters only (D8a): the checked literal a call may omit or write
+                                 //"default" for. NULL when the parameter declares no default. Built once,
+                                 //in the DECLARING module's context - a literal has no call-site-dependent
+                                 //meaning, which is exactly why D8a admits nothing else.
     struct syntax* bodySyntax; //generic functions only: the SNTX_BLOCK of the declaration, kept so each
                                 //instantiation can check the same body again against its own concrete
                                 //parameter types (G16). NULL for everything else.
@@ -257,6 +261,9 @@ struct operand {
                             //whether the base is mutable - a constructor field is mutable only if declared
                             //"mut", while a plain (T13) struct's fields are always mutable
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    bool isDefaultArg; //this operand is the "default" keyword standing in an argument slot (E14a). Never
+                        //survives past OperandFuncCall, which replaces it with the parameter's own
+                        //declared default; every other consumer of an argument list rejects it.
     bool isCtorCall; //OPERATION_FUNCCALL only: this call's target is a struct type's own constructor.
                       //":=" accepts one as an initializer (D15) even though it is not a literal: the type
                       //is written right there at the declaration, which is the whole point of the rule.

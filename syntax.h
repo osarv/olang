@@ -88,6 +88,8 @@ enum syntaxType {
                                //from the argument list's own nesting/counts) - see ParseSyntax
     SNTX_EXPR_STRUCT_LITERAL, //struct literal - "Type{v1, ...}" - type-name-aware, see ParseSyntax
     SNTX_EXPR_VOCAB_VALUE,    //"Type.WORD" - a vocab value - type-name-aware, see ParseSyntax
+    SNTX_EXPR_DEFAULT,        //the "default" keyword in a call's argument position (E14a) - produced
+                              //only by parseExprArgs, so it can never appear inside a larger expression
     SNTX_EXPR_PRIMARY,
     SNTX_EXPR_POSTFIX,
     SNTX_EXPR_UNARY_OP,

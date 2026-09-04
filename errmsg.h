@@ -81,6 +81,14 @@ constructor arguments, so there is nothing for that tag to name"
 #define INVALID_VOCAB_VALUE_TYPE "only a vocab type has values of the form 'Type.word'"
 #define UNKNOWN_VOCAB_WORD "unknown vocab word"
 #define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"
+#define DEFAULT_NOT_LITERAL "a parameter's default value must be a literal - not a call, a variable read, or \
+any other expression: it is evaluated on behalf of callers you cannot see, so it must have a value and no \
+other behaviour"
+#define DEFAULT_NOT_TRAILING "this parameter declares no default but a previous one does - defaulted \
+parameters must come last, so that omitting trailing arguments is unambiguous"
+#define DEFAULT_ARG_NOT_ALLOWED "'default' is only valid as an argument of a call to a function or \
+constructor, in a position whose parameter declares a default value"
+#define DEFAULT_ARG_NO_DEFAULT "this parameter declares no default value, so 'default' cannot stand in for it"
 #define TYPE_CANNOT_BE_INFERRED "a variable declared with ':=' must be initialized with a literal or a constructor call"
 #define OPERANDS_NOT_SAME_TYPE "both operands must have the same type"
 #define MATCH_CASE_TYPE_MISMATCH "case value must have the same type as the matched expression"

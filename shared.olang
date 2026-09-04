@@ -1083,6 +1083,59 @@ test "':=' infers a type from a constructor call" {
     assert(d.tag == 6)
 }
 
+## D8a/D8b: a parameter may declare a default value, and defaulted parameters must be trailing. The
+## default must be a LITERAL - not a call or any other expression - because it is evaluated on behalf of
+## callers the declaration cannot see, so it must have a value and no other behaviour: no allocation, no
+## scope to name, nothing that can fail. That restriction is also what lets one checked operand, built
+## once in the declaring module, serve every call site.
+func connect(host int32, port int32 = 80, timeout int32 = 30, retries int32 = 3) int32 {
+    return host + port + timeout + retries
+}
+
+test "a call may omit trailing arguments" {
+    assert(connect(1) == 114)
+    assert(connect(1, 8080) == 8114)
+    assert(connect(1, 8080, 5) == 8089)
+    assert(connect(1, 8080, 5, 9) == 8095)
+}
+
+## E14a: "default" reaches past a defaulted parameter without restating the values before it. This is
+## deliberately positional rather than named: parameter names stay internal to the declaration, so
+## renaming one is never a change to any caller's contract. It buys reachability, not documentation -
+## for the latter, distinct types (which the checker verifies) beat argument names (which it cannot).
+test "'default' reaches a later parameter" {
+    assert(connect(1, default, default, 9) == 120)
+    assert(connect(1, default, 5) == 89)
+    assert(connect(1, default, default, default) == 114)
+}
+
+## defaults work identically on a constructor - the same param-list rules (C1 defers to D8) with no
+## constructor-specific handling anywhere
+type Server struct(host int32, port int32 = 80) {
+    host,
+    port
+}
+
+test "defaults on a constructor's parameter list" {
+    a mut Server = Server(7)
+    b mut Server = Server(7, 9)
+    c mut Server = Server(7, default)
+    assert(a.port == 80)
+    assert(b.port == 9)
+    assert(c.port == 80)
+}
+
+## a struct literal is a valid default - it is a literal expression (E4), with a value and nothing else
+func offsetOf(p Point = Point{3, 4}) int32 {
+    return p.x + p.y
+}
+
+test "a struct literal as a parameter default" {
+    assert(offsetOf() == 7)
+    assert(offsetOf(Point{1, 1}) == 2)
+    assert(offsetOf(default) == 7)
+}
+
 ## exercises the scope runtime under load: every allocation is rounded up to 8 bytes so the next one
 ## starts aligned (a raw byte bump left a 12-byte "int32[3]" followed by an i64- or pointer-bearing
 ## allocation misaligned - UB at the LLVM level even where the hardware tolerates it); destructor list

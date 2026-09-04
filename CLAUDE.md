@@ -329,6 +329,23 @@ drift out of sync with the actual code.
   instantiation reused the generic's already-built body) - invisible because generic types and
   constructors were each tested separately, and surfaced only by typing in the spec's own `Vec<T>`
   example and running it.
+- **Default parameter values (`= literal`) and the `default` argument keyword.** Spec'd as D8a/D8b and
+  E14/E14a. A parameter may declare a default; defaults must be **trailing**, so omitting arguments from
+  the end is unambiguous. A call may then omit any number of trailing arguments, or write the keyword
+  `default` in an argument slot to reach a later parameter without restating the values before it
+  (`connect(h, default, default, 9)`). The same rules apply to a constructor's parameter list with no
+  constructor-specific handling anywhere, which matters because a type declares exactly **one**
+  constructor - defaults are how that one constructor covers several call shapes, the job overloading
+  would otherwise do. A default must be a **literal expression** (E4: token, struct, or array literal),
+  never a call: it is evaluated on behalf of callers the declaration cannot see, so it must have a value
+  and no other behaviour - no allocation, no scope to name, nothing that can fail. That restriction is
+  also what lets a single checked operand, built once in the declaring module's own context, serve every
+  call site. **Named arguments were considered and rejected**, and `default` is what replaced them: they
+  would make every parameter name of every exported function part of its API permanently (renaming one
+  becomes a breaking change), where parameter names are currently internal. The readability they buy is
+  better served here by distinct types, which the compiler verifies, than by argument names, which it
+  cannot. `default` buys the half that is about *capability* - reaching a later parameter - while leaving
+  names internal, and it is reversible in a way shipping named arguments would not be.
 - **Deferred: user-defined methods, and a real growable `Vec`.** Generics exist now (above), so a
   resizable collection is finally expressible; it belongs in a standard library on top of the language,
   not as more special cases inside the compiler.

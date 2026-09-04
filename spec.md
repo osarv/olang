@@ -97,7 +97,7 @@ if      else    try     catch   return  done    crash   assert
 for     do      while   match   case    nomatch
 type    struct  vocab   func    error   mut     own
 import  test    destruct
-extern
+extern  default
 compif  compelse
 ```
 
@@ -487,7 +487,7 @@ reference any other type (T17, T19).
 
 ```
 param-list      ::= [ param { "," param } ]
-param           ::= IDEN [ "mut" ] type-expr
+param           ::= IDEN [ "mut" ] type-expr [ "=" expr ]
 ret-type        ::= type-expr
 error-list      ::= error-list-item { "+" error-list-item }
 error-list-item ::= alias-chain IDEN | "error"
@@ -504,6 +504,18 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 `error-list-item` naming an `alias-chain IDEN` must name a declared error type (§2.6); the bare `"error"`
 alternative is **the bare error** — see §7.6 for what it means and R15 for its own grammar note.
 See §7 for what a `error-list`'s combined set means.
+
+**D8a.** A parameter may declare a **default value** with `= expr`. `expr` must be a *literal
+expression* (E4) — a token literal, a struct literal, or an array literal — and may not name any
+parameter, local, or global. It is not an arbitrary expression: a constructor call is excluded
+specifically, because it may allocate into a scope, register a destructor, or fail, none of which has a
+well-defined meaning at a declaration evaluated on behalf of an unknown caller. A literal has a value
+and nothing else.
+
+**D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
+parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
+past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
+constructor's own `param-list` (§9.1 C1).
 
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
@@ -775,7 +787,8 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN [ type-args ] "(" [ expr { "," expr } ] ")"` (§4.4 M8),
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] "(" [ arg { "," arg } ] ")"`, where
+`arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
 type, where it names the instantiation whose constructor is being called (G10a).
 
@@ -886,9 +899,19 @@ module-level function; or a struct type's own constructor
 alias chain naming a type) in call position is a constructor call exactly when that type declares
 one. When that type is generic (§12.3), the call must carry a type argument list (G10a).
 
-**E14.** Argument count must match the target's declared parameter count exactly (no default
-arguments, no variadic parameters); each argument, in order, must fit (E12) the corresponding
-parameter's declared type.
+**E14.** Argument count must be at least the number of the target's parameters that declare no default
+(D8a) and at most its total parameter count; there are no variadic parameters. Arguments bind
+positionally, in order, and each must fit (E12) the corresponding parameter's declared type. Any
+parameter left without an argument takes its declared default, which is evaluated as the literal it is —
+one value per call, with no evaluation order to observe.
+
+**E14a.** An argument may be the keyword `default`, which supplies that one parameter's declared default
+in place of a written value, letting a call reach a later parameter without restating the values before
+it: given `connect(host byte[], port int32 = 80, timeout int32 = 30, retries int32 = 3)`, a call
+`connect(h, default, default, 5)` sets only `retries`. `default` is valid **only** as a direct argument of
+a call, and only where the corresponding parameter declares a default (D8a); it is not an expression and
+may not be assigned, nested, or used as a value anywhere. Parameter *names* are deliberately not part of
+this: they remain internal to the declaration, so renaming one is never a change to the caller's contract.
 
 **E15.** If the called function's signature declares one or more errors
 (§7), the call must appear directly as the operand of
