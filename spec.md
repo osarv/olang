@@ -773,7 +773,9 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN "(" [ expr { "," expr } ] ")"` (§4.4 M8), covered in §5.4.
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] "(" [ expr { "," expr } ] ")"` (§4.4 M8),
+covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
+type, where it names the instantiation whose constructor is being called (G10a).
 
 **E4.** `literal ::= BOOL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
 **literal expression** (relevant to D15's `:=`, to T6's numeric widening, and to §5.6–§5.7) exactly
@@ -880,7 +882,7 @@ return, which are unaffected by this rule.
 module-level function; or a struct type's own constructor
 (§9) — a bare type name (or
 alias chain naming a type) in call position is a constructor call exactly when that type declares
-one.
+one. When that type is generic (§12.3), the call must carry a type argument list (G10a).
 
 **E14.** Argument count must match the target's declared parameter count exactly (no default
 arguments, no variadic parameters); each argument, in order, must fit (E12) the corresponding
@@ -1604,9 +1606,9 @@ the list, in scope throughout the whole declaration: the constructor's own `para
 list (C1), every field, and the `destruct` block (C7).
 
 ```
-type Vec<T> struct(cap int64) {
-    items <T>[cap],
-    len int64 = 0
+type Vec<T> struct(s scope, cap int64) {
+    items mut <T>[cap]&s,
+    len mut int64 = 0
 }
 ```
 
@@ -1633,6 +1635,21 @@ different types, the call is a compile-time error.
 **G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<int32>`
 and `Vec<int64>` are different types (T27); two instantiations are the same type exactly when the
 named type and every type argument are the same.
+
+**G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
+arguments before the argument list: `Vec<int32>(own, 4)`. This is the only spelling — C8's rejection of
+the `Type{...}` literal for a constructor-declaring type applies unchanged, so a generic type with a
+constructor has no other construction form. The type arguments select the instantiation exactly as G8
+does in a type reference, and the call then targets **that instantiation's own** constructor: the
+generic's own constructor is never a call target, its parameter types still being type variables.
+Omitting the list where the named type is generic, or writing one where it is not, is a compile-time
+error, as is a count that does not match the declared `type-params` (G6).
+
+**G10b.** A generic struct type's constructor and destructor are monomorphized with it (G16): each
+instantiation gets its own, built from the generic's own field list and `destruct` block against that
+instantiation's substituted types. C11 applies unchanged — an instantiation of a type declaring
+`destruct` is reference-only, and each instantiation's destructor is a distinct one, running for the
+instances of that instantiation only.
 
 **G11.** A type argument may not carry a reference marker (T24). Its scope tag could not be traced by
 the checker of §8.4, which reasons only about tags naming the current function's own scope

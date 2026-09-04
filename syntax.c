@@ -1496,7 +1496,25 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 int save = TokenGetCursor(sc->tc);
                 struct syntax* targs = parseTypeArgs(sc);
                 if (targs) {
+                    int afterArgs = TokenGetCursor(sc->tc);
                     struct token open2 = TokenFeed(sc->tc);
+                    if (open2.type == TOK_PAREN_O) {
+                        //"Vec<int32>(...)" - a CONSTRUCTOR call on an instantiated generic type. Same
+                        //commit rule as the two literal forms below; the type arguments ride on the call
+                        //node, where resolveCallTarget picks them up to instantiate the type and reach
+                        //that copy's own monomorphized constructor (G10/G16).
+                        TokenSetCursor(sc->tc, afterArgs); //parseExprCall consumes the "(" itself
+                        struct syntax* call = parseExprCall(sc);
+                        if (call) {
+                            addSntx(call, targs);
+                            struct syntax* s2 = newNode(SNTX_EXPR_PRIMARY);
+                            addSntx(s2, name);
+                            addSntx(s2, call);
+                            return s2;
+                        }
+                        recordFurthestError(sc, peekTok(sc), "')'");
+                        return NULL;
+                    }
                     if (open2.type == TOK_CURLY_O) {
                         struct syntax* lit = parseStructLiteralTail(sc, name, open2);
                         if (lit) {

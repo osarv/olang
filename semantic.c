@@ -939,6 +939,12 @@ static struct list typeInstantiations;
 //type-resolution signature, and cleared on the way out so nothing outside an instantiation sees it.
 static struct list* currentBindings;   //struct instantiation
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
+//the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
+//generic's own field syntax against the copy's substituted types, and building one can instantiate
+//further generics, so they queue here and drain alongside the function ones.
+struct pendingTypeInst { struct type* spec; struct list bindings; };
+static struct list pendingTypeInsts; //struct pendingTypeInst
+void buildTypeBodies(struct semaModule* mod, struct type* t);
 
 bool bindingsMatch(struct list* a, struct list* b) {
     if (a->len != b->len) return false;
@@ -1046,13 +1052,33 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         ctor->name = instantiationNameFor(generic->ctorFunc->name, &generic->typeParams, bindings);
         ctor->type = TypeSubstitute(generic->ctorFunc->type, bindings);
         ctor->type.typeParams = ListInit(sizeof(struct str));
-        if (ctor->type.hasRetType) {
-            struct type* ret = MallocOrCrash(sizeof(struct type));
-            *ret = *spec;
-            ctor->type.retType = ret;
-        }
+        //the copy's own stable slot, never a snapshot of it: the destructor below is attached to *spec
+        //after this point, and a by-value copy taken here would freeze the GENERIC's destructFunc into
+        //the constructed value's type - registering the wrong (never-emitted) symbol at every
+        //construction. Mirrors resolveStructCtorInto's own "the same stable slot" for the non-generic case.
+        if (ctor->type.hasRetType) ctor->type.retType = spec;
         ctor->origin = ctor;
         spec->ctorFunc = ctor;
+    }
+    //and so is its destructor, for the same reason - its ".self" parameter is the generic type itself,
+    //which every substituted field type has to follow (C7)
+    if (generic->destructFunc) {
+        struct var* dtor = VarAllocSetOrigin();
+        *dtor = *generic->destructFunc;
+        dtor->name = instantiationNameFor(generic->destructFunc->name, &generic->typeParams, bindings);
+        dtor->type = TypeSubstitute(generic->destructFunc->type, bindings);
+        dtor->type.typeParams = ListInit(sizeof(struct str));
+        dtor->origin = dtor;
+        spec->destructFunc = dtor;
+        struct var* self = ListGetIdx(&dtor->type.vars, 0);
+        self->type = *spec; //the copy's own layout, and the copy's own destructFunc - see the by-value
+                            //snapshot in resolveStructCtorInto for why this identity matters
+    }
+    if (spec->ctorFunc) {
+        struct pendingTypeInst p = (struct pendingTypeInst){0};
+        p.spec = spec;
+        p.bindings = *bindings;
+        ListAdd(&pendingTypeInsts, &p);
     }
     return spec;
 }
@@ -1855,6 +1881,14 @@ void resolveTypeDecl(struct type* t) {
             //build-then-copy path below
             resolveStructCtorInto(owner, t, ctorNode);
             t->typeParams = declaredParams;
+            //a generic type's constructor and destructor are generic too - marked as such here (they are
+            //ordinary vars in mod->vars, so without this both the pass-3 body builder and codegen would
+            //treat them as ordinary functions and try to emit a body still mentioning type variables).
+            //Their monomorphized copies are made by instantiateType and carry empty lists.
+            if (declaredParams.len != 0) {
+                t->ctorFunc->type.typeParams = declaredParams;
+                if (t->destructFunc) t->destructFunc->type.typeParams = declaredParams;
+            }
             break;
         }
 
@@ -1981,7 +2015,21 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
 //resolves a possibly-namespaced call-target name node ("func" or "alias.func", from SNTX_NAME) to a var -
 //the 1-identifier case is just lookupVar; the namespaced case looks up the target module directly and
 //requires public visibility, mirroring resolveErrorTypeName
-struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
+struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct syntax* argsNode, struct token errTok);
+
+//"Type(args)"/"Type<args>(args)" - a constructor call. A generic type reaches its own monomorphized
+//constructor through the instantiation, never through the generic's (whose parameters still mention type
+//variables); a written argument list on a non-generic type, or a missing one on a generic, is an error
+//applyTypeArgsTo reports for us.
+struct var* ctorTargetFor(struct checkCtx* ctx, struct type* t, struct syntax* targsNode, struct token tok) {
+    resolveTypeDecl(t);
+    if (t->bType != BASETYPE_STRUCT || !t->hasCtor) return NULL;
+    if (t->typeParams.len == 0 && !targsNode) return t->ctorFunc;
+    struct type* spec = applyTypeArgsTo(ctx, t, targsNode, tok);
+    return spec ? spec->ctorFunc : NULL;
+}
+
+struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, struct syntax* targsNode) {
     struct list idens = allTokOfType(nameNode, TOK_IDEN);
     if (idens.len == 1) {
         struct token tok = *(struct token*)ListGetIdx(&idens, 0);
@@ -1995,8 +2043,9 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
         //coverage, codegen) with no dedicated call path of its own - see the report
         struct type* t = TypeGetList(&ctx->mod->types, name);
         if (t) {
-            resolveTypeDecl(t);
-            if (t->bType == BASETYPE_STRUCT && t->hasCtor) return t->ctorFunc;
+            struct var* ctor = ctorTargetFor(ctx, t, targsNode, tok);
+            if (ctor) return ctor;
+            if (t->bType == BASETYPE_STRUCT && t->hasCtor) return NULL; //already reported
         }
         ErrMsgSemantic(tok, UNKNOWN_VAR);
         return NULL;
@@ -2016,7 +2065,7 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode) {
         resolveTypeDecl(t);
         if (t->bType == BASETYPE_STRUCT && t->hasCtor) {
             if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return NULL; }
-            return t->ctorFunc;
+            return ctorTargetFor(ctx, t, targsNode, nameTok);
         }
     }
     ErrMsgSemantic(nameTok, UNKNOWN_VAR);
@@ -3157,35 +3206,46 @@ struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType,
     return op;
 }
 
-//applies a literal's own type-argument list, if it has one: "Pair<int32, int64>{...}" names an
-//instantiation, not the generic itself. Same instantiation path a type reference takes (G8), so the two
-//spellings of the same instantiated type are one type by identity (G10).
-struct type applyLiteralTypeArgs(struct checkCtx* ctx, struct type base, struct syntax* litNode) {
-    struct syntax* argsNode = firstPartOfType(litNode, SNTX_TYPE_ARGS);
-    if (base.typeParams.len == 0) {
+//applies a written type-argument list, if there is one: "Pair<int32, int64>{...}" and "Vec<int32>(...)"
+//both name an instantiation, not the generic itself. Same instantiation path a type reference takes (G8),
+//so every spelling of the same instantiated type is one type by identity (G10). errTok is only used to
+//report a generic named with no arguments at all, which the caller's own node can point at better than
+//this can.
+struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct syntax* argsNode, struct token errTok) {
+    if (found->typeParams.len == 0) {
         if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
-        return base;
+        return NULL;
     }
-    if (!argsNode) { ErrMsgSemantic(firstTokAnywhere(litNode), MISSING_TYPE_ARGS); return base; }
+    if (!argsNode) { ErrMsgSemantic(errTok, MISSING_TYPE_ARGS); return NULL; }
     struct list argNodes = allSyntaxParts(argsNode);
-    if (argNodes.len != base.typeParams.len) {
+    if (argNodes.len != found->typeParams.len) {
         ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
-        return base;
+        return NULL;
     }
     struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
     struct list bindings = ListInit(sizeof(struct typeBinding));
     for (int i = 0; i < argNodes.len; i++) {
         struct typeBinding b = (struct typeBinding){0};
-        b.name = *(struct str*)ListGetIdx(&base.typeParams, i);
+        b.name = *(struct str*)ListGetIdx(&found->typeParams, i);
         b.type = resolveTypeExpr(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
         if (b.type.structMAlloc) {
             ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&argNodes, i)), TYPE_ARG_HAS_REFERENCE_MARKER);
         }
         ListAdd(&bindings, &b);
     }
+    return instantiateType(found, &bindings);
+}
+
+//the by-value wrapper the two literal forms want: they hold a resolved base type, not the stable slot
+struct type applyTypeArgs(struct checkCtx* ctx, struct type base, struct syntax* argsNode, struct token errTok) {
+    if (base.typeParams.len == 0) {
+        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        return base;
+    }
     struct type* found = TypeGetList(&ctx->mod->types, base.name);
     if (!found) return base;
-    return *instantiateType(found, &bindings);
+    struct type* spec = applyTypeArgsTo(ctx, found, argsNode, errTok);
+    return spec ? *spec : base;
 }
 
 //"T[v1, ...]" - see buildArrLiteralLevel for how the type itself is determined (from resolveLiteralBaseType
@@ -3193,7 +3253,8 @@ struct type applyLiteralTypeArgs(struct checkCtx* ctx, struct type base, struct 
 struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
-    struct type elemType = applyLiteralTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode), s);
+    struct type elemType = applyTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode),
+                                     firstPartOfType(s, SNTX_TYPE_ARGS), firstTokAnywhere(s));
     //"Handle&[...]" - the literal's element type carries its own reference marker, so each element is a
     //separately allocated instance rather than a value laid out inline in the array
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER),
@@ -3213,7 +3274,8 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
 struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_CURLY_O);
-    struct type t = applyLiteralTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode), s);
+    struct type t = applyTypeArgs(ctx, resolveLiteralBaseType(ctx->mod, nameNode),
+                                     firstPartOfType(s, SNTX_TYPE_ARGS), firstTokAnywhere(s));
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
     if (t.bType == BASETYPE_STRUCT) {
@@ -3334,7 +3396,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
             return OperandNumericConversion(TypeVanilla(convTo), convArg, nameTok);
         }
-        struct var* func = resolveCallTarget(ctx, nameNode);
+        struct var* func = resolveCallTarget(ctx, nameNode, firstPartOfType(callNode, SNTX_TYPE_ARGS));
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
         bool allowed = ctx->allowFallibleCall;
         ctx->allowFallibleCall = false;
@@ -4128,6 +4190,10 @@ void checkInstantiationBody(struct instantiation* inst) {
 struct list* SemanticAllInstantiations(void) { return &instantiations; }
 struct list* SemanticAllTypeInstantiations(void) { return &typeInstantiations; }
 
+bool SemanticHasPendingInstantiations(void) {
+    return pendingInstances.len != 0 || pendingTypeInsts.len != 0;
+}
+
 void semaDrainInstantiations(void) {
     int rounds = 0;
     while (pendingInstances.len != 0) {
@@ -4141,6 +4207,121 @@ void semaDrainInstantiations(void) {
         for (int i = 0; i < batch.len; i++) {
             checkInstantiationBody(ListGetIdx(&instantiations, *(int*)ListGetIdx(&batch, i)));
         }
+    }
+}
+
+//the same drain for generic struct types. Separate loop, same fixed-point shape: building one copy's
+//constructor body can instantiate further generics, of either kind.
+void drainTypeInstantiations(void) {
+    int rounds = 0;
+    while (pendingTypeInsts.len != 0) {
+        if (++rounds > 1000) { //G17 - implementation-defined depth, same cap as the function case
+            struct pendingTypeInst* p = ListGetIdx(&pendingTypeInsts, 0);
+            ErrMsgSemantic(p->spec->tok, UNBOUNDED_INSTANTIATION);
+            return;
+        }
+        struct list batch = pendingTypeInsts;
+        pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
+        for (int i = 0; i < batch.len; i++) {
+            struct pendingTypeInst* p = ListGetIdx(&batch, i);
+            struct list* saved = currentBindings;
+            currentBindings = &p->bindings;
+            buildTypeBodies(p->spec->owner, p->spec);
+            currentBindings = saved; //restored, not nulled: instantiations can nest
+        }
+    }
+}
+
+//builds a struct type's constructor body (a single "return Type{f1, f2, ...}" - see the report for why
+//this needs no dedicated codegen of its own) and its destructor body, if it declares one. Factored out of
+//semaCheckBodies so an instantiation of a generic type can run the very same construction against its own
+//substituted field/parameter types (G16) - the copy is not special, it just needs its body built too.
+void buildTypeBodies(struct semaModule* mod, struct type* t) {
+    //---- constructor body: a single "return Type{field1, field2, ...}" - see the report for why
+    //this needs no dedicated codegen of its own (cgFunction/cgRet/OperandStructLiteral's existing
+    //aggregate-literal codegen already do everything this needs) ----
+    struct scope ctorScope = scopePush(NULL);
+    for (int p = 0; p < t->ctorFunc->type.vars.len; p++) {
+        struct var* param = ListGetIdx(&t->ctorFunc->type.vars, p);
+        struct var* local = VarAllocSetOrigin();
+        *local = *param;
+        local->origin = param; //canonicalVar traces this copy back to the type-level original
+        local->mayBeInitialized = true;
+        //D9, same as the function-body case above: a constructor parameter is immutable unless
+        //declared "mut"
+        ListAdd(&ctorScope.localPtrs, &local);
+    }
+    struct checkCtx cctx = {0};
+    cctx.mod = mod;
+    cctx.scope = &ctorScope;
+    cctx.func = t->ctorFunc;
+    cctx.hasOwnScope = true;
+
+    struct list fieldArgs = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < t->vars.len; i++) {
+        struct var* field = ListGetIdx(&t->vars, i);
+        struct syntax* f = *(struct syntax**)ListGetIdx(&t->ctorFieldSyntax, i);
+        struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
+        struct syntax* rhsNode = firstPartOfType(f, SNTX_EXPR);
+        struct operand* fieldOp;
+        if (rhsNode) {
+            fieldOp = buildExprFromSyntax(&cctx, rhsNode);
+            if (typeExprNode) {
+                reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok);
+            } else { // ":=" - type read straight off the (required-to-be-literal) rhs
+                if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
+                field->type = fieldOp->type;
+            }
+        } else if (typeExprNode && detectRuntimeSizedArrayType(typeExprNode)) {
+            //D14a: "data byte[cap]" - the field's value IS the allocation. The size expression is
+            //built here, in pass 3, because it may name the constructor's own parameters, which
+            //only exist in this scope; it is evaluated once per construction, in field order.
+            struct syntax* sizeExprNode = detectRuntimeSizedArrayType(typeExprNode);
+            struct operand* sizeOp = buildExprFromSyntax(&cctx, sizeExprNode);
+            if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
+            fieldOp = OperandSizedArrayAlloc(sizeOp, field->type, field->tok);
+        } else if (typeExprNode) {
+            //no initializer at all - CTOR_FIELD_NOT_INITIALIZED already reported in pass 2;
+            //fabricate a placeholder so the rest of the file still gets checked
+            fieldOp = operandNew(field->tok, OPERATION_NONE, field->type);
+        } else {
+            //bare pun - already resolved against a same-named parameter's type in pass 2
+            struct var* param = scopeFindLocal(&ctorScope, field->name);
+            fieldOp = param ? OperandReadVar(param, field->tok) : operandNew(field->tok, OPERATION_NONE, field->type);
+        }
+        //persisted once, at this field's own declaration, so any later caller's "instance.field"
+        //access (OperandMember) can compose through it - see the "field of a field" entry in the
+        //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
+        //field whose own type isn't constructor-bearing, or one with no scope-typed ctor params.
+        field->scopeBindings = fieldOp->scopeBindings;
+        ListAdd(&fieldArgs, &fieldOp);
+    }
+    struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
+    struct statement retStmt = (struct statement){0};
+    retStmt.sType = STATEMENT_RET;
+    retStmt.op = built;
+    t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
+    StatementAdd(&t->ctorFunc->codeBlock, retStmt);
+
+    //---- destructor body: no error union of its own (ctx.func stays NULL, same as a test{}
+    //block) - a fallible call inside must be fully caught right here, since a destructor can never
+    //propagate a failure to anyone (see the report) ----
+    if (t->hasDestruct) {
+        struct scope dtorScope = scopePush(NULL);
+        struct var* selfParam = ListGetIdx(&t->destructFunc->type.vars, 0);
+        struct var* selfLocal = VarAllocSetOrigin();
+        *selfLocal = *selfParam;
+        selfLocal->origin = selfParam; //canonicalVar traces this copy back to the type-level original
+        selfLocal->mayBeInitialized = true;
+        selfLocal->mut = true;
+        ListAdd(&dtorScope.localPtrs, &selfLocal);
+
+        struct checkCtx dctx = {0};
+        dctx.mod = mod;
+        dctx.scope = &dtorScope;
+        dctx.hasOwnScope = true;
+        dctx.destructSelfVar = selfLocal;
+        t->destructFunc->codeBlock = buildBlock(&dctx, t->destructBlockSyntax);
     }
 }
 
@@ -4200,93 +4381,10 @@ void semaCheckBodies(struct semaModule* mod) {
             struct token nameTok = firstTokOfType(actual, TOK_IDEN);
             struct type* t = TypeGetList(&mod->types, strFromTok(nameTok));
             if (!t->hasCtor) continue;
-
-            //---- constructor body: a single "return Type{field1, field2, ...}" - see the report for why
-            //this needs no dedicated codegen of its own (cgFunction/cgRet/OperandStructLiteral's existing
-            //aggregate-literal codegen already do everything this needs) ----
-            struct scope ctorScope = scopePush(NULL);
-            for (int p = 0; p < t->ctorFunc->type.vars.len; p++) {
-                struct var* param = ListGetIdx(&t->ctorFunc->type.vars, p);
-                struct var* local = VarAllocSetOrigin();
-                *local = *param;
-                local->origin = param; //canonicalVar traces this copy back to the type-level original
-                local->mayBeInitialized = true;
-                //D9, same as the function-body case above: a constructor parameter is immutable unless
-                //declared "mut"
-                ListAdd(&ctorScope.localPtrs, &local);
-            }
-            struct checkCtx cctx = {0};
-            cctx.mod = mod;
-            cctx.scope = &ctorScope;
-            cctx.func = t->ctorFunc;
-            cctx.hasOwnScope = true;
-
-            struct list fieldArgs = ListInit(sizeof(struct operand*));
-            for (int i = 0; i < t->vars.len; i++) {
-                struct var* field = ListGetIdx(&t->vars, i);
-                struct syntax* f = *(struct syntax**)ListGetIdx(&t->ctorFieldSyntax, i);
-                struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
-                struct syntax* rhsNode = firstPartOfType(f, SNTX_EXPR);
-                struct operand* fieldOp;
-                if (rhsNode) {
-                    fieldOp = buildExprFromSyntax(&cctx, rhsNode);
-                    if (typeExprNode) {
-                        reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok);
-                    } else { // ":=" - type read straight off the (required-to-be-literal) rhs
-                        if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
-                        field->type = fieldOp->type;
-                    }
-                } else if (typeExprNode && detectRuntimeSizedArrayType(typeExprNode)) {
-                    //D14a: "data byte[cap]" - the field's value IS the allocation. The size expression is
-                    //built here, in pass 3, because it may name the constructor's own parameters, which
-                    //only exist in this scope; it is evaluated once per construction, in field order.
-                    struct syntax* sizeExprNode = detectRuntimeSizedArrayType(typeExprNode);
-                    struct operand* sizeOp = buildExprFromSyntax(&cctx, sizeExprNode);
-                    if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
-                    fieldOp = OperandSizedArrayAlloc(sizeOp, field->type, field->tok);
-                } else if (typeExprNode) {
-                    //no initializer at all - CTOR_FIELD_NOT_INITIALIZED already reported in pass 2;
-                    //fabricate a placeholder so the rest of the file still gets checked
-                    fieldOp = operandNew(field->tok, OPERATION_NONE, field->type);
-                } else {
-                    //bare pun - already resolved against a same-named parameter's type in pass 2
-                    struct var* param = scopeFindLocal(&ctorScope, field->name);
-                    fieldOp = param ? OperandReadVar(param, field->tok) : operandNew(field->tok, OPERATION_NONE, field->type);
-                }
-                //persisted once, at this field's own declaration, so any later caller's "instance.field"
-                //access (OperandMember) can compose through it - see the "field of a field" entry in the
-                //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
-                //field whose own type isn't constructor-bearing, or one with no scope-typed ctor params.
-                field->scopeBindings = fieldOp->scopeBindings;
-                ListAdd(&fieldArgs, &fieldOp);
-            }
-            struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
-            struct statement retStmt = (struct statement){0};
-            retStmt.sType = STATEMENT_RET;
-            retStmt.op = built;
-            t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
-            StatementAdd(&t->ctorFunc->codeBlock, retStmt);
-
-            //---- destructor body: no error union of its own (ctx.func stays NULL, same as a test{}
-            //block) - a fallible call inside must be fully caught right here, since a destructor can never
-            //propagate a failure to anyone (see the report) ----
-            if (t->hasDestruct) {
-                struct scope dtorScope = scopePush(NULL);
-                struct var* selfParam = ListGetIdx(&t->destructFunc->type.vars, 0);
-                struct var* selfLocal = VarAllocSetOrigin();
-                *selfLocal = *selfParam;
-                selfLocal->origin = selfParam; //canonicalVar traces this copy back to the type-level original
-                selfLocal->mayBeInitialized = true;
-                selfLocal->mut = true;
-                ListAdd(&dtorScope.localPtrs, &selfLocal);
-
-                struct checkCtx dctx = {0};
-                dctx.mod = mod;
-                dctx.scope = &dtorScope;
-                dctx.hasOwnScope = true;
-                dctx.destructSelfVar = selfLocal;
-                t->destructFunc->codeBlock = buildBlock(&dctx, t->destructBlockSyntax);
-            }
+            //G16, same rule the function case below states in full: an uninstantiated generic's body is
+            //never built as written. buildTypeBodies runs once per instantiation instead.
+            if (t->typeParams.len != 0) continue;
+            buildTypeBodies(mod, t);
             continue;
         }
         if (actual->type != SNTX_FUNC_DEF) continue;
@@ -4340,6 +4438,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     instantiations = ListInit(sizeof(struct instantiation));
     typeInstantiations = ListInit(sizeof(struct type*));
     pendingInstances = ListInit(sizeof(int));
+    pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
     allModules = ListInit(sizeof(struct semaModule*));
     rootModule = semaLoadModule(StrFromCStr(fileName));
     checkDuplicateImportReachability();
@@ -4348,7 +4447,12 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
     //every instantiation discovered while checking those bodies, plus everything those discover in turn
-    semaDrainInstantiations();
+    //one fixed point over both queues, not two in sequence: a function copy's body can instantiate a
+    //generic type and a type copy's constructor body can call a generic function, in either order
+    while (SemanticHasPendingInstantiations()) {
+        semaDrainInstantiations();
+        drainTypeInstantiations();
+    }
 
     if (!testMode) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));

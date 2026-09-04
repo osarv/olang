@@ -2670,3 +2670,45 @@ from their original form.
   boundary values. That is G16 working as specified - once substituted there is nothing generic left, so
   every existing rule applies to the copy exactly as if it had been written by hand. `make verify`:
   89/13/12.
+
+- **Generic types with constructors (G10a/G10b) - the one combination the generics work never reached.**
+  Found by going back to fix what looked like a stale example: §12.3's own `Vec<T>` sketch still read
+  `items <T>[cap]`, which D14a had since made illegal (the field needs a scope tag). Writing the corrected
+  version out and actually compiling it turned up something much larger than a documentation slip - the
+  entire combination of "generic type" and "constructor" was unreachable, in three separate ways, none of
+  which any test covered because every generic-type test in `shared.olang` used a plain `Type{...}`
+  literal.
+  **First, there was no call syntax.** The parser's generic-literal branch committed on `{` or `[` after a
+  type-argument list, never `(`, so `Vec<int32>(own, 4)` did not parse at all. Since C8 rejects the
+  `Type{...}` literal for any type declaring a constructor, a generic type with a constructor could not be
+  constructed by *any* spelling. Fixed by extending that same branch with a `(` case, under the identical
+  commit rule.
+  **Second, merely declaring one crashed the compiler.** `type Holder<T> struct(v <T>) { val <T> = v }`
+  and nothing else was enough: `ERROR: bug found` from `llvmType`, reached through `cgFunction`. A type's
+  constructor is a synthetic `BASETYPE_FUNC` var living in `mod->vars`, and the generic marker that makes
+  both the pass-3 body builder and codegen skip a generic is `type.typeParams` - which was set on the type
+  but never on its constructor, so both walked straight into a "function" whose parameters were still type
+  variables. The generic's constructor and destructor now carry the type's own parameter list, which is
+  what makes them skippable; their monomorphized copies carry an empty one, exactly as for a generic
+  function.
+  **Third, an instantiation's constructor had no body.** `instantiateType` copied the generic's already-built
+  `codeBlock`, whose statements were built against type variables. The fix mirrors the function case
+  exactly: the constructor/destructor body construction was factored out of `semaCheckBodies` into
+  `buildTypeBodies`, and each new type instantiation is queued and drained with `currentBindings` set, so
+  the very same field syntax is built again against the copy's substituted types. The two queues drain in
+  one combined fixed point rather than in sequence, because a function copy's body can instantiate a type
+  and a type copy's constructor body can call a generic function, in either order.
+  **A fourth bug, found only by testing a generic type with a destructor.** The instantiated constructor's
+  return type was a *snapshot* (`*ret = *spec`) taken before the copy's destructor was attached, so it
+  froze the **generic's** `destructFunc` into the constructed value's type. Every construction then
+  registered `@m0_Res$dtor` - the generic's symbol, which is never emitted - and the link failed. Fixed by
+  pointing the return type at the copy's own stable slot instead, which is what the non-generic path
+  already does and says so in a comment ("the same stable slot resolveTypeDecl was called with - never a
+  copy"). The by-value snapshot had no reason to exist.
+  **Spec:** G10a states the call form and that the generic's own constructor is never a call target;
+  G10b states that constructor and destructor are monomorphized with the type; E3's grammar and E13 gained
+  the optional type-argument list. G6's `Vec<T>` example is now the corrected, actually-compiling one.
+  **The lesson worth keeping:** the untested combination was invisible because both halves were tested
+  separately - generic types (via literals) and constructors (via non-generic types). It surfaced only
+  when the spec's own motivating example was typed in and run, which is a good argument for treating
+  spec examples as test cases rather than prose. `make verify`: 92/13/12.

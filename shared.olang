@@ -960,6 +960,82 @@ test "writing through a run-time-sized constructor field does not corrupt its le
     assert(bufferLenAfterWrite(10) == 10)
 }
 
+## D14a and generics together: a generic struct type declaring a CONSTRUCTOR - which is what makes a real
+## "Vec<T>" expressible, and is exactly the example G6 states. Both halves of the type are generic and
+## both are monomorphized: the copy gets its own layout AND its own constructor, whose parameters and
+## field expressions are built against the substituted types (G16). Before this the whole combination was
+## unreachable: there was no "Vec<int32>(...)" call syntax at all, and since a type declaring a
+## constructor rejects the "Type{...}" literal (C8), a generic type with one could not be constructed by
+## any spelling - merely declaring one crashed the compiler, because the generic's own constructor was
+## emitted as if it were an ordinary function and its parameters still named type variables.
+type Vec<T> struct(s scope, cap int64) {
+    items mut <T>[cap]&s,
+    len mut int64 = 0
+}
+
+func vecRoundTrip() int32 {
+    v mut Vec<int32> = Vec<int32>(own, 4)
+    v.items[0] = 11
+    v.items[3] = 22
+    v.len = 2
+    return v.items[0] + v.items[3] + int32(v.len) + int32(len(v.items))
+}
+
+## two instantiations of one generic type are separate types with separate layouts and separate
+## constructors - the element sizes here differ, so a shared constructor would mis-size the buffer
+func vecFloatRoundTrip() float64 {
+    v mut Vec<float64> = Vec<float64>(own, 2)
+    v.items[1] = 2.5
+    return v.items[1] + float64(len(v.items))
+}
+
+test "a generic type's constructor is monomorphized alongside the type" {
+    assert(vecRoundTrip() == 39)
+    assert(vecFloatRoundTrip() == 4.5)
+}
+
+## a generic type's constructor body is checked and built per instantiation like any other body, so it can
+## call a generic function - which instantiates further copies while the type copies are still draining
+type Wrapped<T> struct(v <T>) {
+    val <T> = copyThrough(v)
+}
+
+test "a generic type's constructor calling a generic function" {
+    w mut Wrapped<int32> = Wrapped<int32>(9)
+    q mut Wrapped<int64> = Wrapped<int64>(int64(3))
+    assert(w.val == 9)
+    assert(q.val == int64(3))
+}
+
+## a generic type may declare a destructor, and it is monomorphized too - each instantiation gets its own
+## destructor symbol. C11 applies unchanged: the type is reference-only, so every use writes the marker.
+## (The instantiated constructor's return type must be the copy's own stable slot, not a snapshot taken
+## before its destructor was attached - a snapshot froze the GENERIC's destructor into the constructed
+## value's type, so every construction registered a symbol that was never emitted.)
+type Tracked<T> struct(v <T>) {
+    val <T> = v
+} destruct {
+    resourcesClosed = resourcesClosed + 1
+}
+
+func trackedInt() int32 {
+    t mut Tracked<int32>& = Tracked<int32>(4)
+    return t.val
+}
+
+func trackedFloat() float64 {
+    t mut Tracked<float64>& = Tracked<float64>(2.5)
+    return t.val
+}
+
+test "a generic type's destructor is monomorphized per instantiation" {
+    resourcesClosed = 0
+    assert(trackedInt() == 4)
+    assert(resourcesClosed == 1)
+    assert(trackedFloat() == 2.5)
+    assert(resourcesClosed == 2)
+}
+
 ## exercises the scope runtime under load: every allocation is rounded up to 8 bytes so the next one
 ## starts aligned (a raw byte bump left a 12-byte "int32[3]" followed by an i64- or pointer-bearing
 ## allocation misaligned - UB at the LLVM level even where the hardware tolerates it); destructor list

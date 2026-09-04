@@ -1974,6 +1974,14 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
         struct instantiation* inst = ListGetIdx(insts, i);
         cgFunction(ctx, inst->generic->type.owner, inst->specialized);
     }
+    //a generic TYPE's constructor and destructor are generic too, and their copies live on the type
+    //instantiation rather than in any module's var list - emitted here for the same reason
+    struct list* tinsts = SemanticAllTypeInstantiations();
+    for (int i = 0; i < tinsts->len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(tinsts, i);
+        if (t->ctorFunc) cgFunction(ctx, t->owner, t->ctorFunc);
+        if (t->destructFunc) cgFunction(ctx, t->owner, t->destructFunc);
+    }
 }
 
 //pinned to match clang-20's actual host default (`clang-20 -dumpmachine`) - an unset triple still defaults

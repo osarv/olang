@@ -289,10 +289,20 @@ drift out of sync with the actual code.
   **Monomorphization**: one ordinary function or type per distinct argument set, after which every other
   rule applies unchanged - destructors, scope containment and structural `==` all needed no
   generic-aware version. Type identity falls out for free, since an instantiation's name carries its
-  arguments and struct identity is owner+name. Two implementation constraints worth keeping: a type
-  argument may carry no reference marker (the §8.4 checker can't trace a tag through an instantiation),
-  and instantiations live in their own stable lists rather than in `mod->vars`/`mod->types`, which store
-  by value and would invalidate every live pointer on growth.
+  arguments and struct identity is owner+name. A generic type's **constructor and destructor are
+  monomorphized with it** (G10b), each built from the generic's own field list and `destruct` block
+  against that instantiation's substituted types; the generic's own constructor is never a call target
+  and is never emitted. A constructor-declaring generic type is constructed as `Vec<int32>(own, 4)`
+  (G10a) and by no other spelling, since C8 still rejects the `Type{...}` literal for it. Two
+  implementation constraints worth keeping: a type argument may carry no reference marker (the §8.4
+  checker can't trace a tag through an instantiation), and instantiations live in their own stable lists
+  rather than in `mod->vars`/`mod->types`, which store by value and would invalidate every live pointer
+  on growth. **The combination of "generic type" + "constructor" was initially unreachable in three
+  independent ways** (no call syntax; the generic's synthetic constructor var lacked the `typeParams`
+  marker that makes codegen skip a generic, so merely *declaring* one crashed the compiler; and an
+  instantiation reused the generic's already-built body) - invisible because generic types and
+  constructors were each tested separately, and surfaced only by typing in the spec's own `Vec<T>`
+  example and running it.
 - **Deferred: user-defined methods, and a real growable `Vec`.** Generics exist now (above), so a
   resizable collection is finally expressible; it belongs in a standard library on top of the language,
   not as more special cases inside the compiler.
