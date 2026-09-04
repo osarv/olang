@@ -1393,12 +1393,14 @@ compiler-recognized blocks a struct type can declare; olang has no general user-
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN "struct" "(" param-list ")" [ error-list ] "{" ctor-field-list "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" "(" param-list ")" [ "?" error-list ] "{" ctor-field-list "}" [ destruct-block ]
 ```
 
 `param-list` and `error-list` are as in a function signature
-(§3 D8). This shape is distinguished from a plain struct
-declaration (T13) purely by `(` immediately following `struct`.
+(§3 D8), the error set carrying the same leading `?` it does there —
+a constructor has no `ret-type` slot for the marker to disambiguate against, but it is written all the
+same, so that one spelling of an error set holds everywhere in the language. This shape is
+distinguished from a plain struct declaration (T13) purely by `(` immediately following `struct`.
 
 **C2.** `ctor-field-list ::= [ ctor-field { "," ctor-field } ]`, where each `ctor-field` is exactly
 one of:
@@ -1437,6 +1439,13 @@ against the constructor's own `param-list`, in order; the result is a value of t
 with each field set per C2's own rule for that field, evaluated once, in field declaration order.
 A constructor-declaring type may equally be built by the plain positional literal (E18), which
 assembles its fields directly without running the constructor — see C6a for the one case that cannot.
+The literal therefore bypasses whatever the constructor establishes: computed field values, and any
+validation a fallible field initializer performs. This is deliberate, and follows from a type declaring
+**exactly one** constructor (C1): with no overloading and no second named constructor, a validating
+constructor would otherwise be the only construction path in existence for its type, leaving no way to
+rebuild an instance from values already known to be valid. The literal is that path, and it states
+itself at the point of use — `Type{...}` is visibly not a constructor call, so the bypass is never
+silent.
 
 **C6a.** A struct literal (E18) is a compile-time error for a type any of whose fields has a declared
 type carrying an explicit `&name` scope tag (T24) — whether written as a marker or arising from a

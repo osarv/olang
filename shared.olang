@@ -293,7 +293,7 @@ func checkNonNegative(n int32) int32 ? ValidationError {
 ## a constructor may declare its own error union, exactly like a function signature - a fallible field
 ## initializer needs "try" the same way any fallible call does, and "Measurement(...)" itself becomes a
 ## fallible call site at every caller, handled by the exact same try/catch machinery as any other function
-type Measurement struct(n int32) ValidationError {
+type Measurement struct(n int32) ? ValidationError {
     v mut int32 = try checkNonNegative(n),
     n
 }

@@ -478,8 +478,8 @@ struct syntax* parseErrorListItem(SyntaxCtx sc) {
 }
 
 //appends "(+ error-list-item)*" onto s, whose first item has already been parsed and added by the
-//caller - shared by both a bare (constructor, parseErrorList) and '?'-marked (ordinary function,
-//parseFuncErrorList) error list, which differ only in what, if anything, precedes the first item
+//caller - factored out because both an ordinary function's signature and a constructor's build the
+//same '?'-marked list (parseFuncErrorList), differing only in where it sits in the declaration
 void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
     while (true) {
         int before = TokenGetCursor(sc->tc);
@@ -493,17 +493,6 @@ void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
 }
 
 //a constructor's own error-list, e.g. "struct(params) ErrA + ErrB { ... }" - bare, no leading marker,
-//since a constructor has no ret-type of its own to disambiguate against (see parseFuncErrorList for an
-//ordinary function's '?'-marked counterpart)
-struct syntax* parseErrorList(SyntaxCtx sc) {
-    struct syntax* first = parseErrorListItem(sc);
-    if (!first) return NULL;
-    struct syntax* s = newNode(SNTX_ERROR_LIST);
-    addSntx(s, first);
-    addErrorListTail(sc, s);
-    return s;
-}
-
 //an ordinary function's error-list is marked with a leading '?' - the marker moved here (from ret-type,
 //see parseRetType) so a signature reads "(params) [ret-type] [? errors]": the return value first, then,
 //if there is one, the error set
@@ -658,7 +647,7 @@ struct syntax* parseDestruct(SyntaxCtx sc) {
     return s;
 }
 
-//"STRUCT PAREN_O PARAM_LIST PAREN_C ERROR_LIST? CURLY_O CTOR_FIELD_LIST CURLY_C DESTRUCT?" - only called
+//"STRUCT PAREN_O PARAM_LIST PAREN_C ('?' ERROR_LIST)? CURLY_O CTOR_FIELD_LIST CURLY_C DESTRUCT?" - only called
 //from parseTypeDecl, right after "type NAME"; committing to this (vs. a plain "struct { ... }") is decided
 //purely by whether "(" immediately follows "struct"
 struct syntax* parseStructCtor(SyntaxCtx sc) {
@@ -675,7 +664,7 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* errs = parseErrorList(sc);
+    struct syntax* errs = parseFuncErrorList(sc);
     if (errs) addSntx(s, errs);
     struct token curlyO = acceptTok(sc, TOK_CURLY_O);
     if (curlyO.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }

@@ -49,9 +49,11 @@ drift out of sync with the actual code.
 - **Function signature order: return value first, then `?` error set.** `func f(params) [RetType]
   [? ErrA [+ ErrB ...]] { }` - the return type, when present, is bare (no marker of its own) and
   comes first; the error set, when present, is what the `?` now marks, and comes after. `main`
-  follows the same rule (`func main() ? SomeError { }`, no return type ever). A constructor's own
-  error-list is unaffected - still bare, no `?`, directly after its parameter list - since a
-  constructor never had a `ret-type` slot to disambiguate against in the first place. Reversed from
+  follows the same rule (`func main() ? SomeError { }`, no return type ever). A constructor's
+  error-list carries the same `?`, directly after its parameter list
+  (`type T struct(params) ? ErrA { }`). It has no `ret-type` slot for the marker to disambiguate
+  against - that is why it *could* be bare, and was, until the arbitrariness outweighed the saving:
+  one spelling of an error set now holds everywhere in the language. Reversed from
   the original order (`[ErrList] [? RetType]`, error set first, return type marked); user-driven,
   purely a syntax change, no effect on the error-union return ABI below or on any other semantics.
 - **Error-union return ABI.** Zig-style, but with *locally*-scoped codes: a fallible function's LLVM
@@ -120,7 +122,13 @@ drift out of sync with the actual code.
   also what would let a constructor raise its own error later without making every struct in the
   language fallible. The old rule that declaring a constructor *rejected* the literal for that type is
   therefore gone (C6): the literal assembles the fields directly, supplying every one of them, including
-  any the constructor would have computed. **One narrow exception (C6a):** a literal is rejected for a
+  any the constructor would have computed - so a literal *bypasses* whatever the constructor establishes,
+  validation included. That is deliberate and follows from a type declaring **exactly one** constructor:
+  with no overloading and no second named constructor, a validating constructor would otherwise be the
+  only construction path its type has, leaving no way to rebuild an instance from values already known
+  to be valid (deserialization, reconstruction after taking a value apart) - the need other languages
+  meet with an explicit unchecked constructor. The literal is that path, and it announces itself at the
+  point of use, so the bypass is never silent. **One narrow exception (C6a):** a literal is rejected for a
   type any of whose fields carries an explicit `&name` scope tag - a marker, or the mandatory tag of a
   D14a run-time-sized field - because such a tag names one of the *constructor's own parameters* and a
   literal supplies field values, not constructor arguments. A bare `&` field is unaffected (it names the

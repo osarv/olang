@@ -2785,3 +2785,31 @@ from their original form.
   points back at (which also covers a monomorphized constructor, since an instantiation's constructor
   points at the instantiation). An ordinary call (`x := f()`) is still rejected, unchanged.
   `make verify`: 96/13/12.
+
+- **Why the literal is allowed to bypass a constructor, and the constructor error-list `?` alignment.**
+  Two loose ends from the reversal above, closed together.
+  **The bypass is a consequence of one-constructor-per-type, not a general concession.** The first
+  justification written down - "a literal is visibly infallible at the use site" - explains why the two
+  forms are worth keeping apart, but not why the literal must be available for a *validating* type
+  specifically. The real reason is narrower and stronger: a type declares exactly one constructor (C1),
+  with no overloading and no second named constructor. So a validating constructor, if the literal were
+  withheld, would be the only construction path its type has anywhere - leaving no way to rebuild an
+  instance from values already known to be valid (deserialization, or reassembling a value that was
+  taken apart). Other languages meet that need with an explicit unchecked constructor; here the literal
+  is it, and being ordinary visible syntax it announces itself at the point of use, where a
+  conventionally-named `new_unchecked` relies on the reader knowing what the name means. Confirmed
+  reachable with a test: a constructor whose field initializer is `try checkCap(cap)` rejects `Sized(-1)`
+  and the literal `Sized{-1}` builds it anyway, no `try` required.
+  **This also retired a rule that had been proposed one exchange earlier** - rejecting the literal only
+  for constructors that *declare errors*. It looks principled (a constructor with no error set computes
+  but does not validate, so bypassing it cannot produce an invalid instance) and is exactly backwards:
+  it would hit precisely the validating types, the ones that most need a trusted-reconstruction path,
+  and leave them unconstructible from values. Recorded because the argument for it is superficially
+  persuasive and worth not re-deriving.
+  **The `?` alignment.** A constructor's error-list was bare (`type M struct(n int32) ValidationError`)
+  where a function's is `?`-marked. The stated reason was that a constructor has no `ret-type` slot for
+  the marker to disambiguate against - which explains why it *could* be bare, never why it should be. It
+  now carries the `?` like every other error set in the language. `parseStructCtor` simply calls
+  `parseFuncErrorList` instead of `parseErrorList`, and the latter, left with no callers at all, is
+  deleted. One site in the whole corpus needed updating, which is itself a fair measure of how little the
+  saving was worth. `make verify`: 96/13/12.
