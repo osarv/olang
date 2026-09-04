@@ -2712,3 +2712,45 @@ from their original form.
   separately - generic types (via literals) and constructors (via non-generic types). It surfaced only
   when the spec's own motivating example was typed in and run, which is a good argument for treating
   spec examples as test cases rather than prose. `make verify`: 92/13/12.
+
+- **Considered and rejected: dropping `Type{...}` so all struct construction goes through a constructor.**
+  Raised while revisiting the parked constructor/function-symmetry question. The proposal was to delete
+  the positional struct literal entirely and give every plain (T13) struct a **derived constructor**
+  synthesized from its field list, so `P{3, 4}` became `P(3, 4)` and the language had one construction
+  syntax. It was worked out far enough to be costed, and the investigation is worth keeping even though
+  the answer was no.
+  **What the investigation established, all verified empirically rather than argued:**
+  - The derived constructor needs no new mechanism: `type P struct { x int32, y int32 }` desugars to
+    `type P struct(x int32, y int32) { x, y }` - the all-bare-puns constructor - which compiles and
+    behaves identically today.
+  - **The performance objection the proposal pre-empted does not exist.** A struct-literal global already
+    compiles to `zeroinitializer` plus a store in `__olang_init_globals`, byte for byte what a
+    constructor call produces; struct literals were never static data. At -O3 a trivial constructor
+    inlines to plain stores. So compile-time function evaluation was never a prerequisite for the change
+    - it would be an optimization benefiting both forms equally.
+  - **One case does not desugar naively**, found only by testing: a literal *accepts* an lvalue for a
+    bare `&` field (copying it into container-owned storage), while a constructor *rejects* it under
+    E12a, because `&` on a parameter means "the caller's own instance". A faithful derivation therefore
+    has to **strip the reference marker on the derived parameter and keep it on the field** - the caller
+    supplies a value, the container decides how to store it. That distinction (a field's `&` is storage,
+    a parameter's `&` is aliasing) is worth remembering independently of this proposal.
+  - A plain struct cannot carry a `&name` field at all (no parameter list to name a scope in), so the
+    derivation only ever had to handle unmarked and bare `&` fields.
+  - Cost was fully scoped: delete E18 and C6's second sentence, amend E4/D15 (a `:=` initializer would
+    have to admit a constructor call, since `p := P(3, 4)` is rejected today), add three rules to §9.1,
+    delete `parseStructLiteralTail` and `buildStructLiteralExpr`, keep `OperandStructLiteral` as the
+    internal aggregate form every constructor body is built from, and migrate 57 call sites.
+  **Why it was rejected.** Two construction forms make infallibility visible *at the use site*. With a
+  single form, "can this construction fail?" becomes a property of the declaration that a reader has to
+  look up; with two, the syntax says it: `Type{...}` is plain data assembled, `Type(...)` is constructed,
+  possibly validating or allocating or taking ownership. The E12a difference above stops being an
+  inconsistency to paper over and becomes the two forms correctly meaning different things. This also
+  keeps open the cleaner version of the still-unresolved question below - a constructor that can raise
+  its own error - without making every struct in the language fallible.
+  **Still open, and now better posed:** a constructor may declare an error set but has no way to produce
+  an error of its own (R3 restricts `error T.W` to a function body, and a constructor has no statement
+  body). Verified: a validating constructor is only expressible via a helper function plus a throwaway
+  field, and the compiler accepts a constructor declaring an error set it is structurally incapable of
+  producing, forcing every caller to `try` forever. Also noted along the way: `mut` on a constructor
+  parameter is accepted and completely inert, since there are no statements to assign in - a feature that
+  exists only because the `param-list` grammar is shared with functions.

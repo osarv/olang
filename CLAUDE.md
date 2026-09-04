@@ -109,6 +109,13 @@ drift out of sync with the actual code.
   (`x := f()`) is a compile error. The parser is hand-written recursive descent, not table-driven,
   with a cheap top-level name-collection pre-pass (`ScanTopLevelDecls`) run before real parsing so
   `Type{`/`Type[`/vocab-value syntax can commit only when the leading name is a genuinely known type.
+  **The literal form is deliberately kept alongside constructors, not folded into them.** Dropping
+  `Type{...}` so that all struct construction went through `Type(...)` (with a derived, all-bare-puns
+  constructor for plain structs) was worked out in full and rejected: two forms make infallibility
+  visible *at the use site*, where one form would make "can this construction fail?" depend on the
+  declaration. `Type{...}` is plain data assembled; `Type(...)` is constructed - possibly validating,
+  allocating, or taking ownership. This is also what would let a constructor raise its own error later
+  without making every struct in the language fallible.
 - **Vocab values: `Type.WORD`.** Constructs/reads a vocab value - the type's declared ordinal, never
   treated as numeric (no arithmetic, ordering, or conversion to/from any integer type); only `==`/
   `!=` and `match`/`case` (structural) apply. Never alias-qualified - always resolved against the
