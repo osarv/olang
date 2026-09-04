@@ -620,10 +620,12 @@ the shape remains rejected there. The element-type restriction of D13 applies un
 zero-filled element type may contain no reference, at any depth, since none has a valid zero value.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read entirely from
-`expr`, which must itself be a literal (a struct literal, array literal, or primitive literal — see
-§5). `expr` may not be an arbitrary expression (e.g. a function
-call or a variable read) in this form — see §5.1 for what
-counts as a literal for this purpose.
+`expr`, which must be either a literal (a struct literal, array literal, or primitive literal — see
+§5) or a **constructor call** (E13). `expr` may not be an arbitrary expression (e.g. an ordinary
+function call or a variable read) in this form — see §5.1 for what counts as a literal for this
+purpose. A constructor call qualifies for the same reason a literal does, which is what the rule is
+actually about: the type is written at the declaration, plainly visible to a reader. `p := Point(1, 2)`
+names its type as clearly as `p := Point{1, 2}` does, where `x := f()` does not.
 
 **D16.** In the first form, if the declared type is a compile-time-length array (`T[N]`) and the initializer
 is an array literal, that is a compile-time error regardless of whether `N` matches the literal's
@@ -907,12 +909,13 @@ type is that field's declared type.
 ### 5.6 Struct literals
 
 **E18.** `struct-literal ::= alias-chain IDEN "{" [ expr { "," expr } ] "}"` (§4.4 M8), resolving to
-a plain (non-constructor, T14) struct type. Arguments
+any struct type — plain (T14) or constructor-declaring (§9) alike. Arguments
 are positional, in the type's own declared field order, one per field exactly (E14's count rule
-applies here too); each argument's value must fit (E12) that field's declared type. A struct type
-that declares a constructor
-(§9) may not be constructed
-this way; use a call (E13) instead.
+applies here too); each argument's value must fit (E12) that field's declared type. For a
+constructor-declaring type the literal assembles the fields directly and the constructor does not run,
+so every field is supplied here, including any the constructor would have computed. The two forms are
+deliberately both available: a literal is visibly infallible at the point it is written, where a call's
+fallibility is a property of the callee's declaration. The one exception is C6a.
 
 ### 5.7 Array literals
 
@@ -1432,8 +1435,15 @@ even if its name happens to match a parameter).
 **C6.** `Type(args)` (E13) constructs an instance: `args` are checked exactly as an ordinary call
 against the constructor's own `param-list`, in order; the result is a value of the struct type,
 with each field set per C2's own rule for that field, evaluated once, in field declaration order.
-Once a struct type declares a constructor, the plain positional literal (E18) is no longer valid for
-it; only a constructor call constructs a value of that type.
+A constructor-declaring type may equally be built by the plain positional literal (E18), which
+assembles its fields directly without running the constructor — see C6a for the one case that cannot.
+
+**C6a.** A struct literal (E18) is a compile-time error for a type any of whose fields has a declared
+type carrying an explicit `&name` scope tag (T24) — whether written as a marker or arising from a
+run-time-sized field (D14a, whose tag is mandatory). Such a tag names one of the constructor's **own
+parameters**, and a literal supplies field values, not constructor arguments, so there is nothing for
+the tag to name. A **bare** `&` field is unaffected: it denotes the container's own scope, which a
+literal establishes as readily as a call does.
 
 **C7.** `destruct-block ::= "destruct" block`. A destructor's body has no error union of its own —
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught

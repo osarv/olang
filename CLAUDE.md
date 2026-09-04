@@ -105,17 +105,28 @@ drift out of sync with the actual code.
   element type stated exactly once, nested `[...]` rows for multi-dimensional, no separate
   size/length-kind prefix - see HISTORY.md for the syntax's full evolution). Both are
   general expressions, usable anywhere a value is needed. `x := <literal>` infers `x`'s type entirely
-  from a literal initializer (locals, for-loop init vars, globals); a non-literal initializer
-  (`x := f()`) is a compile error. The parser is hand-written recursive descent, not table-driven,
+  from a literal initializer (locals, for-loop init vars, globals), **or from a constructor call**
+  (`p := Point(1, 2)`) - the rule is really "the type is written at the declaration", which a
+  constructor call satisfies as plainly as a literal; an ordinary call (`x := f()`) is still a compile
+  error. The parser is hand-written recursive descent, not table-driven,
   with a cheap top-level name-collection pre-pass (`ScanTopLevelDecls`) run before real parsing so
   `Type{`/`Type[`/vocab-value syntax can commit only when the leading name is a genuinely known type.
-  **The literal form is deliberately kept alongside constructors, not folded into them.** Dropping
-  `Type{...}` so that all struct construction went through `Type(...)` (with a derived, all-bare-puns
-  constructor for plain structs) was worked out in full and rejected: two forms make infallibility
-  visible *at the use site*, where one form would make "can this construction fail?" depend on the
-  declaration. `Type{...}` is plain data assembled; `Type(...)` is constructed - possibly validating,
-  allocating, or taking ownership. This is also what would let a constructor raise its own error later
-  without making every struct in the language fallible.
+  **The literal form is deliberately kept alongside constructors, not folded into them, and a
+  constructor-declaring type is buildable BOTH ways.** Dropping `Type{...}` so that all struct
+  construction went through `Type(...)` (with a derived, all-bare-puns constructor for plain structs)
+  was worked out in full and rejected: two forms make infallibility visible *at the use site*, where one
+  form would make "can this construction fail?" depend on the declaration. `Type{...}` is plain data
+  assembled; `Type(...)` is constructed - possibly validating, allocating, or taking ownership. This is
+  also what would let a constructor raise its own error later without making every struct in the
+  language fallible. The old rule that declaring a constructor *rejected* the literal for that type is
+  therefore gone (C6): the literal assembles the fields directly, supplying every one of them, including
+  any the constructor would have computed. **One narrow exception (C6a):** a literal is rejected for a
+  type any of whose fields carries an explicit `&name` scope tag - a marker, or the mandatory tag of a
+  D14a run-time-sized field - because such a tag names one of the *constructor's own parameters* and a
+  literal supplies field values, not constructor arguments. A bare `&` field is unaffected (it names the
+  container's own scope). Destructors need no special case here: registration rides on the value-to-
+  reference promotion every C11 reference-only type must go through, so a literal-built instance
+  registers exactly as a constructed one does.
 - **Vocab values: `Type.WORD`.** Constructs/reads a vocab value - the type's declared ordinal, never
   treated as numeric (no arithmetic, ordering, or conversion to/from any integer type); only `==`/
   `!=` and `match`/`case` (structural) apply. Never alias-qualified - always resolved against the

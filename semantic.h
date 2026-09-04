@@ -257,6 +257,9 @@ struct operand {
                             //whether the base is mutable - a constructor field is mutable only if declared
                             //"mut", while a plain (T13) struct's fields are always mutable
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    bool isCtorCall; //OPERATION_FUNCCALL only: this call's target is a struct type's own constructor.
+                      //":=" accepts one as an initializer (D15) even though it is not a literal: the type
+                      //is written right there at the declaration, which is the whole point of the rule.
     struct list scopeBindings; //list of struct scopeBinding - see the type's own comment. Populated for a
                                 //function/constructor call (from its own scope-typed params matched against
                                 //the actual arguments) and for a member access whose field carries a scope

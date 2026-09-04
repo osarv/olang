@@ -2754,3 +2754,34 @@ from their original form.
   producing, forcing every caller to `try` forever. Also noted along the way: `mut` on a constructor
   parameter is accepted and completely inert, since there are no statements to assign in - a feature that
   exists only because the `param-list` grammar is shared with functions.
+
+- **Reversal: a constructor-declaring type is now buildable by struct literal too (C6/C6a), and `:=`
+  accepts a constructor call (D15).** The direct consequence of the decision above. Having settled that
+  the two construction forms are worth keeping apart, the old prohibition - "once a struct type declares
+  a constructor, the plain positional literal is no longer valid for it" - stopped making sense: if the
+  point of two forms is that a literal is *visibly infallible at the use site*, then withholding it from
+  exactly the types that have constructors withholds it precisely where the distinction is informative.
+  The literal now assembles the fields directly, supplying every one of them, including any the
+  constructor would have computed; the constructor does not run.
+  **Two cases genuinely cannot work, and both were found by testing rather than by reasoning.** A field
+  whose declared type carries an explicit `&name` scope tag names one of the *constructor's own
+  parameters*, and a literal supplies field values, not constructor arguments - so there is nothing for
+  the tag to name. That covers both shapes that can produce such a field: an explicitly `&name`-marked
+  field, and a D14a run-time-sized field, whose tag is mandatory. Before this was checked the first
+  **crashed the compiler** (`ERROR: bug found`) and the second produced a garbled diagnostic - one
+  "type doesn't match" per array element - so C6a replaces two bad failure modes with one accurate
+  message. A **bare** `&` field is deliberately unaffected: it denotes the container's own scope, which a
+  literal establishes as readily as a call does.
+  **What did not need a special case, contrary to the initial worry.** A destructor-bearing type built by
+  literal was expected to escape registration, since O16 says registration happens at the constructor
+  call. It does not: registration actually rides on the value-to-reference promotion, and C11 makes every
+  destructor-declaring type reference-only, so every instance goes through one however it was built.
+  Verified by running both forms and counting destructor calls. Worth recording because the O16 wording
+  ("at the point its constructor call completes") describes the intent but not the mechanism.
+  **`:=` and constructor calls.** D15 required a literal initializer, so `p := Point(1, 2)` was rejected
+  while `p := Point{1, 2}` was fine. The rule's actual purpose is that the declared type be evident at
+  the declaration, which a constructor call satisfies exactly as well - it names the type right there.
+  Now admitted, via an `isCtorCall` flag set where a call's target is the struct type its own `ctorFunc`
+  points back at (which also covers a monomorphized constructor, since an instantiation's constructor
+  points at the instantiation). An ordinary call (`x := f()`) is still rejected, unchanged.
+  `make verify`: 96/13/12.

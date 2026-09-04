@@ -3271,6 +3271,20 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
 //"Type{v1, v2, ...}" - the parser only ever produces this node when the name was already confirmed to be
 //some known type (see nameIsKnownType in syntax.c), but that check can't tell struct/vocab/error types
 //apart - only a struct can actually be built this way, so that narrowing happens here instead.
+//true if this type, at its own level or any array level within it, carries an explicit "&name" scope tag.
+//Deliberately does NOT recurse into a struct's own members: a scope name is only ever resolvable against
+//the constructor that declared it, so a nested struct's tags are that type's problem, not this one's -
+//and not recursing is also what keeps a self-referential type from looping here.
+bool typeHasNamedScopeTag(struct type t) {
+    struct type* cur = &t;
+    while (true) {
+        if (cur->scopeParam) return true; //not gated on structMAlloc: a runtime-length array (T11) is
+                                           //reference-shaped without a marker, and carries its tag here
+        if (cur->bType != BASETYPE_ARRAY || !cur->arrElem) return false;
+        cur = cur->arrElem;
+    }
+}
+
 struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_CURLY_O);
@@ -3279,12 +3293,16 @@ struct operand* buildStructLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct list args = buildArgs(ctx, firstPartOfType(s, SNTX_EXPR_ARGS));
 
     if (t.bType == BASETYPE_STRUCT) {
-        //a constructor-bearing type must be built by calling it, not by the plain positional literal -
-        //otherwise the constructor's own logic (validation, fallible field initializers) could be
-        //silently bypassed, which would make declaring one pointless. See the report.
+        //a constructor-bearing type is buildable BOTH ways (E18/C6): the literal assembles it field by
+        //field, the call runs the constructor. The one thing the literal cannot do is supply a
+        //constructor PARAMETER, so a field whose declared type is tagged to one has no meaning here.
         if (t.hasCtor) {
-            ErrMsgSemantic(tok, TYPE_REQUIRES_CONSTRUCTOR_CALL);
-            return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+            for (int i = 0; i < t.vars.len; i++) {
+                struct var* f = ListGetIdx(&t.vars, i);
+                if (!typeHasNamedScopeTag(f->type)) continue;
+                ErrMsgSemantic(tok, LITERAL_NEEDS_CTOR_PARAM);
+                return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+            }
         }
         return OperandStructLiteral(ctx->func, t, args, tok);
     }
@@ -3404,7 +3422,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (!func) return OperandIntLiteral(nameTok);
         if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, NOT_CALLABLE); return OperandIntLiteral(nameTok); }
         if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
-        return OperandFuncCall(ctx->func, func, args, nameTok);
+        struct operand* call = OperandFuncCall(ctx->func, func, args, nameTok);
+        //a constructor is exactly the function a struct type points at as its own - true for an
+        //instantiation's monomorphized constructor too, since that points at the instantiation
+        call->isCtorCall = func->type.hasRetType && func->type.retType->bType == BASETYPE_STRUCT
+                           && func->type.retType->ctorFunc == func;
+        return call;
     }
     //parenthesized sub-expression: TOK_PAREN_O SNTX_EXPR TOK_PAREN_C
     return buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
@@ -3510,7 +3533,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
             declType = inferArrayLenFromInit(declType, rhs->type);
         } else { // ":=" - type read straight off the (required-to-be-literal) initializer
-            if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+            if (!rhs->isLiteral && !rhs->isCtorCall) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
             declType = rhs->type;
         }
     }
@@ -3780,7 +3803,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
         reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok);
         declType = inferArrayLenFromInit(declType, initVal->type);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
-        if (!initVal->isLiteral) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
+        if (!initVal->isLiteral && !initVal->isCtorCall) ErrMsgSemantic(initVal->tok, TYPE_CANNOT_BE_INFERRED);
         declType = initVal->type;
     }
     struct var* loopVar = scopeDeclare(innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
@@ -4269,7 +4292,7 @@ void buildTypeBodies(struct semaModule* mod, struct type* t) {
             if (typeExprNode) {
                 reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok);
             } else { // ":=" - type read straight off the (required-to-be-literal) rhs
-                if (!fieldOp->isLiteral) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
+                if (!fieldOp->isLiteral && !fieldOp->isCtorCall) ErrMsgSemantic(fieldOp->tok, TYPE_CANNOT_BE_INFERRED);
                 field->type = fieldOp->type;
             }
         } else if (typeExprNode && detectRuntimeSizedArrayType(typeExprNode)) {
@@ -4360,7 +4383,7 @@ void semaCheckBodies(struct semaModule* mod) {
                 }
                 reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok);
             } else { // ":=" - type read straight off the (required-to-be-literal) initializer
-                if (!rhs->isLiteral) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+                if (!rhs->isLiteral && !rhs->isCtorCall) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
                 v->type = rhs->type;
             }
             v->initExpr = rhs;

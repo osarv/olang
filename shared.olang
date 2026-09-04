@@ -1036,6 +1036,53 @@ test "a generic type's destructor is monomorphized per instantiation" {
     assert(resourcesClosed == 2)
 }
 
+## a constructor-declaring type is buildable BOTH ways (C6): "Type(...)" runs the constructor, "Type{...}"
+## assembles it field by field, positionally, in field-declaration order like any other struct literal.
+## The two forms are deliberately kept apart rather than folded into one: a literal is visibly infallible
+## at the use site, where a call's fallibility is a property of the declaration you would have to look up.
+type Counted struct(start int32) {
+    n mut int32 = start,
+    tag int32 = 9
+}
+
+test "a constructor-declaring type built by its constructor" {
+    c mut Counted = Counted(4)
+    assert(c.n == 4)
+    assert(c.tag == 9)
+}
+
+## the literal supplies every field positionally, including ones the constructor would have computed -
+## it bypasses the constructor entirely, which is the point of having both forms
+test "a constructor-declaring type built by a struct literal" {
+    c mut Counted = Counted{4, 7}
+    assert(c.n == 4)
+    assert(c.tag == 7)
+}
+
+## the one thing a literal cannot do is supply a constructor PARAMETER, so a field whose declared type is
+## tagged to one has nothing for that tag to name. Both shapes that can produce such a field are rejected:
+## a D14a run-time-sized field ("data byte[cap]&s") and an explicitly "&name"-tagged field. Before this
+## was checked, the first gave a garbled per-element diagnostic and the second crashed the compiler.
+## A BARE "&" field is unaffected - it names the container's own scope, not a parameter.
+type BareRefField struct(v int32) {
+    inner Point& = Point{v, v}
+}
+
+test "a bare '&' field does not block the literal form" {
+    b mut BareRefField = BareRefField{Point{1, 2}}
+    assert(b.inner.x == 1)
+}
+
+## ":=" infers from a constructor call as well as from a literal (D15). The rule was always about the type
+## being evident at the declaration, and "p := Counted(4)" names it just as plainly as a literal does -
+## unlike "x := f()", which is still rejected.
+test "':=' infers a type from a constructor call" {
+    c := Counted(5)
+    assert(c.n == 5)
+    d := Counted{5, 6}
+    assert(d.tag == 6)
+}
+
 ## exercises the scope runtime under load: every allocation is rounded up to 8 bytes so the next one
 ## starts aligned (a raw byte bump left a 12-byte "int32[3]" followed by an i64- or pointer-bearing
 ## allocation misaligned - UB at the LLVM level even where the hardware tolerates it); destructor list

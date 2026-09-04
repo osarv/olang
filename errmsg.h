@@ -74,12 +74,14 @@
 #define ARRAY_SIZE_MISMATCH "this compile-time-length array has a different length than the target's declared one - a compile-time-length array's length is part of its type, and is never silently truncated or padded to fit"
 #define INVALID_ARRAY_LITERAL_TYPE "only an array type can be constructed with a [ ] literal"
 #define INVALID_STRUCT_LITERAL_TYPE "only a struct type can be constructed with a { } literal"
-#define TYPE_REQUIRES_CONSTRUCTOR_CALL "this type declares a constructor - construct it with Type(...), not Type{...}"
+#define LITERAL_NEEDS_CTOR_PARAM "this type has a field whose type is tagged to one of its constructor's own \
+parameters, so it can only be built by calling that constructor - a literal supplies field values, not \
+constructor arguments, so there is nothing for that tag to name"
 #define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"
 #define INVALID_VOCAB_VALUE_TYPE "only a vocab type has values of the form 'Type.word'"
 #define UNKNOWN_VOCAB_WORD "unknown vocab word"
 #define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"
-#define TYPE_CANNOT_BE_INFERRED "a variable declared with ':=' must be initialized with a literal"
+#define TYPE_CANNOT_BE_INFERRED "a variable declared with ':=' must be initialized with a literal or a constructor call"
 #define OPERANDS_NOT_SAME_TYPE "both operands must have the same type"
 #define MATCH_CASE_TYPE_MISMATCH "case value must have the same type as the matched expression"
 #define OPERATION_REQUIRES_INT "operand must be an integer"
