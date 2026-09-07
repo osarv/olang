@@ -2055,6 +2055,26 @@ test "a 'mut T[]&' parameter writes to the caller's own array" {
     assert(buf[0] == 'X')
 }
 
+## S4a: assignment to a reference overwrites the POINTER, never the pointed-to value, in every position.
+## On a parameter that repoints this function's own copy - a cursor, local to the call - so the caller's
+## instance is untouched. That is not a defect to be rejected: it is the same rule as everywhere else, and
+## it lets a reference parameter double as a cursor with no separate local. Write-through was considered
+## and rejected: "x = y" must imply "x == y", and E10 compares references by identity, so copying contents
+## would leave two things equal-by-value but unequal - and would break C11's whole reason for existing.
+func cursorRebind(p mut Point&, q Point&) int32 {
+    start int32 = p.x
+    p = q
+    return start + p.x
+}
+
+test "assigning to a reference parameter repoints this function's own cursor" {
+    a mut Point& = Point{1, 0}
+    b mut Point& = Point{2, 0}
+    assert(cursorRebind(a, b) == 3)
+    assert(a.x == 1)
+    assert(b.x == 2)
+}
+
 ## T24 gives a type-ref two marker positions - before the array suffixes (the element type) and after
 ## them (the array as a whole) - so a type carries one reference level per array level and no more. With
 ## NO array suffix the two positions are the same place, so "Point&s&a" is not a double reference, it is

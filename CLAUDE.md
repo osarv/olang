@@ -470,6 +470,15 @@ drift out of sync with the actual code.
   gives a bare name exactly one meaning in the whole language: a constructor's bare-pun field (C4), which
   is a field declaration, not a statement, and is a syntax error anywhere else. No existing test relied on
   the old permissiveness.
+- **Assignment to a reference overwrites the pointer, in every position (S4a).** `a = b` repoints a local;
+  `p.x = q.x` repoints a reference *field* inside whatever instance holds it (visible to everyone holding
+  that instance); `p = q` on a reference *parameter* repoints this function's own copy - a cursor local to
+  the call, not visible to the caller. One rule, no positional exception, and the third case is useful in
+  its own right rather than a defect: a reference parameter doubles as a mutable cursor with no separate
+  local. **Write-through was considered and rejected**: `x = y` must imply `x == y`, and E10 compares
+  references by *identity*, so copying contents would leave two things equal-by-value but unequal. Making
+  `==` structural to repair that would cost O(n) on arrays and destroy C11's reason for existing - a
+  destructor-declaring type is reference-only precisely so "which instance owns this" has an answer.
 - **Deferred: user-defined methods, and a real growable `Vec`.** Generics exist now (above), so a
   resizable collection is finally expressible; it belongs in a standard library on top of the language,
   not as more special cases inside the compiler.

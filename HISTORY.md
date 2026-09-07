@@ -3219,3 +3219,25 @@ from their original form.
   identity (`==` on a reference is pointer identity, T26) - the third is wrong for a primitive. The real
   gap it exposes is that olang cannot return two values at all, which wants multiple return values rather
   than a weakening of what `&` means. Recorded as a future problem at the user's request.
+
+- **`p = q` through a reference parameter: kept, not rejected (S4a).** The last of the three reference
+  questions, and the one where two successive proposals of mine were wrong.
+  **First proposal - write-through** (copy q's contents into p's instance, so the caller sees it) - was
+  defeated by the user's own question: *"but then comparison on references should also be field-wise, is
+  that really smart? especially for arrays that sounds really not smart."* Exactly right. `x = y` must
+  imply `x == y`, and E10 compares references by identity, so write-through would leave the two
+  equal-by-value and unequal. Repairing that by making `==` structural costs O(n) on arrays and destroys
+  C11's reason for existing: a destructor-declaring type is reference-only *precisely* so that "which
+  instance owns this" has an answer, which structural comparison removes.
+  **Second proposal - reject it** as a silent no-op - was defeated by the user pointing out it is not a
+  no-op at all: *"you probably should keep it even in the local case where the caller doesn't see it. it's
+  one less exception and may be useful for some algorithmic tricks."* Rebinding the parameter is a real
+  effect inside the function; a reference parameter doubling as a mutable cursor is an ordinary pattern,
+  and rejecting it would force a redundant local to be declared from it first.
+  **What was actually missing was documentation, not a check.** Measured, the rule is already uniform and
+  already right: `=` on a reference overwrites the *pointer* in every position - a local's own, a field's
+  (inside whatever instance holds it, visible to every other holder - confirmed by aliasing a field and
+  mutating through the other handle), and a parameter's (this call's cursor). The surprise only arises
+  from expecting `mut &` to mean "write through everything", when it means "you may write *through* the
+  pointer"; `=` replaces the pointer instead. Written up as S4a with a test, and the working tree reverted
+  to what it already did. `make verify`: 111/13/12/3.

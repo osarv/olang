@@ -1101,6 +1101,19 @@ nothing anywhere in the language: a declaration always states a type (`name Type
 
 ### 6.2 Assignment
 
+**S4a.** Assignment to a **reference-shaped** (T24) target overwrites the *reference* — the pointer —
+never the pointed-to value, uniformly and in every position. `a = b` on a local repoints the local;
+`p.x = q.x` on a reference field repoints that field inside whatever instance holds it, which is visible
+to everyone else holding that instance; and `p = q` on a reference **parameter** repoints the function's
+own copy, which is a cursor local to that call and is not visible to the caller. All three are the same
+rule, and the third is useful in its own right — a reference parameter doubles as a mutable cursor
+without needing a separate local declared from it.
+
+This is why assignment does *not* copy contents through a reference: `x = y` must imply `x == y`, and
+T26 compares references by identity. Write-through would satisfy neither that nor C11, which makes a
+destructor-declaring type reference-only precisely so that "which instance owns this" has an answer.
+Copying a reference's contents is written explicitly, field by field.
+
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
 anything else on the left of an assignment operator is a compile-time error.
