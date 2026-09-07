@@ -53,7 +53,14 @@ drift out of sync with the actual code.
   and is named `<base>.main.o`/`<base>.test.o`: without that they overwrite each other, and a plain object
   left by `-c` looks current to `-b` while missing `main` entirely - which is why the root used to be
   force-rebuilt every time. Two modules whose base names match are a compile-time error, reported against
-  the file rather than left to surface as a duplicate symbol at link time. Two things had to change before any of this
+  the file rather than left to surface as a duplicate symbol at link time. **A declared module identity
+  (`module util`, à la Java packages / Go module paths / Rust crates) was considered and deferred**: it
+  decouples identity from file layout, but two files declaring the same name collide exactly as before,
+  so it does not solve the problem on its own. What actually makes accidental collision unlikely is
+  hierarchy plus an owner (reverse DNS, a repo URL, a registry) or a build-supplied disambiguator (Rust's
+  `-C metadata`), and both belong to a package boundary olang does not have yet. Within one program every
+  file is yours to rename, so base name plus a hard error is adequate until a third-party library you
+  cannot rename exists - at which point identity and packaging should be designed together. Two things had to change before any of this
   worked: symbols are mangled from the module's **file base name** (the same identity M3 derives an import
   alias from), never from its position in the current compilation's module list - an index means nothing
   to a separately-compiled object; and code no single module owns (a generic's instantiations, whose set

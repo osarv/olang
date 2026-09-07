@@ -3070,3 +3070,28 @@ from their original form.
   as a duplicate-symbol error naming mangled symbols. Reproduced first (`sub/util.olang` alongside
   `util.olang` produced `invalid redefinition of function '@__olang_init_globals_util'`), then fixed.
   `make verify`: 108/13/12.
+
+- **Module identity stays derived from the file base name; a declared `module` name was considered and
+  deferred.** Follow-on from the collision work above, and a good example of a proposal dying to one
+  question. Having established that a UUID cannot work (it must be stable across compilations, so it
+  would have to be written in the source), the obvious next step looked like a declared identity -
+  `module util` - as Java packages, Go module paths and Rust crate names all are, and it was suggested as
+  worth doing before a stdlib occupies common names like `io`/`vec`/`str`. The user's reply killed it in
+  one line: *"but if both lib/util.olang and app/util.olang declare module util then we have the same
+  problem again right?"* - which is correct. A declared name relocates the cause of a collision (from the
+  directory structure to the programmer) without removing the possibility of one.
+  **What the alternatives actually do**, checked rather than recalled. C++ mangles the declaration's own
+  scope path and signature and nothing about the file: `foo::util(int)` is `_ZN3foo4utilEi` wherever it
+  lives, and two files defining it collide with `multiple definition of 'foo::util(int)'`. Its only
+  genuine per-file mechanism is *internal linkage* - two objects each containing an anonymous-namespace
+  `hidden` both emit the byte-identical symbol `_ZN12_GLOBAL__N_16hiddenEi` and link fine, because both
+  are LOCAL symbols (`t` in nm, not `T`). Uniqueness there comes from linkage, not from the name, which
+  is the same reason a UUID cannot help anything exported. Systems that make accidental collision
+  *unlikely* do it with hierarchy plus an owner (reverse DNS, a repo URL, a registry entry) or a
+  build-supplied disambiguator (Rust's `-C metadata`, from Cargo rather than from the source) - and every
+  one of them still merely *reports* a collision rather than preventing it.
+  **Decision: base name only.** Both mechanisms that would make a declared identity worth having belong to
+  a package boundary olang does not have. Within one program every file is the author's to rename, and
+  P3b's hard error catches a clash immediately. The problem only becomes real for a third-party library
+  that cannot be renamed, and at that point identity and packaging want designing together rather than one
+  being guessed at first.
