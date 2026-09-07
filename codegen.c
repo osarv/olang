@@ -8,6 +8,7 @@
 #include "syntax.h"
 #include "semantic.h"
 #include "codegen.h"
+#include "errmsg.h"
 
 /* ---- codegen-time symbol table: pure name-based lexical scoping, rebuilt from the same statement/
  * operand tree the semantic layer already validated. We deliberately do NOT rely on struct var* pointer
@@ -67,6 +68,24 @@ void mangleModPrefix(struct semaModule* mod, char* buf, size_t n) {
                     || (c >= '0' && c <= '9') || c == '_') ? c : '_';
     }
     buf[w] = '\0';
+}
+
+//P3b: two modules whose base names match would mangle to the same prefix and so define the same symbols.
+//Checked once per compilation, before anything is emitted, rather than left to surface as a duplicate
+//symbol at link time - which is where it would otherwise appear, naming mangled symbols rather than files.
+void CodegenCheckModuleNames(void) {
+    struct list* all = SemanticAllModules();
+    for (int i = 0; i < all->len; i++) {
+        struct semaModule* a = *(struct semaModule**)ListGetIdx(all, i);
+        char pa[256];
+        mangleModPrefix(a, pa, sizeof(pa));
+        for (int j = i +1; j < all->len; j++) {
+            struct semaModule* b = *(struct semaModule**)ListGetIdx(all, j);
+            char pb[256];
+            mangleModPrefix(b, pb, sizeof(pb));
+            if (!strcmp(pa, pb)) ErrMsgFile(b->fileName, MODULE_NAME_COLLISION);
+        }
+    }
 }
 
 void mangleGlobal(struct semaModule* mod, struct str name, char* buf, size_t n) {

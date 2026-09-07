@@ -3044,3 +3044,29 @@ from their original form.
   constructors "ride on the type" - true only for generic instantiations, which are `linkonce_odr` in every
   object. A non-generic type's constructor is an ordinary entry in its module's own var list and needed a
   declaration like any other function. `make verify`: 108/13/12, now through four separate objects.
+
+- **The root module stops being force-rebuilt, and base-name collisions become a real error.** Two
+  follow-ups the user asked for immediately after separate compilation landed, both flagged in the same
+  breath as shipping it.
+  **Why the root always rebuilt, and the actual fix.** The first cut forced it, which quietly gave up
+  incrementality on the module most likely to be edited. The reason was real but the remedy was lazy:
+  a root's object carries `main` on top of its own code, so it is a *different artifact* from the same
+  module's plain object - and both were being written to `build/<base>.o`. A plain object left by `-c`
+  would therefore look perfectly current to a later `-b` while containing no `main` at all, and the link
+  would fail. Naming them apart (`<base>.main.o`, `<base>.test.o`) makes them independent artifacts that
+  can both be current at once, after which ordinary staleness covers the root like anything else and the
+  force flag disappears. `-t` was routed through the same path while there, so a test build is incremental
+  too. `-b` with nothing changed now regenerates nothing at all.
+  **On UUID mangling.** The user asked whether a UUID would fix base-name collisions. It cannot, and the
+  reason is worth writing down: the prefix has to be *stable* - the same for a module however and whenever
+  it is compiled, or a prebuilt object stops linking against a client compiled later. A UUID generated per
+  compilation is not stable; a hash of the file's *content* is stable per content but changes on every
+  edit, which is worse than the problem; a hash of the *path* is stable only while the path is, which
+  defeats relocatable objects and is exactly why full paths were rejected in the first place. What does
+  work is a UUID (or any name) *declared in the source* - which is what Java packages, Go module paths and
+  Rust crate names all are: an identity the module states rather than one derived from where its file
+  happens to sit. That is a real design addition and was not made here. What was made is P3b's check:
+  two modules with matching base names are now rejected up front, against the file, rather than surfacing
+  as a duplicate-symbol error naming mangled symbols. Reproduced first (`sub/util.olang` alongside
+  `util.olang` produced `invalid redefinition of function '@__olang_init_globals_util'`), then fixed.
+  `make verify`: 108/13/12.

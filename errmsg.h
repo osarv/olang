@@ -79,6 +79,9 @@ constructor arguments, so there is nothing for that tag to name"
 #define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
 statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
 'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
+#define MODULE_NAME_COLLISION "another module in this program has the same file base name - a module's \
+symbols are named from it (§10 P3b), so two modules sharing one would define the same symbols; rename \
+one of the files"
 #define SCOPE_DECL_REDUNDANT "this scope is already declared by appearing in the signature's own types \
 - declare a scope after the name only when nothing in the parameters or return type names it"
 #define SCOPE_DECL_ON_PLAIN_TYPE "only a constructor-bearing struct can declare a scope: a plain struct \

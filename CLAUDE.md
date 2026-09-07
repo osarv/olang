@@ -48,7 +48,12 @@ drift out of sync with the actual code.
   fact only the source is authority for. **Staleness is transitive**: an object depends on the signatures
   it was compiled against, so it rebuilds when its own source *or any source it transitively imports* is
   newer - compared at nanosecond resolution, since a whole-second compare silently skips a rebuild when
-  the edit and the previous build land in the same second. Two things had to change before any of this
+  the edit and the previous build land in the same second. A root module's object carries `main` (or the
+  test harness) on top of its own code, so it is a *different artifact* from that module's plain object
+  and is named `<base>.main.o`/`<base>.test.o`: without that they overwrite each other, and a plain object
+  left by `-c` looks current to `-b` while missing `main` entirely - which is why the root used to be
+  force-rebuilt every time. Two modules whose base names match are a compile-time error, reported against
+  the file rather than left to surface as a duplicate symbol at link time. Two things had to change before any of this
   worked: symbols are mangled from the module's **file base name** (the same identity M3 derives an import
   alias from), never from its position in the current compilation's module list - an index means nothing
   to a separately-compiled object; and code no single module owns (a generic's instantiations, whose set

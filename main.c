@@ -75,14 +75,19 @@ bool moduleIsStale(struct semaModule* mod, char* objPath) {
 
 //compiles one module to build/<base>.o, skipping the work when the object is already up to date.
 //Returns the object path.
-char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry, bool force) {
+char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) {
     char nameBuf[512];
     char* base = baseNameNoExt(StrToCStr(mod->fileName, nameBuf));
     char* irPath = MallocOrCrash(512);
     char* objPath = MallocOrCrash(512);
-    snprintf(irPath, 512, "build/%s.ll", base);
-    snprintf(objPath, 512, "build/%s.o", base);
-    if (!force && entry == CG_ENTRY_NONE && !moduleIsStale(mod, objPath)) return objPath;
+    //a root module's object carries "main" (or the test harness) on top of its own code, so it is a
+    //DIFFERENT artifact from the same module's plain object and gets its own name. Without that the two
+    //would overwrite each other, and a plain object left by "-c" would look current to "-b" while
+    //missing main entirely - which is why this used to force the root to rebuild every time.
+    char* suffix = entry == CG_ENTRY_MAIN ? ".main" : (entry == CG_ENTRY_TESTS ? ".test" : "");
+    snprintf(irPath, 512, "build/%s%s.ll", base, suffix);
+    snprintf(objPath, 512, "build/%s%s.o", base, suffix);
+    if (!moduleIsStale(mod, objPath)) return objPath;
 
     CodegenModule(mod, irPath, entry);
     requireClangOrExplain(clang, irPath);
@@ -95,16 +100,18 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry, 
 //"-c": one module to one object, nothing linked (P2)
 void compileModule(char* file) {
     struct semaModule* root = SemanticAnalyzeFile(file, false);
+    CodegenCheckModuleNames();
     if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
     ensureBuildDir();
     char* clang = findClang();
-    char* objPath = emitModuleObject(root, clang, CG_ENTRY_NONE, true);
+    char* objPath = emitModuleObject(root, clang, CG_ENTRY_NONE);
     printf(COLOR_FG_GREEN "built %s\n" COLOR_RESET, objPath);
 }
 
 //"-b": every reachable module to its own object, then one link (P1/P3)
 void buildProgram(char* file) {
     struct semaModule* root = SemanticAnalyzeFile(file, true);
+    CodegenCheckModuleNames();
     if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
 
     ensureBuildDir();
@@ -113,8 +120,7 @@ void buildProgram(char* file) {
     struct list* all = SemanticAllModules();
     for (int i = 0; i < all->len; i++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
-        char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_MAIN : CG_ENTRY_NONE,
-                                         mod == root);
+        char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_MAIN : CG_ENTRY_NONE);
         strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
         strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
     }
@@ -133,33 +139,31 @@ void buildProgram(char* file) {
 int runTestFile(char* file, char* clang) {
     int before = ErrMsgGetNErrors();
     struct semaModule* root = SemanticAnalyzeFile(file, false);
+    CodegenCheckModuleNames();
     if (ErrMsgGetNErrors() > before) {
         printf(COLOR_FG_RED "%s: semantic errors, skipping\n" COLOR_RESET, file);
         return 1;
     }
 
     ensureBuildDir();
+    requireClangOrExplain(clang, "build");
     char* base = baseNameNoExt(file);
-    char irPath[512], binPath[512];
-    snprintf(irPath, sizeof(irPath), "build/%s_test.ll", base);
+    char binPath[512];
     snprintf(binPath, sizeof(binPath), "build/%s_test", base);
-    CodegenModule(root, irPath, CG_ENTRY_TESTS);
 
-    requireClangOrExplain(clang, irPath);
-
-    //every OTHER module still needs its own object, exactly as under -b; only the root differs, carrying
-    //the test harness instead of main
+    //one object per module, exactly as under -b; only the root differs, carrying the test harness
+    //instead of main - and it is a distinct artifact from that module's plain object, so both can be
+    //current at once and neither forces the other to rebuild
     char objs[8192] = "";
     struct list* all = SemanticAllModules();
     for (int i = 0; i < all->len; i++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
-        if (mod == root) continue;
-        char* objPath = emitModuleObject(mod, clang, CG_ENTRY_NONE, true);
+        char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_TESTS : CG_ENTRY_NONE);
         strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
         strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
     }
     char cmd[16384];
-    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s%s -lm", clang, binPath, irPath, objs);
+    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s%s -lm", clang, binPath, objs);
     int rc = system(cmd);
     if (rc != 0) {
         printf(COLOR_FG_RED "%s: native compilation failed\n" COLOR_RESET, file);

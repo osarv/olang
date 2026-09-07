@@ -10,6 +10,9 @@ enum cgEntry {
     CG_ENTRY_TESTS, //-t: this module also carries the test harness (P8)
 };
 
+//P3b: rejects two modules in one program whose file base names match, since symbols are named from them
+void CodegenCheckModuleNames(void);
+
 //emits ONE module's LLVM IR to outPath - the rest of the program is declarations, never definitions
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry);
 
