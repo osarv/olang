@@ -534,6 +534,17 @@ parameter after it must too. A call may then omit any number of trailing argumen
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
 
+**D9a.** A parameter whose type is an **array** must carry a reference marker (T24) on the array itself:
+a by-value array parameter is a compile-time error. Passing an array by value copies it, silently and in
+time proportional to its length, at every call — and a `mut` one would then be written by the callee where
+the caller can never see it, which is the hazard E12a exists to prevent, arising here from the *absence* of
+a marker rather than its presence. Requiring the marker also means one rule covers both length kinds: what
+makes a parameter alias the caller's array is `&`, never how the array's length happens to be known.
+
+This applies to the array itself, not its elements: `Handle&[3]` is an array of references passed by value
+and is rejected; `Handle&[3]&` is a reference to it and is accepted. It does not apply to an `extern-param`
+(§11 X3), which marshals to a raw pointer and so never copies anything to begin with.
+
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
 parameter's type rather than modifying it: for a value parameter it makes the callee's own copy
@@ -899,10 +910,20 @@ call's argument, §5.4; and a `return`ed value, §6.5) exactly when one of:
 - the value is a compile-time-length array whose element type matches `T`'s element type, and `T` is a
   runtime-length array of that element type (T7–T8) — the value is copied into a freshly sized runtime-length
   array regardless of whether the value itself is a literal;
+- the value is a **reference** to a compile-time-length array (`T[N]&`) and `T` is a reference to a
+  runtime-length array of the same element type (`T[]&`) — a **widening**, not a copy: the reference is
+  kept and the statically-known length `N` is materialised alongside it, so the target names the very same
+  storage. This is what lets one `b mut byte[]&` parameter accept `byte[4]`, `byte[24]` and `byte[n]`
+  alike. It never allocates, unlike the length-kind promotion above, which does;
 - `S` and `T` are both compile-time-length arrays of the same element type but different sizes — this is
   specifically rejected (a "wrong size" error distinct from a general type mismatch), not accepted.
 
 Any other pairing does not fit, and is a compile-time error.
+
+**E12b.** D9a and E12a together mean no ordinary call ever copies an array: a by-value array parameter
+cannot be declared, and an array argument passed to a `&` parameter is either already reference-shaped or
+is a temporary with no caller-side instance to preserve. A callee that wants its own copy declares a local
+and assigns to it, where the copy is written down.
 
 **E12a.** In a **call argument** position specifically, a value may not be promoted into a
 reference-shaped (`&`-marked, T24) parameter when the argument is an lvalue (a variable read, index,

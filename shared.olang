@@ -838,12 +838,14 @@ test "nested struct literals" {
 ## here, and an "int32[]" holding 3 was type-identical to one holding 4 (TypeIsSame skips the length
 ## whenever arrMalloc is set). An initializer with no compile-time length of its own leaves the
 ## declaration runtime-length, which is the only shape that had a length worth keeping to begin with.
-func takesExactlyThree(a int32[3]) int32 {
+func takesExactlyThree(a int32[3]&) int32 {
     return a[0] + a[1] + a[2]
 }
 
 func declaredRuntimeLengthAdoptsIt() int32 {
-    y mut int32[] = int32[4, 5, 6]
+    ## declared as a reference (D9a): an array parameter is one, and E12a will not silently promote a
+    ## by-value array into it. The length still comes from the literal, so this is an int32[3]&.
+    y mut int32[]& = int32[4, 5, 6]
     return takesExactlyThree(y)
 }
 
@@ -2051,6 +2053,19 @@ test "a 'mut T[]&' parameter writes to the caller's own array" {
     n int32 = fillFirst(buf)
     assert(n == 4)
     assert(buf[0] == 'X')
+}
+
+## E12's reference widening: a "T[N]&" argument reaching a "T[]&" parameter keeps its pointer and
+## materialises the length it already knows statically - no allocation and no copy, so the callee writes
+## to the caller's own storage. It is what lets ONE "byte[]&" parameter accept every length. The by-VALUE
+## counterpart above it (T[N] -> T[]) does allocate and copy, which is why the two must not be confused:
+## this path used to run through that one and emit invalid IR, GEP-ing a bare "ptr" as an "[N x T]".
+test "a compile-time-length array reference widens into a runtime-length reference parameter" {
+    a mut byte[]& = byte[byte(1), byte(2), byte(3)]
+    n int32 = fillFirst(a)
+    assert(n == 3)
+    assert(a[0] == 'X')
+    assert(a[1] == byte(2))
 }
 
 test "'extern func' links against and calls a real external scalar-only function" {

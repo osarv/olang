@@ -3154,3 +3154,45 @@ from their original form.
   **Also checked and NOT a bug:** `byte[0, 0, 0, 0]` is rejected because an int literal does not narrow to
   `byte` (T6 widens only), and `int32[3]& = int32[7, 8, 9]` is rejected by D16 as a redundant size, not by
   anything to do with the marker. Both were mistaken for compiler faults before being run down.
+
+- **Array passing, settled: D9a (an array parameter must be a reference) and E12's reference widening.**
+  The whole confusion laid out as a matrix first, because describing it in prose had already produced two
+  wrong diagnoses:
+
+      param       <- byte[4] arg          <- byte[n] arg
+      byte[4]        COPY (compiles!)        reject: type mismatch
+      byte[4]&       reject: E12a            reject: type mismatch
+      byte[]         COPY (compiles!)        ALIAS
+      byte[]&        reject: E12a            ALIAS
+
+  Four problems visible at once: two cells silently copy a `mut` parameter's array (write lost, O(n) at
+  every call); `byte[]` means COPY in one column and ALIAS in the other, one declaration whose semantics
+  are chosen by how the *argument* was declared; there is no "any byte array, by reference" parameter at
+  all, which is what `&[u8]`, `[]byte` and `(char*, size_t)` all are; and a fixed-size scratch buffer
+  cannot be passed anywhere.
+  **The user's two claims, both right.** *"dynamic vs static allocation has nothing to do with
+  references"* - T11 promoted a representation fact (a runtime length needs `{len, ptr}`) into a semantic
+  rule, so "how long is it" decided "is it aliased". *"passing an array as a copy should be a compilation
+  error"* - the only two cells that silently copy are the only two nobody would ever want.
+  **Whether the marker should then be implicit** (the user's follow-up, since with by-value parameters
+  illegal `&` has only one legal spelling - the same redundancy argument that removed the scope
+  declaration slot) **was decided by generics.** A single `func takes(v <T>)` is instantiated today with
+  both a struct and an array, and so is `type Box<T>` - both verified, not assumed. An implicit rule would
+  make that function's calling convention depend on its type argument, and E12a would reject some
+  instantiations and accept others for a reason nowhere in the function's own text. The alternative
+  offered - forbidding arrays as type arguments - would remove a working capability (`Vec<byte[16]>`) to
+  save a sigil, and is the one option that is hard to reverse.
+  **What shipped:** D9a rejects a by-value array parameter (`extern-param`s exempt - X3 marshals to a raw
+  pointer, so no copy exists to prevent); E12 gained `T[N]&` -> `T[]&` as a widening that keeps the
+  pointer and materialises the statically-known length. That second half was already *accepted* by
+  OperandFitsType and emitted **invalid IR** - `llvmType` of a `T[N]&` is a bare `ptr`, which
+  cgPromoteFixedToRuntimeLength's element-copy loop then GEP'd as if it were an `[N x T]` aggregate. Found
+  by writing the first test of the new rule.
+  **Migration was three signatures** (`takesExactlyThree`, and io.olang's `Write`/`Print`/`PrintErr`) plus
+  one caller declaring its array as a reference. `make verify`: 110/13/12/3.
+  **Left open and recorded rather than fixed:** D13 still rejects `a mut byte[64]&`, so a zero-filled
+  fixed-size buffer that can be passed somewhere is not declarable. D13's reason is about a reference
+  nested inside a zero-filled aggregate having no valid zero value; a declared type that is *itself* a
+  reference to a compile-time-sized array is a real allocation with a real zero value, exactly like the
+  `T[expr]` form already allowed. Relaxing it is what would let `io.olang`'s scratch buffer stop being
+  run-time-sized for no reason.

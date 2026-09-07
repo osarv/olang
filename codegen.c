@@ -449,6 +449,18 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type srcT, char* s
     llvmType(elemT, elemTy, sizeof(elemTy));
     long long elemSize = TypeGetSize(elemT);
     long long count = srcT.arrLen->intLiteralVal;
+    //E12: a "T[N]&" source is already a reference, so this is a WIDENING, not a promotion - keep the
+    //pointer and materialise the length beside it. Nothing is allocated and nothing is copied, so the
+    //target names the very storage the source did, which is the whole point of "byte[]&" being one
+    //parameter that takes any length. (It also emitted invalid IR before: llvmType of a "T[N]&" is a bare
+    //"ptr", which the element-copy loop below then GEP'd as if it were an "[N x T]" aggregate.)
+    if (srcT.structMAlloc) {
+        char* w1 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %lld, 0\n", w1, count);
+        char* w2 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", w2, w1, srcAddr);
+        return w2;
+    }
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", bytes, scopeVal, elemSize * count);
     char srcStorTy[256];

@@ -16,7 +16,7 @@ Stderr int32 = 2
 
 ## writes every byte of "data" to "fd". A short write is reported rather than retried: retrying needs the
 ## unwritten tail, and the language has no way to name it (see the report on slicing).
-func Write(fd int32, data byte[]) ? IoError {
+func Write(fd int32, data byte[]&) ? IoError {
     n int64 = write(fd, data, int64(len(data)))
     if n < 0 {
         error IoError.FAILED
@@ -26,11 +26,11 @@ func Write(fd int32, data byte[]) ? IoError {
     }
 }
 
-func Print(data byte[]) ? IoError {
+func Print(data byte[]&) ? IoError {
     try Write(Stdout, data)
 }
 
-func PrintErr(data byte[]) ? IoError {
+func PrintErr(data byte[]&) ? IoError {
     try Write(Stderr, data)
 }
 

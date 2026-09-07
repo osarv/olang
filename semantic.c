@@ -1633,6 +1633,14 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         //D8a: an "= expr" default, built here in the DECLARING module's own context (a caller's context
         //would resolve a struct-literal's type name against the wrong module). Restricted to a literal,
         //so there is nothing call-site-dependent to get wrong - no allocation, no scope, no failure.
+        //D9a: an array parameter must be a reference. A by-value one copies the caller's array at every
+        //call, and a "mut" one would then be written where the caller can never see it - E12a's own
+        //hazard, arising from the marker's ABSENCE rather than its presence. Tested on structMAlloc (the
+        //explicit marker) rather than on reference-shapedness, since T11 makes a runtime-length array
+        //reference-SHAPED without one and that is exactly the case this rule exists to stop being implicit.
+        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) {
+            ErrMsgSemantic(nameTok, ARRAY_PARAM_NOT_REFERENCE);
+        }
         struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
         if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
         ListAdd(out, &v);

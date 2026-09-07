@@ -317,9 +317,27 @@ drift out of sync with the actual code.
   `byte[expr]` argument looked like a value about to be promoted and was rejected. That left an array
   out-parameter inexpressible in *either* spelling: `mut T[]&` rejected every argument, while unmarked
   `mut T[]` silently **copied** a `T[N]` one and wrote to the copy. Found by writing `FormatInt` in the
-  standard library, which is exactly the shape that needs it. One residual, now a design question rather
-  than a defect: an unmarked `mut T[]` parameter still copies a `T[N]` lvalue while aliasing a `T[]` one -
-  consistent with D9 (unmarked means a copy), and the other meaning now has a correct spelling.
+  standard library, which is exactly the shape that needs it.
+  **D9a settles the whole question: an array parameter must carry `&`, and a by-value one is a compile-time
+  error.** Passing an array by value copies it silently, in time proportional to its length, at every call -
+  and a `mut` one is then written where the caller can never see it, which is E12a's own hazard arising
+  from the marker's *absence*. So no ordinary call ever copies an array; a callee wanting its own copy
+  declares a local and assigns, where the copy is written down. `extern-param`s are exempt because X3
+  marshals them to a raw pointer and no copy exists to prevent. Explicit rather than implicit because
+  a generic parameter (`v <T>`) can be instantiated with an array *or* a struct - both work today - so an
+  implicit rule would make one function's calling convention depend on its type argument, invisibly.
+  **E12 gained the matching widening**: a `T[N]&` argument reaching a `T[]&` parameter keeps its pointer
+  and materialises the length it already knows statically. No allocation, no copy, so one `byte[]&`
+  parameter accepts `byte[4]`, `byte[24]` and `byte[n]` alike. Distinct from the by-VALUE `T[N]` -> `T[]`
+  promotion beside it, which does allocate and copy - conflating the two emitted invalid IR, GEP-ing a
+  bare `ptr` as though it were an `[N x T]` aggregate.
+  **Known gap, not yet closed:** D13 rejects a no-initializer array var-decl whose type contains a
+  reference *at any level, including its own outermost one* - so `a mut byte[64]&`, a zero-filled scratch
+  buffer you could actually pass somewhere, is not declarable. The rule's own reason (no null literal, so
+  a zero-filled reference would dangle) applies to a reference nested *inside* a zero-filled aggregate,
+  not to the declared type itself being one: that case is a real allocation with a real zero value, exactly
+  like the `T[expr]` form D14 already allows. Until it is relaxed, a passable fixed-size buffer has to be
+  declared run-time-sized, which is why `io.olang`'s own test does.
 - **Array literals, runtime-length arrays, and var-decl forms.** An array literal (`T[v1, ...]`) is always a
   compile-time-length array sized by its own item count; flowing into a runtime-length (`T[]`) target implicitly
   promotes (a fresh copy); flowing into a compile-time-length target of a *different* length is a compile error, not

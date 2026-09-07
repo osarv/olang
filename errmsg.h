@@ -79,6 +79,9 @@ constructor arguments, so there is nothing for that tag to name"
 #define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
 statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
 'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
+#define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
+(e.g. 'byte[]&', 'int32[3]&'). Without it the array is copied at every call, in time proportional to its \
+length, and a 'mut' one would be written where the caller can never see it"
 #define MODULE_NAME_COLLISION "another module in this program has the same file base name - a module's \
 symbols are named from it (§10 P3b), so two modules sharing one would define the same symbols; rename \
 one of the files"
