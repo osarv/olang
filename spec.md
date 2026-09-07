@@ -1021,8 +1021,16 @@ closing `}`.
 | expr-stmnt`. `var-decl` is specified in §3.5;
 `error-stmnt` and `try-catch-stmnt` in §7.
 
-**S3.** `expr-stmnt ::= expr STMNT_END` — any expression, evaluated for its side effects, with its
-value (if any) discarded. This is how a bare function call is written as a statement.
+**S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
+either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4) or
+one of the four increment/decrement forms (`++x`, `--x`, `x++`, `x--`, E1), which are expressions by
+grammar but reach statement position only here. Its value, if any, is discarded.
+
+Any other expression standing alone as a statement is a compile-time error. `n`, `x == y` and `a + 1`
+each compute a value and then throw it away, which is dead code by construction, and far more often a
+typo for the assignment (S4) or declaration (D12) that was meant. In particular, a bare name declares
+nothing anywhere in the language: a declaration always states a type (`name Type = expr`) or infers one
+(`name := expr`), in a function body and a `ctor-body` (§9.1 C2) alike.
 
 ### 6.2 Assignment
 

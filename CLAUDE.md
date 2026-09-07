@@ -362,6 +362,15 @@ drift out of sync with the actual code.
   better served here by distinct types, which the compiler verifies, than by argument names, which it
   cannot. `default` buys the half that is about *capability* - reaching a later parameter - while leaving
   names internal, and it is reversible in a way shipping named arguments would not be.
+- **An expression is a statement only if evaluating it can do something (S3).** A call (ordinary,
+  constructor, or `try`-wrapped) or one of the four `++`/`--` forms - nothing else. `n`, `x == y` and
+  `a + 1` standing alone are compile-time errors, not accepted no-ops: they compute a value and discard
+  it, which is dead code by construction and, far more often, a typo for the assignment or declaration
+  that was meant. Previously `expr-stmnt` accepted *any* expression, so all three compiled silently. The
+  rule holds identically in a function body, a `test { }`, a `destruct { }`, and a `ctor-body`, and it
+  gives a bare name exactly one meaning in the whole language: a constructor's bare-pun field (C4), which
+  is a field declaration, not a statement, and is a syntax error anywhere else. No existing test relied on
+  the old permissiveness.
 - **Deferred: user-defined methods, and a real growable `Vec`.** Generics exist now (above), so a
   resizable collection is finally expressible; it belongs in a standard library on top of the language,
   not as more special cases inside the compiler.

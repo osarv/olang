@@ -2896,3 +2896,23 @@ from their original form.
   constructor needed no new code at all, only a statement position to be written in. The same is true of
   `try`/`catch`, `assert`, `if`/`match`/loops, and of a constructor that declares no errors catching one
   entirely the way a `test { }` block does. `make verify`: 104/13/12.
+
+- **An expression is a statement only if evaluating it can do something (S3).** Fallout from the
+  constructor-body change above, spotted by the user: *"so now constructors can have statements as 'n'
+  without anything else but functions can not?"* The premise was the other way round - `n`, `n + 1` and
+  `n == 3` were all legal, silent no-ops in a function body too, because S3 read "any expression,
+  evaluated for its side effects, with its value (if any) discarded." So the asymmetry was never
+  "constructors allow a form functions don't"; it was that the *same* line meant something in one place
+  and nothing in the other. The constructor didn't create that - it only made it visible, since the new
+  parse rule leans on classifying a bare identifier as a pun "rather than as a useless expression
+  statement," which was only safe because the useless form was tolerated everywhere else.
+  Tightened at the user's direction (*"we need to be a lot more restrictive about what statements we
+  allow. just 'n' should not be a valid statement ever. neither should x == y"*): an expression statement
+  must be a call (ordinary, constructor, or `try`-wrapped - `buildTryExpr` returns the call itself marked
+  `isTried`, so one check covers both) or one of the four `++`/`--` forms, which are expressions by
+  grammar (E1) and reach statement position only through S3. `i++` is why the rule can't simply be "must
+  be a call," which is the shape Go's own expression-statement rule takes for the same reason.
+  Enforced in `buildExprStmnt` rather than the parser, so the diagnostic can say what was probably meant.
+  All 104 tests passed unchanged - nothing in the corpus relied on the old permissiveness, which is
+  itself the evidence the form was never useful. The rule's real value is catching `x == y` written for
+  `x = y`, previously accepted in silence.

@@ -3673,8 +3673,26 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//S3: an expression is only a statement if evaluating it can actually DO something. In olang that is a
+//short, closed list - a call (a "try f()" propagating one included: buildTryExpr returns the call itself,
+//marked isTried) and the four increment/decrement forms, which are expressions by grammar (E1) but reach
+//statement position through here. Everything else - "n", "x == y", "a + 1" - computes a value and
+//discards it, which is dead code by construction and, far more often, a typo for the assignment or
+//declaration that was meant ("x == y" for "x = y", a bare name for a var-decl).
+static bool exprCanStandAsStatement(struct operand* op) {
+    switch (op->opType) {
+        case OPERATION_FUNCCALL:
+        case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC:
+        case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
+            return true;
+        default:
+            return false;
+    }
+}
+
 struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    if (!exprCanStandAsStatement(op)) ErrMsgSemantic(op->tok, EXPR_NOT_A_STATEMENT);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;

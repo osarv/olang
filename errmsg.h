@@ -77,6 +77,9 @@
 #define LITERAL_NEEDS_CTOR_PARAM "this type has a field whose type is tagged to one of its constructor's own \
 parameters, so it can only be built by calling that constructor - a literal supplies field values, not \
 constructor arguments, so there is nothing for that tag to name"
+#define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
+statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
+'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
 #define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \
 declared fields when the body completes; use 'error' to fail out of one instead"
 #define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"
