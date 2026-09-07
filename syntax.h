@@ -28,8 +28,10 @@ enum syntaxType {
     SNTX_CTOR_FIELD,      //one field inside a constructor-bearing struct's body - "name = expr" (bound to a
                            //param or any expr), "name Type [= expr]", "name := expr", or a bare "name" pun
                            //(binds directly to a same-named constructor param) - see the report
-    SNTX_CTOR_FIELD_LIST,
-    SNTX_STRUCT_CTOR,     //"struct(PARAM_LIST) ERROR_LIST? { CTOR_FIELD_LIST } DESTRUCT?" - only reachable
+    SNTX_CTOR_BODY,       //a constructor's whole body: CTOR_FIELDs and ordinary STMNTs interleaved in
+                           //textual order (a constructor is a function whose top-level locals are the
+                           //fields of the value it builds - see the report)
+    SNTX_STRUCT_CTOR,     //"struct(PARAM_LIST) ERROR_LIST? { CTOR_BODY } DESTRUCT?" - only reachable
                            //from parseTypeDecl (never a general type expression) - see the report
     SNTX_DESTRUCT,        //"destruct BLOCK" - trails a SNTX_STRUCT_CTOR; no error union of its own, so every
                            //fallible call inside must be fully caught locally (same rule as test{} blocks)

@@ -1468,8 +1468,8 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
 
     t->vars = ListInit(sizeof(struct var));
     t->ctorFieldSyntax = ListInit(sizeof(struct syntax*));
-    struct syntax* fieldListNode = firstPartOfType(ctorNode, SNTX_CTOR_FIELD_LIST);
-    struct list fieldNodes = allPartsOfType(fieldListNode, SNTX_CTOR_FIELD);
+    t->ctorBodySyntax = firstPartOfType(ctorNode, SNTX_CTOR_BODY);
+    struct list fieldNodes = allPartsOfType(t->ctorBodySyntax, SNTX_CTOR_FIELD);
     for (int i = 0; i < fieldNodes.len; i++) {
         struct syntax* f = *(struct syntax**)ListGetIdx(&fieldNodes, i);
         struct token fieldNameTok = firstTokOfType(f, TOK_IDEN);
@@ -1985,6 +1985,10 @@ struct checkCtx {
     struct var* destructSelfVar; //non-NULL only while checking a destruct{} body: a bare identifier that
                                   //isn't a real local but does name one of this var's own type's fields
                                   //resolves to member access on it instead of UNKNOWN_VAR - see buildPrimary
+    bool inCtor; //true while checking a constructor's own body. Its synthetic ctorFunc does carry a
+                  //ret-type (the struct being built), but that value is assembled by the compiler from the
+                  //field bindings, never written by hand - so "return" is rejected outright (C13) rather
+                  //than checked against it, which would otherwise be a way to hand back some other instance.
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -4032,7 +4036,8 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
     struct token tok = firstTokOfType(s, TOK_RET);
 
-    if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
+    if (ctx->inCtor) ErrMsgSemantic(tok, RETURN_IN_CTOR);
+    else if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
     else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_MISSING_VALUE);
     else if (val && ctx->func && ctx->func->type.hasRetType) {
         enum typeFit fit = OperandFitsType(ctx->func, val, *ctx->func->type.retType);
@@ -4344,12 +4349,32 @@ void buildTypeBodies(struct semaModule* mod, struct type* t) {
     cctx.func = t->ctorFunc;
     cctx.hasOwnScope = true;
 
+    cctx.inCtor = true;
+    t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
+
+    //the constructor's body, walked in TEXTUAL order: a field declaration and an ordinary statement are
+    //both just items here, and a statement's position relative to the fields around it is what decides
+    //when it runs (C12). A field additionally declares a local of its own name, so everything after it -
+    //a later field's initializer, an "if ... error" check - can read the value it just computed; the
+    //instance is assembled from those locals once the body completes normally (C6).
     struct list fieldArgs = ListInit(sizeof(struct operand*));
-    for (int i = 0; i < t->vars.len; i++) {
-        struct var* field = ListGetIdx(&t->vars, i);
-        struct syntax* f = *(struct syntax**)ListGetIdx(&t->ctorFieldSyntax, i);
+    struct list bodyParts = allSyntaxParts(t->ctorBodySyntax);
+    int fieldIdx = 0;
+    for (int b = 0; b < bodyParts.len; b++) {
+        struct syntax* part = *(struct syntax**)ListGetIdx(&bodyParts, b);
+        if (part->type != SNTX_CTOR_FIELD) {
+            StatementAdd(&t->ctorFunc->codeBlock, buildStatement(&cctx, part));
+            continue;
+        }
+        //a field pass 2 rejected outright (a duplicate name) never made it into t->vars, so it has no
+        //slot to fill here either - the error is already reported, just don't run off the end
+        if (fieldIdx >= t->vars.len) continue;
+        struct var* field = ListGetIdx(&t->vars, fieldIdx);
+        struct syntax* f = *(struct syntax**)ListGetIdx(&t->ctorFieldSyntax, fieldIdx);
+        fieldIdx++;
         struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
         struct syntax* rhsNode = firstPartOfType(f, SNTX_EXPR);
+        bool isPun = !typeExprNode && !rhsNode;
         struct operand* fieldOp;
         if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
@@ -4381,13 +4406,24 @@ void buildTypeBodies(struct semaModule* mod, struct type* t) {
         //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
         //field whose own type isn't constructor-bearing, or one with no scope-typed ctor params.
         field->scopeBindings = fieldOp->scopeBindings;
+        //a bare pun declares no local of its own: the same-named parameter already carries both the name
+        //and the value, and re-declaring it would collide with it (VAR_NAME_IN_USE) for no gain
+        if (!isPun) {
+            struct var* local = scopeDeclare(&ctorScope, field->name, field->tok, field->type, true);
+            local->scopeBindings = fieldOp->scopeBindings;
+            struct statement decl = (struct statement){0};
+            decl.sType = STATEMENT_VAR_DECL;
+            decl.var = *local;
+            decl.op = fieldOp;
+            StatementAdd(&t->ctorFunc->codeBlock, decl);
+            fieldOp = OperandReadVar(local, field->tok);
+        }
         ListAdd(&fieldArgs, &fieldOp);
     }
     struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
     struct statement retStmt = (struct statement){0};
     retStmt.sType = STATEMENT_RET;
     retStmt.op = built;
-    t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
     StatementAdd(&t->ctorFunc->codeBlock, retStmt);
 
     //---- destructor body: no error union of its own (ctx.func stays NULL, same as a test{}

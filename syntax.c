@@ -86,7 +86,10 @@ struct token prevTok(SyntaxCtx sc) {
 bool acceptStmntEnd(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
     enum tokenType prev = prevTok(sc).type;
-    return prev == TOK_CURLY_C || prev == TOK_BTWSE_AND;
+    //TOK_MUT: a constructor's bare-pun field may be written "name mut" (C2/C3), the one statement-shaped
+    //form in the language whose last token is that keyword - no ordinary statement can end in it, so
+    //accepting it here terminates the pun without making "mut" a stmntEndTriggerType everywhere
+    return prev == TOK_CURLY_C || prev == TOK_BTWSE_AND || prev == TOK_MUT;
 }
 
 // ---- tree-building primitives ----
@@ -627,20 +630,27 @@ struct syntax* parseCtorField(SyntaxCtx sc) {
     return s;
 }
 
-//"(CTOR_FIELD (COMMA CTOR_FIELD)*)?" - always succeeds (possibly with zero fields)
-struct syntax* parseCtorFieldList(SyntaxCtx sc) {
-    struct syntax* s = newNode(SNTX_CTOR_FIELD_LIST);
-    struct syntax* first = parseCtorField(sc);
-    if (!first) return s;
-    addSntx(s, first);
+//"(CTOR_FIELD STMNT_END | STMNT)*" - always succeeds (possibly empty). A constructor's body is an
+//ordinary statement block in which a field declaration is one more kind of statement: the fields ARE the
+//constructor's own top-level locals, and everything between them ("if", "error", "try ... catch") is
+//ordinary code running in textual order. A field is tried first at every position and must be terminated
+//like any other statement, so anything that isn't one ("x = 5", "f()", "if ...") backtracks cleanly into
+//parseStmnt - "x" alone parses as a field (a bare pun) rather than as a useless expression statement,
+//which is exactly the classification wanted.
+struct syntax* parseCtorBody(SyntaxCtx sc) {
+    struct syntax* s = newNode(SNTX_CTOR_BODY);
     while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        int cur = TokenGetCursor(sc->tc);
         struct syntax* f = parseCtorField(sc);
-        if (!f) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
-        addSntx(s, f);
+        //a field is terminated like any other statement, or by the closing "}" itself - the latter keeps
+        //a whole one-line constructor ("type Point struct(x int32) { x }") writable, which the ordinary
+        //rule can't: "x" is a stmntEndTriggerType but no newline follows it, and "}" only ever terminates
+        //what PRECEDES it in acceptStmntEnd's own prev-token test
+        if (f && (acceptStmntEnd(sc) || peekTok(sc).type == TOK_CURLY_C)) { addSntx(s, f); continue; }
+        TokenSetCursor(sc->tc, cur);
+        struct syntax* stmt = parseStmnt(sc);
+        if (!stmt) break;
+        addSntx(s, stmt);
     }
     return s;
 }
@@ -657,7 +667,7 @@ struct syntax* parseDestruct(SyntaxCtx sc) {
     return s;
 }
 
-//"STRUCT PAREN_O PARAM_LIST PAREN_C ('?' ERROR_LIST)? CURLY_O CTOR_FIELD_LIST CURLY_C DESTRUCT?" - only called
+//"STRUCT PAREN_O PARAM_LIST PAREN_C ('?' ERROR_LIST)? CURLY_O CTOR_BODY CURLY_C DESTRUCT?" - only called
 //from parseTypeDecl, right after "type NAME"; committing to this (vs. a plain "struct { ... }") is decided
 //purely by whether "(" immediately follows "struct"
 struct syntax* parseStructCtor(SyntaxCtx sc) {
@@ -679,11 +689,8 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     struct token curlyO = acceptTok(sc, TOK_CURLY_O);
     if (curlyO.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     addTok(s, curlyO);
-    struct syntax* fields = parseCtorFieldList(sc);
-    addSntx(s, fields);
-    int beforeEnd = TokenGetCursor(sc->tc);
-    struct token end = TokenFeed(sc->tc);
-    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    struct syntax* body = parseCtorBody(sc);
+    addSntx(s, body);
     struct token curlyC = acceptTok(sc, TOK_CURLY_C);
     if (curlyC.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     addTok(s, curlyC);

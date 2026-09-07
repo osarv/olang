@@ -2857,3 +2857,42 @@ from their original form.
   explicit rule read becomes make's default goal - placed above `build/out`, plain `make` silently began
   building one object file instead of the compiler. It belongs at the very end of the file.
   `make verify`: 100/13/12.
+
+- **Constructor bodies are real statement blocks; a constructor can raise its own error (C2/C2a/C2b,
+  R3/R4).** The last open item from the constructor/function symmetry thread. The parked question was
+  "can a constructor raise its own error?", and R3's own text explained why it couldn't: *"a constructor
+  has no statement-block body at all to write one in in the first place"*. The user answered the question
+  by rejecting its premise - **"constructors can raise errors yes, they are basically functions whose
+  local variables are exported into the scope they are constructed on"** - which is not a request for an
+  exception to R3 but a statement about what a constructor already is. Implemented as exactly that: the
+  comma-separated `ctor-field-list` is gone, and a constructor's body is an ordinary statement block in
+  which a field declaration is one more kind of statement.
+  **The fields are the constructor's own top-level locals** (C2a). A `ctor-field` declares both a field of
+  the struct type and a local of the same name, so everything textually after it - a later field's
+  initializer, an `if` guard, a `try ... catch` - can read the value it just computed, and the instance is
+  assembled from those bindings' final values when the body completes normally (C6). Previously a field
+  initializer saw only the constructor's parameters, so `half int32 = doubled / 4` was not expressible at
+  all. A **bare pun declares no local**: the same-named parameter it binds already carries that name and
+  that value, and re-declaring it would collide for no gain - which also means a non-pun field may no
+  longer share a name with a parameter (VAR_NAME_IN_USE, a new rejection, previously silently allowed).
+  `return` is rejected anywhere in a constructor body (C2b): the synthetic `ctorFunc` does carry a
+  ret-type (the struct being built), so without this rule `return someOtherInstance` would have
+  type-checked and become a second, invisible construction path.
+  **Migration was near-trivial, which is itself the argument the design is right**: every existing
+  constructor kept working character-for-character minus its trailing commas. The parse rule is "try a
+  field first at each position, require it to terminate like any other statement, otherwise backtrack into
+  parseStmnt" - so `x` alone classifies as a bare pun rather than a useless expression statement, and
+  `x = 5` / `f()` / `if ...` fall through cleanly.
+  **Two tokenizer-level snags, both real.** A bare pun may be written `open mut`, and `mut` is not a
+  `stmntEndTriggerType`, so no STMNT_END is synthesized after it and the next line's field would have been
+  swallowed as its type; fixed by accepting a preceding `TOK_MUT` in `acceptStmntEnd`, alongside the `}`
+  and `&` cases already there - no ordinary statement can end in that keyword, so it costs nothing
+  elsewhere. Separately, requiring STMNT_END outright broke the one-line form `type Point struct(x int32)
+  { x }`: `x` is a trigger type but no newline follows it, and `acceptStmntEnd`'s `}` case tests the
+  *previous* token, not the next. Fixed by also accepting a lookahead `}` as a field terminator, and
+  `Counter` in shared.olang is now written on one line to keep that shape tested.
+  Everything else fell out for free. `buildErrorStmnt` already resolves against `ctx->func->type.errors`,
+  which for a constructor is its declared error union - so `error MeasureError.NEGATIVE` inside a
+  constructor needed no new code at all, only a statement position to be written in. The same is true of
+  `try`/`catch`, `assert`, `if`/`match`/loops, and of a constructor that declares no errors catching one
+  entirely the way a `test { }` block does. `make verify`: 104/13/12.

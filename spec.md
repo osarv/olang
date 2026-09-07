@@ -304,12 +304,12 @@ parameter passing, and return copy the whole value member-wise, and `==`/`!=` co
 (see §5.2 E10), unless referenced through a marker (§2.9).
 
 **T15.** A struct type may instead be declared with a constructor (a **constructor-bearing**
-struct): `type Name struct( params ) [ error-list ] { ctor-fields } [ destruct-block ]`. This is a
+struct): `type Name struct( params ) [ error-list ] { ctor-body } [ destruct-block ]`. This is a
 distinct declaration shape from T13, covered fully in
 §9; syntactically, the two are
 told apart by whether `(` immediately follows `struct`. A constructor-bearing struct's *field list*
 (what `struct-field`s it has, for the purposes of T14's member-wise semantics) is the set of fields
-declared in its `ctor-fields` block.
+declared in its `ctor-body` (§9.1 C2).
 
 **T16.** A struct type can only embed itself, directly or through any chain of plain (non-array,
 non-reference) member types, if that chain passes through a reference marker (§2.9) at least once;
@@ -1090,7 +1090,8 @@ rule).
 **S15.** `return-stmnt ::= "return" [ expr ] STMNT_END`. If the enclosing function
 (§3 D7–D10) declares a `ret-type`, `expr` is required and
 must fit (E12) it. If the enclosing function declares no `ret-type`, `expr` must be absent — a bare
-`return` (or falling off the end of the function's block) is the only valid way to end it.
+`return` (or falling off the end of the function's block) is the only valid way to end it. A
+`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b).
 
 ### 6.6 `done` and `crash`
 
@@ -1106,7 +1107,7 @@ diagnostic. See §10 for the exact status values used.
 **S17.** `assert-stmnt ::= "assert" expr STMNT_END`. `expr` must be `bool`. `assert` is a statement,
 not a function call — `assert cond` and `assert(cond)` are both valid and identical, the latter
 simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in any function, test,
-or destructor body (§9), not
+constructor, or destructor body (§9), not
 only inside `test { }` blocks.
 
 **S18.** If `expr` evaluates to `false`:
@@ -1137,14 +1138,15 @@ type.
 
 **R3.** `error-stmnt ::= "error" alias-chain IDEN "." IDEN STMNT_END` (`alias-chain`, §4.4 M8,
 possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
-and the final `IDEN` is one of that type's own declared words (T19). Valid only inside an ordinary
-function's own body, whose signature's error union (R1) includes the named error type. Not valid in a
-`test { }` block or a `destruct { }` body (§9.3 C7) — neither has an error union of its own — nor at
-module scope. A constructor has no statement-block body at all to write one in in the first place
-(§9.1 C1–C2: a `ctor-field`'s own initializer is always a single expression, never a statement).
+and the final `IDEN` is one of that type's own declared words (T19). Valid inside an ordinary
+function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's error union
+(R1) includes the named error type. Not valid in a `test { }` block or a `destruct { }` body
+(§9.3 C7) — neither has an error union of its own — nor at module scope.
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
-specific (type, word) pair as its result, in place of a normal `return`ed value — see §7.3.
+specific (type, word) pair as its result, in place of a normal `return`ed value — see §7.3. In a
+constructor this ends the construction: no instance is produced at all, and no field declared after
+the statement is ever evaluated (§9.3 C6).
 
 ### 7.3 Return convention
 
@@ -1213,7 +1215,8 @@ identifier could be read as a further alias hop, it is).
 An error type every one of whose words is individually caught (or that is caught as a whole type) is
 fully handled and does not need to appear in the enclosing signature at all — this makes
 `try`/`catch` usable even where there is no enclosing error union to propagate into (a `test { }`
-block, or a function that declares no errors), as long as nothing actually escapes uncaught.
+block, a `destruct { }` body, or a function or constructor that declares no errors), as long as
+nothing actually escapes uncaught.
 
 **R14.** Coverage (R9, R13) is judged at the level of the called function's own declared
 `error-list` (R1): if a callee declares a whole error type, the caller must treat every one of that
@@ -1234,8 +1237,8 @@ named type, and for the same reason.
 **R16.** `error-stmnt`'s grammar (R3) gains a second form: bare `"error" STMNT_END`, with no
 `alias-chain IDEN "." IDEN` operand at all. Valid under exactly the same conditions as R3's own form —
 inside an ordinary function's own body, whose signature's error union includes the bare error
-(R15) — and, like R4, immediately ends the enclosing function, producing the bare error as its
-result in place of a normal `return`ed value.
+(R15) — and, like R4, immediately ends the enclosing function or constructor, producing the bare
+error as its result in place of a normal `return`ed value.
 
 **R17.** The bare error participates in `try` propagation (§7.4) and `catch` coverage (§7.5)
 exactly as a named error type with exactly one, unnamed word does: R6's ordinal scheme applies to it
@@ -1416,7 +1419,7 @@ compiler-recognized blocks a struct type can declare; olang has no general user-
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" "(" param-list ")" [ "?" error-list ] "{" ctor-field-list "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
 ```
 
 `param-list` and `error-list` are as in a function signature
@@ -1425,8 +1428,9 @@ a constructor has no `ret-type` slot for the marker to disambiguate against, but
 same, so that one spelling of an error set holds everywhere in the language. This shape is
 distinguished from a plain struct declaration (T13) purely by `(` immediately following `struct`.
 
-**C2.** `ctor-field-list ::= [ ctor-field { "," ctor-field } ]`, where each `ctor-field` is exactly
-one of:
+**C2.** `ctor-body ::= { ctor-field STMNT_END | stmnt }` — a constructor's body is an ordinary
+statement block (§6) in which a field declaration is one more kind of statement, so fields and
+statements interleave freely in textual order. A `ctor-field` is exactly one of:
 
 ```
 IDEN [ "mut" ] ":=" expr           # inferred: type read from a required-to-be-literal expr
@@ -1440,8 +1444,26 @@ any parameter of this same constructor's own `param-list`, giving that field a r
 scope tag independent of any particular call site — see
 §8.4.
 
+The `STMNT_END` terminating a `ctor-field` follows §2's own rule for any other statement, with one
+addition: the `"}"` closing the `ctor-body` also terminates the field before it, so a whole
+constructor may be written on one line (`type Point struct(x int32) { x }`).
+
+**C2a.** The fields **are** the constructor's own top-level locals. A `ctor-field` declares, in
+addition to a field of the struct type, a local of the same name, initialized to the same value and
+visible to everything textually after it — a later field's initializer, or an ordinary statement.
+A **bare pun** (C4) declares no local of its own: the same-named parameter it binds already carries
+that name and that value. A field name may therefore not collide with a parameter name (except as a
+bare pun, where matching one is the whole point) or with an earlier field's name.
+
+**C2b.** A `return` statement is a compile-time error anywhere in a `ctor-body`. A constructor
+produces no value of its own to return: the instance is assembled by the language from the field
+bindings (C6), and the way to end a construction early is `error` (§7.2 R3), which produces no
+instance at all.
+
 **C3.** A field is mutable only if declared with `mut` (D9's own rule for parameters applies
-identically here); otherwise it is immutable.
+identically here); otherwise it is immutable. This governs the constructed instance's own field; the
+local a `ctor-field` declares (C2a) is writable inside the `ctor-body` regardless, exactly as any
+other local is, and the instance is assembled from whatever value that local holds at the end (C6).
 
 ### 9.2 Bare-pun fields
 
@@ -1458,12 +1480,18 @@ even if its name happens to match a parameter).
 ### 9.3 Constructing and destructing
 
 **C6.** `Type(args)` (E13) constructs an instance: `args` are checked exactly as an ordinary call
-against the constructor's own `param-list`, in order; the result is a value of the struct type,
-with each field set per C2's own rule for that field, evaluated once, in field declaration order.
+against the constructor's own `param-list`, in order, and the `ctor-body` then runs in textual order
+(C2) — each `ctor-field` evaluating its own initializer once, at its own position, and binding the
+result under the field's name (C2a). If the body completes normally, the result is a value of the
+struct type assembled from those bindings' final values. If it instead reaches an `error` statement
+(§7.2 R4), or an uncaught error propagates out of a `try` within it (§7.4 R9), the construction
+produces that error instead and no instance at all — so a field declared after the failing point is
+never evaluated.
+
 A constructor-declaring type may equally be built by the plain positional literal (E18), which
 assembles its fields directly without running the constructor — see C6a for the one case that cannot.
 The literal therefore bypasses whatever the constructor establishes: computed field values, and any
-validation a fallible field initializer performs. This is deliberate, and follows from a type declaring
+validation the `ctor-body` performs. This is deliberate, and follows from a type declaring
 **exactly one** constructor (C1): with no overloading and no second named constructor, a validating
 constructor would otherwise be the only construction path in existence for its type, leaving no way to
 rebuild an instance from values already known to be valid. The literal is that path, and it states

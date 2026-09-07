@@ -191,11 +191,27 @@ drift out of sync with the actual code.
   checker whose entire point is a compile-time safety proof, not a best-effort hint.
 - **Constructors and destructors - the only two special blocks a struct type can declare** (no
   general user-defined methods, deliberately, to sidestep field/method name collisions).
-  `type Name struct(params) [errors] { fields } [destruct { stmts }]`; a field is a bare pun (binds a
+  `type Name struct(params) [? errors] { ctor-body } [destruct { stmts }]`; a field is a bare pun (binds a
   same-named constructor parameter), an explicit var-decl, or `:=` inference. `Type(args)` is an
-  ordinary call under the hood - once a type declares a constructor, the old positional `Type{...}`
-  literal is rejected for it. `destruct { }` has no error union of its own (same rule as `test{}`)
+  ordinary call under the hood, and the type stays buildable by the `Type{...}` literal too (see the
+  struct-literal entry above). `destruct { }` has no error union of its own (same rule as `test{}`)
   and reads its own fields bare, with no `self`/`this`.
+  **A constructor's body is an ordinary statement block in which a field declaration is one more kind of
+  statement** - no comma-separated field list, and no restriction on what else may appear. So a
+  constructor **can raise its own declared error directly** (`error T.WORD`, R3, no fallible helper
+  needed), guard with `if`/`match`, `assert`, and `try`/`catch` - and one declaring no errors of its own
+  may still catch one entirely, exactly as a `test { }` block or a destructor does. **The fields are the
+  constructor's own top-level locals**: a field declares a same-named local visible to everything after
+  it, so a later field's initializer or a later check can read one already built, and the instance is
+  assembled from those bindings' final values when the body completes normally. A field that fails
+  (`error`, or an uncaught `try`) produces no instance at all and never evaluates a later field. A bare
+  pun declares no local (the same-named parameter already carries the name and the value), which is why a
+  non-pun field may not share a name with a parameter. `return` is rejected anywhere in a constructor
+  body: the synthetic ctor function does carry a ret-type, so without the rule `return someOtherInstance`
+  would type-check and become a second, invisible construction path. This came from the user's own framing
+  of what a constructor is - "basically functions whose local variables are exported into the scope they
+  are constructed on" - and the migration cost was every existing constructor's trailing commas, nothing
+  else.
   **A struct type declaring `destruct { }` is reference-only:** every `type-ref` naming it must carry
   a reference marker, so it is never embedded by value in an aggregate and never passed or
   returned by value. A destructor asserts an instance owns something releasable exactly once, which

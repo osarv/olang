@@ -77,6 +77,8 @@
 #define LITERAL_NEEDS_CTOR_PARAM "this type has a field whose type is tagged to one of its constructor's own \
 parameters, so it can only be built by calling that constructor - a literal supplies field values, not \
 constructor arguments, so there is nothing for that tag to name"
+#define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \
+declared fields when the body completes; use 'error' to fail out of one instead"
 #define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"
 #define INVALID_VOCAB_VALUE_TYPE "only a vocab type has values of the form 'Type.word'"
 #define UNKNOWN_VOCAB_WORD "unknown vocab word"

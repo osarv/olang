@@ -62,9 +62,12 @@ struct type {
                            //"Type(args)" with no dedicated call path of its own - resolveCallTarget routes
                            //a bare type name with hasCtor here instead of failing with UNKNOWN_VAR
     struct list ctorFieldSyntax; //list of struct syntax* (SNTX_CTOR_FIELD), index-aligned with `vars` -
-                                   //resolved (types only) in pass 2; checked into ctorFunc->codeBlock's
-                                   //single return value in pass 3, once the constructor's own parameters
-                                   //are back in scope
+                                   //resolved (types only) in pass 2; checked into ctorFunc->codeBlock in
+                                   //pass 3, once the constructor's own parameters are back in scope
+    struct syntax* ctorBodySyntax; //raw SNTX_CTOR_BODY - fields AND ordinary statements, in textual
+                                    //order. Pass 3 walks this (not ctorFieldSyntax) to build the
+                                    //constructor's body, since a statement's position relative to the
+                                    //fields around it is exactly what decides when it runs.
 
     bool hasDestruct;
     struct var* destructFunc; //synthetic BASETYPE_FUNC var, one param (the instance, by value, plain

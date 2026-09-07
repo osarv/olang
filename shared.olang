@@ -261,21 +261,21 @@ func mightFailWithBareError(n int32) int32 ? RangeError + error {
     return n * 2
 }
 
-## constructors: "type Name struct(params) errorList? { fields } destruct?" - params are the constructor's
-## own declared arguments; each field is either a bare pun (binds directly to a same-named parameter, type
-## inferred from it - no separate declaration needed) or an ordinary var-decl-shaped "name Type = expr" /
-## "name := expr" (never silently inferred - a field always states its own type unless it opts into ":="
-## the same way any other var-decl would). Once a type declares a constructor, the old positional "Type{...}"
-## literal is rejected for it (TYPE_REQUIRES_CONSTRUCTOR_CALL) - constructing it any other way could
-## silently bypass the constructor's own logic. Counter is the plain case: every field is a pun.
-type Counter struct(start int32) {
-    start
-}
+## constructors: "type Name struct(params) errorList? { ctor-body } destruct?" - params are the
+## constructor's own declared arguments; the body is an ordinary statement block in which a field
+## declaration is one more kind of statement (see the report). A field is either a bare pun (binds
+## directly to a same-named parameter, type inferred from it - no separate declaration needed) or an
+## ordinary var-decl-shaped "name Type = expr" / "name := expr" (never silently inferred - a field always
+## states its own type unless it opts into ":=" the same way any other var-decl would). A
+## constructor-declaring type stays buildable by the positional "Type{...}" literal too (C6) - the literal
+## assembles the fields directly and is the one path back from values already known to be valid.
+## Counter is the plain case: every field is a pun, and the whole body is one line.
+type Counter struct(start int32) { start }
 
 ## a field may also be computed from the constructor's parameters via an ordinary expression, alongside a
 ## punned one - "doubled" has its own type/initializer, "n" is a bare pun
 type Rectangle struct(n int32) {
-    n,
+    n
     doubled mut int32 = n * 2
 }
 
@@ -294,13 +294,56 @@ func checkNonNegative(n int32) int32 ? ValidationError {
 ## initializer needs "try" the same way any fallible call does, and "Measurement(...)" itself becomes a
 ## fallible call site at every caller, handled by the exact same try/catch machinery as any other function
 type Measurement struct(n int32) ? ValidationError {
-    v mut int32 = try checkNonNegative(n),
+    v mut int32 = try checkNonNegative(n)
     n
 }
 
 func measurementValue(n int32) int32 ? ValidationError {
     m mut Measurement = try Measurement(n)
     return m.v
+}
+
+error MeasureError {
+    NEGATIVE,
+    TOO_BIG
+}
+
+## a constructor's body is a real statement block: "error" raises the constructor's own declared error
+## directly (no fallible helper needed), and a field declaration is just one more statement among the
+## checks around it. The fields ARE the constructor's own top-level locals, so a later field's initializer
+## and a later statement alike can read one that was already built ("half" reads "doubled", and the
+## second check tests "doubled" rather than re-deriving it from "n").
+type Measure struct(n int32) ? MeasureError {
+    if n < 0 {
+        error MeasureError.NEGATIVE
+    }
+    doubled int32 = n * 2
+    if doubled > 100 {
+        error MeasureError.TOO_BIG
+    }
+    n
+    half int32 = doubled / 4
+}
+
+measuredDoubled mut int32 = 0
+measuredHalf mut int32 = 0
+
+func recordMeasure(n int32) ? MeasureError {
+    m mut Measure = try Measure(n)
+    measuredDoubled = m.doubled
+    measuredHalf = m.half
+}
+
+## a constructor declaring NO error union of its own may still catch one entirely, exactly as a test{}
+## block or a destructor can - nothing escapes, so there is nothing to propagate. "v" is a field, and the
+## catch body assigns to it: a field's own local is writable inside the body regardless of whether the
+## FIELD is "mut", and the instance is assembled from whatever the local holds at the end.
+type Guarded struct(n int32) {
+    v mut int32 = n
+    try checkNonNegative(n) catch ValidationError {
+        v = -1
+    }
+    tag int32 = 7
 }
 
 resourcesClosed mut int32 = 0
@@ -522,7 +565,8 @@ func makePunnedBoxChecked(a scope, x int32, y int32) Point&a {
 ## punned parameter (struct var.punParam, OperandMember's carry-forward step) - see the report.
 ## "d.left.inner" below is now a real, independently-verified match, not a blanket ambiguous rejection.
 type DualWrapped struct(ls scope, rs scope, left WrappedPoint&ls, right WrappedPoint&rs) {
-    left, right
+    left
+    right
 }
 
 func dualWrappedFieldChecked(a scope, leftX int32, leftY int32, rightX int32, rightY int32) Point&a {
@@ -563,7 +607,8 @@ type LeafWrap struct(s scope, leaf WrappedPoint&s) {
 }
 
 type SiblingPair struct(s1 scope, s2 scope, one WrappedPoint&s1, two LeafWrap&s2) {
-    one, two
+    one
+    two
 }
 
 func siblingPairOneChecked(a scope, b scope, x1 int32, y1 int32, x2 int32, y2 int32) Point&a {
@@ -934,7 +979,7 @@ test "a type variable used as a type inside the body" {
 ## merely a leak - the freed chunk was immediately reused for the constructed struct itself, so a later
 ## write through the field landed on the struct's own length word and corrupted it.
 type Buffer struct(s scope, cap int64) {
-    data mut byte[cap]&s,
+    data mut byte[cap]&s
     used int64 = 0
 }
 
@@ -969,7 +1014,7 @@ test "writing through a run-time-sized constructor field does not corrupt its le
 ## any spelling - merely declaring one crashed the compiler, because the generic's own constructor was
 ## emitted as if it were an ordinary function and its parameters still named type variables.
 type Vec<T> struct(s scope, cap int64) {
-    items mut <T>[cap]&s,
+    items mut <T>[cap]&s
     len mut int64 = 0
 }
 
@@ -1041,7 +1086,7 @@ test "a generic type's destructor is monomorphized per instantiation" {
 ## The two forms are deliberately kept apart rather than folded into one: a literal is visibly infallible
 ## at the use site, where a call's fallibility is a property of the declaration you would have to look up.
 type Counted struct(start int32) {
-    n mut int32 = start,
+    n mut int32 = start
     tag int32 = 9
 }
 
@@ -1112,7 +1157,7 @@ test "'default' reaches a later parameter" {
 ## defaults work identically on a constructor - the same param-list rules (C1 defers to D8) with no
 ## constructor-specific handling anywhere
 type Server struct(host int32, port int32 = 80) {
-    host,
+    host
     port
 }
 
@@ -1214,7 +1259,7 @@ test "a non-mut '&' parameter still reads it" {
 ## field of a mutable variable was writable regardless of how it was declared. A plain (T13) struct's
 ## fields carry mut = true (that grammar has no "mut" at all) and are unaffected - both are covered here.
 type MutFields struct(locked int32, open int32) {
-    locked,
+    locked
     open mut
 }
 
@@ -1484,6 +1529,43 @@ test "constructor: a fallible field initializer propagates through the construct
         failed2 = true
     }
     assert(!failed2)
+}
+
+test "constructor: 'error' raises the constructor's own declared error before any field is built" {
+    failed mut bool = false
+    try recordMeasure(-1) catch MeasureError {
+        failed = true
+    }
+    assert(failed)
+}
+
+test "constructor: a check placed after a field tests the field it just built" {
+    failed mut bool = false
+    try recordMeasure(60) catch MeasureError {
+        failed = true
+    }
+    assert(failed)
+}
+
+test "constructor: a later field reads an earlier one, and the whole body completes" {
+    failed mut bool = false
+    try recordMeasure(8) catch MeasureError {
+        failed = true
+    }
+    assert(!failed)
+    assert(measuredDoubled == 16)
+    assert(measuredHalf == 4)
+}
+
+test "constructor: a body with no declared errors catches a fallible call entirely" {
+    a mut Guarded = Guarded(5)
+    assert(a.v == 5)
+    assert(a.tag == 7)
+
+    ## the catch body ran and wrote the field, so the assembled instance carries -1, not the argument
+    b mut Guarded = Guarded(-3)
+    assert(b.v == -1)
+    assert(b.tag == 7)
 }
 
 test "destructor runs when the instance's own scope closes at function return" {
