@@ -85,6 +85,12 @@ struct token prevTok(SyntaxCtx sc) {
 //named marker ('&name') ends in TOK_IDEN, which is an ordinary stmntEndTriggerType, so it never gets here.
 bool acceptStmntEnd(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
+    //a closing "}" terminates the statement before it, so a whole block can be written on one line
+    //("func g(a int32) int32 { return a }"). Peeked, never consumed - the "}" is the enclosing block's
+    //own, and whoever is parsing that block still needs it. No newline precedes it, so the tokenizer
+    //synthesizes no STMNT_END of its own; nothing else can follow a statement inside a block either, so
+    //this can never swallow something a longer parse would have wanted.
+    if (peekTok(sc).type == TOK_CURLY_C) return true;
     enum tokenType prev = prevTok(sc).type;
     //TOK_MUT: a constructor's bare-pun field may be written "name mut" (C2/C3), the one statement-shaped
     //form in the language whose last token is that keyword - no ordinary statement can end in it, so
@@ -642,11 +648,7 @@ struct syntax* parseCtorBody(SyntaxCtx sc) {
     while (true) {
         int cur = TokenGetCursor(sc->tc);
         struct syntax* f = parseCtorField(sc);
-        //a field is terminated like any other statement, or by the closing "}" itself - the latter keeps
-        //a whole one-line constructor ("type Point struct(x int32) { x }") writable, which the ordinary
-        //rule can't: "x" is a stmntEndTriggerType but no newline follows it, and "}" only ever terminates
-        //what PRECEDES it in acceptStmntEnd's own prev-token test
-        if (f && (acceptStmntEnd(sc) || peekTok(sc).type == TOK_CURLY_C)) { addSntx(s, f); continue; }
+        if (f && acceptStmntEnd(sc)) { addSntx(s, f); continue; }
         TokenSetCursor(sc->tc, cur);
         struct syntax* stmt = parseStmnt(sc);
         if (!stmt) break;

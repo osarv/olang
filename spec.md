@@ -189,7 +189,19 @@ x := 1
               # after "1", making "+ 2" the start of a new, invalid statement
 ```
 
-**L20.** Two further, narrower positions accept a statement's end with no `STMNT_END` token at all,
+**L20.** Wherever the grammar writes `STMNT_END`, a statement is also accepted as ended when the very
+next token is a `}` — the one that closes the enclosing block or body. L18 synthesizes nothing there
+(no newline precedes it), and nothing but the block's end can follow a statement inside a block, so
+this can never absorb a token a longer parse would have wanted. It is what makes a whole block
+writable on one line:
+
+```
+func g(a int32) int32 { return a }
+type Point struct(x int32) { x }
+if n > 3 { n = 3 }
+```
+
+**L20a.** Three further, narrower positions accept a statement's end with no `STMNT_END` token at all,
 because the grammar never expects one there and L18 never produces one there either:
 - immediately after a `}` that closes a block, struct/vocab/error body, or struct literal;
 - immediately after the `&` of a bare reference marker (§8),
@@ -197,7 +209,9 @@ because the grammar never expects one there and L18 never produces one there eit
   operator can never be the last token of a complete statement, since a binary operator is always
   followed by an operand; the two are therefore never ambiguous in this position. A *named* marker
   (`&name`) ends in an identifier, which does trigger a synthesized `STMNT_END` under L18, so this
-  exception concerns the bare form only.)
+  exception concerns the bare form only.);
+- immediately after the `mut` of a constructor's bare-pun field (§9.1 C2, `open mut`) — the only
+  statement-shaped form in the language whose last token is that keyword.
 
 ## 2. Types
 
@@ -387,7 +401,7 @@ independent one, so such a tag could never be honoured. Writing one is a compile
 with no suffix after it is the whole type's own marker and takes a scope name normally. The Each marker's optional `IDEN` must begin on the same source line as
 that `&`; an identifier on a later line is not part of the marker, which therefore reads as bare.
 (Without this, a bare marker ending a line would silently absorb the identifier opening the next one,
-since `&` triggers no `STMNT_END` under L18 — see L20.)
+since `&` triggers no `STMNT_END` under L18 — see L20a.)
 
 **T25.** A bare marker (`&`) and a named marker (`&name`) both make the type reference-shaped; the
 distinction between the two (which region of memory the reference belongs to) is an ownership
@@ -1452,9 +1466,8 @@ any parameter of this same constructor's own `param-list`, giving that field a r
 scope tag independent of any particular call site — see
 §8.4.
 
-The `STMNT_END` terminating a `ctor-field` follows §2's own rule for any other statement, with one
-addition: the `"}"` closing the `ctor-body` also terminates the field before it, so a whole
-constructor may be written on one line (`type Point struct(x int32) { x }`).
+The `STMNT_END` terminating a `ctor-field` follows §1's own rules for any other statement, L20
+included, so a whole constructor may be written on one line (`type Point struct(x int32) { x }`).
 
 **C2a.** The fields **are** the constructor's own top-level locals. A `ctor-field` declares, in
 addition to a field of the struct type, a local of the same name, initialized to the same value and

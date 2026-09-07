@@ -362,6 +362,14 @@ drift out of sync with the actual code.
   better served here by distinct types, which the compiler verifies, than by argument names, which it
   cannot. `default` buys the half that is about *capability* - reaching a later parameter - while leaving
   names internal, and it is reversible in a way shipping named arguments would not be.
+- **A closing `}` terminates the statement before it (L20), so any block may be written on one line.**
+  `func g(a int32) int32 { return a }`, `type Point struct(x int32) { x }`, `if n > 3 { n = 3 }`, a
+  one-line `test`/`match`/`for`/`do` body - all of it. There is no `;` in olang and a newline synthesizes
+  the `STMNT_END` (L18), so before this a block always needed a line break before its `}`; the one-line
+  forms simply didn't parse. Safe because nothing but the block's own end can follow a statement inside a
+  block, so the peeked `}` can never absorb a token a longer parse would have wanted - and it is never
+  consumed, since the enclosing block parser still needs it. Go's own rule is the same. This subsumes the
+  ad-hoc `}` lookahead the constructor body briefly needed for `{ x }`.
 - **An expression is a statement only if evaluating it can do something (S3).** A call (ordinary,
   constructor, or `try`-wrapped) or one of the four `++`/`--` forms - nothing else. `n`, `x == y` and
   `a + 1` standing alone are compile-time errors, not accepted no-ops: they compute a value and discard

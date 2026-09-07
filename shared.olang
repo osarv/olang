@@ -269,7 +269,8 @@ func mightFailWithBareError(n int32) int32 ? RangeError + error {
 ## states its own type unless it opts into ":=" the same way any other var-decl would). A
 ## constructor-declaring type stays buildable by the positional "Type{...}" literal too (C6) - the literal
 ## assembles the fields directly and is the one path back from values already known to be valid.
-## Counter is the plain case: every field is a pun, and the whole body is one line.
+## Counter is the plain case: every field is a pun, and the whole body is one line - a closing "}"
+## terminates the statement before it (L20), so any block at all may be written on one line.
 type Counter struct(start int32) { start }
 
 ## a field may also be computed from the constructor's parameters via an ordinary expression, alongside a
@@ -1509,6 +1510,38 @@ test "the real arena allocator handles chunk growth and reuse across many scope 
 test "constructor: every field a bare pun" {
     c mut Counter = Counter(5)
     assert(c.start == 5)
+}
+
+## L20: a closing "}" ends the statement before it, so a whole block fits on one line - a function
+## body, a constructor body (Counter, above), an if/for/do/match arm, or a test block. Nothing but the
+## block's own end can follow a statement inside a block, so this can never swallow a token a longer
+## parse would have wanted.
+func oneLineBody(a int32) int32 { return a }
+
+func oneLineBlocks(a mut int32) int32 {
+    if a > 3 { a = 3 }
+    for i mut int32 = 0, i < 2, i++ { a++ }
+    do { a++ } while a < 6
+    return a
+}
+
+func oneLineMatch(n int32) int32 {
+    r mut int32 = 0
+    match n { case 6 { r = 60 } nomatch { r = 9 } }
+    return r
+}
+
+func oneLineEmpty() { }
+
+test "one-line blocks: a whole body between braces on a single line" {
+    assert(oneLineBody(7) == 7)
+    assert(oneLineBlocks(1) == 6)
+    assert(oneLineBlocks(9) == 6)
+    assert(oneLineMatch(6) == 60)
+    assert(oneLineMatch(2) == 9)
+    oneLineEmpty()
+    c mut Counter = Counter(4)
+    assert(c.start == 4)
 }
 
 test "constructor: a computed field alongside a punned one" {

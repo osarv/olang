@@ -2916,3 +2916,26 @@ from their original form.
   All 104 tests passed unchanged - nothing in the corpus relied on the old permissiveness, which is
   itself the evidence the form was never useful. The rule's real value is catching `x == y` written for
   `x = y`, previously accepted in silence.
+
+- **A closing `}` terminates the statement before it (L20).** Noticed while testing the S3 restriction
+  above: `func g(a int32) int32 { return a }` did not parse, even though `type Point struct(x int32)
+  { x }` did, because the constructor body had been given an ad-hoc `}` lookahead and nothing else had.
+  Generalized at the user's request (*"fix the one-line thing tho. I want one-liners to be valid"*), and
+  the general rule turned out to be strictly simpler than the special case it replaced: `acceptStmntEnd`
+  now succeeds when the next token is `}`, and `parseCtorBody`'s own lookahead went away.
+  There is no `;` in olang - a newline before a `}` synthesizes the `STMNT_END` (L18) - so before this
+  every block needed a line break before its closing brace, and no one-line form parsed anywhere: not a
+  function body, an `if`/`for`/`do`/`match` arm, a `test`, or an empty `{ }`. All of them work now.
+  Sound because nothing but the block's own end can follow a statement inside a block, so the peeked `}`
+  can never absorb a token a longer parse would have wanted; it is peeked rather than consumed, since the
+  enclosing block parser still needs it. Go's automatic-semicolon rule has the same clause for exactly
+  this reason. L20a keeps the three genuinely narrow no-token-at-all positions (after a body-closing `}`,
+  after a bare `&` marker, after a bare pun's `mut`).
+- **Restating a constructor parameter as an explicitly-typed field stays rejected.** Raised as an open
+  question alongside the bare pun: should `start int32 = start` (C2a, VAR_NAME_IN_USE) or `start int32`
+  with no initializer (C5) be legal for a type declaring `struct(start int32)`? User: *"they should both
+  be rejected. keep it as it is."* The pun already gives the concise form, and C5 exists so `name Type`
+  means one thing everywhere rather than silently becoming a pun whenever the name happens to match a
+  parameter. Keeping C2a's collision rule also avoids a real fix that would otherwise be needed: params
+  and field-locals share one scope, and both `scopeFindLocal` and `cgFindLocal` scan forward, so a
+  shadowing field would resolve to the parameter instead of itself. `make verify`: 105/13/12.
