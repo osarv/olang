@@ -2034,6 +2034,25 @@ test "a runtime-sized array tagged to a named scope survives a function boundary
 extern func getpid() int32
 extern func write(fd int32, buf byte[], count int64) int64
 
+## E12a on an ARRAY parameter. "b mut byte[]&" is the caller's own array, so writes through it are visible
+## at the call site - which is what makes an out-parameter expressible at all. The marker is load-bearing:
+## an unmarked "b mut byte[]" takes a copy of a compile-time-length argument, and the write would go
+## nowhere. E12a used to reject this call too, testing only structMAlloc while T11 makes a runtime-length
+## array reference-shaped through arrMalloc instead - so BOTH spellings failed and there was no way to
+## write this at all (see the report).
+func fillFirst(b mut byte[]&) int32 {
+    b[0] = 'X'
+    return len(b)
+}
+
+test "a 'mut T[]&' parameter writes to the caller's own array" {
+    sz mut int32 = 4
+    buf mut byte[sz]
+    n int32 = fillFirst(buf)
+    assert(n == 4)
+    assert(buf[0] == 'X')
+}
+
 test "'extern func' links against and calls a real external scalar-only function" {
     pid int32 = getpid()
     assert(pid > 0)

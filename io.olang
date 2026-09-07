@@ -36,8 +36,9 @@ func PrintErr(data byte[]) ? IoError {
 
 ## writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
 ## buffer because a function may not return a bare "&" reference (O13) and an int64 never needs more than
-## 20 bytes anyway.
-func FormatInt(n int64, buf mut byte[]) int32 {
+## 20 bytes anyway. "buf mut byte[]&" and not "buf mut byte[]": the marker is what makes this the caller's
+## own array rather than a copy of it (E12a), and so what makes this an out-parameter at all.
+func FormatInt(n int64, buf mut byte[]&) int32 {
     if n == 0 {
         buf[0] = '0'
         return 1
@@ -87,9 +88,9 @@ test "Write succeeds on a real descriptor" {
     assert(ok)
 }
 
-## the buffer is declared run-time-length on purpose: a compile-time-length "byte[24]" argument is
-## copied into a "byte[]" parameter rather than aliased, so the digits would be written to a copy the
-## caller never sees. See the report - that asymmetry is a real bug, not something to design around.
+## the buffer is run-time-length because that is what a "byte[]&" parameter accepts: a compile-time-length
+## "byte[24]" is a value, and E12a rejects promoting one into a reference parameter rather than silently
+## copying it - the caller must hand over an array that is already reference-shaped (T11).
 test "FormatInt renders decimals, including zero and negatives" {
     sz mut int32 = 24
     buf mut byte[sz]

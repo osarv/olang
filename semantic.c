@@ -2803,7 +2803,13 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         //silent copy of something the caller holds, exactly as at a var-decl or a return. That is what
         //keeps "PunnedBox(a, WrappedPoint(a, Point{x, y}))" working while still rejecting the case this
         //rule exists for: passing a named value where the signature promised to use the caller's own.
-        if (paramType.structMAlloc && !arg->type.structMAlloc && OperandIsLvalue(arg)
+        //"already reference-shaped" has TWO forms, and testing only structMAlloc was a real bug: T11 makes
+        //a runtime-length array reference-shaped through arrMalloc, with or without a marker, so a
+        //perfectly good "byte[expr]" argument looked like a value about to be promoted and was rejected -
+        //which left an array out-parameter inexpressible, since the unmarked form silently copies instead.
+        bool argIsRef = arg->type.structMAlloc
+            || (arg->type.bType == BASETYPE_ARRAY && arg->type.arrMalloc);
+        if (paramType.structMAlloc && !argIsRef && OperandIsLvalue(arg)
                 && (arg->type.bType == BASETYPE_STRUCT || arg->type.bType == BASETYPE_ARRAY)) {
             ErrMsgSemantic(arg->tok, VALUE_ARG_FOR_REFERENCE_PARAM);
         }

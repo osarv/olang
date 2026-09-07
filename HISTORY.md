@@ -3130,3 +3130,27 @@ from their original form.
   `Base.olang`'s capital is load-bearing: it is what lets `worker.olang` re-export it and `runner.olang`
   reach `wk.Base.BaseError` two hops away. Derivable from M4 + M6 but stated in neither, so M4 now says it.
   `io.olang` stays lowercase, since nothing re-exports it.
+
+- **Correction to the entry above: the `T[]`-parameter hole was real, but not where it was reported.**
+  The diagnosis there - that E12a's exemption for the arrMalloc promotion "rests on a false premise" - was
+  arrived at without trying the obvious alternative spelling. The user asked the obvious question:
+  *"why is fill not declared with a ref arg?"*
+  It should have been. `func fill(b mut byte[]&)` is the correct signature for an out-parameter, and with
+  the marker present E12a fires exactly as designed, rejecting a `byte[4]` lvalue instead of silently
+  copying it. So the rule was not exempting the dangerous case at all - the test that found the "bug" had
+  simply not asked for a reference.
+  **What trying it did expose is a real bug, one level down.** `fillRef(c)` with `c mut byte[sz]` - a
+  genuinely reference-shaped runtime-length array, nothing to promote - was *also* rejected. E12a's test
+  read `!arg->type.structMAlloc`, and a runtime-length array is reference-shaped through `arrMalloc`
+  instead (T11), so it looked like a value about to be promoted. The two forms of "already a reference"
+  were not both accounted for. Consequence: an array out-parameter was inexpressible in **either**
+  spelling - `mut T[]&` rejected every argument including correct ones, and unmarked `mut T[]` silently
+  copied a `T[N]` argument and wrote to the copy. Fixed by testing both forms; `io.olang`'s `FormatInt`
+  now takes `buf mut byte[]&`, and shared.olang carries a permanent regression test.
+  **One residual, now a design question rather than a defect**: an *unmarked* `mut T[]` parameter still
+  copies a `T[N]` lvalue while aliasing a `T[]` one. That is consistent with D9 (unmarked means a copy)
+  and there is now a correct alternative spelling for the other meaning, so it no longer blocks anything -
+  but "reference-shaped by T11, yet copied on the way in" remains worth revisiting.
+  **Also checked and NOT a bug:** `byte[0, 0, 0, 0]` is rejected because an int literal does not narrow to
+  `byte` (T6 widens only), and `int32[3]& = int32[7, 8, 9]` is rejected by D16 as a redundant size, not by
+  anything to do with the marker. Both were mistaken for compiler faults before being run down.
