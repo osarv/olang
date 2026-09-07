@@ -1691,23 +1691,49 @@ type happens to declare a destructor.
 
 ### 10.1 Compilation modes
 
-**P1.** The compiler operates in exactly one of two modes, selected by a command-line flag; there is
-no other entry point.
+**P1.** Each module — one `.olang` file (§4) — is a **separate compilation unit**, compiled to its own
+object file and linked with the others. The compiler operates in exactly one of three modes, selected
+by a command-line flag; there is no other entry point.
 
-**P2.** `-c <file>`: compiles one program, with `<file>` as its root module. Every module reachable
-from `<file>` by imports (§4) is pulled in transitively. `<file>` must
-declare a `main` function (§10.2); the result is one native executable.
+**P2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
+linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
+read and analyzed, because that is where their declarations come from (P2a); only code generation is
+confined to `<file>` itself. `main` is neither required nor emitted.
 
-**P3.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
-root module (transitively pulling in its own imports, exactly as `-c` would) and runs every
+**P2a.** A module's imports are resolved from their **source**, exactly as they are within one program:
+there is no separate interface, header, or metadata file, and none is generated. A prebuilt library is
+therefore its sources together with its object files, and a signature is never stated in two places
+that could disagree. This matters beyond convenience: a function's scope obligations (§8 O10b) are
+derived from its body, so a separate interface would carry a fact its own source is the only authority
+for.
+
+**P3.** `-b <file>`: builds one program, with `<file>` as its root module. Every module reachable from
+`<file>` by imports is compiled as in P2, and the results are linked into one native executable.
+`<file>` must declare a `main` function (§10.2). A module's object is rebuilt when it is older than
+that module's own source **or than any source it transitively imports** — an object depends on the
+signatures it was compiled against, so a change to an import invalidates it even though its own source
+did not change.
+
+**P3a.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
+root module (transitively pulling in its own imports, exactly as `-b` would) and runs every
 `test { }` block declared *directly in that file* (§10.4) — not those declared in any module it
 merely imports. `main` is not required in this mode, and is not run even if present. Each listed
 file's compilation and test run is independent: a compile-time error in one listed file does not
 prevent the others from being checked and run.
 
+**P3b.** A symbol a module defines is named from that module's own **file base name** (directory and
+`.olang` extension removed), never from anything about the compilation it happens to be part of — an
+object compiled on its own has to agree with one compiled as part of a whole program. Two modules
+whose base names match therefore collide, and that is a compile-time error.
+
+**P3c.** Code a module generates but does not exclusively own — an instantiation of a generic declared
+elsewhere (§12 G16), and the language's own runtime support — is emitted by **every** module that needs
+it, under one shared name per P3b, and the duplicates are discarded at link time. An instantiation set
+is not known until the module using it is compiled, so no single module could be responsible for it.
+
 ### 10.2 Program entry
 
-**P4.** In `-c` mode, the root module must declare a function named `main` with exactly this shape:
+**P4.** In `-b` mode, the root module must declare a function named `main` with exactly this shape:
 no parameters, no success type, and at least one declared error
 (§3 D8) — `func main() ? SomeError [+ ...] { ... }`. Any other
 shape (parameters, a `ret-type`, or no declared error at all) is a compile-time error. There is no
@@ -1715,10 +1741,16 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 
 ### 10.3 Process exit
 
-**P5.** Running the compiled program (`-c` mode) invokes `main`. If it returns normally (falls off
+**P5.** Running the compiled program (`-b` mode) invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
 declared error type and word that escaped) and exits with status `1`.
+
+**P5a.** Every module's global variables (§3 D12) are initialized before `main` runs, each module's own
+in declaration order. Across modules the order is **imports first**: a module is initialized after every
+module it imports has been. Where imports form a cycle (§4.6 allows one), the relative order of the
+modules in that cycle is unspecified, so a global initializer that reads a global from another module in
+the same cycle has no defined value to read and must not be written.
 
 **P6.** `done` and `crash` (§6.6) exit the process immediately,
 from anywhere, with status `0` or `1` respectively, printing nothing, independent of §10.3's own
@@ -1730,7 +1762,7 @@ from anywhere, with status `0` or `1` respectively, printing nothing, independen
 `STR_LIT` is the test's description. A `test` block has no error union of its own — the same rule a
 destructor's body follows (§9.3 C7): every fallible call inside it must be fully caught.
 
-**P8.** A `test` block is only ever executed under `-t` (§10.1 P3), and only for the file it is
+**P8.** A `test` block is only ever executed under `-t` (§10.1 P3a), and only for the file it is
 directly declared in. Each test in a run prints its own description together with pass/fail, and
 one test failing (§6.7 S18, inside the block itself) does not stop the remaining tests in the same
 file, or any other listed file, from running.

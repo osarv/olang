@@ -37,24 +37,94 @@ void requireClangOrExplain(char* clang, char* irPath) {
     exit(EXIT_FAILURE);
 }
 
-void compileProgram(char* file) {
+//true when `objPath` is older than `srcPath` (or missing) - P3's own staleness test, applied to one file.
+//Compared at nanosecond resolution (st_mtim, not st_mtime): a whole-second comparison silently treats an
+//object as current when the source was edited in the same second as the last build, which is exactly what
+//a fast edit-build loop does.
+bool olderThan(char* objPath, char* srcPath) {
+    struct stat o, s;
+    if (stat(objPath, &o) != 0) return true;
+    if (stat(srcPath, &s) != 0) return true;
+    if (o.st_mtim.tv_sec != s.st_mtim.tv_sec) return o.st_mtim.tv_sec < s.st_mtim.tv_sec;
+    return o.st_mtim.tv_nsec < s.st_mtim.tv_nsec;
+}
+
+//P3: an object depends on the signatures it was compiled against, so it is stale when its own source OR
+//any source it transitively IMPORTS is newer than it. Walks the real import graph rather than the whole
+//program - comparing against every module would be safe but would rebuild the world whenever any leaf
+//changed, which is the entire thing separate compilation exists to avoid. `seen` carries the visited set,
+//since imports may legitimately form a cycle (§4.6).
+bool anyImportNewer(struct semaModule* mod, char* objPath, struct list* seen) {
+    for (int i = 0; i < seen->len; i++) {
+        if (*(struct semaModule**)ListGetIdx(seen, i) == mod) return false;
+    }
+    ListAdd(seen, &mod);
+    char buf[512];
+    if (olderThan(objPath, StrToCStr(mod->fileName, buf))) return true;
+    for (int i = 0; i < mod->imports.len; i++) {
+        struct semaImport* imp = ListGetIdx(&mod->imports, i);
+        if (anyImportNewer(imp->mod, objPath, seen)) return true;
+    }
+    return false;
+}
+
+bool moduleIsStale(struct semaModule* mod, char* objPath) {
+    struct list seen = ListInit(sizeof(struct semaModule*));
+    return anyImportNewer(mod, objPath, &seen);
+}
+
+//compiles one module to build/<base>.o, skipping the work when the object is already up to date.
+//Returns the object path.
+char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry, bool force) {
+    char nameBuf[512];
+    char* base = baseNameNoExt(StrToCStr(mod->fileName, nameBuf));
+    char* irPath = MallocOrCrash(512);
+    char* objPath = MallocOrCrash(512);
+    snprintf(irPath, 512, "build/%s.ll", base);
+    snprintf(objPath, 512, "build/%s.o", base);
+    if (!force && entry == CG_ENTRY_NONE && !moduleIsStale(mod, objPath)) return objPath;
+
+    CodegenModule(mod, irPath, entry);
+    requireClangOrExplain(clang, irPath);
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "%s -O3 -c -o %s %s", clang, objPath, irPath);
+    if (system(cmd) != 0) { fprintf(stderr, "native compilation failed for %s\n", irPath); exit(EXIT_FAILURE); }
+    return objPath;
+}
+
+//"-c": one module to one object, nothing linked (P2)
+void compileModule(char* file) {
     struct semaModule* root = SemanticAnalyzeFile(file, false);
-    if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation(); //prints the failure summary and exits
+    if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
+    ensureBuildDir();
+    char* clang = findClang();
+    char* objPath = emitModuleObject(root, clang, CG_ENTRY_NONE, true);
+    printf(COLOR_FG_GREEN "built %s\n" COLOR_RESET, objPath);
+}
+
+//"-b": every reachable module to its own object, then one link (P1/P3)
+void buildProgram(char* file) {
+    struct semaModule* root = SemanticAnalyzeFile(file, true);
+    if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
 
     ensureBuildDir();
-    char* base = baseNameNoExt(file);
-    char irPath[512], binPath[512];
-    snprintf(irPath, sizeof(irPath), "build/%s.ll", base);
-    snprintf(binPath, sizeof(binPath), "build/%s", base);
-    CodegenProgram(root, irPath);
-
     char* clang = findClang();
-    requireClangOrExplain(clang, irPath);
+    char objs[8192] = "";
+    struct list* all = SemanticAllModules();
+    for (int i = 0; i < all->len; i++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
+        char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_MAIN : CG_ENTRY_NONE,
+                                         mod == root);
+        strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
+        strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
+    }
 
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s -lm", clang, binPath, irPath);
-    int rc = system(cmd);
-    if (rc != 0) { fprintf(stderr, "native compilation failed\n"); exit(EXIT_FAILURE); }
+    char* base = baseNameNoExt(file);
+    char binPath[512];
+    snprintf(binPath, sizeof(binPath), "build/%s", base);
+    char cmd[16384];
+    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s%s -lm", clang, binPath, objs);
+    if (system(cmd) != 0) { fprintf(stderr, "link failed\n"); exit(EXIT_FAILURE); }
     printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, binPath);
 }
 
@@ -62,7 +132,7 @@ void compileProgram(char* file) {
 //an -t file list still runs even if this one has semantic errors, fails to build, or fails a test
 int runTestFile(char* file, char* clang) {
     int before = ErrMsgGetNErrors();
-    struct semaModule* root = SemanticAnalyzeFile(file, true);
+    struct semaModule* root = SemanticAnalyzeFile(file, false);
     if (ErrMsgGetNErrors() > before) {
         printf(COLOR_FG_RED "%s: semantic errors, skipping\n" COLOR_RESET, file);
         return 1;
@@ -73,12 +143,23 @@ int runTestFile(char* file, char* clang) {
     char irPath[512], binPath[512];
     snprintf(irPath, sizeof(irPath), "build/%s_test.ll", base);
     snprintf(binPath, sizeof(binPath), "build/%s_test", base);
-    CodegenTests(root, irPath);
+    CodegenModule(root, irPath, CG_ENTRY_TESTS);
 
     requireClangOrExplain(clang, irPath);
 
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s -lm", clang, binPath, irPath);
+    //every OTHER module still needs its own object, exactly as under -b; only the root differs, carrying
+    //the test harness instead of main
+    char objs[8192] = "";
+    struct list* all = SemanticAllModules();
+    for (int i = 0; i < all->len; i++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
+        if (mod == root) continue;
+        char* objPath = emitModuleObject(mod, clang, CG_ENTRY_NONE, true);
+        strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
+        strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
+    }
+    char cmd[16384];
+    snprintf(cmd, sizeof(cmd), "%s -O3 -o %s %s%s -lm", clang, binPath, irPath, objs);
     int rc = system(cmd);
     if (rc != 0) {
         printf(COLOR_FG_RED "%s: native compilation failed\n" COLOR_RESET, file);
@@ -99,7 +180,13 @@ int main(int argc, char** argv) {
 
     if (!strcmp(argv[1], "-c")) {
         if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
-        compileProgram(argv[2]);
+        compileModule(argv[2]);
+        return 0;
+    }
+
+    if (!strcmp(argv[1], "-b")) {
+        if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        buildProgram(argv[2]);
         return 0;
     }
 

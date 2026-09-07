@@ -4817,7 +4817,7 @@ void semaCheckBodies(struct semaModule* mod) {
 
 // ---- entry point ----
 
-struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
+struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     bareErrorType = (struct type){0};
     bareErrorType.bType = BASETYPE_ERROR;
     bareErrorType.name = StrFromCStr("error");
@@ -4846,7 +4846,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode) {
         drainTypeInstantiations();
     }
 
-    if (!testMode) {
+    if (requireMain) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
         if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND);
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to

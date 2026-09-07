@@ -3005,3 +3005,42 @@ from their original form.
   **Corpus migration**: every `s scope` parameter and every `own` argument deleted; a handful of bodies
   that had tagged a local to a scope parameter for no reason now read as plain `own`, which is what they
   always meant. `make verify`: 108/13/12.
+
+- **Separate compilation: one module, one object file (§10 P1-P3c, P5a).** Chosen over the stdlib as the
+  next piece because the user had named it directly - *"I want to have libraries to link against and every
+  file to be its own compilation unit"* - and because it gets harder, not easier, once a standard library
+  exists to be rebuilt by it.
+  **Two blockers, both found by looking rather than guessing.** First, symbols were mangled `@m<n>_name`
+  where `n` was the module's index in *this compilation's* module list. An index is meaningless to a
+  separately-compiled object: two objects would disagree about which module `m0` named and nothing would
+  link. Now the prefix is the file's base name, which is the identity the language already derives an
+  import alias from (M3), so it is stable however a client spells the path. Fixed and verified on its own
+  (`19b8bf6`) before anything else moved. Second, a generic's instantiation set is not known until the
+  *using* module is compiled, so no single module can own it - instantiations, and the runtime, are now
+  emitted by every object that needs them as `linkonce_odr`, and the linker keeps one. That is the C++
+  template model and it is what makes stable mangling load-bearing rather than cosmetic: dedup is by name.
+  **No interface files, deliberately.** Imports are resolved from source exactly as before; only codegen
+  narrowed to one module. Semantic analysis was not touched at all. Beyond avoiding a metadata format, this
+  sidesteps a real hazard already noted when obligations were designed: a function's scope obligations are
+  *derived from its body*, so an interface file would carry a fact the source is the only authority for and
+  could silently drift from it. A prebuilt library is therefore its sources plus its objects - the C++
+  headers-and-`.a` model rather than the Go/Rust one.
+  **`-c` vs `-b`.** The user proposed a `-b` build flag and asked how it would differ from `-c`. It reads
+  cleanly once `-c` means what it means in every other compiler: compile one file, don't link. So `-b` is
+  the driver and `-c` is one unit of work it schedules, which also means an external build system can drive
+  `-c` per file without going through `-b` at all. `SemanticAnalyzeFile`'s `testMode` parameter became
+  `requireMain`, since "needs a main" was the only thing it ever controlled and only `-b` wants one.
+  **Staleness is transitive, and two mistakes in it were caught by testing rather than reasoning.** An
+  object depends on the signatures it was compiled against, so a change to an import invalidates it even
+  though its own source did not change. The first implementation compared against *every* module in the
+  program - safe, but it rebuilt the world whenever any leaf changed, defeating the entire point; it now
+  walks the real import graph, with a visited set since import cycles are legal (§4.6). The first test of
+  it was also inconclusive in a way worth recording: the whole edit-and-rebuild sequence ran inside one
+  second, and `st_mtime` is whole-second, so nothing looked stale. That is not a test artifact but a real
+  bug - a fast edit-build loop would silently skip rebuilds - fixed by comparing `st_mtim` at nanosecond
+  resolution.
+  **One genuine bug the corpus caught:** a cross-module *constructor* call emitted no `declare`. The
+  foreign-declaration pass skipped anything a type pointed at as its `ctorFunc`, on the theory that
+  constructors "ride on the type" - true only for generic instantiations, which are `linkonce_odr` in every
+  object. A non-generic type's constructor is an ordinary entry in its module's own var list and needed a
+  declaration like any other function. `make verify`: 108/13/12, now through four separate objects.

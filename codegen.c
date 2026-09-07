@@ -1645,7 +1645,7 @@ void emitStructTypeDefs(FILE* out) {
     }
 }
 
-void emitGlobalDecls(FILE* out) {
+void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
@@ -1656,7 +1656,10 @@ void emitGlobalDecls(FILE* out) {
             mangleGlobal(mod, v->name, name, sizeof(name));
             char ty[256];
             llvmType(v->type, ty, sizeof(ty));
-            fprintf(out, "%s = global %s zeroinitializer\n", name, ty);
+            //P1: one module, one object. Another module's global is a reference to storage that object
+            //defines, never a second definition of it - two would be a duplicate symbol at link time.
+            if (mod == emitMod) fprintf(out, "%s = global %s zeroinitializer\n", name, ty);
+            else fprintf(out, "%s = external global %s\n", name, ty);
         }
     }
 }
@@ -1707,10 +1710,10 @@ void emitRuntimeDecls(FILE* out) {
         "@stderr = external global ptr\n"
         "declare void @longjmp(ptr, i32) noreturn\n"
         "\n"
-        "@__olang_jmp_target = global ptr null\n"
-        "@__olang_assert_msg = private unnamed_addr constant [17 x i8] c\"assertion failed\\0A\"\n"
+        "@__olang_jmp_target = linkonce_odr global ptr null\n"
+        "@__olang_assert_msg = linkonce_odr unnamed_addr constant [17 x i8] c\"assertion failed\\0A\"\n"
         "\n"
-        "define void @__olang_assert_fail() {\n"
+        "define linkonce_odr void @__olang_assert_fail() {\n"
         "entry:\n"
         "  %tgt = load ptr, ptr @__olang_jmp_target\n"
         "  %isnull = icmp eq ptr %tgt, null\n"
@@ -1748,11 +1751,11 @@ void emitScopeRuntime(FILE* out) {
                                                     //is whichever chunk this scope allocated first, set
                                                     //once when the list goes from empty to non-empty and
                                                     //never touched again.
-        "@__olang_chunk_pool = global ptr null\n"
+        "@__olang_chunk_pool = linkonce_odr global ptr null\n"
         "\n"
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
         //larger, original capacity) or freshly malloc'd at max(4096, size) bytes
-        "define ptr @__olang_new_chunk(i64 %size) {\n"
+        "define linkonce_odr ptr @__olang_new_chunk(i64 %size) {\n"
         "entry:\n"
         "  %pool = load ptr, ptr @__olang_chunk_pool\n"
         "  %poolnull = icmp eq ptr %pool, null\n"
@@ -1783,7 +1786,7 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n"
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
         //doesn't have room
-        "define ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
+        "define linkonce_odr ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
         "entry:\n"
         //every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
         //raw byte sum, so without this a 12-byte "int32[3]" left the following allocation at offset 12 -
@@ -1837,7 +1840,7 @@ void emitScopeRuntime(FILE* out) {
         //any chunk is reclaimed) and is returned to the pool wholesale, so this turns a malloc/free pair
         //per registered instance into a pointer bump and nothing at all. LLVM cannot make this change
         //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
-        "define void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
+        "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
         "  %node = call ptr @__olang_scope_alloc(ptr %scope, i64 24)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
@@ -1855,7 +1858,7 @@ void emitScopeRuntime(FILE* out) {
         //registered first, same order a stack unwind would give - then splices its entire chunk list onto
         //the free pool in one O(1) op (after walking to find this list's own tail) and resets the scope
         //back to empty/lazy
-        "define void @__olang_scope_close(ptr %scope) {\n"
+        "define linkonce_odr void @__olang_scope_close(ptr %scope) {\n"
         "entry:\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %dhead = load ptr, ptr %dheadptr\n"
@@ -1898,27 +1901,102 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n", out);
 }
 
-void cgInitGlobalsFunc(struct cgCtx* ctx) {
-    fputs("define void @__olang_init_globals() {\nentry:\n", ctx->fnOut);
+//P5a: one initializer per module, since one module is one object. The entry point calls them all, in
+//an order the ROOT object decides (cgInitGlobalsCalls) - imports before importers.
+void cgInitGlobalsName(struct semaModule* mod, char* buf, size_t n) {
+    char prefix[256];
+    mangleModPrefix(mod, prefix, sizeof(prefix));
+    snprintf(buf, n, "@__olang_init_globals_%s", prefix);
+}
+
+void cgInitGlobalsFunc(struct cgCtx* ctx, struct semaModule* emitMod) {
+    char fname[300];
+    cgInitGlobalsName(emitMod, fname, sizeof(fname));
+    fprintf(ctx->fnOut, "define void %s() {\nentry:\n", fname);
     ctx->terminated = false;
-    struct list* all = SemanticAllModules();
-    for (int m = 0; m < all->len; m++) {
-        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
-        ctx->curMod = mod;
-        ctx->scope = NULL;
-        for (int i = 0; i < mod->vars.len; i++) {
-            struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType == BASETYPE_FUNC || !v->initExpr) continue;
-            char gaddr[256];
-            mangleGlobal(mod, v->name, gaddr, sizeof(gaddr));
-            char* val = cgValue(ctx, v->initExpr);
-            cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr, NULL);
-        }
+    ctx->curMod = emitMod;
+    ctx->scope = NULL;
+    for (int i = 0; i < emitMod->vars.len; i++) {
+        struct var* v = ListGetIdx(&emitMod->vars, i);
+        if (v->type.bType == BASETYPE_FUNC || !v->initExpr) continue;
+        char gaddr[256];
+        mangleGlobal(emitMod, v->name, gaddr, sizeof(gaddr));
+        char* val = cgValue(ctx, v->initExpr);
+        cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr, NULL);
     }
     fputs("  ret void\n}\n\n", ctx->fnOut);
 }
 
-void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
+//P5a: imports before importers, so a module's own globals are set only after everything it imports has
+//been. SemanticAllModules is already in discovery order (a module is appended once its imports have been
+//analyzed), which is exactly that post-order; a cycle leaves the members' relative order unspecified,
+//which is what P5a says.
+void cgInitGlobalsCalls(struct cgCtx* ctx, struct semaModule* emitMod) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        char fname[300];
+        cgInitGlobalsName(mod, fname, sizeof(fname));
+        if (mod != emitMod) fprintf(ctx->fnOut, "  call void %s()\n", fname);
+        else fprintf(ctx->fnOut, "  call void %s()\n", fname);
+    }
+}
+
+//declarations for the other modules' init functions, which this object calls but does not define
+void cgEmitForeignInitDecls(FILE* out, struct semaModule* emitMod) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        if (mod == emitMod) continue;
+        char fname[300];
+        cgInitGlobalsName(mod, fname, sizeof(fname));
+        fprintf(out, "declare void %s()\n", fname);
+    }
+}
+
+//the parameter list, shared by a definition and by the "declare" another module's object needs for the
+//same function - they have to agree exactly, so they are written in one place. §8 O3/O19: each of the
+//signature's own scope variables is a leading, never-user-visible "ptr" parameter, the arena the caller
+//bound it to - exactly what the old "s scope" parameter carried, minus any presence in the language.
+void cgEmitParamList(FILE* out, struct var* func, bool named) {
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        fprintf(out, "%sptr", i > 0 ? ", " : "");
+        if (named) fprintf(out, " %%sarg%d", i);
+    }
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&func->type.vars, i);
+        char pty[256];
+        llvmType(p->type, pty, sizeof(pty));
+        bool first = (i == 0 && func->type.scopeVars.len == 0);
+        fprintf(out, "%s%s", first ? "" : ", ", pty);
+        if (named) fprintf(out, " %%arg%d", i);
+    }
+}
+
+//P1/P2: every function this object does not define but may call - another module's, or one of this
+//module's own that ends up referenced before its definition is written - needs a declaration matching
+//the definition exactly.
+void cgEmitForeignFuncDecls(FILE* out, struct semaModule* emitMod) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        if (mod == emitMod) continue;
+        for (int i = 0; i < mod->vars.len; i++) {
+            struct var* v = ListGetIdx(&mod->vars, i);
+            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
+            if (v->type.typeParams.len != 0) continue; //a generic has no code of its own (G16)
+            char retTy[256], name[256];
+            llvmFuncRetType(v->type, retTy, sizeof(retTy));
+            mangleGlobal(mod, v->name, name, sizeof(name));
+            fprintf(out, "declare %s %s(", retTy, name);
+            cgEmitParamList(out, v, false);
+            fputs(")\n", out);
+        }
+    }
+    fputs("\n", out);
+}
+
+void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func, bool shared) {
     ctx->curMod = mod;
     ctx->curFunc = func;
     ctx->scope = NULL;
@@ -1929,20 +2007,10 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     char retTy[256];
     llvmFuncRetType(func->type, retTy, sizeof(retTy));
 
-    fprintf(ctx->fnOut, "define %s %s(", retTy, name);
-    //§8 O3/O19: each of this signature's own scope variables is a leading, never-user-visible "ptr"
-    //parameter - the arena the caller bound it to. Exactly what the old "s scope" parameter carried,
-    //minus any presence in the language itself.
-    for (int i = 0; i < func->type.scopeVars.len; i++) {
-        fprintf(ctx->fnOut, "%sptr %%sarg%d", i > 0 ? ", " : "", i);
-    }
-    for (int i = 0; i < func->type.vars.len; i++) {
-        struct var* p = ListGetIdx(&func->type.vars, i);
-        char pty[256];
-        llvmType(p->type, pty, sizeof(pty));
-        bool first = (i == 0 && func->type.scopeVars.len == 0);
-        fprintf(ctx->fnOut, "%s%s %%arg%d", first ? "" : ", ", pty, i);
-    }
+    //P3c: a generic's instantiation is emitted by every object that needs it, since no one module owns
+    //the instantiation set - "linkonce_odr" is what lets the linker keep exactly one
+    fprintf(ctx->fnOut, "define %s%s %s(", shared ? "linkonce_odr " : "", retTy, name);
+    cgEmitParamList(ctx->fnOut, func, true);
     fputs(") {\nentry:\n", ctx->fnOut);
     ctx->terminated = false;
 
@@ -1995,17 +2063,18 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     cgPopScope(ctx);
 }
 
-void cgEmitAllFunctions(struct cgCtx* ctx) {
+void cgEmitAllFunctions(struct cgCtx* ctx, struct semaModule* emitMod) {
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        if (mod != emitMod) continue; //P1: one module, one object - the rest are declares, not defines
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
             //G16: an uninstantiated generic has no code of its own - only its monomorphized copies are
             //emitted, each a separate ordinary function with every type variable substituted away
             if (v->type.typeParams.len != 0) continue;
-            cgFunction(ctx, mod, v);
+            cgFunction(ctx, mod, v, false);
         }
     }
     //...and those copies, each an ordinary function by this point. Emitted under the module that
@@ -2014,15 +2083,15 @@ void cgEmitAllFunctions(struct cgCtx* ctx) {
     struct list* insts = SemanticAllInstantiations();
     for (int i = 0; i < insts->len; i++) {
         struct instantiation* inst = ListGetIdx(insts, i);
-        cgFunction(ctx, inst->generic->type.owner, inst->specialized);
+        cgFunction(ctx, inst->generic->type.owner, inst->specialized, true);
     }
     //a generic TYPE's constructor and destructor are generic too, and their copies live on the type
     //instantiation rather than in any module's var list - emitted here for the same reason
     struct list* tinsts = SemanticAllTypeInstantiations();
     for (int i = 0; i < tinsts->len; i++) {
         struct type* t = *(struct type**)ListGetIdx(tinsts, i);
-        if (t->ctorFunc) cgFunction(ctx, t->owner, t->ctorFunc);
-        if (t->destructFunc) cgFunction(ctx, t->owner, t->destructFunc);
+        if (t->ctorFunc) cgFunction(ctx, t->owner, t->ctorFunc, true);
+        if (t->destructFunc) cgFunction(ctx, t->owner, t->destructFunc, true);
     }
 }
 
@@ -2033,13 +2102,13 @@ void emitTargetTriple(FILE* out) {
     fputs("target triple = \"x86_64-pc-linux-gnu\"\n\n", out);
 }
 
-void cgEmitModuleDecls(FILE* out) {
+void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
     emitTargetTriple(out);
     emitStructTypeDefs(out);
     fputs("\n", out);
     emitRuntimeDecls(out);
     emitExternDecls(out);
-    emitGlobalDecls(out);
+    emitGlobalDecls(out, emitMod);
     fputs("\n", out);
 }
 
@@ -2051,7 +2120,8 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     struct var* mainFunc = VarGetList(&root->vars, StrFromCStr("main"));
     fputs("define i32 @main() {\nentry:\n", ctx->fnOut);
     ctx->terminated = false;
-    fputs("  call void @__olang_init_globals()\n", ctx->fnOut);
+    fputs("", ctx->fnOut);
+    cgInitGlobalsCalls(ctx, root);
     char mname[256];
     mangleGlobal(root, mainFunc->name, mname, sizeof(mname));
 
@@ -2122,7 +2192,7 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
 
     fputs("define i32 @main() {\nentry:\n", ctx->fnOut);
     ctx->terminated = false;
-    fputs("  call void @__olang_init_globals()\n", ctx->fnOut);
+    cgInitGlobalsCalls(ctx, root);
     char* passedSlot = cgNewTmp(ctx);
     char* failedSlot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = alloca i32\n  store i32 0, ptr %s\n", passedSlot, passedSlot);
@@ -2203,7 +2273,9 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
     cgPopScope(ctx);
 }
 
-void CodegenProgram(struct semaModule* root, char* outPath) {
+//P1/P2: emits ONE module's object. `entry` selects what tops it off - nothing for a plain module,
+//"main" for the root of a program, the test harness for a -t run.
+void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry) {
     FILE* out = fopen(outPath, "w");
     if (!out) ErrorBugFound();
     char* fnBuf;
@@ -2214,10 +2286,13 @@ void CodegenProgram(struct semaModule* root, char* outPath) {
     ctx.out = out;
     ctx.fnOut = fnOut;
 
-    cgEmitModuleDecls(out);
-    cgInitGlobalsFunc(&ctx);
-    cgEmitAllFunctions(&ctx);
-    cgProgramMain(&ctx, root);
+    cgEmitModuleDecls(out, mod);
+    cgEmitForeignFuncDecls(out, mod);
+    cgEmitForeignInitDecls(out, mod);
+    cgInitGlobalsFunc(&ctx, mod);
+    cgEmitAllFunctions(&ctx, mod);
+    if (entry == CG_ENTRY_MAIN) cgProgramMain(&ctx, mod);
+    else if (entry == CG_ENTRY_TESTS) cgTestHarnessMain(&ctx, mod);
 
     fflush(fnOut);
     fwrite(fnBuf, 1, fnSize, out);
@@ -2226,25 +2301,3 @@ void CodegenProgram(struct semaModule* root, char* outPath) {
     fclose(out);
 }
 
-void CodegenTests(struct semaModule* root, char* outPath) {
-    FILE* out = fopen(outPath, "w");
-    if (!out) ErrorBugFound();
-    char* fnBuf;
-    size_t fnSize;
-    FILE* fnOut = open_memstream(&fnBuf, &fnSize);
-
-    struct cgCtx ctx = {0};
-    ctx.out = out;
-    ctx.fnOut = fnOut;
-
-    cgEmitModuleDecls(out);
-    cgInitGlobalsFunc(&ctx);
-    cgEmitAllFunctions(&ctx);
-    cgTestHarnessMain(&ctx, root);
-
-    fflush(fnOut);
-    fwrite(fnBuf, 1, fnSize, out);
-    fclose(fnOut);
-    free(fnBuf);
-    fclose(out);
-}

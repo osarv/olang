@@ -347,7 +347,9 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
 
-struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode);
+//requireMain: only "-b" (§10 P3) needs a "main" - "-c" compiles a plain module and "-t" runs tests,
+//neither of which has or wants one
+struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain);
 struct list* SemanticAllModules(void);
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.

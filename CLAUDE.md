@@ -36,10 +36,26 @@ drift out of sync with the actual code.
   return union. The named error type must appear in the enclosing function's signature, and `word`
   must be one of that type's declared members. Only valid inside an ordinary function body - not in
   a `test { }` block or a constructor, neither of which has an error union of its own.
-- **Compilation modes.** `olang -c file.olang` compiles one program (`main` required, everything
-  pulled in transitively). `olang -t file1.olang file2.olang ...` runs every listed file's own
-  `test { }` blocks as independent, isolated compiles; `main` is not required, and one broken file
-  doesn't stop the others from being checked/run.
+- **Compilation modes, and separate compilation.** **Each module is its own compilation unit**, compiled
+  to its own object file and linked. `olang -c file.olang` compiles that one module to `build/<name>.o`
+  and stops - `-c` means what it means in every other compiler. `olang -b file.olang` is the build
+  driver: it compiles every transitively reachable module (skipping those whose objects are current) and
+  links one executable; `main` is required only here. `olang -t f1.olang f2.olang ...` runs each listed
+  file's own `test { }` blocks as independent, isolated builds; one broken file doesn't stop the others.
+  **A module's imports are resolved from their source** - there is no interface/header/metadata file and
+  none is generated, so a prebuilt library is its sources plus its objects. That is not just convenience:
+  a function's scope obligations (§8 O10b) are derived from its body, so an interface would be carrying a
+  fact only the source is authority for. **Staleness is transitive**: an object depends on the signatures
+  it was compiled against, so it rebuilds when its own source *or any source it transitively imports* is
+  newer - compared at nanosecond resolution, since a whole-second compare silently skips a rebuild when
+  the edit and the previous build land in the same second. Two things had to change before any of this
+  worked: symbols are mangled from the module's **file base name** (the same identity M3 derives an import
+  alias from), never from its position in the current compilation's module list - an index means nothing
+  to a separately-compiled object; and code no single module owns (a generic's instantiations, whose set
+  isn't known until the *using* module compiles, plus the runtime) is emitted by every object that needs
+  it as `linkonce_odr`, leaving the linker to keep one. Globals initialize per module, imports before
+  importers; within an import cycle the order is unspecified, so an initializer must not read another
+  module's global from inside one.
 - **`test "description" { }` blocks.** Zig-style, top-level declaration, only usable/run under `-t`.
 - **`assert EXPR` is a statement, not a function call** - usable in any function, test, or
   destructor body, not just inside `test { }`. `assert cond` and `assert(cond)` are identical (the

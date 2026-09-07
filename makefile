@@ -23,7 +23,7 @@ build/out: $(OBJ)
 build: build/out
 
 run: build/out
-	build/out -c runner.olang
+	build/out -b runner.olang
 
 # picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
 # (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
@@ -32,7 +32,7 @@ test: build/out
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
 usertest: build/out
-	build/out -c usertest.olang
+	build/out -b usertest.olang
 	./build/usertest
 
 # the one command to run before considering any change done: a from-scratch build with -Werror, the full
