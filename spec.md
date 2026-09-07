@@ -691,6 +691,11 @@ and `import shared "shared.olang"` are equivalent. If the derived alias is not a
 (L6 — e.g. the file name contains a hyphen or starts with a digit), that is a compile-time error;
 such a file must be imported with an explicit alias instead.
 
+A file's own capitalization is therefore part of its interface: because the derived alias is the file's
+base name and M6 makes a capitalized alias public, `import "Base.olang"` yields an alias importers may
+re-export (§4.5) while `import "base.olang"` yields one they may not. An explicit `IDEN` overrides this
+in either direction, so a lowercase file can still be given a re-exportable alias by writing one.
+
 **M5.** Two imports in the same module may not use the same alias (D2). Two imports in the same
 module may not resolve to the same underlying file either, whether both are written directly or one
 is reached transitively through re-export (§4.5) — see §4.6.

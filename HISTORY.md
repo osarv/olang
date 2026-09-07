@@ -3095,3 +3095,38 @@ from their original form.
   P3b's hard error catches a clash immediately. The problem only becomes real for a third-party library
   that cannot be renamed, and at that point identity and packaging want designing together rather than one
   being guessed at first.
+
+- **The first standard-library module (`io.olang`), and the bug writing it immediately found.** The stdlib
+  was picked as the next piece precisely because everything the last several sessions built - generics,
+  constructor bodies, D14a run-time-sized fields, defaults, `extern func`, scope names - had never been
+  exercised by anything except its own tests. It took one function to find a real one.
+  **The module itself worked first try**: `extern func write`/`read`, an `IoError` set, `Stdin/Stdout/Stderr`
+  as ordinary globals, `Write`/`Print`/`PrintErr` propagating through `?`. Real output from real syscalls
+  in ordinary olang, with no compiler privileges - which is what §11 was built to make possible.
+  **Then `FormatInt(n int64, buf mut byte[])` failed, and the cause is a genuine hole.** A `T[N]` argument
+  passed to a `T[]` parameter is malloc-and-COPIED (the T11 length-kind promotion), so the callee writes to
+  a copy and the caller sees nothing; a `T[expr]` argument is already reference-shaped, so the same
+  parameter aliases and works. One signature, two semantics, selected by how the *argument* was declared
+  and invisible at the call site:
+
+      func fill(b mut byte[]) int32 { b[0] = 'X'  return len(b) }
+      a mut byte[4]        fill(a)   -> a[0] unchanged   (copy)
+      sz mut int32 = 4
+      b mut byte[sz]       fill(b)   -> b[0] == 'X'      (alias)
+
+  That is verbatim what E12a exists to prevent - *"`&` in a signature would mean 'the caller's own
+  instance' at some call sites and 'a copy of it' at others, and a `mut` reference parameter could write to
+  a copy the caller never sees"* - and E12a explicitly exempts this case, on the stated grounds that the
+  arrMalloc promotion *"changes no instance identity"*. It does: codegen mallocs and copies. The exemption
+  rests on a false premise, so the rule closes the hole for `&` parameters and leaves it open for `T[]`
+  ones. Left undecided pending the user's call between extending E12a to arrMalloc (consistent, but no
+  fixed-size buffer could ever be passed to a `T[]` parameter), making the promotion a `{len, ptr}` view of
+  the caller's storage (what the parameter looks like it means, with real §8 lifetime consequences), or
+  documenting the copy as intended. `io.olang`'s own test declares its buffer run-time-length to work
+  around it, with a comment saying why.
+  **A filename's case is part of its interface.** Raised when the user asked to rename `Io.olang` and added
+  "no files should ever be capitalized", then immediately retracted it - correctly, since M4 derives an
+  alias-less import's alias from the file's base name and M6 makes a capitalized alias re-exportable. So
+  `Base.olang`'s capital is load-bearing: it is what lets `worker.olang` re-export it and `runner.olang`
+  reach `wk.Base.BaseError` two hops away. Derivable from M4 + M6 but stated in neither, so M4 now says it.
+  `io.olang` stays lowercase, since nothing re-exports it.

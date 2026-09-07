@@ -126,7 +126,10 @@ drift out of sync with the actual code.
   variables, *and import aliases*. A capitalized import alias is automatically re-exported (no
   separate opt-in): a module reaching through it can chain further (`a.b.Name`, to any depth) via the
   same `alias-chain IDEN` grammar used everywhere a possibly-cross-module name is written (calls,
-  type refs, `error`/`catch`, bare variable reads, struct/array literal construction). A raw import
+  type refs, `error`/`catch`, bare variable reads, struct/array literal construction). Since an
+  alias-less `import` derives its alias from the file's base name (M4), a **file's own capitalization is
+  part of its interface**: `import "Base.olang"` gives an alias importers can re-export,
+  `import "base.olang"` gives one they cannot, and an explicit alias overrides either way. A raw import
   cycle (A imports B imports A) is unrestricted; a cycle in the *public-reachability* graph
   specifically (re-exporting your way back to the same module), or reaching the same underlying file
   two different ways from one module, are both compile errors.

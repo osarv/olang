@@ -1,0 +1,113 @@
+## Io - the standard I/O module. Ordinary olang on top of "extern func" (§11), not a compiler builtin:
+## the whole point of the extern mechanism is that this file has no privileges the language doesn't give
+## every other module.
+
+extern func write(fd int32, buf byte[], count int64) int64
+extern func read(fd int32, buf byte[], count int64) int64
+
+error IoError {
+    FAILED,
+    PARTIAL
+}
+
+Stdin int32 = 0
+Stdout int32 = 1
+Stderr int32 = 2
+
+## writes every byte of "data" to "fd". A short write is reported rather than retried: retrying needs the
+## unwritten tail, and the language has no way to name it (see the report on slicing).
+func Write(fd int32, data byte[]) ? IoError {
+    n int64 = write(fd, data, int64(len(data)))
+    if n < 0 {
+        error IoError.FAILED
+    }
+    if n != int64(len(data)) {
+        error IoError.PARTIAL
+    }
+}
+
+func Print(data byte[]) ? IoError {
+    try Write(Stdout, data)
+}
+
+func PrintErr(data byte[]) ? IoError {
+    try Write(Stderr, data)
+}
+
+## writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
+## buffer because a function may not return a bare "&" reference (O13) and an int64 never needs more than
+## 20 bytes anyway.
+func FormatInt(n int64, buf mut byte[]) int32 {
+    if n == 0 {
+        buf[0] = '0'
+        return 1
+    }
+    v mut int64 = n
+    neg mut bool = false
+    if v < 0 {
+        neg = true
+        v = -v
+    }
+    ## least-significant digit first, reversed in place below
+    used mut int32 = 0
+    do {
+        buf[used] = byte(v % 10) + '0'
+        v = v / 10
+        used++
+    } while v > 0
+    if neg {
+        buf[used] = '-'
+        used++
+    }
+    lo mut int32 = 0
+    hi mut int32 = used - 1
+    for i mut int32 = 0, lo < hi, i++ {
+        t byte = buf[lo]
+        buf[lo] = buf[hi]
+        buf[hi] = t
+        lo++
+        hi--
+    }
+    return used
+}
+
+test "Write reports a failure from the underlying syscall" {
+    failed mut bool = false
+    try Write(-1, "no such fd") catch IoError {
+        failed = true
+    }
+    assert(failed)
+}
+
+test "Write succeeds on a real descriptor" {
+    ok mut bool = true
+    try Print("io.olang: hello from a standard library written in olang\n") catch IoError {
+        ok = false
+    }
+    assert(ok)
+}
+
+## the buffer is declared run-time-length on purpose: a compile-time-length "byte[24]" argument is
+## copied into a "byte[]" parameter rather than aliased, so the digits would be written to a copy the
+## caller never sees. See the report - that asymmetry is a real bug, not something to design around.
+test "FormatInt renders decimals, including zero and negatives" {
+    sz mut int32 = 24
+    buf mut byte[sz]
+
+    n mut int32 = FormatInt(0, buf)
+    assert(n == 1)
+    assert(buf[0] == '0')
+
+    n = FormatInt(1234, buf)
+    assert(n == 4)
+    assert(buf[0] == '1')
+    assert(buf[1] == '2')
+    assert(buf[2] == '3')
+    assert(buf[3] == '4')
+
+    n = FormatInt(-90, buf)
+    assert(n == 3)
+    assert(buf[0] == '-')
+    assert(buf[1] == '9')
+    assert(buf[2] == '0')
+}
