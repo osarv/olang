@@ -394,8 +394,10 @@ Point[3]&     one reference to an array of 3 Point values — 1 allocation, elem
 Point&[3]&    one reference to an array of 3 references to Point
 ```
 
-With no array suffix at all the two positions describe the same type, and a single marker is read as the
-element one.
+With no array suffix at all the two positions describe the same *place*, so at most one marker may be
+written there and it is read as the element one; writing both (`Point&s&a`) is a compile-time error,
+since one of the two scope tags could only be discarded. A type therefore carries exactly one reference
+level per array level, plus one for the element type - there is no reference-to-a-reference.
 
 An element-position marker (one with array suffixes following it) may **not** carry a scope name: a
 reference nested inside a larger value always belongs to its container's own scope (§8 O5), never an

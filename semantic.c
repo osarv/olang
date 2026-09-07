@@ -1316,6 +1316,14 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     //an array of 3 Point references; the trailing one applies after, so "Point[3]&" is one reference to an
     //array of 3 Point values. With no suffixes the two are the same type and only the first node exists.
     struct syntax* elemMarker = firstPartOfType(refNode, SNTX_ELEM_REF_MARKER);
+    //T24: the two marker positions are "before the array suffixes" and "after" them, so with NO suffixes
+    //they are the same position and only one marker can mean anything. Writing both ("Point&s&a") used to
+    //be accepted silently, with one of the two scope tags dropped on the floor - and a discarded scope tag
+    //is a discarded safety claim, so it is rejected rather than resolved by precedence.
+    if (elemMarker && firstPartOfType(refNode, SNTX_REF_MARKER)
+            && allPartsOfType(refNode, SNTX_ARR_SFX).len == 0) {
+        ErrMsgSemantic(firstTokAnywhere(refNode), DOUBLE_REFERENCE_MARKER);
+    }
     //an element-position marker only means "element" when array suffixes actually follow it; with none,
     //it IS the whole type's marker and a scope name on it is perfectly ordinary. When it does sit under a
     //suffix, a name on it can never be honoured: a reference nested inside a larger value always inherits

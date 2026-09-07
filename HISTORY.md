@@ -3196,3 +3196,26 @@ from their original form.
   reference to a compile-time-sized array is a real allocation with a real zero value, exactly like the
   `T[expr]` form already allowed. Relaxing it is what would let `io.olang`'s scratch buffer stop being
   run-time-sized for no reason.
+
+- **`Point&s&a` rejected: one reference position per array level, and no reference-to-a-reference.**
+  Found while answering three questions about the reference model. T24 gives a `type-ref` two marker
+  positions - before the array suffixes (the element type) and after them (the array as a whole) - and
+  says that with no suffix at all "the two positions describe the same type". It did not say what happens
+  when both are written anyway, and the answer was: silently accepted, with one of the two scope tags
+  dropped. A discarded scope tag is a discarded safety claim, so it is now a compile-time error rather
+  than something resolved by precedence.
+  The user's framing is the rule: *"I do not want double references, it makes sense with arrays where for
+  every array there might a ref."* So a type carries one reference level per array level plus one for the
+  element type, and nothing more. `Point&&` cannot even lex, since `&&` is the logical-AND token.
+  **Two findings recorded but not acted on**, both from the same investigation. A per-level marker form
+  (`int32[]&[]&[]&`, one `&` after each suffix rather than only two positions overall) does **not** parse
+  today - the grammar has exactly two marker slots however many suffixes there are - though the user
+  observed it "actually means something useful". And `p = q` through a `mut Point&` parameter is currently
+  a **silent no-op**: `p.x = 42` writes through and the caller sees it, but whole-value assignment rebinds
+  the callee's own copy of the pointer and is lost. Since `mut Point&` means "the caller's instance,
+  writable", that should either write through memberwise or be rejected - silently rebinding a local is
+  the one option that is neither.
+  **Also settled: `int32&` stays rejected.** olang's `&` bundles heap indirection, a scope tag, and
+  identity (`==` on a reference is pointer identity, T26) - the third is wrong for a primitive. The real
+  gap it exposes is that olang cannot return two values at all, which wants multiple return values rather
+  than a weakening of what `&` means. Recorded as a future problem at the user's request.

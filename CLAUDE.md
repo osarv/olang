@@ -295,7 +295,11 @@ drift out of sync with the actual code.
   type. A marker may now be written on either side, and the two positions are different types:
   `Point&[3]` is an array of 3 separately-allocated references (elements have identity), `Point[3]&` is
   one reference to an array of 3 inline values, `Point&[3]&` is both. With no array suffix the two
-  coincide and a single marker reads as the element one. An array literal may state a marked element type
+  coincide and a single marker reads as the element one - and writing *both* there (`Point&s&a`) is a
+  compile-time error, not a double reference: it is one position written twice, with one of the two scope
+  tags necessarily discarded, which is a discarded safety claim. **A type carries exactly one reference
+  level per array level, plus one for the element type; there is no reference-to-a-reference** (`Point&&`
+  cannot even lex - `&&` is the logical-AND token). An array literal may state a marked element type
   (`Handle&[a, b, c]`). An element-position marker may not carry a scope *name*: a nested reference
   always inherits its container's scope, so such a tag could never be honoured and is rejected rather
   than silently ignored.

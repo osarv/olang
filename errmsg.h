@@ -79,6 +79,9 @@ constructor arguments, so there is nothing for that tag to name"
 #define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
 statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
 'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
+#define DOUBLE_REFERENCE_MARKER "a type with no array suffix has only one reference position, so it \
+takes at most one '&' - the two marker positions (before and after the array suffixes) are the same \
+place here, and writing both would leave one of the two scope tags meaning nothing"
 #define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
 (e.g. 'byte[]&', 'int32[3]&'). Without it the array is copied at every call, in time proportional to its \
 length, and a 'mut' one would be written where the caller can never see it"
