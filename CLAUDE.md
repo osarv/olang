@@ -311,7 +311,15 @@ drift out of sync with the actual code.
   parameter could write to a copy the caller never sees. Deliberately narrow: a freshly built temporary
   (a literal, or a constructor call's own result) has no caller-side instance to preserve and still
   promotes, and promotion at a var-decl or a return is untouched - there is no caller-side instance
-  there either, that *is* how a reference gets created.
+  there either, that *is* how a reference gets created. **"Already a reference" has two forms and the
+  check knew only one:** a struct or compile-time-length array carries `structMAlloc`, but T11 makes a
+  runtime-length array reference-shaped through `arrMalloc`, marker or not - so a perfectly good
+  `byte[expr]` argument looked like a value about to be promoted and was rejected. That left an array
+  out-parameter inexpressible in *either* spelling: `mut T[]&` rejected every argument, while unmarked
+  `mut T[]` silently **copied** a `T[N]` one and wrote to the copy. Found by writing `FormatInt` in the
+  standard library, which is exactly the shape that needs it. One residual, now a design question rather
+  than a defect: an unmarked `mut T[]` parameter still copies a `T[N]` lvalue while aliasing a `T[]` one -
+  consistent with D9 (unmarked means a copy), and the other meaning now has a correct spelling.
 - **Array literals, runtime-length arrays, and var-decl forms.** An array literal (`T[v1, ...]`) is always a
   compile-time-length array sized by its own item count; flowing into a runtime-length (`T[]`) target implicitly
   promotes (a fresh copy); flowing into a compile-time-length target of a *different* length is a compile error, not
