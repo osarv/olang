@@ -77,6 +77,12 @@ enum syntaxType {
     SNTX_STMNT_TRY_CATCH,
     SNTX_STMNT,
     SNTX_BLOCK,
+    SNTX_SCOPE_DECL,     //"&name" right after a func/type declaration's own name (§8 O3) - declares a
+                          //scope variable the signature's own types never mention, the only case that
+                          //needs one; a name the types already declare is rejected here as redundant
+    SNTX_SCOPE_ARG,      //"&name" between a call target's name and its "(" (§5.11 E25) - the scope the
+                          //caller supplies for the callee's one supplied scope variable (§8 O18).
+                          //Adjacency-constrained, which is what tells it from the binary "&" operator.
     SNTX_EXPR_ARGS,
     SNTX_EXPR_CALL,
     SNTX_EXPR_INDEX,

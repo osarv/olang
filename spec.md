@@ -16,7 +16,7 @@ only depends on concepts already introduced by earlier ones:
 | 5 Expressions | Operators, precedence, literals as values, calls, member/index access |
 | 6 Statements | Control flow: if/for/do/match, assignment, return, assert, done/crash |
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
-| 8 Ownership and Scopes | The `scope` type, `own`, reference markers, the static scope checker |
+| 8 Ownership and Scopes | Scope names, scope variables, reference markers, the static scope checker |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
 | 10 Compilation Model | Compilation units, `-c`/`-t` modes, `main`, test blocks, process exit |
 | 11 External Functions | `extern func` declarations, linkage, and the restricted C-ABI type boundary |
@@ -169,7 +169,7 @@ tokenizer under L18.
 **L18.** Immediately after producing a token whose type is one of:
 
 ```
-IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, own,
+IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT,
 ++, --, ), ], return, done, crash, error
 ```
 
@@ -218,9 +218,9 @@ because the grammar never expects one there and L18 never produces one there eit
 ### 2.1 Kinds of types
 
 **T1.** Every olang type is exactly one of: a primitive type (§2.2), an array type (§2.3), a struct
-type (§2.4), a vocab type (§2.5), an error type (§2.6), a function type (§2.7), or the `scope` type
-(§2.8). There is no `void`/unit type available to user code; a function either declares a success
-type or declares none (see §3.4).
+type (§2.4), a vocab type (§2.5), an error type (§2.6), or a function type (§2.7). A scope name
+(§2.8) is not among them — it is not a type at all. There is no `void`/unit type available to user
+code; a function either declares a success type or declares none (see §3.4).
 
 **T2.** A type expression — anywhere a type is written (a variable's declared type, a field's type,
 a parameter's type, a return type, an array's element type) — is one of:
@@ -363,12 +363,14 @@ first-class value that can be passed and called through it.
 parameter's type in order, presence and identity of a return type, and (if present) the return
 type.
 
-### 2.8 The scope type
+### 2.8 Scope names
 
-**T23.** `scope` is a primitive-like type name with one restriction beyond every other type: a
-value of type `scope` may only ever appear as a function parameter's declared type. It may not be a
-variable's type, a struct field's type, a return type, or constructed by any literal. Its full
-semantics are specified in §8.
+**T23.** A **scope name** identifies a region of memory (§8 O1). It is not a type and not a value:
+there is no `scope` type, no expression of scope kind, nothing of scope kind may be declared, stored,
+compared, or passed as an argument, and a scope name may appear in exactly two places — inside a
+reference marker (T24) and as a call's scope argument (E25). The set of scope names visible at a point
+in a function's body is `own` (that function's own scope) plus that function's own **scope variables**,
+which are declared purely by appearing in its signature. Their full semantics are specified in §8.
 
 ### 2.9 Type references and reference markers
 
@@ -398,7 +400,9 @@ element one.
 An element-position marker (one with array suffixes following it) may **not** carry a scope name: a
 reference nested inside a larger value always belongs to its container's own scope (§8 O5), never an
 independent one, so such a tag could never be honoured. Writing one is a compile-time error. A marker
-with no suffix after it is the whole type's own marker and takes a scope name normally. The Each marker's optional `IDEN` must begin on the same source line as
+with no suffix after it is the whole type's own marker and takes a scope name normally.
+
+A marker's optional `IDEN` is a scope name (T23, §8 O4). Each marker's optional `IDEN` must begin on the same source line as
 that `&`; an identifier on a later line is not part of the marker, which therefore reads as bare.
 (Without this, a bare marker ending a line would silently absorb the identifier opening the next one,
 since `&` triggers no `STMNT_END` under L18 — see L20a.)
@@ -418,7 +422,6 @@ or array is a plain value, self-contained wherever it lives.
 
 **T27.** Two types are the **same type** if and only if:
 - both are the same primitive (T4), or
-- both are `scope`, or
 - both are array types and satisfy T12 (length-kind, lengths, and element type all agree) —
   reference-shapedness (T24) is *not* part of array identity, or
 - both are function types and satisfy T22, or
@@ -537,9 +540,9 @@ parameter's type rather than modifying it: for a value parameter it makes the ca
 writable, leaving the caller unaffected either way; for a reference parameter (T24) it makes the
 **caller's own instance** writable, so the caller observes the write. Whether a call writes to the
 caller's value is therefore readable from the signature alone: `&` says whose instance it is, `mut`
-says whether it may be written, and the two are independent. A parameter's type may be `scope` (§2.8) only in this position. A later
-parameter's reference-marker name (T24) may name any *earlier* parameter of the same signature that
-is itself of type `scope`; see §8.
+says whether it may be written, and the two are independent. A parameter's reference-marker name
+(T24) names a scope variable of the same signature (§8 O3), which needs no declaration and may appear
+in any order relative to the parameters using it; see §8.
 
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
@@ -599,14 +602,14 @@ outermost size at all (D12).
 
 **D14.** `T[expr]`, where `expr` is present but is *not* a compile-time constant, is recognized as a
 distinct grammatical case in exactly two positions: a **local** var-decl with no initializer, inside a
-function, `test { }`, or `destruct { }` body (§6.1, §9.3 C7, §10.4) — anywhere `own` (E25) is itself
-valid — and a **constructor field**'s declared type (§9.2 C2, see D14a). It is not an instance of the
+function, `test { }`, or `destruct { }` body (§6.1, §9.3 C7, §10.4) — anywhere the name `own` (§8 O2)
+is itself meaningful — and a **constructor field**'s declared type (§9.2 C2, see D14a). It is not an instance of the
 general `array-type-suffix` production (T8, which requires a compile-time constant), and this shape
 has no meaning in any other position a `type-expr` is written: not a plain (T13) struct's field, not a
 parameter or return type; not a global var-decl (a module-level
 declaration with this shape is rejected the same way a bare `T[]` global with no initializer is,
-since evaluating `expr` and allocating into a scope both require an enclosing `own`, which no global
-initializer has); and not a `for-stmnt`'s own init clause (§6.3 S9), whose grammar has no
+since evaluating `expr` and allocating into a scope both require an enclosing `own` scope, which no
+global initializer has); and not a `for-stmnt`'s own init clause (§6.3 S9), whose grammar has no
 no-initializer form at all — an initializer is always required there. Recognized in its one valid
 position, it declares a **run-time-sized array**: `expr` is evaluated once, must be of an integer
 type, and the array is allocated with that many zero-filled elements. As with `T[N]` (D13), a
@@ -622,15 +625,15 @@ with an initializer that already restates the same count is a compile-time error
 redundant — see D16.
 
 **D14a.** A **constructor field** (C2) may declare this shape: `items T[expr]&name`, with no
-initializer. `expr` is evaluated once per construction, in field-declaration order like any other
-field initializer (C6), and may name the constructor's own parameters and any earlier field. The
+initializer. `expr` is evaluated once per construction, at its own position in the `ctor-body` like
+any other field initializer (C6), and may name the constructor's own parameters and any earlier field. The
 array is allocated with that many zero-filled elements, into the scope named by the field's own
 reference marker.
 
-That marker is **required**: the field must be tagged to a `scope`-typed parameter of this same
-constructor (T24, C2). An untagged one would be allocated into the constructor's own private scope,
-which closes before the constructed value ever reaches its caller — precisely the hazard O13 rejects
-for a bare `&` return type — so it is rejected the same way, at the field's declaration.
+That marker is **required**: the field must be tagged to a scope variable of this same constructor
+(T24, C2c). An untagged one means `own` (§8 O4) — the constructor's own private scope, which closes
+before the constructed value ever reaches its caller, precisely the hazard O13 rejects for a bare `&`
+return type — so it is rejected the same way, at the field's declaration.
 
 ```
 type Buffer struct(s scope, cap int64) {
@@ -787,7 +790,7 @@ binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
 unary    ::= { unary-op } postfix
 unary-op ::= "-" | "!" | "~" | "++" | "--"
 postfix  ::= primary { index | member | "++" | "--" }
-primary  ::= literal | own-expr | try-expr | call-expr | struct-literal
+primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | vocab-value | IDEN | "(" expr ")"
 ```
 
@@ -801,7 +804,8 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN [ type-args ] "(" [ arg { "," arg } ] ")"`, where
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" [ arg { "," arg } ] ")"`,
+where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
 type, where it names the instantiation whose constructor is being called (G10a).
@@ -911,7 +915,9 @@ return, which are unaffected by this rule.
 module-level function; or a struct type's own constructor
 (§9) — a bare type name (or
 alias chain naming a type) in call position is a constructor call exactly when that type declares
-one. When that type is generic (§12.3), the call must carry a type argument list (G10a).
+one. When that type is generic (§12.3), the call must carry a type argument list (G10a). A call whose
+target declares a **supplied** scope variable (§8 O18) may carry a scope argument (E25) between the
+target name and the `(`; a call whose target declares none may not.
 
 **E14.** Argument count must be at least the number of the target's parameters that declare no default
 (D8a) and at most its total parameter count; there are no variadic parameters. Arguments bind
@@ -996,11 +1002,30 @@ a call target, or passed a non-array argument.
 call's success type is expected. Its full semantics (error propagation, signature requirements) are
 specified in §7.
 
-### 5.11 `own`
+### 5.11 The scope argument
 
-**E25.** `own-expr ::= "own"`, a primary expression of type `scope` (§2.8), valid only inside a
-function or test body. Its semantics are specified in
-§8.
+**E25.** `scope-args ::= { "&" IDEN }`, written between a call's target name and its opening `(`:
+
+```
+makeVec&a()
+Vec<int32>&a(4)
+DualWrapped&a&own(left, right)
+```
+
+Each names one of the callee's own scope variables, **positionally in that signature's declaration
+order** (§8 O3's first-appearance order). Writing fewer than the callee declares leaves the rest to
+O18's own defaulting, exactly as omitting trailing arguments does (E14); writing more is a
+compile-time error.
+
+The `&` must be **adjacent** to what precedes it and the `IDEN` adjacent to the `&` — no whitespace or
+comment anywhere in the run, and all on one line. Without that requirement `f&a(x)` could not be
+told from the binary `&` of `f & a(x)` (E7), which is a legal expression. `IDEN` is a scope name
+visible in the **calling** function (T23): `own`, or one of the caller's own scope variables — never a
+name from the callee's signature, which is a different function's.
+
+A scope argument on a call whose target declares no scope variables at all is a compile-time error.
+A scope argument that disagrees with what the arguments themselves determine (O17) is also an error —
+it may state a binding, never override one.
 
 ### 5.12 Explicit numeric conversion
 
@@ -1282,10 +1307,15 @@ not exist.
 
 ## 8. Ownership and Scopes
 
-This section specifies the `scope` type, the `&`/`&name` reference marker's ownership meaning
-(distinct from its purely type-level effect, §2.9), the allocation model
-for reference-shaped values, and the static compile-time check that constrains how a scope tag may
-flow from one place to another.
+This section specifies scope names and scope variables, the `&`/`&name` reference marker's ownership
+meaning (distinct from its purely type-level effect, §2.9), the allocation
+model for reference-shaped values, and the static compile-time check that constrains how a scope tag
+may flow from one place to another.
+
+A scope tag is a **claim about lifetime**, not a record of where a value was allocated: `&s` says the
+value is valid at least until `s` closes. That is why a value may satisfy a target asking for a
+shorter-lived scope (O10) without anything being moved or copied, and why a returned value need not
+have been created by the function returning it.
 
 The marker's `&` denotes scope-tagged heap indirection. It is not an address-of operator and not a
 borrow: this language exposes no pointer type and no way to take the address of a value (there is no
@@ -1300,25 +1330,49 @@ reference-shaped value (T24) belongs to. A scope closes exactly when the functio
 opened it returns (falls off the end, hits `return`, or otherwise ends normally); every
 reference-shaped value belonging to it becomes invalid at that point.
 
-**O2.** Every function and test body implicitly opens its own private scope on entry. `own`
-(E25) is an expression of type `scope` evaluating to that function's own private scope; it is the
-only way to name it, and is valid anywhere a `scope`-typed value is expected, including as an
-argument to a call.
+**O2.** Every function and test body implicitly opens its own private scope on entry, and closes it
+when that body ends. `own` is the name of that scope, inside that body only. A scope name is not a
+value (T23), so `own` is not an expression: it can only be written inside a reference marker (`&own`
+is not needed — a bare `&` already means `own`) or as a call's scope argument (E25).
 
-**O3.** A `scope`-typed value (T23) is never itself a reference-shaped value, never stored, and
-never compared; it exists only to be read once (`own`, or a parameter of type `scope`) and passed
-along as an argument.
+**O3.** A function's **scope variables** are declared by appearing as the `IDEN` of a reference marker
+somewhere in its signature — its parameter types and its `ret-type`. There is no declaration list; the
+set *is* whatever appears, exactly as for a generic type variable (§12.1 G1). A scope name written
+inside a body must be `own` or one of the enclosing signature's own scope variables; a name appearing
+nowhere in the signature at all is a compile-time error, since the signature is what a caller reads and
+there would be nothing there to tell it what to supply.
+
+**O3a.** For the one case appearance cannot cover — a scope a body allocates into that **no type in the
+signature mentions** — the name may be declared after the declaration's own name:
+
+```
+func makeScopedBoxPlain&outer(x int32, y int32) ScopedBox
+type Wrapper&s struct(x int32)
+```
+
+`scope-decls ::= { "&" IDEN }`, adjacent to the name under E25's own adjacency rule, and for a struct
+type written after any `type-params` (`type Vec<T>&s struct(...)`), mirroring the use site. A plain
+(T13) struct may not carry them: it has no signature for a scope variable to be bound at.
+
+A name here that the signature's own types **already** declare is a compile-time error: it is declared
+by appearing there, and writing it twice says nothing the first writing did not. So this form declares
+only what nothing else does — `func f&b(x Point&a) Point&a` is valid, `func f&a(x Point&a)` is not.
+
+Scope variables declared this way come **first** in the signature's own order, ahead of those declared
+by its types, so a caller writing scope arguments positionally (E25) reaches the ones it must supply
+without restating what its arguments already determine.
+
+A scope variable never lengthens the enclosing function's own lifetime. The function still opens and
+closes its own scope exactly as O2 says; a scope variable is an additional, separately-named region
+that the body may allocate into **only** where something is explicitly tagged with it.
 
 ### 8.2 Scope tags
 
 **O4.** A reference-shaped type (T24) carries a **scope tag**: bare (`&`) or named (`&name`).
-`&name` names a `scope`-typed parameter visible at the point the type is written — an earlier
-parameter of the same function or constructor signature
-(§3 D9), or, for a constructor's own field
-(§9), any parameter of that
-same constructor's own signature. `own` is not itself a valid marker name (it is an expression, not
-a declared parameter); a bare marker is how a type expresses "this value's own private scope,
-determined at the point a value is actually allocated into it" — see §8.3.
+A bare marker means `own` — the scope of the function whose text the marker appears in. `&name`
+names a scope variable (O3) of the signature the marker appears in; inside a body it may name a scope
+variable of the enclosing signature. `own` is not written as a marker name, since a bare marker
+already means exactly that.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations
 (field access, indexing, calls) are valid; it only constrains where the value may be allocated (§8.3)
@@ -1332,13 +1386,11 @@ reference-shaped slot: a variable declaration, an assignment, a function argumen
 or a field/element of a larger literal being itself promoted this way. The scope it is allocated
 into is:
 
-- for a **named** (`&name`) target: the scope value bound to that parameter at the relevant call
-  (the argument passed for it, tracing back through however many call boundaries are needed to find
-  a concrete `own` or passed-in scope — see §8.4 for what is and is not provable about this
-  statically);
-- for a **bare** (`&`) target that is itself a top-level declared type (a variable, parameter,
-  field, or return type written with a bare marker directly): the current function's own private
-  scope (`own`);
+- for a **named** (`&name`) target: the scope that variable is bound to at the relevant call
+  (O17/O18, tracing back through however many call boundaries are needed to reach a concrete `own` —
+  see §8.4 for what is and is not provable about this statically);
+- for a **bare** (`&`) target that is itself a top-level declared type (a variable, parameter, or
+  field written with a bare marker directly): the current function's own private scope (`own`);
 - for a **bare** field or element nested inside a larger value that is itself being allocated into
   some scope `S` (named or bare): the same scope `S` — a bare nested field's scope is never
   independent of its immediate container's own scope.
@@ -1361,35 +1413,72 @@ declaration's initializer, a function argument, or a return value — the source
 **compatible** with the target's declared scope tag, checked at compile time, in addition to (not
 instead of) O6's own runtime allocation behavior.
 
-**O10.** A source scope tag `src` is compatible with a target scope tag `dst`, both considered from
-the perspective of the function currently being checked, exactly when one of:
+**O10.** A source scope tag `src` is compatible with a target scope tag `dst` — both read from the
+perspective of the function currently being checked — exactly when **`src` outlives `dst`**.
 
-- `src` and `dst` name the exact same scope (including: both bare, meaning both mean that same
-  function's own `own`);
-- `dst` is bare (`&`) and `src` names any scope parameter of the *current* function — a value
-  received from a longer-lived, named scope may always narrow into "at least as long as my own
-  scope," since a function's own `own` scope is always the shortest-lived scope reachable from
-  inside it.
+A tag is a claim that a value is valid at least until the named scope closes (§8's preamble), so
+supplying a *longer*-lived scope than a target asks for is always safe: the target's own users stop
+relying on the value strictly before it becomes invalid. Supplying a shorter-lived one is precisely
+the dangling-reference case this check exists to reject. Only the second is an error.
 
-Any other pairing — a bare source flowing into a named target, or two *different* named scope
-parameters of the current function — is a compile-time error: neither is provably safe without a
-lifetime-relationship annotation, which olang does not have.
+**O10a.** `X outlives Y` holds exactly when one of:
 
-**O11.** O10 applies only when both sides are traceable, at compile time, to a scope parameter of
-the function currently being checked (following, where applicable: a call's own argument-to-
-parameter binding — including resolving a *callee's* own parameter-declared scope tag through that
-same call's binding before comparing, since a callee's `&name` always names one of *its own*
-parameters, D9, never anything in the calling function's frame; one hop through a variable's own
-declaration; a chain of member accesses through constructor-declared fields; straight-line
-reassignment; and branches of `if`/`match`/loops, merged — agreeing branches keep the agreed tag,
-disagreeing branches are treated as O12). A scope tag this specification's own tracing cannot
-resolve back to one of the current function's own parameters — including one read back through an
-array index (E16), which this tracing does not follow at all — is treated as **unverifiable** and is
-a compile-time error, the same as an actually-proven-unsafe flow under O10: this checker's guarantee
-is only as complete as what it can trace, but it is sound within that limit, rejecting anything it
-cannot prove safe rather than optimistically accepting it. Extending what this tracing can follow can
-only ever accept more programs that are genuinely safe; it can never turn an already-rejected program
-newly unsafe.
+- `X` and `Y` are the same scope name (a scope trivially outlives itself; two bare tags are both
+  `own` and so are the same name);
+- `Y` is `own` and `X` is any scope variable — every scope variable is bound to a scope that was
+  already open when this function was entered, and scopes are strictly FILO (O1), so the current
+  function's own scope is always the shortest-lived scope nameable from inside it.
+
+No other pair is ordered **by these facts alone**. Two distinct scope variables of the same function
+have no relationship known where that function is checked: each is bound independently by the caller.
+Rather than reject such a pair, the checker records it as an obligation on the signature — see O10b.
+
+At run time all live scopes *are* totally ordered, by O1's nesting; O10a is simply the part of that
+order provable from one function's own signature.
+
+**O10b.** *Scope obligations.* When a flow (O9) requires `X outlives Y` and O10a does not establish it,
+and both `X` and `Y` are scope variables of the function being checked, the relation is recorded as an
+**obligation** of that function rather than reported as an error. A function's obligation set is the
+transitive closure of everything so recorded across its whole body, and is part of its signature
+exactly as its parameter types are: it is what the function requires of every caller, derived from
+what the body actually does rather than written by hand.
+
+A function whose body makes no such demand has an empty obligation set, which is the common case.
+
+**O10c.** *Discharging obligations.* At every call, each of the callee's obligations is translated
+through that call's own scope-variable binding (O17/O18) into a relation between scope names of the
+**calling** function, and must then hold under O10a extended with the caller's own obligation set
+(O10b). One that does not hold is a compile-time error at that call. Because `own` is ordered against
+every scope variable (O10a) and every chain of calls ends at a body whose bindings are concrete, this
+terminates.
+
+Obligations are computed per function and consulted per call; nothing outside a function's own
+signature and body is ever needed to check it, and nothing but its own callers' bindings is needed to
+check them. A directly or mutually recursive function's obligation set is the least fixed point of
+O10b over its own body, which exists and is reached in finitely many steps: obligations are pairs
+drawn from that one signature's own finite set of scope variables.
+
+**O10d.** *Unsatisfiable relations.* A required `X outlives Y` where `Y` is a scope variable and `X` is
+`own` is not an obligation and is never deferred to a caller: `own` is the shortest-lived scope
+nameable inside the body (O10a) and no binding a caller could choose changes that. It is a
+compile-time error in the body itself, reported there, and is worth telling apart from O10b's
+deferrable case and from O11's untraceable one — all three reject, for three different reasons.
+
+**O11.** O10 applies only when both sides are traceable, at compile time, to a scope name of the
+function currently being checked (following, where applicable: a call's own scope-variable binding —
+including resolving a *callee's* own `&name` through that same call's binding before comparing, since
+a callee's `&name` always names one of *its own* scope variables, O3, never anything in the calling
+function's frame; one hop through a variable's own declaration; a chain of member accesses through
+constructor-declared fields; straight-line reassignment; and branches of `if`/`match`/loops, merged —
+agreeing branches keep the agreed tag, disagreeing branches are treated as O12). A scope tag this
+specification's own tracing cannot resolve back to one of the current function's own scope names —
+including one read back through an array index (E16), which this tracing does not follow at all — is
+treated as **unverifiable** and is a compile-time error, the same as an actually-proven-unsafe flow
+under O10 — this is distinct from O10b's obligations, which arise only when *both* sides are
+successfully traced to scope variables and merely lack a known order: this checker's guarantee is only as complete as what it can trace, but it is sound within
+that limit, rejecting anything it cannot prove safe rather than optimistically accepting it.
+Extending what this tracing can follow can only ever accept more programs that are genuinely safe; it
+can never turn an already-rejected program newly unsafe.
 
 **O12.** A variable whose scope tag becomes genuinely ambiguous — reassigned to different scopes on
 different branches that are merged back together, or (for a constructor field) forwarded from two
@@ -1403,9 +1492,10 @@ outright rather than silently guessing.
 ### 8.5 Return-type restrictions
 
 **O13.** A function's declared return type may never be a bare (`&`) reference-shaped type
-directly: the function's own `own` scope closes at the instant it returns, strictly before the
-caller could ever observe a value allocated into it. A bare return type must instead be tagged to an
-explicitly-received scope parameter (`&name`).
+directly: a bare tag means `own` (O4), and the function's own scope closes at the instant it returns,
+strictly before the caller could ever observe a value in it. A reference-shaped return type must
+instead be tagged to a scope variable (`&name`, O3) — which the caller then either determines by its
+arguments (O17) or supplies (O18).
 
 **O14.** The same restriction extends through embedding: a *plain* (non-reference) struct return
 type that itself contains a bare (`&`) reference-shaped field, anywhere within its own field chain
@@ -1416,7 +1506,33 @@ as O13. This check is conservative: it also rejects some code that would in fact
 allocating into the bare field itself) — telling that case apart from a genuinely unsound one would
 require dataflow analysis this specification's checker does not perform.
 
-### 8.6 Destructors and scope closing
+### 8.6 Binding scope variables at a call
+
+**O17.** *Determination by arguments.* An argument that is **already reference-shaped** carries a scope
+tag of its own, and where the parameter it is passed for is tagged with a scope variable, that
+argument *determines* the variable: it binds to the argument's own scope. Every argument determining
+the same variable must agree on one scope, or the call is a compile-time error.
+
+This is what lets one variable used twice state a real constraint: `func fill(dst Vec<int32>&s, p
+Point&s)` requires the two arguments to agree, checked at every call.
+
+An argument that is **not** already reference-shaped determines nothing, even where its parameter is
+tagged: it is a plain value being promoted (O6), and the tag on that parameter is where it is about to
+be *allocated*, not a fact about where it already lives. There is nothing to read off it.
+
+**O18.** *Supply and default.* A scope argument (E25) states a binding for a scope variable the
+arguments do not determine — including one appearing only in the `ret-type`, which nothing could
+determine. A variable that is neither determined nor supplied binds to the **caller's own scope**, so
+`makeVec()` means `makeVec&own()`. A scope argument for a variable the arguments *do* determine is
+permitted only where it names the same scope: it may restate a binding, never override one.
+
+**O19.** Binding is per call, and both mechanisms compose in one signature: in `func take(v
+Vec<int32>&s) Point&t`, `s` is determined by `v` and `t` is supplied or defaulted, so `take&own&a(v)`
+states both and `take(v)` states neither. A scope variable's binding is not a value the program can
+observe; whether a callee needs the region at run time (because it allocates into it, O6) is an
+implementation matter with no user-visible parameter.
+
+### 8.7 Destructors and scope closing
 
 **O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
 scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
@@ -1461,10 +1577,9 @@ IDEN [ "mut" ] T "[" expr "]"          # run-time-sized array, no initializer (D
 IDEN [ "mut" ]                     # bare pun (§9.2) — valid only when no type/initializer follows
 ```
 
-A field's declared type (explicit, or inferred by `:=`) may carry a reference marker (T24) naming
-any parameter of this same constructor's own `param-list`, giving that field a real, type-level
-scope tag independent of any particular call site — see
-§8.4.
+A field's declared type (explicit, or inferred by `:=`) may carry a reference marker (T24) naming a
+scope variable of this same constructor (C2c), giving that field a real, type-level scope tag
+independent of any particular call site — see §8.4.
 
 The `STMNT_END` terminating a `ctor-field` follows §1's own rules for any other statement, L20
 included, so a whole constructor may be written on one line (`type Point struct(x int32) { x }`).
@@ -1475,6 +1590,17 @@ visible to everything textually after it — a later field's initializer, or an 
 A **bare pun** (C4) declares no local of its own: the same-named parameter it binds already carries
 that name and that value. A field name may therefore not collide with a parameter name (except as a
 bare pun, where matching one is the whole point) or with an earlier field's name.
+
+**C2c.** A constructor's **scope variables** (§8 O3) are declared by appearing as the `IDEN` of a
+reference marker anywhere in its `param-list` or in a `ctor-field`'s declared type. One appearing in a
+parameter type is **unified** from the arguments at each call (O17); one appearing only in field types
+is **supplied** by the caller with a scope argument (E25) — `Vec<int32>&a(4)` — and binds to the
+caller's `own` when omitted. A constructor may declare at most one supplied scope variable.
+
+The scope the constructed instance itself is allocated into is decided by whatever the value flows
+into (O6), exactly as for any other value, and is independent of the above: `v mut Vec<int32>& =
+Vec<int32>&a(4)` puts the instance in `own` and its `&a`-tagged fields in `a`, which is sound because
+`a` outlives `own` (O10a).
 
 **C2b.** A `return` statement is a compile-time error anywhere in a `ctor-body`. A constructor
 produces no value of its own to return: the instance is assembled by the language from the field
@@ -1623,7 +1749,7 @@ numeric primitive type (T5 — `byte`, `int32`, `int64`, `float32`, or `float64`
 exactly `extern-scalar-type`), or an array type (T7, compile-time-length or runtime-length) whose element type is
 itself one of those five. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
 return type is never valid (see X3 for why). No other type — `bool`, a struct, a vocab type, an
-error type, a function type, `scope`, or an array of any type outside the numeric-primitive set —
+error type, a function type, or an array of any type outside the numeric-primitive set —
 is valid in an `extern-param` or `extern-ret-type` position.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
@@ -1728,9 +1854,11 @@ and `Vec<int64>` are different types (T27); two instantiations are the same type
 named type and every type argument are the same.
 
 **G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
-arguments before the argument list: `Vec<int32>(own, 4)`. This is the only spelling — C8's rejection of
-the `Type{...}` literal for a constructor-declaring type applies unchanged, so a generic type with a
-constructor has no other construction form. The type arguments select the instantiation exactly as G8
+arguments before the argument list, and its scope argument (E25) after them if it has a supplied scope
+variable: `Vec<int32>&a(4)`, or `Vec<int32>(4)` to bind that variable to the caller's `own`. A generic
+type whose fields carry an explicit `&name` tag has no other construction form, since C6a rejects the
+`Type{...}` literal for exactly those types; one whose fields do not may equally be built by the
+literal (C6). The type arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.
 Omitting the list where the named type is generic, or writing one where it is not, is a compile-time

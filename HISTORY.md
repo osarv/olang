@@ -2939,3 +2939,69 @@ from their original form.
   parameter. Keeping C2a's collision rule also avoids a real fix that would otherwise be needed: params
   and field-locals share one scope, and both `scopeFindLocal` and `cgFindLocal` scan forward, so a
   shadowing field would resolve to the parameter instead of itself. `make verify`: 105/13/12.
+
+- **Scopes stop being variables: no `scope` type, no `own` expression, scope variables declared by
+  appearance, and an outlives relation with inferred obligations (T23, O3/O3a, O10/O10a-d, O17-O19, E25).**
+  The largest change to §8 since it was written, and it started from a question about generics: *"I am
+  curious if we can somehow get rid of scopes as variables as we have done with type generics."*
+  **The argument that settled it is O3's own old text.** It already said a `scope` value is *"never
+  itself a reference-shaped value, never stored, and never compared; it exists only to be read once and
+  passed along as an argument."* A thing that can be neither stored, compared, nor constructed is not a
+  value - it is an annotation that happened to be spelled as an argument. The implementation agreed:
+  a `&`-reference is a bare `ptr` at run time carrying no scope, and `cgResolveEffectiveScope` already
+  resolved the arena *statically* from the type's tag. So the only genuinely dynamic part was the arena
+  pointer at an allocation site, which is a hidden parameter, not a user-facing one.
+  **What the design went through before landing.** Three shapes were tried and rejected in discussion
+  before the fourth was built. (1) *Whole-program region inference* (Tofte-Talpin, MLKit) - possible,
+  genuinely memory-safe, and wrong here: region inference never fails, it just picks a longer region, so
+  §8.4's compile-time proof would become vacuous and the failure mode (retention) would have no
+  diagnostic and no fix the programmer could write. Decisively, it makes **destructor timing an
+  inference artifact** - C9/O15 say a destructor runs when its scope closes, so an inferred scope means
+  a file handle closes whenever unification decided, possibly at exit. (2) *Bare `&` in return position
+  meaning "the caller's scope"* - terse, and rejected by the user: `&` would read differently by
+  position. Worth recording that the objection turned out to be to the wrong half - what was actually
+  wrong was that the caller had no way to *say* which scope; once a scope argument existed, the
+  positional reading was still dropped in favour of (3). (3) *A declaration slot on every function*
+  (`func f&s(...)`) - the user's own first proposal, argued down as redundant for any name the
+  signature's types already declare... and then reinstated as O3a when the corpus proved the
+  non-redundant case real (see below).
+  **What was built.** A scope variable is declared by appearing as a `&name` in a signature, exactly as
+  a generic type variable is (G1) - `resolveScopeTag` creating one on demand instead of looking up a
+  `BASETYPE_SCOPE` parameter bought that almost for free. At a call it is **determined** by an
+  already-reference-shaped argument whose parameter names it, **supplied** by an adjacency-constrained
+  scope argument, or bound to the caller's own scope. Adjacency (`f&a(x)`, no whitespace, checked on the
+  source pointers) is what distinguishes it from the binary `&` of `f & a(x)`; the alternative of
+  revisiting `{s}` for the marker was considered and dropped - `{}` has already lost this argument twice
+  (`{}` -> `&` -> `{}` -> `<>` -> `&`) and its cost is paid at every type reference, to fix an ambiguity
+  adjacency already closes at a handful of call sites.
+  **The outlives relation, and why obligations exist.** O10 became "src must outlive dst", which is what
+  the user asked for: *"the only problem should be supplying a scope that dies too quickly, not one that
+  lives too long."* O10a can prove only two things - a name outlives itself, and every scope variable
+  outlives `own`. Two distinct scope variables are unordered where the function is checked. Rather than
+  reject that (the original plan, documented as a known limitation), the user proposed the fix:
+  *"the function computes what the order has to be based on its body and the call checks if that order
+  is true?"* That is O10b/O10c, and it is strictly better than the Rust-style written bound it replaces:
+  the checker already visits every flow point and already computes the ordered/unordered verdict, so the
+  change is to *record* the unordered pair as an obligation instead of rejecting it. It is also NOT the
+  region inference rejected above - every scope stays written by hand; only the relation between two of
+  them is derived. It keeps separate compilation open, which the user explicitly wants (*"I want to have
+  libraries to link against"*) and which the error-union ABI was already designed for.
+  **Two things the corpus proved wrong that discussion had not.** First, O17's original "a variable
+  appearing in a parameter type is unified from the arguments, never written" is false for a **promoted**
+  argument: `WrappedPoint(Point{x, y})` has nothing to read off a literal - the tag on that parameter is
+  where the value is about to be *allocated*. Fixed by having only already-reference-shaped arguments
+  determine anything, which also forced E25 from a single slot to a positional list (`DualWrapped&a&own(...)`).
+  Second, and more embarrassing: the claim that a scope used only in a body is never useful, which killed
+  the declaration slot. It appeared **four times** in one test file, the clearest being
+  `makeScopedBoxPlain`, which returns a plain `ScopedBox` whose `inner` field is `&outer` - nothing in its
+  signature's types mentions `outer`, since the return type is unmarked and the parameters are ints.
+  Three were worked around by pushing the scope onto a real parameter; the sibling-pair pair could not be,
+  and the reason is instructive rather than incidental: building the values outside and passing them in
+  means their inner tags were bound at a call the function cannot see, so O11 correctly rejects the deep
+  access as untraceable. O3a reinstates the slot as a **fallback only** - rejected if the signature's own
+  types already declare the name (the user's call: *"make it an error"*), and rejected outright on a plain
+  struct. Fallback-declared variables come first in E25's positional order, so a caller reaches what it
+  must supply without restating what its arguments already determine.
+  **Corpus migration**: every `s scope` parameter and every `own` argument deleted; a handful of bodies
+  that had tagged a local to a scope parameter for no reason now read as plain `own`, which is what they
+  always meant. `make verify`: 108/13/12.

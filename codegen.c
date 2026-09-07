@@ -347,15 +347,10 @@ static bool typeIsRefShaped(struct type t) {
 //expression for that same index - instead of letting cgResolveScope try (and fail) to look "s" up as a
 //caller-local. NULL when paramT's scope tag doesn't need this (bare "&", or names a scope the caller
 //already has in its own scope, e.g. a scope parameter of the caller itself being passed straight through).
-char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct list* args, struct type paramT) {
+char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct operand* callOp, struct type paramT) {
+    (void)func;
     if (!(typeIsRefShaped(paramT) && paramT.structMAlloc && paramT.scopeParam)) return NULL;
-    for (int i = 0; i < func->type.vars.len; i++) {
-        struct var* p = ListGetIdx(&func->type.vars, i);
-        if (p != paramT.scopeParam) continue;
-        struct operand* scopeArg = *(struct operand**)ListGetIdx(args, i);
-        return cgValue(ctx, scopeArg);
-    }
-    return NULL;
+    return cgResolveScope(ctx, SemanticBoundScope(callOp, paramT.scopeParam));
 }
 
 //if t declares a destructor, registers the instance at heapPtr with scopeVal so it runs when that scope
@@ -971,17 +966,27 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     }
 
     char argsBuf[4096] = "";
+    //O17/O18: semantic analysis already bound every one of the callee's scope variables to a scope of
+    //ours, recorded on this very call operand - codegen reads it back and resolves it in our own frame
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
+        char* sval = cgResolveScope(ctx, SemanticBoundScope(op, sv));
+        char piece[512];
+        snprintf(piece, sizeof(piece), "%sptr %s", i > 0 ? ", " : "", sval);
+        strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
+    }
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         //the parameter's own declared type (not argOp->type) decides malloc-promotion and the LLVM type
         //word at the call site - a "&" parameter is exactly where a plain struct argument needs one
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, &op->args, paramT);
+        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
         char piece[512];
-        snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, av);
+        bool firstArg = (i == 0 && func->type.scopeVars.len == 0);
+        snprintf(piece, sizeof(piece), "%s%s %s", firstArg ? "" : ", ", aty, av);
         strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
     }
 
@@ -1478,15 +1483,23 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
         mangleGlobal(func->owner, func->name, target, 256);
     }
     char argsBuf[4096] = "";
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
+        char* sval = cgResolveScope(ctx, SemanticBoundScope(callOp, sv));
+        char piece[512];
+        snprintf(piece, sizeof(piece), "%sptr %s", i > 0 ? ", " : "", sval);
+        strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
+    }
     for (int i = 0; i < callOp->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&callOp->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, &callOp->args, paramT);
+        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, callOp, paramT);
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
         char piece[512];
-        snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, av);
+        bool firstArg = (i == 0 && func->type.scopeVars.len == 0);
+        snprintf(piece, sizeof(piece), "%s%s %s", firstArg ? "" : ", ", aty, av);
         strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
     }
 
@@ -1901,15 +1914,28 @@ void cgFunction(struct cgCtx* ctx, struct semaModule* mod, struct var* func) {
     llvmFuncRetType(func->type, retTy, sizeof(retTy));
 
     fprintf(ctx->fnOut, "define %s %s(", retTy, name);
+    //§8 O3/O19: each of this signature's own scope variables is a leading, never-user-visible "ptr"
+    //parameter - the arena the caller bound it to. Exactly what the old "s scope" parameter carried,
+    //minus any presence in the language itself.
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        fprintf(ctx->fnOut, "%sptr %%sarg%d", i > 0 ? ", " : "", i);
+    }
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         char pty[256];
         llvmType(p->type, pty, sizeof(pty));
-        fprintf(ctx->fnOut, "%s%s %%arg%d", i > 0 ? ", " : "", pty, i);
+        bool first = (i == 0 && func->type.scopeVars.len == 0);
+        fprintf(ctx->fnOut, "%s%s %%arg%d", first ? "" : ", ", pty, i);
     }
     fputs(") {\nentry:\n", ctx->fnOut);
     ctx->terminated = false;
 
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
+        char* slot = cgDeclareLocal(ctx, sv->name, sv->type);
+        fprintf(ctx->fnOut, "  %s = alloca ptr\n", slot);
+        fprintf(ctx->fnOut, "  store ptr %%sarg%d, ptr %s\n", i, slot);
+    }
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         char pty[256];

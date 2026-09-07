@@ -781,14 +781,37 @@ struct type inferArrayLenFromInit(struct type declType, struct type initType) {
     return declType;
 }
 
-struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeParams) {
+struct type TypeScope(void);
+
+//O3: a scope variable is declared purely by APPEARING IN A SIGNATURE, so while one is being resolved a
+//name not seen yet is not an error - it is the declaration. Everywhere else (a body's own var-decl, a
+//match-case type, a literal's type arguments) the same "&name" must already name one of the enclosing
+//signature's variables: a name appearing nowhere in the signature would leave a caller nothing to read
+//and nothing to supply. A file-static flag rather than a threaded parameter because the one thing that
+//would have to thread it - resolveTypeExpr - is reached from a dozen places that neither know nor care.
+static bool scopeVarDeclarationAllowed = false;
+
+//O3: `scopeVars` is the enclosing signature's own list (of struct var*), growing in first-appearance
+//order; NULL means there is no signature to name into at all (a global initializer, a test/destruct
+//body), where a named tag has nothing it could refer to.
+struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeVars) {
     struct list nameToks = allTokOfType(markerNode, TOK_IDEN);
     if (nameToks.len == 0) return NULL;
     struct token nameTok = *(struct token*)ListGetIdx(&nameToks, 0);
-    struct var* found = scopeParams ? VarGetList(scopeParams, strFromTok(nameTok)) : NULL;
-    if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_SCOPE); return NULL; }
-    if (found->type.bType != BASETYPE_SCOPE) { ErrMsgSemantic(nameTok, NOT_A_SCOPE); return NULL; }
-    return found;
+    struct str name = strFromTok(nameTok);
+    if (!scopeVars) { ErrMsgSemantic(nameTok, UNKNOWN_SCOPE); return NULL; }
+    for (int i = 0; i < scopeVars->len; i++) {
+        struct var* v = *(struct var**)ListGetIdx(scopeVars, i);
+        if (StrCmp(v->name, name)) return v;
+    }
+    if (!scopeVarDeclarationAllowed) { ErrMsgSemantic(nameTok, UNKNOWN_SCOPE); return NULL; }
+    struct var* v = VarAllocSetOrigin();
+    v->name = name;
+    v->tok = nameTok;
+    v->type = TypeScope();
+    v->mayBeInitialized = true;
+    ListAdd(scopeVars, &v);
+    return v;
 }
 
 //"<T>" - a type variable (G1). Carries its own name and nothing else; substituted for a real type when
@@ -1441,14 +1464,25 @@ struct type resolveStructBody(struct semaModule* mod, struct token nameTok, stru
 //(the way resolveStructBody/resolveVocabBody do, via resolveTypeDecl's generic "*t = resolved" step)
 //specifically so t->ctorFunc/t->destructFunc's own retType/self-param can point at t directly (the stable
 //slot inside mod->types) instead of a temporary that's about to be overwritten - see the report.
-void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out);
+void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out,
+                      struct list* scopeVars);
+void declareScopeVars(struct list scopeDeclNodes, struct list* scopeVars);
+void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, struct list* varsA,
+                           struct list* varsB, struct type* retType);
+bool paramTypeNamesScope(struct type pt, struct var* sv);
 
 void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax* ctorNode) {
     t->bType = BASETYPE_STRUCT;
     t->hasCtor = true;
 
+    t->scopeVars = ListInit(sizeof(struct var*));
+    t->scopeObligations = ListInit(sizeof(struct scopeObligation));
+    struct list ctorScopeDecls = allPartsOfType(ctorNode, SNTX_SCOPE_DECL);
+    scopeVarDeclarationAllowed = true;
+    declareScopeVars(ctorScopeDecls, &t->scopeVars);
+    scopeVarDeclarationAllowed = false;
     struct list ctorParams;
-    resolveParamList(mod, firstPartOfType(ctorNode, SNTX_PARAM_LIST), &ctorParams);
+    resolveParamList(mod, firstPartOfType(ctorNode, SNTX_PARAM_LIST), &ctorParams, &t->scopeVars);
 
     struct list ctorErrors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(ctorNode, SNTX_ERROR_LIST);
@@ -1466,6 +1500,7 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
         }
     }
 
+    scopeVarDeclarationAllowed = true;
     t->vars = ListInit(sizeof(struct var));
     t->ctorFieldSyntax = ListInit(sizeof(struct syntax*));
     t->ctorBodySyntax = firstPartOfType(ctorNode, SNTX_CTOR_BODY);
@@ -1488,7 +1523,7 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
             //are only in scope there); here the field just takes the runtime-length array type the same
             //shape a local "T[expr]" var-decl resolves to. No initializer is expected or allowed - the
             //allocation IS the initialization, exactly as for the local form.
-            v.type = resolveRuntimeSizedArrayDeclType(mod, partSntx(typeExprNode, 0), &ctorParams);
+            v.type = resolveRuntimeSizedArrayDeclType(mod, partSntx(typeExprNode, 0), &t->scopeVars);
             if (hasTokOfType(f, TOK_ASS)) ErrMsgSemantic(fieldNameTok, REDUNDANT_ARRAY_SIZE);
             //the allocation happens inside the constructor, whose own scope closes before the value it
             //built reaches anyone - so an untagged field would hand the caller a dangling pointer, and
@@ -1503,7 +1538,7 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
         } else if (typeExprNode) {
             //explicit type - "= expr"/":= expr" is checked for real in pass 3 (needs ctor params in
             //scope); a type with no initializer at all never has anywhere to get a value from
-            v.type = resolveTypeExpr(mod, typeExprNode, &ctorParams);
+            v.type = resolveTypeExpr(mod, typeExprNode, &t->scopeVars);
             if (!hasTokOfType(f, TOK_ASS)) ErrMsgSemantic(fieldNameTok, CTOR_FIELD_NOT_INITIALIZED);
         } else if (hasTokOfType(f, TOK_ASS_INFER)) {
             //":=" - type read off the (required-to-be-literal) rhs in pass 3, same as a global ":=" var
@@ -1521,10 +1556,17 @@ void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax
         ListAdd(&t->ctorFieldSyntax, &f);
     }
 
+    scopeVarDeclarationAllowed = false;
+    declareScopeVarsCheck(ctorScopeDecls, &t->scopeVars, &ctorParams, &t->vars, NULL);
     struct var* ctorFuncVar = VarGetList(&mod->vars, internalCtorName(t->tok));
     ctorFuncVar->owner = mod;
     ctorFuncVar->type.bType = BASETYPE_FUNC;
     ctorFuncVar->type.vars = ctorParams;
+    //the constructor is the callable, so the call site reads its scope variables off the FUNC type -
+    //copied once here, after every field type (C2c: a ctor's scope variables come from its parameters
+    //AND its field types) has finished adding to the struct's own list
+    ctorFuncVar->type.scopeVars = t->scopeVars;
+    ctorFuncVar->type.scopeObligations = t->scopeObligations;
     ctorFuncVar->type.errors = ctorErrors;
     ctorFuncVar->type.hasRetType = true;
     ctorFuncVar->type.retType = t; //the same stable slot resolveTypeDecl was called with - never a copy
@@ -1569,19 +1611,10 @@ struct type TypeScope(void) {
     return t;
 }
 
-bool isScopeTypeRef(struct syntax* typeExprNode) {
-    struct syntax* actual = partSntx(typeExprNode, 0);
-    if (actual->type != SNTX_TYPE_REF) return false;
-    if (firstPartOfType(actual, SNTX_ELEM_REF_MARKER) || firstPartOfType(actual, SNTX_REF_MARKER)) return false;
-    if (allPartsOfType(actual, SNTX_ARR_SFX).len != 0) return false;
-    //a type-var head ("<T>") has no SNTX_NAME child at all, and is never the "scope" type
-    if (firstPartOfType(actual, SNTX_TYPE_VAR)) return false;
-    struct list idens = allTokOfType(firstPartOfType(actual, SNTX_NAME), TOK_IDEN);
-    if (idens.len != 1) return false;
-    return StrCmp(strFromTok(*(struct token*)ListGetIdx(&idens, 0)), StrFromCStr("scope"));
-}
-
-void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out) {
+void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out,
+                      struct list* scopeVars) {
+    bool prevDeclare = scopeVarDeclarationAllowed;
+    scopeVarDeclarationAllowed = true;
     *out = ListInit(sizeof(struct var));
     struct list params = allPartsOfType(paramListNode, SNTX_PARAM);
     for (int i = 0; i < params.len; i++) {
@@ -1594,9 +1627,9 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         v.name = name;
         v.tok = nameTok;
         v.mut = hasTokOfType(p, TOK_MUT);
-        //"out" doubles as this param list's growing scopeParams: an earlier param's name is visible to a
-        //later param's "&name" tag (e.g. "func f(s scope, n Node<s>)"), not the other way around
-        v.type = isScopeTypeRef(typeExprNode) ? TypeScope() : resolveTypeExpr(mod, typeExprNode, out);
+        //O3: a "&name" tag declares its scope variable by appearing, into the signature's own shared
+        //scopeVars list - so order among parameters no longer matters, unlike the old scope-parameter form
+        v.type = resolveTypeExpr(mod, typeExprNode, scopeVars);
         //D8a: an "= expr" default, built here in the DECLARING module's own context (a caller's context
         //would resolve a struct-literal's type name against the wrong module). Restricted to a literal,
         //so there is nothing call-site-dependent to get wrong - no allocation, no scope, no failure.
@@ -1604,6 +1637,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
         ListAdd(out, &v);
     }
+    scopeVarDeclarationAllowed = prevDeclare;
     //D8b: defaults must be trailing, so that omitting arguments from the end is unambiguous
     bool seenDefault = false;
     for (int i = 0; i < out->len; i++) {
@@ -1674,10 +1708,54 @@ bool typeContainsReference(struct type t) {
     return false;
 }
 
+//O3: the fallback declaration form. Declared FIRST, so a caller writing scope arguments positionally
+//reaches the ones it actually has to supply without restating what the arguments already determine.
+//Redundancy is rejected afterwards, by declareScopeVarsCheck, once the types have had their say.
+void declareScopeVars(struct list scopeDeclNodes, struct list* scopeVars) {
+    for (int i = 0; i < scopeDeclNodes.len; i++) {
+        struct syntax* d = *(struct syntax**)ListGetIdx(&scopeDeclNodes, i);
+        resolveScopeTag(d, scopeVars);
+    }
+}
+
+//O3: a scope declared after the name must be one the signature's own types never mention - otherwise it
+//is already declared by appearing there, and writing it twice says nothing the first did not.
+void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, struct list* varsA,
+                           struct list* varsB, struct type* retType) {
+    for (int i = 0; i < scopeDeclNodes.len; i++) {
+        struct syntax* d = *(struct syntax**)ListGetIdx(&scopeDeclNodes, i);
+        struct list toks = allTokOfType(d, TOK_IDEN);
+        if (toks.len == 0) continue;
+        struct token nameTok = *(struct token*)ListGetIdx(&toks, 0);
+        struct var* sv = NULL;
+        for (int j = 0; j < scopeVars->len; j++) {
+            struct var* c = *(struct var**)ListGetIdx(scopeVars, j);
+            if (StrCmp(c->name, strFromTok(nameTok))) { sv = c; break; }
+        }
+        if (!sv) continue;
+        bool inTypes = false;
+        struct list* lists[2] = {varsA, varsB};
+        for (int k = 0; k < 2; k++) {
+            if (!lists[k]) continue;
+            for (int j = 0; j < lists[k]->len && !inTypes; j++) {
+                inTypes = paramTypeNamesScope((*(struct var*)ListGetIdx(lists[k], j)).type, sv);
+            }
+        }
+        if (!inTypes && retType) inTypes = paramTypeNamesScope(*retType, sv);
+        if (inTypes) ErrMsgSemantic(nameTok, SCOPE_DECL_REDUNDANT);
+    }
+}
+
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
-    resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars);
+    t.scopeVars = ListInit(sizeof(struct var*));
+    t.scopeObligations = ListInit(sizeof(struct scopeObligation));
+    struct list scopeDeclNodes = allPartsOfType(sigNode, SNTX_SCOPE_DECL);
+    scopeVarDeclarationAllowed = true;
+    declareScopeVars(scopeDeclNodes, &t.scopeVars);
+    scopeVarDeclarationAllowed = false;
+    resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
 
     t.errors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(sigNode, SNTX_ERROR_LIST);
@@ -1705,9 +1783,11 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     if (retTypeNode) {
         t.hasRetType = true;
         t.retType = MallocOrCrash(sizeof(struct type));
-        //full param list (t.vars) is already built above, so a return type may reference any of them,
-        //e.g. "func makeNode(v int32, s scope) Node<s>"
-        *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.vars);
+        //O3: the ret-type declares scope variables by appearance too, into the same list - a name it
+        //shares with a parameter is that same variable (unified, O17); one only it uses is supplied (O18)
+        scopeVarDeclarationAllowed = true;
+        *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.scopeVars);
+        scopeVarDeclarationAllowed = false;
         //G4: a variable reachable only through the return type could never be determined at a call, since
         //inference matches arguments against parameters and nothing else. Reported here, at the
         //declaration, rather than at every call that fails to resolve it.
@@ -1743,6 +1823,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             ErrMsgSemantic(firstTokAnywhere(retTypeNode), NESTED_BARE_SCOPE_RETURN_TYPE);
         }
     }
+    declareScopeVarsCheck(scopeDeclNodes, &t.scopeVars, &t.vars, NULL, t.hasRetType ? t.retType : NULL);
     return t;
 }
 
@@ -1889,6 +1970,17 @@ void resolveTypeDecl(struct type* t) {
         }
 
         struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
+        //O3a: a scope declaration is only meaningful on a constructor-bearing type - a plain struct has no
+        //signature for one to be bound at. The parser attaches them to whichever type node it built.
+        if (!ctorNode) {
+            struct syntax* teNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
+            struct list plainScopeDecls = teNode ? allPartsOfType(teNode, SNTX_SCOPE_DECL)
+                                                 : ListInit(sizeof(struct syntax*));
+            for (int i = 0; i < plainScopeDecls.len; i++) {
+                ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&plainScopeDecls, i)),
+                               SCOPE_DECL_ON_PLAIN_TYPE);
+            }
+        }
         if (ctorNode) {
             //mutates *t in place - see resolveStructCtorInto for why this can't go through the generic
             //build-then-copy path below
@@ -2176,16 +2268,14 @@ struct list viaPathPopFront(struct list path) {
     return result;
 }
 
-//true if scopeVar is one of func's own declared parameters, by identity (after canonicalization - see
-//canonicalVar) - the same pattern cgResolveParamScopeOverride (codegen.c) already uses to compare a scope
-//tag against a signature's own param list, generalized here to also handle a value-level copy. func may
-//be NULL (a global initializer or a test{} block, neither of which has a parameter list of its own) -
-//always false there.
+//true if scopeVar is one of func's own scope variables (O3), by identity after canonicalization (see
+//canonicalVar). func may be NULL (a global initializer or a test{} block, neither of which has a
+//signature of its own) - always false there.
 bool varIsOwnParam(struct var* scopeVar, struct var* func) {
     if (!scopeVar || !func) return false;
     scopeVar = canonicalVar(scopeVar);
-    for (int i = 0; i < func->type.vars.len; i++) {
-        if (canonicalVar(ListGetIdx(&func->type.vars, i)) == scopeVar) return true;
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        if (canonicalVar(*(struct var**)ListGetIdx(&func->type.scopeVars, i)) == scopeVar) return true;
     }
     return false;
 }
@@ -2260,20 +2350,77 @@ struct var* resolveEffectiveScopeVar(struct operand* op, struct var* scopeVar) {
 //both are correctly indistinguishable from here, and both are rejected. A SCOPE_AMBIGUOUS srcScope is
 //handled first, above, for the same reason - "traced it and found two different things" is not
 //"unverifiable" and must never fall through to any lenient default either.
+//codegen's own entry point into the binding map a call operand carries (O17/O18): which of OUR scopes
+//the callee's scope variable `sv` was bound to at this call. NULL means our own scope.
+struct var* SemanticBoundScope(struct operand* callOp, struct var* sv) {
+    struct var* bound = resolveEffectiveScopeVar(callOp, sv);
+    return bound == SCOPE_AMBIGUOUS ? NULL : bound;
+}
+
+//O10a: the order provable from one signature alone. NULL is "own". A name outlives itself; every scope
+//variable outlives own, since scopes are strictly FILO (O1) and a variable is always bound to one that
+//was already open when this function was entered. Nothing else is decided here.
+bool scopeOutlives(struct var* func, struct var* longer, struct var* shorter) {
+    if (longer == shorter) return true;
+    if (shorter == NULL) return varIsOwnParam(longer, func);
+    return false;
+}
+
+//O10b: does func already require "longer outlives shorter", directly or through the transitive closure
+//its obligation set is kept in?
+bool scopeObligationHeld(struct var* func, struct var* longer, struct var* shorter) {
+    if (!func) return false;
+    for (int i = 0; i < func->type.scopeObligations.len; i++) {
+        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
+        if (canonicalVar(o->longer) == longer && canonicalVar(o->shorter) == shorter) return true;
+    }
+    return false;
+}
+
+//records "longer outlives shorter" as an obligation of func (O10b), keeping the set transitively closed
+//so scopeObligationHeld above is a plain membership test. Both must be scope variables of func - a
+//relation involving own is never deferrable (O10a decides it, or O10d rejects it).
+void scopeObligationAdd(struct var* func, struct var* longer, struct var* shorter) {
+    if (scopeObligationHeld(func, longer, shorter)) return;
+    struct scopeObligation o = (struct scopeObligation){0};
+    o.longer = longer;
+    o.shorter = shorter;
+    ListAdd(&func->type.scopeObligations, &o);
+    //transitive closure: anything shorter already outlived by "shorter", and anything already outliving
+    //"longer", compose across the edge just added. Re-entrant through scopeObligationAdd, terminating
+    //because the pair space is this one signature's own finite scopeVars squared.
+    struct list snapshot = func->type.scopeObligations;
+    for (int i = 0; i < snapshot.len; i++) {
+        struct scopeObligation* e = ListGetIdx(&snapshot, i);
+        if (canonicalVar(e->longer) == shorter) scopeObligationAdd(func, longer, canonicalVar(e->shorter));
+        if (canonicalVar(e->shorter) == longer) scopeObligationAdd(func, canonicalVar(e->longer), shorter);
+    }
+}
+
+//O10: a value tagged srcScope may flow into a target tagged dstScope exactly when src outlives dst.
+//Decided by O10a where it can be; otherwise, when BOTH sides are this function's own scope variables,
+//recorded as an obligation on func and accepted here (O10b) - every caller then has to discharge it
+//(O10c). An untraceable tag (O11) or a known-ambiguous one (O12) is neither, and still rejects.
 bool scopeCanFlowInto(struct var* func, struct var* srcScope, struct var* dstScope) {
-    if (srcScope == SCOPE_AMBIGUOUS) return false;
+    if (srcScope == SCOPE_AMBIGUOUS || dstScope == SCOPE_AMBIGUOUS) return false;
     srcScope = canonicalVar(srcScope);
     dstScope = canonicalVar(dstScope);
-    if (srcScope == dstScope) return true;
-    if (srcScope && !varIsOwnParam(srcScope, func)) return false;
-    if (dstScope && !varIsOwnParam(dstScope, func)) return false;
-    return srcScope != NULL && dstScope == NULL;
+    if (scopeOutlives(func, srcScope, dstScope)) return true;
+    //O10d: own can never outlive a scope variable, and no caller's binding could make it so - this is a
+    //bug in the body, not something to defer. Reported by the caller of this function, which has the token.
+    if (srcScope == NULL) return false;
+    if (!varIsOwnParam(srcScope, func) || !varIsOwnParam(dstScope, func)) return false;
+    if (scopeObligationHeld(func, srcScope, dstScope)) return true;
+    scopeObligationAdd(func, srcScope, dstScope);
+    return true;
 }
 
 enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
+    TYPE_FIT_SCOPE_OWN,     //O10d: own into a named scope. Rejected like the above, but told apart because
+                             //no caller could ever satisfy it - the fix is in this body, not at a call site
     TYPE_FIT_ARRAY_SIZE_MISMATCH //ARRAY_SIZE_MISMATCH - same element type, both compile-time-length, different sizes
 };
 
@@ -2316,7 +2463,12 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             || (target.bType == BASETYPE_ARRAY && target.arrMalloc);
         if (needsScopeCheck) {
             struct var* effectiveSrc = resolveEffectiveScopeVar(op, op->type.scopeParam);
-            if (!scopeCanFlowInto(func, effectiveSrc, target.scopeParam)) return TYPE_FIT_SCOPE_MISMATCH;
+            if (!scopeCanFlowInto(func, effectiveSrc, target.scopeParam)) {
+                //O10d: "own outlives <a scope variable>" is unsatisfiable by any binding, so it is a bug
+                //here rather than an obligation to hand a caller - worth its own diagnostic
+                if (!effectiveSrc && target.scopeParam) return TYPE_FIT_SCOPE_OWN;
+                return TYPE_FIT_SCOPE_MISMATCH;
+            }
         }
         return TYPE_FIT_OK;
     }
@@ -2366,6 +2518,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
 
 void reportTypeFit(enum typeFit fit, struct token tok) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+    else if (fit == TYPE_FIT_SCOPE_OWN) ErrMsgSemantic(tok, OWN_CANNOT_OUTLIVE);
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, ARRAY_SIZE_MISMATCH);
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
 }
@@ -2411,7 +2564,110 @@ struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode
     return def;
 }
 
-struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct list args, struct token tok) {
+//does this parameter's declared type carry `sv` as its scope tag, at its own level or any array level?
+bool paramTypeNamesScope(struct type pt, struct var* sv) {
+    for (struct type* c = &pt; c; c = (c->bType == BASETYPE_ARRAY) ? c->arrElem : NULL) {
+        if (canonicalVar(c->scopeParam) == canonicalVar(sv)) return true;
+    }
+    return false;
+}
+
+//O17: only an argument that is ALREADY reference-shaped determines anything. One that is not is a plain
+//value about to be promoted (O6) - the tag on its parameter says where it is about to be *allocated*,
+//which is a binding to be supplied or defaulted, not a fact that can be read off the argument. Getting
+//this wrong is what a whole class of the corpus caught: "WrappedPoint(Point{x, y})" has nothing to read.
+bool argDeterminesScope(struct operand* arg) {
+    return arg->type.structMAlloc || (arg->type.bType == BASETYPE_ARRAY && arg->type.arrMalloc);
+}
+
+//the caller-side scope an already-reference-shaped argument actually lives in, from the calling
+//context's own perspective: its own tag, resolved one hop through whatever map it carries. NULL is own.
+struct var* argEffectiveScope(struct operand* arg) {
+    struct var* tag = arg->type.scopeParam;
+    if (!tag) return NULL;
+    return resolveEffectiveScopeVar(arg, tag);
+}
+
+//E25: resolves a call's written scope argument in the CALLING function's own frame - "own" (NULL, the
+//caller's own scope) or one of the caller's own scope variables. Never a name from the callee's
+//signature: that is a different function's, and nothing here could bind it.
+struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, bool* ok) {
+    *ok = true;
+    struct list idens = allTokOfType(scopeArgNode, TOK_IDEN);
+    if (idens.len == 0) return NULL; //"&own" - the keyword form, which IS the caller's own scope
+    struct token nameTok = *(struct token*)ListGetIdx(&idens, 0);
+    struct str name = strFromTok(nameTok);
+    if (ctx && ctx->func) {
+        for (int i = 0; i < ctx->func->type.scopeVars.len; i++) {
+            struct var* sv = *(struct var**)ListGetIdx(&ctx->func->type.scopeVars, i);
+            if (StrCmp(sv->name, name)) return sv;
+        }
+    }
+    ErrMsgSemantic(nameTok, SCOPE_ARG_UNKNOWN);
+    *ok = false;
+    return NULL;
+}
+
+//O17/O18: binds every scope variable of func to a scope of the CALLER's, recording each on op's own
+//scopeBindings map. From there the existing machinery does the rest: the per-parameter fit check below
+//resolves a callee's "&name" through this map before comparing, and a later read of this call's result
+//resolves it the same way (see resolveEffectiveScopeVar).
+void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
+                       struct token tok, struct list scopeArgNodes) {
+    if (scopeArgNodes.len > func->type.scopeVars.len) ErrMsgSemantic(tok, SCOPE_ARG_NOT_ACCEPTED);
+    for (int i = 0; i < func->type.scopeVars.len; i++) {
+        struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
+        //O17: every already-reference-shaped argument whose parameter names this variable determines it,
+        //and all of them must agree
+        struct var* boundTo = NULL;
+        bool determined = false;
+        for (int j = 0; j < func->type.vars.len && j < args.len; j++) {
+            struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
+            if (!paramTypeNamesScope(pt, sv)) continue;
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
+            if (!argDeterminesScope(arg)) continue;
+            struct var* argScope = argEffectiveScope(arg);
+            if (determined && argScope != boundTo) {
+                ErrMsgSemantic(tok, SCOPE_ARGS_DISAGREE);
+                boundTo = SCOPE_AMBIGUOUS;
+                break;
+            }
+            boundTo = argScope;
+            determined = true;
+        }
+        //O18: a written scope argument states a binding positionally over this signature's own scope
+        //variables; it may restate what the arguments determined but never contradict it. Neither
+        //determined nor written means the caller's own scope.
+        if (i < scopeArgNodes.len) {
+            bool ok = false;
+            struct var* written = resolveScopeArg(ctx, *(struct syntax**)ListGetIdx(&scopeArgNodes, i), &ok);
+            if (ok) {
+                if (determined && written != boundTo) ErrMsgSemantic(tok, SCOPE_ARGS_DISAGREE);
+                else boundTo = written;
+            }
+        }
+        struct scopeBinding b = (struct scopeBinding){0};
+        b.typeParam = sv;
+        b.boundTo = boundTo;
+        b.viaPath = ListInit(sizeof(struct var*));
+        ListAdd(&op->scopeBindings, &b);
+    }
+
+    //O10c: every obligation func's own body recorded, translated through the bindings just made, must
+    //hold in the caller - under its own O10a facts plus its own obligation set, which may grow here.
+    for (int i = 0; i < func->type.scopeObligations.len; i++) {
+        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
+        struct var* longer = resolveEffectiveScopeVar(op, canonicalVar(o->longer));
+        struct var* shorter = resolveEffectiveScopeVar(op, canonicalVar(o->shorter));
+        if (!scopeCanFlowInto(ctx ? ctx->func : NULL, longer, shorter)) {
+            ErrMsgSemantic(tok, SCOPE_OBLIGATION_UNMET);
+        }
+    }
+}
+
+struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
+                                struct list scopeArgNodes) {
+    struct var* callerFunc = ctx ? ctx->func : NULL;
     //G9: a call to a generic never writes its type arguments - each is inferred by matching the actual
     //argument types against the declared parameter types, which G4 guarantees reaches every variable.
     //Done before anything else here, so everything below (arity, fit checking, scope bindings, the return
@@ -2480,17 +2736,13 @@ struct operand* OperandFuncCall(struct var* callerFunc, struct var* func, struct
     //one check (a constructor field's own scopeBindings - see semaCheckBodies/the "field of a field" entry
     //in the report), storing the type-level original is what makes it a portable, comparable key/value
     //for any later, unrelated caller's own resolveEffectiveScopeVar lookup.
+    //O17: every scope variable named by some parameter's type binds to that argument's own effective
+    //scope; all parameters naming the same variable must agree. O18: one named by no parameter is
+    //supplied by the caller's scope argument, defaulting to the caller's own scope (NULL).
+    bindCallScopeVars(ctx, op, func, args, tok, scopeArgNodes);
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* param = ListGetIdx(&func->type.vars, i);
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
-        if (param->type.bType == BASETYPE_SCOPE) {
-            struct scopeBinding b = (struct scopeBinding){0};
-            b.typeParam = param;
-            b.boundTo = arg->opType == OPERATION_READ_VAR ? canonicalVar(arg->readVar) : NULL;
-            b.viaPath = ListInit(sizeof(struct var*)); //empty - already a unique key on its own, see the report
-            ListAdd(&op->scopeBindings, &b);
-            continue;
-        }
         //a non-scope-typed argument may itself already carry a real scopeBindings map (e.g. a fresh call
         //to another constructor, "WrappedPoint(s, ...)", passed as this argument) - merge it into op's own
         //map so a BARE-PUN field on the callee's own type (one that just forwards this parameter's value
@@ -3279,7 +3531,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
         ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
         return NULL;
     }
-    struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
+    struct list* scopeParams = ctx->func ? &ctx->func->type.scopeVars : NULL;
     struct list bindings = ListInit(sizeof(struct typeBinding));
     for (int i = 0; i < argNodes.len; i++) {
         struct typeBinding b = (struct typeBinding){0};
@@ -3315,7 +3567,7 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     //"Handle&[...]" - the literal's element type carries its own reference marker, so each element is a
     //separately allocated instance rather than a value laid out inline in the array
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER),
-                              ctx->func ? &ctx->func->type.vars : NULL);
+                              ctx->func ? &ctx->func->type.scopeVars : NULL);
     //an error type has no constructible values at all - every element would fail to type-check anyway, but
     //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
     if (elemType.bType == BASETYPE_ERROR) {
@@ -3392,13 +3644,6 @@ struct operand* buildVocabValueExpr(struct checkCtx* ctx, struct syntax* s) {
 }
 
 //"own" - a "scope"-typed value naming the enclosing function's own private scope (see the report). Not
-//isLiteral (unlike the other OPERATION_NONE nodes above): letting ":=" infer off it would smuggle a
-//"scope" value into an ordinary variable, defeating the whole "scope is parameter-only" restriction.
-struct operand* OperandOwn(struct checkCtx* ctx, struct token tok) {
-    if (!ctx->hasOwnScope) ErrMsgSemantic(tok, OWN_OUTSIDE_FUNC);
-    return operandNew(tok, OPERATION_NONE, TypeScope());
-}
-
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
@@ -3408,7 +3653,6 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             case TOK_FLOAT_LIT: return OperandFloatLiteral(tok);
             case TOK_CHAR_LIT: return OperandCharLiteral(tok);
             case TOK_STR_LIT: return OperandStringLiteral(tok);
-            case TOK_OWN: return OperandOwn(ctx, tok);
             case TOK_IDEN: {
                 //inside a destruct{} body only: a bare identifier that isn't a real local but does name
                 //one of the instance's own fields reads as that field (no "self." prefix - see the
@@ -3440,14 +3684,20 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_STRUCT_LITERAL) {
         return buildStructLiteralExpr(ctx, partSntx(s, 0));
     }
-    if (s->parts.len == 2) { //SNTX_NAME SNTX_EXPR_CALL - "func(...)" or "alias.func(...)"
-        struct syntax* nameNode = partSntx(s, 0);
+    if (firstPartOfType(s, SNTX_EXPR_CALL)) { //NAME [SCOPE_ARG] EXPR_CALL - "f(...)", "a.f(...)", "f&s(...)"
+        struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
         struct list nameIdens = allTokOfType(nameNode, TOK_IDEN);
         struct token nameTok = *(struct token*)ListGetIdx(&nameIdens, nameIdens.len -1);
-        struct syntax* callNode = partSntx(s, 1);
+        struct syntax* callNode = firstPartOfType(s, SNTX_EXPR_CALL);
+        struct list scopeArgNodes = allPartsOfType(s, SNTX_SCOPE_ARG);
         //"len(arr)" is a compiler builtin, not an ordinary callable var - intercepted here, before the
         //normal var/constructor lookup, so a bare (never aliased) "len" is never shadowable by a real
         //declaration of that name; see OperandLen for why it can't just be a normal function
+        if (firstPartOfType(s, SNTX_SCOPE_ARG) && nameIdens.len == 1
+                && (StrCmp(strFromTok(nameTok), StrFromCStr("len"))
+                    || numericPrimitiveBaseType(strFromTok(nameTok), &(enum baseType){0}))) {
+            ErrMsgSemantic(nameTok, SCOPE_ARG_NOT_ACCEPTED);
+        }
         if (nameIdens.len == 1 && StrCmp(strFromTok(nameTok), StrFromCStr("len"))) {
             bool allowedLen = ctx->allowFallibleCall;
             ctx->allowFallibleCall = false;
@@ -3482,7 +3732,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (!func) return OperandIntLiteral(nameTok);
         if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, NOT_CALLABLE); return OperandIntLiteral(nameTok); }
         if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
-        struct operand* call = OperandFuncCall(ctx->func, func, args, nameTok);
+        struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
         //a constructor is exactly the function a struct type points at as its own - true for an
         //instantiation's monomorphized constructor too, since that points at the instantiation
         call->isCtorCall = func->type.hasRetType && func->type.retType->bType == BASETYPE_STRUCT
@@ -3549,7 +3799,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
     //ctx->func is NULL for a global initializer, which has no parameter list to tag a "&name" against
-    struct list* scopeParams = ctx->func ? &ctx->func->type.vars : NULL;
+    struct list* scopeParams = ctx->func ? &ctx->func->type.scopeVars : NULL;
 
     struct type declType;
     struct operand* rhs;
@@ -3885,7 +4135,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* typeExprNode = firstPartOfType(initNode, SNTX_TYPE_EXPR);
     struct type declType;
     if (typeExprNode) {
-        declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.vars : NULL);
+        declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
         reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok);
         declType = inferArrayLenFromInit(declType, initVal->type);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
@@ -3988,7 +4238,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
         struct syntax* caseTypeNode = firstPartOfType(c, SNTX_TYPE_EXPR);
         if (!caseTypeNode) continue;
-        struct type caseT = resolveTypeExpr(ctx->mod, caseTypeNode, ctx->func ? &ctx->func->type.vars : NULL);
+        struct type caseT = resolveTypeExpr(ctx->mod, caseTypeNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
         if (!TypeIsSame(operandT, caseT)) continue;
         //selected: this arm's block IS the statement, spliced in place of the match itself
         stmt.sType = STATEMENT_IF;
@@ -4060,6 +4310,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     else if (val && ctx->func && ctx->func->type.hasRetType) {
         enum typeFit fit = OperandFitsType(ctx->func, val, *ctx->func->type.retType);
         if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(val->tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
+        else if (fit == TYPE_FIT_SCOPE_OWN) ErrMsgSemantic(val->tok, OWN_CANNOT_OUTLIVE);
         else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(val->tok, ARRAY_SIZE_MISMATCH);
         else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
     }

@@ -24,8 +24,8 @@ drift out of sync with the actual code.
   always reference-shaped, marker or not. The `&` denotes scope-tagged heap indirection and is
   deliberately *not* an address-of or a borrow - there is no pointer type, no unary `&`, and the
   §8.4 check is scope-containment, not a borrow check. The marker's spelling went through four
-  iterations (`{}` → `&` → `{}` → `&` → `&`); the last move exists to free `&` for generic type
-  parameters, and voided `&`'s own two justifications at once - that it "reads the way a
+  iterations (`{}` → `&` → `{}` → `<>` → `&`); the last move exists to free `<>` for generic type
+  parameters, and voided `<>`'s own two justifications at once - that it "reads the way a
   type-parameter annotation does in most other languages" (unhelpful once the language has real
   ones) and that `parseTypeRef` is only ever reached from a known-type position, never from
   expression parsing (a premise generics void, since generic calls and literals *are* expressions).
@@ -152,17 +152,31 @@ drift out of sync with the actual code.
   indexing). `int64`/`float64` were previously *completely unreachable* - no literal syntax produced
   either, and nothing implicitly widened into them - this closes that gap along with adding the
   explicit mechanism.
-- **Ownership scopes: `scope`, `own`, `&`/`&name`, and the static scope-containment checker.**
-  Every `&`-heap-indirect value belongs to a nested, FILO-closing `scope` (a chunked bump allocator;
+- **Ownership scopes: scope *names*, `&`/`&name`, and the static scope-containment checker.**
+  Every `&`-heap-indirect value belongs to a nested, FILO-closing scope (a chunked bump allocator;
   closing one is genuinely O(1) - the scope records its tail chunk so the whole list splices onto a
   global free-list with no walk - plus O(destructor-bearing instances it holds) to run their
   destructors). Every allocation is rounded up to 8 bytes so the next one starts aligned, and destructor
   list nodes are bump-allocated from the scope's own arena rather than individually malloc'd/freed.
-  `scope` is a restricted builtin type usable only as a function parameter's declared type. `own`
-  evaluates to the enclosing function/test's own private scope; a bare `&` marker means "my own
-  scope" (implicitly `own`), a named `&name` marker tags a value to an explicitly-passed `scope`
-  parameter (or, for a constructor field, any of that constructor's own parameters), letting it
-  escape into the caller's scope. A function's return type can never be a bare (untagged) `&`
+  **There is no `scope` type and `own` is not an expression** - a scope name is not a value at all.
+  A bare `&` marker means `own`, the scope of the function whose text it appears in; a named `&name`
+  marker tags a value to a **scope variable**, which is declared purely by *appearing* in a signature
+  (parameter types and the return type), with no declaration list - exactly as a generic type variable
+  is. O3's argument is that a scope you can neither store nor compare nor construct was never a value;
+  it was an annotation spelled as an argument, and passing it positionally alongside real arguments was
+  the accident. At a call, a scope variable is **determined** by any already-reference-shaped argument
+  whose parameter names it (all must agree), **supplied** by an adjacency-constrained scope argument
+  (`makeVec&a(4)`, `Vec<int32>&a(4)` - adjacency is what tells it from the binary `&` of `f & a(x)`),
+  or otherwise bound to the **caller's own scope**, which is what `Vec<int32>(4)` means. An argument
+  that is *not* already reference-shaped determines nothing: it is a plain value about to be promoted,
+  so its parameter's tag says where it is about to be *allocated*, not where it already lives.
+  **One case appearance cannot cover (O3a):** a scope a body allocates into that no type in the
+  signature mentions - `func makeScopedBoxPlain&outer(x int32, y int32) ScopedBox`, whose return type
+  is unmarked and whose parameters are ints. That takes a fallback declaration after the name, rejected
+  as redundant if the types already declare the name, and rejected outright on a plain (non-constructor)
+  struct. This case was initially dismissed as non-existent and turned up four times in one test file.
+  Runtime-wise each scope variable is a leading hidden `ptr` parameter - exactly what `s scope` carried,
+  minus any presence in the language. A function's return type can never be a bare (untagged) `&`
   reference, directly or nested inside a plain returned struct/array (covering structs, compile-time-length
   arrays, and runtime-length arrays alike) - the function's own scope closes before a caller could ever see
   a value allocated into it. `&`/`&name` apply uniformly to compile-time-length arrays too (the
@@ -171,11 +185,27 @@ drift out of sync with the actual code.
   container's own scope, never an independent tag - enforced at every relevant codegen site
   (aggregate-literal building, assignment through a chain of bare fields or array indices).
 
+  **A scope tag is a claim about lifetime, not a record of where a value was allocated** - `&s` says
+  "valid at least until `s` closes." O10's narrowing rule proves it: a `&a` value flowing into a bare
+  `&` target changes the tag while nothing is moved or copied (E10's pointer identity would break
+  otherwise). The allocation reading applies at exactly one place, O6's promotion, where something new
+  has to be put somewhere. This is also why a returned value need not have been *created* by the
+  function returning it, so a return tag is checked, not executed.
+
   A **static, compile-time scope-containment checker** (not a general borrow checker) additionally
-  proves, wherever it can trace a scope tag back to one of the current function's own declared scope
-  parameters: a value may flow into a same-tagged target; a named-scope value may narrow into a bare
-  `&` (own) target (own is always the shortest-lived scope reachable from inside a function);
-  anything else (a bare/own value into a named target, or two different named scopes) is rejected.
+  proves, wherever it can trace a scope tag back to one of the current function's own scope variables:
+  **a value may flow into a target exactly when its scope outlives the target's.** Supplying a
+  longer-lived scope than asked for is always safe; only shorter-lived dangles. Provable directly
+  (O10a) are just two facts - a name outlives itself, and every scope variable outlives `own` (FILO
+  makes own the shortest scope nameable inside a function). A required relation between two *different*
+  scope variables is **not** rejected: it is recorded as an **obligation** on the signature (O10b),
+  transitively closed, and every caller must discharge it through its own binding (O10c) - which
+  terminates, since own is ordered against everything and every call chain ends at concrete bindings.
+  Obligations are inferred from the body rather than written; an explicit syntax for declaring them is
+  deliberately deferred until there is usage data, and is purely additive when it comes (both forms
+  populate the same set). Three rejections that used to be one, each naming a different fix: **O10d**
+  (`own` into a named scope - unsatisfiable by any caller, so a bug in this body), **O11**
+  (untraceable), and a genuinely unsafe flow.
   Tracing composes through a call's own argument-to-parameter binding (including a callee's own
   parameter type naming one of *that callee's own* scope parameters, resolved through the call's own
   binding before comparing - never the caller's), one or more hops through a var-decl or

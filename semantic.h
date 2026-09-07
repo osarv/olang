@@ -46,9 +46,10 @@ struct type {
     struct list vars; //list of struct var: struct members, or function/func-type parameters
     bool structMAlloc; //true when referenced via a trailing "{}" or "{name}" - heap-indirect, breaks
                         //recursive embedding
-    //valid only when structMAlloc: NULL for a bare "{}" (this value's own private/local scope - not
-    //further distinguished at the type-system level yet, see the report); non-NULL for an explicit
-    //"{name}", pointing at the BASETYPE_SCOPE parameter that value is allocated into
+    //valid only when structMAlloc: NULL for a bare "&" (O4: this value's own function's "own" scope);
+    //non-NULL for an explicit "&name", pointing at the scope VARIABLE (O3) that value is tagged to -
+    //an entry in the enclosing signature's own scopeVars below, synthesized by its first appearance in
+    //that signature rather than declared anywhere
     struct var* scopeParam;
 
     //BASETYPE_STRUCT, only when declared "struct(params) { ... }" - see the report. `vars` above still
@@ -83,6 +84,17 @@ struct type {
     bool hasRetType;
     struct type* retType; //heap-allocated, valid when hasRetType
     struct list errors; //list of struct type*: error types declared in the signature's error list
+    struct list scopeVars; //BASETYPE_FUNC: list of struct var* - this signature's own scope variables
+                            //(§8 O3), in first-appearance order across its parameter types and ret-type.
+                            //Declared by appearing in a "&name" marker, never by any declaration list;
+                            //each is a synthetic BASETYPE_SCOPE var that is NOT one of `vars`. A variable
+                            //named by some parameter's type is UNIFIED at a call from that argument's own
+                            //tag (O17); one named only by the ret-type is SUPPLIED by the caller's scope
+                            //argument, defaulting to the caller's own scope (O18).
+    struct list scopeObligations; //BASETYPE_FUNC: list of struct scopeObligation - relations between two
+                                   //of THIS signature's own scopeVars that its body turned out to require
+                                   //and O10a could not establish (O10b). Part of the signature: every
+                                   //caller must discharge them through its own binding (O10c).
     struct list typeParams; //list of struct str: for BASETYPE_FUNC, every distinct type variable in this
                              //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
                              //declared in its own "<...>" list, whose ORDER is what a type-argument list
@@ -113,6 +125,13 @@ struct type {
 //regardless of path" - true for a callee's own scope-typed parameter's direct binding (each such parameter
 //is already a unique key on its own) and for anything already fully popped down to one field. See the
 //report.
+//O10b: "longer outlives shorter", both scope variables of one signature - a requirement its body makes
+//of every caller, recorded instead of rejected when O10a cannot decide it locally.
+struct scopeObligation {
+    struct var* longer;
+    struct var* shorter;
+};
+
 struct scopeBinding {
     struct var* typeParam;
     struct var* boundTo;
@@ -330,6 +349,9 @@ bool StatementCatchCoversType(struct list* matches, struct type errType);
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool testMode);
 struct list* SemanticAllModules(void);
+//which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
+//NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.
+struct var* SemanticBoundScope(struct operand* callOp, struct var* sv);
 //list of struct instantiation - every monomorphized copy of a generic (G16). Held separately from any
 //module's own vars because that list stores struct var BY VALUE, and growing it during body checking
 //would invalidate every struct var* already handed out.

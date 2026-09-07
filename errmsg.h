@@ -30,7 +30,6 @@
 #define UNKNOWN_ERROR "unknown error"
 #define UNKNOWN_VAR "unknown variable"
 #define UNKNOWN_SCOPE "unknown scope - not a parameter of type 'scope' visible here"
-#define NOT_A_SCOPE "this name does not refer to a scope"
 #define SCOPE_NOT_ALLOWED_HERE "'scope' may only be used as a function parameter's type"
 #define OWN_OUTSIDE_FUNC "'own' is only valid inside a function"
 #define BARE_SCOPE_RETURN_TYPE "a bare '&' return type would always be dangling the instant this function returns - its own private scope closes at that exact point; tag it to a passed-in scope instead, e.g. '&s'"
@@ -80,6 +79,20 @@ constructor arguments, so there is nothing for that tag to name"
 #define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
 statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
 'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
+#define SCOPE_DECL_REDUNDANT "this scope is already declared by appearing in the signature's own types \
+- declare a scope after the name only when nothing in the parameters or return type names it"
+#define SCOPE_DECL_ON_PLAIN_TYPE "only a constructor-bearing struct can declare a scope: a plain struct \
+has no signature for one to be bound at"
+#define SCOPE_ARG_NOT_ACCEPTED "this call's target has no scope of its own for a caller to supply - a \
+scope argument is only written where the target names a scope its parameters do not determine"
+#define SCOPE_ARG_UNKNOWN "no scope of this name is visible here - a scope argument names 'own' or one \
+of the calling function's own scope variables, never one from the signature being called"
+#define SCOPE_ARGS_DISAGREE "two arguments are tagged to different scopes where this signature requires \
+one and the same - the parameters share a scope name, so the values passed for them must share a scope"
+#define SCOPE_OBLIGATION_UNMET "this call needs one of the target's scopes to outlive another, and \
+nothing here establishes that - pass values sharing one scope, or narrow through 'own'"
+#define OWN_CANNOT_OUTLIVE "a value in this function's own scope cannot satisfy a longer-lived scope: \
+'own' closes first and no caller can change that, so no argument would make this work"
 #define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \
 declared fields when the body completes; use 'error' to fail out of one instead"
 #define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"

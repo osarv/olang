@@ -136,6 +136,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc);
 struct syntax* parseExprPostfix(SyntaxCtx sc);
 struct syntax* parseExprArgs(SyntaxCtx sc);
 struct syntax* parseCatchErrList(SyntaxCtx sc);
+struct list parseScopeDecls(SyntaxCtx sc);
 
 // ---- names, types ----
 
@@ -404,12 +405,16 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     //("Vec<int32>") rather than attaching to "struct"; it also scopes over the whole declaration, not
     //just the body (G6), and keeps type parameters out of the anonymous struct-shape grammar (T3)
     struct syntax* typeParams = parseTypeArgsInto(sc, SNTX_TYPE_PARAMS);
+    //"type T&s struct(...)" - same fallback declaration, attached to the constructor node below (a plain
+    //struct has no signature for a scope variable to mean anything in, and is rejected semantically)
+    struct list scopeDecls = parseScopeDecls(sc);
     //a constructor-bearing struct ("struct(params) { ... }") is only ever reachable here, never as a
     //general type expression - disambiguated purely by "(" immediately following "struct", so a plain
     //"struct { ... }" (parseTypeExpr's path, unchanged) never even attempts this
     struct syntax* ctor = parseStructCtor(sc);
     struct syntax* type = ctor ? ctor : parseTypeExpr(sc);
     if (!type) { TokenSetCursor(sc->tc, cur); return NULL; }
+    for (int i = 0; i < scopeDecls.len; i++) addSntx(type, *(struct syntax**)ListGetIdx(&scopeDecls, i));
     struct syntax* s = newNode(SNTX_TYPE_DECL);
     addTok(s, kw);
     addTok(s, name);
@@ -707,8 +712,12 @@ struct syntax* parseFuncDef(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    //O3: "func f&b(...)" - scope declarations ride on the signature node, where resolveFuncSig finds them
+    //alongside everything else it needs
+    struct list scopeDecls = parseScopeDecls(sc);
     struct syntax* sig = parseFuncSig(sc);
     if (!sig) { TokenSetCursor(sc->tc, cur); return NULL; }
+    for (int i = 0; i < scopeDecls.len; i++) addSntx(sig, *(struct syntax**)ListGetIdx(&scopeDecls, i));
     struct syntax* block = parseBlock(sc);
     if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_FUNC_DEF);
@@ -1298,6 +1307,45 @@ struct syntax* parseExprArgs(SyntaxCtx sc) {
     return s;
 }
 
+//E25: "&s" written between a call target's name and its "(", as in "makeVec&a()" or "Vec<int32>&a(4)".
+//Adjacency is the whole disambiguator: "f&a(x)" and "f & a(x)" tokenize identically, and the second is a
+//legal bitwise-and expression, so the "&" must physically touch the name and the IDEN must touch the "&"
+//- checked on the source pointers, since every real token points into the one source buffer. "own" is a
+//keyword rather than an identifier, so it is accepted explicitly alongside IDEN.
+struct syntax* parseScopeMarkerRun(SyntaxCtx sc, enum syntaxType nodeType) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token prev = prevTok(sc);
+    struct token amp = TokenFeed(sc->tc);
+    if (amp.type != TOK_BTWSE_AND || amp.str.ptr != prev.str.ptr + prev.str.len) {
+        TokenSetCursor(sc->tc, cur);
+        return NULL;
+    }
+    struct token name = TokenFeed(sc->tc);
+    if ((name.type != TOK_IDEN && name.type != TOK_OWN) || name.str.ptr != amp.str.ptr + amp.str.len) {
+        TokenSetCursor(sc->tc, cur);
+        return NULL;
+    }
+    struct syntax* s = newNode(nodeType);
+    addTok(s, amp);
+    addTok(s, name);
+    return s;
+}
+
+struct syntax* parseScopeArg(SyntaxCtx sc) { return parseScopeMarkerRun(sc, SNTX_SCOPE_ARG); }
+
+//O3: "func f&b(...)" / "type T&s struct(...)" - declares a scope variable for the one case appearance
+//alone cannot cover: a scope the signature's own types never mention, used only inside the body. Adjacent
+//to the name, same rule as a call's scope argument and for the same reason.
+struct list parseScopeDecls(SyntaxCtx sc) {
+    struct list decls = ListInit(sizeof(struct syntax*));
+    while (true) {
+        struct syntax* d = parseScopeMarkerRun(sc, SNTX_SCOPE_DECL);
+        if (!d) break;
+        ListAdd(&decls, &d);
+    }
+    return decls;
+}
+
 struct syntax* parseExprCall(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token open = acceptTok(sc, TOK_PAREN_O);
@@ -1445,13 +1493,13 @@ bool firstIdenIsLocalKnownType(SyntaxCtx sc, struct syntax* name) {
     return sc->isKnownType(sc->typeCtx, ListInit(sizeof(struct str)), n);
 }
 
-//"TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|TOK_OWN|EXPR_TRY|
+//"TOK_BOOL_LIT|TOK_INT_LIT|TOK_FLOAT_LIT|TOK_CHAR_LIT|TOK_STR_LIT|EXPR_TRY|
 // (NAME EXPR_CALL)|STRUCT_LITERAL|EXPR_LITERAL|TOK_IDEN|(PAREN_O EXPR PAREN_C)"
 struct syntax* parseExprPrimary(SyntaxCtx sc) {
     struct token t = peekTok(sc);
     switch (t.type) {
         case TOK_BOOL_LIT: case TOK_INT_LIT: case TOK_FLOAT_LIT: case TOK_CHAR_LIT:
-        case TOK_STR_LIT: case TOK_OWN: {
+        case TOK_STR_LIT: {
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
             addTok(s, advanceTok(sc));
             return s;
@@ -1479,12 +1527,26 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
         case TOK_IDEN: {
             int save = TokenGetCursor(sc->tc);
             struct syntax* name = parseName(sc);
+            //a scope argument only ever precedes a "(" - anything else that looked like one was really the
+            //binary "&", so put the tokens back and let the ordinary branches below see them
+            int afterName = TokenGetCursor(sc->tc);
+            struct list scopeArgs = ListInit(sizeof(struct syntax*));
+            while (true) {
+                struct syntax* sa = parseScopeArg(sc);
+                if (!sa) break;
+                ListAdd(&scopeArgs, &sa);
+            }
+            if (scopeArgs.len != 0 && peekTok(sc).type != TOK_PAREN_O) {
+                TokenSetCursor(sc->tc, afterName);
+                scopeArgs.len = 0;
+            }
             struct token after = peekTok(sc);
             if (after.type == TOK_PAREN_O) {
                 struct syntax* call = parseExprCall(sc);
                 if (call) {
                     struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
                     addSntx(s, name);
+                    for (int i = 0; i < scopeArgs.len; i++) addSntx(s, *(struct syntax**)ListGetIdx(&scopeArgs, i));
                     addSntx(s, call);
                     return s;
                 }
@@ -1523,18 +1585,34 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 struct syntax* targs = parseTypeArgs(sc);
                 if (targs) {
                     int afterArgs = TokenGetCursor(sc->tc);
+                    //"Vec<int32>&a(4)" - a scope argument (E25) sits between the type-argument list and
+                    //the "(", exactly as it does after a plain name above
+                    struct list gScopeArgs = ListInit(sizeof(struct syntax*));
+                    while (true) {
+                        struct syntax* sa = parseScopeArg(sc);
+                        if (!sa) break;
+                        ListAdd(&gScopeArgs, &sa);
+                    }
+                    int afterScope = TokenGetCursor(sc->tc);
                     struct token open2 = TokenFeed(sc->tc);
+                    if (gScopeArgs.len != 0 && open2.type != TOK_PAREN_O) {
+                        TokenSetCursor(sc->tc, afterArgs);
+                        gScopeArgs.len = 0;
+                        afterScope = afterArgs;
+                        open2 = TokenFeed(sc->tc);
+                    }
                     if (open2.type == TOK_PAREN_O) {
                         //"Vec<int32>(...)" - a CONSTRUCTOR call on an instantiated generic type. Same
                         //commit rule as the two literal forms below; the type arguments ride on the call
                         //node, where resolveCallTarget picks them up to instantiate the type and reach
                         //that copy's own monomorphized constructor (G10/G16).
-                        TokenSetCursor(sc->tc, afterArgs); //parseExprCall consumes the "(" itself
+                        TokenSetCursor(sc->tc, afterScope); //parseExprCall consumes the "(" itself
                         struct syntax* call = parseExprCall(sc);
                         if (call) {
                             addSntx(call, targs);
                             struct syntax* s2 = newNode(SNTX_EXPR_PRIMARY);
                             addSntx(s2, name);
+                            for (int i = 0; i < gScopeArgs.len; i++) addSntx(s2, *(struct syntax**)ListGetIdx(&gScopeArgs, i));
                             addSntx(s2, call);
                             return s2;
                         }
