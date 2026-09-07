@@ -48,21 +48,37 @@ struct cgCtx {
     bool terminated; //true once the current basic block has a terminator - see cgLabel/cgBr
 };
 
-int modIndex(struct semaModule* mod) {
-    struct list* all = SemanticAllModules();
-    for (int i = 0; i < all->len; i++) {
-        if (*(struct semaModule**)ListGetIdx(all, i) == mod) return i;
+//a module's own stable symbol prefix: its file's base name, directory and ".olang" extension stripped,
+//with anything not [A-Za-z0-9_] replaced. Deliberately NOT the module's discovery-order index, which was
+//what this used to be: an index is only meaningful within one compilation, so two objects compiled
+//independently would disagree about which module "m0" named, and nothing would link. The base name is
+//the same identity the language already derives an import alias from (§4 M3), so it is stable for a
+//given module however a client happens to spell the path it imports it by.
+void mangleModPrefix(struct semaModule* mod, char* buf, size_t n) {
+    struct str f = mod->fileName;
+    int start = 0;
+    for (int i = 0; i < f.len; i++) if (f.ptr[i] == '/') start = i +1;
+    int end = f.len;
+    if (end - start > 6 && !memcmp(f.ptr + end -6, ".olang", 6)) end -= 6;
+    size_t w = 0;
+    for (int i = start; i < end && w +1 < n; i++) {
+        char c = f.ptr[i];
+        buf[w++] = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '_') ? c : '_';
     }
-    ErrorBugFound();
-    return -1;
+    buf[w] = '\0';
 }
 
 void mangleGlobal(struct semaModule* mod, struct str name, char* buf, size_t n) {
-    snprintf(buf, n, "@m%d_%.*s", modIndex(mod), name.len, name.ptr);
+    char prefix[256];
+    mangleModPrefix(mod, prefix, sizeof(prefix));
+    snprintf(buf, n, "@%s_%.*s", prefix, name.len, name.ptr);
 }
 
 void mangleTypeName(struct semaModule* mod, struct str name, char* buf, size_t n) {
-    snprintf(buf, n, "m%d.%.*s", modIndex(mod), name.len, name.ptr);
+    char prefix[256];
+    mangleModPrefix(mod, prefix, sizeof(prefix));
+    snprintf(buf, n, "%s.%.*s", prefix, name.len, name.ptr);
 }
 
 void llvmType(struct type t, char* buf, size_t n);
