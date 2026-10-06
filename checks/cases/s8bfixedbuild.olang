@@ -1,0 +1,11 @@
+## check: build
+error E { X }
+Verbose := false
+Level Int32 = 2 + 1
+FromBuild Bool = DebugBuild or false
+fn helper3() Int32 { return 3 }
+fn main() ? E {
+    x := 3
+    n Int64 = TargetOs.Len()
+    if n > 0 { x = 1 } else { x = NoSuchType{0}.v }
+}

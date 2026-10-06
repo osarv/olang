@@ -1,0 +1,332 @@
+## text, part of the prelude. A String is an Array<Byte> with an identity of its own (T29a): it indexes,
+## slices and goes to C as the array does, and text written in the program - a literal, a "$x" rendering, a
+## join - is a String wherever one is wanted (T29c). Other bytes become text with "String(bytes)", which
+## copies nothing. "==" on a "String&" stays reference identity (E10); comparing what two texts SAY is
+## "a.Eq(b)". There is no encoding check: a String is bytes.
+
+type String Array<Byte>
+
+error ParseError {
+    EMPTY,
+    INVALID,
+    OVERFLOW
+}
+
+## FNV-1a over the bytes: text that SAYS the same thing hashes the same, whatever storage holds it
+fn (t String&) Hash() Int64 {
+    h Int64 = -3750763034362895579
+    for c in t {
+        h = (h ^ Int64(c)) * 1099511628211
+    }
+    return h
+}
+
+## the same bytes, in the same order
+fn (a String&) Eq(b String&) Bool {
+    if a.Len() != b.Len() {
+        return false
+    }
+    for i in range a.Len() {
+        if a[i] != b[i] {
+            return false
+        }
+    }
+    return true
+}
+
+## bytewise lexicographic order: -1, 0 or 1. A proper prefix sorts first.
+fn (a String&) Compare(b String&) Int32 {
+    n Int64 = a.Len()
+    if b.Len() < n {
+        n = b.Len()
+    }
+    for i in range n {
+        if a[i] < b[i] {
+            return -1
+        }
+        if a[i] > b[i] {
+            return 1
+        }
+    }
+    if a.Len() < b.Len() {
+        return -1
+    }
+    if a.Len() > b.Len() {
+        return 1
+    }
+    return 0
+}
+
+fn (a String&) StartsWith(prefix String&) Bool {
+    if prefix.Len() > a.Len() {
+        return false
+    }
+    return a[:prefix.Len()].Eq(prefix)
+}
+
+fn (a String&) EndsWith(suffix String&) Bool {
+    if suffix.Len() > a.Len() {
+        return false
+    }
+    return a[a.Len() - suffix.Len():].Eq(suffix)
+}
+
+## the index of the first occurrence of c, or -1
+fn (a String&) FindByte(c Byte) Int64 {
+    for i in range a.Len() {
+        if a[i] == c {
+            return i
+        }
+    }
+    return -1
+}
+
+## the index of the first occurrence of sub, or -1. An empty sub is found at 0.
+fn (a String&) Find(sub String&) Int64 {
+    last Int64 = a.Len() - sub.Len()
+    for i in range last + 1 {
+        if a[i:i + sub.Len()].Eq(sub) {
+            return i
+        }
+    }
+    return -1
+}
+
+fn (a String&) Contains(sub String&) Bool {
+    return a.Find(sub) >= 0
+}
+
+## the pieces of the text between each occurrence of sep, in order - borrows of the receiver's own storage,
+## so no text is copied, held in an array that lives where the receiver does. Adjacent separators, or one at
+## either end, give empty pieces, so joining the pieces with sep gives the text back; text with no separator
+## is one piece, and the empty text one empty piece. An empty sep splits the text into its single bytes.
+fn (t String&) Split(sep String&) mut Array<String&>&t {
+    if sep.Len() == 0 {
+        bytes Array<String&>&t = Array<String&>(t.Len())
+        for i in range t.Len() {
+            bytes[i] = t[i:i + 1]
+        }
+        return bytes
+    }
+    n Int64 = 1
+    at Int64 = t.Find(sep)
+    from Int64 = 0
+    for at >= 0 {
+        n++
+        from = from + at + sep.Len()
+        at = t[from:].Find(sep)
+    }
+    pieces Array<String&>&t = Array<String&>(n)
+    from = 0
+    for i in range n - 1 {
+        at = t[from:].Find(sep)
+        pieces[i] = t[from:from + at]
+        from = from + at + sep.Len()
+    }
+    pieces[n - 1] = t[from:]
+    return pieces
+}
+
+fn isSpace(c Byte) Bool {
+    return c == ' ' or c == '\t' or c == '\n' or c == '\r'
+}
+
+## the text without leading and trailing whitespace - a borrow of the receiver's own storage, so it shares
+## the receiver's scope "s" and costs no copy
+fn (t String&) Trim() String&t {
+    lo Int64 = 0
+    hi Int64 = t.Len()
+    for lo < hi and isSpace(t[lo]) {
+        lo++
+    }
+    for hi > lo and isSpace(t[hi - 1]) {
+        hi--
+    }
+    return t[lo:hi]
+}
+
+## a decimal integer with an optional leading '-' or '+', and nothing else - no surrounding space, no
+## separators. The value is accumulated NEGATIVELY, since the negative range is the larger one: that is what
+## lets the most negative Int64 parse without overflowing on its way in.
+fn (t String&) ParseInt() Int64 ? ParseError {
+    if t.Len() == 0 {
+        error ParseError.EMPTY
+    }
+    neg Bool = false
+    start Int64 = 0
+    if t[0] == '-' or t[0] == '+' {
+        neg = t[0] == '-'
+        start = 1
+    }
+    if start == t.Len() {
+        error ParseError.INVALID
+    }
+    limit Int64 = -922337203685477580        ## the most negative Int64 divided by ten, truncated toward zero
+    v Int64 = 0
+    for i in range start, t.Len() {
+        c Byte = t[i]
+        if c < '0' or c > '9' {
+            error ParseError.INVALID
+        }
+        d Int64 = Int64(c - '0')
+        if v < limit or (v == limit and d > 8) {
+            error ParseError.OVERFLOW
+        }
+        v = v * 10 - d
+    }
+    if not neg {
+        if v == limit * 10 - 8 {
+            error ParseError.OVERFLOW
+        }
+        return -v
+    }
+    return v
+}
+
+test "Eq compares contents, where == compares identity" {
+    a String& = "hello"
+    bytes := Array<Byte>(5, 'x')
+    bytes[0] = 'h'
+    bytes[1] = 'e'
+    bytes[2] = 'l'
+    bytes[3] = 'l'
+    bytes[4] = 'o'
+    b := String(bytes)        ## bytes become text by naming them so (T29c)
+    assert a.Eq(b)
+    assert a.Eq("hello")
+    assert not a.Eq("hell")
+    assert not a.Eq("hellO")
+    assert "".Eq("")
+    assert ("x = " $42).Eq("x = 42")        ## a rendering is text like any other
+}
+
+test "Compare orders bytewise, a prefix first" {
+    assert "abc".Compare("abc") == 0
+    assert "abc".Compare("abd") == -1
+    assert "abd".Compare("abc") == 1
+    assert "ab".Compare("abc") == -1
+    assert "abc".Compare("ab") == 1
+    assert "".Compare("a") == -1
+}
+
+test "prefixes, suffixes and searching" {
+    s := "hello, world"
+    assert s.StartsWith("hello")
+    assert not s.StartsWith("world")
+    assert s.EndsWith("world")
+    assert s.StartsWith("")
+    assert not "hi".StartsWith("high")
+    assert s.FindByte(',') == 5
+    assert s.FindByte('z') == -1
+    assert s.Find("world") == 7
+    assert s.Find("o") == 4
+    assert s.Find("") == 0
+    assert s.Find("worlds") == -1
+    assert s.Contains("lo, w")
+    assert not "".Contains("a")
+}
+
+test "Trim borrows the receiver's storage" {
+    assert "  padded \t\n".Trim().Eq("padded")
+    assert "bare".Trim().Eq("bare")
+    assert "   ".Trim().Eq("")
+    assert "".Trim().Eq("")
+}
+
+## the result of a fallible call can be bound only where there is a signature to propagate through, so the
+## checks live in a helper, as io.olang's do
+fn checkParses(t String&, want Int64) ? ParseError {
+    got Int64 = try t.ParseInt()
+    assert got == want
+}
+
+## each of these lets exactly one word through and swallows the other two, so a test - which must catch
+## everything it tries - can still tell which word a failure was
+fn onlyEmpty(t String&) ? ParseError {
+    try t.ParseInt() catch ParseError.INVALID + ParseError.OVERFLOW { }
+}
+
+fn onlyInvalid(t String&) ? ParseError {
+    try t.ParseInt() catch ParseError.EMPTY + ParseError.OVERFLOW { }
+}
+
+fn onlyOverflow(t String&) ? ParseError {
+    try t.ParseInt() catch ParseError.EMPTY + ParseError.INVALID { }
+}
+
+test "ParseInt reads decimals across the whole Int64 range" {
+    ok Bool = true
+    try checkParses("0", 0) catch ParseError { ok = false }
+    try checkParses("42", 42) catch ParseError { ok = false }
+    try checkParses("-17", -17) catch ParseError { ok = false }
+    try checkParses("+8", 8) catch ParseError { ok = false }
+    try checkParses("9223372036854775807", 9223372036854775807) catch ParseError { ok = false }
+    try checkParses("-9223372036854775808", -9223372036854775807 - 1) catch ParseError { ok = false }
+    assert ok
+}
+
+test "ParseInt names what was wrong" {
+    e Bool = false
+    try onlyEmpty("") catch ParseError { e = true }
+    assert e
+    i Bool = false
+    try onlyInvalid("12a") catch ParseError { i = true }
+    assert i
+    i = false
+    try onlyInvalid("-") catch ParseError { i = true }
+    assert i
+    i = false
+    try onlyInvalid(" 1") catch ParseError { i = true }  ## no surrounding space: Trim first
+    assert i
+    o Bool = false
+    try onlyOverflow("9223372036854775808") catch ParseError { o = true }
+    assert o
+    o = false
+    try onlyOverflow("-9223372036854775809") catch ParseError { o = true }
+    assert o
+    o = false
+    try onlyOverflow("99999999999999999999") catch ParseError { o = true }
+    assert o
+    o = false
+    try onlyOverflow("12") catch ParseError { o = true }
+    assert not o
+}
+
+## T29c: text written in the program is a String wherever one is wanted - declared from, called on, passed
+fn takesBytes(b Array<Byte>&) Int64 { return b.Len() }
+
+test "T29c: written text is a String, and a String is still its bytes" {
+    s := "  hi  "                        ## ":=" from text declares a String
+    assert s.Trim().Eq("hi")             ## so it has text's methods
+    r := $42 "!"                         ## a rendering and a join are text too
+    assert r.Eq("42!")
+    assert s[2:4].Eq("hi")               ## a slice of text is text
+    assert takesBytes(s) == 6            ## and text goes wherever bytes are wanted
+    raw := Array<Byte>(2, 'z')
+    assert String(raw).Eq("zz")          ## bytes become text only by saying so
+}
+
+test "equal text hashes equally, whatever storage holds it" {
+    assert "ab".Hash() == String(Byte['a', 'b']).Hash()
+    assert "ab".Hash() != "ba".Hash()
+}
+
+test "Split gives the pieces between separators, borrowed from the text" {
+    p := "a,b,,c".Split(",")
+    assert p.Len() == 4
+    assert p[0].Eq("a") and p[1].Eq("b") and p[2].Eq("") and p[3].Eq("c")
+    q := ",x,".Split(",")
+    assert q.Len() == 3 and q[0].Eq("") and q[1].Eq("x") and q[2].Eq("")
+    assert "none".Split(",").Len() == 1 and "none".Split(",")[0].Eq("none")
+    e := "".Split(",")
+    assert e.Len() == 1 and e[0].Eq("")
+    w := "one::two::three".Split("::")
+    assert w.Len() == 3 and w[1].Eq("two") and w[2].Eq("three")
+    b := "abc".Split("")
+    assert b.Len() == 3 and b[0].Eq("a") and b[2].Eq("c")
+    n Int32 = 0
+    for piece in "1 2 3".Split(" ") {
+        n = n + Int32(try piece.ParseInt() catch default 0)
+    }
+    assert n == 6
+}

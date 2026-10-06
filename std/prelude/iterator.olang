@@ -1,0 +1,8 @@
+## T35b: the prelude is part of every program - its exported types are visible in every module without an
+## import, and it is the one place methods on the built-in types are declared (M19d).
+
+## what "for ... in" walks besides an array and a range (S9a): each Next() gives the following value, and
+## false once there are no more
+type Iterator<T> interface {
+    mut Next() (<T>, Bool)
+}

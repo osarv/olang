@@ -1,0 +1,177 @@
+## Io - the standard I/O module. Ordinary olang on top of "extern fn" (§11), not a compiler builtin:
+## the whole point of the extern mechanism is that this file has no privileges the language doesn't give
+## every other module.
+
+extern fn write(fd Int32, buf Array<Byte>, count Int64) Int64
+extern fn read(fd Int32, buf Array<Byte>, count Int64) Int64
+extern fn open(path Array<Byte>, flags Int32) Int32
+extern fn close(fd Int32) Int32
+
+error IoError {
+    FAILED,
+    PARTIAL
+}
+
+## thin wrappers so the tests can open a real descriptor; the raw calls take a NUL-terminated path, which
+## olang string literals do not add, so callers write the "\0" themselves
+fn openReadOnly(path Array<Byte>&) Int32 {
+    return open(path, 0)
+}
+
+fn closeFd(fd Int32) Int32 {
+    return close(fd)
+}
+
+Stdin Int32 = 0
+Stdout Int32 = 1
+Stderr Int32 = 2
+
+## writes every byte of "data" to "fd", retrying until it is all gone. A short write is ordinary rather than
+## exceptional - a pipe or socket takes what it has room for - so the loop re-slices the unwritten tail and
+## goes again. "data[sent:]" is a borrow (E16a): no copy, no allocation, just a pointer and a length, which
+## is what makes retrying free. Before slicing existed this reported PARTIAL and gave up, because there was
+## no way to name the tail at all.
+fn Write(fd Int32, data Array<Byte>&) ? IoError {
+    total Int64 = Int64(data.Len())
+    if total == 0 {
+        return
+    }
+    sent Int64 = 0
+    do {
+        tail := data[sent:]
+        n Int64 = write(fd, tail, Int64(tail.Len()))
+        if n < 0 {
+            error IoError.FAILED
+        }
+        ## no bytes moved with bytes still outstanding: retrying would spin rather than make progress
+        if n == 0 {
+            error IoError.PARTIAL
+        }
+        sent = sent + n
+    } for sent < total
+}
+
+## reads up to len(buf) bytes into the caller's buffer and hands back the front of it - a borrow, so the
+## caller gets something already the right length to pass on and cannot read past what was actually read.
+## "buf" and the return share the scope variable "s" (O3): the returned slice points into the caller's own
+## buffer, so its lifetime is that buffer's, and saying so is what lets it be returned at all - a bare "&"
+## return type is rejected outright (O13).
+fn Read(fd Int32, buf mut Array<Byte>&) Array<Byte>&buf ? IoError {
+    n Int64 = read(fd, buf, Int64(buf.Len()))
+    if n < 0 {
+        error IoError.FAILED
+    }
+    return buf[:n]
+}
+
+fn Print(data Array<Byte>&) ? IoError {
+    try Write(Stdout, data)
+}
+
+fn PrintErr(data Array<Byte>&) ? IoError {
+    try Write(Stderr, data)
+}
+
+## writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
+## buffer because a function may not return a bare "&" reference (O13) and an Int64 never needs more than
+## 20 bytes anyway. "buf mut Array<Byte>&" and not "buf mut Array<Byte>": the marker is what makes this the caller's
+## own array rather than a copy of it, and so what makes this an out-parameter at all - D9a rejects the
+## unmarked spelling outright rather than let a call copy an array.
+fn FormatInt(n Int64, buf mut Array<Byte>&) Int32 {
+    if n == 0 {
+        buf[0] = '0'
+        return 1
+    }
+    v Int64 = n
+    neg Bool = false
+    if v < 0 {
+        neg = true
+        v = -v
+    }
+        ## least-significant digit first, reversed in place below
+    used Int32 = 0
+    do {
+        buf[used] = Byte(v % 10) + '0'
+        v = v / 10
+        used++
+    } for v > 0
+    if neg {
+        buf[used] = '-'
+        used++
+    }
+    lo Int32 = 0
+    hi Int32 = used - 1
+    for lo < hi {
+        t Byte = buf[lo]
+        buf[lo] = buf[hi]
+        buf[hi] = t
+        lo++
+        hi--
+    }
+    return used
+}
+
+test "Write reports a failure from the underlying syscall" {
+    failed Bool = false
+    try Write(-1, "no such fd") catch IoError {
+        failed = true
+    }
+    assert failed
+}
+
+test "Write succeeds on a real descriptor" {
+    ok Bool = true
+    try Print("io.olang: hello from a standard library written in olang\n") catch IoError {
+        ok = false
+    }
+    assert ok
+}
+
+## an ordinary zero-filled fixed-size buffer, no marker and no run-time length: passing it to a "Array<Byte>&"
+## parameter borrows it (E12c), so FormatInt writes into these very bytes. Both of those used to be
+## impossible at once - E12a rejected passing an unmarked array, and D13 rejects the "Byte[24]&" that would
+## have satisfied it - so the buffer had to be declared run-time-sized for a length known right here.
+## Read hands back the front of the caller's own buffer, so the length is carried by the value rather than
+## by a separate count the caller has to remember to respect. Reading from /dev/null gives 0 bytes, which is
+## an empty slice rather than an error.
+## The assertion lives in a fallible helper rather than in the test: "try f()" is an expression only where
+## there is a signature to propagate through, and a "try f() catch { }" statement discards the value it
+## caught - so a test block cannot bind the result of a fallible call at all.
+fn checkReadIsEmpty(fd Int32, buf mut Array<Byte>&) ? IoError {
+    got := try Read(fd, buf)
+    assert got.Len() == 0
+}
+
+test "Read returns a slice of the caller's own buffer" {
+    buf := Array<Byte>(8)
+    path := Byte['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
+    fd Int32 = openReadOnly(path)
+    assert fd >= 0
+    ok Bool = true
+    try checkReadIsEmpty(fd, buf) catch IoError {
+        ok = false
+    }
+    assert ok
+    closeFd(fd)
+}
+
+test "FormatInt renders decimals, including zero and negatives" {
+    buf := Array<Byte>(24)
+
+    n Int32 = FormatInt(0, buf)
+    assert n == 1
+    assert buf[0] == '0'
+
+    n = FormatInt(1234, buf)
+    assert n == 4
+    assert buf[0] == '1'
+    assert buf[1] == '2'
+    assert buf[2] == '3'
+    assert buf[3] == '4'
+
+    n = FormatInt(-90, buf)
+    assert n == 3
+    assert buf[0] == '-'
+    assert buf[1] == '9'
+    assert buf[2] == '0'
+}

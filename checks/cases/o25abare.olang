@@ -1,0 +1,11 @@
+## check: fail declare the local with ':='
+## O25a: a typed bare local lives in its block and never adopts its initializer's scope
+type N struct(v Int32, nx N&) {
+    v
+    next mut N& = nx
+}
+fn f(l N&) Int32 {
+    c N& = l.next
+    return c.v
+}
+fn main() ? { }

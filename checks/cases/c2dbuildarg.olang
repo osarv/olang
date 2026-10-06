@@ -1,0 +1,10 @@
+## check: fail nothing can be built in its place
+## C2d/O23: a field written '&p' lives where its argument did, unknown to a function given the container
+type N struct(v Int32, nx N&) {
+    v
+    next mut N& = nx
+}
+type Cur struct(of N&) { at mut N&of = of }
+fn grow(n mut N&) { n.next = N(9, null) }
+fn fill(c mut Cur&) { grow(c.at) }
+fn main() ? { }

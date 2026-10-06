@@ -1,0 +1,9 @@
+## check: run
+error E { X }
+fn f() Int32 { return 1 }
+if f() == 1 {
+    fn g() Int32 { return 7 }
+}
+fn main() ? E {
+    assert g() == 7
+}

@@ -1,0 +1,4 @@
+import "std/list"
+import "list"
+error E { X }
+fn main() ? E { }

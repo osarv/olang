@@ -1,0 +1,29 @@
+## the neighbour of rect.olang, which imports it while it imports rect.olang back - a cycle between two
+## files of one directory, legal as any import cycle is (M2).
+
+import "rect"
+
+fn Area(r rect.Rect) Int32 {
+    return r.W * r.H
+}
+
+## a method on a type this module declares over a primitive: reached through its receiver, from this
+## module and from every module holding a value of it
+type Side Int32
+
+fn (n Side) Squared() Side {
+    return n * n
+}
+
+test "a value of a type declared in the neighbouring file" {
+    r rect.Rect = rect.Rect(2, 5)
+    assert Area(r) == 10
+    four Side = 4
+    assert four.Squared() == 16
+}
+
+GeomUnits String = "cm"
+
+test "B9a: a condition reads a global of an imported module" {
+    assert rect.UnitName().Eq("cm")
+}

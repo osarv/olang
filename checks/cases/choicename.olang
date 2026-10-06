@@ -1,0 +1,10 @@
+## check: build
+type Dir enum {
+    North
+    South
+}
+error E { X }
+fn main() ? E {
+    choice := Dir.South
+    assert choice != Dir.North
+}

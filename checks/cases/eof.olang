@@ -1,0 +1,4 @@
+## check: build
+error E { X }
+fn main() ? E { }
+Last Int32 = 7

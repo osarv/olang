@@ -1,0 +1,43 @@
+error E { X }
+type Pair struct(a Int32, b Float64) {
+    a mut
+    b mut
+}
+fn fib(n Int32) Int32 {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+fn table() Array<Int32>& {
+    t Array<Int32>&return = Array<Int32>(4)
+    for i in range 4 { t[i] = fib(i + 10) }
+    return t
+}
+type Node struct(v Int32, next mut Node&) {
+    v mut
+    next mut
+}
+fn ring() Node& {
+    a Node&return = Node(1, null)
+    a.next = a
+    return a
+}
+Chain Node& = Node(1, Node(2, null))
+Ring Node& = ring()
+closed mut Int32 = 0
+type Loud struct(id Int32) { id } destruct { closed = closed + 1 }
+fn loudOnce() Int32 {
+    l Loud& = Loud(1)
+    return l.id
+}
+Kept Loud& = Loud(7)
+Dropped Int32 = loudOnce()
+Fib Int32 = fib(15)
+Table Array<Int32>& = table()
+P Pair = Pair(fib(6), 0.5)
+seed mut Int32 = 3
+Later Int32 = seed * 2
+fn main() ? E {
+    assert Fib == 610 and Table[3] == 233 and P.a == 8 and P.b == 0.5 and Later == 6
+    assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring
+    assert Kept.id == 7 and Dropped == 1 and closed == 1
+}

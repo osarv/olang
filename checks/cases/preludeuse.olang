@@ -1,0 +1,6 @@
+## check: run
+error E { X }
+fn main() ? E {
+    v := try "42".ParseInt() catch ParseError default 0
+    assert v == 42
+}

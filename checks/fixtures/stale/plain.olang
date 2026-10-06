@@ -1,0 +1,1 @@
+fn Plain() Int32 { return 1 }

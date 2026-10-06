@@ -1,0 +1,6 @@
+## check: fail this reference is read-only, and this place wants a writable one
+## T25b: a "mut" method needs a writable receiver, through an interface too
+type Writer interface { mut Put(n Int32) }
+fn feed(w Writer&) { w.Put(1) }
+error E { X }
+fn main() ? E { }

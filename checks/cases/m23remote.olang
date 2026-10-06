@@ -1,0 +1,4 @@
+## check: fail names a file within the repository
+import "example.com/me/tools"
+error E { X }
+fn main() ? E { }

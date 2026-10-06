@@ -1,0 +1,4 @@
+## check: fail this destructor does nothing
+## C7a: an empty destructor is an error - it releases nothing
+type Big struct(n Int32) { n } destruct { }
+test "never runs" { }

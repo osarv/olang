@@ -1,0 +1,4 @@
+## check: fail no .olang file at this path
+import "nothere"
+error E { X }
+fn main() ? E { }

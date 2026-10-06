@@ -1,0 +1,172 @@
+## map - values found by key. A key is any type with "Hash() Int64" and "Eq(other) Bool" methods: the prelude
+## gives them to Int32, Int64, Byte and String, and a program's own key type declares them.
+##
+## Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
+## Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
+## needs no destructor. Growing re-links the existing slots into new buckets and copies nothing else; the old
+## bucket array stays in the scope until it closes, as anything an arena holds does.
+##
+## A key or value that is a reference ("Map<String&, Int32>") is stored as the reference - it must outlive the
+## map, which every call checks (O10b).
+
+type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
+    key
+    value mut
+    next mut
+}
+
+type Map<K, V> struct() {
+    buckets mut Array<mut mapSlot<<K>, <V>>&>& = Array<mut mapSlot<<K>, <V>>&>(8)
+    count mut Int64 = 0
+}
+
+## one key and its value, as a "for ... in" over a Map gives them
+type MapEntry<K, V> struct(key <K>, value <V>) {
+    Key <K> = key
+    Value <V> = value
+}
+
+fn (m Map<<K>, <V>>&) Len() Int64 { return m.count }
+
+fn (m Map<<K>, <V>>&) bucketOf(key <K>) Int64 { return key.Hash() & (m.buckets.Len() - 1) }
+
+## sets the value for key, replacing the one it had
+fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
+    i := m.bucketOf(key)
+    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+        if s.key.Eq(key) {
+            s.value = value
+            return
+        }
+    }
+    m.buckets[i] = mapSlot<<K>, <V>>(key, value, m.buckets[i])
+    m.count++
+    if m.count * 4 > m.buckets.Len() * 3 { m.grow() }
+}
+
+## doubles the buckets and re-links every slot into its new one
+fn (m mut Map<<K>, <V>>&) grow() {
+    old := m.buckets
+    m.buckets = Array<mut mapSlot<<K>, <V>>&>(old.Len() * 2)
+    for i in range old.Len() {
+        s mapSlot<<K>, <V>>&m = old[i]
+        for s != null {
+            after := s.next
+            j := m.bucketOf(s.key)
+            s.next = m.buckets[j]
+            m.buckets[j] = s
+            s = after
+        }
+    }
+}
+
+## the value for key, and whether there was one - the type's zero value when not
+fn (m Map<<K>, <V>>&) Get(key <K>) (<V>, Bool) {
+    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+        if s.key.Eq(key) { return s.value, true }
+    }
+    none <V>
+    return none, false
+}
+
+fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
+    v, found := m.Get(key)
+    return found
+}
+
+## removes key and its value, and says whether it was there
+fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
+    i := m.bucketOf(key)
+    prev mapSlot<<K>, <V>>&m = null
+    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+        if s.key.Eq(key) {
+            if prev == null { m.buckets[i] = s.next } else { prev.next = s.next }
+            m.count--
+            return true
+        }
+        prev = s
+    }
+    return false
+}
+
+## a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. Two
+## numbers rather than a slot reference, as a ListIter is: a bucket, and how far along its chain.
+type MapIter<K, V> struct(of Map<<K>, <V>>&) {
+    m Map<<K>, <V>>&of = of
+    bucket mut Int64 = 0
+    depth mut Int64 = 0
+}
+
+fn (it mut MapIter<<K>, <V>>&) Next() (MapEntry<<K>, <V>>, Bool) {
+    for it.bucket < it.m.buckets.Len() {
+        e, found := it.m.entryAt(it.bucket, it.depth)
+        if found {
+            it.depth++
+            return e, true
+        }
+        it.bucket++
+        it.depth = 0
+    }
+    none MapEntry<<K>, <V>>
+    return none, false
+}
+
+## the entry "depth" slots along bucket's chain, if the chain is that long - asked of the map, which knows where
+## its own slots live, rather than walked from an iterator that does not
+fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) (MapEntry<<K>, <V>>, Bool) {
+    k Int64 = 0
+    for s mapSlot<<K>, <V>>&m = m.buckets[bucket], s != null, s = s.next {
+        if k == depth { return MapEntry<<K>, <V>>(s.key, s.value), true }
+        k++
+    }
+    none MapEntry<<K>, <V>>
+    return none, false
+}
+
+fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }
+
+test "put, get, replace, remove" {
+    m := Map<Int32, Int64>()
+    m.Put(1, 10)
+    m.Put(2, 20)
+    v, found := m.Get(1)
+    assert found and v == 10
+    m.Put(1, 11)
+    v, found = m.Get(1)
+    assert v == 11 and m.Len() == 2
+    v, found = m.Get(3)
+    assert not found and v == 0
+    assert m.Remove(1) and not m.Remove(1)
+    assert not m.Has(1) and m.Has(2) and m.Len() == 1
+}
+
+test "a map grows, and keeps every key through it" {
+    m := Map<Int32, Int32>()
+    for i in range 1000 { m.Put(i, i * i) }
+    assert m.Len() == 1000
+    for i in range 1000 {
+        v, found := m.Get(i)
+        assert found and v == i * i
+    }
+}
+
+test "text keys compare by what they say" {
+    m := Map<String&, Int32>()
+    m.Put("apple", 1)
+    m.Put("pear", 2)
+    key := String(Byte['p', 'e', 'a', 'r'])
+    v, found := m.Get(key)
+    assert found and v == 2
+}
+
+test "for ... in visits every entry once" {
+    m := Map<Int32, Int32>()
+    for i in range 50 { m.Put(Int32(i), Int32(i) * 2) }
+    keys Int64 = 0
+    values Int64 = 0
+    for e in m {
+        keys = keys + Int64(e.Key)
+        values = values + Int64(e.Value)
+    }
+    assert keys == 1225 and values == 2450
+}

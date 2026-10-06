@@ -1,0 +1,5 @@
+## check: fail are integers
+error E { X }
+fn main() ? E {
+    for i in range 2.5 { }
+}

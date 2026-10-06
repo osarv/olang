@@ -1,0 +1,10 @@
+## check: fail C2d
+## a constructor parameter whose reference names no scope stores its argument in the instance, so an
+## instance returned into the caller's scope may not hold a reference to this function's own local
+type P struct(x Int32) { x }
+type NB struct(inner P&) { inner }
+fn bad(x Int32) NB& {
+    q P& = P(x)
+    return NB(q)
+}
+test "never runs" { assert bad(1).inner.x == 1 }

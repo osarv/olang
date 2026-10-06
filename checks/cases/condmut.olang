@@ -1,0 +1,7 @@
+## check: fail mutable global
+error E { X }
+Level mut Int32 = 1
+if Level == 1 {
+    fn g() { }
+}
+fn main() ? E { }

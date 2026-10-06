@@ -1,0 +1,178 @@
+## Imports shared.olang for its types/errors/functions, and imports runner.olang - which imports this
+## file right back, forming a genuine import cycle (see runner.olang for the other half).
+
+import sh "shared"
+
+## unnamed import (see the report) - its own alias is derived from the file name, "Base". Capitalized, so
+## it's re-exported: a THIRD module importing worker.olang can reach Base.olang through it too, two hops
+## away ("wk.Base.Whatever") - see runner.olang's own tests, which exercise exactly that. Declared BEFORE
+## "rn" below on purpose, not just by convention: worker's own "imports" list has to be fully built,
+## "Base" included, before runner.olang's own parse can recognize a "wk.Base.Whatever" literal as one at
+## all (see isKnownTypeForParsing's own comment) - and since "rn" recurses right back into worker.olang
+## itself (the same raw cycle described below), *whichever* of worker's own imports is declared first is
+## the one guaranteed ready by the time that recursion's own parse runs. Confirmed directly: reversing this
+## order breaks exactly the literal-chain tests in runner.olang, only when worker.olang (not runner.olang)
+## is the one used as the compile root - see the report's own honest note on this narrow, accepted edge.
+import "Base"
+import rn "runner"
+
+error WorkerError {
+    BAD_INPUT
+}
+
+error InputError {
+    NEGATIVE,
+    TOO_BIG
+}
+
+fn Classify(n Int32) Int32 ? sh.RangeError + WorkerError {
+    if n < 0 {
+        error WorkerError.BAD_INPUT
+    }
+    return try sh.CheckRange(n, 0, 100)
+}
+
+## combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
+## re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
+## ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
+fn classifyInput(n Int32) Int32 ? WorkerError + InputError {
+    if n < 0 {
+        error InputError.NEGATIVE
+    }
+    if n > 1000 {
+        error InputError.TOO_BIG
+    }
+    if n == 0 {
+        error WorkerError.BAD_INPUT
+    }
+    return n
+}
+
+fn reclassifyInput(n Int32) Int32 ? InputError + WorkerError {
+    return try classifyInput(n)
+}
+
+fn checkRangeOk(n Int32) Bool {
+    ok Bool = true
+    try sh.CheckRange(n, 0, 100) catch sh.RangeError {
+        ok = false
+    }
+    return ok
+}
+
+## a bare cross-module VARIABLE read ("alias.SomeGlobal", no call) - previously unsupported: a bare
+## TOK_IDEN primary couldn't gain a namespace at the grammar level without colliding with ordinary struct
+## member access ("localVar.field"), so this needed real semantic-level disambiguation (buildPostfix's own
+## tryBuildCrossModuleVarRead) rather than a grammar tweak - see the report.
+AskCount mut Int32 = 0
+
+fn AskRunner(n Int32) Int32 {
+    AskCount = AskCount + 1
+    return rn.DoubleIt(n)
+}
+
+test "Classify accepts values inside the range" {
+    ok Bool = true
+    try Classify(50) catch sh.RangeError + WorkerError {
+        ok = false
+    }
+    assert ok
+}
+
+test "Classify rejects negative input with its own error" {
+    caught Bool = false
+    try Classify(-1) catch sh.RangeError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "Classify rejects out-of-range input with the shared error" {
+    caught Bool = false
+    try Classify(500) catch sh.RangeError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "checkRangeOk reports success and failure correctly" {
+    assert checkRangeOk(50)
+    assert not checkRangeOk(500)
+}
+
+test "reordered propagation identifies negative correctly" {
+    caught Bool = false
+    try reclassifyInput(-1) catch InputError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "reordered propagation identifies too-big correctly" {
+    caught Bool = false
+    try reclassifyInput(2000) catch InputError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "reordered propagation identifies bad-input correctly" {
+    caught Bool = false
+    try reclassifyInput(0) catch InputError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "reordered propagation: catching both combined error types with +" {
+    caught Bool = false
+    try reclassifyInput(-1) catch InputError + WorkerError {
+        caught = true
+    }
+    assert caught
+}
+
+test "reordered propagation: success path is unaffected by the reordering" {
+    caught Bool = false
+    try reclassifyInput(50) catch InputError + WorkerError {
+        caught = true
+    }
+    assert not caught
+}
+
+test "cross-module: ComputeChecked identifies div-by-zero correctly" {
+    caught Bool = false
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError + sh.RangeError {
+        caught = true
+    }
+    assert caught
+}
+
+test "cross-module: ComputeChecked identifies too-small correctly" {
+    caught Bool = false
+    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError + sh.RangeError {
+        caught = true
+    }
+    assert caught
+}
+
+## exercises the "alias.Type.word" catch form specifically (3 identifiers) - every other cross-module
+## catch in this file uses the whole-type "alias.Type" form (2 identifiers) instead
+test "cross-module: catching a specific word by its full alias.Type.word name" {
+    caught Bool = false
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO + sh.MathError.OVERFLOW + sh.RangeError {
+        caught = true
+    }
+    assert caught
+}
+
+test "calling across the worker/runner import cycle" {
+    assert AskRunner(21) == 42
+}
+
+
+## G16: instantiated from runner.olang, whose bodies are checked before this module's - the case that used
+## to hand the instantiation an empty body and return a zero value silently
+fn GenericEcho(x <T>) <T> {
+    return x
+}

@@ -1,0 +1,7 @@
+## check: fail D3a
+## flags: -D Level=2
+error E { X }
+fn main() ? E {
+    Level := 1
+    if Level > 3 { fail }
+}

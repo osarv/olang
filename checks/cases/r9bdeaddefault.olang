@@ -1,0 +1,9 @@
+## check: fail always leaves
+error E { A, B }
+error F { C }
+fn f() Int32 ? E + F { error E.A }
+fn main() ? E { }
+fn t() Int32 ? E {
+    x := try f() catch E { return 0 } default 1 catch default 0
+    return 0
+}

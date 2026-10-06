@@ -1,0 +1,11 @@
+## check: fail must declare every error
+## R20: a checked operation fails with BuiltinError, which a signature must name or a catch take
+fn add(a Int32, b Int32) Int32 ? {
+    return a
+}
+fn strict(a Int32, b Int32) Int32 ? RangeErr {
+    r Int32 = try (a + b)
+    return r
+}
+error RangeErr { HIGH }
+fn main() ? { }

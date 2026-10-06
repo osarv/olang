@@ -1,0 +1,7 @@
+## check: fail expected
+error E { X }
+fn f(a Array<Byte>&) { }
+fn main() ? E {
+    b := "y"
+    f("a" b)
+}

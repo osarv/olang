@@ -1,0 +1,6 @@
+## check: fail disagrees with the function type
+fn apply(f fn(x Int32) Int32) Int32 { return f(1) }
+error E { X }
+fn main() ? E {
+    n := apply(fn(x Int64) { return 1 })
+}

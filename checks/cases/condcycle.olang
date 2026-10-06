@@ -1,0 +1,8 @@
+## check: fail B9a
+error E { X }
+A Int32 = B
+B Int32 = A
+if A == 1 {
+    fn g() { }
+}
+fn main() ? E { }

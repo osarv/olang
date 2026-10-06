@@ -1,0 +1,1 @@
+fn Mine() Int32 { return 7 }

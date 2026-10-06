@@ -1,0 +1,9 @@
+## check: fail signature
+error E { A, B }
+error F { C }
+fn f() Int32 ? E + F { error E.A }
+fn main() ? E { }
+fn t() Int32 ? E {
+    x := try f() catch E default 1
+    return 0
+}

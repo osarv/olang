@@ -1,0 +1,12 @@
+## check: run
+## flags: -D Level=3
+error E { X }
+fn main() ? E {
+    x := 0
+    if Level > 2 {
+        x = 1
+    } else {
+        x = onlyOnSmallBuilds()
+    }
+    assert x == 1
+}

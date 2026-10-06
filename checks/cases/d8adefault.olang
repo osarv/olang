@@ -1,0 +1,6 @@
+## check: fail computable at compile time
+## a default parameter value is evaluated on behalf of callers the declaration cannot see, so it must be
+## computable at compile time - reading a mutable global is not
+counter mut Int32 = 0
+fn f(n Int32 = counter) Int32 { return n }
+test "never runs" { assert f() == 0 }

@@ -1,0 +1,10 @@
+## check: fail does not exist outside the branches
+error E { X }
+fn f() Bool { return true }
+if f() {
+    fn h() Bool { return true }
+}
+if h() {
+    fn g() { }
+}
+fn main() ? E { }

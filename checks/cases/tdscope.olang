@@ -1,0 +1,15 @@
+## check: fail R9a
+error E { X }
+type B struct(v Int32) { v mut }
+fn pick(b B&, ok Bool) B&b ? E {
+    if not ok { error E.X }
+    return b
+}
+fn inner() {
+    a B& = B(1)
+    if true {
+        c B& = B(3)
+        r := try pick(a, false) catch default c
+    }
+}
+fn main() ? E { }

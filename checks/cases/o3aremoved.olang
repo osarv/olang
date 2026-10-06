@@ -1,0 +1,5 @@
+## check: fail a scope cannot be declared after a name
+## O3: the after-name declaration is gone with scope names
+type P struct(x Int32) { x }
+fn f&s(x Int32) Int32 { return x }
+fn main() ? { }

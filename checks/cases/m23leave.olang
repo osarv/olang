@@ -1,0 +1,4 @@
+## check: fail stays within it
+import "std/../badform"
+error E { X }
+fn main() ? E { }

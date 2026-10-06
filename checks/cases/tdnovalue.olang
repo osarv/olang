@@ -1,0 +1,8 @@
+## check: fail R9a
+error E { X }
+fn two() (Int32, Int32) ? E { return 1, 2 }
+fn none() ? E { }
+type P struct(v Int32) { v mut }
+fn ref(p P&) P&p ? E { return p }
+fn main() ? E { }
+fn novalue() { x := try none() catch default 1 }

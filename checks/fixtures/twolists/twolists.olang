@@ -1,0 +1,8 @@
+import "std/list"
+import mine "list"
+error E { X }
+fn main() ? E {
+    l list.List<Int32>& = list.List<Int32>()
+    l.Push(mine.Mine())
+    assert l.Len() == 1
+}

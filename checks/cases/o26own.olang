@@ -1,0 +1,11 @@
+## check: fail cannot satisfy a longer-lived scope
+## O14: a built result cannot be storage of this function's own, which closes at the return
+type N struct(v Int32, nx N&) {
+    v
+    next mut N& = nx
+}
+fn f() N& {
+    x N& = N(1, null)
+    return x
+}
+fn main() ? { }

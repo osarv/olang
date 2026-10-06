@@ -1,0 +1,8 @@
+## check: fail writes through a read-only reference
+## T25b: a result borrowed from an immutable global is read-only - writing through it used to change the global
+G String = "abc"
+error E { X }
+fn main() ? E {
+    x := G.Trim()
+    x[0] = 'z'
+}

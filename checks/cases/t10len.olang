@@ -1,0 +1,6 @@
+## check: fail doesn't match the target's declared type
+## T10: an array's length is an Int64, and a value never converts implicitly - Int32(a.Len()) says so
+test "never runs" {
+    a := Array<Int32>(3)
+    n Int32 = a.Len()
+}

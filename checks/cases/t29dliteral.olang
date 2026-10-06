@@ -1,0 +1,9 @@
+## check: fail write the constructor call
+## T29d: a literal does not slide into a type with a constructor past its checks
+type Percent Int32(v mut Int32) {
+    if v > 100 { v = 100 }
+}
+fn main() ? {
+    p Percent = 150
+    assert Int32(p) == 100
+}

@@ -1,0 +1,24 @@
+## hashing, part of the prelude: what a Map needs of a key - "Hash() Int64" and "Eq(other) Bool" - for the
+## built-in types a key is most often (String's own are in text.olang, beside the type - M19). A program's own key type declares the same two methods (T29, M19).
+## Integer arithmetic wraps, which every hash here relies on.
+
+## a multiply by the golden-ratio constant, then the high bits folded into the low ones: a Map takes the low
+## bits as a bucket index, and a multiply alone leaves keys that differ only above them in one bucket
+fn mixHash(n Int64) Int64 {
+    h Int64 = n * -7046029254386353131
+    return h ^ (h >> 29)
+}
+
+fn (n Int64) Hash() Int64 { return mixHash(n) }
+fn (n Int32) Hash() Int64 { return mixHash(Int64(n)) }
+fn (b Byte) Hash() Int64 { return mixHash(Int64(b)) }
+
+fn (a Int64) Eq(b Int64) Bool { return a == b }
+fn (a Int32) Eq(b Int32) Bool { return a == b }
+fn (a Byte) Eq(b Byte) Bool { return a == b }
+
+test "equal keys hash equally, and nearby integers spread" {
+    assert Int32(7).Hash() == Int32(7).Hash()
+    assert Int64(1).Hash() != Int64(2).Hash()
+    assert Int32(3).Eq(3) and not Int32(3).Eq(4)
+}

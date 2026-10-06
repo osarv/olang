@@ -1,0 +1,6 @@
+## check: fail D3a
+error E { X }
+Count Int32 = 1
+fn helper() { }
+fn f() { Count := 2 }
+fn main() ? E { }

@@ -1,0 +1,31 @@
+## check: fail nothing here establishes that
+## O4b/O10c: a key stored into a map must outlive it, an obligation each caller discharges - and a key
+## built in an inner block does not outlive a map from the outer one, which the block depths decide
+type SSlot struct(key String&, val Int32, next SSlot&) {
+    key
+    val mut
+    next mut
+}
+type SMap struct() { first mut SSlot& = null }
+fn (m mut SMap&) Put(key String&, val Int32) {
+    for s SSlot& = m.first, s != null, s = s.next {
+        if s.key.Eq(key) {
+            s.val = val
+            return
+        }
+    }
+    m.first = SSlot(key, val, m.first)
+}
+fn (m SMap&) Get(key String&) Int32 {
+    for s SSlot& = m.first, s != null, s = s.next {
+        if s.key.Eq(key) { return s.val }
+    }
+    return -1
+}
+test "inner key" {
+    m SMap& = SMap()
+    if m.first == null {
+        k String& = $1
+        m.Put(k, 1)
+    }
+}

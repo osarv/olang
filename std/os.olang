@@ -1,0 +1,78 @@
+## Os - running commands and reading files. Ordinary olang on top of "extern fn" (§11), like std/io.
+
+import "io"
+
+extern fn system(cmd Array<Byte>) Int32
+extern fn open(path Array<Byte>, flags Int32) Int32
+extern fn close(fd Int32) Int32
+extern fn lseek(fd Int32, offset Int64, whence Int32) Int64
+extern fn read(fd Int32, buf Array<Byte>, count Int64) Int64
+
+error OsError {
+    NOT_FOUND,
+    FAILED
+}
+
+## runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at
+## all, or one ended by a signal, is reported as a nonzero status like any other failure.
+fn Run(cmd String&) Int32 {
+    status := system($cmd "\0")
+    if status < 0 { return 127 }
+    if status % 256 != 0 { return 128 + status % 128 }        ## ended by a signal
+    return status / 256
+}
+
+## the whole of the file at "path", built where the caller puts it, or where the scope argument says
+## ("os.ReadFile&x(p)" builds it where x lives)
+fn ReadFile(path String&) String& ? OsError {
+    fd := open($path "\0", 0)
+    if fd < 0 { error OsError.NOT_FOUND }
+    size := lseek(fd, 0, 2)
+    lseek(fd, 0, 0)
+    if size < 0 {
+        close(fd)
+        error OsError.FAILED
+    }
+    text String&return = String(Array<Byte>(size))
+    got Int64 = 0
+    for got < size {
+        n := read(fd, text[got:], size - got)
+        if n <= 0 {
+            close(fd)
+            error OsError.FAILED
+        }
+        got += n
+    }
+    close(fd)
+    return text        ## the file's bytes, read as text (T29c)
+}
+
+## text quoted for the shell: one argument whatever it holds
+fn Quote(t String&) String& {
+    out String& = "'"
+    start Int64 = 0
+    for i in range t.Len() {
+        if t[i] == '\'' {
+            out = $out $t[start:i] "'\\''"
+            start = i + 1
+        }
+    }
+    return $out $t[start:] "'"
+}
+
+test "Run gives a command's exit status" {
+    assert Run("true") == 0
+    assert Run("exit 3") == 3
+}
+
+test "ReadFile reads what a command wrote" {
+    assert Run("printf 'a\\nb' > build/os_test.txt") == 0
+    text := try ReadFile("build/os_test.txt") catch default ""
+    assert text.Eq("a\nb")
+    missing := try ReadFile("build/no/such/file") catch OsError.NOT_FOUND default "gone" catch default "other"
+    assert missing.Eq("gone")
+}
+
+test "Quote survives a quote" {
+    assert Run("test " $Quote("it's") " = \"it's\"") == 0
+}

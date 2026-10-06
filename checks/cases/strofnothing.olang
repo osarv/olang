@@ -1,0 +1,6 @@
+## check: fail has nothing to render
+fn nothing() { }
+error E { X }
+fn main() ? E {
+    t := $nothing()
+}
