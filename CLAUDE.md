@@ -2371,6 +2371,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   `mut` on locals when I misread an earlier message - reverted before anything landed. Migration: ~60 corpus
   sites, nearly all constructor parameters stored into `mut` fields (now `mut` themselves) and arrays whose
   elements are written through (`Array<mut T&>`); std needed `Map`'s buckets `mut`, `ToArray`/`Split` results.
+- **Static literals (T25d, 2026-10-07, the user's request).** A literal known while compiling - text, or an array
+  of constants - reaching a read-only reference (a parameter without `mut`, a read-only field or element) is the
+  constant data itself, `{ n, ptr @.str.N }`, with no arena allocation per evaluation; a writable target (a local,
+  a `mut` parameter) still gets a copy. Plain data owned by an immutable global is `internal constant`. This was
+  the user's original goal ("bss when immutable, arena when not"); it needed T25b first, because without
+  read-only references something could have written the shared constant. The read-only data lives in `.rodata`,
+  not BSS (BSS is zero-initialised only).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

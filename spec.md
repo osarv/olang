@@ -608,6 +608,12 @@ local, a `mut` global, a `mut` parameter's copy - and a read-only one otherwise.
 permission. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
 
+**T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
+compiling - text, or an array of constants - that reaches one (a parameter without `mut`, a read-only field or
+element) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
+plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
+parameter or field - gets a copy of its own. Which happens is not observable except as speed.
+
 **T26.** A reference-shaped struct or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
 pointer identity rather than structural content (see

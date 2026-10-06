@@ -946,6 +946,51 @@ bool typeNeedsRuntimeLengthPromotion(struct type dstT, struct type srcT) {
 //again - see typeNeedsRuntimeLengthPromotion), so its own element loop is the exact same compile-time-
 //unrolled shape cgRegisterDtorIfNeeded already walks generically, regardless of whether srcAddr came from
 //a fresh literal or an existing variable; no new mechanism needed, just one more call site.
+char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op);
+char* cgFloatConst(double v, bool isF32);
+//T25b: a literal known while compiling that reaches a READ-ONLY array reference is never written through it, so it
+//is the constant itself - static data, no arena allocation, nothing copied. NULL where that does not apply: a
+//writable target, or a literal with anything not constant in it
+char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
+    if (!(dstT.bType == BASETYPE_ARRAY && dstT.arrMalloc && dstT.structMAlloc && !dstT.refMut)) return NULL;
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len) op = *(struct operand**)ListGetIdx(&op->args, 0);
+    if (!op->isLiteral || op->opType != OPERATION_NONE || op->type.bType != BASETYPE_ARRAY || op->type.arrMalloc
+            || !op->type.arrLen) return NULL;
+    long long n = op->type.arrLen->intLiteralVal;
+    char* data;
+    if (op->tok.type == TOK_STR_LIT) {
+        data = cgStringLiteralGlobal(ctx, op);
+    } else {
+        struct type et = *op->type.arrElem;
+        bool scalar = et.bType == BASETYPE_BYTE || et.bType == BASETYPE_INT32 || et.bType == BASETYPE_INT64
+                      || et.bType == BASETYPE_BOOL || et.bType == BASETYPE_FLOAT32 || et.bType == BASETYPE_FLOAT64;
+        if (!scalar || op->args.len != n) return NULL;
+        for (int i = 0; i < op->args.len; i++) { //every element constant, or the literal is built as usual
+            struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
+            if (!e->isLiteral || e->opType != OPERATION_NONE) return NULL;
+        }
+        char ety[64];
+        llvmType(et, ety, sizeof(ety));
+        data = MallocOrCrash(32);
+        snprintf(data, 32, "@.arr.%d", ctx->strCtr++);
+        fprintf(ctx->out, "%s = private unnamed_addr constant [%lld x %s] [", data, n, ety);
+        for (int i = 0; i < op->args.len; i++) {
+            struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
+            char v[64];
+            if (et.bType == BASETYPE_FLOAT32 || et.bType == BASETYPE_FLOAT64) {
+                double d = e->type.bType == BASETYPE_FLOAT32 || e->type.bType == BASETYPE_FLOAT64 ? e->floatLiteralVal : (double)e->intLiteralVal;
+                snprintf(v, sizeof(v), "%s", cgFloatConst(d, et.bType == BASETYPE_FLOAT32));
+            } else if (et.bType == BASETYPE_BOOL) snprintf(v, sizeof(v), "%s", e->intLiteralVal ? "true" : "false");
+            else snprintf(v, sizeof(v), "%lld", et.bType == BASETYPE_BYTE ? (long long)(signed char)e->intLiteralVal : e->intLiteralVal);
+            fprintf(ctx->out, "%s%s %s", i ? ", " : "", ety, v);
+        }
+        fputs("]\n", ctx->out);
+    }
+    char* r = MallocOrCrash(96);
+    snprintf(r, 96, "{ i64 %lld, ptr %s }", n, data);
+    return r;
+}
+
 char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct type srcT, char* srcAddr, char* scopeVal) {
     struct type elemT = *srcT.arrElem;
     char elemTy[256];
@@ -1475,6 +1520,8 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         ctx->targetScopeOverride = prev;
         return tv;
     }
+    char* st = cgStaticLiteral(ctx, op, dstT);
+    if (st) return st;
     if (typeNeedsRuntimeLengthPromotion(dstT, op->type)) {
         //T11a: a literal promoted into a run-time-length reference is built in the target's scope, elements
         //and all - its reference elements are allocated as it is built, before the copy
@@ -4648,6 +4695,7 @@ struct cgAuxNode { struct ctVal* node; char* name; };
 static struct list cgAuxNodes;
 static FILE* cgAuxOut;
 static const char* cgAuxBase;
+static bool cgAuxReadOnly; //T25b: the global these belong to is immutable - plain data under it is never written
 static int cgAuxCtr;
 
 static char* cgConstInit(struct ctVal* v, struct type t);
@@ -4666,7 +4714,9 @@ static char* cgAuxGlobal(struct ctVal* node, struct type storeT) {
     if (!init) return NULL;
     char ty[256];
     llvmType(storeT, ty, sizeof(ty));
-    if (cgAuxOut) fprintf(cgAuxOut, "%s = internal global %s %s\n", name, ty, init);
+    //T25b: plain data an immutable global owns is reached only through it, read-only - so it is read-only data
+    bool ro = cgAuxReadOnly && CtIsPlainData(node);
+    if (cgAuxOut) fprintf(cgAuxOut, "%s = internal %s %s %s\n", name, ro ? "constant" : "global", ty, init);
     return name;
 }
 
@@ -4815,6 +4865,7 @@ static char* cgGlobalConstInit(struct var* v, const char* gname, FILE* aux) {
     cgAuxNodes = ListInit(sizeof(struct cgAuxNode));
     cgAuxOut = aux;
     cgAuxBase = gname;
+    cgAuxReadOnly = !v->mut;
     cgAuxCtr = 0;
     char* init = cgConstInit(val, v->type);
     cgAuxOut = NULL;

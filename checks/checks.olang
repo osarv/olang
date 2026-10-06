@@ -159,6 +159,18 @@ test "a proven assert leaves no run-time check" {
     assert sh(dir, "grep -q assert.fail build/s18c.main.ll") != 0
 }
 
+## T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
+## writable, still gets a copy of its own
+test "a literal reaching a read-only reference is static data" {
+    dir := fresh("static")
+    os.Run("cp checks/fixtures/static/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b -debug lit.olang > out.txt 2>&1 && ./build/lit.debug") == 0 or failed("static", dir)
+    ll String& = " build/lit.main.debug.ll"
+    assert sh(dir, "grep -q 'constant .3 x i32. .i32 3, i32 4, i32 5.'" $ll) == 0
+    assert sh(dir, "grep -q 'lit_total(ptr %[a-z0-9.]*, { i64, ptr } { i64 3, ptr @.arr'" $ll) == 0
+    assert sh(dir, "grep -q 'lit_lenOf(ptr %[a-z0-9.]*, { i64, ptr } { i64 11, ptr @.str'" $ll) == 0
+}
+
 ## K2: a global computed at compile time is written out as data; one reading a mutable global is set at startup
 test "computed globals are written out as data" {
     dir := fresh("k2")
@@ -166,7 +178,7 @@ test "computed globals are written out as data" {
     assert sh(dir, "\"$OLANG\" -b ct.olang > out.txt 2>&1 && ./build/ct") == 0 or failed("k2", dir)
     ll String& = " build/ct.main.ll"
     assert sh(dir, "grep -q '@ct_Fib = global i32 610'" $ll) == 0
-    assert sh(dir, "grep -q '@ct_Table.k0 = internal global \\[4 x i32\\] \\[ i32 55, i32 89, i32 144, i32 233 \\]'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Table.k0 = internal constant \\[4 x i32\\] \\[ i32 55, i32 89, i32 144, i32 233 \\]'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Table = global { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0

@@ -7209,3 +7209,12 @@ from their original form.
   Decisions made while migrating, flagged: a typed local takes its initializer's permission when that is
   read-only (otherwise `rest String& = list` from a read-only parameter could not be written at all); a built
   result is writable (otherwise every builder needed `mut` on its result); an array literal adapts.
+
+- **Static literals (T25d, 2026-10-07).** The request that started the permission work: a literal should be
+  static data where the variable receiving it is immutable, and arena data where it is not. With permissions in
+  types, "immutable" became checkable: a read-only reference target. So a text literal or an array literal of
+  constants passed to a non-`mut` parameter is now `{ length, pointer to a private constant }` - every
+  `io.Print("...")` and `s.Eq("...")` used to copy its literal into an arena first - and plain data baked for an
+  immutable global is emitted `constant`. A first version emitted the constant before checking that every
+  element was constant, producing malformed IR for `Int32[1, 5, 2, 8 + k]`; the elements are now checked first.
+  Locals keep their arena copy, as the user decided locals are writable.
