@@ -2395,6 +2395,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   kept a pointer into the `instantiations` list, which reallocates when the body instantiates something
   else - the bindings were then read from freed memory, a compiler crash (or garbage errors) for a `Map` whose
   key type was a user struct. Four corpus types named `Pair` were renamed.
+- **A function value returns from a parameter with no borrowed form (O14a, 2026-10-07, the user's call).** `fn
+  id(f fn() Int32) fn() Int32 { return f }` was rejected by O14 with advice that could not be followed (a function
+  type has nowhere to write `&f`). The hazard is real but only for closures: a named function's value is static,
+  while a lambda's closure lives in a block (D16d). Since nothing is written through a function value, outliving
+  suffices, so the return records an obligation (parameter outlives result scope) that each call discharges when
+  the result lands - the existing O10b/O18a machinery, no syntax. A function with it is not usable as a value
+  itself (T22a). Not done: calling a call's result directly (`id(dbl)(3)`) does not parse.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

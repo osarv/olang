@@ -5453,6 +5453,34 @@ test "D8d: a spread reference lives where the outer result lands" {
     assert x.v == 14 and y.v == 18
 }
 
+## O14a: a function value is returned from a parameter with no borrowed form - each call checks that the argument
+## outlives where the result lands
+fn idFnO(f fn(a Int32) Int32) fn(a Int32) Int32 { return f }
+fn chooseFnO(c Bool, f fn(a Int32) Int32, g fn(a Int32) Int32) fn(a Int32) Int32 {
+    if c { return f }
+    return g
+}
+fn doubleO(a Int32) Int32 { return a * 2 }
+fn viaIdO(n Int32) Int32 {
+    g := idFnO(doubleO)
+    return g(n)
+}
+ViaIdBakedO Int32 = viaIdO(21)   ## K2: computed while compiling
+
+test "O14a: a function value passes back through a function" {
+    d := idFnO(doubleO)
+    assert d(3) == 6
+    k Int32 = 10
+    addK := fn(a Int32) Int32 { return a + k }
+    h := idFnO(addK)
+    churnLinks()
+    assert h(1) == 11
+    p := chooseFnO(false, doubleO, addK)
+    assert p(2) == 12
+    assert viaIdO(4) == 8          ## S18c: decided while compiling
+    assert ViaIdBakedO == 42
+}
+
 ## rejected, and nameable only here:
 ##   t := divmodD(1, 2)            several results are not one value
 ##   divmodD(1, 2) + 1             nor an operand

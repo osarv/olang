@@ -8831,6 +8831,12 @@ static bool checkBuiltResult(struct checkCtx* ctx, struct operand* v, struct typ
     if (!(asRef || OperandIsLvalue(v)) || !RefExactScope(ctx, v, asRef, &sv, &sd, &un)) return false;
     if (un || !sv || sv == SCOPE_AMBIGUOUS || canonicalVar(sv) == canonicalVar(rs)) return false;
     if (!varIsOwnParam(canonicalVar(sv), ctx->func)) return false;
+    //O14a: a function value is never written through (D16d), so returning one from a parameter needs no borrowed
+    //form - only that the parameter's value outlives where the result lands, which every call then checks (O10b)
+    if (et.bType == BASETYPE_FUNC) {
+        scopeObligationAdd(ctx->func, canonicalVar(sv), canonicalVar(rs));
+        return false;
+    }
     ErrMsgSemantic(v->tok, RETURN_BORROW_AS_BUILT);
     return true;
 }

@@ -2907,6 +2907,13 @@ returning a temporary, or by naming it: `&return` (O26).
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
   (O10b). A temporary is built in `p`'s scope.
 
+**O14a.** A **function value** (T21) is the exception to O14's first case: a built result of function type may
+return a parameter's value, or a function value reached through a parameter's data, with no borrowed form. Nothing
+is ever written through a function value (D16d), so such a return needs only that the parameter outlive the
+result scope; it is an obligation of the function (O10b), and every call checks it once the result has landed
+(O18a). `fn id(f fn() Int32) fn() Int32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
+where `y`'s closure lives in a block `keep` outlives.
+
 **O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
 function (O13): `n Node&return = Node(1, null)` declares a local living where the result will be put, and
 `f&return(...)` builds a call's result there (E25). It is how a body builds something in the result scope

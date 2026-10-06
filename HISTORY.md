@@ -7252,3 +7252,16 @@ from their original form.
   capacity. The list header is copied now.
   **A gap recorded, not fixed**: a function cannot return a function-value parameter - O14 asks for a borrowed
   result, and a function type has no way to carry the marker. Needs a decision.
+
+- **Returning a function value from a parameter (O14a, 2026-10-07).** The gap recorded with D8d: O14 rejected
+  `return f` for a function-typed parameter and told the programmer to write a borrowed result, which a function
+  type cannot express (`fn(a Int32) Int32&f` would mark the inner result type). Discussed with the user: the
+  restriction only matters because of lambdas - a named function used as a value is a static object and cannot
+  dangle, while a closure lives in a block's arena (D16d), whether it captured references or only copied values.
+  Three ways out: a marker spelling for function types, inferring "borrowed" from the body (rejected: built vs
+  borrowed changes the calling convention, which callers read off the signature), or treating a function result
+  as needing only to outlive. The user chose the last. It cost four lines: where O14 would report, a function-typed
+  result instead adds the obligation "the parameter's scope outlives the result scope", and O18a's deferred
+  discharge checks it at every call once the result has landed - `keep = id(y)` with `y` an inner block's closure
+  is rejected, `id(dbl)` and a long-lived lambda pass. Found while testing, not fixed: a call's result cannot be
+  called directly (`id(dbl)(3)` does not parse; M19b's postfix form covers methods only).
