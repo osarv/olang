@@ -2362,7 +2362,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   writable - which makes "passing immut to mut" an error everywhere (the user's requirement), including through
   a borrowed result: **the pre-existing hole that started this** - `x := G.Trim(); x[0] = 'z'` changed an
   immutable global G, and `same(p P&) P&p` did the same for any struct (and the evaluator disagreed with the run
-  time about it) - is closed. Shallow, as in C, so generic containers need nothing special. My calls, flagged:
+  time about it) - is closed. Shallow, as in C, so generic containers need nothing special (the user confirmed: "keep shallow"). My calls, flagged:
   a **built** result is writable (new storage only the caller holds; a borrowed `T&p` result is read-only unless
   `mut`), an array literal's elements adapt to the target's permission when all may be written, and interface
   values carry it (a `mut` method needs a `mut` receiver). How it got here: inference per variable was tried
