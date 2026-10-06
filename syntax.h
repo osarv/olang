@@ -114,6 +114,7 @@ enum syntaxType {
                       //defaulting to 0 and len(base) respectively.
     SNTX_EXPR_INDEX,
     SNTX_EXPR_MEMBR,
+    SNTX_EXPR_VALUE_CALL, //E13b: "(args)" after any postfix expression - a call through the function value it gives
     SNTX_EXPR_TRY,
     SNTX_ARR_LIT_ARGS,   //array literal's own argument list - each item is either a plain EXPR or a nested
                           //SNTX_ARR_LIT_NESTED bracket group (for a 2D+ literal) - see parseArrLiteralArgs

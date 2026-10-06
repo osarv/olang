@@ -5481,6 +5481,40 @@ test "O14a: a function value passes back through a function" {
     assert ViaIdBakedO == 42
 }
 
+## E13b: "(args)" after any expression calls the function value it gives - a call's result, an element, a
+## parenthesized expression - evaluated before the arguments; "try" covers the last call of the chain
+fn adderE(k Int32) fn(a Int32) Int32 { return fn(a Int32) Int32 { return a + k } }
+fn limiterE(lim Int32) fn(a Int32) Int32 ? DivError {
+    return fn(a Int32) Int32 ? DivError {
+        if a > lim { error DivError.ZERO }
+        return a
+    }
+}
+fn limitedE(n Int32) Int32 ? DivError { return try limiterE(5)(n) }
+ChainBakedE Int32 = adderE(3)(4)   ## K2: computed while compiling
+
+test "E13b: a call's result, an element or a parenthesized value is called directly" {
+    assert idFnO(doubleO)(3) == 6
+    assert adderE(10)(1) == 11
+    fs := Array<fn(a Int32) Int32>(2)
+    fs[0] = doubleO
+    fs[1] = adderE(1)
+    assert fs[1](fs[0](5)) == 11
+    assert (idFnO(doubleO))(4) == 8
+    assert (try limitedE(3) catch default -1) == 3
+    assert (try limitedE(9) catch default -1) == -1
+    assert adderE(2)(2) == 4       ## S18c: decided while compiling
+    assert ChainBakedE == 7
+}
+
+test "E13b: a parenthesized expression on the next line is a statement of its own" {
+    y fn(a Int32) Int32 = doubleO
+    (y)(2)
+    k := adderE(1)(1)
+    (doubleO)(k)
+    assert k == 2
+}
+
 ## rejected, and nameable only here:
 ##   t := divmodD(1, 2)            several results are not one value
 ##   divmodD(1, 2) + 1             nor an operand

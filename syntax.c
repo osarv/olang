@@ -2364,6 +2364,23 @@ struct syntax* parseExprPostfix(SyntaxCtx sc) {
         if (idx) { addSntx(s, idx); continue; }
         struct syntax* mem = parseExprMembr(sc);
         if (mem) { addSntx(s, mem); continue; }
+        //E13b: "(args)" calls whatever the chain has built - "id(dbl)(3)", "fs[i](x)". A line end before
+        //"(" ends the statement (L18), so a parenthesized expression on the next line is never taken for one
+        int beforeCall = TokenGetCursor(sc->tc);
+        struct token open = acceptTok(sc, TOK_PAREN_O);
+        if (open.type != TOK_NONE) {
+            struct syntax* args = parseExprArgs(sc);
+            struct token close = acceptTok(sc, TOK_PAREN_C);
+            if (args && close.type != TOK_NONE) {
+                struct syntax* call = newNode(SNTX_EXPR_VALUE_CALL);
+                addTok(call, open);
+                addSntx(call, args);
+                addTok(call, close);
+                addSntx(s, call);
+                continue;
+            }
+            TokenSetCursor(sc->tc, beforeCall);
+        }
         int before = TokenGetCursor(sc->tc);
         struct token t = TokenFeed(sc->tc);
         if (t.type == TOK_INC || t.type == TOK_DEC) { addTok(s, t); continue; }

@@ -2401,7 +2401,10 @@ Go through this for every change to what olang means - a rule added, revised or 
   while a lambda's closure lives in a block (D16d). Since nothing is written through a function value, outliving
   suffices, so the return records an obligation (parameter outlives result scope) that each call discharges when
   the result lands - the existing O10b/O18a machinery, no syntax. A function with it is not usable as a value
-  itself (T22a). Not done: calling a call's result directly (`id(dbl)(3)`) does not parse.
+  itself (T22a). **E13b followed (the user's request)**: `(args)` after any postfix expression calls the function
+  value it gives - `id(dbl)(3)`, `fs[i](x)`, `adder(3)(4)` - lowered as an ordinary call whose target is a
+  synthetic var of the callee's type, with the callee expression on the operand (`callee`) for codegen and the
+  evaluator to compute; `try` before a chain covers its last call. A `(` on a new line stays a new statement.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

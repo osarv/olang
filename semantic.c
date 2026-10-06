@@ -6038,7 +6038,32 @@ struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* 
 struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
                                 struct syntax* argsNode, struct list scopeArgNodes, bool* reported);
 
+//E13b: "e(args)" - a call through the function value e gives. It is an ordinary call whose target is a var of
+//e's function type standing for the value, so arity, fit, scope binding and codegen's argument lowering are all
+//the ordinary call's; the value itself is computed from e, before the arguments
+static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* callee, struct syntax* callNode, bool allowed) {
+    struct token tok = firstTokOfType(callNode, TOK_PAREN_O);
+    struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+    if (callee->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(tok, NOT_CALLABLE); return OperandIntLiteral(tok); }
+    if (callee->type.errors.len > 0 && !allowed) ErrMsgSemantic(tok, UNHANDLED_FALLIBLE_CALL);
+    struct var* fv = MallocOrCrash(sizeof(struct var));
+    *fv = (struct var){0};
+    fv->name = StrFromCStr("$callee");
+    fv->tok = tok;
+    fv->type = callee->type;
+    struct operand* call = OperandFuncCall(ctx, fv, args, tok, ListInit(sizeof(struct syntax*)));
+    call->callee = callee;
+    return call;
+}
+
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
+    //E13b: a "try" covers the chain's last call, not a call inside it
+    struct syntaxPart* lastPart = partAt(s, s->parts.len - 1);
+    bool allowLast = false;
+    if (s->parts.len > 1 && !lastPart->isToken && lastPart->sntx->type == SNTX_EXPR_VALUE_CALL) {
+        allowLast = ctx->allowFallibleCall;
+        ctx->allowFallibleCall = false;
+    }
     int consumed = 1;
     struct operand* crossModuleRead = tryBuildCrossModuleVarRead(ctx, s, &consumed);
     struct operand* result = crossModuleRead ? crossModuleRead : buildExprFromSyntax(ctx, partSntx(s, 0));
@@ -6067,6 +6092,8 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             struct operand* lo = loNode ? buildExprFromSyntax(ctx, loNode) : NULL;
             struct operand* hi = hiNode ? buildExprFromSyntax(ctx, hiNode) : NULL;
             result = OperandSlice(result, lo, hi, firstTokOfType(p->sntx, TOK_SQUARE_O));
+        } else if (p->sntx->type == SNTX_EXPR_VALUE_CALL) {
+            result = buildValueCall(ctx, result, p->sntx, i == s->parts.len - 1 && allowLast);
         } else { //SNTX_EXPR_MEMBR
             struct token memberTok = firstTokOfType(p->sntx, TOK_IDEN);
             //M19/M19a: an argument list here makes this a METHOD call on whatever the chain has built so
@@ -7017,6 +7044,7 @@ static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct 
 static void finalizeOpLambdas(struct operand* op) {
     if (!op) return;
     if (op->pendingLambda) FinalizeLambda(op, NULL);
+    finalizeOpLambdas(op->callee); //E13b
     for (int i = 0; i < op->args.len; i++) finalizeOpLambdas(*(struct operand**)ListGetIdx(&op->args, i));
     for (int i = 0; i < op->catchClauses.len; i++) finalizeOpLambdas(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt);
 }
@@ -8028,6 +8056,7 @@ static bool opWrites(struct operand* op, struct var* v) {
             break;
         default: break;
     }
+    if (opWrites(op->callee, v)) return true; //E13b
     for (int i = 0; i < op->args.len; i++) if (opWrites(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
     for (int c = 0; c < op->catchClauses.len; c++) {
         struct catchClause* cc = ListGetIdx(&op->catchClauses, c);

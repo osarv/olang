@@ -7265,3 +7265,12 @@ from their original form.
   discharge checks it at every call once the result has landed - `keep = id(y)` with `y` an inner block's closure
   is rejected, `id(dbl)` and a long-lived lambda pass. Found while testing, not fixed: a call's result cannot be
   called directly (`id(dbl)(3)` does not parse; M19b's postfix form covers methods only).
+  **E13b, the chained call, built the same day at the user's request.** `(args)` became a postfix part like
+  indexing and member access, so it follows a call, an element or a parenthesized expression. In the checker it is
+  an ordinary call through a synthetic variable of the callee's function type - the same shape as a call through
+  a local function value, so arity, fit, scope binding and the argument lowering are shared - with the callee
+  expression kept on the operand; codegen computes the closure from it where a named variable would be loaded,
+  and the evaluator evaluates it where it would look the variable up. Three operand walkers learned the new child
+  (lambda finalizing, S8c's write scan, K1a's static scan). `try f(x)(y)` covers the last call: the inner call is
+  checked with fallible calls disallowed, so a fallible inner call needs its own `try`. Line ends are already
+  statement ends (L18), so a parenthesized expression starting the next line was never at risk - a test pins it.

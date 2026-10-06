@@ -484,6 +484,8 @@ struct operand {
                                 //by what the call bound them to - which the default is stored against
     void* pendingLambda; //D16: a lambda not checked yet - it is checked where its expected type is known
     bool isMoveSource;   //T7b: a destructured result's element - its array is taken, not copied
+    struct operand* callee; //E13b: a call through the function value this expression gives, rather than through a
+                            //named function or variable - readVar is then a synthetic var of the callee's type
     bool isSpreadSource; //D8d: several results passed as a call's arguments - each argument reads one of them
                          //(an OPERATION_MEMBER on this operand), and the first read evaluates it for all
     int spreadIndex;     //D8d: on such an argument, which result it is (0 evaluates the source)

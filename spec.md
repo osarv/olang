@@ -1361,13 +1361,14 @@ unary    ::= "not" binary | text | { unary-op } postfix
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
-postfix  ::= primary { index | member | "++" | "--" }
+postfix  ::= primary { index | member | call-on | "++" | "--" }
 primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | enum-value | lambda | IDEN | "(" expr ")"
 ```
 
 `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } ] ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
+`call-on ::= "(" [ arg { "," arg } ] ")"` calls the function value everything to its left gives (E13b).
 Postfix `++`/`--` and unary `++`/`--` are the same
 two operators in prefix and postfix position (E5); both require the operand to be an assignable
 lvalue (§6.2).
@@ -1638,9 +1639,15 @@ the target's dispatch table cannot be selected at the point of conversion.
 module-level function; or a struct type's own constructor
 (§9) — a bare type name (or
 alias chain naming a type) in call position is a constructor call exactly when that type declares
-one. When that type is generic (§12.3), the call must carry a type argument list (G10a). A call whose
+one. When that type is generic (§12.3), it may carry a type argument list (G10a), or leave it to be inferred (G10c). A call whose
 target has a result scope (§8 O13) — a constructor always has one, its instance's — may carry a scope
 argument (E25) between the target name and the `(`; a call whose target has none may not.
+
+**E13b.** A `call-on` after any postfix expression of function type calls the function value it gives:
+`id(dbl)(3)`, `fs[i](x)`, `(pick(c))(x)`. The expression is evaluated first, then the arguments, and the call
+is checked as a call through a variable of that type would be (E14, E12). A fallible one needs `try` as any
+call does; a `try` written before the chain covers its last call only. A `(` beginning a new line begins a new
+statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error.
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,

@@ -1,0 +1,7 @@
+## check: fail must be handled with try
+## E13b: a fallible function value called in a chain is handled like any fallible call
+error E { BAD }
+fn pick() fn() Int32 ? E { return fn() Int32 ? E { error E.BAD } }
+fn main() ? {
+    n := pick()()
+}

@@ -2550,7 +2550,12 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* ar
     struct var* func = op->readVar;
     char* ifaceData = NULL;
     char* closure = NULL;
-    char* target = op->isIfaceDispatch ? cgDispatchTarget(ctx, op, &ifaceData) : cgNamedTarget(ctx, func, &closure);
+    char* target;
+    if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
+        closure = cgValue(ctx, op->callee);
+        target = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, closure);
+    } else target = op->isIfaceDispatch ? cgDispatchTarget(ctx, op, &ifaceData) : cgNamedTarget(ctx, func, &closure);
     if (closure) {
         strncat(argsBuf, "ptr ", argsBufN - strlen(argsBuf) -1);
         strncat(argsBuf, closure, argsBufN - strlen(argsBuf) -1);

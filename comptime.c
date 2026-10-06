@@ -707,6 +707,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
             break;
         default: break;
     }
+    if (op->callee) ctScanOp(sc, op->callee); //E13b
     for (int i = 0; i < op->args.len && !sc->why; i++) ctScanOp(sc, *(struct operand**)ListGetIdx(&op->args, i));
     for (int c = 0; c < op->catchClauses.len && !sc->why; c++) {
         struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
@@ -814,7 +815,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     struct ctVal* through = NULL;
     if (!func->owner && !op->isCtorCall) {
         //a call through a function value: the function it names, decided now (K1a)
-        struct ctVal* fv = ctFindLocal(st, func->name);
+        struct ctVal* fv = op->callee ? ctEval(st, op->callee) : ctFindLocal(st, func->name); //E13b: computed
+        if (!fv && op->callee) return NULL;
         if (fv) fv = ctDeref(fv);
         if (!fv || fv->kind == CT_NULL) return ctFail(st, op->tok, "it calls through a null function value");
         if (fv->kind != CT_FUNC) return ctFail(st, op->tok, "it calls through a function value compile-time evaluation does not model");
