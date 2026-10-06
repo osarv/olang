@@ -7218,3 +7218,37 @@ from their original form.
   immutable global is emitted `constant`. A first version emitted the constant before checking that every
   element was constant, producing malformed IR for `Int32[1, 5, 2, 8 + k]`; the elements are now checked first.
   Locals keep their arena copy, as the user decided locals are writable.
+
+- **The tuple question closed: `Pair`, constructor inference, and passing several results on (D8d, G10c,
+  2026-10-07).** D8c had chosen multiple return values over tuples, and the user asked for tuples to be
+  reconsidered once immutable references existed ("immutable arrays are basically tuples?"). They are not: an
+  array has one element type and a run-time length, a tuple neither. Asked when anonymous structs would be
+  wanted, the honest list was short - several results (already D8c), and "two things kept together" in a
+  container or a map key. A tuple type was designed (structural identity, `(A, B)` spellings, `.0` access,
+  destructuring from values) and set against a named generic struct; the user chose `Pair<A, B>` in the prelude
+  and closed the question, and asked in the same breath for `f(g())` to work when g's results fit f's parameters.
+  **`Pair` needed constructor inference to be worth having.** G10a required `Pair<Int32, String&>(1, s)`, which
+  is longer than declaring a struct. G6's reason for written arguments - nothing at a type reference can infer
+  them - does not hold at a constructor call, which has arguments; so G10c infers them there, through G9's own
+  code (literals adapt, text adapts, a bound variable is not re-inferred), then retargets the call at the
+  instantiation's constructor. A parameter the constructor never mentions cannot be inferred, and the message
+  says to write the list. `Hash`/`Eq` are generic methods checked per instantiation, so a `Pair` of things
+  without them is still a pair; the hash scales the first part's hash by the FNV prime before adding the
+  second's, so swapping the parts changes it. Four corpus types named `Pair` were renamed, since the prelude's
+  types cannot be redeclared (D3a).
+  **D8d is Go's rule**: only when the multi-result call is the sole argument. Mixing (`f(g(), 1)`) stays an error
+  whose message now names both legal forms and `Pair`. Implementation: the argument list is replaced by one member
+  read per result on the same call operand, flagged as a spread source; codegen and the evaluator compute the
+  source at result 0's read and reuse it for the rest, which is sound because arguments are lowered in order.
+  The scope checker needed one thing: a part must land the way its call would (O18a) - without it,
+  `return keep(mk(42))` was rejected as "own scope cannot satisfy a longer-lived scope" where the single-result
+  form compiled. Several `try` defaults remain confined to destructuring and `return`, because inside an argument
+  list their commas are the arguments' (R9a).
+  **A pre-existing compiler crash found by the first Pair test**: `Map<Pair<Int32, Int32>, Int32>` segfaulted the
+  compiler, and a user struct key did too. Checking a generic function's instantiation set `currentBindings` to
+  `&inst->bindings`, a pointer into the list of instantiations; checking that body instantiated `mapSlot` and
+  grew the list, so the bindings were read from freed memory (a crash, or bizarre "unknown member" errors in
+  Map's own body). It had survived because every earlier Map test's instantiations happened to fit the list's
+  capacity. The list header is copied now.
+  **A gap recorded, not fixed**: a function cannot return a function-value parameter - O14 asks for a borrowed
+  result, and a function type has no way to carry the marker. Needs a decision.

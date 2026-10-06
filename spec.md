@@ -903,12 +903,23 @@ tuple type, and a call returning several values may appear only
 
 - as the right-hand side of a **destructuring** statement (S4b),
 - as the `expr` of a `return` in a function declaring the same results (S15), which passes them on whole,
-- after `spawn` with one target per result (P1g), or
+- after `spawn` with one target per result (P1g),
+- as the **only** argument of a call (D8d), or
 - alone as an expression statement (S3), discarding them.
 
-Anywhere else — an initializer, an operand, an argument — it is a compile-time error. Each result is
+Anywhere else — an initializer, an operand, one argument among others — it is a compile-time error. Two values
+held together as one value are a `Pair` (M19d); there is no tuple type and no anonymous struct type. Each result is
 checked on its own terms everywhere a single value would be: its type, its scope tag (§8: every built
 result is in the one result scope, O13/O14), and its fit at the target.
+
+**D8d (passing several results on).** A call returning several values written as the only argument of a call
+— a function, a method, a constructor, an enum payload or a conversion — passes its results as that call's
+arguments, the first result to the first parameter and so on: `add(divmod(17, 5))`. The inner call is evaluated
+once, before the outer one. There must be exactly as many results as the outer call takes arguments (a
+parameter's default is not used), and each result is checked against its parameter as any argument is (E12),
+including the scope its parameter gives it (§8 O18a: a result built in the inner call's result scope lands where
+the outer call's parameter says). The inner call may be a `try` (E24), though several defaults stay confined to
+destructuring and `return` (R9a). To pass some results, or others beside them, destructure first.
 
 `_` is not a name: it discards a value in a destructuring or `spawn` target list, and declaring a
 variable, parameter or global named `_` is a compile-time error.
@@ -1210,6 +1221,10 @@ visible in every module by their bare names, with no import, and no module may d
 name (D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
+
+Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, two values of any types held as
+one, its type arguments inferred at construction (G10c). It has `Hash()` and `Eq(other)` - what a map key needs - for
+every instantiation whose two parts have them.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -3535,8 +3550,14 @@ a variable lives: `Vec<Int32>&x(4)`, or `Vec<Int32>(4)` to build it where it lan
 arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.
-Omitting the list where the named type is generic, or writing one where it is not, is a compile-time
-error, as is a count that does not match the declared `type-params` (G6).
+Writing a list where the named type is not generic is a compile-time error, as is a count that does not
+match the declared `type-params` (G6). Omitting it is G10c.
+
+**G10c.** A generic struct type's constructor called with no type-argument list infers its type arguments from
+the constructor's arguments, exactly as a generic function's are inferred (G9, G9a, G9b): `Pair(1, s)` is
+`Pair<Int32, String&>(1, s)`. A type parameter no constructor parameter mentions, or arguments that bind one
+inconsistently, cannot be inferred, and the call is then a compile-time error naming the written form. A type
+named anywhere other than a constructor call always writes its arguments (G6).
 
 **G10b.** A generic struct type's constructor and destructor are monomorphized with it (G16): each
 instantiation gets its own, built from the generic's own field list and `destruct` block against that

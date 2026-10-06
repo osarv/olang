@@ -3581,7 +3581,7 @@ struct var* ctorTargetFor(struct checkCtx* ctx, struct type* t, struct syntax* t
     resolveTypeDecl(t);
     if (!t->hasCtor) return NULL;
     if (t->bType != BASETYPE_STRUCT) return t->ctorFunc; //T29d
-    if (t->typeParams.len == 0 && !targsNode) return t->ctorFunc;
+    if (!targsNode) return t->ctorFunc; //G10c: a generic's own, its arguments inferred in OperandFuncCall
     struct type* spec = applyTypeArgsTo(ctx, t, targsNode, tok);
     return spec ? spec->ctorFunc : NULL;
 }
@@ -4717,6 +4717,20 @@ void landCall(struct operand* op, struct var* dst, int depth) {
     op->landsWith.len = 0;
 }
 
+//D8d: the call whose results an argument is one of, when it is one of several spread over a call's arguments
+static struct operand* spreadSourceOf(struct operand* arg) {
+    if (arg->opType != OPERATION_MEMBER) return NULL;
+    struct operand* base = *(struct operand**)ListGetIdx(&arg->args, 0);
+    return base->isSpreadSource ? base : NULL;
+}
+
+//WRONG_ARG_COUNT, or - where the arguments are one call's spread results (D8d) - the message saying so
+void reportArgCount(struct list args, struct token tok) {
+    struct operand* a0 = args.len ? *(struct operand**)ListGetIdx(&args, 0) : NULL;
+    if (a0 && spreadSourceOf(a0)) ErrMsgSemantic(a0->tok, SPREAD_COUNT_MISMATCH);
+    else ErrMsgSemantic(tok, WRONG_ARG_COUNT);
+}
+
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
     bool instanceArg = scopeArgNodes.len > 0 && firstScopeVarIndex(func) < 0;
@@ -4733,6 +4747,9 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
             if (!paramTypeNamesScope(pt, sv)) continue;
             struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
+            //D8d: one result of a call still landing determines nothing - the call lands with the parameter (below)
+            struct operand* src = spreadSourceOf(arg);
+            if (src && callIsLanding(src)) continue;
             //E12c: a VALUE lvalue passed for a reference parameter is borrowed - the callee gets that very
             //storage, so its scope is where that storage is. Treating it as a temporary bound the variable to the
             //block the call is written in: "l.Push(i)" in a loop built the list's chunks in the loop's arena
@@ -4795,6 +4812,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
     //it is known, or along with this call's own result where it is itself still landing
     for (int j = 0; j < func->type.vars.len && j < args.len; j++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
+        if (spreadSourceOf(arg)) arg = spreadSourceOf(arg); //D8d: its results land together, with the first
         struct var* psv = (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam;
         if (arg->opType != OPERATION_FUNCCALL || !psv || !callIsLanding(arg)) continue;
         for (int k = 0; k < op->scopeBindings.len; k++) {
@@ -4890,6 +4908,8 @@ void flushPendingDischarges(void) {
     pendingDischarges.len = 0;
 }
 
+static struct operand* spreadSourceOf(struct operand* arg);
+void reportArgCount(struct list args, struct token tok);
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
     struct var* callerFunc = ctx ? ctx->func : NULL;
@@ -4955,13 +4975,21 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             if (!bindingGet(&bindings, *(struct str*)ListGetIdx(&func->type.typeParams, i))) ok = false;
         }
         if (!ok) {
-            ErrMsgSemantic(tok, TYPE_ARGS_NOT_INFERABLE);
+            struct operand* a0 = args.len ? *(struct operand**)ListGetIdx(&args, 0) : NULL;
+            if (args.len != func->type.vars.len && a0 && spreadSourceOf(a0)) reportArgCount(args, tok); //D8d
+            else ErrMsgSemantic(tok, func->type.hasRetType && func->type.retType->ctorFunc == func
+                                     ? CTOR_TYPE_ARGS_NOT_INFERABLE : TYPE_ARGS_NOT_INFERABLE);
             struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
             bad->readVar = func;
             bad->args = args;
             return bad;
         }
-        func = instantiateFunc(func, &bindings);
+        //G10c: a generic type's constructor called with no written type arguments infers them as a generic
+        //function's are inferred, and the call targets that instantiation's own constructor (G10a)
+        if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
+            struct type* spec = instantiateType(func->type.retType, &bindings);
+            func = spec->ctorFunc;
+        } else func = instantiateFunc(func, &bindings);
     }
     struct type ret = func->type.hasRetType ? *func->type.retType : TypeVanilla(BASETYPE_VOID);
     struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
@@ -4975,7 +5003,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     int required = func->type.vars.len;
     while (required > 0 && (*(struct var*)ListGetIdx(&func->type.vars, required -1)).defaultVal) required--;
     if (args.len < required || args.len > func->type.vars.len) {
-        ErrMsgSemantic(tok, WRONG_ARG_COUNT);
+        reportArgCount(args, tok);
         return op;
     }
     for (int i = 0; i < func->type.vars.len; i++) {
@@ -5092,7 +5120,7 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
     int want = (kind == OPERATION_ATOMIC_LOAD) ? 1 : (kind == OPERATION_ATOMIC_CAS ? 3 : 2);
     struct type resT = TypeVanilla(kind == OPERATION_ATOMIC_STORE ? BASETYPE_VOID : BASETYPE_INT32);
     if (args.len != want) {
-        ErrMsgSemantic(tok, WRONG_ARG_COUNT);
+        reportArgCount(args, tok);
         return operandNew(tok, OPERATION_NONE, resT);
     }
     struct operand* target = *(struct operand**)ListGetIdx(&args, 0);
@@ -5818,7 +5846,7 @@ struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType,
     //writing some is the same mistake as giving a struct literal too many fields.
     struct list args = argsNode ? buildArgs(ctx, argsNode) : ListInit(sizeof(struct operand*));
     rejectDefaultArgs(args);
-    if (args.len != c->type.vars.len) { ErrMsgSemantic(wordTok, WRONG_ARG_COUNT); return op; }
+    if (args.len != c->type.vars.len) { reportArgCount(args, wordTok); return op; }
     //O17: a payload's "&name" tag names one of the CHOICE TYPE's own scope variables, never anything in
     //the constructing function's frame - so it is bound here from the arguments, exactly as a call binds a
     //callee's own scope variables, and resolved through that binding before any fit check. Without the
@@ -6067,6 +6095,18 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
     for (int i = 0; i < exprs.len; i++) {
         struct syntax* e = *(struct syntax**)ListGetIdx(&exprs, i);
         struct operand* op = buildExprFromSyntax(ctx, e);
+        //D8d: a call returning several values, as the only argument, is its results as the arguments - "f(g())".
+        //Each argument reads one result of the one evaluation, in order
+        if (op->type.isTuple && exprs.len == 1) {
+            op->isSpreadSource = true;
+            for (int k = 0; k < op->type.vars.len; k++) {
+                struct var* field = ListGetIdx(&op->type.vars, k);
+                struct operand* part = OperandMember(ctx->mod, op, field->name, op->tok);
+                part->spreadIndex = k;
+                ListAdd(&result, &part);
+            }
+            return result;
+        }
         if (op->type.isTuple) ErrMsgSemantic(op->tok, TUPLE_NOT_A_VALUE); //D8c
         ListAdd(&result, &op);
     }
@@ -6741,7 +6781,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(convArgs);
             ctx->allowFallibleCall = allowedNamed;
-            if (convArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
+            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok); return OperandIntLiteral(nameTok); }
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
             if (namedConv->bType == BASETYPE_ARRAY) return OperandNominalConversion(*namedConv, convArg, nameTok);
             return OperandNumericConversion(*namedConv, convArg, nameTok);
@@ -6753,7 +6793,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(convArgs);
             ctx->allowFallibleCall = allowedConv;
-            if (convArgs.len != 1) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
+            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok); return OperandIntLiteral(nameTok); }
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
             return OperandNumericConversion(TypeVanilla(convTo), convArg, nameTok);
         }
@@ -6828,7 +6868,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list aArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(aArgs);
             ctx->allowFallibleCall = allowedArr;
-            if (aArgs.len < 1 || aArgs.len > 2) { ErrMsgSemantic(nameTok, WRONG_ARG_COUNT); return OperandIntLiteral(nameTok); }
+            if (aArgs.len < 1 || aArgs.len > 2) { reportArgCount(aArgs, nameTok); return OperandIntLiteral(nameTok); }
             struct operand* sizeOp = *(struct operand**)ListGetIdx(&aArgs, 0);
             if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
             at.scopeDepth = ctx->blockDepth;
@@ -6851,6 +6891,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
         //a constructor is exactly the function a struct type points at as its own - true for an
         //instantiation's monomorphized constructor too, since that points at the instantiation
+        if (call->readVar) func = call->readVar; //G10c: the instantiation's constructor, when inferred
         call->isCtorCall = func->type.hasRetType && func->type.retType->bType == BASETYPE_STRUCT
                            && func->type.retType->ctorFunc == func;
         if (call->isCtorCall) bindCtorHere(ctx, call, func);
@@ -9775,7 +9816,10 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
     ctx.hasOwnScope = true;
     ctx.bodyId = bodyBegin(); //S8b
     struct list* savedBindings = currentBindings;
-    currentBindings = &inst->bindings;
+    //a copy of the list header, not a pointer into inst: inst lives in the instantiations list, which
+    //reallocates when this body instantiates something new - and the bindings were then read from freed memory
+    struct list bindings = inst->bindings;
+    currentBindings = &bindings;
     spec->codeBlock = buildBlock(&ctx, spec->bodySyntax);
     bodyEnd(ctx.bodyId, spec->codeBlock);
     if (spec->type.hasRetType && !blockAlwaysExits(&spec->codeBlock)) { //D10a, per instantiation (G18)

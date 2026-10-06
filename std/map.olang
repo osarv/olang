@@ -170,3 +170,11 @@ test "for ... in visits every entry once" {
     }
     assert keys == 1225 and values == 2450
 }
+
+test "a pair is a key when both its parts are" {
+    m := Map<Pair<Int32, Int32>, Int32>()
+    for i in range 20 { m.Put(Pair(Int32(i), Int32(i) + 1), Int32(i)) }
+    v, found := m.Get(Pair(7, 8))
+    assert found and v == 7
+    assert not m.Has(Pair(8, 7))
+}

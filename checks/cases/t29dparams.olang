@@ -1,4 +1,4 @@
 ## check: fail takes exactly one parameter, of the type it is declared over
 ## T29d: the constructor's one parameter is the value being built
-type Pair Int32(a Int32, b Int32) { }
+type Twin Int32(a Int32, b Int32) { }
 fn main() ? { }

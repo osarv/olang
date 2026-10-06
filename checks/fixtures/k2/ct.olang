@@ -1,5 +1,5 @@
 error E { X }
-type Pair struct(a Int32, b Float64) {
+type CtPair struct(a Int32, b Float64) {
     a mut
     b mut
 }
@@ -33,7 +33,7 @@ Kept Loud& = Loud(7)
 Dropped Int32 = loudOnce()
 Fib Int32 = fib(15)
 Table Array<Int32>& = table()
-P Pair = Pair(fib(6), 0.5)
+P CtPair = CtPair(fib(6), 0.5)
 seed mut Int32 = 3
 Later Int32 = seed * 2
 fn main() ? E {

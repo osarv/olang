@@ -858,12 +858,13 @@ test "the same type arguments reuse one instantiation" {
 }
 
 ## a generic STRUCT type declares its parameters in a "<...>" list after the name (G6). Unlike a
-## function's, that list is required, because a type's arguments cannot be inferred - nothing at
-## "Pair<Int32, Int64>" determines them but the writing - so they are supplied positionally, and the
-## declared order is what makes positional meaningful (G7). Each distinct argument set is a distinct type
+## function's, that list is required, because a type named in a declaration has nothing its arguments could be
+## inferred from - nothing at "Couple<Int32, Int64>" determines them but the writing - so they are supplied
+## positionally, and the declared order is what makes positional meaningful (G7). A constructor call may leave
+## them to be inferred from its arguments (G10c), as a generic function's are. Each distinct argument set is a distinct type
 ## (G10), which falls out for free: struct identity is owner+name, and an instantiation's name carries
 ## its own arguments.
-type Pair<A, B> struct(first <A>, second <B>) {
+type Couple<A, B> struct(first <A>, second <B>) {
     first mut
     second mut
 }
@@ -872,23 +873,31 @@ type Box<T> struct(v <T>) {
     v mut
 }
 
-fn pairSum(p Pair<Int32, Int32>) Int32 {
+fn pairSum(p Couple<Int32, Int32>) Int32 {
     return p.first + p.second
 }
 
 fn nestedGeneric() Int32 {
-    n Box<Pair<Int32, Int32>> = Box<Pair<Int32, Int32>>(Pair<Int32, Int32>(4, 5))
+    n Box<Couple<Int32, Int32>> = Box<Couple<Int32, Int32>>(Couple<Int32, Int32>(4, 5))
     return n.v.first + n.v.second
 }
 
 test "a generic struct type instantiates, and its fields take the argument types" {
-    p Pair<Int32, Int64> = Pair<Int32, Int64>(7, Int64(9))
+    p Couple<Int32, Int64> = Couple<Int32, Int64>(7, Int64(9))
     assert p.first == 7
     assert p.second == Int64(9)
 }
 
 test "an instantiated generic type crosses a function boundary" {
-    assert pairSum(Pair<Int32, Int32>(8, 1)) == 9
+    assert pairSum(Couple<Int32, Int32>(8, 1)) == 9
+}
+
+test "G10c: a generic constructor's type arguments are inferred from its arguments" {
+    p := Couple(7, Int64(9))
+    assert p.first == 7 and p.second == Int64(9)
+    assert pairSum(Couple(8, 1)) == 9
+    n := Box(Couple(4, 5))
+    assert n.v.first + n.v.second == 9
 }
 
 test "a generic instantiated with another generic's instantiation" {
@@ -5321,7 +5330,8 @@ test "D15: := from a call" {
 }
 
 ## D8c: a function may return several values - "(T1, T2)" after its parameters, "return a, b" in its body.
-## They are received by destructuring and are never one value: there is no tuple type to store or pass.
+## They are received by destructuring, or passed as all of a call's arguments (D8d), and are never one value: there
+## is no tuple type to store or pass (two values held together are a Pair).
 ## "_" discards one, ":=" declares, "=" assigns into existing places, and "try" and "spawn" both apply.
 fn divmodD(a Int32, b Int32) (Int32, Int32) { return a / b, a % b }
 fn passD(a Int32, b Int32) (Int32, Int32) { return divmodD(a, b) }        ## several results passed on whole
@@ -5398,6 +5408,49 @@ test "D8c: spawn binds several results" {
     assert q == 3
     assert r == 2
     assert only == 1
+}
+
+## D8d: a call returning several values, as the only argument of a call, passes them as its arguments - each
+## result to one parameter, in order, the call evaluated once. Functions, generics, methods and constructors alike.
+spreadCallsD mut Int32 = 0
+fn countedDivmodD(a Int32, b Int32) (Int32, Int32) {
+    spreadCallsD++
+    return a / b, a % b
+}
+fn addD(a Int32, b Int32) Int32 { return a + b }
+fn pickSecondD(a <T>, b <T>) <T> { return b }
+fn (r RangeD&) ShiftedD(dlo Int32, dhi Int32) Int32 { return r.lo + dlo + r.hi + dhi }
+fn digitSumD(n Int32) Int32 ? DivError { return addD(try safeDivD(n, 10)) }
+fn twiceD(f fn(a Int32) Int32, v Int32) (Int32, Int32) { return f(v), f(f(v)) }
+## a reference among the results lands where the outer call's result does (O18a)
+fn linkPairD(n Int32) (Link&, Int32) { return Link(n), n }
+fn keepLinkD(l mut Link&, n Int32) mut Link&l {
+    l.v = l.v + n
+    return l
+}
+fn spreadFromInnerD() Link& { return keepLinkD(linkPairD(9)) }
+SpreadBakedD Int32 = addD(divmodD(17, 5))   ## K2: computed while compiling
+
+test "D8d: several results passed as a call's arguments" {
+    before Int32 = spreadCallsD
+    assert addD(countedDivmodD(17, 5)) == 5
+    assert spreadCallsD == before + 1
+    assert pickSecondD(divmodD(9, 4)) == 1
+    rg := RangeD(divmodD(7, 2))
+    assert rg.lo == 3 and rg.hi == 1
+    assert rg.ShiftedD(divmodD(7, 2)) == 8
+    assert (try digitSumD(42) catch default -1) == 6
+    k Int32 = 3
+    assert addD(twiceD(fn(a Int32) Int32 { return a * k }, 5)) == 60
+    assert addD(divmodD(23, 4)) == 8     ## S18c: decided while compiling
+    assert SpreadBakedD == 5
+}
+
+test "D8d: a spread reference lives where the outer result lands" {
+    x := keepLinkD(linkPairD(7))
+    y := spreadFromInnerD()
+    churnLinks()
+    assert x.v == 14 and y.v == 18
 }
 
 ## rejected, and nameable only here:

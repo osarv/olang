@@ -1635,7 +1635,10 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
 
 char* cgMemberAddr(struct cgCtx* ctx, struct operand* op) {
     struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
-    char* baseVal = cgValue(ctx, base); //struct: always a ptr
+    //D8d: the results of one call spread over a call's arguments - the first argument evaluates it, the rest
+    //read the same value (the arguments are lowered in order, so the first dominates them)
+    char* baseVal = base->isSpreadSource && op->spreadIndex > 0 ? base->spreadVal : cgValue(ctx, base); //struct: always a ptr
+    if (base->isSpreadSource && op->spreadIndex == 0) base->spreadVal = baseVal;
     int idx = -1;
     for (int i = 0; i < base->type.vars.len; i++) {
         struct var* mv = ListGetIdx(&base->type.vars, i);

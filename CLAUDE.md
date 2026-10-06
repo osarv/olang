@@ -600,7 +600,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   declared parameter types, which is total because every variable must appear in at least one parameter
   (G4). A **struct type** does declare a list, after the name (`type Vec<T> struct(...)`), and for a
   reason that isn't arbitrary: a type's arguments can't be inferred, so they're written positionally,
-  and only a declared list makes "positional" mean anything. That asymmetry tracks inferability exactly.
+  and only a declared list makes "positional" mean anything. That asymmetry tracks inferability exactly -
+  which is also why a *constructor call* may omit them (G10c, 2026-10-07): there they can be inferred.
   **`match <T>`** dispatches on a type parameter, resolved at instantiation - no runtime comparison or
   branch, only the selected arm's code; inside that arm the variable *is* the concrete type (so each arm
   is checked only for its own instantiation), and unlike a value `match` it is exhaustiveness-checked,
@@ -1809,8 +1810,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   discarding one, `q, r := try f()`, and `spawn q, r = f()`. The user chose this over first-class tuples and
   over named results: it covers the real uses (a value plus a count, a flag, a remainder) with the least new
   machinery and keeps "if you store it, it is a declared type". A call returning several values is **never
-  one value** - not an initializer, operand or argument - only destructured, passed on whole by `return`,
-  spawned into targets, or discarded as a statement.
+  one value** - not an initializer or operand - only destructured, passed on whole by `return` or as all of a
+  call's arguments (D8d, 2026-10-07), spawned into targets, or discarded as a statement.
   **Cheap because it reuses the struct machinery twice over.** The result type is an anonymous struct with
   fields `0`, `1`, ... and an `isTuple` flag, so layout, the error-union ABI (`{ i32, { T1, T2 } }`),
   generic substitution, interface signature matching and codegen of a struct return all applied unchanged.
@@ -2378,6 +2379,22 @@ Go through this for every change to what olang means - a rule added, revised or 
   the user's original goal ("bss when immutable, arena when not"); it needed T25b first, because without
   read-only references something could have written the shared constant. The read-only data lives in `.rodata`,
   not BSS (BSS is zero-initialised only).
+- **No tuple type: `Pair` in the prelude, and several results pass on as arguments (D8d, G10c, 2026-10-07, the
+  user's call).** Closes the tuple question. The user asked whether read-only arrays settled it (they do not -
+  an array has one element type) and when anonymous structs would be wanted; the answer was that every real use
+  is either several results (D8c already) or two things kept together, and a named `Pair<A, B>` with `First`
+  and `Second` covers the second with no new type-system feature. `std/prelude/pair.olang`; `Hash`/`Eq` exist
+  for any instantiation whose parts have them, so a `Pair` is a `Map` key. **G10c** made it usable:
+  a generic constructor's type arguments are inferred from its arguments (`Pair(1, s)`), by G9's own path, then
+  the call retargets the instantiation's constructor; a type parameter no constructor parameter mentions keeps
+  the written form, with a message saying so. **D8d, the user's request**: `f(g())` passes g's results as f's
+  arguments when g's call is f's only argument (Go's rule; mixing with other arguments stays an error naming
+  the fix). Lowered as one member read per result on the same call operand, which codegen and the evaluator
+  evaluate once, at the first read; for O18a the parts land as their call does. Several `try` defaults stay
+  out (R9a's comma ambiguity). **Found on the way, pre-existing**: checking a generic function's instantiation
+  kept a pointer into the `instantiations` list, which reallocates when the body instantiates something
+  else - the bindings were then read from freed memory, a compiler crash (or garbage errors) for a `Map` whose
+  key type was a user struct. Four corpus types named `Pair` were renamed.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

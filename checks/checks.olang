@@ -184,6 +184,6 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0           ## K2c: never destructs, so baked
     assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    ## its temporary's destructor runs
-    assert sh(dir, "grep -q '@ct_P = global %ct.Pair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
 }

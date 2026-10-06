@@ -323,7 +323,10 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
         }
         case OPERATION_MEMBER: {
             struct operand* baseOp = *(struct operand**)ListGetIdx(&op->args, 0);
-            struct ctVal* base = ctDeref(ctLvalue(st, baseOp, forWrite));
+            //D8d: one call's results spread over a call's arguments - evaluated once, by the first
+            struct ctVal* base = baseOp->isSpreadSource && op->spreadIndex > 0 ? baseOp->spreadVal
+                                 : ctDeref(ctLvalue(st, baseOp, forWrite));
+            if (baseOp->isSpreadSource && op->spreadIndex == 0) baseOp->spreadVal = base;
             if (!base) return NULL;
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it reads through a null reference");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");

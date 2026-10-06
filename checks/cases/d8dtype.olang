@@ -1,0 +1,7 @@
+## check: fail doesn't match
+## D8d: each result is checked against its parameter as any argument is
+fn named() (Int32, String&) { return 1, "x" }
+fn sum(a Int32, b Int32) Int32 { return a + b }
+fn main() ? {
+    n := sum(named())
+}

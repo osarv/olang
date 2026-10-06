@@ -181,17 +181,17 @@ test "ToArray is a copy, independent of the list" {
     assert b.Len() == 3
 }
 
-type Pair struct(k Int32, v Int32) {
+type KV struct(k Int32, v Int32) {
     k
     v
 }
 
 test "a list of structs" {
-    l List<Pair>& = List<Pair>()
+    l List<KV>& = List<KV>()
     for i in range 20 {
-        l.Push(Pair(i, i * i))
+        l.Push(KV(i, i * i))
     }
-    a Array<Pair>& = l.ToArray()
+    a Array<KV>& = l.ToArray()
     assert a[19].v == 361
 }
 

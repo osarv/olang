@@ -1,0 +1,7 @@
+## check: fail pass them as ALL of a call's arguments
+## D8d: a spread is the whole argument list - not beside other arguments
+fn qr(a Int32, b Int32) (Int32, Int32) { return a / b, a % b }
+fn sum3(a Int32, b Int32, c Int32) Int32 { return a + b + c }
+fn main() ? {
+    n := sum3(qr(7, 2), 1)
+}
