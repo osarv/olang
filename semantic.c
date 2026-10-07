@@ -7067,6 +7067,42 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
 //cross-module call, a plain member access). Shared by the two spellings that can reach a method: a name
 //chain ("a.b.f()"), and a postfix member on any other expression ("arr[i].f()", "f(x).g()").
 //*reported says this already emitted a diagnostic (or a real call), so the caller must not try again.
+//M19e: the method named name declared on an interface recv's type satisfies, searched in mod, the modules mod
+//imports and the prelude; *found counts the interfaces offering one (more than one is the caller's error)
+static struct var* interfaceMethodIn(struct semaModule* m, struct type recv, struct str name, int* found, struct var* got) {
+    for (int i = 0; i < m->vars.len; i++) {
+        struct var* v = ListGetIdx(&m->vars, i);
+        if (!v->isMethod || !StrCmp(v->name, name) || v == got) continue;
+        struct type* r = SemanticMethodReceiver(v);
+        if (!r || r->bType != BASETYPE_INTERFACE) continue;
+        struct type iface = *r;
+        if (TypeIsGeneric(iface)) {
+            struct list b = ListInit(sizeof(struct typeBinding));
+            if (!unifyThroughMethods(iface, recv, &b)) continue;
+            iface = TypeSubstitute(iface, &b);
+            if (TypeIsGeneric(iface)) continue;
+        }
+        if (!TypeSatisfiesInterface(recv, iface, NULL)) continue;
+        (*found)++;
+        if (!got) got = v;
+    }
+    return got;
+}
+
+static struct var* interfaceMethodFor(struct semaModule* mod, struct type recv, struct str name, int* found) {
+    *found = 0;
+    struct var* got = interfaceMethodIn(mod, recv, name, found, NULL);
+    for (int i = 0; i < mod->imports.len; i++) {
+        struct semaModule* im = ((struct semaImport*)ListGetIdx(&mod->imports, i))->mod;
+        if (im && im != mod) got = interfaceMethodIn(im, recv, name, found, got);
+    }
+    for (int i = 0; i < preludeModules.len; i++) {
+        struct semaModule* pm = *(struct semaModule**)ListGetIdx(&preludeModules, i);
+        if (pm != mod) got = interfaceMethodIn(pm, recv, name, found, got);
+    }
+    return got;
+}
+
 struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
                                 struct syntax* argsNode, struct list scopeArgNodes, bool* reported) {
     *reported = false;
@@ -7144,9 +7180,22 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         *reported = true;
         return OperandIntLiteral(mTok);
     }
+    //M19e: with no method of its own by this name, a method declared on an interface the type satisfies - one
+    //declared in this module, a module it imports, or the prelude. The receiver becomes that interface's value.
+    bool viaInterface = false;
+    if (!m && recvType.bType != BASETYPE_INTERFACE) {
+        int found = 0;
+        m = interfaceMethodFor(ctx->mod, recvType, mName, &found);
+        if (found > 1) {
+            ErrMsgSemantic(mTok, METHOD_FROM_TWO_INTERFACES);
+            *reported = true;
+            return OperandIntLiteral(mTok);
+        }
+        viaInterface = m != NULL;
+    }
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.vars.len == 0) return NULL;
     struct type p0 = (*(struct var*)ListGetIdx(&m->type.vars, 0)).type;
-    if (!MethodReceiverAccepts(p0, recvType)) return NULL;
+    if (!viaInterface && !MethodReceiverAccepts(p0, recvType)) return NULL;
     *reported = true;
     if (m->owner != ctx->mod && !isPublic(mName)) {
         ErrMsgSemantic(mTok, VAR_IS_PRIVATE);

@@ -110,6 +110,7 @@
 #define LOCAL_SHADOWS_GLOBAL "this module already declares this name at its top level, and a name means one thing throughout a module - choose another (D3a)"
 #define LOCAL_SHADOWS_BUILD_CONST "this name is a build constant (-D, or one the compiler defines), visible everywhere - choose another (D3a)"
 #define ASSERT_FALSE_AT_COMPILE_TIME "this assertion can be evaluated at compile time, and it is false (S18c)"
+#define METHOD_FROM_TWO_INTERFACES "this type satisfies two interfaces that each declare a method of this name - the call cannot choose; drop one of the imports here, or rename one of the methods (M19e)"
 #define METHOD_AMBIGUOUS "two imported modules each declare a method of this name on this built-in type - import only the one you mean here, or call it from a module that imports only that one (M22)"
 #define DESTRUCT_TYPE_MUST_BE_REFERENCE "this type declares a 'destruct' block, so it is reference-only - write it with a reference marker ('&' or '&x'). A destructor releases something when the scope holding the instance closes, and only a reference carries the scope tag that lets that lifetime be checked; a by-value copy carries none, so it could still name the released resource afterwards with nothing able to see it"
 #define NAMED_SCOPE_ON_ELEMENT "only the outermost level of a type may name a variable in its marker - this marker sits nested inside a larger value, and a nested reference always belongs to its container's own scope, never an independent one, so it could never be honoured; write a bare '&' here"

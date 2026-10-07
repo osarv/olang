@@ -6659,6 +6659,34 @@ test "E31: operators in generic code, in a constraint, through an interface valu
     assert OpDotBaked == 10
 }
 
+# M19e: a method declared on an interface is callable on any value whose type satisfies it; a type's own method
+# of the same name wins
+type IfmNamed interface {
+    IfmName() Int32
+}
+
+fn (n IfmNamed&) Shout() Int32 { return n.IfmName() * 2 }
+fn (n IfmNamed&) Whisper() Int32 { return n.IfmName() - 1 }
+
+type IfmP struct(v Int32) {
+    v
+}
+
+fn (p IfmP) IfmName() Int32 { return p.v }
+fn (p IfmP) Whisper() Int32 { return 100 }
+
+IfmCountBaked := Int32[1, 2, 3, 4].Iter().Count(fn(x) { return x > 2 })
+
+test "M19e: interface methods reach satisfying types; a type's own method wins" {
+    p := IfmP(5)
+    assert p.Shout() == 10
+    assert p.Whisper() == 100
+    n IfmNamed& = p
+    assert n.Whisper() == 4
+    assert Int32[1, 2, 3].Iter().Any(fn(x) { return x == 3 })
+    assert IfmCountBaked == 2
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

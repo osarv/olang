@@ -7470,3 +7470,20 @@ from their original form.
   Each renamed token now owns its text. And then every diagnostic on an operator method crashed the compiler, because
   the error printer finds a token in the source by that same pointer; it now falls back to the token as written,
   found by its id.
+
+- **Interface methods on satisfying types (M19e, 2026-10-07).** The user's third item was "moving the corpus to
+  use methods on interfaces so every type doesn't have to implement useless methods on its own". Under the earlier
+  choice (a) such methods were reachable only through an interface value, which made `l.Count(f)` into a
+  conversion first; the user then proposed plain functions over the interface, then `l.Iter().Count()` by making
+  the methods callable on any satisfying type, then asked whether types should declare their interfaces, then
+  whether the call should name the module (with `:` freed up for module access) or the interface
+  (`l.Iter().Iterator.Count()`). Each was workable; the user found the qualified forms confusing and settled on
+  the simplest: implicit satisfaction, a type's own method wins, a call two visible interfaces could answer is an
+  error. The `:` separator and interface-qualified calls are recorded as open questions.
+  **Built** as a fallback in `buildMethodCall`: when a concrete type has no method of the name, search the calling
+  module, its imports and the prelude for a method on an interface the type satisfies (instantiating a generic
+  interface through G9c's `unifyThroughMethods`), and call it with the receiver converted to that interface - the
+  ordinary call path then does the conversion and the inference. The migration moved `Any`, `All`, `Count` and
+  `Fold` from `List` to `Iterator<T>`, which gives them to `Map`'s and arrays' iterators and to any iterator a program
+  writes; `Map` and `Filter` could not move, because they build a `List` and an interface's methods must live in the
+  interface's module, the prelude, which cannot name `std/list`.

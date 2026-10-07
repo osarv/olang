@@ -1280,6 +1280,14 @@ method declared with the interface itself as its receiver (`fn (w Writer&) Write
 helper over every value of the interface, called statically. Such a method may not reuse the name of one
 of the interface's own methods, which would make `w.f` both a dispatch and a static call.
 
+**M19e.** A method declared with an interface as its receiver is also callable on a value of **any type that
+satisfies the interface** (T31), implicitly: `l.Iter().Count(f)` calls the `Count` declared on `Iterator<T>`, since a
+`List`'s iterator satisfies it. The receiver is converted to the interface's value (E12d), with the interface's type
+arguments inferred from the value's type (G9c). It applies only where the value's type has **no method of its own**
+by that name - a type's own method always wins - and it looks at the interfaces declared in the calling module, in
+the modules it imports, and in the prelude. When two such interfaces each declare a method of that name and the
+type satisfies both, the call is a compile-time error: it cannot choose.
+
 **M19b.** A method call's receiver need not be a name at all. Wherever a postfix `.` member access (§5.5)
 is followed by an argument list, everything to its left is the receiver: `items[i].Area()`, `f(x).Size()`.
 This is the only spelling that reaches a method on an indexed or returned value, since the

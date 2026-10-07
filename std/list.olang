@@ -96,7 +96,8 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
     return out
 }
 
-# what a function value lets a list do (D16) - each walks the elements in the order they were pushed
+# what a function value lets a list do (D16) - each walks the elements in the order they were pushed. Any, All,
+# Count and Fold are every iterator's (the prelude's Iterator, M19e): "l.Iter().Count(f)".
 
 # whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
 fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
@@ -106,35 +107,9 @@ fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
     return false
 }
 
-fn (l List<<T>>&) Any(keep fn(x <T>) Bool) Bool {
-    for x in l {
-        if keep(x) { return true }
-    }
-    return false
-}
 
-fn (l List<<T>>&) All(keep fn(x <T>) Bool) Bool {
-    for x in l {
-        if not keep(x) { return false }
-    }
-    return true
-}
 
-fn (l List<<T>>&) Count(keep fn(x <T>) Bool) Int64 {
-    n Int64 = 0
-    for x in l {
-        if keep(x) { n++ }
-    }
-    return n
-}
 
-fn (l List<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
-    acc <U> = init
-    for x in l {
-        acc = f(acc, x)
-    }
-    return acc
-}
 
 # a new list - in the caller's scope - of f applied to every element
 fn (l List<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
@@ -280,9 +255,9 @@ test "a list's elements, walked through a lambda" {
     l List<Int32>& = List<Int32>()
     for i in range 20 { l.Push(Int32(i)) }
     limit Int32 = 15
-    assert l.Any(fn(x) { return x > limit }) and not l.All(fn(x) { return x > limit })
-    assert l.Count(fn(x) { return x % 5 == 0 }) == 4
-    assert l.Fold(Int64(0), fn(acc, x) { return acc + Int64(x) }) == 190
+    assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
+    assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
+    assert l.Iter().Fold(Int64(0), fn(acc, x) { return acc + Int64(x) }) == 190
     big := l.Filter(fn(x) { return x >= limit })
     assert big.Len() == 5 and big.ToArray()[0] == 15
     halves := l.Map(fn(x) { return Float64(x) / 2.0 })

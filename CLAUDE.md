@@ -2520,6 +2520,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   evaluator change, since an operator is a method call by the time it is checked. A declared `+` on a named numeric
   type replaces the built-in one. The long road there: free functions, groups, `Self`, Rust traits, "is it worth
   it" - see HISTORY.
+- **Interface methods reach every satisfying type (M19e, 2026-10-07, the user's call).** A method declared on an
+  interface (M19a) is callable on any value whose type satisfies it, implicitly, when the type has no method of
+  its own by that name - so `Iterator<T>` in the prelude declares `Any`/`All`/`Count`/`Fold` once and
+  `l.Iter().Count(f)`, `a.Iter().Any(f)`, `m.Iter().Fold(...)` all work, with `List`'s own copies removed (`Map` and
+  `Filter` stay on `List`: they build a `List`, which the prelude cannot name). Interfaces searched: the calling
+  module's, its imports', the prelude's; two that both offer the name is an error at the call. This revised the
+  user's earlier (a) ("defaults only through the interface"); declared conformance (`satisfies`), naming the
+  interface at the call (`x.Iterator.Count()`) and `:` as the module separator were weighed - the user found them
+  confusing for now and deferred `:` and the naming as open questions. Called this way the method runs through the
+  interface's dispatch table; compiling it per concrete type is possible later.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

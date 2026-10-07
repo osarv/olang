@@ -6,3 +6,41 @@
 type Iterator<T> interface {
     mut Next() (<T>, Bool)
 }
+
+# what every iterator can do, declared once here (M19e): callable on any value whose type satisfies Iterator -
+# "l.Iter().Count(f)", "m.Iter().Any(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
+# Each walks the iterator onward from where it stands.
+
+# true when keep holds for at least one value
+fn (it mut Iterator<<T>>&) Any(keep fn(x <T>) Bool) Bool {
+    for x in it {
+        if keep(x) { return true }
+    }
+    return false
+}
+
+# true when keep holds for every value - so for none, when there are none
+fn (it mut Iterator<<T>>&) All(keep fn(x <T>) Bool) Bool {
+    for x in it {
+        if not keep(x) { return false }
+    }
+    return true
+}
+
+# how many values keep holds for
+fn (it mut Iterator<<T>>&) Count(keep fn(x <T>) Bool) Int64 {
+    n Int64 = 0
+    for x in it {
+        if keep(x) { n++ }
+    }
+    return n
+}
+
+# every value folded into one, starting from init
+fn (it mut Iterator<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
+    acc <U> = init
+    for x in it {
+        acc = f(acc, x)
+    }
+    return acc
+}
