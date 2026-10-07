@@ -3422,7 +3422,8 @@ struct operatorShape { const char* name; int operands; bool result; };
 static const struct operatorShape operatorShapes[] = {
     {"Plus", 1, true}, {"Minus", 1, true}, {"Mul", 1, true}, {"Div", 1, true}, {"Rem", 1, true},
     {"MatMul", 1, true}, {"Neg", 0, true}, {"Less", 1, true}, {"At", 1, true}, {"SetAt", 2, false},
-    {"Slice", 2, true},
+    {"Slice", 2, true}, {"BitAnd", 1, true}, {"BitOr", 1, true}, {"BitXor", 1, true}, {"ShiftLeft", 1, true},
+    {"ShiftRight", 1, true}, {"BitNot", 0, true}, {"Inc", 0, true}, {"Dec", 0, true},
 };
 
 //a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
@@ -6335,6 +6336,11 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
         case TOK_DIV: capName = "Div"; break;
         case TOK_MOD: capName = "Rem"; break;
         case TOK_AT: capName = "MatMul"; break;
+        case TOK_BTWSE_AND: capName = "BitAnd"; break;
+        case TOK_BTWSE_OR: capName = "BitOr"; break;
+        case TOK_BTWSE_XOR: capName = "BitXor"; break;
+        case TOK_BTSFT_L: capName = "ShiftLeft"; break;
+        case TOK_BTSFT_R: capName = "ShiftRight"; break;
         case TOK_LST: capName = "Less"; break;
         case TOK_GRT: capName = "Less"; swap = true; break;
         case TOK_LSE: capName = "Less"; swap = true; negate = true; break;
@@ -6532,6 +6538,7 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
+static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
     struct operand* result = buildExprFromSyntax(ctx, partSntx(s, n -1)); //last part is EXPR_POSTFIX
@@ -6539,8 +6546,13 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
         struct syntax* opNode = partSntx(s, i); //SNTX_EXPR_UNARY_OP
         struct token opTok = partAt(opNode, 0)->tok;
         //E31: negation a type declares ("fn (v Vec2) -() Vec2")
-        const char* negName = opTok.type == TOK_SUB ? operatorMethodName(ctx, result->type, "Neg") : NULL;
+        const char* negName = opTok.type == TOK_SUB ? operatorMethodName(ctx, result->type, "Neg")
+                            : opTok.type == TOK_BTWSE_INV ? operatorMethodName(ctx, result->type, "BitNot") : NULL;
         if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
+        if (opTok.type == TOK_INC || opTok.type == TOK_DEC) {
+            struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
+            if (r) { result = r; continue; }
+        }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
     }
     return result;
@@ -6636,6 +6648,34 @@ static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* call
     return call;
 }
 
+//E31: "x++" / "x--" on a type that is not numeric - x = x.Inc() (Dec), a method the type may declare, or else
+//x = x + 1 (x - 1) through its Plus (Minus), for a type whose Plus takes the literal one. Postfix gives the old
+//value, prefix the new. NULL when the type has neither, leaving the built-in form and its error.
+struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok);
+static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok) {
+    if (TypeIsNumeric(target->type) || target->type.bType == BASETYPE_TYPEVAR) return NULL;
+    const char* own = operatorMethodName(ctx, target->type, inc ? "Inc" : "Dec");
+    const char* arith = own ? NULL : operatorMethodName(ctx, target->type, inc ? "Plus" : "Minus");
+    if (!own && !arith) return NULL;
+    struct operand* seq = operandNew(tok, OPERATION_SEQ, target->type);
+    seq->isIncDec = true;
+    seq->comprBody = ListInit(sizeof(struct statement));
+    struct var* old = prefix ? NULL : holdInHidden(ctx, target, tok, "old", &seq->comprBody);
+    struct token one = tok;
+    one.type = TOK_INT_LIT;
+    one.str = StrFromCStr("1");
+    struct operand* next = own ? operatorCall(ctx, target, NULL, own, tok)
+                               : operatorCall(ctx, target, OperandIntLiteral(one), arith, tok);
+    struct token eq = tok;
+    eq.type = TOK_ASS;
+    eq.str = StrFromCStr("=");
+    struct statement set = buildAssignCore(ctx, target, next, eq);
+    ListAdd(&seq->comprBody, &set);
+    struct operand* val = old ? OperandReadVar(old, tok) : target;
+    ListAdd(&seq->args, &val);
+    return seq;
+}
+
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     //E13b: a "try" covers the chain's last call, not a call inside it
     struct syntaxPart* lastPart = partAt(s, s->parts.len - 1);
@@ -6651,7 +6691,9 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     for (int i = startIdx; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) {
-            if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
+            struct operand* incDec = buildIncDec(ctx, result, p->tok.type == TOK_INC, false, p->tok); //E31
+            if (incDec) result = incDec;
+            else if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
             else result = OperandUnary(result, OPERATION_POSTFIX_DEC, p->tok);
         } else if (p->sntx->type == SNTX_EXPR_INDEX) {
             struct syntax* idxExprNode = firstPartOfType(p->sntx, SNTX_EXPR);
@@ -8315,6 +8357,11 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             case OPERATION_MUL: binTok.type = TOK_MUL; break;
             case OPERATION_DIV: binTok.type = TOK_DIV; break;
             case OPERATION_MOD: binTok.type = TOK_MOD; break;
+            case OPERATION_BTWSE_AND: binTok.type = TOK_BTWSE_AND; break;
+            case OPERATION_BTWSE_OR: binTok.type = TOK_BTWSE_OR; break;
+            case OPERATION_BTWSE_XOR: binTok.type = TOK_BTWSE_XOR; break;
+            case OPERATION_BTSFT_L: binTok.type = TOK_BTSFT_L; break;
+            case OPERATION_BTSFT_R: binTok.type = TOK_BTSFT_R; break;
             default: binTok.type = TOK_NONE; break;
         }
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
@@ -8358,6 +8405,11 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             case OPERATION_MUL: cap = "Mul"; break;
             case OPERATION_DIV: cap = "Div"; break;
             case OPERATION_MOD: cap = "Rem"; break;
+            case OPERATION_BTWSE_AND: cap = "BitAnd"; break;
+            case OPERATION_BTWSE_OR: cap = "BitOr"; break;
+            case OPERATION_BTWSE_XOR: cap = "BitXor"; break;
+            case OPERATION_BTSFT_L: cap = "ShiftLeft"; break;
+            case OPERATION_BTSFT_R: cap = "ShiftRight"; break;
             default: break;
         }
         const char* nm = cap ? operatorMethodName(ctx, target->type, cap) : NULL;
@@ -8563,6 +8615,7 @@ static bool exprCanStandAsStatement(struct operand* op) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC:
         case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             return true;
+        case OPERATION_SEQ: return op->isIncDec; //E31: an increment a type declares
         //P9: every atomic builtin writes its target, which is exactly S3's own criterion. "atomicStore"
         //has no value at all, and the other four are routinely wanted for the write rather than the value
         //they return - a discarded "atomicAdd" is a counter bump, not dead code.

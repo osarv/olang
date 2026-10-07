@@ -7527,3 +7527,10 @@ from their original form.
   old behaviour (`n.Whisper()` through the interface ran the default); it now pins the override. Loop speed is
   unchanged (the interface-value `Count` loop still matches the hand loop). The user also asked whether interfaces
   need whole-program compilation - they do not; tables are per (type, interface) pair, emitted where converted.
+
+- **Bitwise operators and increments (E31, 2026-10-07).** From the list of further overloading candidates the user
+  took the bitwise and shift set as proposed, and the increments with a twist of their own: derived from `Plus`/
+  `Minus` with the literal one, but overridable through `Inc`/`Dec` for a type where adding one makes no sense. An
+  increment on such a type lowers to the statements-then-value operand (`OPERATION_SEQ`), holding the old value
+  for the postfix form; S3 accepts it as a statement as it accepts the built-in increments. The callable struct
+  (`Call`) was not understood as proposed and is open, as is `for ... in` over `At` and `Len`.

@@ -6642,6 +6642,41 @@ fn (g OpGrid&) Slice(lo Int64, hi Int64) Array<Int32> { return Int32[g.cells[i] 
 # borrowed from the receiver is legal
 fn (g OpGrid&) Row(lo Int64, hi Int64) Array<Int32>&g { return g.cells[lo:hi] }
 
+type OpBits struct(v Int64) {
+    v
+}
+
+fn (a OpBits) BitAnd(b OpBits) OpBits { return OpBits(a.v & b.v) }
+fn (a OpBits) BitOr(b OpBits) OpBits { return OpBits(a.v | b.v) }
+fn (a OpBits) BitXor(b OpBits) OpBits { return OpBits(a.v ^ b.v) }
+fn (a OpBits) ShiftLeft(n Int32) OpBits { return OpBits(a.v << Int64(n)) }
+fn (a OpBits) ShiftRight(n Int32) OpBits { return OpBits(a.v >> Int64(n)) }
+fn (a OpBits) BitNot() OpBits { return OpBits(~a.v) }
+
+type OpCtr struct(n Int32) {
+    n
+}
+
+fn (c OpCtr) Plus(k Int32) OpCtr { return OpCtr(c.n + k) }
+fn (c OpCtr) Minus(k Int32) OpCtr { return OpCtr(c.n - k) }
+
+type OpStep struct(n Int32) {
+    n
+}
+
+fn (s OpStep) Inc() OpStep { return OpStep(s.n + 10) }
+fn (s OpStep) Dec() OpStep { return OpStep(s.n - 10) }
+
+fn opBitsBaked() Int64 {
+    c OpBits = OpBits(12) & OpBits(10)
+    c |= OpBits(1)
+    k OpCtr = OpCtr(5)
+    k++
+    return c.v + Int64(k.n)
+}
+
+OpBitsBaked := opBitsBaked()
+
 OpDotBaked Int32 = (OpVec(1, 2) + OpVec(3, 4)) @ OpVec(1, 1)
 
 test "E31: operators call methods named for them - arithmetic, negation, ordering, @, compound assignment" {
@@ -6661,6 +6696,32 @@ test "E31: operators call methods named for them - arithmetic, negation, orderin
     assert v.x == 4 and v.y == 6
     m := OpMoney(5) + OpMoney(6)
     assert Int64(m) == 12
+}
+
+test "E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from Plus/Minus" {
+    a := OpBits(12)
+    b := OpBits(10)
+    assert (a & b).v == 8 and (a | b).v == 14 and (a ^ b).v == 6
+    assert (a << 2).v == 48 and (a >> 2).v == 3
+    assert (~OpBits(0)).v == -1
+    c OpBits = a
+    c |= OpBits(1)
+    assert c.v == 13
+    k OpCtr = OpCtr(5)
+    k++
+    assert k.n == 6
+    old OpCtr = k++
+    assert old.n == 6 and k.n == 7
+    nw OpCtr = ++k
+    assert nw.n == 8
+    k--
+    assert k.n == 7
+    st OpStep = OpStep(0)
+    st++
+    assert st.n == 10
+    --st
+    assert st.n == 0
+    assert OpBitsBaked == 15
 }
 
 test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {

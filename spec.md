@@ -1986,6 +1986,9 @@ type declares one:
 | `x[i]` | `At` | one operand, a result |
 | `x[i] = v` | `SetAt` | two operands, no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
+| `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
+| `~a` | `BitNot` | none, a result |
+| `x++`, `x--` (either side) | `Inc`, `Dec` | none, a result |
 
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
 name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
@@ -2004,7 +2007,12 @@ that becomes the receiver, `a` still evaluated before `b` - and they chain (E30)
 returning a writable borrowed reference (`At(i Int64) mut T&x`) makes `x[i].f = v` write the element. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
-`==`, `!=` (E10) and `$` (E11a) are never declared.
+`x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
+`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`; postfix gives the value
+before, prefix the value after. A type with neither is an error, as for any other non-numeric type.
+
+`==`, `!=` (E10) and `$` (E11a) are never declared, nor are `and`, `or`, `not` (they short-circuit, E7), `=`, `.`,
+`try` and `match`.
 
 ## 6. Statements
 

@@ -2555,6 +2555,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   table entry and stays static. The user asked whether interfaces therefore need whole-program builds: no - a table
   belongs to one (type, interface) pair and is emitted where the conversion is written; only a switch-dispatch
   speedup would need the whole program.
+- **Bitwise operators and increments overloadable too (E31, 2026-10-07, the user's call).** `BitAnd`, `BitOr`, `BitXor`,
+  `ShiftLeft`, `ShiftRight`, `BitNot` (and their `op=`); `x++`/`x--` call `Inc`/`Dec`, or are derived as `x = x + 1`
+  through `Plus` when the type declares no `Inc` (the user: derived, but overridable "if the type doesn't play nice
+  with ones"). Not overloadable, confirmed by the user: `==`/`!=`, `$`, `and`/`or`/`not`, `=`, `.`, `try`, `match`.
+  `for ... in` over a type with `At`/`Len`, and a callable struct (`f(x)`), are open for discussion.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
