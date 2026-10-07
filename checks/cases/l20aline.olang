@@ -1,0 +1,4 @@
+## check: fail unexpected token '(' expected 'end of statement'
+## L20a: a closing ">" ends a declaration only as the line's last token - the "(" is not a new statement
+state Array<Float32>(4)
+fn main() ? { }

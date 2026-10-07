@@ -106,7 +106,11 @@ bool acceptStmntEnd(SyntaxCtx sc) {
     //TOK_GRT/TOK_BTSFT_R: a type's argument list closing a declaration with no initializer ("none <T>",
     //"q Pair<Int32, <T>>") - a "greater than" is never a complete statement's last token, since the
     //expression parser always goes on to its right operand, so this cannot end a comparison early
-    return prev == TOK_CURLY_C || prev == TOK_BTWSE_AND || prev == TOK_MUT || prev == TOK_GRT || prev == TOK_BTSFT_R;
+    if (prev == TOK_CURLY_C) return true;
+    if (!(prev == TOK_BTWSE_AND || prev == TOK_MUT || prev == TOK_GRT || prev == TOK_BTSFT_R)) return false;
+    //L20a: only as the LAST token - one the line goes on past ("state Array<Float32>(n)") is not a statement's end
+    struct token next = peekTok(sc);
+    return next.type == TOK_NONE || next.lineNr > prevTok(sc).lineNr;
 }
 
 // ---- tree-building primitives ----
@@ -3251,22 +3255,50 @@ static void skipStmntEnds(SyntaxCtx sc) {
 
 //one top-level declaration, or a nested top-level "if", added to out; reports and recovers from a
 //declaration that does not parse, exactly as the file-level loop does
+//after a top-level item failed to parse: skips the whole item from its start - through any block it opens,
+//so the statements inside a broken function or test are not read again as top-level declarations, each
+//reported once more - to the end of its line, or of its last block
+static void skipTopItem(SyntaxCtx sc, int start) {
+    TokenSetCursor(sc->tc, start);
+    int depth = 0;
+    while (true) {
+        int at = TokenGetCursor(sc->tc);
+        struct token t = TokenFeed(sc->tc);
+        if (t.type == TOK_NONE) return;
+        if (t.type == TOK_CURLY_O) depth++;
+        else if (t.type == TOK_CURLY_C) {
+            if (depth == 0) { TokenSetCursor(sc->tc, at); return; } //an enclosing branch's own "}"
+            if (--depth == 0) {
+                struct token next = peekTok(sc);
+                if (next.type == TOK_NONE || next.type == TOK_STMNT_END || next.lineNr > t.lineNr) return;
+            }
+        } else if (depth == 0 && t.type == TOK_STMNT_END) return;
+    }
+}
+
+//the token a failed top-level item is reported at; where nothing got past the item's first token, every
+//alternative failed there and the last one tried says nothing useful - "a declaration" is what was wanted
+static void reportTopItemFailure(SyntaxCtx sc, int start) {
+    bool atFirst = sc->furthestPos <= start +1;
+    ErrMsgUnexpectedToken(sc->furthestTok, !atFirst && sc->furthestExpected ? sc->furthestExpected : "declaration");
+}
+
 static void parseTopItem(SyntaxCtx sc, struct list* out) {
     sc->localNames = ListInit(sizeof(struct str)); //S8b: a fresh function, test or type
     sc->itemIncomplete = false;
+    int start = TokenGetCursor(sc->tc);
+    sc->furthestPos = start;
     if (peekTok(sc).type == TOK_IF) {
         if (!parseTopIf(sc, out)) {
-            ErrMsgUnexpectedToken(sc->furthestTok, sc->furthestExpected ? sc->furthestExpected : "declaration");
-            TokenFeedUntil(sc->tc, TOK_STMNT_END);
+            reportTopItemFailure(sc, start);
+            skipTopItem(sc, start);
         }
         return;
     }
-    sc->furthestPos = TokenGetCursor(sc->tc);
     struct syntax* decl = parseTopDecl(sc);
     if (!decl) {
-        char* expected = sc->furthestExpected ? sc->furthestExpected : "declaration";
-        ErrMsgUnexpectedToken(sc->furthestTok, expected);
-        TokenFeedUntil(sc->tc, TOK_STMNT_END);
+        reportTopItemFailure(sc, start);
+        skipTopItem(sc, start);
         return;
     }
     if (sc->itemIncomplete) addSntx(partSntxOf(decl), newNode(SNTX_BODY_INCOMPLETE)); //S8b

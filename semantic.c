@@ -612,6 +612,15 @@ bool isKnownTypeForParsing(void* ctxPtr, struct list aliasChain, struct str name
         struct str* n = ListGetIdx(&target->declaredTypeNames, i);
         if (StrCmp(*n, name)) return true;
     }
+    //M19d: the prelude's exported types are named bare in every module ("Pair<Int32, Int32>(1, 2)")
+    if (aliasChain.len == 0 && isPublic(name)) {
+        for (int m = 0; m < preludeModules.len; m++) {
+            struct semaModule* pm = *(struct semaModule**)ListGetIdx(&preludeModules, m);
+            for (int i = 0; i < pm->declaredTypeNames.len; i++) {
+                if (StrCmp(*(struct str*)ListGetIdx(&pm->declaredTypeNames, i), name)) return true;
+            }
+        }
+    }
     return false;
 }
 
@@ -1525,6 +1534,7 @@ void TypeCollectVars(struct type t, struct list* out) {
 //appear in: a non-generic parameter is checked by the ordinary OperandFitsType path afterwards, so this
 //only has to be exact where a binding is actually being extracted.
 static int numericTypeRank(struct type t);
+static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
 bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     if (param.bType == BASETYPE_TYPEVAR) {
         struct type* bound = bindingGet(bindings, param.name);
@@ -1541,6 +1551,11 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
         return true;
     }
     if (!TypeIsGeneric(param)) return true; //nothing to bind here; ordinary fit-checking covers it
+    //G9c: a concrete type reaching a generic interface ("Source<<T>>&" given a ListIter<Int32>) binds through the
+    //methods that satisfy it - each interface method's parameters and result against the concrete method's
+    if (param.bType == BASETYPE_INTERFACE && arg.bType != BASETYPE_INTERFACE && arg.bType != BASETYPE_TYPEVAR) {
+        return unifyThroughMethods(param, arg, bindings);
+    }
     if (param.bType != arg.bType) return false;
     if (param.bType == BASETYPE_ARRAY) return TypeUnify(*param.arrElem, *arg.arrElem, bindings);
     //two applications of one generic unify through their arguments - see typeIsDeclaredStruct
@@ -4078,6 +4093,36 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     //not on who is writing the conversion, so a sealed interface still travels normally.
     if (!isPublic(m->name) && m->owner != f->owner) return NULL;
     return f;
+}
+
+//G9c: binds the variables in a generic interface application from the methods a concrete type supplies for it.
+//Only the binding is done here; whether the concrete type then really satisfies the interface the
+//substitution gives is the ordinary conversion's question, asked at the fit check.
+static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings) {
+    for (int i = 0; i < iface.vars.len; i++) {
+        struct var* m = ListGetIdx(&iface.vars, i);
+        if (m->type.bType != BASETYPE_FUNC) continue;
+        struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
+        if (!f || f->type.bType != BASETYPE_FUNC || f->type.isExtern) return false;
+        if (f->type.typeParams.len > 0) { //a generic type's method: the receiver fixes which instantiation
+            struct list own = ListInit(sizeof(struct typeBinding));
+            if (!TypeUnify((*(struct var*)ListGetIdx(&f->type.vars, 0)).type, concrete, &own)) return false;
+            for (int j = 0; j < f->type.typeParams.len; j++) {
+                if (!bindingGet(&own, *(struct str*)ListGetIdx(&f->type.typeParams, j))) return false;
+            }
+            f = instantiateFunc(f, &own);
+            if (!f) return false;
+        }
+        if (f->type.vars.len != m->type.vars.len +1) return false;
+        for (int j = 0; j < m->type.vars.len; j++) {
+            if (!TypeUnify((*(struct var*)ListGetIdx(&m->type.vars, j)).type,
+                           (*(struct var*)ListGetIdx(&f->type.vars, j +1)).type, bindings)) return false;
+        }
+        if (m->type.hasRetType) {
+            if (!f->type.hasRetType || !TypeUnify(*m->type.retType, *f->type.retType, bindings)) return false;
+        }
+    }
+    return true;
 }
 
 //T31: structural, implicit satisfaction - every method the interface declares, supplied by the concrete

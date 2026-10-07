@@ -7274,3 +7274,24 @@ from their original form.
   (lambda finalizing, S8c's write scan, K1a's static scan). `try f(x)(y)` covers the last call: the inner call is
   checked with fallible calls disallowed, so a fallible inner call needs its own `try`. Line ends are already
   statement ends (L18), so a parenthesized expression starting the next line was never at risk - a test pins it.
+
+- **Inference through satisfaction (G9c, 2026-10-07).** The last of the generic-interface follow-ups recorded with
+  T35a: `genFirst(c)` with `c` a concrete `ForCounter` failed to infer `T` in `GenSource<<T>>&`, so a caller had to
+  convert to an interface value first. `TypeUnify` now meets a generic interface application with a concrete
+  argument by looking up, for each interface method, the method the concrete type supplies (instantiated for a
+  generic receiver, exactly as `InterfaceMethodImpl` does) and unifying parameters and results. It only binds;
+  whether the type really satisfies the substituted interface is still checked by the ordinary conversion, so a
+  wrong `mut` or error list is reported where it always was. `total(l.Iter())` over a List works with nothing
+  written. The evaluator needed nothing: binding is a checker step, and a call through an interface is outside K1.
+  **Three parser defects found writing its test.** (1) `Pair<Int32, Int64>(1, 2)` did not parse in any module but
+  the prelude: `isKnownTypeForParsing` looked only at the module's own declared names, while the checker resolves
+  prelude types by bare name (M19d) - so the type position worked and the expression position, which the parser
+  must commit to, did not. (2) L20a let a `>`, a bare `&` or a `mut` end a statement wherever it fell, not only at
+  a line's end as the spec says; `state Array<Float32>(stateSize)` (written in a user program) became a valid
+  declaration followed by an item starting at `(`, reported as "unexpected token '(' expected 'test'". (3) Error
+  recovery after a failed top-level item fed tokens to the next statement end - the end of the item's first line -
+  so the rest of a broken function or test was parsed as top-level declarations and each line re-reported; it
+  could even declare a test's locals as globals and then report D3a clashes against them. The item is now skipped
+  through its blocks, and one failing at its very first token reports "expected 'declaration'" instead of the
+  name of whichever alternative happened to be tried last. Two check cases pin (2) and (3); the old compiler gives
+  five errors for the one-typo case.

@@ -246,6 +246,10 @@ because the grammar never expects one there and L18 never produces one there eit
   with no initializer (`none <T>`, `q Pair<Int32, Int64>`). A `>` used as "greater than" is always followed
   by its right operand, so it is never a complete statement's last token.
 
+Each of the last three applies only where its token is the last on its line (or of the file): a token after it
+on the same line continues the statement, so `s Array<Int32>(4)` is a syntax error at the `(`, not a declaration
+followed by a parenthesized expression.
+
 ## 2. Types
 
 ### 2.1 Kinds of types
@@ -3553,6 +3557,12 @@ the variable is the text's own type (`String`).
 variable already bound by an earlier argument takes no part in it: the argument is then checked against the
 bound type as in any call, with E12's conversions - so `m.Get(key)` with `K` bound to `String&` borrows a `String`
 value `key` as any `String&` parameter would.
+
+**G9c.** An argument of a concrete (non-interface) type whose parameter is an application of a generic interface
+(`s mut Source<<T>>&`) is matched through the methods that make it satisfy that interface (T31): each interface
+method's parameter types and result are matched against those of the method the argument's type supplies under
+the same name. So a `ListIter<Int32>` passed to `Iterator<<T>>&` binds `T` to `Int32`. Whether the argument then
+satisfies the interface the bindings give is decided by the ordinary conversion (E12d).
 
 **G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<Int32>`
 and `Vec<Int64>` are different types (T27); two instantiations are the same type exactly when the

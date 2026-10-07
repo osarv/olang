@@ -2405,6 +2405,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   value it gives - `id(dbl)(3)`, `fs[i](x)`, `adder(3)(4)` - lowered as an ordinary call whose target is a
   synthetic var of the callee's type, with the callee expression on the operand (`callee`) for codegen and the
   evaluator to compute; `try` before a chain covers its last call. A `(` on a new line stays a new statement.
+- **Inference through satisfaction (G9c, 2026-10-07).** A concrete argument reaching a generic-interface parameter
+  (`total(it mut Iterator<<T>>&)` given a `ListIter<Int32>`) binds `T` through the methods that satisfy it - before,
+  an interface value had to be made first. Binding only; satisfaction is still the conversion's check. Dispatch
+  stays outside K1, so there is no compile-time twin of the test. **Found on the way, pre-existing**: a prelude
+  generic type with written arguments did not parse as an expression outside the prelude (`Pair<Int32, Int64>(1,
+  2)` - the parser's type-name predicate never looked at the prelude); L20a's `>`/`&`/`mut` statement ends fired
+  mid-line, so `s Array<Int32>(4)` became a declaration plus a stray `(4)` reported as "expected 'test'"; and a
+  top-level item that failed to parse was skipped only to the end of its first line, so every later line of a
+  broken function or test was re-reported as a bad declaration (5 errors for one typo). A failed item is now
+  skipped whole, and one failing at its first token says "expected 'declaration'".
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
