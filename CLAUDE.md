@@ -2490,8 +2490,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   another signature (error recommended), and whether the body sits inside the interface (recommended). *Constraints*
   (`<T Shape>`): worth it mostly for errors at the call and visible requirements, since a generic body is already
   checked per instantiation; recommended as interfaces doubling as constraints rather than a new keyword (`group` is
-  wrong by group theory). *Operator overloading* deferred until a real program needs it: free `fn *(a A, b B) C`,
-  heterogeneous, declared in A's or B's module, plain-data results; the `Self`-in-interfaces question goes with it.
+  wrong by group theory). *Operator overloading* - **decided later the same day, not built**: operators are methods named by their
+  symbol, `fn (a Vec2) +(b Vec2) Vec2`, reached only through the operator. Declarable: `+ - * / %`, unary `-`, `<`
+  (`> <= >=` derived from it) and `$` (reversing E11a's "nothing overrides `$`" - to confirm when built). Not
+  declarable: `==`/`!=` (structural / identity stay the language's), `@` (dropped). No built-in on the left
+  (`2.0 * v`); several right-hand types go through one generic method with a constraint and `match <T>`, so
+  constraints come first. Any value result, built results following the ordinary scope rules. *Constraints* were
+  decided too (interfaces doubling as constraints, `<T Iterator<Int32>>`), also not built.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
