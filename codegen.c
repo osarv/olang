@@ -4120,6 +4120,11 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
             char* matched = "false";
             for (int i = 0; i < cc->matches.len; i++) {
                 struct catchMatch* cm = ListGetIdx(&cc->matches, i);
+                //a clause of a try covering several things may name an error this call cannot produce (E31a)
+                bool produced = false;
+                for (int k = 0; k < funcType->errors.len && !produced; k++)
+                    produced = TypeIsSame(**(struct type**)ListGetIdx(&funcType->errors, k), cm->errType);
+                if (!produced) continue;
                 int ord = errorTypeOrdinal(*funcType, cm->errType);
                 char* cmp = cgNewTmp(ctx);
                 if (cm->hasWord) {
@@ -4136,10 +4141,41 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
             ctx->terminated = true;
         }
         cgLabel(ctx, clauseLbl);
+        //a failure from a block nested inside the try (a comprehension's loop, S9e) leaves those blocks first, as a
+        //break does, and the clause then runs where the try is
+        int savedSlots = ctx->blockSlots.len, savedDepth = ctx->blockDepth;
+        bool unwound = op->cgDepthSet && ctx->blockSlots.len > op->cgSlots;
+        char* keptSlots[64];
+        char* keptJoins[64];
+        if (unwound && savedSlots - op->cgSlots > 64) unwound = false; //deeper than any program nests
+        for (int i = op->cgSlots; unwound && i < savedSlots; i++) {
+            keptSlots[i - op->cgSlots] = *(char**)ListGetIdx(&ctx->blockSlots, i);
+            keptJoins[i - op->cgSlots] = *(char**)ListGetIdx(&ctx->blockJoins, i);
+        }
+        if (unwound) {
+            for (int i = ctx->blockSlots.len - 1; i >= op->cgSlots; i--) {
+                char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
+                if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
+                fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
+            }
+            if (ctx->ownUnwindNode) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", cgUnwindBelow(ctx, op->cgSlots));
+            ctx->blockSlots.len = op->cgSlots;
+            ctx->blockJoins.len = op->cgSlots;
+            ctx->blockDepth = op->cgDepth;
+        }
         if (cc->hasBlock) cgBlock(ctx, &cc->block);
         if (cc->dflt) cgTryDefaultStore(ctx, op, cc->dflt);
         else if (endLbl) cgBr(ctx, endLbl);
         else if (!ctx->terminated) { fputs("  unreachable\n", ctx->fnOut); ctx->terminated = true; }
+        if (unwound) { //the clause's own blocks reused the entries it left; the try's inner ones come back
+            ctx->blockSlots.len = op->cgSlots;
+            ctx->blockJoins.len = op->cgSlots;
+            for (int i = 0; i < savedSlots - op->cgSlots; i++) {
+                ListAdd(&ctx->blockSlots, &keptSlots[i]);
+                ListAdd(&ctx->blockJoins, &keptJoins[i]);
+            }
+            ctx->blockDepth = savedDepth;
+        }
         cgLabel(ctx, nextLbl);
     }
     //reached only by an error no clause named
@@ -4175,6 +4211,11 @@ char* cgCond(struct cgCtx* ctx, struct operand* op);
 char* cgCmpChain(struct cgCtx* ctx, struct operand* op);
 char* cgValue(struct cgCtx* ctx, struct operand* op) {
     if (op->cgCached) return op->cgCached; //E30: a chain's shared operand, computed once
+    if (op->isTried && ctx->tdOp != op) { //where its clauses run, should a failure come from a block nested inside it
+        op->cgSlots = ctx->blockSlots.len;
+        op->cgDepth = ctx->blockDepth;
+        op->cgDepthSet = true;
+    }
     if (op->tryNeedsSlot && ctx->tdOp != op) return cgTryDefaultValue(ctx, op);
     switch (op->opType) {
         case OPERATION_COND: return cgCond(ctx, op);

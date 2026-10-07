@@ -1961,7 +1961,9 @@ own, under every rule a value landing there meets (E12, §8). It is text written
 ask whether `x` is in the collection `c`. When `x` has the collection's own type (references aside - or is text
 written in place and `c` is text), it is `c.Contains(x)`: whether `x` occurs in `c` as a contiguous run, a
 substring for text. Otherwise it is `c.Has(x)`, whether `x` is one of its elements (a key, for a `Map`). The method
-must exist and give a `Bool`. `not in` is `not (x in c)`. `x` is evaluated before `c`.
+must exist and give a `Bool`. `not in` is `not (x in c)`. `x` is evaluated before `c`. `Has` and `Contains` may
+declare errors - a question whose answer can fail, like a set kept elsewhere - and are then reached under `try`, which
+reaches through them as through an operator (E15a): `if try (x in c) catch default false { }`.
 
 The prelude gives every array `Has` and `Contains`, both comparing elements by the element type's `Eq` method, so
 text is found by what it says (E10 would compare a reference's identity); `List` and `Map` have `Has`.
@@ -2202,6 +2204,10 @@ iterator does not satisfy `Iterator<T>`, whose `Next` cannot fail, and needs onl
 receiver. An error from one of these calls **ends the loop**: the first clause naming it runs its block, and control
 continues after the loop; an error no clause names propagates, as from any `try`. A clause runs once the loop has
 ended, so a `break` or `continue` directly in one is a compile-time error.
+
+A **comprehension** (E27) makes the same calls and has no clauses of its own: one whose own calls can fail is
+written under `try` - `try Int32[f(x) for x in lines] catch default Int32[]` - which checks it as E15a checks any
+expression, those calls included; an error from them abandons the array being built.
 
 **S9b (`range`).** After a `for`'s `in` (and nowhere else), `range-expr ::= "range" expr [ "," expr [ "," expr ] ]`
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its

@@ -2618,6 +2618,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   `SetAt` and no `At` crashed the compiler; the evaluator did not let a tried index's own clauses take a check failing
   inside its index (`try a[b[i]]`), disagreeing with the run time; and a slice with its end left out evaluated its
   base twice.
+- **`try (x in c)` and `try T[e for x in c]` (E29/S9e, 2026-10-07, the user's call: "build both").** The user asked
+  where else `try` had nowhere to go; the two answers were membership, whose `Has`/`Contains` may now fail (no
+  `TryHas` - a question that can fail always can, as `Call`), and comprehensions, which make a loop's implicit calls
+  but have no body to hang clauses on. `try` before the comprehension checks it as E15a checks any expression -
+  arithmetic in the element included, which the user should know (`catch TxErr + BuiltinError`). The array element
+  reads the lowering makes are `noCheck`. Codegen needed a real fix: an error from inside the comprehension's loop
+  jumped to the try's clause without closing the loop's block scopes, so a clause now closes the scopes opened since
+  its try was emitted (recorded per operand: `cgSlots`/`cgDepth`) and runs at the try's depth. **Found on the way**:
+  a clause naming an error type its call cannot produce crashed codegen (`errorTypeOrdinal`) - reachable since E31a,
+  whenever one try covers a Try form and a built-in check.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

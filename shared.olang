@@ -7086,6 +7086,44 @@ test "E31/S9e: try calls the Try forms or derives them from Len; try on a store 
     fail
 }
 
+# E29/S9e: "try (x in c)" reaches a Has that can fail; "try T[e for x in c]" covers a comprehension's own calls, an
+# error from deep inside its loop leaving the loop's blocks before the clause runs
+type TxRemote struct(down Bool) {
+    down
+}
+
+fn (r TxRemote&) Has(x Int32) Bool ? TxErr {
+    if r.down { error TxErr.MISSING }
+    return x > 3
+}
+
+fn txMember(down Bool) Int32 {
+    r TxRemote& = TxRemote(down)
+    t := 0
+    if try (5 in r) catch default false { t += 1 }
+    if try (2 not in r) catch default false { t += 10 }
+    return t
+}
+
+fn txCollect(n Int32, failAt Int32) Int32 {
+    l TxLines& = TxLines(n, failAt)
+    xs := try Int32[x * 2 for x in l if x != 2] catch TxErr + BuiltinError default Int32[-1]
+    t := 0
+    for x in xs { t += x }
+    return t
+}
+
+TxMemberBaked := txMember(false)
+TxCollectBaked := txCollect(4, 3)
+
+test "E29/S9e: try reaches a fallible Has, and a comprehension's own calls" {
+    assert txMember(false) == 11 and TxMemberBaked == 11
+    assert txMember(true) == 0
+    assert txCollect(4, 99) == 16
+    assert txCollect(4, 3) == -1 and TxCollectBaked == -1
+    for k in range 1000 { assert txCollect(4, 3) == -1 }
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

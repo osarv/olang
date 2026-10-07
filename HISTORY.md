@@ -7595,3 +7595,14 @@ from their original form.
   type with `SetAt` and no `At` crashed the compiler on `x[i] = v`; the evaluator's `errBypass` made a tried index
   ignore a failure of a check nested in its own index, where the generated code takes it; and an absent slice end
   evaluated the sliced expression twice.
+
+- **`try (x in c)` and `try T[e for x in c]` (2026-10-07).** The user asked whether the `in` was tryable and where else
+  `try` should reach. The for loop's `in` is the loop's (S9e already covers its calls); the membership `in` is an
+  expression, so `try (x in c)` works once the membership call is marked as an operator call that `try` reaches
+  through, with `Has`/`Contains` allowed to fail. Comprehensions make a loop's calls with no body for clauses, so
+  `try` goes before the whole comprehension. Two codegen problems surfaced: the clause of a value-position try was
+  emitted at the failure site, which inside a comprehension's loop is several blocks deep - jumping to the join left
+  those block arenas open (a leak per failure, and destructors not run); a clause now closes them first, the
+  `blockSlots` entries saved and restored around it since the clause's own blocks reuse them. And `cgCatchDispatch`
+  asked for the ordinal of every type a clause named in the callee's error list, crashing when a try covering a Try
+  form and a built-in check named `BuiltinError` at the Try form's call.

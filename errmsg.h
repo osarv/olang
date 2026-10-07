@@ -149,6 +149,8 @@
 #define FOR_IN_NEEDS_TRY "this loop calls something that can fail by itself - its source, Iter(), Next() or TryAt() - so it is written 'for x in try c', with catch clauses after the body if the errors are handled here (S9e)"
 #define FOR_IN_TRY_NOTHING "'try' here covers what the loop calls by itself, and nothing this loop calls can fail - drop the 'try' (S9e)"
 #define FOR_IN_CLAUSE_LOOP_EXIT "a loop's catch clause runs once the loop has ended, so 'break' and 'continue' there have no loop of this one's to act on - set a flag and test it after the loop (S9e)"
+#define COMPR_NEEDS_TRY "this comprehension walks something whose own calls can fail - its source, Iter(), Next() or TryAt() - so it is written under 'try', as 'try T[e for x in c]' (E27, S9e)"
+#define MEMBERSHIP_NEEDS_TRY "'x in c' calls Has or Contains, and this one can fail - write it under 'try', as 'try (x in c)' (E29)"
 #define TRY_OPERATOR_MUST_FAIL "a Try method is the checked form of an operation - it declares the errors it can fail with (E31)"
 #define SLICE_NEEDS_LEN "a slice with its end left out is 'x[lo:x.Len()]', and this type has no Len (E31)"
 #define OPERATOR_SETAT_RESULT "SetAt, which 'x[i] = v' calls, gives no result (E31)"

@@ -6581,8 +6581,16 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     ListAdd(&args, &arg);
     prebuiltMethodArgs = &args;
     bool reported = false;
+    //a Has or Contains that can fail is reached under "try", which reaches through it as through an operator (E29)
+    bool prevAllow = ctx->allowFallibleCall;
+    ctx->allowFallibleCall = true;
     struct operand* call = buildMethodCall(ctx, c, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
+    ctx->allowFallibleCall = prevAllow;
     prebuiltMethodArgs = NULL;
+    if (call->opType == OPERATION_FUNCCALL) {
+        call->isOperatorCall = true;
+        if (call->readVar && call->readVar->type.errors.len && !ctx->checkingTry) ErrMsgSemantic(tok, MEMBERSHIP_NEEDS_TRY);
+    }
     if (!OperandIsBool(call)) ErrMsgSemantic(tok, MEMBERSHIP_NO_METHOD);
     struct operand* result = call;
     if (seq) { ListAdd(&seq->args, &call); result = seq; }
@@ -7211,7 +7219,8 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
     if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && (op->isTried || op->checkRoot)))
         return 0;
     unsigned w = 0;
-    if (op->opType == OPERATION_SEQ) w |= markCheckedStmts(&op->comprBody, root, errs); //held operands, an increment
+    //held operands, an increment; a comprehension's loop, whose own calls a "try" around it covers (S9e)
+    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) w |= markCheckedStmts(&op->comprBody, root, errs);
     if (op->opType == OPERATION_FUNCCALL) {
         struct list* es = &op->readVar->type.errors;
         if (es->len) {
@@ -7250,7 +7259,8 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
             else if (a0 && !TypeIsFloat(t) && TypeIsNumeric(a0->type) && a0->type.bType != t.bType
                      && !(t.bType == BASETYPE_INT64) && !(t.bType == BASETYPE_INT32 && a0->type.bType == BASETYPE_BYTE)) w = ovf;
             break;
-        case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
+        case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
+        case OPERATION_INDEX: if (!op->noCheck) w = oob; break;
         default: break;
     }
     if (w) op->checkRoot = root;
@@ -9618,6 +9628,8 @@ static struct token clauseLoopExit(struct syntax* n) {
 //ends the loop and what follows it runs; unnamed errors propagate. Without "try" a fallible one is an error.
 struct forInTry {
     bool on;              //"in try" was written
+    bool inExpr;          //a comprehension inside a "try": its calls are that try's to check, as an operator's are
+    bool isCompr;         //a comprehension's loop, which has no clauses of its own
     struct syntax* s;     //the for-in, whose clauses these are
     struct list errors;   //every error the loop's own calls can produce (struct type*)
     struct list calls;    //the fallible calls (struct operand*), clauses attached once all are known
@@ -9627,7 +9639,8 @@ struct forInTry {
 
 static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct operand* call) {
     if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar || !call->readVar->type.errors.len) return;
-    if (!ft->on) { ErrMsgSemantic(ft->kw, FOR_IN_NEEDS_TRY); return; }
+    if (!ft->on) { ErrMsgSemantic(ft->kw, ft->isCompr ? COMPR_NEEDS_TRY : FOR_IN_NEEDS_TRY); return; }
+    if (ft->inExpr) { call->isOperatorCall = true; return; }
     if (ft->calls.len >= 8) return;
     call->isTried = true;
     struct list* es = &call->readVar->type.errors;
@@ -9642,7 +9655,7 @@ static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct opera
 }
 
 static void forInTryFinish(struct forInTry* ft) {
-    if (!ft->on) return;
+    if (!ft->on || ft->inExpr) return;
     if (!ft->calls.len) { ErrMsgSemantic(ft->kw, FOR_IN_TRY_NOTHING); return; }
     bool hasClauses = firstPartOfType(ft->s, SNTX_CATCH_CLAUSE) != NULL;
     struct token bad = (struct token){0};
@@ -9705,6 +9718,9 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* rangeNode = firstPartOfType(s, SNTX_RANGE);
     struct forInTry ft = (struct forInTry){0};
     ft.on = hasTokOfType(s, TOK_TRY);
+    ft.inExpr = spec && ctx->checkingTry; //S9e: "try T[e for x in c]"
+    ft.isCompr = spec != NULL;
+    if (ft.inExpr) ft.on = true;
     ft.s = s;
     ft.kw = kw;
     ft.errors = ListInit(sizeof(struct type*));
@@ -9871,6 +9887,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
                                          : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
+        if (!indexable) elem->noCheck = true;
         if (indexable) forInTryNote(&ft, &lctx, elem);
         struct statement d = buildVarDeclFromOperand(&lctx, elemTok, elem);
         ListAdd(&body, &d);
@@ -11147,6 +11164,12 @@ static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struc
     for (int i = 0; i < stmts->len; i++) {
         struct statement* st = ListGetIdx(stmts, i);
         w |= markChecked(st->target, root, errs) | markChecked(st->op, root, errs) | markChecked(st->fillValue, root, errs);
+        w |= markChecked(st->forInit, root, errs);
+        if (st->forPost) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, st->forPost);
+            w |= markCheckedStmts(&one, root, errs);
+        }
         w |= markCheckedStmts(&st->block, root, errs);
         if (st->elseStmnt) {
             struct list one = ListInit(sizeof(struct statement));

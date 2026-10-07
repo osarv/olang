@@ -498,6 +498,10 @@ struct operand {
     bool isTryStmt;             //E31: an OPERATION_SEQ standing for "try x[i] = v" - its clauses are a statement's,
                                 //falling through to after it; cgEndLbl is where (codegen)
     char* cgEndLbl;
+    bool noCheck;               //S9e: an array element read a loop's lowering makes - in range by construction, so
+                                //a "try" around the loop does not check it
+    int cgSlots, cgDepth;       //codegen: the open block scopes where a tried operand with clauses is emitted - a
+    bool cgDepthSet;            //failure deeper inside it (a comprehension's loop) unwinds to there before a clause
     bool isInclusive;           //E31: OPERATION_BOUNDS only - the upper bound itself is allowed (a slice's)
     bool isAtCall;              //E31: "x[i]" written on a type declaring At - args [x, i]; "x[i] = v" becomes SetAt
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
