@@ -7305,3 +7305,11 @@ from their original form.
   value. A null interface value is refused. Pinned by globals baked through `GenSource<Int32>` and through G9c's
   `Iterator<<T>>&` inference, compared with the same computation at run time. The user's rule, recorded: the
   evaluator should handle everything it can.
+
+- **Arrays hand out iterators (T35b, 2026-10-07).** The `Iterable` question closed the cheap way, on my
+  recommendation which the user took: G9c made `total(l.Iter())` work for any concrete iterator, so the only thing
+  generic code over `Iterator<<T>>&` still could not take was an array, which had no `Iter()`. `ArrayIter<T>` in
+  `std/prelude/array.olang` holds the array by reference and an index; `String` inherits it (T29e). The test first
+  asserted that a second `for` over an exhausted by-value iterator ran zero times; it runs again, because S9a gives
+  the loop its own copy of a by-value iterator - the spec was right and the test now pins it. A global computed
+  through `a.Iter()` is baked (K2), matching the run time.

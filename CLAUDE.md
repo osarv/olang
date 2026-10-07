@@ -2417,6 +2417,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   top-level item that failed to parse was skipped only to the end of its first line, so every later line of a
   broken function or test was re-reported as a bad declaration (5 errors for one typo). A failed item is now
   skipped whole, and one failing at its first token says "expected 'declaration'".
+- **Arrays hand out iterators; no `Iterable` interface (T35b, 2026-10-07, the user's call).** `a.Iter()` gives an
+  `ArrayIter<T>` (prelude), so generic code takes `Iterator<<T>>&` and every collection - array, `String`, `List`,
+  `Map` - is passed as `xs.Iter()`, with G9c inferring `T`. A nameable `Iterable` would need a method returning a
+  concrete iterator to satisfy one returning an interface, boxing the iterator per call; with G9c it buys nothing.
+  `for x in a` still walks an array directly.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

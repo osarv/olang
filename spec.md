@@ -796,6 +796,10 @@ function; a method with type variables its receiver does not determine satisfies
 
 **T35b (built-in interfaces).** The prelude (M19d) declares `type Iterator<T> interface { mut Next() (<T>,
 Bool) }`, visible in every module. It is what `for ... in` walks besides an array and a range (S9a).
+Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
+`Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
+(`total(a.Iter())`). There is no `Iterable` interface: a function wanting "anything that can be walked" takes
+an `Iterator<<T>>&` and its caller writes `.Iter()` (G9c infers `T`).
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as

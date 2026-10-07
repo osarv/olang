@@ -6304,7 +6304,13 @@ fn drainBoth() Int32 {
     return genDrain(a) + genDrain(b)
 }
 
+fn arrayIterTotal() Int64 {
+    a := Int64[4, 5, 6]
+    return iterTotal(a.Iter())
+}
+
 IterTotalBaked := iterTotalOf(5)
+ArrayIterBaked := arrayIterTotal()
 DrainBothBaked := drainBoth()
 
 test "K1: interface calls are evaluated while compiling, and agree with the run time" {
@@ -6314,6 +6320,25 @@ test "K1: interface calls are evaluated while compiling, and agree with the run 
     n++
     assert iterTotalOf(n - 1) == IterTotalBaked
     assert drainBoth() == DrainBothBaked
+}
+
+test "T35b: every array hands out an Iterator, so code written over Iterator takes arrays too" {
+    assert ArrayIterBaked == 15
+    a := Int32[1, 2, 3]
+    a[2] = 30
+    assert iterTotal(a.Iter()) == 33
+    it := a.Iter()
+    n := 0
+    for x in it { n++ }
+    assert n == 3
+    for x in it { n++ } ## S9a: the loop walks its own copy of a by-value iterator, so "it" was not advanced
+    assert n == 6
+    empty := Array<Int32>(0)
+    assert iterTotal(empty.Iter()) == 0
+    t String& = "ab"
+    st := t.Iter()
+    c, ok := st.Next()
+    assert ok and c == 'a'
 }
 
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {

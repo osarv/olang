@@ -219,3 +219,22 @@ test "Sort is stable, and sorts long arrays and arrays of references" {
     words.Sort(fn(x, y) { return x.Len() < y.Len() })
     assert words[0].Eq("fig") and words[1].Eq("pear") and words[2].Eq("kiwi") and words[4].Eq("banana")
 }
+
+## a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
+## as it takes a List or a Map. "for x in a" does not go through it: an array is walked directly.
+type ArrayIter<T> struct(of Array<<T>>&) {
+    arr Array<<T>>&of = of
+    i mut Int64 = 0
+}
+
+fn (it mut ArrayIter<<T>>&) Next() (<T>, Bool) {
+    if it.i >= it.arr.Len() {
+        none <T>
+        return none, false
+    }
+    it.i++
+    return it.arr[it.i - 1], true
+}
+
+## a fresh position at the array's start - each call its own, so loops never disturb each other
+fn (a Array<<T>>&) Iter() ArrayIter<<T>> { return ArrayIter<<T>>(a) }
