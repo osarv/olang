@@ -1212,6 +1212,60 @@ static struct syntax* parseStmntIfRuntime(SyntaxCtx sc, int cur, struct token kw
     return s;
 }
 
+//S9a/S9b: what follows a for's "in" - an expression, or "range end" / "range start, end [, step]" (one to three
+//expressions, no parentheses)
+static struct syntax* parseForInSource(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token rangeKw = acceptTok(sc, TOK_RANGE);
+    if (rangeKw.type == TOK_NONE) return parseExpr(sc);
+    struct syntax* e = newNode(SNTX_RANGE);
+    addTok(e, rangeKw);
+    int n = 0;
+    while (true) {
+        struct syntax* arg = parseExpr(sc);
+        if (!arg) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(e, arg);
+        n++;
+        if (acceptTok(sc, TOK_COMMA).type == TOK_NONE) break;
+    }
+    if (n > 3) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return e;
+}
+
+//E27: "for NAME [, NAME] in source [if expr]" - a comprehension's clause, after its element expression
+static struct syntax* parseComprehensionClause(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_FOR);
+    if (kw.type == TOK_NONE) return NULL;
+    struct token n1 = acceptTok(sc, TOK_IDEN);
+    if (n1.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token n2 = (struct token){0};
+    if (acceptTok(sc, TOK_COMMA).type != TOK_NONE) {
+        n2 = acceptTok(sc, TOK_IDEN);
+        if (n2.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    }
+    struct token in = acceptTok(sc, TOK_IN);
+    if (in.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    ListAdd(&sc->localNames, &n1.str);
+    if (n2.type != TOK_NONE) ListAdd(&sc->localNames, &n2.str);
+    struct syntax* src = parseForInSource(sc);
+    if (!src) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* s = newNode(SNTX_COMPREHENSION);
+    addTok(s, kw);
+    addTok(s, n1);
+    if (n2.type != TOK_NONE) addTok(s, n2);
+    addTok(s, in);
+    addSntx(s, src);
+    struct token ifKw = acceptTok(sc, TOK_IF);
+    if (ifKw.type != TOK_NONE) {
+        struct syntax* cond = parseExpr(sc);
+        if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addTok(s, ifKw);
+        addSntx(s, cond);
+    }
+    return s;
+}
+
 //S9a: "for NAME [, NAME] in expr block"
 static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     int cur = TokenGetCursor(sc->tc);
@@ -1227,24 +1281,7 @@ static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     if (in.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     ListAdd(&sc->localNames, &n1.str); //S8b: the loop's names are locals
     if (n2.type != TOK_NONE) ListAdd(&sc->localNames, &n2.str);
-    struct syntax* e = NULL;
-    struct token rangeKw = acceptTok(sc, TOK_RANGE);
-    if (rangeKw.type != TOK_NONE) {
-        //S9b: "range end" or "range start, end [, step]" - one to three expressions, no parentheses
-        e = newNode(SNTX_RANGE);
-        addTok(e, rangeKw);
-        int n = 0;
-        while (true) {
-            struct syntax* arg = parseExpr(sc);
-            if (!arg) { TokenSetCursor(sc->tc, cur); return NULL; }
-            addSntx(e, arg);
-            n++;
-            if (acceptTok(sc, TOK_COMMA).type == TOK_NONE) break;
-        }
-        if (n > 3) { TokenSetCursor(sc->tc, cur); return NULL; }
-    } else {
-        e = parseExpr(sc);
-    }
+    struct syntax* e = parseForInSource(sc);
     if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* block = parseBlock(sc);
     if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
@@ -2003,12 +2040,19 @@ bool nameIsPrimitiveTypeName(struct syntax* name) {
 //bracket group - type-name-awareness is now load-bearing here, not just a convenience.
 struct syntax* parseArrayLiteralTail(SyntaxCtx sc, struct syntax* name, struct token open) {
     struct syntax* args = parseArrLiteralArgs(sc);
+    //E27: one item followed by "for" is a comprehension - "Int32[x * 2 for x in a if x > 3]"
+    struct syntax* compr = NULL;
+    if (args->parts.len == 1 && peekTok(sc).type == TOK_FOR) {
+        compr = parseComprehensionClause(sc);
+        if (!compr) return NULL;
+    }
     struct token close = acceptTok(sc, TOK_SQUARE_C);
     if (close.type == TOK_NONE) return NULL;
     struct syntax* s = newNode(SNTX_EXPR_LITERAL);
     addSntx(s, name);
     addTok(s, open);
     addSntx(s, args);
+    if (compr) addSntx(s, compr);
     addTok(s, close);
     return s;
 }
@@ -2288,9 +2332,16 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             addTok(s, bare);
             return s;
         }
-        default:
-            recordFurthestError(sc, t, "expression");
+        default: {
+            //recorded as acceptTok records - just past the token it failed on - so it competes fairly with the
+            //other alternatives' failures for the furthest one
+            int cur = TokenGetCursor(sc->tc);
+            TokenFeed(sc->tc);
+            //E27/E4: an array literal or a comprehension states its element type before the "["
+            recordFurthestError(sc, t, t.type == TOK_SQUARE_O ? "an element type before the [, as in Int32[...]" : "expression");
+            TokenSetCursor(sc->tc, cur);
             return NULL;
+        }
     }
 }
 

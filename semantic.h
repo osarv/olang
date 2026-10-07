@@ -393,6 +393,10 @@ enum operation {
     OPERATION_LEN, //"len(arr)" - a compiler builtin, not an ordinary function (needs to work over any
                     //array type regardless of element type/dimensionality, which no user-space signature
                     //can express without generics) - see the report
+    OPERATION_COMPREHENSION, //E27: "T[e for x in src if c]" - comprBody is the lowered loop; the array is built
+                             //where it lands, as "Array<T>(n)" is (op->type is the same run-time-length type)
+    OPERATION_COMPR_PUSH,    //E27: appends args[0] to the innermost comprehension being built
+    OPERATION_COMPR_RESERVE, //E27: args[0] (an Int64) is how many elements the innermost one will hold at most
     OPERATION_SIZED_ARRAY_ALLOC, //an uninitialized "T[expr]" var-decl (expr not a compile-time constant) -
                                    //a runtime-length array of expr zero-valued elements, arena-allocated (own by
                                    //default, or the declared type's own "&name" tag) - see the report.
@@ -477,6 +481,7 @@ struct operand {
                          //adapted type's zero value rather than treat it as an aggregate literal.
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    struct list comprBody;      //E27: OPERATION_COMPREHENSION only - struct statement, the loop that fills it
     struct list catchClauses;   //R9b: a try in value position with catch clauses - struct catchClause, in
                                 //order. Empty for a plain propagating try.
     bool tryNeedsSlot;          //R9b: some clause gives a value by default, so both outcomes meet in a slot

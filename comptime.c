@@ -60,6 +60,10 @@ struct ctState {
     //K2c: evaluating a global's initializer. Everything its own frame builds lands in the program's scope,
     //which never closes (O1b), so a destructor there would never run at all - building one is no effect
     bool globalInit;
+    //E27: the comprehensions being built, innermost last, each with how many elements its storage has room for
+    struct ctVal* compr[64];
+    int comprCap[64];
+    int comprDepth;
 };
 
 bool SemanticIsBuildConst(struct var* v);
@@ -707,6 +711,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         default: break;
     }
     if (op->callee) ctScanOp(sc, op->callee); //E13b
+    ctScanBlock(sc, &op->comprBody); //E27
     for (int i = 0; i < op->args.len && !sc->why; i++) ctScanOp(sc, *(struct operand**)ListGetIdx(&op->args, i));
     for (int c = 0; c < op->catchClauses.len && !sc->why; c++) {
         struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
@@ -1170,6 +1175,31 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             v = ctCopy(v);
             v->type = op->type;
             return v;
+        }
+        case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended
+            if (st->comprDepth >= 64) return ctFail(st, op->tok, "comprehensions nest deeper than compile-time evaluation allows");
+            struct ctVal* a = ctNew(CT_AGG, op->type);
+            a->n = 0;
+            a->elems = MallocOrCrash(sizeof(struct ctVal*) * 8);
+            st->compr[st->comprDepth] = a;
+            st->comprCap[st->comprDepth] = 8;
+            st->comprDepth++;
+            ctExecBlock(st, &op->comprBody);
+            st->comprDepth--;
+            return st->flow == CF_NORMAL ? a : NULL;
+        }
+        case OPERATION_COMPR_RESERVE: return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+        case OPERATION_COMPR_PUSH: {
+            struct ctVal* a = st->compr[st->comprDepth - 1];
+            struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type.arrElem);
+            if (!v) return NULL;
+            int* cap = &st->comprCap[st->comprDepth - 1];
+            if (a->n == *cap) {
+                *cap *= 2;
+                a->elems = ReallocOrCrash(a->elems, sizeof(struct ctVal*) * (size_t)*cap);
+            }
+            a->elems[a->n++] = ctIsRef(*a->type.arrElem) ? v : ctCopy(v);
+            return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
         }
         case OPERATION_SIZED_ARRAY_ALLOC: {
             struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));

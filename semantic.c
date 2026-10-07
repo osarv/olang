@@ -4466,6 +4466,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //E11a/E11b: a rendering or a join is always byte[], and the "$" or the quotes say so where it is written
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
+    if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
     //a conversion names its type as plainly as a constructor call does - "String(bytes)", "Int64(n)"
     if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT) return true;
     //D15: a field read - its type is the field's declared one, as a call's is its callee's result, and it is how
@@ -6576,6 +6577,16 @@ struct type applyTypeArgs(struct checkCtx* ctx, struct type base, struct syntax*
 //"T[v1, ...]" - see buildArrLiteralLevel for how the type itself is determined (from resolveLiteralBaseType
 //plus the argument list's own nesting/counts) and checked.
 struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, struct token nameTok, struct list* scopeParams);
+//E27: see forInBody
+struct comprSpec {
+    struct syntax* elemNode;
+    struct syntax* condNode;
+    struct type elemType;
+};
+static struct comprSpec* comprActive = NULL;
+struct operand* buildComprehension(struct checkCtx* ctx, struct type elemType, struct syntax* s,
+                                   struct syntax* comprNode, struct token tok);
+struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s);
 struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
@@ -6599,8 +6610,40 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
         ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
+    struct syntax* comprNode = firstPartOfType(s, SNTX_COMPREHENSION);
+    if (comprNode) return buildComprehension(ctx, elemType, s, comprNode, tok);
     struct operand* lit = buildArrLiteralLevel(ctx, elemType, firstPartOfType(s, SNTX_ARR_LIT_ARGS), tok);
     return lit;
+}
+
+//E27: "T[elem for x in src if cond]" - a new array of every elem, built where it lands like "Array<T>(n)". The
+//loop is S9a's own lowering, with "[if cond] push(elem)" for a body, so what may be walked, how a name is bound
+//and every rule about scopes are for-in's. An element holding references is not admitted yet: where it lives
+//would have to be the array's scope, which the lowering does not establish.
+struct operand* buildComprehension(struct checkCtx* ctx, struct type elemType, struct syntax* s,
+                                   struct syntax* comprNode, struct token tok) {
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_ARRAY;
+    t.arrElem = MallocOrCrash(sizeof(struct type));
+    *t.arrElem = elemType;
+    t.arrMalloc = true;
+    t.scopeDepth = ctx->blockDepth;
+    struct operand* op = operandNew(tok, OPERATION_COMPREHENSION, t);
+    if (elemType.structMAlloc || TypeHoldsReferences(elemType)) {
+        ErrMsgSemantic(tok, COMPREHENSION_REFERENCE_ELEMENT);
+        return op;
+    }
+    struct list items = allSyntaxParts(firstPartOfType(s, SNTX_ARR_LIT_ARGS));
+    struct list exprs = allPartsOfType(comprNode, SNTX_EXPR);
+    struct comprSpec spec = { *(struct syntax**)ListGetIdx(&items, 0),
+                              hasTokOfType(comprNode, TOK_IF) ? *(struct syntax**)ListGetIdx(&exprs, exprs.len - 1) : NULL,
+                              elemType };
+    comprActive = &spec;
+    struct statement loop = buildForInStmnt(ctx, comprNode);
+    comprActive = NULL;
+    op->comprBody = ListInit(sizeof(struct statement));
+    ListAdd(&op->comprBody, &loop);
+    return op;
 }
 
 //"Type{v1, v2, ...}" - the parser only ever produces this node when the name was already confirmed to be
@@ -7092,6 +7135,7 @@ static void finalizeOpLambdas(struct operand* op) {
     if (!op) return;
     if (op->pendingLambda) FinalizeLambda(op, NULL);
     finalizeOpLambdas(op->callee); //E13b
+    //E27: a comprehension's own element and filter were finalized as its loop was built
     for (int i = 0; i < op->args.len; i++) finalizeOpLambdas(*(struct operand**)ListGetIdx(&op->args, i));
     for (int i = 0; i < op->catchClauses.len; i++) finalizeOpLambdas(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt);
 }
@@ -8104,6 +8148,7 @@ static bool opWrites(struct operand* op, struct var* v) {
         default: break;
     }
     if (opWrites(op->callee, v)) return true; //E13b
+    if (stmtsWrite(&op->comprBody, v)) return true; //E27
     for (int i = 0; i < op->args.len; i++) if (opWrites(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
     for (int c = 0; c < op->catchClauses.len; c++) {
         struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
@@ -8242,6 +8287,41 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     return stmt;
 }
 
+//E27: what a comprehension's loop does with each value instead of running a block - set by
+//buildComprehension, taken (and cleared) by buildForInStmnt before it builds anything, so a comprehension
+//written inside the source, the element or the filter starts afresh
+
+static struct statement comprOpStmt(enum operation kind, struct operand* arg, struct token at) {
+    struct operand* op = operandNew(at, kind, TypeVanilla(BASETYPE_VOID));
+    ListAdd(&op->args, &arg);
+    struct statement st = (struct statement){0};
+    st.sType = STATEMENT_EXPR;
+    st.op = op;
+    return st;
+}
+
+//a loop's body: the program's own block, or for a comprehension "[if cond] push(elem)"
+static void finalizeOpLambdas(struct operand* op);
+static struct list forInBody(struct checkCtx* ctx, struct syntax* s, struct comprSpec* spec, struct token kw) {
+    if (!spec) return buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
+    struct list out = ListInit(sizeof(struct statement));
+    struct operand* elem = buildExprFromSyntax(ctx, spec->elemNode);
+    reportTypeFit(OperandFitsType(ctx->func, elem, spec->elemType), elem->tok);
+    finalizeOpLambdas(elem);
+    struct statement push = comprOpStmt(OPERATION_COMPR_PUSH, elem, kw);
+    if (!spec->condNode) { ListAdd(&out, &push); return out; }
+    struct operand* cond = buildExprFromSyntax(ctx, spec->condNode);
+    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    finalizeOpLambdas(cond);
+    struct statement st = (struct statement){0};
+    st.sType = STATEMENT_IF;
+    st.op = cond;
+    st.block = ListInit(sizeof(struct statement));
+    ListAdd(&st.block, &push);
+    ListAdd(&out, &st);
+    return out;
+}
+
 //S9a: a token standing for a name the loop introduces itself - "$" cannot begin an identifier, so it never
 //collides with one the program writes
 static int forInCounter = 0;
@@ -8325,7 +8405,8 @@ static struct statement rangeIf(struct operand* cond, struct list block) {
 //out once before the first iteration and a counted loop, so it costs what the three-clause form does:
 //  n = start < end and step > 0 ? ceil((end - start) / step) : 0,   value(c) = start + step * c
 static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* rangeNode,
-                                           struct token kw, struct token* idxTok, struct token elemTok) {
+                                           struct token kw, struct token* idxTok, struct token elemTok,
+                                           struct comprSpec* spec) {
     struct scope wrapScope = scopePush(ctx->scope);
     struct checkCtx w = *ctx;
     w.scope = &wrapScope;
@@ -8367,6 +8448,12 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
         struct statement st = rangeIf(runs, b);
         ListAdd(&pre, &st);
     }
+    //E27: a comprehension over a range holds at most its count
+    if (spec) {
+        struct statement r = comprOpStmt(OPERATION_COMPR_RESERVE,
+                                         OperandNumericConversion(TypeVanilla(BASETYPE_INT64), rangeRead(vN, kw), kw), kw);
+        ListAdd(&pre, &r);
+    }
 
     //the counted loop
     struct scope loopScope = scopePush(w.scope);
@@ -8393,7 +8480,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct operand* stepped = OperandBinary(rangeRead(vStep, kw), rangeRead(vC, kw), OPERATION_MUL, kw);
     struct statement d = buildVarDeclFromOperand(&l, elemTok, OperandBinary(rangeRead(vStart, kw), stepped, OPERATION_ADD, kw));
     ListAdd(&body, &d);
-    struct list user = buildBlock(&l, firstPartOfType(s, SNTX_BLOCK));
+    struct list user = forInBody(&l, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
     struct list after = snapshotScopeBindings(l.scope);
@@ -8415,6 +8502,8 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
 //and a loop whose body starts by asking it for the next value and leaving when there is none. So every rule -
 //borrowing, scope containment, mutability, unwinding - applies to it with nothing loop-specific added.
 struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct comprSpec* spec = comprActive;
+    comprActive = NULL;
     forInCounter++;
     struct token kw = firstTokOfType(s, TOK_FOR);
     struct list names = ListInit(sizeof(struct token));
@@ -8425,7 +8514,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token* idxTok = names.len == 2 ? ListGetIdx(&names, 0) : NULL;
     struct token elemTok = *(struct token*)ListGetIdx(&names, names.len - 1);
     struct syntax* rangeNode = firstPartOfType(s, SNTX_RANGE);
-    if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok);
+    if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 
     //the block the whole lowering lives in, so its hidden names end with the loop
     struct scope wrapScope = scopePush(ctx->scope);
@@ -8458,6 +8547,11 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         d.var = *arr;
         d.op = src;
         ListAdd(&pre, &d);
+        //E27: a comprehension over an array holds at most its length
+        if (spec) {
+            struct statement r = comprOpStmt(OPERATION_COMPR_RESERVE, OperandLen(OperandReadVar(arr, kw), kw), kw);
+            ListAdd(&pre, &r);
+        }
     } else {
         //T35a: anything that satisfies the built-in Iterator<T> for some T - the T read off its Next(), and
         //then checked by ordinary satisfaction, so a Next() without a mutable receiver does not qualify
@@ -8564,7 +8658,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
                                                      OperandMember(lctx.mod, OperandReadVar(rv, kw), f0->name, kw));
         ListAdd(&body, &d);
     }
-    struct list user = buildBlock(&lctx, firstPartOfType(s, SNTX_BLOCK));
+    struct list user = forInBody(&lctx, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
     struct list after = snapshotScopeBindings(lctx.scope);

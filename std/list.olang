@@ -280,3 +280,15 @@ test "a list's elements, walked through a lambda" {
     halves := l.Map(fn(x) { return Float64(x) / 2.0 })
     assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
 }
+
+## E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
+## 100 and doubles, so 250 elements grow it twice
+test "a comprehension walks a List" {
+    l List<Int32>& = List<Int32>()
+    for i in range 250 { l.Push(i) }
+    evens := Int32[x for x in l if x % 2 == 0]
+    assert evens.Len() == 125
+    assert evens[124] == 248
+    all := Int32[x for x in l]
+    assert all.Len() == 250 and all[249] == 249
+}

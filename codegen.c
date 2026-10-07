@@ -114,6 +114,10 @@ struct cgCtx {
     //the literal itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
     //NULL when nothing is currently being promoted (the common case - most values never touch this).
     char* targetScopeOverride;
+    //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
+    //allocas), the scope its storage comes from, and its element type
+    struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
+    int comprDepth;
     //a failed check under "try" (an index, a slice, checked arithmetic): the one error it can produce, known
     //statically, which cgCatchDispatch matches clauses against when it is given no run-time code
     struct type* staticErrType;
@@ -1249,6 +1253,13 @@ static bool cgIsFreshClosure(struct operand* op) {
            && op->readVar->lambdaCaptures.len && !op->lambdaHomeSet;
 }
 
+//storage made by the expression itself, with nothing to borrow - built in the scope of whatever it lands in
+//(E12c): rendered or joined text, a capturing lambda's closure, "Array<T>(n)" and a comprehension (E27)
+static bool cgIsFreshTemp(struct operand* op) {
+    return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
+           || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
+}
+
 char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     //E12d: an interface target takes the (dispatch table, instance) pair, built from the operand itself -
     //the instance half is a borrow, so it needs the lvalue's address, which a produced value has already
@@ -1260,7 +1271,7 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     //temporaries in E12c's sense - so they are built in the TARGET's scope, exactly as a struct literal
     //is. Building them in the block the expression sits in instead made every string-building function
     //impossible: the result could never outlive the block, so "return "hi " + name" was rejected.
-    bool isFreshText = (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) || cgIsFreshClosure(op);
+    bool isFreshText = cgIsFreshTemp(op);
     if (!isFreshText && !typeNeedsMallocPromotion(dstT, op->type) && !typeNeedsRuntimeLengthPromotion(dstT, op->type))
         return cgValue(ctx, op);
     char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
@@ -1512,7 +1523,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
     //type's; at an argument, the parameter's. Only stores and declarations did this, so "return $a $b"
     //built the text in the function's own block scope and returned it dangling - read back correctly only
     //until something reused the freed chunk.
-    if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)) {
+    if (cgIsFreshTemp(op)) {
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
         char* prev = ctx->targetScopeOverride;
         ctx->targetScopeOverride = scopeVal;
@@ -2945,6 +2956,104 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     return agg2;
 }
 
+//E27: a comprehension - its loop emitted with an empty buffer in hand, each element appended to it. The storage
+//comes from the scope the result lands in, as "Array<T>(n)"'s does; growing allocates the next one there and
+//copies (the arena frees nothing before the scope closes, and nothing can hold the buffer before it is done).
+char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
+    if (ctx->comprDepth >= 64) { fprintf(stderr, "comprehensions nest too deeply\n"); exit(1); }
+    char* scopeVal = !op->type.scopeParam && ctx->targetScopeOverride ? ctx->targetScopeOverride
+                     : cgResolveScope(ctx, op->type.scopeParam, op->type.scopeDepth);
+    int d = ctx->comprDepth++;
+    ctx->compr[d].elem = *op->type.arrElem;
+    ctx->compr[d].scope = scopeVal;
+    ctx->compr[d].buf = cgNewTmp(ctx);
+    ctx->compr[d].len = cgNewTmp(ctx);
+    ctx->compr[d].cap = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n  %s = alloca i64\n  %s = alloca i64\n",
+            ctx->compr[d].buf, ctx->compr[d].len, ctx->compr[d].cap);
+    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n  store i64 0, ptr %s\n  store i64 0, ptr %s\n",
+            ctx->compr[d].buf, ctx->compr[d].len, ctx->compr[d].cap);
+    //the loop's own temporaries land where they are written, not where the comprehension does
+    char* prevOverride = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = NULL;
+    cgBlock(ctx, &op->comprBody);
+    ctx->targetScopeOverride = prevOverride;
+    ctx->comprDepth--;
+    char* n = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n, ctx->compr[d].len);
+    char* p = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", p, ctx->compr[d].buf);
+    char* agg1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", agg1, n);
+    char* agg2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", agg2, agg1, p);
+    return agg2;
+}
+
+//a new buffer of room elements in the comprehension's scope, the first len copied over from the old one
+static void cgComprRealloc(struct cgCtx* ctx, int d, char* room) {
+    long long size = TypeGetSize(ctx->compr[d].elem);
+    char* bytes = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, room, size);
+    char* nb = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", nb, ctx->compr[d].scope, bytes);
+    char* ob = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", ob, ctx->compr[d].buf);
+    char* n = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n, ctx->compr[d].len);
+    char* used = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", used, n, size);
+    fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %s, i1 false)\n", nb, ob, used);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n  store i64 %s, ptr %s\n", nb, ctx->compr[d].buf, room, ctx->compr[d].cap);
+}
+
+//E27: room for at most n elements, known before the loop runs (an array's length, a range's count)
+void cgComprReserve(struct cgCtx* ctx, struct operand* op) {
+    int d = ctx->comprDepth - 1;
+    char* n = cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
+    cgComprRealloc(ctx, d, n);
+}
+
+//E27: the element appended, the buffer first grown if it is full - to 100 from nothing, then doubling
+void cgComprPush(struct cgCtx* ctx, struct operand* op) {
+    int d = ctx->comprDepth - 1;
+    struct operand* v = *(struct operand**)ListGetIdx(&op->args, 0);
+    char* val = cgValueForTarget(ctx, v, ctx->compr[d].elem, NULL);
+    int id = ctx->lblCtr++;
+    char growLbl[32], putLbl[32];
+    snprintf(growLbl, sizeof(growLbl), "compr.grow.%d", id);
+    snprintf(putLbl, sizeof(putLbl), "compr.put.%d", id);
+    char* n = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n, ctx->compr[d].len);
+    char* cap = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", cap, ctx->compr[d].cap);
+    char* full = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", full, n, cap);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", full, growLbl, putLbl);
+    ctx->terminated = true;
+    cgLabel(ctx, growLbl);
+    char* isEmpty = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, 0\n", isEmpty, cap);
+    char* dbl = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = shl i64 %s, 1\n", dbl, cap);
+    char* room = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = select i1 %s, i64 100, i64 %s\n", room, isEmpty, dbl);
+    cgComprRealloc(ctx, d, room);
+    cgBr(ctx, putLbl);
+    cgLabel(ctx, putLbl);
+    char* buf = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", buf, ctx->compr[d].buf);
+    char* n2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n2, ctx->compr[d].len);
+    char elemTy[256];
+    llvmType(ctx->compr[d].elem, elemTy, sizeof(elemTy));
+    char* slot = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", slot, elemTy, buf, n2);
+    cgStoreInto(ctx, ctx->compr[d].elem, v->type, val, slot, NULL, false, OperandIsLvalue(v), true);
+    char* n3 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n  store i64 %s, ptr %s\n", n3, n2, n3, ctx->compr[d].len);
+}
+
 //E16a: a slice is a BORROW with the pointer and length adjusted - one GEP and two insertvalues, no
 //allocation and no copy, which is the whole reason it is cheap. The base pointer comes from wherever the
 //array already keeps it: the data half of a runtime-length descriptor, or the storage address of a
@@ -3824,6 +3933,9 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_STR_OF: case OPERATION_CONCAT: return cgText(ctx, op);
         case OPERATION_SLICE: return cgSliceValue(ctx, op);
         case OPERATION_SIZED_ARRAY_ALLOC: return cgSizedArrayAlloc(ctx, op);
+        case OPERATION_COMPREHENSION: return cgComprehension(ctx, op);
+        case OPERATION_COMPR_PUSH: cgComprPush(ctx, op); return "";
+        case OPERATION_COMPR_RESERVE: cgComprReserve(ctx, op); return "";
         case OPERATION_NUMERIC_CONVERT: return cgNumericConvert(ctx, op);
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);

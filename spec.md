@@ -1371,7 +1371,7 @@ text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
 postfix  ::= primary { index | member | call-on | "++" | "--" }
 primary  ::= literal | try-expr | call-expr | struct-literal
-           | array-literal | enum-value | lambda | IDEN | "(" expr ")"
+           | array-literal | comprehension | enum-value | lambda | IDEN | "(" expr ")"
 ```
 
 `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } ] ")" ]`. A `member` carrying an
@@ -1867,6 +1867,27 @@ Note that this differs from an integer narrowing conversion, which **wraps** and
 float-to-integer conversion out of range has no defined result at all: not a wrap, not a saturation,
 nothing. In practice x86 yields the target's most negative value and sets a masked floating-point flag,
 but that is the hardware's behaviour rather than the language's.
+
+### 5.11 Comprehensions
+
+**E27.** `comprehension ::= elem-type "[" expr "for" IDEN [ "," IDEN ] "in" ( expr | range ) [ "if" expr ] "]"` is
+a new array holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk, in order — only those for
+which the condition after `if` is `true`, when there is one. It is an `array-literal` (E19) whose one item is followed
+by the `for` clause, and its `elem-type` is written as a literal's is; every element must fit it as a literal's items
+must. The names are bound for each value exactly as in a `for ... in` loop (copied out of an array, an index counting
+from 0 for the two-name form) and are visible in the element expression and the condition only. What may follow `in`
+is what a `for ... in` takes: an array, a range, an iterator or an iterable.
+
+Its type is `Array<T>` for the written element type `T`, a value. Like `Array<T>(n)` (T7) it is a temporary,
+built in the scope of whatever it lands in. The element expression and the condition are evaluated once per value,
+the condition first, in the order the values are walked.
+
+Its storage is allocated before the first element where the source's length is known before the loop - an array's
+length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full.
+
+An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
+
+`Int32[x * 2 for x in a if x > 3]`, `Int64[Int64(i) * Int64(i) for i in range n]`, `Byte[c - 32 for c in t]`.
 
 ## 6. Statements
 

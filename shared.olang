@@ -6341,6 +6341,83 @@ test "T35b: every array hands out an Iterator, so code written over Iterator tak
     assert ok and c == 'a'
 }
 
+## E27: a comprehension - a new array of one expression per value walked, those the filter keeps. The element type
+## is written, as an array literal's is; the array is built where it lands, like "Array<T>(n)".
+fn comprEvens(a Array<Int32>&) Array<Int32> {
+    return Int32[x * 2 for x in a if x > 3]
+}
+
+fn comprSquares(n Int32) Array<Int64> {
+    return Int64[Int64(i) * Int64(i) for i in range n]
+}
+
+## returned through a built reference result: it must be built in the result's scope, not the function's
+fn comprKeep(a Array<Int32>&) Array<Int32>& {
+    return Int32[x for x in a if x != 0]
+}
+
+fn allocKeep() Array<Int32>& {
+    return Array<Int32>(2, 5)
+}
+
+fn comprChurn() Array<Int32>& {
+    return Array<Int32>(1000, 7)
+}
+
+type ComprPt struct(x Int32, y Int32) {
+    x
+    y
+}
+
+ComprSquaresBaked := comprSquares(5)
+ComprEvensBaked := comprEvens(Int32[1, 5, 2, 7])
+
+test "E27: comprehensions over arrays, ranges and text, with and without a filter" {
+    a := Int32[1, 5, 2, 7]
+    e := comprEvens(a)
+    assert e.Len() == 2
+    assert e[0] == 10 and e[1] == 14
+    s := comprSquares(4)
+    assert s.Len() == 4 and s[3] == 9
+    idx := Int64[i * 10 + Int64(x) for i, x in a]
+    assert idx[3] == 37
+    none := Int32[x for x in a if x > 100]
+    assert none.Len() == 0
+    t := "hello"
+    up := Byte[c - 32 for c in t]
+    assert String(up).Eq("HELLO")
+    nested := Int64[Int32[y for y in range x].Len() for x in range 4]
+    assert nested[3] == 3
+    ps := ComprPt[ComprPt(i, i * i) for i in range 3]
+    assert ps[2].y == 4
+    total := 0
+    for r in range 1000 {
+        row := Int32[x + r for x in range 3]
+        total += row[2]
+    }
+    assert total == 501500
+}
+
+test "E27: a comprehension is evaluated while compiling, and agrees with the run time" {
+    assert ComprSquaresBaked[4] == 16 and ComprSquaresBaked.Len() == 5
+    assert ComprEvensBaked.Len() == 2 and ComprEvensBaked[1] == 14
+    n := 5
+    n++
+    assert comprSquares(n - 1)[4] == ComprSquaresBaked[4]
+    assert comprEvens(Int32[1, 5, 2, 7])[1] == ComprEvensBaked[1]
+    assert Int32[x for x in range 4 if x % 2 == 1][1] == 3
+}
+
+test "E27/T7: a comprehension or Array<T>(n) returned through a reference result is built in the result's scope" {
+    k := comprKeep(Int32[0, 1, 0, 2])
+    c := comprChurn()
+    assert k.Len() == 2
+    assert k[1] == 2
+    m := allocKeep()
+    c2 := comprChurn()
+    assert m[1] == 5
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

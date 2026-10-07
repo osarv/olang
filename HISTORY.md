@@ -7331,3 +7331,30 @@ from their original form.
   `OPERATION_NONE` as a literal. It now refuses a placeholder that is not one.
   Noted for the user, not changed: error words are comma-separated (T19) while enum cases are separated by line
   ends, and writing the error the enum way fails with "expected '}'".
+
+- **Comprehensions (E27, 2026-10-07).** Designed in conversation. The user asked whether the brackets were needed; the
+  answer given was that something has to mark where the expression starts and ends and what it builds, and that
+  the real alternative is a keyword (`for x in a if c yield e`, Scala's), arguably more natural but a second meaning
+  for `for` and a new word. The user chose brackets, required the element type for now so a comprehension reads as
+  an array literal does, set iterator growth to start at 100 and double rather than at one element, kept `if`, and
+  asked for the type-free form to be recorded as a future relaxation.
+  **How it is built.** A comprehension needs a loop inside an expression, and the checker had no way for an
+  expression to carry statements. The operand now can (`comprBody`, as a catch clause already carries a block): it
+  holds S9a's own lowering, reached through a hook (`comprSpec`, taken by `buildForInStmnt` before it builds
+  anything so a comprehension nested in the source, element or filter starts afresh), with the body replaced by
+  `[if cond] push(elem)` and a `reserve` after the source when its length is known. So what can be walked, how
+  names bind and every scope rule are for-in's, and the three operand walkers (lambda finalizing, S8c's writes,
+  K1a's scan) only had to learn to look into the body. Codegen keeps a stack of comprehensions in flight (buffer,
+  length and capacity in entry allocas, the landing scope); growth allocates in that scope and copies, which is
+  safe because nothing can hold the buffer before it is finished. The evaluator appends to a node; a global built
+  from a comprehension bakes to constant data.
+  **The use-after-free it found.** The first test returned a comprehension through an `Array<Int32>&` result and
+  read it after another allocation: wrong values. So did `return Array<Int32>(2, 5)` - the existing allocation
+  form, reproduced before any comprehension code was involved. Codegen treated only text and closures as
+  temporaries to build in the target's scope at a store or a return; `Array<T>(n)` was built in the function's
+  own block scope, freed at the return. The same mistake E11b fixed for text. The list of fresh temporaries is
+  one predicate now, used at both sites. A corpus test pins both forms.
+  **A diagnostic fix:** `[y for y in range 3]`, with no element type, reported "unexpected token ':=' expected 'end
+  of statement'". The primary-expression parser recorded its failure at the cursor before the token, while
+  `acceptTok` records just past it, so it lost every tie for "furthest". It now records past the token, and a `[`
+  there says an element type belongs before it.

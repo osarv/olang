@@ -81,6 +81,7 @@ enum syntaxType {
     SNTX_STMNT_FOR,
     SNTX_STMNT_FOR_IN, //S9a: "for x in a" / "for i, x in a"
     SNTX_RANGE,        //S9b: "range end" / "range start, end [, step]", only ever after a for's "in"
+    SNTX_COMPREHENSION, //E27: "for NAME [, NAME] in (expr | range ...) [if expr]" after an array literal's one item
     SNTX_STMNT_DO,
     SNTX_STMNT_CASE,
     SNTX_STMNT_NOMATCH,

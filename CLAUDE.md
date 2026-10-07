@@ -2430,6 +2430,19 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Map` - is passed as `xs.Iter()`, with G9c inferring `T`. A nameable `Iterable` would need a method returning a
   concrete iterator to satisfy one returning an interface, boxing the iterator per call; with G9c it buys nothing.
   `for x in a` still walks an array directly.
+- **Comprehensions (E27, 2026-10-07, the user's design).** `Int32[x * 2 for x in a if x > 3]` - brackets (the
+  user's call, over a Scala-style `for ... yield`: they bound the expression and say "array"), the element type
+  **required, to match array literals** (the user's call; inferring it is recorded as a future relaxation), `if` for
+  the filter. Sources are whatever `for ... in` walks; storage is reserved up front from an array's length or a
+  range's count, else starts at room for **100 and doubles** (the user's numbers). The result is an `Array<T>`
+  temporary built where it lands. Lowered in the checker by S9a's own for-in lowering with "[if c] push(e)" as the
+  body, carried on an `OPERATION_COMPREHENSION` operand whose statements codegen and the evaluator run - so
+  globals bake (K2) and asserts decide (S18c) through it. Elements that are or hold references are not admitted
+  yet (their scope would have to be the array's). Deferred: several `for` clauses, a lazy form. **Found on the way,
+  pre-existing**: `return Array<T>(n)` through a reference result built the array in the dying function scope -
+  a use-after-free, the E11b bug again for a different temporary; every fresh temporary now goes through one
+  predicate (`cgIsFreshTemp`). And a syntax error at an expression's first token was recorded one position short,
+  so it lost to an earlier alternative's failure and the message pointed at the wrong token.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
