@@ -6554,6 +6554,48 @@ test "L4a: a block comment is whitespace, and a line break where it spans one" {
     assert blockCommented() == 6
 }
 
+# G19: an interface as a constraint on a type variable - checked where the variable is inferred or written, the
+# code compiled per type with direct calls. A variable named only in a constraint is inferred through it.
+type CnShape interface {
+    Area() Int32
+}
+
+type CnSq struct(s Int32) {
+    s
+}
+
+fn (q CnSq) Area() Int32 { return q.s * q.s }
+
+fn cnArea(x <T CnShape>) Int32 { return x.Area() }
+
+fn cnDrain(it mut <I GenSource<<E>>>) <E> {
+    t <E> = 0
+    for {
+        v, ok := it.Next()
+        if not ok { break }
+        t = t + v
+    }
+    return t
+}
+
+type CnHolder<T CnShape> struct(v <T>) {
+    v
+}
+
+CnAreaBaked := cnArea(CnSq(4))
+
+test "G19: interfaces constrain type variables of functions and of generic types" {
+    assert cnArea(CnSq(3)) == 9
+    c ForCounter& = ForCounter(0, 4)
+    assert cnDrain(c) == 10
+    h CnHolder<CnSq>& = CnHolder<CnSq>(CnSq(2))
+    assert h.v.Area() == 4
+    h2 := CnHolder(CnSq(5))
+    assert h2.v.Area() == 25
+    assert Int32[1, 2].Has(2)
+    assert CnAreaBaked == 16
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

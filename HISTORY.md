@@ -7428,3 +7428,23 @@ from their original form.
   `# check:`/`# flags:`. The tokenizer change is a few lines in `findNextTokStart`; a block comment sets the line-break
   flag only when it crosses a line, so `x Int32 = 1 ## note ## + 2` stays one statement. The first test of it
   promptly hit the obvious trap - writing `"##"` inside a block comment closes it - which is the rule working.
+
+- **Constraints (G19, 2026-10-07).** The type-system discussion began with the user wanting "ways to group types
+  together for operations". It went through groups of types (`group` rejected as a word - group theory's group is one
+  operation with four laws, this is a signature without laws), Rust traits, `Self` in interfaces, and whether a
+  constraint is anything but a nicer error. The deciding exchange was the user asking how `<T Iterator>` differs from
+  `Iterator`: it does not differ in what is required but in how the value is passed - compiled per type with direct,
+  inlinable calls and the concrete type kept, versus one function dispatching through a table - and then why anyone
+  would want the latter: values of different types mixed at run time. So interfaces serve both, as Rust's traits do.
+  **Implementation.** The constraint is parsed into the type-variable node (and after a declared parameter), resolved
+  with T32's marker rule suspended, and kept on the variable's type (`varConstraint`); the signature collects them
+  (`typeConstraints`), and a generic type keeps its declared ones and hands them to its constructor so G10c's inference
+  is checked too. `checkTypeConstraints` first binds variables named only in a constraint through G9c's
+  `unifyThroughMethods`, then checks each binding; `TypeCollectVars` collects constraint variables so G4 accepts them.
+  **The first run of the corpus failed in `std/map`**: `String&` and `Pair` did not satisfy `Hashable` - `Pair`'s
+  `Eq` takes its argument by reference and the interface by value, and `String&`'s method carries a scope variable the
+  interface's does not. Both differences matter to a dispatch table, which calls the method as it is; neither matters
+  to a constrained call, which is an ordinary call. Constraint satisfaction now allows a parameter's reference-shape
+  to differ and skips the table's scope-count check. A test name collision (`CtShape` already existed for the
+  compile-time tests) briefly looked like a missed duplicate-declaration error; it was reported, just filtered out of
+  the output I was reading.

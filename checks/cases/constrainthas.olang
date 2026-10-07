@@ -1,0 +1,9 @@
+# check: fail Plain does not satisfy the constraint Equatable on T: it has no method Eq that fits
+# G19: Has compares by Eq, so an array of a type without one is rejected at the call
+type Plain struct(n Int32) {
+    n
+}
+fn main() ? {
+    ps := Plain[Plain(1)]
+    b := ps.Has(Plain(1))
+}

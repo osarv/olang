@@ -2,6 +2,18 @@
 # built-in types a key is most often (String's own are in text.olang, beside the type - M19). A program's own key type declares the same two methods (T29, M19).
 # Integer arithmetic wraps, which every hash here relies on.
 
+# what comparing by content needs (G19): Has, Contains and a Map's keys are constrained by these, so a type
+# without them is rejected where it is used, naming the missing method
+type Equatable<T> interface {
+    Eq(o <T>) Bool
+}
+
+# what a Map key needs: Eq, and a Hash that agrees with it - equal keys hash equally
+type Hashable<T> interface {
+    Hash() Int64
+    Eq(o <T>) Bool
+}
+
 # a multiply by the golden-ratio constant, then the high bits folded into the low ones: a Map takes the low
 # bits as a bucket index, and a multiply alone leaves keys that differ only above them in one bucket
 fn mixHash(n Int64) Int64 {

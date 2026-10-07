@@ -1,0 +1,9 @@
+# check: fail Int32 does not satisfy the constraint CtShape on T: it has no method Area that fits
+# G19: a constraint is checked at the call that infers the variable
+type CtShape interface {
+    Area() Int32
+}
+fn ctArea(x <T CtShape>) Int32 { return x.Area() }
+fn main() ? {
+    a := ctArea(3)
+}

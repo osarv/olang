@@ -1,0 +1,11 @@
+# check: fail Int64 does not satisfy the constraint CtShape on T
+# G19: and where a generic type's arguments are written
+type CtShape interface {
+    Area() Int32
+}
+type CtHolder<T CtShape> struct(v <T>) {
+    v
+}
+fn main() ? {
+    h CtHolder<Int64>& = CtHolder<Int64>(4)
+}

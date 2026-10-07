@@ -1510,6 +1510,8 @@ void TypeCollectVars(struct type t, struct list* out) {
             if (StrCmp(*(struct str*)ListGetIdx(out, i), t.name)) return;
         }
         ListAdd(out, &t.name);
+        //G19: a variable named only in a constraint ("<I Iterator<<E>>>") is inferred through it
+        if (t.varConstraint) TypeCollectVars(*t.varConstraint, out);
         return;
     }
     if (t.bType == BASETYPE_ARRAY) { TypeCollectVars(*t.arrElem, out); return; }
@@ -1586,6 +1588,66 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
         return true;
     }
     return true;
+}
+
+//G19: every constrained occurrence of a type variable in t, into out (one BASETYPE_TYPEVAR per name); two
+//occurrences constraining one name differently are an error
+static void TypeCollectConstraints(struct type t, struct list* out) {
+    if (t.bType == BASETYPE_TYPEVAR) {
+        if (!t.varConstraint) return;
+        for (int i = 0; i < out->len; i++) {
+            struct type* o = ListGetIdx(out, i);
+            if (!StrCmp(o->name, t.name)) continue;
+            if (!TypeIsSame(*o->varConstraint, *t.varConstraint)) ErrMsgSemantic(t.tok, CONSTRAINT_DISAGREES);
+            return;
+        }
+        ListAdd(out, &t);
+        return;
+    }
+    if (t.bType == BASETYPE_ARRAY && t.arrElem) { TypeCollectConstraints(*t.arrElem, out); return; }
+    if (typeIsDeclaredStruct(t)) {
+        if (t.genericOrigin) for (int i = 0; i < t.typeArgs.len; i++) TypeCollectConstraints(*(struct type*)ListGetIdx(&t.typeArgs, i), out);
+        return;
+    }
+    if (t.bType == BASETYPE_FUNC || t.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < t.vars.len; i++) TypeCollectConstraints((*(struct var*)ListGetIdx(&t.vars, i)).type, out);
+        if (t.bType == BASETYPE_FUNC && t.hasRetType) TypeCollectConstraints(*t.retType, out);
+    }
+}
+
+//G19: binds what the constraints determine and checks each constrained variable's binding satisfies its
+//interface, reporting at tok. A variable named only in a constraint is bound through the methods of the type
+//its constrained variable is bound to (G9c). Returns false when a constraint is not met.
+void RdSpellType(struct type t, char* buf, size_t n);
+static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
+bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed);
+static bool checkTypeConstraints(struct list* constraints, struct list* bindings, struct token tok) {
+    for (int i = 0; i < constraints->len; i++) {
+        struct type* c = ListGetIdx(constraints, i);
+        struct type* bound = bindingGet(bindings, c->name);
+        if (bound && TypeIsGeneric(*c->varConstraint)) unifyThroughMethods(*c->varConstraint, *bound, bindings);
+    }
+    bool ok = true;
+    for (int i = 0; i < constraints->len; i++) {
+        struct type* c = ListGetIdx(constraints, i);
+        struct type* bound = bindingGet(bindings, c->name);
+        if (!bound || TypeIsGeneric(*bound)) continue; //still a pattern: checked where it is applied
+        struct type want = TypeSubstitute(*c->varConstraint, bindings);
+        if (TypeIsGeneric(want)) continue;
+        struct var* missing = NULL;
+        if (TypeSatisfiesConstraint(*bound, want, &missing)) continue;
+        char tn[160], cn[160];
+        RdSpellType(*bound, tn, sizeof(tn));
+        struct type wantNamed = want.genericOrigin ? *want.genericOrigin : want;
+        snprintf(cn, sizeof(cn), "%.*s", wantNamed.name.len, wantNamed.name.ptr);
+        char* msg = MallocOrCrash(600);
+        if (missing) snprintf(msg, 600, "%s does not satisfy the constraint %s on %.*s: it has no method %.*s that fits (G19)",
+                              tn, cn, c->name.len, c->name.ptr, missing->name.len, missing->name.ptr);
+        else snprintf(msg, 600, "%s does not satisfy the constraint %s on %.*s (G19)", tn, cn, c->name.len, c->name.ptr);
+        ErrMsgSemantic(tok, msg);
+        ok = false;
+    }
+    return ok;
 }
 
 // ---- generic instantiation (G16) ----
@@ -1925,6 +1987,20 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
 }
 static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, struct list* scopeParams);
 
+//G19: a constraint is an interface - anything else is reported, and no constraint applies
+struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
+static bool resolvingConstraint = false;
+static struct type* resolveConstraint(struct semaModule* mod, struct syntax* node, struct list* scopeParams) {
+    bool prev = resolvingConstraint;
+    resolvingConstraint = true;
+    struct type c = resolveTypeExpr(mod, node, scopeParams);
+    resolvingConstraint = prev;
+    if (c.bType != BASETYPE_INTERFACE) { ErrMsgSemantic(firstTokAnywhere(node), CONSTRAINT_NOT_INTERFACE); return NULL; }
+    struct type* out = MallocOrCrash(sizeof(struct type));
+    *out = c;
+    return out;
+}
+
 struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     //a type-var head short-circuits every name lookup below: there is nothing to resolve, the variable
     //stands for whatever the instantiation supplies
@@ -1937,7 +2013,10 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
             struct type* bound = bindingGet(currentBindings, vname);
             if (bound) return *bound;
         }
-        return TypeVar(vname, nameTok);
+        struct type tv = TypeVar(vname, nameTok);
+        struct syntax* cNode = firstPartOfType(varNode, SNTX_TYPE_EXPR);
+        if (cNode) tv.varConstraint = resolveConstraint(mod, cNode, scopeParams);
+        return tv;
     }
     (void)scopeParams; //no longer used to resolve a scope tag here - see applyRefMarker
     struct syntax* nameNode = firstPartOfType(refNode, SNTX_NAME);
@@ -2045,6 +2124,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         b.type = resolveTypeArg(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
         ListAdd(&bindings, &b);
     }
+    checkTypeConstraints(&found->typeConstraints, &bindings, firstTokAnywhere(argsNode)); //G19
     return *instantiateType(found, &bindings);
 }
 
@@ -2224,7 +2304,8 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     if (typeHasBareDestructStruct(t)) {
         ErrMsgSemantic(firstTokAnywhere(refNode), DESTRUCT_TYPE_MUST_BE_REFERENCE);
     }
-    if (typeHasBareInterface(t)) ErrMsgSemantic(firstTokAnywhere(refNode), INTERFACE_NEEDS_REF_MARKER); //T32
+    //T32 - except as a constraint (G19), where the interface is a requirement, never a value
+    if (typeHasBareInterface(t) && !resolvingConstraint) ErrMsgSemantic(firstTokAnywhere(refNode), INTERFACE_NEEDS_REF_MARKER);
     return t;
 }
 
@@ -2952,6 +3033,9 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         finishResultScope(&t, firstTokAnywhere(retTypeNode));
     }
     declareScopeVarsCheck(scopeDeclNodes, &t.scopeVars, &t.vars, NULL, t.hasRetType ? t.retType : NULL);
+    //G19: the constraints written on the signature's type variables
+    t.typeConstraints = ListInit(sizeof(struct type));
+    TypeCollectConstraints(t, &t.typeConstraints);
     currentTypeParamNames = prevTPN;
     scopeTagParams = prevTagParams;
     return t;
@@ -3158,10 +3242,16 @@ void resolveTypeDecl(struct type* t) {
         //be checked against.
         struct list declaredParams = ListInit(sizeof(struct str));
         struct syntax* paramsNode = firstPartOfType(actual, SNTX_TYPE_PARAMS);
+        struct list declaredConstraints = ListInit(sizeof(struct type));
+        struct list constraintNodes = ListInit(sizeof(struct syntax*));
         if (paramsNode) {
             struct list items = allSyntaxParts(paramsNode);
             for (int i = 0; i < items.len; i++) {
                 struct syntax* item = *(struct syntax**)ListGetIdx(&items, i);
+                if (item->type == SNTX_TYPE_CONSTRAINT) continue; //G19: resolved below, once the names exist
+                struct syntax* nextItem = i + 1 < items.len ? *(struct syntax**)ListGetIdx(&items, i + 1) : NULL;
+                if (nextItem && nextItem->type == SNTX_TYPE_CONSTRAINT) ListAdd(&constraintNodes, &nextItem);
+                else { struct syntax* none = NULL; ListAdd(&constraintNodes, &none); }
                 struct token nameTok = firstTokAnywhere(item);
                 struct str pname = strFromTok(nameTok);
                 bool dup = false;
@@ -3177,6 +3267,14 @@ void resolveTypeDecl(struct type* t) {
         //written "Box<T>". The declared list is available here, before any field is resolved.
         struct list* prevTPN = currentTypeParamNames;
         if (declaredParams.len > 0) currentTypeParamNames = &declaredParams;
+        //G19: each declared parameter's constraint, with the parameters in scope
+        for (int i = 0; i < declaredParams.len && i < constraintNodes.len; i++) {
+            struct syntax* cn = *(struct syntax**)ListGetIdx(&constraintNodes, i);
+            if (!cn) continue;
+            struct type tv = TypeVar(*(struct str*)ListGetIdx(&declaredParams, i), firstTokAnywhere(cn));
+            tv.varConstraint = resolveConstraint(owner, firstPartOfType(cn, SNTX_TYPE_EXPR), NULL);
+            if (tv.varConstraint) ListAdd(&declaredConstraints, &tv);
+        }
 
         struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
         //O3a: a scope declaration is only meaningful on a constructor-bearing type - a plain struct has no
@@ -3197,14 +3295,17 @@ void resolveTypeDecl(struct type* t) {
             //itself - "next listChunk<T>&s" - which a generic linked node needs; set only afterwards, the
             //self-reference saw a type with no parameters and was rejected as taking none
             t->typeParams = declaredParams;
+            t->typeConstraints = declaredConstraints;
             resolveStructCtorInto(owner, t, ctorNode);
             t->typeParams = declaredParams;
+            t->typeConstraints = declaredConstraints;
             //a generic type's constructor and destructor are generic too - marked as such here (they are
             //ordinary vars in mod->vars, so without this both the pass-3 body builder and codegen would
             //treat them as ordinary functions and try to emit a body still mentioning type variables).
             //Their monomorphized copies are made by instantiateType and carry empty lists.
             if (declaredParams.len != 0) {
                 t->ctorFunc->type.typeParams = declaredParams;
+                t->ctorFunc->type.typeConstraints = declaredConstraints; //G19: checked where G10c infers them
                 if (t->destructFunc) t->destructFunc->type.typeParams = declaredParams;
             }
             currentTypeParamNames = prevTPN;
@@ -3221,6 +3322,7 @@ void resolveTypeDecl(struct type* t) {
         t->tok = tok;
         t->owner = ownerSave;
         t->typeParams = declaredParams;
+        t->typeConstraints = declaredConstraints;
         struct syntax* primCtor = firstPartOfType(actual, SNTX_PRIM_CTOR);
         if (primCtor) resolvePrimCtor(owner, t, primCtor);
         currentTypeParamNames = prevTPN;
@@ -4039,6 +4141,7 @@ bool typeIsSameModuloRefShape(struct type a, struct type b) {
 //none. This is M19's own lookup - the type's declaring module, by the method's name - so an interface is
 //satisfied by exactly the methods the type already has, and the coherence rule that only a type's own
 //module may give it methods carries over untouched.
+static bool interfaceImplLoose = false; //G19: judging a constraint, not an interface value - see TypeSatisfiesConstraint
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (concrete.bType == BASETYPE_INTERFACE) return NULL;
     struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
@@ -4075,7 +4178,9 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     for (int i = 0; i < m->type.vars.len; i++) {
         struct type want = (*(struct var*)ListGetIdx(&m->type.vars, i)).type;
         struct type got = (*(struct var*)ListGetIdx(&f->type.vars, i +1)).type;
-        if (!TypeIsSame(want, got)) return NULL;
+        //G19: under a constraint the method is called directly, so an argument of the wanted type reaching a
+        //reference parameter is borrowed as at any call (E12) - only the reference-shape may differ
+        if (!TypeIsSame(want, got) && !(interfaceImplLoose && typeIsSameModuloRefShape(want, got))) return NULL;
     }
     if (f->type.hasRetType != m->type.hasRetType) return NULL;
     if (m->type.hasRetType && !TypeIsSame(*f->type.retType, *m->type.retType)) return NULL;
@@ -4091,7 +4196,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     //from the interface value; a by-value receiver has none, and its thunk takes and drops that argument.
     //Checked rather than assumed because a mismatch would be a silently wrong call, not a type error.
     int fScopes = f->type.scopeVars.len + (recv->type.scopeParam ? 0 : 1);
-    if (fScopes != m->type.scopeVars.len) return NULL;
+    if (fScopes != m->type.scopeVars.len && !interfaceImplLoose) return NULL; //no dispatch table under a constraint
     //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can
     //supply it - which makes an interface with a private method a sealed one: no outside module can
     //implement it, though anyone may hold and pass a value of it. The test is on the two declarations,
@@ -4140,6 +4245,16 @@ bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var*
         if (!InterfaceMethodImpl(concrete, m)) { if (failed) *failed = m; return false; }
     }
     return true;
+}
+
+//G19: does concrete meet iface as a constraint - every method present, called directly (so with E12's latitude
+//between a value and a reference parameter), where an interface value needs exact signatures for its table
+bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed) {
+    bool prev = interfaceImplLoose;
+    interfaceImplLoose = true;
+    bool ok = TypeSatisfiesInterface(concrete, iface, failed);
+    interfaceImplLoose = prev;
+    return ok;
 }
 
 bool OperandIsLvalue(struct operand* op);
@@ -5031,6 +5146,13 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type paramT = TypeSubstitute((*(struct var*)ListGetIdx(&func->type.vars, i)).type, &bindings);
             FinalizeLambda(arg, &paramT);
             if (!TypeUnify((*(struct var*)ListGetIdx(&func->type.vars, i)).type, arg->type, &bindings)) ok = false;
+        }
+        //G19: what the constraints bind, and whether each holds - reported here, at the call
+        if (ok && !checkTypeConstraints(&func->type.typeConstraints, &bindings, tok)) {
+            struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
+            bad->readVar = func;
+            bad->args = args;
+            return bad;
         }
         for (int i = 0; ok && i < func->type.typeParams.len; i++) {
             if (!bindingGet(&bindings, *(struct str*)ListGetIdx(&func->type.typeParams, i))) ok = false;
@@ -6719,6 +6841,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
         b.type = resolveTypeArg(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams); //G11, as above
         ListAdd(&bindings, &b);
     }
+    checkTypeConstraints(&found->typeConstraints, &bindings, firstTokAnywhere(argsNode)); //G19
     return instantiateType(found, &bindings);
 }
 

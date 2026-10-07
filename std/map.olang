@@ -15,7 +15,7 @@ type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
     next mut
 }
 
-type Map<K, V> struct() {
+type Map<K Hashable<<K>>, V> struct() {
     buckets mut Array<mut mapSlot<<K>, <V>>&>& = Array<mut mapSlot<<K>, <V>>&>(8)
     count mut Int64 = 0
 }

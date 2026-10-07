@@ -135,6 +135,11 @@ struct type {
                              //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
                              //declared in its own "<...>" list, whose ORDER is what a type-argument list
                              //supplies positionally (G6/G7). Empty for anything non-generic.
+    //G19: BASETYPE_TYPEVAR - the interface written as this occurrence's constraint ("<T Iterator<Int32>>"), or NULL
+    struct type* varConstraint;
+    //G19: BASETYPE_FUNC and a generic declared type - the constrained variables, one BASETYPE_TYPEVAR per
+    //constrained name, each carrying its varConstraint
+    struct list typeConstraints;
     bool isExtern; //true for an "extern func" decl (§11) - never fallible (errors always empty), params/
                     //retType restricted to numeric primitives or arrays of them, codegen emits a bare C-ABI
                     //declare/call instead of the olang {code,payload} convention

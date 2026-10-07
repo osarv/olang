@@ -2496,7 +2496,19 @@ Go through this for every change to what olang means - a rule added, revised or 
   declarable: `==`/`!=` (structural / identity stay the language's) and `$` (E11a stands: nothing overrides it). No built-in on the left
   (`2.0 * v`); several right-hand types go through one generic method with a constraint and `match <T>`, so
   constraints come first. Any value result, built results following the ordinary scope rules. *Constraints* were
-  decided too (interfaces doubling as constraints, `<T Iterator<Int32>>`), also not built.
+  decided too (interfaces doubling as constraints, `<T Iterator<Int32>>`) - **built as G19** (next entry).
+- **Constraints: interfaces double as constraints on type variables (G19, 2026-10-07, the user's call).**
+  `fn area(x <T Shape>)`, `fn drain(it mut <I Iterator<<E>>>) <E>`, `type Map<K Hashable<<K>>, V>`. Checked where the
+  variable is bound - inference at a call, written type arguments, a constructor's inferred ones - with the error
+  there, naming the missing method; a variable named only in a constraint is inferred through it (G9c) and counts for
+  G4. One construct for both of Rust's uses: as a constraint, code compiled per type with direct calls; as a
+  reference type, a value dispatched at run time (the user: "why would we ever want Iterator without generics" -
+  answered: mixing types at run time). Satisfaction is looser than for an interface value in one respect: a parameter
+  may differ in reference-shape, since a constrained call is a direct call where E12 borrows (`Pair`'s `Eq(q Pair&)`
+  meets `Eq(o <T>)`); a value's table needs exact signatures. The prelude gained `Equatable<T>` and `Hashable<T>`, and
+  `Has`/`Contains` and `Map`'s key are constrained by them - so `Has` on an array of a type without `Eq` fails at the
+  call, not inside the prelude, which is the case that started the discussion. No evaluator change: constraints are
+  resolved before anything runs.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -99,7 +99,7 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
 # what a function value lets a list do (D16) - each walks the elements in the order they were pushed
 
 # whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
-fn (l List<<T>>&) Has(x <T>) Bool {
+fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
     for y in l {
         if y.Eq(x) { return true }
     }

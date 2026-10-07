@@ -208,12 +208,20 @@ struct syntax* parseTypeVar(SyntaxCtx sc) {
     if (open.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    //G19: "<T Iterator<Int32>>" - a constraint, an interface T must satisfy
+    struct syntax* constraint = NULL;
+    enum tokenType next = peekTok(sc).type;
+    if (next != TOK_GRT && next != TOK_BTSFT_R) {
+        constraint = parseTypeExpr(sc);
+        if (!constraint) { TokenSetCursor(sc->tc, cur); return NULL; }
+    }
     struct token close = acceptTok(sc, TOK_GRT);
     //"List<<T>>": the variable's ">" and the list's ">" lex as one ">>"
     if (close.type == TOK_NONE && TokenSplitShiftRight(sc->tc)) close = acceptTok(sc, TOK_GRT);
     if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_TYPE_VAR);
     addTok(s, name);
+    if (constraint) addSntx(s, constraint);
     return s;
 }
 
@@ -234,6 +242,17 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
         struct syntax* item = parseTypeExpr(sc);
         if (!item) break;
         addSntx(s, item);
+        //G19: a declared parameter may carry a constraint - "type Map<K Hashable<<K>>, V>"
+        if (nodeType == SNTX_TYPE_PARAMS) {
+            enum tokenType next = peekTok(sc).type;
+            if (next != TOK_COMMA && next != TOK_GRT && next != TOK_BTSFT_R) {
+                struct syntax* constraint = parseTypeExpr(sc);
+                if (!constraint) break;
+                struct syntax* cn = newNode(SNTX_TYPE_CONSTRAINT);
+                addSntx(cn, constraint);
+                addSntx(s, cn);
+            }
+        }
         if (acceptTok(sc, TOK_COMMA).type != TOK_NONE) continue;
         if (acceptTok(sc, TOK_GRT).type != TOK_NONE) return s;
         if (TokenSplitShiftRight(sc->tc)) { //">>" closing a nested list - consume one ">", leave the other

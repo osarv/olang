@@ -494,6 +494,25 @@ itself: a type variable contains no reference, no destructor-bearing struct and 
 asking what a field of type `<T>` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
 
+**G19 (constraints).** A type variable may carry a **constraint**, an interface its type must satisfy:
+`type-var ::= "<" IDEN [ type-expr ] ">"` (`<T Shape>`, `<I Iterator<<E>>>`), and a generic type's declared
+parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name an interface; it is a requirement,
+not a value, so it carries no reference marker (T32 does not apply). A constraint may be written on any occurrence
+of the variable in a declaration; two occurrences constraining one variable differently are an error.
+
+Where the variable is bound - by inference at a call (G9), by written type arguments (G7), or by a constructor's
+inferred ones (G10c) - its type must satisfy the constraint's interface, with every variable in the constraint
+substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
+missing. Satisfaction is T31's, except that a method's parameter may differ from the interface's in reference-shape
+alone, since a constrained call is a direct call where E12 borrows a value for a reference parameter.
+
+A variable named only in a constraint (`E` in `<I Iterator<<E>>>`) counts as appearing in the signature (G4): it is
+bound through the methods of the type its constrained variable is bound to (G9c).
+
+A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls; an
+interface used as a constraint is the same interface that, written as a reference type, gives a value dispatched at
+run time (T30) - one for code compiled per type, the other for values of different types mixed at run time.
+
 **T18.** An enum type must declare at least one case; case names must be unique within the type. A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
 reference in a later case's payload is unreachable without a `match` whose tag test selects that case
@@ -3553,7 +3572,7 @@ parameterize.
 
 ### 12.1 Type variables
 
-**G1.** `type-var ::= "<" IDEN ">"`, written where an entire `type-expr` (T2) would otherwise
+**G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19), written where an entire `type-expr` (T2) would otherwise
 appear. It names a **type variable**: a type that is not known at the declaration and is supplied
 per instantiation. `IDEN` must not name a type declared in the referencing module (D2); writing a
 declared type's name inside a `type-var` is a compile-time error, since `<Point>` would otherwise
