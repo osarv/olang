@@ -2562,6 +2562,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   so prefix and postfix mean the same. Nothing in the corpus or std used one inside an expression (the user: derived, but overridable "if the type doesn't play nice
   with ones"). Not overloadable, confirmed by the user: `==`/`!=`, `$`, `and`/`or`/`not`, `=`, `.`, `try`, `match`.
   `for ... in` over a type with `At`/`Len`, and a callable struct (`f(x)`), are open for discussion.
+- **`Call`, and fallible indexing (E31, 2026-10-07, the user's call).** `f(x)` on a value whose type declares `Call`
+  calls it - a counter `next()`, a layer `layer(x)` - and such a value is accepted where a function value is
+  expected when `Call` matches the function type exactly, through a small adapter object holding the instance (the
+  instance itself, so state changes are visible); generic callbacks infer their variables from `Call`'s signature.
+  The user saw where it fits after I first argued it was only notation (a lambda can forward to a stateful struct,
+  but `next()` is the honest spelling for a callable thing). `At`, `SetAt`, `Slice` and `Call` may declare errors
+  (`try x[i]`, `try x[lo:hi]`, `try f(x)`); a fallible `SetAt` is called by name, since `x[i] = v` has no `try`.
+  **Found on the way, pre-existing**: `try f() catch default Int32[9]` crashed the compiler for any fallible
+  function returning an array - the slot's type still named the callee's result scope; it is now built where the
+  call's result lands.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

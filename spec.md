@@ -1989,10 +1989,18 @@ type declares one:
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
 | `~a` | `BitNot` | none, a result |
 | `x++`, `x--` (either side) | `Inc`, `Dec` | none, a result |
+| `f(args)` on a value `f` | `Call` | any parameters, any result |
 
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
 name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
-by one of these names without its shape or declaring errors (there is nowhere to write `try` on an operator). The
+by one of these names without its shape. Only `At`, `SetAt`, `Slice` and `Call` may declare errors - the others have
+nowhere to write `try`: a fallible `At` is read as `try x[i]`, a fallible `Slice` as `try x[lo:hi]`, a fallible `Call`
+as `try f(x)`; a fallible `SetAt` cannot be reached by `x[i] = v`, which has no `try`, and is called by name.
+
+A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
+result and errors are exactly the function type's (and a generic function type's variables are inferred from them):
+the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would, and
+state `Call` changes is visible through the instance afterwards. A temporary is built where the function value lands. The
 methods are ordinary methods otherwise, callable by name (`a.Plus(b)`), and M19's coherence rules apply, so the
 built-in types' operators stay the language's. A result may be any value; a built one follows the ordinary rules for
 a built result (§8).

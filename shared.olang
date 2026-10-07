@@ -6677,6 +6677,61 @@ fn opBitsBaked() Int64 {
 
 OpBitsBaked := opBitsBaked()
 
+# E31: Call - a value whose type declares it is called like a function, and passed where one is wanted
+type OpIdGen struct() {
+    n mut Int32 = 0
+}
+
+fn (g mut OpIdGen&) Call() Int32 {
+    g.n++
+    return g.n
+}
+
+type OpSeen struct() {
+    n mut Int32 = 0
+}
+
+fn (c mut OpSeen&) Call(x Int32) Bool {
+    c.n++
+    return x > 3
+}
+
+type OpScale struct(k Int32) {
+    k
+}
+
+fn (s OpScale) Call(x Int32) Int32 { return x * s.k }
+
+fn opApply(f fn(x Int32) Int32, v Int32) Int32 { return f(v) }
+
+error OpGridError {
+    OUT
+}
+
+type OpSafe struct(n Int64) {
+    n
+    cells mut Array<Int32>& = Array<Int32>(n)
+}
+
+fn (g OpSafe&) At(i Int64) Int32 ? OpGridError {
+    if i < 0 or i >= g.n { error OpGridError.OUT }
+    return g.cells[i]
+}
+
+fn (g OpSafe&) Slice(lo Int64, hi Int64) Array<Int32> ? OpGridError {
+    if lo < 0 or hi > g.n { error OpGridError.OUT }
+    return Int32[g.cells[i] for i in range lo, hi]
+}
+
+fn (g OpSafe&) Len() Int64 { return g.n }
+
+fn opMaybeArray(n Int32) Array<Int32> ? {
+    if n > 3 { error }
+    return Int32[1, 2]
+}
+
+OpCallBaked := OpScale(3)(7)
+
 OpDotBaked Int32 = (OpVec(1, 2) + OpVec(3, 4)) @ OpVec(1, 1)
 
 test "E31: operators call methods named for them - arithmetic, negation, ordering, @, compound assignment" {
@@ -6720,6 +6775,29 @@ test "E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from P
     --st
     assert st.n == 0
     assert OpBitsBaked == 15
+}
+
+test "E31: Call makes a value callable and passable as a function; At and Slice may fail under try" {
+    next OpIdGen& = OpIdGen()
+    a := next()
+    b := next()
+    assert a == 1 and b == 2
+    double := OpScale(2)
+    assert double(21) == 42 and opApply(double, 5) == 10
+    seen OpSeen& = OpSeen()
+    big := Int32[1, 5, 2, 7].Iter().Filter(seen)
+    assert big.Len() == 2 and seen.n == 4
+    assert OpCallBaked == 21
+    g OpSafe& = OpSafe(3)
+    g.cells[1] = 5
+    assert (try g[1] catch default -1) == 5
+    assert (try g[7] catch OpGridError.OUT default -2) == -2
+    s := try g[0:2] catch default Int32[9]
+    assert s.Len() == 2
+    t := try g[0:9] catch default Int32[9]
+    assert t.Len() == 1
+    u := try opMaybeArray(5) catch default Int32[4, 4, 4]
+    assert u.Len() == 3
 }
 
 test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {

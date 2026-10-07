@@ -547,6 +547,9 @@ long long ChoicePayloadSize(struct type t);
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
 //M19e: an interface's default methods (instantiated for it), and the entry a table for (concrete, iface) holds for one
 void SemanticInterfaceDefaults(struct type iface, struct list* out);
+//E31: a type's Call method, and whether it matches a function type exactly
+struct var* SemanticCallOf(struct type t);
+bool SemanticCallMatches(struct type t, struct type fnType);
 struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d);
 extern struct semaModule* SemanticMethodScope;
 struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whose imports decide which built-in methods are visible

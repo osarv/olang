@@ -7540,3 +7540,18 @@ from their original form.
   them expressions by grammar that S3 lets stand as statements, and nothing rejected one as an operand. Now an
   increment is valid only as a statement's whole expression (the checker records that node, looking past the
   parser's single-child wrappers) - and nothing in the corpus or std used one any other way; only my new test did.
+
+- **`Call` and fallible indexing (E31, 2026-10-07).** The user liked the callable-struct mechanic but did not see
+  where it fit. I first gave three uses, then corrected myself - a lambda capturing a reference to a stateful
+  struct already does the job - and recommended leaving it out; the user pointed at the counter, where `next()` is
+  simply the right spelling, and asked for it. Built as: `f(x)` on a non-function value calls `Call` (both the
+  named-call and the value-call paths), and a conversion where a function value is expected - an object `{adapter,
+  instance, instance's scope}` whose adapter takes the function-value calling convention and forwards to `Call`,
+  the receiver's scope argument supplied from the object. Generic callbacks (`Filter(keep fn(x <T>) Bool)`) needed
+  `TypeUnify` to read a function type off a value's `Call`. The user also asked that `At`, `SetAt` and `Slice` may
+  fail, since indexing is already a `try` position; `SetAt` behind `x[i] = v` has no `try`, so a fallible one is
+  called by name.
+  **A pre-existing crash surfaced testing fallible `Slice`**: `try f() catch default Int32[9]` segfaulted the
+  compiler for any fallible function returning an array, plain functions included - the try's slot was stored at
+  the call's result type, whose scope is the callee's result-scope variable, which codegen tried to look up in the
+  caller. The slot (both the success and the default path) is now stored in the scope the call's result lands in.

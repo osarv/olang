@@ -1,4 +1,4 @@
-# check: fail a method named for an operator cannot declare errors
+# check: fail a method named for this operator cannot declare errors
 # E31: an operator method's shape
 type V struct(x Int32) {
     x

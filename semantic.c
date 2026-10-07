@@ -1541,6 +1541,7 @@ void TypeCollectVars(struct type t, struct list* out) {
 //only has to be exact where a binding is actually being extracted.
 static int numericTypeRank(struct type t);
 static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
+struct var* SemanticCallOf(struct type t);
 bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     if (param.bType == BASETYPE_TYPEVAR) {
         struct type* bound = bindingGet(bindings, param.name);
@@ -1557,6 +1558,15 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
         return true;
     }
     if (!TypeIsGeneric(param)) return true; //nothing to bind here; ordinary fit-checking covers it
+    //E31: a value whose type declares Call, reaching a function type, binds through Call's own signature
+    if (param.bType == BASETYPE_FUNC && arg.bType != BASETYPE_FUNC && arg.bType != BASETYPE_TYPEVAR) {
+        struct var* call = SemanticCallOf(arg);
+        if (!call || call->type.bType != BASETYPE_FUNC || call->type.vars.len == 0) return false;
+        struct type ft = call->type;
+        ft.vars = ListInit(sizeof(struct var));
+        for (int i = 1; i < call->type.vars.len; i++) ListAdd(&ft.vars, ListGetIdx(&call->type.vars, i));
+        return TypeUnify(param, ft, bindings);
+    }
     //G9c: a concrete type reaching a generic interface ("Source<<T>>&" given a ListIter<Int32>) binds through the
     //methods that satisfy it - each interface method's parameters and result against the concrete method's
     if (param.bType == BASETYPE_INTERFACE && arg.bType != BASETYPE_INTERFACE && arg.bType != BASETYPE_TYPEVAR) {
@@ -3418,12 +3428,13 @@ static struct type underlyingArray(struct type t);
 
 //E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
-struct operatorShape { const char* name; int operands; bool result; };
+struct operatorShape { const char* name; int operands; bool result; bool mayFail; };
 static const struct operatorShape operatorShapes[] = {
-    {"Plus", 1, true}, {"Minus", 1, true}, {"Mul", 1, true}, {"Div", 1, true}, {"Rem", 1, true},
-    {"MatMul", 1, true}, {"Neg", 0, true}, {"Less", 1, true}, {"At", 1, true}, {"SetAt", 2, false},
-    {"Slice", 2, true}, {"BitAnd", 1, true}, {"BitOr", 1, true}, {"BitXor", 1, true}, {"ShiftLeft", 1, true},
-    {"ShiftRight", 1, true}, {"BitNot", 0, true}, {"Inc", 0, true}, {"Dec", 0, true},
+    {"Plus", 1, true, false}, {"Minus", 1, true, false}, {"Mul", 1, true, false}, {"Div", 1, true, false},
+    {"Rem", 1, true, false}, {"MatMul", 1, true, false}, {"Neg", 0, true, false}, {"Less", 1, true, false},
+    {"At", 1, true, true}, {"SetAt", 2, false, true}, {"Slice", 2, true, true}, {"BitAnd", 1, true, false},
+    {"BitOr", 1, true, false}, {"BitXor", 1, true, false}, {"ShiftLeft", 1, true, false},
+    {"ShiftRight", 1, true, false}, {"BitNot", 0, true, false}, {"Inc", 0, true, false}, {"Dec", 0, true, false},
 };
 
 //a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
@@ -3439,7 +3450,7 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         if (a->type.vars.len != sh->operands + 1) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
         else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
-        else if (a->type.errors.len > 0) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
+        else if (a->type.errors.len > 0 && !sh->mayFail) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
         if (pub) {
             char low[16];
@@ -4482,6 +4493,29 @@ static bool bindingIsLanding(struct operand* op, struct var* sv);
 bool callIsLanding(struct operand* op);
 void landCall(struct operand* op, struct var* dst, int depth);
 bool OperandGivesWritable(struct operand* op);
+static struct var* methodNamedOn(struct type t, const char* name);
+//E31: the Call method a value of type t has (public, or private when the caller could use it - judged by the caller),
+//when its parameters, result and errors are exactly fnType's
+struct var* SemanticCallOf(struct type t) {
+    struct var* m = methodNamedOn(t, "Call");
+    return m ? m : methodNamedOn(t, "call");
+}
+bool SemanticCallMatches(struct type t, struct type fnType) {
+    struct var* m = SemanticCallOf(t);
+    if (!m || m->type.bType != BASETYPE_FUNC || m->type.typeParams.len) return false;
+    if (m->type.vars.len != fnType.vars.len + 1) return false;
+    for (int i = 0; i < fnType.vars.len; i++) {
+        if (!TypeIsSame((*(struct var*)ListGetIdx(&m->type.vars, i + 1)).type, (*(struct var*)ListGetIdx(&fnType.vars, i)).type)) return false;
+    }
+    if (m->type.hasRetType != fnType.hasRetType) return false;
+    if (m->type.hasRetType && !TypeIsSame(*m->type.retType, *fnType.retType)) return false;
+    if (m->type.errors.len != fnType.errors.len) return false;
+    for (int i = 0; i < fnType.errors.len; i++) {
+        if (*(struct type**)ListGetIdx(&m->type.errors, i) != *(struct type**)ListGetIdx(&fnType.errors, i)) return false;
+    }
+    return true;
+}
+
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
@@ -4603,6 +4637,17 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         if (!TypeIsNullable(target)) return TYPE_FIT_MISMATCH;
         op->type = target;
         return TYPE_FIT_OK;
+    }
+    //E31: a value whose type declares a Call matching a function type fits it - a function value calling that very
+    //instance's Call, so the instance must outlive the target as a reference to it would
+    if (target.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, target)) {
+        if (!op->type.structMAlloc && !OperandIsLvalue(op)) return TYPE_FIT_OK; //a temporary: built where it lands
+        struct type asRef = op->type;
+        asRef.structMAlloc = true;
+        asRef.scopeParam = target.scopeParam;
+        asRef.scopeDepth = target.scopeDepth;
+        asRef.refMut = op->type.refMut;
+        return op->type.structMAlloc ? TYPE_FIT_OK : borrowLifetimeFits(func, op, asRef);
     }
     //E12d: a value whose type satisfies an interface fits that interface. The instance half of the pair is
     //an ordinary E12c borrow and gets the same lifetime check - an interface value names an instance, it
@@ -6638,7 +6683,19 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
 static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* callee, struct syntax* callNode, bool allowed) {
     struct token tok = firstTokOfType(callNode, TOK_PAREN_O);
     struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
-    if (callee->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(tok, NOT_CALLABLE); return OperandIntLiteral(tok); }
+    if (callee->type.bType != BASETYPE_FUNC) {
+        //E31: "f(x)" on a value whose type declares Call
+        const char* cn = operatorMethodName(ctx, callee->type, "Call");
+        if (cn) {
+            bool prevAllowed = ctx->allowFallibleCall;
+            ctx->allowFallibleCall = allowed;
+            struct operand* c = operatorCallArgs(ctx, callee, args, cn, tok);
+            ctx->allowFallibleCall = prevAllowed;
+            return c;
+        }
+        ErrMsgSemantic(tok, NOT_CALLABLE);
+        return OperandIntLiteral(tok);
+    }
     if (callee->type.errors.len > 0 && !allowed) ErrMsgSemantic(tok, UNHANDLED_FALLIBLE_CALL);
     struct var* fv = MallocOrCrash(sizeof(struct var));
     *fv = (struct var){0};
@@ -7671,7 +7728,19 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         ctx->allowFallibleCall = false;
         struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
         if (!func) return OperandIntLiteral(nameTok);
-        if (func->type.bType != BASETYPE_FUNC) { ErrMsgSemantic(nameTok, NOT_CALLABLE); return OperandIntLiteral(nameTok); }
+        if (func->type.bType != BASETYPE_FUNC) {
+            //E31: "next()" on a variable whose type declares Call
+            const char* cn = operatorMethodName(ctx, func->type, "Call");
+            if (cn) {
+                ctx->allowFallibleCall = allowed;
+                struct operand* recv = OperandReadVar(func, nameTok);
+                struct operand* c = operatorCallArgs(ctx, recv, args, cn, nameTok);
+                ctx->allowFallibleCall = false;
+                return c;
+            }
+            ErrMsgSemantic(nameTok, NOT_CALLABLE);
+            return OperandIntLiteral(nameTok);
+        }
         if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
         struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
         //a constructor is exactly the function a struct type points at as its own - true for an
@@ -8345,6 +8414,8 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
     struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
     const char* setName = operatorMethodName(ctx, base->type, "SetAt");
     if (!setName) { ErrMsgSemantic(opTok, SETAT_UNDECLARED); return (struct statement){0}; }
+    struct var* setM = methodNamedOn(base->type, setName);
+    if (setM && setM->type.errors.len > 0) { ErrMsgSemantic(opTok, SETAT_FALLIBLE); return (struct statement){0}; }
     bool isCompound = false;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct list pre = ListInit(sizeof(struct statement));

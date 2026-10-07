@@ -1289,7 +1289,95 @@ static bool cgIsFreshTemp(struct operand* op) {
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
 
+//E31: a value whose type declares Call, given where a function value is wanted - a closure object holding the
+//adapter, the instance and the instance's scope; the adapter takes the object as any function value's code does
+//(then the function type's scope arguments and parameters) and calls the instance's Call with them
+static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym);
+static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
+    struct var* call = SemanticCallOf(op->type);
+    char callSym[256];
+    mangleFuncSym(call, callSym, sizeof(callSym));
+    char adapter[320];
+    snprintf(adapter, sizeof(adapter), "%s.callfv", callSym);
+    struct var* recv = ListGetIdx(&call->type.vars, 0);
+    char recvTy[256];
+    llvmType(recv->type, recvTy, sizeof(recvTy));
+    bool recvRef = strcmp(recvTy, "ptr") == 0;
+    if (!cgSymAlreadyEmitted(ctx, adapter)) {
+        char retTy[256];
+        llvmFuncRetType(call->type, retTy, sizeof(retTy));
+        fprintf(ctx->out, "define linkonce_odr %s %s(ptr %%closure", retTy, adapter);
+        for (int k = 0; k < dstT.scopeVars.len; k++) fprintf(ctx->out, ", ptr %%sarg%d", k);
+        for (int k = 0; k < dstT.vars.len; k++) {
+            char pty[256];
+            llvmType(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
+            fprintf(ctx->out, ", %s %%arg%d", pty, k);
+        }
+        fputs(") {\nentry:\n", ctx->out);
+        fputs("  %ip = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 1\n  %inst = load ptr, ptr %ip\n"
+              "  %sp = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 2\n  %iscope = load ptr, ptr %sp\n", ctx->out);
+        char args[4096] = "";
+        //the receiver's own scope comes first among Call's, where it has one (a reference receiver, O4b)
+        int callScopes = call->type.scopeVars.len;
+        int k0 = 0;
+        if (recv->type.scopeParam) { strncat(args, "ptr %iscope", sizeof(args) - strlen(args) - 1); k0 = 1; }
+        for (int k = k0; k < callScopes; k++) {
+            char piece[64];
+            snprintf(piece, sizeof(piece), "%sptr %%sarg%d", strlen(args) ? ", " : "", k - k0);
+            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+        }
+        if (recvRef) {
+            strncat(args, strlen(args) ? ", ptr %inst" : "ptr %inst", sizeof(args) - strlen(args) - 1);
+        } else {
+            fprintf(ctx->out, "  %%rv = load %s, ptr %%inst\n", recvTy);
+            char piece[320];
+            snprintf(piece, sizeof(piece), "%s%s %%rv", strlen(args) ? ", " : "", recvTy);
+            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+        }
+        for (int k = 0; k < dstT.vars.len; k++) {
+            char pty[256], piece[320];
+            llvmType(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
+            snprintf(piece, sizeof(piece), ", %s %%arg%d", pty, k);
+            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+        }
+        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", callSym, args);
+        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, callSym, args, retTy);
+    }
+    //where the function value lives, and the instance it calls: the very one when it has storage (a reference, or
+    //an lvalue borrowed), else a temporary built there
+    char* where = scopeOverride ? scopeOverride : ctx->targetScopeOverride ? ctx->targetScopeOverride
+                : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
+    char* inst;
+    char* instScope;
+    if (op->type.structMAlloc) {
+        inst = cgValue(ctx, op);
+        instScope = cgResolveEffectiveScope(ctx, op);
+    } else if (OperandIsLvalue(op)) {
+        inst = cgAddr(ctx, op);
+        instScope = cgResolveEffectiveScope(ctx, op);
+    } else {
+        char ty[256];
+        llvmType(op->type, ty, sizeof(ty));
+        inst = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", inst, where, TypeGetSize(op->type));
+        char* v = cgValue(ctx, op);
+        cgStoreInto(ctx, op->type, op->type, v, inst, where, false, false, false);
+        instScope = where;
+    }
+    char* obj = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", obj, where);
+    char* p1 = cgNewTmp(ctx);
+    char* p2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", adapter, obj);
+    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s\n", p1, obj, inst, p1);
+    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 2\n  store ptr %s, ptr %s\n", p2, obj, instScope, p2);
+    return obj;
+}
+
 char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
+    if (dstT.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, dstT)) {
+        return cgCallAdapterValue(ctx, op, dstT, scopeOverride);
+    }
     //E12d: an interface target takes the (dispatch table, instance) pair, built from the operand itself -
     //the instance half is a borrow, so it needs the lvalue's address, which a produced value has already
     //discarded. Every cgStoreInto site funnels through here, so this is the one place it has to happen.
@@ -1527,6 +1615,9 @@ static char* cgInterfaceValue(struct cgCtx* ctx, struct type ifaceT, struct oper
 }
 
 char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
+    if (dstT.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, dstT)) {
+        return cgCallAdapterValue(ctx, op, dstT, scopeOverride); //E31: an argument or result converted from Call
+    }
     //E12d: a concrete value reaching an interface target becomes the (dispatch table, instance) pair
     if (dstT.bType == BASETYPE_INTERFACE && op->type.bType != BASETYPE_INTERFACE) {
         return cgInterfaceValue(ctx, dstT, op, scopeOverride);
@@ -3906,6 +3997,18 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
 
 //R9a: "try X default d" - both outcomes land in one slot: the success value on the ordinary path, the
 //default on the failure path (see cgTryDefaultFailed), joined after.
+//the type a try's slot is stored at (R9a): a built result's scope is the callee's result-scope variable, which
+//names nothing in this function - what is stored there lives where the call's result lands, the scope being built
+//into or this block, given back in *where
+static struct type cgTrySlotType(struct cgCtx* ctx, struct type t, char** where) {
+    *where = NULL;
+    if (t.scopeParam && !cgFindLocalKind(ctx, t.scopeParam->name, true)) {
+        *where = ctx->targetScopeOverride ? ctx->targetScopeOverride : cgResolveScope(ctx, NULL, ctx->blockDepth);
+        t.scopeParam = NULL;
+    }
+    return t;
+}
+
 static char* cgTryDefaultValue(struct cgCtx* ctx, struct operand* op) {
     struct operand* savedOp = ctx->tdOp;
     char* savedSlot = ctx->tdSlot;
@@ -3921,7 +4024,9 @@ static char* cgTryDefaultValue(struct cgCtx* ctx, struct operand* op) {
     char join[32];
     memcpy(join, ctx->tdJoin, sizeof(join));
     char* v = cgValue(ctx, op);
-    cgStoreInto(ctx, op->type, op->type, v, slot, NULL, false, false, false);
+    char* where = NULL;
+    struct type st = cgTrySlotType(ctx, op->type, &where);
+    cgStoreInto(ctx, st, st, v, slot, where, false, false, false);
     cgBr(ctx, join);
     cgLabel(ctx, join);
     ctx->tdOp = savedOp;
@@ -3939,8 +4044,10 @@ static void cgTryDefaultStore(struct cgCtx* ctx, struct operand* op, struct oper
     memcpy(join, ctx->tdJoin, sizeof(join));
     //against the result type as seen from here (tryDefaultType): a temporary default is allocated into the
     //scope the call's result was bound to, which the callee's own scope variable names nothing for here
-    char* dv = cgValueForTarget(ctx, dflt, op->tryDefaultType, NULL);
-    cgStoreInto(ctx, op->tryDefaultType, dflt->type, dv, slot, NULL, false, OperandIsLvalue(dflt), false);
+    char* where = NULL;
+    struct type dt = cgTrySlotType(ctx, op->tryDefaultType, &where);
+    char* dv = cgValueForTarget(ctx, dflt, dt, where);
+    cgStoreInto(ctx, dt, dflt->type, dv, slot, where, false, OperandIsLvalue(dflt), false);
     cgBr(ctx, join);
 }
 
