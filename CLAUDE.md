@@ -2582,7 +2582,10 @@ Go through this for every change to what olang means - a rule added, revised or 
   enum match to 0.06s / 0.39s against C's 0.05s / 0.36s. Rounding the payload to whole words also fixed a
   pre-existing **heap corruption**: a payload smaller than a word was sized at 12 bytes where LLVM strides 16, so an
   array of such enums was allocated short (the old compiler aborts on the corpus test). Switch dispatch for interfaces
-  is now worth building - recommended next, user's call.
+  was then measured at 3/8/16/32 types (it wins only with very few types, or a predictable order; from about eight
+  in random order tables are level or ahead), a cutoff version (at most 4 types) begun - and **dropped by the user**:
+  "it gains very little and causes a lot of problems". Interface calls stay table calls; a closed set of types
+  written as an enum is the static, fast choice.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
