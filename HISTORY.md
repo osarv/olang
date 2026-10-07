@@ -7295,3 +7295,13 @@ from their original form.
   through its blocks, and one failing at its very first token reports "expected 'declaration'" instead of the
   name of whichever alternative happened to be tried last. Two check cases pin (2) and (3); the old compiler gives
   five errors for the one-typo case.
+
+- **The evaluator calls through interfaces (K1, 2026-10-07).** Asked why it could not, there was no reason: K1
+  listed dispatch beside `extern` as though both were opaque, but a dispatch always reaches an ordinary olang
+  method, and the evaluator's interface value is a reference to the instance node, which keeps its concrete type.
+  So `ctCall` evaluates the receiver, asks the checker's own `InterfaceMethodImpl` which method that type supplies
+  (instantiating a generic receiver's method), and runs it - the receiver bound as the instance, or a copy for a
+  by-value receiver, as the generated thunk does. The static scan defers the decision as it does for a function
+  value. A null interface value is refused. Pinned by globals baked through `GenSource<Int32>` and through G9c's
+  `Iterator<<T>>&` inference, compared with the same computation at run time. The user's rule, recorded: the
+  evaluator should handle everything it can.

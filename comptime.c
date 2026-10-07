@@ -7,7 +7,7 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, spawn/join, atomics, an interface dispatch or a call through a function value,
+//the write), an extern call, spawn/join, atomics, a call through a function value or an interface whose target cannot be,
 //done/fail/abort/unreachable, a failing assert, integer division by zero or an out-of-range shift or
 //conversion (undefined at run time - refused here rather than guessed), and running out of the step
 //budget. Every one of those is reported with the operation that caused it.
@@ -671,11 +671,10 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_FUNCCALL: {
             struct var* f = op->readVar;
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
-            if (op->isIfaceDispatch) { ctScanFail(sc, op->tok, "it calls through an interface"); return; }
-            if (!f || f->type.isExtern) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
-            //a call through a function value is evaluable exactly when the function it reaches is - which only
-            //the evaluation knows, so it is decided there (ctCall), not here
-            bool throughValue = !f->owner && !op->isCtorCall;
+            if (!f || (f->type.isExtern && !op->isIfaceDispatch)) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
+            //a call through a function value or an interface is evaluable exactly when the function it reaches
+            //is - which only the evaluation knows, so it is decided there (ctCall), not here
+            bool throughValue = (!f->owner && !op->isCtorCall) || op->isIfaceDispatch;
             for (int i = 0; i < op->args.len && !sc->why; i++) {
                 struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
                 //a global bound to a "mut &" parameter may be written through it
@@ -810,10 +809,24 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
         return ctFail(st, op->tok, CT_WHY_DESTRUCTOR);
     }
-    if (op->isIfaceDispatch) return ctFail(st, op->tok, "it calls through an interface");
-    if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
+    if (!func || (func->type.isExtern && !op->isIfaceDispatch)) return ctFail(st, op->tok, "it calls an external function");
     struct ctVal* through = NULL;
-    if (!func->owner && !op->isCtorCall) {
+    struct ctVal* recv = NULL; //T31: a dispatch's receiver - the interface value - evaluated before the method is known
+    if (op->isIfaceDispatch) {
+        //the method the instance's own concrete type supplies, decided now (K1a), as for a function value
+        struct operand* a0 = *(struct operand**)ListGetIdx(&op->args, 0);
+        recv = ctFit(st, a0, ((struct var*)ListGetIdx(&func->type.vars, 0))->type);
+        if (!recv) {
+            if (st->flow == CF_ERROR) st->errBypass = true;
+            return NULL;
+        }
+        if (recv->kind == CT_NULL) return ctFail(st, op->tok, "it calls a method through a null interface value");
+        if (recv->kind != CT_REF || !recv->target) return ctFail(st, op->tok, "it calls through an interface value compile-time evaluation does not model");
+        struct var* m = ListGetIdx(&op->ifaceType.vars, op->ifaceMethodIdx);
+        struct var* impl = InterfaceMethodImpl(recv->target->type, m);
+        if (!impl) return ctFail(st, op->tok, "it calls through an interface value compile-time evaluation does not model");
+        func = canonicalVar(impl);
+    } else if (!func->owner && !op->isCtorCall) {
         //a call through a function value: the function it names, decided now (K1a)
         struct ctVal* fv = op->callee ? ctEval(st, op->callee) : ctFindLocal(st, func->name); //E13b: computed
         if (!fv && op->callee) return NULL;
@@ -838,7 +851,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     for (int i = 0; i < func->type.vars.len && i < op->args.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-        struct ctVal* v = ctFit(st, a, p->type);
+        //a dispatched method's receiver: the instance the interface names, or a copy for a by-value receiver
+        struct ctVal* v = recv && i == 0 ? (ctIsRef(p->type) ? recv : recv->target) : ctFit(st, a, p->type);
         if (!v) {
             if (st->flow == CF_ERROR) st->errBypass = true; //from an argument, not from this call
             return NULL;

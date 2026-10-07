@@ -6289,6 +6289,33 @@ test "G9c: a concrete type passed to a generic interface binds its variables thr
     assert iterTotal(c2) == 10
 }
 
+## K1: compile-time evaluation calls through an interface - the method the instance's concrete type supplies,
+## found when the call is reached, as a call through a function value is
+fn iterTotalOf(n Int32) Int32 {
+    c ForCounter& = ForCounter(0, n)
+    return iterTotal(c)
+}
+
+fn drainBoth() Int32 {
+    c ForCounter& = ForCounter(0, 3)
+    o GenOnce<Int32>& = GenOnce<Int32>(10, false)
+    a GenSource<Int32>& = c
+    b GenSource<Int32>& = o
+    return genDrain(a) + genDrain(b)
+}
+
+IterTotalBaked := iterTotalOf(5)
+DrainBothBaked := drainBoth()
+
+test "K1: interface calls are evaluated while compiling, and agree with the run time" {
+    assert IterTotalBaked == 15
+    assert DrainBothBaked == 16
+    n := 5
+    n++
+    assert iterTotalOf(n - 1) == IterTotalBaked
+    assert drainBoth() == DrainBothBaked
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

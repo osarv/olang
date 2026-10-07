@@ -3652,8 +3652,8 @@ error as they would at run time. It is **not** possible when evaluation would:
 - read a mutable global, whose value is the running program's, or write any global;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
-- call an `extern` function or dispatch through an interface - a call through a function value is evaluated
-  when the function it reaches is, which is known only when the call is reached;
+- call an `extern` function - a call through a function value or an interface is evaluated when the function
+  it reaches is, which is known only when the call is reached;
 - spawn or join, use an atomic operation, or end the test or the process (`done`, `fail`, `abort`,
   `unreachable`);
 - fail an `assert`, or let an error escape that no clause handles;
