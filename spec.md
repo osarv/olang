@@ -1288,6 +1288,12 @@ by that name - a type's own method always wins - and it looks at the interfaces 
 the modules it imports, and in the prelude. When two such interfaces each declare a method of that name and the
 type satisfies both, the call is a compile-time error: it cannot choose.
 
+Such a method is the interface's **default**: a type with its own method of that name and signature (receiver
+mutability included) **overrides** it, and the override runs whichever way the method is called - directly on the
+value, or through an interface value holding it, whose dispatch (T31) reaches the type's own method. Through an
+interface value the call is dispatched, unless the default is generic in a type of its own beyond the interface's
+(`Fold`'s `U`): such a default is a family of functions rather than one, and the default itself runs.
+
 **M19b.** A method call's receiver need not be a name at all. Wherever a postfix `.` member access (§5.5)
 is followed by an argument list, everything to its left is the receiver: `items[i].Area()`, `f(x).Size()`.
 This is the only spelling that reaches a method on an indexed or returned value, since the

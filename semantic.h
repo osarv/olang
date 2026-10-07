@@ -544,6 +544,9 @@ bool ChoiceHasPayload(struct type t);
 long long ChoicePayloadSize(struct type t);
 
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
+//M19e: an interface's default methods (instantiated for it), and the entry a table for (concrete, iface) holds for one
+void SemanticInterfaceDefaults(struct type iface, struct list* out);
+struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d);
 extern struct semaModule* SemanticMethodScope;
 struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whose imports decide which built-in methods are visible
 //M21: the type f is a method OF - its first parameter's type, when that type is declared in f's own module

@@ -1352,9 +1352,21 @@ static bool cgIfaceBoxesDescriptor(struct type t) {
 //always hands over a pointer to the instance), so it gets a one-line adapter that loads the aggregate and
 //forwards. T31 deliberately admits both receiver shapes, on the grounds that the latitude E12 gives every
 //other argument should not stop at this one; the thunk is what that costs, and it is confined to here.
+static void cgItabEntryFor(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
+                           struct str mName, char* out, size_t n);
 static void cgItabEntry(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* m,
                         char* out, size_t n) {
-    struct var* impl = InterfaceMethodImpl(concrete, m);
+    cgItabEntryFor(ctx, concrete, iface, InterfaceMethodImpl(concrete, m), m->name, out, n);
+}
+
+//M19e: a default's entry - a by-value override needs the same thunk an interface method's would
+static void cgDefaultEntry(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
+                           char* out, size_t n) {
+    cgItabEntryFor(ctx, concrete, iface, impl, impl->name, out, n);
+}
+
+static void cgItabEntryFor(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
+                           struct str mName, char* out, size_t n) {
     char real[256];
     mangleFuncSym(impl, real, sizeof(real));
     struct var* recv = ListGetIdx(&impl->type.vars, 0);
@@ -1368,7 +1380,7 @@ static void cgItabEntry(struct cgCtx* ctx, struct type concrete, struct type ifa
     char ifaceName[200], concreteName[200];
     mangleTypeName(iface.owner, iface.name, ifaceName, sizeof(ifaceName));
     cgConcreteName(concrete, concreteName, sizeof(concreteName));
-    snprintf(out, n, "@olang.thunk.%s.%s.%.*s", ifaceName, concreteName, m->name.len, m->name.ptr);
+    snprintf(out, n, "@olang.thunk.%s.%s.%.*s", ifaceName, concreteName, mName.len, mName.ptr);
     if (cgSymAlreadyEmitted(ctx, out)) return;
 
     char retTy[256];
@@ -1458,7 +1470,17 @@ static char* cgItable(struct cgCtx* ctx, struct type concrete, struct type iface
     char piece[300];
     snprintf(piece, sizeof(piece), "%sptr %s", iface.vars.len > 0 ? ", " : "", eqFn);
     strncat(entries, piece, sizeof(entries) - strlen(entries) -1);
-    fprintf(ctx->out, "%s = linkonce_odr constant [%d x ptr] [%s]\n", sym, iface.vars.len +1, entries);
+    //M19e: then the interface's defaults - the type's own method where it overrides one, else the default compiled for it
+    struct list ds = ListInit(sizeof(struct var*));
+    SemanticInterfaceDefaults(iface, &ds);
+    for (int k = 0; k < ds.len; k++) {
+        struct var* entry = SemanticDefaultEntry(concrete, iface, *(struct var**)ListGetIdx(&ds, k));
+        char fn[512], dp[600];
+        cgDefaultEntry(ctx, concrete, iface, entry, fn, sizeof(fn));
+        snprintf(dp, sizeof(dp), ", ptr %s", fn);
+        strncat(entries, dp, sizeof(entries) - strlen(entries) -1);
+    }
+    fprintf(ctx->out, "%s = linkonce_odr constant [%d x ptr] [%s]\n", sym, iface.vars.len +1 + ds.len, entries);
     return sym;
 }
 
@@ -2464,8 +2486,7 @@ static char* cgDispatchTarget(struct cgCtx* ctx, struct operand* op, char** data
     *dataOut = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", *dataOut, pair);
     char* slotAddr = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = getelementptr [%d x ptr], ptr %s, i64 0, i64 %d\n",
-            slotAddr, op->ifaceType.vars.len, itab, op->ifaceMethodIdx);
+    fprintf(ctx->fnOut, "  %s = getelementptr ptr, ptr %s, i64 %d\n", slotAddr, itab, op->ifaceMethodIdx);
     char* target = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, slotAddr);
     return target;

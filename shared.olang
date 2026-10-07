@@ -6694,8 +6694,8 @@ test "E31: operators in generic code, in a constraint, through an interface valu
     assert OpDotBaked == 10
 }
 
-# M19e: a method declared on an interface is callable on any value whose type satisfies it; a type's own method
-# of the same name wins
+# M19e: a method declared on an interface is callable on any value whose type satisfies it - a default - and a type's
+# own method of the same name overrides it, called directly or through an interface value
 type IfmNamed interface {
     IfmName() Int32
 }
@@ -6708,6 +6708,12 @@ type IfmP struct(v Int32) {
 }
 
 fn (p IfmP) IfmName() Int32 { return p.v }
+
+type IfmQ struct(v Int32) {
+    v
+}
+
+fn (q IfmQ) IfmName() Int32 { return q.v }
 fn (p IfmP) Whisper() Int32 { return 100 }
 
 IfmCountBaked := Int32[1, 2, 3, 4].Iter().Count(fn(x) { return x > 2 })
@@ -6717,7 +6723,9 @@ test "M19e: interface methods reach satisfying types; a type's own method wins" 
     assert p.Shout() == 10
     assert p.Whisper() == 100
     n IfmNamed& = p
-    assert n.Whisper() == 4
+    assert n.Whisper() == 100 # through an interface value the type's own version runs too
+    m IfmNamed& = IfmQ(5)
+    assert m.Whisper() == 4 and m.Shout() == 10
     assert Int32[1, 2, 3].Iter().Any(fn(x) { return x == 3 })
     assert IfmCountBaked == 2
 }

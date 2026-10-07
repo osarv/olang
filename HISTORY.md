@@ -7516,3 +7516,14 @@ from their original form.
   **Found writing the indexing test:** `return g.cells[lo:hi]` from `fn (g G&) ... Array<Int32>&g` was rejected
   though `return g.cells` was accepted. `lvalueStorageScope` took a bare reference field's empty tag as this
   function's own scope; O20's walk out to the container, already in the fit check, now applies there too.
+
+- **Defaults override through interface values (M19e, 2026-10-07).** Asked how default methods work now, I
+  answered that M19e already is them, with one gap: through an interface value the default ran even where the type
+  had its own. The user: "it does matter, we should run the overload version." Each dispatch table now holds the
+  interface's defaults after the identity entry (so `==`'s entry keeps its index): the conversion that builds the
+  table resolves each default to the type's own method (matched as T31 matches an interface method) or to the
+  default instantiated for the concrete type - created while checking, since codegen cannot check bodies - and a
+  default called on an interface value becomes a dispatch through that slot. The M19e corpus test had pinned the
+  old behaviour (`n.Whisper()` through the interface ran the default); it now pins the override. Loop speed is
+  unchanged (the interface-value `Count` loop still matches the hand loop). The user also asked whether interfaces
+  need whole-program compilation - they do not; tables are per (type, interface) pair, emitted where converted.

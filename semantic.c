@@ -1658,6 +1658,8 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
 //mangled name is stable regardless of which module first triggered it.
 //struct instantiation itself is declared in semantic.h, so codegen can walk the list
 static struct list instantiations;
+static int instantiationsCount(void) { return instantiations.len; }
+static struct instantiation* instantiationAt(int i) { return ListGetIdx(&instantiations, i); }
 //monomorphized copies of generic STRUCT types (G10/G16), kept as struct type* so their addresses are
 //stable: mod->types stores struct type BY VALUE, so adding to it during resolution would realloc and
 //invalidate every pointer already handed out, exactly as for mod->vars.
@@ -4295,6 +4297,72 @@ bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var*
     return true;
 }
 
+//the default methods of an interface (M19e): the methods its own module declares with it as the receiver, in
+//declaration order, that a dispatch table can hold - one compiled function each, so none generic in a type of
+//its own beyond the interface's (Fold's U names a family). Each is returned instantiated for this interface
+//(its variables bound from iface's arguments).
+struct var* instantiateFunc(struct var* generic, struct list* bindings);
+static bool unifyIfaceReceiver(struct var* d, struct type iface, struct list* b) {
+    struct type r = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type;
+    r.structMAlloc = false;
+    return TypeUnify(r, iface, b);
+}
+void SemanticInterfaceDefaults(struct type iface, struct list* out) {
+    struct type* origin = iface.genericOrigin ? iface.genericOrigin : NULL;
+    struct semaModule* mod = origin ? origin->owner : iface.owner;
+    if (!mod) return;
+    for (int i = 0; i < mod->vars.len; i++) {
+        struct var* d = ListGetIdx(&mod->vars, i);
+        if (!d->isMethod || d->type.bType != BASETYPE_FUNC || d->type.vars.len == 0) continue;
+        struct type* r = SemanticMethodReceiver(d);
+        if (!r || r->bType != BASETYPE_INTERFACE) continue;
+        bool same = origin ? (r->genericOrigin == origin || (r->owner == origin->owner && StrCmp(r->name, origin->name)))
+                           : (r->owner == iface.owner && StrCmp(r->name, iface.name));
+        if (!same) continue;
+        struct list b = ListInit(sizeof(struct typeBinding));
+        if (!unifyIfaceReceiver(d, iface, &b)) continue;
+        bool closed = true;
+        for (int k = 0; k < d->type.typeParams.len && closed; k++) {
+            closed = bindingGet(&b, *(struct str*)ListGetIdx(&d->type.typeParams, k)) != NULL;
+        }
+        if (!closed) continue;
+        struct var* spec = d->type.typeParams.len ? instantiateFunc(d, &b) : d;
+        ListAdd(out, &spec);
+    }
+}
+
+//the entry a dispatch table for (concrete, iface) holds for default d: concrete's own method of that name and
+//signature, which overrides it, else d compiled for concrete. Called while checking (a conversion), so the
+//instantiation exists by the time codegen asks again.
+struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
+struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d) {
+    struct var asMethod = *d; //the default's signature without its receiver, as an interface method would read
+    asMethod.type.vars = ListInit(sizeof(struct var));
+    for (int i = 1; i < d->type.vars.len; i++) ListAdd(&asMethod.type.vars, ListGetIdx(&d->type.vars, i));
+    asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type.refMut;
+    struct var* own = VarGetMethod(concrete.owner, d->name, concrete);
+    if (own && own->owner && InterfaceMethodImpl(concrete, &asMethod) == own) return own;
+    if (own && own->type.typeParams.len && InterfaceMethodImpl(concrete, &asMethod)) return InterfaceMethodImpl(concrete, &asMethod);
+    struct var* generic = d->origin && d->origin != d ? d : d;
+    struct list b = ListInit(sizeof(struct typeBinding));
+    struct var* src = generic;
+    for (int i = 0; i < instantiationsCount(); i++) {
+        struct instantiation* inst = instantiationAt(i);
+        if (inst->specialized == d) { src = inst->generic; b = inst->bindings; break; }
+    }
+    struct list b2 = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < b.len; i++) ListAdd(&b2, ListGetIdx(&b, i));
+    struct typeBinding sb = (struct typeBinding){0};
+    sb.name = StrFromCStr("$Self");
+    sb.type = concrete;
+    sb.type.structMAlloc = false;
+    sb.type.scopeParam = NULL;
+    sb.type.scopeDepth = 0;
+    ListAdd(&b2, &sb);
+    (void)iface;
+    return instantiateFunc(src, &b2);
+}
+
 //G19: does concrete meet iface as a constraint - every method present, called directly (so with E12's latitude
 //between a value and a reference parameter), where an interface value needs exact signatures for its table
 bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed) {
@@ -4539,7 +4607,16 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //never owns or copies one, so handing it storage that dies first is the same defect it always was.
     if (target.bType == BASETYPE_INTERFACE) {
         struct var* missing = NULL;
-        if (TypeSatisfiesInterface(op->type, target, &missing)) return borrowLifetimeFits(func, op, target);
+        if (TypeSatisfiesInterface(op->type, target, &missing)) {
+            //M19e: the table this conversion builds holds the interface's defaults too - the type's own where
+            //it overrides one, else the default compiled for it, which has to exist before codegen asks
+            struct list ds = ListInit(sizeof(struct var*));
+            SemanticInterfaceDefaults(target, &ds);
+            struct type concrete = op->type;
+            concrete.structMAlloc = false;
+            for (int i = 0; i < ds.len; i++) SemanticDefaultEntry(concrete, target, *(struct var**)ListGetIdx(&ds, i));
+            return borrowLifetimeFits(func, op, target);
+        }
         recordInterfaceFitFailure(target, op->type, missing);
         return TYPE_FIT_INTERFACE;
     }
@@ -7333,6 +7410,19 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     }
     struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
     selfForInterfaceCall = NULL;
+    //M19e: a default called through an interface value goes through the table, so a type overriding it runs its
+    //own - the default's entries follow the interface's methods and its identity entry
+    if (recvType.bType == BASETYPE_INTERFACE && call->readVar && !call->isIfaceDispatch) {
+        struct list ds = ListInit(sizeof(struct var*));
+        SemanticInterfaceDefaults(recvType, &ds);
+        for (int k = 0; k < ds.len; k++) {
+            if (*(struct var**)ListGetIdx(&ds, k) != call->readVar) continue;
+            call->isIfaceDispatch = true;
+            call->ifaceMethodIdx = recvType.vars.len + 1 + k;
+            call->ifaceType = recvType;
+            break;
+        }
+    }
     return call;
 }
 

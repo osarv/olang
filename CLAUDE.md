@@ -2547,6 +2547,14 @@ Go through this for every change to what olang means - a rule added, revised or 
   `a.Iter().Count(f)` 0.29s -> 0.08s, through an `Iterator<Int32>&` value 0.20s -> 0.07s, the hand loop 0.08s.
   Binary size was already minimal: LTO drops every prelude function a program does not reach (an empty program is
   15.8 KB, one using `List` and text 16.5 KB), so "import only what is used" needed nothing for the output.
+- **Defaults override through interface values too (M19e, 2026-10-07, the user's call).** A method declared on an
+  interface is its default; a type's own method of that name and signature overrides it on a direct call (as
+  before) and now also through an interface value: each dispatch table carries the interface's defaults after its
+  identity entry, filled with the type's override or the default compiled for it, and a default called on an
+  interface value dispatches through that entry. A default generic in its own types (`Fold`'s `U`) cannot be one
+  table entry and stays static. The user asked whether interfaces therefore need whole-program builds: no - a table
+  belongs to one (type, interface) pair and is emitted where the conversion is written; only a switch-dispatch
+  speedup would need the whole program.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
