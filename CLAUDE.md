@@ -2482,6 +2482,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   written `##` by convention (a single `#` already began a line comment), so 2,046 comments were rewritten to `#`
   by a script that skips string and character literals, and the `# check:` / `# flags:` headers with them. The user
   chose `##` over the unused `###`, which would have needed no migration.
+- **Pending, deferred by the user (2026-10-07): default methods, constraints, operator overloading.** Recorded,
+  not decided. *Default methods*: chosen to be reachable only through the interface (an interface value or a
+  constrained `<T>`), never as a concrete type's own methods - which M19a's interface-receiver methods already are.
+  On top of that the user wants `default` to mark an *optional* interface member a type may supply itself (an
+  override, e.g. an O(1) `List.Count`) or leave to the default body; open are the rule for a same-named method with
+  another signature (error recommended), and whether the body sits inside the interface (recommended). *Constraints*
+  (`<T Shape>`): worth it mostly for errors at the call and visible requirements, since a generic body is already
+  checked per instantiation; recommended as interfaces doubling as constraints rather than a new keyword (`group` is
+  wrong by group theory). *Operator overloading* deferred until a real program needs it: free `fn *(a A, b B) C`,
+  heterogeneous, declared in A's or B's module, plain-data results; the `Self`-in-interfaces question goes with it.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
