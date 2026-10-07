@@ -1,0 +1,6 @@
+# check: fail '++' and '--' are statements of their own, never part of an expression
+# S3a: an increment is never part of an expression
+fn main() ? {
+    i := 0
+    j Int32 = i++
+}

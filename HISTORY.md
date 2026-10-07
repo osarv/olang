@@ -7534,3 +7534,9 @@ from their original form.
   increment on such a type lowers to the statements-then-value operand (`OPERATION_SEQ`), holding the old value
   for the postfix form; S3 accepts it as a statement as it accepts the built-in increments. The callable struct
   (`Call`) was not understood as proposed and is open, as is `for ... in` over `At` and `Len`.
+
+- **Increments are statements only (S3a, 2026-10-07).** Testing user-type increments, I wrote `old OpCtr = k++`;
+  the user stopped it - increments are not supposed to be usable in expressions at all. Nothing said so: E1 called
+  them expressions by grammar that S3 lets stand as statements, and nothing rejected one as an operand. Now an
+  increment is valid only as a statement's whole expression (the checker records that node, looking past the
+  parser's single-child wrappers) - and nothing in the corpus or std used one any other way; only my new test did.

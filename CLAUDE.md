@@ -2557,7 +2557,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   speedup would need the whole program.
 - **Bitwise operators and increments overloadable too (E31, 2026-10-07, the user's call).** `BitAnd`, `BitOr`, `BitXor`,
   `ShiftLeft`, `ShiftRight`, `BitNot` (and their `op=`); `x++`/`x--` call `Inc`/`Dec`, or are derived as `x = x + 1`
-  through `Plus` when the type declares no `Inc` (the user: derived, but overridable "if the type doesn't play nice
+  through `Plus` when the type declares no `Inc`; and **increments are statements only (S3a, the user: "we are not
+  supposed to be able to use ++ and -- in expressions")** - never an operand, argument or initializer, for any type,
+  so prefix and postfix mean the same. Nothing in the corpus or std used one inside an expression (the user: derived, but overridable "if the type doesn't play nice
   with ones"). Not overloadable, confirmed by the user: `==`/`!=`, `$`, `and`/`or`/`not`, `=`, `.`, `try`, `match`.
   `for ... in` over a type with `At`/`Len`, and a callable struct (`f(x)`), are open for discussion.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,

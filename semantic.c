@@ -3656,6 +3656,7 @@ struct checkCtx {
     bool hasOwnScope; //true inside a function body or a test { } block - both are "own"'s valid range,
                        //even though only the former also sets func (see the field above); false for a
                        //global initializer, which has no enclosing scope at all
+    struct syntax* incDecRoot; //S3a: the one expression an increment may be - a statement's whole expression
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
     struct var* destructSelfVar; //non-NULL only while checking a destruct{} body: a bare identifier that
@@ -6550,6 +6551,7 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
                             : opTok.type == TOK_BTWSE_INV ? operatorMethodName(ctx, result->type, "BitNot") : NULL;
         if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
         if (opTok.type == TOK_INC || opTok.type == TOK_DEC) {
+            if (!(s == ctx->incDecRoot && n == 2)) ErrMsgSemantic(opTok, INCDEC_IN_EXPRESSION); //S3a
             struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
             if (r) { result = r; continue; }
         }
@@ -6649,8 +6651,8 @@ static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* call
 }
 
 //E31: "x++" / "x--" on a type that is not numeric - x = x.Inc() (Dec), a method the type may declare, or else
-//x = x + 1 (x - 1) through its Plus (Minus), for a type whose Plus takes the literal one. Postfix gives the old
-//value, prefix the new. NULL when the type has neither, leaving the built-in form and its error.
+//x = x + 1 (x - 1) through its Plus (Minus), for a type whose Plus takes the literal one. A statement only (S3a).
+//NULL when the type has neither, leaving the built-in form and its error.
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok) {
     if (TypeIsNumeric(target->type) || target->type.bType == BASETYPE_TYPEVAR) return NULL;
@@ -6660,7 +6662,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     struct operand* seq = operandNew(tok, OPERATION_SEQ, target->type);
     seq->isIncDec = true;
     seq->comprBody = ListInit(sizeof(struct statement));
-    struct var* old = prefix ? NULL : holdInHidden(ctx, target, tok, "old", &seq->comprBody);
+    (void)prefix; //S3a: an increment has no value anyone reads, so the two forms are the same
     struct token one = tok;
     one.type = TOK_INT_LIT;
     one.str = StrFromCStr("1");
@@ -6671,8 +6673,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     eq.str = StrFromCStr("=");
     struct statement set = buildAssignCore(ctx, target, next, eq);
     ListAdd(&seq->comprBody, &set);
-    struct operand* val = old ? OperandReadVar(old, tok) : target;
-    ListAdd(&seq->args, &val);
+    ListAdd(&seq->args, &target);
     return seq;
 }
 
@@ -6691,6 +6692,8 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     for (int i = startIdx; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) {
+            //S3a: an increment is a statement of its own, never part of an expression
+            if (!(s == ctx->incDecRoot && i == s->parts.len - 1)) ErrMsgSemantic(p->tok, INCDEC_IN_EXPRESSION);
             struct operand* incDec = buildIncDec(ctx, result, p->tok.type == TOK_INC, false, p->tok); //E31
             if (incDec) result = incDec;
             else if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
@@ -8630,7 +8633,14 @@ static bool exprCanStandAsStatement(struct operand* op) {
 }
 
 struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct operand* op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    struct syntax* e = firstPartOfType(s, SNTX_EXPR);
+    struct syntax* prevRoot = ctx->incDecRoot;
+    //the node the whole expression is, past any single-child wrappers the parser leaves around it
+    struct syntax* root = e;
+    while (root && root->parts.len == 1 && !partAt(root, 0)->isToken) root = partSntx(root, 0);
+    ctx->incDecRoot = root;
+    struct operand* op = buildExprFromSyntax(ctx, e);
+    ctx->incDecRoot = prevRoot;
     if (!exprCanStandAsStatement(op)) ErrMsgSemantic(op->tok, EXPR_NOT_A_STATEMENT);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;

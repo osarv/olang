@@ -6710,12 +6710,10 @@ test "E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from P
     k OpCtr = OpCtr(5)
     k++
     assert k.n == 6
-    old OpCtr = k++
-    assert old.n == 6 and k.n == 7
-    nw OpCtr = ++k
-    assert nw.n == 8
-    k--
+    ++k
     assert k.n == 7
+    k--
+    assert k.n == 6
     st OpStep = OpStep(0)
     st++
     assert st.n == 10

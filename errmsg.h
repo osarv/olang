@@ -149,6 +149,7 @@
 #define OPERATOR_AT_UNDECLARED "'@' has no built-in meaning - the left operand's type declares it as the method MatMul (E31)"
 #define CONSTRAINT_NOT_INTERFACE "a constraint on a type variable is an interface the variable's type must satisfy (G19)"
 #define CONSTRAINT_DISAGREES "this type variable is constrained differently elsewhere in the declaration - one constraint per variable (G19)"
+#define INCDEC_IN_EXPRESSION "'++' and '--' are statements of their own, never part of an expression - write 'x++' on its own and use x after it (S3a)"
 #define SEPARATOR_COMMA "these entries are separated by line ends, one per line - not by commas (T17/T19/C2)"
 #define VAR_LIST_COUNT "a declaration of several names takes one value per name, or none (D12b)"
 #define ASSIGN_LIST_COUNT "an assignment of several targets takes one value per target, or one call giving that many results (S4c)"

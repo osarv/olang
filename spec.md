@@ -2008,8 +2008,8 @@ returning a writable borrowed reference (`At(i Int64) mut T&x`) makes `x[i].f = 
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
-`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`; postfix gives the value
-before, prefix the value after. A type with neither is an error, as for any other non-numeric type.
+`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
+error, as for any other non-numeric type.
 
 `==`, `!=` (E10) and `$` (E11a) are never declared, nor are `and`, `or`, `not` (they short-circuit, E7), `=`, `.`,
 `try` and `match`.
@@ -2033,6 +2033,11 @@ closing `}`.
 either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4) or
 one of the four increment/decrement forms (`++x`, `--x`, `x++`, `x--`, E1), which are expressions by
 grammar but reach statement position only here. Its value, if any, is discarded.
+
+**S3a.** The increment and decrement forms are **only** statements: `x++`, `x--`, `++x` and `--x` are valid as a
+statement's whole expression (here, and as a `for` loop's post clause, S9) and nowhere else - never as an operand,
+an argument, an index or an initializer. Their value is therefore never read, so the prefix and postfix forms mean
+the same.
 
 Any other expression standing alone as a statement is a compile-time error. `n`, `x == y` and `a + 1`
 each compute a value and then throw it away, which is dead code by construction, and far more often a
