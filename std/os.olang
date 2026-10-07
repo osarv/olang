@@ -9,7 +9,7 @@ extern fn lseek(fd Int32, offset Int64, whence Int32) Int64
 extern fn read(fd Int32, buf Array<Byte>, count Int64) Int64
 
 error OsError {
-    NOT_FOUND,
+    NOT_FOUND
     FAILED
 }
 

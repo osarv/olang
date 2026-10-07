@@ -7,8 +7,8 @@
 type String Array<Byte>
 
 error ParseError {
-    EMPTY,
-    INVALID,
+    EMPTY
+    INVALID
     OVERFLOW
 }
 

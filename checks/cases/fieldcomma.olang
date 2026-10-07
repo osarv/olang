@@ -1,0 +1,4 @@
+## check: fail these entries are separated by line ends, one per line - not by commas
+## T17/T19/C2: a comma between entries is a compile-time error
+type P struct(x Int32, y Int32) { a Int32 = x, b Int32 = y }
+fn main() ? { }

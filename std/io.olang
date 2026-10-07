@@ -8,7 +8,7 @@ extern fn open(path Array<Byte>, flags Int32) Int32
 extern fn close(fd Int32) Int32
 
 error IoError {
-    FAILED,
+    FAILED
     PARTIAL
 }
 

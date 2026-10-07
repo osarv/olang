@@ -27,12 +27,12 @@ type Direction enum {
 }
 
 error MathError {
-    DIV_BY_ZERO,
+    DIV_BY_ZERO
     OVERFLOW
 }
 
 error RangeError {
-    TOO_SMALL,
+    TOO_SMALL
     TOO_LARGE
 }
 
@@ -299,7 +299,7 @@ fn measurementValue(n Int32) Int32 ? ValidationError {
 }
 
 error MeasureError {
-    NEGATIVE,
+    NEGATIVE
     TOO_BIG
 }
 
@@ -5651,7 +5651,7 @@ test "R9a: a reference default lives in exactly the result's scope, or is built 
 ## R9b: several catch clauses, tried in order; in value position each leaves or gives its own default
 
 error R9E {
-    A,
+    A
     B
 }
 

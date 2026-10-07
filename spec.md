@@ -414,7 +414,8 @@ an unmarked, unbroken self-embedding cycle is a compile-time error.
 representation available to a program: it supports only equality (`==`/`!=`) and structural matching
 (`match`/`case`, §6.4) — no ordering, no arithmetic, no explicit conversion to or from any integer type.
 
-Cases are separated by statement ends, not commas (L18/L20), the same way a constructor body's fields are:
+Cases are separated by statement ends, not commas (L18/L20) - a comma between two is a compile-time error - the same
+way a constructor body's fields and an error type's words (T19) are:
 a case is a declaration rather than an item in a list.
 
 **T17a.** A case may carry a **payload**, written as a parameter list after its name:
@@ -498,11 +499,12 @@ which is exactly `Option`-shaped when the other case holds a reference.
 
 ### 2.6 Error types
 
-**T19.** `error-decl ::= "error" IDEN "{" IDEN { "," IDEN } [ STMNT_END ] "}"` is a **top-level**
+**T19.** `error-decl ::= "error" IDEN "{" [ STMNT_END ] IDEN { STMNT_END IDEN } [ STMNT_END ] "}"` is a **top-level**
 declaration in its own right — not a `type Name error { ... }` form, and not reachable from a
 general `type-expr` position (T2). An error type declares a closed, ordered set of named words,
 similar in shape to an enum body but declared with its own keyword and usable only
-in the specific positions described in §7.
+in the specific positions described in §7. Its words are separated by statement ends, as an enum's cases are (T17):
+one per line, or a single word on the declaration's own line; a comma between two is a compile-time error.
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
@@ -2676,7 +2678,12 @@ uncaught past `main` (§10.3 B5), the diagnostic says so rather than naming a ty
 **R20.** The checks the language itself makes report **`BuiltinError`**, an error type declared in the prelude:
 
 ```
-error BuiltinError { OUT_OF_BOUNDS, DIVIDE_BY_ZERO, OVERFLOW, INVALID }
+error BuiltinError {
+    OUT_OF_BOUNDS
+    DIVIDE_BY_ZERO
+    OVERFLOW
+    INVALID
+}
 ```
 
 A check runs only where it is asked for, with `try` (§5); an operation written without it behaves as §5 says.
@@ -3109,7 +3116,9 @@ same, so that one spelling of an error set holds everywhere in the language.
 
 **C2.** `ctor-body ::= { ctor-field STMNT_END | stmnt }` — a constructor's body is an ordinary
 statement block (§6) in which a field declaration is one more kind of statement, so fields and
-statements interleave freely in textual order. A `ctor-field` is exactly one of:
+statements interleave freely in textual order. Fields are separated by statement ends like any statement; a comma
+between two is a compile-time error (several names sharing one declaration, `x, y mut`, are D12b's). A `ctor-field`
+is exactly one of:
 
 ```
 IDEN [ "mut" ] ":=" expr           # inferred: type read from expr, as D15 reads it

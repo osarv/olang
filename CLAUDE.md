@@ -2472,6 +2472,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   compile, so a miss can never be read as a zero value. A proposed `m.Get(k) else 0` shorthand was dropped - the
   user: it swallows one result of two while reading as though it applies to both. Iterators keep `Next() (T, Bool)`,
   since running out is not a failure and `for ... in` handles it.
+- **Error words are separated like enum cases; a separating comma is an error (T17/T19/C2, 2026-10-07, the user's
+  call).** `error E {` then one word per line (or `error E { X }` for one), exactly as enum cases; and a comma between
+  entries - an error type's words, an enum's cases, a constructor's fields - is a compile-time error saying entries
+  go one per line, reported and read past so it stays one error. Several names sharing a declaration (`x, y mut`,
+  D12b) are not entries and keep their commas. 13 files migrated by script.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

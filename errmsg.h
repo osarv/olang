@@ -136,6 +136,7 @@
 #define SPAWN_ARG_TOO_SHORT "this argument does not outlive the enclosing 'join' block, so the task could still be running when its storage is reclaimed. It is declared inside a nested block that closes first; declare it at the join block's own level or wider"
 #define SPAWN_REQUIRES_CALL "the operand of 'spawn' must be a call - that is what a task is. There are no closures, so an argument list is the only way to state what a task may touch"
 #define ATOMIC_NOT_INTEGER "an atomic operation's target must be an integer variable ('Byte', 'Int32' or 'Int64'). Atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float"
+#define SEPARATOR_COMMA "these entries are separated by line ends, one per line - not by commas (T17/T19/C2)"
 #define VAR_LIST_COUNT "a declaration of several names takes one value per name, or none (D12b)"
 #define ASSIGN_LIST_COUNT "an assignment of several targets takes one value per target, or one call giving that many results (S4c)"
 #define COND_BRANCH_TYPES "the two values of 'a if c else b' must have the same type - a literal adapts to the other, nothing else is converted (E28)"

@@ -340,6 +340,14 @@ struct syntax* parseChoiceCase(SyntaxCtx sc) {
     return s;
 }
 
+//T17/T19/C2: a comma where line ends separate entries (an enum's cases, an error type's words, a constructor's
+//fields) is reported and then read past as though it were the line end it stands for, so one stray comma is one error
+static bool rejectSeparatorComma(SyntaxCtx sc) {
+    if (peekTok(sc).type != TOK_COMMA) return false;
+    ErrMsgSemantic(TokenFeed(sc->tc), SEPARATOR_COMMA);
+    return true;
+}
+
 struct syntax* parseChoiceBody(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_CHOICE);
@@ -362,6 +370,7 @@ struct syntax* parseChoiceBody(SyntaxCtx sc) {
         if (!c) break;
         addSntx(s, c);
         any = true;
+        rejectSeparatorComma(sc);
     }
     if (!any) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token close = acceptTok(sc, TOK_CURLY_C);
@@ -533,25 +542,26 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token open = acceptTok(sc, TOK_CURLY_O);
     if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct token first = acceptTok(sc, TOK_IDEN);
-    if (first.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_ERROR_DECL);
     addTok(s, kw);
     addTok(s, name);
     addTok(s, open);
-    addTok(s, first);
+    //T19: words are separated by statement ends, as an enum's cases are - one per line, or a single one on the
+    //declaration's own line (L20)
+    bool any = false;
     while (true) {
         int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        struct token end = TokenFeed(sc->tc);
+        if (end.type == TOK_STMNT_END) { addTok(s, end); continue; }
+        TokenSetCursor(sc->tc, before);
         struct token iden = acceptTok(sc, TOK_IDEN);
-        if (iden.type == TOK_NONE) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
+        if (iden.type == TOK_NONE) break;
         addTok(s, iden);
+        any = true;
+        if (rejectSeparatorComma(sc)) continue;
+        if (peekTok(sc).type != TOK_CURLY_C && acceptTok(sc, TOK_STMNT_END).type == TOK_NONE) break;
     }
-    int beforeEnd = TokenGetCursor(sc->tc);
-    struct token end = TokenFeed(sc->tc);
-    if (end.type == TOK_STMNT_END) addTok(s, end); else TokenSetCursor(sc->tc, beforeEnd);
+    if (!any) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token close = acceptTok(sc, TOK_CURLY_C);
     if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     addTok(s, close);
@@ -752,13 +762,13 @@ struct syntax* parseCtorBody(SyntaxCtx sc) {
     while (true) {
         int cur = TokenGetCursor(sc->tc);
         struct syntax* fs = parseMultiDecl(sc, SNTX_CTOR_FIELD); //D12b: several fields at once
-        if (fs && acceptStmntEnd(sc)) {
+        if (fs && (acceptStmntEnd(sc) || rejectSeparatorComma(sc))) {
             for (int i = 0; i < fs->parts.len; i++) addSntx(s, ((struct syntaxPart*)ListGetIdx(&fs->parts, i))->sntx);
             continue;
         }
         TokenSetCursor(sc->tc, cur);
         struct syntax* f = parseCtorField(sc);
-        if (f && acceptStmntEnd(sc)) { addSntx(s, f); continue; }
+        if (f && (acceptStmntEnd(sc) || rejectSeparatorComma(sc))) { addSntx(s, f); continue; }
         TokenSetCursor(sc->tc, cur);
         struct syntax* stmt = parseStmnt(sc);
         if (!stmt) break;

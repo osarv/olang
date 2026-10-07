@@ -7409,3 +7409,12 @@ from their original form.
   built on the same pattern to be migrated. Only `Map.Get` was public; `Map.entryAt` and `List.elementAt` are the
   iterators' internals, where running out is the ordinary end of a sequence, as it is for `Next()`. `Has` no longer
   goes through `Get`. A global computed through a hit and a miss bakes to the run-time answer.
+
+- **Error words separated like enum cases (T19, 2026-10-07).** Found writing `std/cancel`: an error declared with
+  one word per line and no commas, as enum cases are written, failed with "expected '}'". The user chose the enum
+  form, and then made a comma between entries a compile-time error in all three places entries are listed - error
+  words, enum cases, constructor fields - rather than a generic syntax failure. The parser reports the comma and
+  reads past it as the line end it stands for, so recovery yields one error. The distinction kept: `x, y mut Int32`
+  lists names sharing one declaration (D12b), which is not a separator between entries. The migration was a script
+  over every `.olang` file turning a trailing comma into a space so aligned comments stayed aligned; 13 files and
+  one spec example changed.

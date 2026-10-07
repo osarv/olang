@@ -21,7 +21,7 @@ error WorkerError {
 }
 
 error InputError {
-    NEGATIVE,
+    NEGATIVE
     TOO_BIG
 }
 

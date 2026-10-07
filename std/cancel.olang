@@ -7,7 +7,7 @@
 
 ## why a wait gave up
 error Stopped {
-    CANCELLED,
+    CANCELLED
     TIMED_OUT
 }
 

@@ -2,8 +2,8 @@
 ## operation written without it behaves as it always does (§5, E6a-E6c, E8a, E16, E26a). A function that lets
 ## one through names BuiltinError in its signature, as it would any error type, or catches it.
 error BuiltinError {
-    OUT_OF_BOUNDS,     ## an index or slice outside its array, or a negative array length
-    DIVIDE_BY_ZERO,    ## an integer or float "/" or "%" by zero
-    OVERFLOW,          ## a result the type cannot hold
+    OUT_OF_BOUNDS      ## an index or slice outside its array, or a negative array length
+    DIVIDE_BY_ZERO     ## an integer or float "/" or "%" by zero
+    OVERFLOW           ## a result the type cannot hold
     INVALID            ## an operand the operation does not accept: a shift amount, a NaN or infinity
 }

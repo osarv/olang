@@ -1,5 +1,8 @@
 ## check: fail nowhere for a value
-error E { A, B }
+error E {
+    A
+    B
+}
 error F { C }
 fn f() Int32 ? E + F { error E.A }
 fn main() ? E { }
