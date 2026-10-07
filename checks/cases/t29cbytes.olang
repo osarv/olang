@@ -1,5 +1,5 @@
-## check: fail no method of this name
-## T29c: bytes are not text until they are named so - String(raw).Eq(...) is how
+# check: fail no method of this name
+# T29c: bytes are not text until they are named so - String(raw).Eq(...) is how
 test "never runs" {
     raw := Array<Byte>(2, 'z')
     assert raw.Eq("zz")

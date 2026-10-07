@@ -1,4 +1,4 @@
-## check: fail does not exist outside the branches
+# check: fail does not exist outside the branches
 error E { X }
 fn f() Bool { return true }
 if f() {

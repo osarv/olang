@@ -1,5 +1,5 @@
-## check: fail must declare every error
-## R20: a checked division can fail with DIVIDE_BY_ZERO and OVERFLOW, so catching one word is not complete
+# check: fail must declare every error
+# R20: a checked division can fail with DIVIDE_BY_ZERO and OVERFLOW, so catching one word is not complete
 fn div(a Int32, b Int32) Int32 {
     r Int32 = try (a / b) catch BuiltinError.OVERFLOW default 0
     return r

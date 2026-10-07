@@ -15,6 +15,7 @@
 #define UNKNOWN_SYMBOL "unknown symbol"
 #define INVALID_ESCAPE_CHAR "invalid escape character"
 #define NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL "newline before closing of character literal"
+#define UNTERMINATED_BLOCK_COMMENT "a block comment opened with ## is never closed - another ## ends it (L4a)"
 #define EMPTY_CHAR_LITERAL "empty character literal"
 #define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
 #define BIN_LITERAL_NO_DIGITS "a binary literal needs at least one digit after '0b'"

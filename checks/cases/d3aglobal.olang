@@ -1,4 +1,4 @@
-## check: fail D3a
+# check: fail D3a
 error E { X }
 Count Int32 = 1
 fn helper() { }

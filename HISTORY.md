@@ -7418,3 +7418,13 @@ from their original form.
   lists names sharing one declaration (D12b), which is not a separator between entries. The migration was a script
   over every `.olang` file turning a trailing comma into a space so aligned comments stayed aligned; 13 files and
   one spec example changed.
+
+- **Block comments (L4a, 2026-10-07).** The user asked for `##` to open a block comment closed by the next `##`,
+  believing `#` was the line comment - it was, but every comment in the repository was written `##` by habit, so
+  the change meant rewriting all of them first or each would open an unterminated block. `###` was offered as the
+  marker needing no migration (no run of three hashes existed anywhere); the user kept `##`. The migration was a
+  script turning the first `##` on a line, outside string and character literals, into `#` (2,046 comments), then a
+  pass over `##` left inside comment text (example code shown in comments). The check runner's headers became
+  `# check:`/`# flags:`. The tokenizer change is a few lines in `findNextTokStart`; a block comment sets the line-break
+  flag only when it crosses a line, so `x Int32 = 1 ## note ## + 2` stays one statement. The first test of it
+  promptly hit the obvious trap - writing `"##"` inside a block comment closes it - which is the rule working.

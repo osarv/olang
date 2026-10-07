@@ -1,6 +1,6 @@
-## M1: a module is one file. This file and measure.olang sit in one directory, which groups them and names
-## them ("geom/rect", "geom/measure") and nothing more: each imports what it uses of the other (M22), by a
-## path relative to its own directory (M23).
+# M1: a module is one file. This file and measure.olang sit in one directory, which groups them and names
+# them ("geom/rect", "geom/measure") and nothing more: each imports what it uses of the other (M22), by a
+# path relative to its own directory (M23).
 
 import "measure"
 
@@ -17,7 +17,7 @@ test "a function in one file calls one declared in its neighbour, through an imp
     assert measure.Area(Square(3)) == 9
 }
 
-## B9a: a top-level condition reads a global of an imported module (measure.olang)
+# B9a: a top-level condition reads a global of an imported module (measure.olang)
 if measure.GeomUnits == "cm" {
     fn UnitName() String& { return "cm" }
 } else {

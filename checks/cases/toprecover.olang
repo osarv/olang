@@ -1,6 +1,6 @@
-## check: fail compilation failed with 1 error
-## a top-level item that fails to parse is skipped whole, block included: the statements inside it are not
-## read again as top-level declarations and reported one by one
+# check: fail compilation failed with 1 error
+# a top-level item that fails to parse is skipped whole, block included: the statements inside it are not
+# read again as top-level declarations and reported one by one
 fn helper() Int32 {
     x := (1 +
     y := 2

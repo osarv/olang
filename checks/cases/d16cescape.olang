@@ -1,5 +1,5 @@
-## check: fail own scope cannot satisfy
-## D16d: a lambda capturing a local reference lives where that local's referent does, so it cannot be returned
+# check: fail own scope cannot satisfy
+# D16d: a lambda capturing a local reference lives where that local's referent does, so it cannot be returned
 type Point struct(x Int32) { x mut }
 fn leak() fn(n Int32) Int32 {
     p Point& = Point(5)

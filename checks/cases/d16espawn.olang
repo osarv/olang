@@ -1,6 +1,6 @@
-## check: fail does not outlive the enclosing 'join' block
-## P2: a lambda made inside the join block lives in the block it was made in - a task calling through it could
-## outlive it
+# check: fail does not outlive the enclosing 'join' block
+# P2: a lambda made inside the join block lives in the block it was made in - a task calling through it could
+# outlive it
 type Slot struct() { v mut Int32 = 0 }
 error E { X }
 fn main() ? E {

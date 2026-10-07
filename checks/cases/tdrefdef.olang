@@ -1,4 +1,4 @@
-## check: build
+# check: build
 error E { X }
 fn two() (Int32, Int32) ? E { return 1, 2 }
 fn none() ? E { }

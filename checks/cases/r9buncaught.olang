@@ -1,4 +1,4 @@
-## check: fail signature
+# check: fail signature
 error E {
     A
     B

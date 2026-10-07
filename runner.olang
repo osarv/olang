@@ -1,4 +1,4 @@
-## Completes the worker.olang <-> runner.olang import cycle, and is the -c mode entry point (has main).
+# Completes the worker.olang <-> runner.olang import cycle, and is the -c mode entry point (has main).
 
 import sh "shared"
 import wk "worker"
@@ -13,18 +13,18 @@ fn DoubleIt(n Int32) Int32 {
     return n * 2
 }
 
-## originating a FOREIGN module's error type directly via "error alias.Type.word" - previously you could
-## only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
-## report. wk.WorkerError is declared over in worker.olang, not here.
+# originating a FOREIGN module's error type directly via "error alias.Type.word" - previously you could
+# only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
+# report. wk.WorkerError is declared over in worker.olang, not here.
 fn alwaysWorkerBadInput() Int32 ? wk.WorkerError {
     error wk.WorkerError.BAD_INPUT
 }
 
-## a chain of TWO alias hops ("wk" - runner's own alias for worker.olang, then "Base" - worker's own
-## re-exported alias for wk.Base.olang, see worker.olang) reaching a THIRD module's own error type directly,
-## originated fresh right here - not just declared/caught through a signature. Every cross-module
-## mechanism (type ref, call, bare var read, catch, "error" statement) supports an alias chain of any
-## length now, not just one hop - see the report.
+# a chain of TWO alias hops ("wk" - runner's own alias for worker.olang, then "Base" - worker's own
+# re-exported alias for wk.Base.olang, see worker.olang) reaching a THIRD module's own error type directly,
+# originated fresh right here - not just declared/caught through a signature. Every cross-module
+# mechanism (type ref, call, bare var read, catch, "error" statement) supports an alias chain of any
+# length now, not just one hop - see the report.
 fn alwaysBaseBrokenViaChain() ? wk.Base.BaseError {
     error wk.Base.BaseError.BROKEN
 }
@@ -88,25 +88,25 @@ test "a two-hop alias chain reaches a re-exported module's own type" {
     assert t.Id == 9
 }
 
-## M6a: capitalization decides a MEMBER's visibility too, not just a top-level declaration's. "t.Id" reads
-## fine from here; "t.secret" and "catch wk.Base.BaseError.quiet" are compile errors and so can only be
-## named in a comment. Reaching the private member through the declaring module's own accessor works, which
-## is the point - privacy is about this boundary, not about the member being special.
+# M6a: capitalization decides a MEMBER's visibility too, not just a top-level declaration's. "t.Id" reads
+# fine from here; "t.secret" and "catch wk.Base.BaseError.quiet" are compile errors and so can only be
+# named in a comment. Reaching the private member through the declaring module's own accessor works, which
+# is the point - privacy is about this boundary, not about the member being special.
 test "a lowercase member is private across the module boundary, reachable through its own module" {
     t wk.Base.BaseThing = wk.Base.BaseThing(9)
     assert wk.Base.BaseSecretOf(t) == 7
 }
 
-## G16: a generic instantiated across a module boundary. The instantiation is emitted into THIS module's
-## object as linkonce_odr - worker's own object never contains it - so the body has to be available from
-## worker's source at the moment this module is checked.
+# G16: a generic instantiated across a module boundary. The instantiation is emitted into THIS module's
+# object as linkonce_odr - worker's own object never contains it - so the body has to be available from
+# worker's source at the moment this module is checked.
 test "a generic from another module returns its own argument" {
     assert wk.GenericEcho(7) == 7
     assert wk.GenericEcho(Byte(3)) == 3
 }
 
-## M12: an enum value is alias-qualified like any other cross-module name now. "wk.Base.BaseDir.south" is
-## a compile error under M6a and so appears only here, in a comment.
+# M12: an enum value is alias-qualified like any other cross-module name now. "wk.Base.BaseDir.south" is
+# a compile error under M6a and so appears only here, in a comment.
 test "a two-hop alias chain names a re-exported enum type's word, and matches on it" {
     d wk.Base.BaseDir = wk.Base.BaseDir.North
     assert d == wk.Base.BaseDir.North
@@ -118,15 +118,15 @@ test "a two-hop alias chain names a re-exported enum type's word, and matches on
     assert hit == 1
 }
 
-## a private enum case is still perfectly usable through the declaring module's own function - the value
-## crosses the boundary even though its NAME cannot
+# a private enum case is still perfectly usable through the declaring module's own function - the value
+# crosses the boundary even though its NAME cannot
 test "a private enum case's value still crosses the boundary" {
     d wk.Base.BaseDir = wk.Base.BaseSouth()
     assert d != wk.Base.BaseDir.North
 }
 
-## a private WORD does not stop the whole type being caught - you can handle "some BaseError" without being
-## able to name the ones the declaring module kept to itself
+# a private WORD does not stop the whole type being caught - you can handle "some BaseError" without being
+# able to name the ones the declaring module kept to itself
 test "a private error word is still caught by its type from another module" {
     caught Bool = false
     try wk.Base.AlwaysBaseQuiet() catch wk.Base.BaseQuiet {
@@ -163,9 +163,9 @@ test "originating a two-hop re-exported error type directly with 'error alias.al
     assert caught
 }
 
-## T30/T31 across a module boundary: Metre is declared here and satisfies Base's interface purely by
-## having a matching method - no import of the interface into the declaration, no declared intent, no
-## mention of Metre anywhere in wk.Base.
+# T30/T31 across a module boundary: Metre is declared here and satisfies Base's interface purely by
+# having a matching method - no import of the interface into the declaration, no declared intent, no
+# mention of Metre anywhere in wk.Base.
 type Metre struct(len Int32) {
     n mut Int32 = len
 }
@@ -175,19 +175,19 @@ test "a local type satisfies an imported interface structurally" {
     m Metre& = Metre(3)
     s wk.Base.BaseSized& = m
     assert s.Size() == 300
-    assert s.BaseDoubled() == 600        ## M19a: a method on the interface itself, reached across the boundary
+    assert s.BaseDoubled() == 600        # M19a: a method on the interface itself, reached across the boundary
 }
 
 test "a sealed interface still travels, it just cannot be implemented from outside" {
     b wk.Base.BaseBox& = wk.Base.BaseBox(5)
     sealed wk.Base.BaseSealed& = wk.Base.BaseSealedBox(b)
     assert wk.Base.BaseTagOf(sealed) == 7
-        ## "sealed = someLocalType" is a compile error here: baseTag is private to Base, so no type declared
-        ## in this module can supply it - which is the whole point of a sealed interface
+        # "sealed = someLocalType" is a compile error here: baseTag is private to Base, so no type declared
+        # in this module can supply it - which is the whole point of a sealed interface
 }
 
-## M19d: a built-in type's methods are the prelude's and visible everywhere, so nothing is imported for
-## every String here - a literal, a slice, a "$x" rendering - to have them.
+# M19d: a built-in type's methods are the prelude's and visible everywhere, so nothing is imported for
+# every String here - a literal, a slice, a "$x" rendering - to have them.
 test "the prelude's methods on a built-in type are visible without an import" {
     greeting String& = "hello, " $3
     assert greeting.Eq("hello, 3")
@@ -206,16 +206,16 @@ test "M19: a method on a type from an imported module is reached through its rec
     assert n.Squared() == 36
 }
 
-## B5a: imports initialize before importers - this initializer reads a global of shared.olang's that is
-## itself computed at startup. The root used to be initialized first, reading 0.
+# B5a: imports initialize before importers - this initializer reads a global of shared.olang's that is
+# itself computed at startup. The root used to be initialized first, reading 0.
 runnerFourteen Int32 = sh.InitSeven * 2
 
 test "B5a: an importer's global initializer sees its import's globals already set" {
     assert runnerFourteen == 14
 }
 
-## B9: an import inside a top-level if exists only when its branch is taken - the pre-scan that loads imports
-## evaluates the same condition. This one, and the test using it, exist only in a test build.
+# B9: an import inside a top-level if exists only when its branch is taken - the pre-scan that loads imports
+# evaluates the same condition. This one, and the test using it, exist only in a test build.
 if TestBuild {
     import "std/list"
 

@@ -1,5 +1,5 @@
-## check: fail unknown
-## flags: -D Level=1
+# check: fail unknown
+# flags: -D Level=1
 error E { X }
 fn main() ? E {
     x := 0

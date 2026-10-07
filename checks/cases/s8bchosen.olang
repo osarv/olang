@@ -1,5 +1,5 @@
-## check: run
-## flags: -D Level=3
+# check: run
+# flags: -D Level=3
 error E { X }
 fn main() ? E {
     x := 0

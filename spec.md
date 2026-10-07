@@ -72,9 +72,12 @@ parsing, and (per §4) the unit of module identity.
 
 **L3.** Space (`' '`) and tab (`'\t'`) are insignificant except as token separators.
 
-**L4.** A comment begins with `#` and runs to the end of the line (exclusive of the newline). There
-are no block comments. A comment is otherwise treated as whitespace, except that it counts as a
-newline for the purpose of L18 (automatic statement termination).
+**L4.** A line comment begins with a single `#` and runs to the end of the line (exclusive of the newline). It is
+treated as whitespace, except that it counts as a newline for the purpose of L18 (automatic statement termination).
+
+**L4a.** `##` opens a **block comment**, which runs to the next `##` (block comments do not nest). It is treated as
+whitespace, and as a newline for L18 exactly when it spans one - so `x := 1 ## note ## + 2` is one statement. A block
+comment never closed is a compile-time error. Within a line comment, `##` is only text.
 
 **L5.** A newline (`'\n'`) is otherwise insignificant except for L18.
 

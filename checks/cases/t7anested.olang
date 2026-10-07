@@ -1,5 +1,5 @@
-## check: fail T7a
-## an array held inside a struct shares its storage when the struct is copied, so one whose size is only
-## known at run time must be written as a reference
+# check: fail T7a
+# an array held inside a struct shares its storage when the struct is copied, so one whose size is only
+# known at run time must be written as a reference
 type W struct(n Int32) { a mut Array<Int32> = Array<Int32>(n) }
 test "never runs" { w W = W(3) }

@@ -1,14 +1,14 @@
-## list - a growable sequence, built for incremental construction when the final size is not known in
-## advance: parsing, accumulating, collecting results. Append-only, and deliberately NOT contiguous.
-##
-## Storage is a chain of chunks, each twice the size of the last, so appending never moves anything that
-## is already stored. That is the whole design: a contiguous growable array has to reallocate and copy as it
-## grows, and every borrow taken before a growth then points at a stale copy. A List never hands out its
-## chunks at all, so nothing it stores can go stale, and there is no invalidation rule to learn.
-## When contiguous storage is wanted, ToArray copies once, at a point the program chose and can see.
-##
-## Everything a List allocates lives where the List does (its fields are bare "&", C2d), so it is reclaimed with
-## that scope like anything else, and costs no destructor.
+# list - a growable sequence, built for incremental construction when the final size is not known in
+# advance: parsing, accumulating, collecting results. Append-only, and deliberately NOT contiguous.
+#
+# Storage is a chain of chunks, each twice the size of the last, so appending never moves anything that
+# is already stored. That is the whole design: a contiguous growable array has to reallocate and copy as it
+# grows, and every borrow taken before a growth then points at a stale copy. A List never hands out its
+# chunks at all, so nothing it stores can go stale, and there is no invalidation rule to learn.
+# When contiguous storage is wanted, ToArray copies once, at a point the program chose and can see.
+#
+# Everything a List allocates lives where the List does (its fields are bare "&", C2d), so it is reclaimed with
+# that scope like anything else, and costs no destructor.
 
 type listChunk<T> struct(size Int64) {
     data mut Array<<T>>& = Array<<T>>(size)
@@ -22,8 +22,8 @@ type List<T> struct() {
     count mut Int64 = 0
 }
 
-## the first chunk's capacity; each one after it doubles, so n elements take about log2(n / 8) chunks and
-## never more than twice the storage they need
+# the first chunk's capacity; each one after it doubles, so n elements take about log2(n / 8) chunks and
+# never more than twice the storage they need
 firstChunk Int64 = 8
 
 fn (l mut List<<T>>&) Push(x <T>) {
@@ -43,11 +43,11 @@ fn (l mut List<<T>>&) Push(x <T>) {
 
 fn (l List<<T>>&) Len() Int64 { return l.count }
 
-## a position in a List - handed out fresh by Iter(), so the list keeps none and every loop gets its own: two
-## loops over one list, nested or one after the other, never disturb each other. The position is two numbers
-## rather than a reference to the current chunk, so Next writes no reference through its receiver and needs
-## no scope name on it, which is what lets it satisfy Iterator<T> (an interface call has no way to pass a
-## receiver's scope); reaching the chunk costs a walk over at most log2(n / 8) chunks.
+# a position in a List - handed out fresh by Iter(), so the list keeps none and every loop gets its own: two
+# loops over one list, nested or one after the other, never disturb each other. The position is two numbers
+# rather than a reference to the current chunk, so Next writes no reference through its receiver and needs
+# no scope name on it, which is what lets it satisfy Iterator<T> (an interface call has no way to pass a
+# receiver's scope); reaching the chunk costs a walk over at most log2(n / 8) chunks.
 type ListIter<T> struct(of List<<T>>&) {
     list List<<T>>&of = of
     chunkNo mut Int64 = 0
@@ -61,8 +61,8 @@ fn (it mut ListIter<<T>>&) Next() (<T>, Bool) {
     return v, ok
 }
 
-## the element at position (chunkNo, i), moving on to the next chunk when i is past the end of this one: the
-## element, the position it was found at, and whether there was one
+# the element at position (chunkNo, i), moving on to the next chunk when i is past the end of this one: the
+# element, the position it was found at, and whether there was one
 fn (l List<<T>>&) elementAt(chunkNo Int64, i Int64) (<T>, Int64, Int64, Bool) {
     want Int64 = chunkNo
     at Int64 = i
@@ -70,7 +70,7 @@ fn (l List<<T>>&) elementAt(chunkNo Int64, i Int64) (<T>, Int64, Int64, Bool) {
     for c := l.head, c != null, c = c.next {
         if n == want {
             if at < c.used { return c.data[at], n, at, true }
-            want++        ## this chunk is used up: the position moves to the start of the next one
+            want++        # this chunk is used up: the position moves to the start of the next one
             at = 0
         }
         n++
@@ -79,11 +79,11 @@ fn (l List<<T>>&) elementAt(chunkNo Int64, i Int64) (<T>, Int64, Int64, Bool) {
     return none, n, at, false
 }
 
-## the elements in the order they were pushed - what "for x in l" walks (S9c)
+# the elements in the order they were pushed - what "for x in l" walks (S9c)
 fn (l List<<T>>&) Iter() ListIter<<T>> { return ListIter<<T>>(l) }
 
-## the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
-## independent of the list, which may be discarded, or keep growing, without affecting it
+# the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
+# independent of the list, which may be discarded, or keep growing, without affecting it
 fn (l List<<T>>&) ToArray() mut Array<<T>>& {
     out Array<<T>>&return = Array<<T>>(l.count)
     at Int64 = 0
@@ -96,9 +96,9 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
     return out
 }
 
-## what a function value lets a list do (D16) - each walks the elements in the order they were pushed
+# what a function value lets a list do (D16) - each walks the elements in the order they were pushed
 
-## whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
+# whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
 fn (l List<<T>>&) Has(x <T>) Bool {
     for y in l {
         if y.Eq(x) { return true }
@@ -136,7 +136,7 @@ fn (l List<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     return acc
 }
 
-## a new list - in the caller's scope - of f applied to every element
+# a new list - in the caller's scope - of f applied to every element
 fn (l List<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
     out List<<U>>&return = List<<U>>()
     for x in l {
@@ -145,7 +145,7 @@ fn (l List<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
     return out
 }
 
-## a new list - in the caller's scope - of the elements keep holds for
+# a new list - in the caller's scope - of the elements keep holds for
 fn (l List<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
     out List<<T>>&return = List<<T>>()
     for x in l {
@@ -166,7 +166,7 @@ test "pushes survive many chunk boundaries, in order" {
     for i in range 1000 {
         l.Push(Int64(i) * 3)
     }
-    l.Push(7)        ## a literal adapts to the list's own T (G9a)
+    l.Push(7)        # a literal adapts to the list's own T (G9a)
     assert l.Len() == 1001
     a Array<Int64>& = l.ToArray()
     assert a.Len() == 1001
@@ -203,8 +203,8 @@ test "a list of structs" {
     assert a[19].v == 361
 }
 
-## O10e: ToArray's "&out" appears only in its return type, so it orders before the list's own scope and the
-## body requires nothing between them - an outer list flattens into an inner block's array freely
+# O10e: ToArray's "&out" appears only in its return type, so it orders before the list's own scope and the
+# body requires nothing between them - an outer list flattens into an inner block's array freely
 test "an outer list flattened into an inner block" {
     l List<Int32>& = List<Int32>()
     l.Push(1)
@@ -218,21 +218,21 @@ test "an outer list flattened into an inner block" {
 
 test "a List is iterable: every loop over it gets its own position" {
     l List<Int64>& = List<Int64>()
-    for i in range 20 { l.Push(Int64(i)) }        ## crosses two chunks (8, then 16)
+    for i in range 20 { l.Push(Int64(i)) }        # crosses two chunks (8, then 16)
     sum Int64 = 0
     for x in l { sum += x }
     assert sum == 190
     again Int64 = 0
-    for x in l { again += x }              ## a second loop starts from the beginning
+    for x in l { again += x }              # a second loop starts from the beginning
     assert again == 190
     pairs Int64 = 0
-    for a in l { for b in l { if a == b { pairs++ } } }        ## nested loops keep separate positions
+    for a in l { for b in l { if a == b { pairs++ } } }        # nested loops keep separate positions
     assert pairs == 20
-    for x in List<Int32>() { unreachable }        ## an empty list yields nothing
+    for x in List<Int32>() { unreachable }        # an empty list yields nothing
 }
 
-## G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
-## references into it and copies nothing
+# G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
+# references into it and copies nothing
 fn wordsOf(t String&) List<String&>&t {
     out List<String&>&t = List<String&>()
     start Int64 = 0
@@ -256,8 +256,8 @@ test "a List of references: the words of a line, as slices of it" {
     assert arr[0].Eq("to") and arr[3].Eq("not")
 }
 
-## a list held by value and pushed to from inside a loop: the call borrows the list (E12c), so its chunks are
-## built where the list lives - they used to be built in the loop's own block and freed with it
+# a list held by value and pushed to from inside a loop: the call borrows the list (E12c), so its chunks are
+# built where the list lives - they used to be built in the loop's own block and freed with it
 fn listChurn() Int64 {
     t Int64 = 0
     for i in range 2000 {
@@ -289,8 +289,8 @@ test "a list's elements, walked through a lambda" {
     assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
 }
 
-## E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
-## 100 and doubles, so 250 elements grow it twice
+# E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
+# 100 and doubles, so 250 elements grow it twice
 test "a comprehension walks a List" {
     l List<Int32>& = List<Int32>()
     for i in range 250 { l.Push(i) }

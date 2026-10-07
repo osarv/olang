@@ -1,13 +1,13 @@
-## map - values found by key. A key is any type with "Hash() Int64" and "Eq(other) Bool" methods: the prelude
-## gives them to Int32, Int64, Byte and String, and a program's own key type declares them.
-##
-## Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
-## Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
-## needs no destructor. Growing re-links the existing slots into new buckets and copies nothing else; the old
-## bucket array stays in the scope until it closes, as anything an arena holds does.
-##
-## A key or value that is a reference ("Map<String&, Int32>") is stored as the reference - it must outlive the
-## map, which every call checks (O10b).
+# map - values found by key. A key is any type with "Hash() Int64" and "Eq(other) Bool" methods: the prelude
+# gives them to Int32, Int64, Byte and String, and a program's own key type declares them.
+#
+# Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
+# Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
+# needs no destructor. Growing re-links the existing slots into new buckets and copies nothing else; the old
+# bucket array stays in the scope until it closes, as anything an arena holds does.
+#
+# A key or value that is a reference ("Map<String&, Int32>") is stored as the reference - it must outlive the
+# map, which every call checks (O10b).
 
 type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
     key
@@ -20,7 +20,7 @@ type Map<K, V> struct() {
     count mut Int64 = 0
 }
 
-## one key and its value, as a "for ... in" over a Map gives them
+# one key and its value, as a "for ... in" over a Map gives them
 type MapEntry<K, V> struct(key <K>, value <V>) {
     Key <K> = key
     Value <V> = value
@@ -30,7 +30,7 @@ fn (m Map<<K>, <V>>&) Len() Int64 { return m.count }
 
 fn (m Map<<K>, <V>>&) bucketOf(key <K>) Int64 { return key.Hash() & (m.buckets.Len() - 1) }
 
-## sets the value for key, replacing the one it had
+# sets the value for key, replacing the one it had
 fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
     i := m.bucketOf(key)
     for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
@@ -44,7 +44,7 @@ fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
     if m.count * 4 > m.buckets.Len() * 3 { m.grow() }
 }
 
-## doubles the buckets and re-links every slot into its new one
+# doubles the buckets and re-links every slot into its new one
 fn (m mut Map<<K>, <V>>&) grow() {
     old := m.buckets
     m.buckets = Array<mut mapSlot<<K>, <V>>&>(old.Len() * 2)
@@ -60,8 +60,8 @@ fn (m mut Map<<K>, <V>>&) grow() {
     }
 }
 
-## the value for key - failing with the default error when there is none, so a miss is never read as a value:
-## "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
+# the value for key - failing with the default error when there is none, so a miss is never read as a value:
+# "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
     for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
         if s.key.Eq(key) { return s.value }
@@ -69,7 +69,7 @@ fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
     error
 }
 
-## whether key has a value - what "key in m" asks (E29)
+# whether key has a value - what "key in m" asks (E29)
 fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
     for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
         if s.key.Eq(key) { return true }
@@ -77,7 +77,7 @@ fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
     return false
 }
 
-## removes key and its value, and says whether it was there
+# removes key and its value, and says whether it was there
 fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
     i := m.bucketOf(key)
     prev mapSlot<<K>, <V>>&m = null
@@ -92,8 +92,8 @@ fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
     return false
 }
 
-## a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. Two
-## numbers rather than a slot reference, as a ListIter is: a bucket, and how far along its chain.
+# a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. Two
+# numbers rather than a slot reference, as a ListIter is: a bucket, and how far along its chain.
 type MapIter<K, V> struct(of Map<<K>, <V>>&) {
     m Map<<K>, <V>>&of = of
     bucket mut Int64 = 0
@@ -114,8 +114,8 @@ fn (it mut MapIter<<K>, <V>>&) Next() (MapEntry<<K>, <V>>, Bool) {
     return none, false
 }
 
-## the entry "depth" slots along bucket's chain, if the chain is that long - asked of the map, which knows where
-## its own slots live, rather than walked from an iterator that does not
+# the entry "depth" slots along bucket's chain, if the chain is that long - asked of the map, which knows where
+# its own slots live, rather than walked from an iterator that does not
 fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) (MapEntry<<K>, <V>>, Bool) {
     k Int64 = 0
     for s mapSlot<<K>, <V>>&m = m.buckets[bucket], s != null, s = s.next {
@@ -186,7 +186,7 @@ test "membership in a Map is by key" {
     assert "z" not in m
 }
 
-## a lookup and a miss, computed while compiling (K2) - the same answers as at run time
+# a lookup and a miss, computed while compiling (K2) - the same answers as at run time
 fn lookupBoth() Int32 {
     m := Map<Int32, Int32>()
     m.Put(4, 40)

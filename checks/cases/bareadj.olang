@@ -1,4 +1,4 @@
-## check: fail expected
+# check: fail expected
 error E { X }
 fn f(a Array<Byte>&) { }
 fn main() ? E {

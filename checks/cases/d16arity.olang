@@ -1,4 +1,4 @@
-## check: fail different number of parameters
+# check: fail different number of parameters
 fn apply(f fn(x Int32) Int32) Int32 { return f(1) }
 error E { X }
 fn main() ? E {

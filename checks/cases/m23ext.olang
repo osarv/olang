@@ -1,4 +1,4 @@
-## check: fail without its '.olang' extension
+# check: fail without its '.olang' extension
 import "badform.olang"
 error E { X }
 fn main() ? E { }

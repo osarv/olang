@@ -1,5 +1,5 @@
-## check: fail B10
-## flags: -D Level=3
+# check: fail B10
+# flags: -D Level=3
 error E { X }
 Level Int32 = 1
 fn main() ? E { }

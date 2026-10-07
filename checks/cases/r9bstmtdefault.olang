@@ -1,4 +1,4 @@
-## check: fail nowhere for a value
+# check: fail nowhere for a value
 error E {
     A
     B

@@ -1,5 +1,5 @@
-## the neighbour of rect.olang, which imports it while it imports rect.olang back - a cycle between two
-## files of one directory, legal as any import cycle is (M2).
+# the neighbour of rect.olang, which imports it while it imports rect.olang back - a cycle between two
+# files of one directory, legal as any import cycle is (M2).
 
 import "rect"
 
@@ -7,8 +7,8 @@ fn Area(r rect.Rect) Int32 {
     return r.W * r.H
 }
 
-## a method on a type this module declares over a primitive: reached through its receiver, from this
-## module and from every module holding a value of it
+# a method on a type this module declares over a primitive: reached through its receiver, from this
+# module and from every module holding a value of it
 type Side Int32
 
 fn (n Side) Squared() Side {

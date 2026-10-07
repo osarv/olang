@@ -1,4 +1,4 @@
-## check: build
+# check: build
 error E { X }
 Verbose := false
 Level Int32 = 2 + 1

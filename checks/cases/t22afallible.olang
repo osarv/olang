@@ -1,5 +1,5 @@
-## check: fail doesn't match
-## T22: a fallible function is not a value of an infallible function type - its errors are part of its type
+# check: fail doesn't match
+# T22: a fallible function is not a value of an infallible function type - its errors are part of its type
 error E { X }
 fn bad(n Int32) Int32 ? E {
     if n > 0 { error E.X }

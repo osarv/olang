@@ -212,7 +212,22 @@ bool findNextTokStart(TokenCtx tc) {
     while (true) {
         char c = feedChar(tc);
         switch (c) {
-            case '#': discardComment(tc); tc->sawNewline = true; break; //a comment runs to the end of its line
+            case '#':
+                if (tryFeedChar(tc, '#')) { //L4a: "##" opens a block comment, closed by the next "##"
+                    int line = tc->charLineNr;
+                    while (true) {
+                        char b = feedChar(tc);
+                        if (b == '\0') {
+                            ErrMsgUnexpectedChar(tc, UNTERMINATED_BLOCK_COMMENT);
+                            return false;
+                        }
+                        if (b == '#' && tryFeedChar(tc, '#')) break;
+                    }
+                    //it stands for whitespace - and for a line break where it spans one (L18)
+                    if (tc->charLineNr != line) tc->sawNewline = true;
+                    break;
+                }
+                discardComment(tc); tc->sawNewline = true; break; //a comment runs to the end of its line
             case '\n': tc->sawNewline = true; break;
             case '\t': break;
             case ' ': break;

@@ -1,6 +1,6 @@
-## check: fail nothing here establishes that
-## O4b/O10c: a key stored into a map must outlive it, an obligation each caller discharges - and a key
-## built in an inner block does not outlive a map from the outer one, which the block depths decide
+# check: fail nothing here establishes that
+# O4b/O10c: a key stored into a map must outlive it, an obligation each caller discharges - and a key
+# built in an inner block does not outlive a map from the outer one, which the block depths decide
 type SSlot struct(key String&, val Int32, next SSlot&) {
     key
     val mut

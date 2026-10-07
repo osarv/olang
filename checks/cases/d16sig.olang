@@ -1,4 +1,4 @@
-## check: fail disagrees with the function type
+# check: fail disagrees with the function type
 fn apply(f fn(x Int32) Int32) Int32 { return f(1) }
 error E { X }
 fn main() ? E {

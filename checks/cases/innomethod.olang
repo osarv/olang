@@ -1,5 +1,5 @@
-## check: fail 'x in c' calls c.Has(x)
-## E29: membership needs the collection to have Has (or Contains, for a run of its own type)
+# check: fail 'x in c' calls c.Has(x)
+# E29: membership needs the collection to have Has (or Contains, for a run of its own type)
 fn main() ? {
     n := 3
     b := 3 in n

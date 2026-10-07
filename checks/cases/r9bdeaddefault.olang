@@ -1,4 +1,4 @@
-## check: fail always leaves
+# check: fail always leaves
 error E {
     A
     B

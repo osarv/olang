@@ -1,4 +1,4 @@
-## check: run
+# check: run
 error E { X }
 fn f() Int32 { return 1 }
 if f() == 1 {

@@ -1,5 +1,5 @@
-## check: fail discards it
-## D16: a lambda never yields a value implicitly - a result needs "return"
+# check: fail discards it
+# D16: a lambda never yields a value implicitly - a result needs "return"
 fn apply(f fn(x Int32) Int32) Int32 { return f(1) }
 error E { X }
 fn main() ? E {

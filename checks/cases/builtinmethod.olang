@@ -1,4 +1,4 @@
-## check: fail declared by the prelude alone
+# check: fail declared by the prelude alone
 fn (n Int32) Tw() Int32 { return n * 2 }
 error E { X }
 fn main() ? E { }

@@ -1,4 +1,4 @@
-## check: fail reads a mutable global
+# check: fail reads a mutable global
 error E { X }
 seed mut Int32 = 1
 fn f() Int32 { return seed }

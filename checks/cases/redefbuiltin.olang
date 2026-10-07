@@ -1,5 +1,5 @@
-## check: fail B10a
-## flags: -D TestBuild=true
+# check: fail B10a
+# flags: -D TestBuild=true
 error E { X }
 Level Int32 = 1
 fn main() ? E { }

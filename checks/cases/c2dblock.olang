@@ -1,5 +1,5 @@
-## check: fail C2d
-## the instance assigned to an outer variable would outlive the inner block its argument lives in
+# check: fail C2d
+# the instance assigned to an outer variable would outlive the inner block its argument lives in
 type P struct(x Int32) { x }
 type NB struct(inner P&) { inner }
 fn bad(c Bool) Int32 {

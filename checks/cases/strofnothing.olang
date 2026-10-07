@@ -1,4 +1,4 @@
-## check: fail has nothing to render
+# check: fail has nothing to render
 fn nothing() { }
 error E { X }
 fn main() ? E {

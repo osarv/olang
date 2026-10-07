@@ -1,4 +1,4 @@
-## check: fail has no type, and nothing says what it is
+# check: fail has no type, and nothing says what it is
 error E { X }
 fn main() ? E {
     f := fn(x) { return x }

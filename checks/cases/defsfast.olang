@@ -1,5 +1,5 @@
-## check: run
-## flags: -D Flag=true -D Ratio=0.75 -D Huge=5000000000 -D Level=3 -D Mode=fast -D Expect=30
+# check: run
+# flags: -D Flag=true -D Ratio=0.75 -D Huge=5000000000 -D Level=3 -D Mode=fast -D Expect=30
 error E { X }
 if Level > 2 and Mode == "fast" {
     fn pick() Int32 { return Level * 10 }

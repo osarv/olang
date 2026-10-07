@@ -1,4 +1,4 @@
-## check: fail no clause can come after
+# check: fail no clause can come after
 error E {
     A
     B

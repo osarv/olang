@@ -1,4 +1,4 @@
-## check: fail walks an array, a range, an Iterator
+# check: fail walks an array, a range, an Iterator
 error E { X }
 fn main() ? E {
     for x in 5 { }

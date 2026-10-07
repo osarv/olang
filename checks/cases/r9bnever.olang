@@ -1,4 +1,4 @@
-## check: fail can never run
+# check: fail can never run
 error E {
     A
     B

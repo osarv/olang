@@ -1,4 +1,4 @@
-## check: build
+# check: build
 type Dir enum {
     North
     South

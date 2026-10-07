@@ -1,5 +1,5 @@
-## check: fail inherits every array method
-## T29e: an inherited array method is never overridden
+# check: fail inherits every array method
+# T29e: an inherited array method is never overridden
 type Nums Array<Int32>
 fn (n Nums&) Count() Int32 { return 0 }
 error E { X }

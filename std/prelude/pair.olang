@@ -1,14 +1,14 @@
-## Pair - two values of any types, held together under the names First and Second. olang has no tuple type and
-## no anonymous struct: a value held is a declared type, and Pair is the declared type for "just two things".
-## Several results of one call are not a Pair (D8c) - they are destructured or passed straight on.
-## Its type arguments are inferred from the constructor's (G10c): "Pair(1, s)" is a Pair<Int32, String&>.
+# Pair - two values of any types, held together under the names First and Second. olang has no tuple type and
+# no anonymous struct: a value held is a declared type, and Pair is the declared type for "just two things".
+# Several results of one call are not a Pair (D8c) - they are destructured or passed straight on.
+# Its type arguments are inferred from the constructor's (G10c): "Pair(1, s)" is a Pair<Int32, String&>.
 type Pair<A, B> struct(First <A>, Second <B>) {
     First
     Second
 }
 
-## a Pair is a Map key when both its parts are (std/map): equal pairs hash equally, and swapping the parts
-## changes the hash (the first part's is scaled by the FNV prime before the second's is added; arithmetic wraps, E6c)
+# a Pair is a Map key when both its parts are (std/map): equal pairs hash equally, and swapping the parts
+# changes the hash (the first part's is scaled by the FNV prime before the second's is added; arithmetic wraps, E6c)
 fn (p Pair<<A>, <B>>&) Hash() Int64 { return p.First.Hash() * 1099511628211 + p.Second.Hash() }
 fn (p Pair<<A>, <B>>&) Eq(q Pair<<A>, <B>>&) Bool { return p.First.Eq(q.First) and p.Second.Eq(q.Second) }
 

@@ -2099,8 +2099,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   layouts, constant tables) and a length-free `Array<T>` makes assignment into fixed storage a run-time check.
 - **The whole test suite is olang (2026-09-30, the user's call).** `modcheck.sh` - the must-fail programs and
   whole-build scenarios a `test` block cannot express - became the `checks/` package: `checks/cases/*.olang`
-  are ordinary programs whose first line says what they must do (`## check: fail <text>` / `build` / `run`,
-  optional `## flags:`), and `checks/checks.olang` runs them and drives the multi-step scenarios (remote
+  are ordinary programs whose first line says what they must do (`# check: fail <text>` / `build` / `run`,
+  optional `# flags:`), and `checks/checks.olang` runs them and drives the multi-step scenarios (remote
   fetch into a cache, `-D` rebuild staleness, grepping the emitted IR) with files from `checks/fixtures`. It
   runs as part of `make test`, on top of a new `std/os` package (`Run`, `ReadFile`, `Quote`) written over
   `extern fn`. Adding a check is adding a file. Writing it found a real use-after-free (next entry).
@@ -2477,6 +2477,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   entries - an error type's words, an enum's cases, a constructor's fields - is a compile-time error saying entries
   go one per line, reported and read past so it stays one error. Several names sharing a declaration (`x, y mut`,
   D12b) are not entries and keep their commas. 13 files migrated by script.
+- **`#` is a line comment, `##` a block comment (L4/L4a, 2026-10-07, the user's call).** `## ... ##` runs to the next
+  `##`, no nesting, a line break for L18 only where it spans one, unclosed is an error. Every comment had been
+  written `##` by convention (a single `#` already began a line comment), so 2,046 comments were rewritten to `#`
+  by a script that skips string and character literals, and the `# check:` / `# flags:` headers with them. The user
+  chose `##` over the unused `###`, which would have needed no migration.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

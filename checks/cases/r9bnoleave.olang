@@ -1,4 +1,4 @@
-## check: fail provably leave
+# check: fail provably leave
 error E {
     A
     B

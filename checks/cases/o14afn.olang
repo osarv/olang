@@ -1,5 +1,5 @@
-## check: fail needs one of the target's scopes to outlive another
-## O14a: a function value returned from a parameter must outlive where the result lands
+# check: fail needs one of the target's scopes to outlive another
+# O14a: a function value returned from a parameter must outlive where the result lands
 fn id(f fn() Int32) fn() Int32 { return f }
 fn main() ? {
     s String& = "x"

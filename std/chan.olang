@@ -1,24 +1,24 @@
 import "cancel"
 
-## chan - a bounded, blocking channel. Ordinary olang on top of "extern fn", with no help from the
-## compiler at all: the same claim io.olang makes, held to for the one type that most obviously wants to
-## be a builtin.
+# chan - a bounded, blocking channel. Ordinary olang on top of "extern fn", with no help from the
+# compiler at all: the same claim io.olang makes, held to for the one type that most obviously wants to
+# be a builtin.
 
-## pthread's own types are opaque C structs, and X2's extern vocabulary is numeric primitives and arrays of
-## them - so a mutex is a byte array handed over as exactly the pointer pthread wants (X3).
-## These are RESERVATIONS in WORDS, not sizes in bytes (X3a), and both halves of that matter.
-## Reservation: nothing embeds the blob by value - pthread only ever receives a pointer - so over-reserving
-## is free and only under-reserving corrupts. That is what makes one constant right everywhere, because the
-## true size is a property of the architecture rather than of C: glibc's own headers define three different
-## values for pthread_mutex_t (40, 32, 24) by machine, and other platforms differ again. 8 words is 64
-## bytes, comfortably above all of them, for a few bytes per channel.
-## Words: the ELEMENT TYPE is what supplies the alignment. "Int64" is 8-aligned, so "Int64[8]" is 8-aligned
-## wherever it sits - inline in a struct, in a local, in the arena - which is what pthread needs. A
-## "Byte[64]" would be alignment 1 and could land at any offset in its container: measured, a byte blob
-## after a single byte field sits at offset 1, where a word blob sits at 8.
-## And they carry no "mut" because their bytes are pthread's, not ours - that stops olang writing them
-## while leaving pthread free to, since an extern-param carries no mutability and X3 hands over a bare
-## pointer.
+# pthread's own types are opaque C structs, and X2's extern vocabulary is numeric primitives and arrays of
+# them - so a mutex is a byte array handed over as exactly the pointer pthread wants (X3).
+# These are RESERVATIONS in WORDS, not sizes in bytes (X3a), and both halves of that matter.
+# Reservation: nothing embeds the blob by value - pthread only ever receives a pointer - so over-reserving
+# is free and only under-reserving corrupts. That is what makes one constant right everywhere, because the
+# true size is a property of the architecture rather than of C: glibc's own headers define three different
+# values for pthread_mutex_t (40, 32, 24) by machine, and other platforms differ again. 8 words is 64
+# bytes, comfortably above all of them, for a few bytes per channel.
+# Words: the ELEMENT TYPE is what supplies the alignment. "Int64" is 8-aligned, so "Int64[8]" is 8-aligned
+# wherever it sits - inline in a struct, in a local, in the arena - which is what pthread needs. A
+# "Byte[64]" would be alignment 1 and could land at any offset in its container: measured, a byte blob
+# after a single byte field sits at offset 1, where a word blob sits at 8.
+# And they carry no "mut" because their bytes are pthread's, not ours - that stops olang writing them
+# while leaving pthread free to, since an extern-param carries no mutability and X3 hands over a bare
+# pointer.
 MutexWords Int32 = 8
 CondWords Int32 = 8
 
@@ -30,14 +30,14 @@ extern fn pthread_cond_wait(c Array<Int64>, m Array<Int64>) Int32
 extern fn pthread_cond_broadcast(c Array<Int64>) Int32
 extern fn pthread_cond_timedwait(c Array<Int64>, m Array<Int64>, ts Array<Int64>) Int32
 
-## This type synchronises its own state, which is exactly what no compile-time rule could know. It used to
-## say so with a "shared" marker waiving P3's exclusivity for the whole type - a claim nothing verified.
-## Both are gone now: P3 could never be sound without an ownership discipline this language does not have,
-## so it stopped claiming and was then removed outright, and an exemption from a rule that no longer exists
-## has nothing to mean. A channel handed to a producer and a consumer is once again just a channel.
+# This type synchronises its own state, which is exactly what no compile-time rule could know. It used to
+# say so with a "shared" marker waiving P3's exclusivity for the whole type - a claim nothing verified.
+# Both are gone now: P3 could never be sound without an ownership discipline this language does not have,
+# so it stopped claiming and was then removed outright, and an exemption from a rule that no longer exists
+# has nothing to mean. A channel handed to a producer and a consumer is once again just a channel.
 type Chan<T> struct(cap Int32) {
-        ## the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
-        ## (C2d), which is what a run-time-sized field needs.
+        # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
+        # (C2d), which is what a run-time-sized field needs.
     data mut Array<<T>>& = Array<<T>>(cap)
     head mut Int64 = 0
     tail mut Int64 = 0
@@ -47,16 +47,16 @@ type Chan<T> struct(cap Int32) {
     notFull Array<Int64>& = Array<Int64>(CondWords)
 }
 
-## a channel must be initialised before use: a constructor cannot call these, because pthread wants the
-## final address of the mutex and the constructed value has not reached its home yet.
+# a channel must be initialised before use: a constructor cannot call these, because pthread wants the
+# final address of the mutex and the constructed value has not reached its home yet.
 fn Init(c mut Chan<Int32>&) {
     pthread_mutex_init(c.lock, 0)
     pthread_cond_init(c.notEmpty, 0)
     pthread_cond_init(c.notFull, 0)
 }
 
-## blocks while the channel is full, then appends. "while" is spelled as a do-loop guarded by a re-check,
-## since a condition variable may wake spuriously and the count must be re-read under the lock either way.
+# blocks while the channel is full, then appends. "while" is spelled as a do-loop guarded by a re-check,
+# since a condition variable may wake spuriously and the count must be re-read under the lock either way.
 fn Send(c mut Chan<Int32>&, v Int32) {
     pthread_mutex_lock(c.lock)
     do {
@@ -71,7 +71,7 @@ fn Send(c mut Chan<Int32>&, v Int32) {
     pthread_mutex_unlock(c.lock)
 }
 
-## blocks while the channel is empty, then takes the oldest value
+# blocks while the channel is empty, then takes the oldest value
 fn Recv(c mut Chan<Int32>&) Int32 {
     pthread_mutex_lock(c.lock)
     do {
@@ -87,8 +87,8 @@ fn Recv(c mut Chan<Int32>&) Int32 {
     return v
 }
 
-## Send, giving up - with the token's reason - once the token fires while the channel is still full. The wait
-## wakes at the token's deadline, and every few milliseconds besides to notice a Cancel() (cancel.WakeAt).
+# Send, giving up - with the token's reason - once the token fires while the channel is still full. The wait
+# wakes at the token's deadline, and every few milliseconds besides to notice a Cancel() (cancel.WakeAt).
 fn SendUntil(c mut Chan<Int32>&, v Int32, tok cancel.Token&) ? cancel.Stopped {
     ts := Array<Int64>(2)
     pthread_mutex_lock(c.lock)
@@ -107,7 +107,7 @@ fn SendUntil(c mut Chan<Int32>&, v Int32, tok cancel.Token&) ? cancel.Stopped {
     pthread_mutex_unlock(c.lock)
 }
 
-## Recv, giving up - with the token's reason - once the token fires while the channel is still empty
+# Recv, giving up - with the token's reason - once the token fires while the channel is still empty
 fn RecvUntil(c mut Chan<Int32>&, tok cancel.Token&) Int32 ? cancel.Stopped {
     ts := Array<Int64>(2)
     pthread_mutex_lock(c.lock)
@@ -127,9 +127,9 @@ fn RecvUntil(c mut Chan<Int32>&, tok cancel.Token&) Int32 ? cancel.Stopped {
     return v
 }
 
-## a producer and a consumer on separate tasks, communicating only through the channel. This is the shape
-## P3 used to reject and "shared" used to un-reject: one channel handed to both as "mut Chan<Int32>&".
-## Nothing about it is checked - the correctness is the mutex's, which is where it belongs.
+# a producer and a consumer on separate tasks, communicating only through the channel. This is the shape
+# P3 used to reject and "shared" used to un-reject: one channel handed to both as "mut Chan<Int32>&".
+# Nothing about it is checked - the correctness is the mutex's, which is where it belongs.
 fn produce(c mut Chan<Int32>&, n Int32) {
     for i in range n {
         Send(c, i)
@@ -154,11 +154,11 @@ test "a bounded channel carries values between two tasks" {
         spawn produce(c, 100)
         spawn consume(c, 100, total)
     }
-        ## 0 + 1 + ... + 99
+        # 0 + 1 + ... + 99
     assert total.v == 4950
 }
 
-## and the same channel used sequentially, which exercises the ring buffer wrapping several times over
+# and the same channel used sequentially, which exercises the ring buffer wrapping several times over
 test "the ring buffer wraps" {
     c Chan<Int32>& = Chan<Int32>(4)
     Init(c)

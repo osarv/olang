@@ -1,5 +1,5 @@
-## check: fail a constructor never returns a value of its own
-## T29d: the parameter's final value is the result - a return would be a second way out
+# check: fail a constructor never returns a value of its own
+# T29d: the parameter's final value is the result - a return would be a second way out
 type Percent Int32(v mut Int32) {
     if v > 100 { return 100 }
 }

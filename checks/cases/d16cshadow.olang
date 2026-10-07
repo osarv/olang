@@ -1,5 +1,5 @@
-## check: fail name already in use
-## D16c: a lambda's parameter may not reuse a name it could capture
+# check: fail name already in use
+# D16c: a lambda's parameter may not reuse a name it could capture
 fn apply(f fn(x Int32) Int32, n Int32) Int32 { return f(n) }
 error E { X }
 fn main() ? E {

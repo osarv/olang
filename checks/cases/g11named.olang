@@ -1,6 +1,6 @@
-## check: fail a scope name here would belong to this function
-## G11: a reference type argument is written bare - its references live in the container's scope; naming a
-## variable would name this function's scope, inside generic code that cannot see it
+# check: fail a scope name here would belong to this function
+# G11: a reference type argument is written bare - its references live in the container's scope; naming a
+# variable would name this function's scope, inside generic code that cannot see it
 type Box<T> struct(v <T>) { v }
 fn f(p Array<Int32>&) Int32 {
     b Box<Array<Int32>&p>& = Box<Array<Int32>&p>(p)

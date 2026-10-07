@@ -1,4 +1,4 @@
-## check: run
+# check: run
 error E { X }
 fn f() Int32 { return 1 }
 Level Int32 = f()

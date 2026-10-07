@@ -1,17 +1,17 @@
-## checks - what a test block cannot check about the compiler itself: programs that must NOT compile, and
-## whole builds (a remote fetch, rebuilds under -D, the code generated). Every file in checks/cases is an
-## ordinary olang program whose first lines say what it must do:
-##     ## check: fail <text>    it must fail to build, with <text> in the diagnostics
-##     ## check: build          it must build
-##     ## check: run            it must build, and the program must exit 0
-##     ## flags: <arguments>    passed to the compiler (a -D value, say)
-## The multi-step scenarios below drive the compiler themselves, with their files in checks/fixtures.
-## Everything is built under build/checks, so nothing touches the tree.
+# checks - what a test block cannot check about the compiler itself: programs that must NOT compile, and
+# whole builds (a remote fetch, rebuilds under -D, the code generated). Every file in checks/cases is an
+# ordinary olang program whose first lines say what it must do:
+#     # check: fail <text>    it must fail to build, with <text> in the diagnostics
+#     # check: build          it must build
+#     # check: run            it must build, and the program must exit 0
+#     # flags: <arguments>    passed to the compiler (a -D value, say)
+# The multi-step scenarios below drive the compiler themselves, with their files in checks/fixtures.
+# Everything is built under build/checks, so nothing touches the tree.
 
 import "std/os"
 import "std/io"
 
-## the text after "<prefix>" on the line that starts with it, or "" when no line does
+# the text after "<prefix>" on the line that starts with it, or "" when no line does
 fn lineAfter(src String&, prefix String&) String&src {
     at := src.Find(prefix)
     if at < 0 { return src[0:0] }
@@ -21,21 +21,21 @@ fn lineAfter(src String&, prefix String&) String&src {
     return rest[:end]
 }
 
-## the repository root - where the tests run - as an absolute path
+# the repository root - where the tests run - as an absolute path
 fn root() String& {
     os.Run("pwd > build/checks.root")
     r := try os.ReadFile("build/checks.root") catch default ""
     return $r.Trim()
 }
 
-## a fresh, empty directory for one check, as an absolute path
+# a fresh, empty directory for one check, as an absolute path
 fn fresh(tag String&) String& {
     dir String&return = $root() "/build/checks/" $tag
     os.Run("rm -rf " $os.Quote(dir) " && mkdir -p " $os.Quote(dir))
     return dir
 }
 
-## runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
+# runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
 fn sh(dir String&, cmd String&) Int32 {
     return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote($root() "/build/out") " && " $cmd)
 }
@@ -44,17 +44,17 @@ fn outOf(dir String&) String& {
     return try os.ReadFile($dir "/out.txt") catch default ""
 }
 
-## reports a failed check with what the compiler said, and says so
+# reports a failed check with what the compiler said, and says so
 fn failed(what String&, dir String&) Bool {
     try io.PrintErr("check FAIL: " $what "\n" $outOf(dir) "\n") catch { }
     return false
 }
 
-## builds one case file and judges it against its own header
+# builds one case file and judges it against its own header
 fn runCase(dir String&, name String&) Bool {
     src := try os.ReadFile("checks/cases/" $name) catch default ""
-    check := lineAfter(src, "## check: ")
-    flags := lineAfter(src, "## flags: ")
+    check := lineAfter(src, "# check: ")
+    flags := lineAfter(src, "# flags: ")
     base := name[:name.Len() - 6]
     os.Run("cp checks/cases/" $name " " $os.Quote(dir))
     status := sh(dir, "\"$OLANG\" -b " $flags " " $name " > out.txt 2>&1")
@@ -93,8 +93,8 @@ test "every case in checks/cases does what its header says" {
     assert bad == 0
 }
 
-## M22a: a std module and a local file with the same base name are two modules - but one module may not
-## import both under the one alias the name gives them
+# M22a: a std module and a local file with the same base name are two modules - but one module may not
+# import both under the one alias the name gives them
 test "std/list beside a local list.olang" {
     dir := fresh("twolists")
     os.Run("cp checks/fixtures/twolists/* " $os.Quote(dir))
@@ -103,8 +103,8 @@ test "std/list beside a local list.olang" {
     assert outOf(dir).Contains("alias")
 }
 
-## M23a: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
-## branch, and a second build reads the cache and never touches git - the remote is removed to prove it
+# M23a: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
+# branch, and a second build reads the cache and never touches git - the remote is removed to prove it
 test "a file in a remote repository, fetched once into the cache" {
     dir := fresh("remote")
     repo String& = $dir "/remote/example.com/me/tools"
@@ -126,8 +126,8 @@ test "a file in a remote repository, fetched once into the cache" {
     assert outOf(dir).Contains("fetch")
 }
 
-## M1/M22: a module is a file - a directory is not one, and files in one directory see each other only
-## through imports
+# M1/M22: a module is a file - a directory is not one, and files in one directory see each other only
+# through imports
 test "a directory groups files and is never a module" {
     dir := fresh("pkg")
     os.Run("cp -r checks/fixtures/pkg " $os.Quote(dir))
@@ -140,18 +140,18 @@ test "a directory groups files and is never a module" {
     assert outOf(dir).Contains("unknown")
 }
 
-## B10b: only a module whose import closure mentions a -D name is rebuilt when that value changes
+# B10b: only a module whose import closure mentions a -D name is rebuilt when that value changes
 test "a -D value rebuilds only the modules that mention it" {
     dir := fresh("stale")
     os.Run("cp checks/fixtures/stale/* " $os.Quote(dir))
     assert sh(dir, "\"$OLANG\" -b -D Level=1 -D Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0 or failed("first build", dir)
     assert sh(dir, "stat -c %Y.%N build/plain.o > before.txt && ls build/uses.d*.main.o | wc -l > first.txt") == 0
     assert sh(dir, "sleep 1 && \"$OLANG\" -b -D Level=5 -D Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0
-    assert sh(dir, "stat -c %Y.%N build/plain.o | cmp -s - before.txt") == 0     ## plain.o untouched
+    assert sh(dir, "stat -c %Y.%N build/plain.o | cmp -s - before.txt") == 0     # plain.o untouched
     assert sh(dir, "test $(ls build/uses.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
 }
 
-## S18c: an assert the compiler proves emits no run-time check at all
+# S18c: an assert the compiler proves emits no run-time check at all
 test "a proven assert leaves no run-time check" {
     dir := fresh("s18c")
     os.Run("cp checks/fixtures/s18c/* " $os.Quote(dir))
@@ -159,8 +159,8 @@ test "a proven assert leaves no run-time check" {
     assert sh(dir, "grep -q assert.fail build/s18c.main.ll") != 0
 }
 
-## T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
-## writable, still gets a copy of its own
+# T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
+# writable, still gets a copy of its own
 test "a literal reaching a read-only reference is static data" {
     dir := fresh("static")
     os.Run("cp checks/fixtures/static/* " $os.Quote(dir))
@@ -171,7 +171,7 @@ test "a literal reaching a read-only reference is static data" {
     assert sh(dir, "grep -q 'lit_lenOf(ptr %[a-z0-9.]*, { i64, ptr } { i64 11, ptr @.str'" $ll) == 0
 }
 
-## K2: a global computed at compile time is written out as data; one reading a mutable global is set at startup
+# K2: a global computed at compile time is written out as data; one reading a mutable global is set at startup
 test "computed globals are written out as data" {
     dir := fresh("k2")
     os.Run("cp checks/fixtures/k2/* " $os.Quote(dir))
@@ -182,8 +182,8 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_Table = global { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0
-    assert sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0           ## K2c: never destructs, so baked
-    assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    ## its temporary's destructor runs
+    assert sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0           # K2c: never destructs, so baked
+    assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    # its temporary's destructor runs
     assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
 }

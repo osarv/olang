@@ -1,5 +1,5 @@
-## check: fail a comprehension's elements may not be or hold references yet
-## E27: an element that is or holds a reference would have to live in the array's scope, which is not done yet
+# check: fail a comprehension's elements may not be or hold references yet
+# E27: an element that is or holds a reference would have to live in the array's scope, which is not done yet
 fn main() ? {
     t := "a b"
     a := String&[t for c in t]

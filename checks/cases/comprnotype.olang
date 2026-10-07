@@ -1,5 +1,5 @@
-## check: fail an element type before the [, as in Int32[...]
-## E27: a comprehension states its element type, as an array literal does
+# check: fail an element type before the [, as in Int32[...]
+# E27: a comprehension states its element type, as an array literal does
 fn main() ? {
     a := [y for y in range 3]
 }

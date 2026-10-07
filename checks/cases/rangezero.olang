@@ -1,4 +1,4 @@
-## check: fail step must be positive
+# check: fail step must be positive
 error E { X }
 fn main() ? E {
     for i in range 10, 0, 0 { }

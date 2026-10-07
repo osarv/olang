@@ -1,4 +1,4 @@
-## check: fail R9a
+# check: fail R9a
 error E { X }
 type B struct(v Int32) { v mut }
 fn pick(b B&, ok Bool) B&b ? E {

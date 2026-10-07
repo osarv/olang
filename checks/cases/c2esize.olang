@@ -1,5 +1,5 @@
-## check: fail differs from the length
-## C2e: two known lengths that differ are a compile-time error, never a truncation or a padding
+# check: fail differs from the length
+# C2e: two known lengths that differ are a compile-time error, never a truncation or a padding
 type M struct() { a mut Array<Int32> = Array<Int32>(3) }
 test "never runs" {
     m M = M()

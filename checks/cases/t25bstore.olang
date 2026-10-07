@@ -1,5 +1,5 @@
-## check: fail this reference is read-only, and this place wants a writable one
-## T25c: ...nor by being stored where a writable one is held
+# check: fail this reference is read-only, and this place wants a writable one
+# T25c: ...nor by being stored where a writable one is held
 type P struct(x Int32) { x mut }
 fn link(a mut Array<mut P&>&, b P&) { a[0] = b }
 error E { X }

@@ -1,5 +1,5 @@
-## check: fail does not live as long as the container
-## D16d: nor stored into something that outlives what it captured
+# check: fail does not live as long as the container
+# D16d: nor stored into something that outlives what it captured
 type Point struct(x Int32) { x mut }
 type Box struct() { f mut fn(n Int32) Int32 = null }
 fn stash(b mut Box&) {

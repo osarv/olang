@@ -1,7 +1,7 @@
-## check: fail nothing here establishes that
-## a function may return something built from a bare "&" parameter into its result scope: the parameter's
-## scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
-## This caller cannot - its argument lives in its own scope, and the result would outlive it
+# check: fail nothing here establishes that
+# a function may return something built from a bare "&" parameter into its result scope: the parameter's
+# scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
+# This caller cannot - its argument lives in its own scope, and the result would outlive it
 type P struct(x Int32) { x }
 type NB struct(inner P&) { inner }
 fn wrap(p P&) NB& { return NB(p) }

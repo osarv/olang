@@ -1,5 +1,5 @@
-## check: fail as many of them as the called function takes
-## D8d: several results passed as arguments must match the parameters in number
+# check: fail as many of them as the called function takes
+# D8d: several results passed as arguments must match the parameters in number
 fn qr(a Int32, b Int32) (Int32, Int32) { return a / b, a % b }
 fn sum3(a Int32, b Int32, c Int32) Int32 { return a + b + c }
 fn main() ? {

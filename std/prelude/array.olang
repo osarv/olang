@@ -1,9 +1,9 @@
-## arrays, part of the prelude: what a function value lets every array do. Each takes a lambda (D16) - "keep"
-## says which elements count, "less" orders two, "f" makes a new value of one - and none of them copies an
-## element it does not have to.
+# arrays, part of the prelude: what a function value lets every array do. Each takes a lambda (D16) - "keep"
+# says which elements count, "less" orders two, "f" makes a new value of one - and none of them copies an
+# element it does not have to.
 
-## whether x is one of the elements - what "x in a" asks (E29). Compared by the element type's Eq, so text is
-## found by what it says, not by where it is stored.
+# whether x is one of the elements - what "x in a" asks (E29). Compared by the element type's Eq, so text is
+# found by what it says, not by where it is stored.
 fn (a Array<<T>>&) Has(x <T>) Bool {
     for y in a {
         if y.Eq(x) { return true }
@@ -11,8 +11,8 @@ fn (a Array<<T>>&) Has(x <T>) Bool {
     return false
 }
 
-## whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
-## a substring, for text. The empty run occurs in everything.
+# whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
+# a substring, for text. The empty run occurs in everything.
 fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {
     for i in range a.Len() - sub.Len() + 1 {
         j Int64 = 0
@@ -22,7 +22,7 @@ fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {
     return false
 }
 
-## true when keep holds for at least one element
+# true when keep holds for at least one element
 fn (a Array<<T>>&) Any(keep fn(x <T>) Bool) Bool {
     for x in a {
         if keep(x) { return true }
@@ -30,7 +30,7 @@ fn (a Array<<T>>&) Any(keep fn(x <T>) Bool) Bool {
     return false
 }
 
-## true when keep holds for every element - so for none, of an empty array
+# true when keep holds for every element - so for none, of an empty array
 fn (a Array<<T>>&) All(keep fn(x <T>) Bool) Bool {
     for x in a {
         if not keep(x) { return false }
@@ -38,7 +38,7 @@ fn (a Array<<T>>&) All(keep fn(x <T>) Bool) Bool {
     return true
 }
 
-## the index of the first element keep holds for, or -1
+# the index of the first element keep holds for, or -1
 fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) Int64 {
     for i, x in a {
         if keep(x) { return i }
@@ -46,7 +46,7 @@ fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) Int64 {
     return -1
 }
 
-## how many elements keep holds for
+# how many elements keep holds for
 fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) Int64 {
     n Int64 = 0
     for x in a {
@@ -55,7 +55,7 @@ fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) Int64 {
     return n
 }
 
-## a new array of f applied to every element, in order
+# a new array of f applied to every element, in order
 fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
     out := Array<<U>>(a.Len())
     for i, x in a {
@@ -64,7 +64,7 @@ fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
     return out
 }
 
-## a new array of the elements keep holds for, in order. keep runs once per element
+# a new array of the elements keep holds for, in order. keep runs once per element
 fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
     marks := Array<Bool>(a.Len())
     n Int64 = 0
@@ -83,7 +83,7 @@ fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
     return out
 }
 
-## the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
+# the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
 fn (a Array<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     acc <U> = init
     for x in a {
@@ -92,9 +92,9 @@ fn (a Array<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     return acc
 }
 
-## sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not
-## order keep their order. It allocates nothing - elements only ever swap places, so it sorts an array of
-## references exactly as it sorts numbers: insertion-sorted blocks, merged by rotation (Go's sort.Stable)
+# sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not
+# order keep their order. It allocates nothing - elements only ever swap places, so it sorts an array of
+# references exactly as it sorts numbers: insertion-sorted blocks, merged by rotation (Go's sort.Stable)
 fn (a mut Array<<T>>&) Sort(less fn(x <T>, y <T>) Bool) {
     n Int64 = a.Len()
     block Int64 = 20
@@ -133,7 +133,7 @@ fn sortInsertion(a mut Array<<T>>&, lo Int64, hi Int64, less fn(x <T>, y <T>) Bo
     }
 }
 
-## merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
+# merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
 fn sortMerge(a mut Array<<T>>&, lo Int64, m Int64, hi Int64, less fn(x <T>, y <T>) Bool) {
     if m - lo == 1 {
         i Int64 = m
@@ -178,7 +178,7 @@ fn sortMerge(a mut Array<<T>>&, lo Int64, m Int64, hi Int64, less fn(x <T>, y <T
     if mid < end and end < hi { sortMerge(a, mid, end, hi, less) }
 }
 
-## swaps the runs a[lo:m] and a[m:hi]
+# swaps the runs a[lo:m] and a[m:hi]
 fn sortRotate(a mut Array<<T>>&, lo Int64, m Int64, hi Int64) {
     i Int64 = m - lo
     j Int64 = hi - m
@@ -199,7 +199,7 @@ fn arraySorted() Array<Int32> {
     a.Sort(fn(x, y) { return x < y })
     return a.Filter(fn(x) { return x > 10 })
 }
-ArraySorted := arraySorted()                     ## computed while compiling (K2): calls through lambdas
+ArraySorted := arraySorted()                     # computed while compiling (K2): calls through lambdas
 ArraySum Int32 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
 
 test "the array methods take what to do as a lambda" {
@@ -230,7 +230,7 @@ test "Sort is stable, and sorts long arrays and arrays of references" {
         if big[i - 1] > big[i] { ok = false }
     }
     assert ok
-    ## stability: sort pairs by their key only, and equal keys keep the order they came in
+    # stability: sort pairs by their key only, and equal keys keep the order they came in
     keys := Array<Int32>(300)
     for i in range 300 { keys[i] = Int32(i) }
     keys.Sort(fn(x, y) { return x % 3 < y % 3 })
@@ -240,8 +240,8 @@ test "Sort is stable, and sorts long arrays and arrays of references" {
     assert words[0].Eq("fig") and words[1].Eq("pear") and words[2].Eq("kiwi") and words[4].Eq("banana")
 }
 
-## a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
-## as it takes a List or a Map. "for x in a" does not go through it: an array is walked directly.
+# a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
+# as it takes a List or a Map. "for x in a" does not go through it: an array is walked directly.
 type ArrayIter<T> struct(of Array<<T>>&) {
     arr Array<<T>>&of = of
     i mut Int64 = 0
@@ -256,5 +256,5 @@ fn (it mut ArrayIter<<T>>&) Next() (<T>, Bool) {
     return it.arr[it.i - 1], true
 }
 
-## a fresh position at the array's start - each call its own, so loops never disturb each other
+# a fresh position at the array's start - each call its own, so loops never disturb each other
 fn (a Array<<T>>&) Iter() ArrayIter<<T>> { return ArrayIter<<T>>(a) }

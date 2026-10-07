@@ -1,5 +1,5 @@
-## check: fail what a lambda captures from a value is read-only
-## D16c: a captured value array is borrowed read-only
+# check: fail what a lambda captures from a value is read-only
+# D16c: a captured value array is borrowed read-only
 error E { X }
 fn main() ? E {
     a := Int32[1, 2]
