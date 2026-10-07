@@ -1057,6 +1057,13 @@ elsewhere would read as immutability that does not exist.
 declaration with no initializer is D13's zero value. When present, `expr`'s type must fit the declared type
 (assignability, defined per-context in §5 and §8).
 
+**D12b.** `IDEN "," IDEN { "," IDEN } [ "mut" ] type-expr [ "=" expr { "," expr } ] STMNT_END` declares several
+names with one type: it is one declaration per name, in the order written, each `name [mut] type-expr [= expr_i]`
+taking the i-th value - so each initializer sees the names declared before it, as in C. There is one value per name,
+or none (each then its zero value, D13); any other count is a compile-time error. It is valid wherever a declaration
+of that kind is - a local, a global (`X, Y mut Int32 = 0, 0`) - and as constructor fields (C2), where the names may
+also be puns (`x, y mut`) or inferred (`p, q := a, b`).
+
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
 `0`/`0.0` for numeric types, `null` (T2a) for anything nullable, all-zero fields for a struct, an empty
 array for `Array<T>`, and the first-declared case for an enum — an enum and an error type have no other
@@ -1992,6 +1999,12 @@ result) must fit (§5.3 E12) the target's declared type.
 a call returning several values (D8c) and there is exactly one `target` per result. With `:=` each target
 is a plain name, declared as by D15 from its result; with `=` each is an lvalue, assigned as by S4. A
 target written `_` discards its result. The call is evaluated once, before any target is written.
+
+**S4c.** The value side may instead be a list of one value per target, `target "," target ... ( ":=" | "=" ) expr
+"," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
+`a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4. With `:=` each name is
+declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
+value of its own - there is no tuple type - and exists only in this statement.
 
 **S8.** `if-stmnt ::= "if" expr block [ "else" ( if-stmnt | block ) ]`. `expr` must be `Bool`
 (E7/E9/E10 all produce `Bool`; any other type is a compile-time error). An `else` clause is

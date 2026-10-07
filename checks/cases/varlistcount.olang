@@ -1,0 +1,5 @@
+## check: fail a declaration of several names takes one value per name, or none
+## D12b: one value per name
+fn main() ? {
+    a, b Int32 = 1
+}

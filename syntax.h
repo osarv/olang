@@ -66,6 +66,7 @@ enum syntaxType {
     SNTX_EXTERN_FUNC_DECL,  //"extern func IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level
                              //declaration only, no body, no error-list - see the report on §11
     SNTX_VAR_DECL,
+    SNTX_VAR_DECLS,   //D12b: "a, b [mut] T [= x, y]" - one SNTX_VAR_DECL (or SNTX_CTOR_FIELD) per name, in order
     SNTX_ASSIGN_OP,
     SNTX_STMNT_ASSIGN,
     SNTX_STMNT_DESTRUCT, //D8c: "a, b := f()" / "a, b = f()" - two or more targets, "_" discarding one
@@ -230,5 +231,7 @@ struct scanResult {
 struct scanResult ScanTopLevelDecls(TokenCtx tc);
 
 struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKnownType);
+struct syntax* newNode(enum syntaxType type);
+void addSntx(struct syntax* s, struct syntax* child);
 
 #endif //SYNTAX_H

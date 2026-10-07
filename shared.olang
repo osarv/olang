@@ -6496,6 +6496,52 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert condMax(3, n - 1) == CondMaxBaked
 }
 
+## S4c/D12b: parallel assignment - every value evaluated before any target is written - and several names
+## declared with one type, as locals, globals and constructor fields
+ParX, ParY mut Int32 = 3, 4
+ParA, ParB Int64
+
+type ParV struct(x Int32, y Int32) {
+    x, y mut
+    p, q Int32 = x + y, x * y
+    r, s := 1, 2
+}
+
+fn parFib(n Int32) Int64 {
+    a, b Int64 = 0, 1
+    for i in range n { a, b = b, a + b }
+    return a
+}
+
+ParFibBaked := parFib(10)
+
+test "S4c/D12b: parallel assignment swaps; several names share one type" {
+    a, b := 1, 2
+    a, b = b, a
+    assert a == 2 and b == 1
+    arr := Int32[5, 6, 7]
+    arr[0], arr[2] = arr[2], arr[0]
+    assert arr[0] == 7 and arr[2] == 5
+    assert parFib(10) == 55 and ParFibBaked == 55
+    x, y Int32
+    assert x == 0 and y == 0
+    s, t String& = "a", "b"
+    s, t = t, s
+    assert s.Eq("b") and t.Eq("a")
+    assert ParY == 4 and ParA == 0 and ParB == 0
+    ParX, ParY = ParY, ParX
+    assert ParX == 4 and ParY == 3
+    v ParV& = ParV(2, 3)
+    assert v.p == 5 and v.q == 6 and v.r == 1 and v.s == 2
+    v.x, v.y = v.y, v.x
+    assert v.x == 3 and v.y == 2
+    _, c := 9, 8
+    assert c == 8
+    l CondLog& = CondLog()
+    m, n := condMark(l, 1), condMark(l, 2)
+    assert l.s == 12 and m == 1 and n == 2
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

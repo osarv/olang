@@ -746,10 +746,17 @@ struct syntax* parseCtorField(SyntaxCtx sc) {
 //like any other statement, so anything that isn't one ("x = 5", "f()", "if ...") backtracks cleanly into
 //parseStmnt - "x" alone parses as a field (a bare pun) rather than as a useless expression statement,
 //which is exactly the classification wanted.
+struct syntax* parseMultiDecl(SyntaxCtx sc, enum syntaxType nodeType);
 struct syntax* parseCtorBody(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_CTOR_BODY);
     while (true) {
         int cur = TokenGetCursor(sc->tc);
+        struct syntax* fs = parseMultiDecl(sc, SNTX_CTOR_FIELD); //D12b: several fields at once
+        if (fs && acceptStmntEnd(sc)) {
+            for (int i = 0; i < fs->parts.len; i++) addSntx(s, ((struct syntaxPart*)ListGetIdx(&fs->parts, i))->sntx);
+            continue;
+        }
+        TokenSetCursor(sc->tc, cur);
         struct syntax* f = parseCtorField(sc);
         if (f && acceptStmntEnd(sc)) { addSntx(s, f); continue; }
         TokenSetCursor(sc->tc, cur);
@@ -973,6 +980,57 @@ struct syntax* parseVarDecl(SyntaxCtx sc) {
     }
     if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
     if (sc->blockDepth > 0) ListAdd(&sc->localNames, &name.str); //S8b: a local, not a global
+    return s;
+}
+
+//D12b: "a, b [mut] T [= x, y]" - several names declared with one type, each its own declaration of nodeType
+//(SNTX_VAR_DECL, or a constructor's SNTX_CTOR_FIELD) taking its value from the list in order. A constructor's fields
+//may also be puns ("a, b mut") or inferred ("a, b := x, y"); a local or global inferred list is a destructuring
+//(parseStmntDestruct). The statement end is the caller's. Each initializer sees the names declared before it.
+struct syntax* parseMultiDecl(SyntaxCtx sc, enum syntaxType nodeType) {
+    int cur = TokenGetCursor(sc->tc);
+    struct list names = ListInit(sizeof(struct token));
+    do {
+        struct token n = acceptTok(sc, TOK_IDEN);
+        if (n.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+        ListAdd(&names, &n);
+    } while (acceptTok(sc, TOK_COMMA).type != TOK_NONE);
+    if (names.len < 2) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token mut = acceptTok(sc, TOK_MUT);
+    bool field = nodeType == SNTX_CTOR_FIELD;
+    struct token infer = field ? acceptTok(sc, TOK_ASS_INFER) : (struct token){0};
+    struct syntax* type = infer.type == TOK_NONE ? parseTypeExpr(sc) : NULL;
+    if (infer.type == TOK_NONE && !type && !field) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct token ass = type ? acceptTok(sc, TOK_ASS) : (struct token){0};
+    struct list values = ListInit(sizeof(struct syntax*));
+    if (infer.type != TOK_NONE || ass.type != TOK_NONE) {
+        do {
+            struct syntax* v = parseExpr(sc);
+            if (!v) { TokenSetCursor(sc->tc, cur); return NULL; }
+            ListAdd(&values, &v);
+        } while (acceptTok(sc, TOK_COMMA).type != TOK_NONE);
+        if (values.len != names.len) ErrMsgSemantic(*(struct token*)ListGetIdx(&names, 0), VAR_LIST_COUNT);
+    }
+    struct syntax* s = newNode(SNTX_VAR_DECLS);
+    for (int i = 0; i < names.len; i++) {
+        struct token n = *(struct token*)ListGetIdx(&names, i);
+        struct syntax* d = newNode(nodeType);
+        addTok(d, n);
+        if (mut.type != TOK_NONE) addTok(d, mut);
+        if (infer.type != TOK_NONE) addTok(d, infer);
+        if (type) addSntx(d, type);
+        if (ass.type != TOK_NONE) addTok(d, ass);
+        if (i < values.len && (infer.type != TOK_NONE || ass.type != TOK_NONE)) addSntx(d, *(struct syntax**)ListGetIdx(&values, i));
+        else if (infer.type != TOK_NONE || ass.type != TOK_NONE) {
+            //a count mismatch, already reported: the name gets no initializer, so it still declares something
+            d = newNode(nodeType);
+            addTok(d, n);
+            if (mut.type != TOK_NONE) addTok(d, mut);
+            if (type) addSntx(d, type);
+        }
+        addSntx(s, d);
+        if (!field && sc->blockDepth > 0) ListAdd(&sc->localNames, &n.str); //S8b
+    }
     return s;
 }
 
@@ -1793,6 +1851,21 @@ struct syntax* parseStmntDestruct(SyntaxCtx sc) {
     sc->defaultListAt = -1;
     if (!rhs) { TokenSetCursor(sc->tc, cur); return NULL; }
     addSntx(s, rhs);
+    //S4c: or one value per target - "a, b = b, a"
+    while (acceptTok(sc, TOK_COMMA).type != TOK_NONE) {
+        struct syntax* more = parseExpr(sc);
+        if (!more) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, more);
+    }
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
+//D12b as a statement (a local) or a top-level declaration (globals)
+static struct syntax* parseMultiDeclStmnt(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* s = parseMultiDecl(sc, SNTX_VAR_DECL);
+    if (!s) return NULL;
     if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
     return s;
 }
@@ -1800,6 +1873,7 @@ struct syntax* parseStmntDestruct(SyntaxCtx sc) {
 struct syntax* parseStmnt(SyntaxCtx sc) {
     struct syntax* inner;
     if ((inner = parseStmntDestruct(sc))) {}
+    else if ((inner = parseMultiDeclStmnt(sc))) {}
     else if ((inner = parseVarDecl(sc))) {}
     else if ((inner = parseStmntAssign(sc))) {}
     else if ((inner = parseStmntIf(sc))) {}
@@ -2651,6 +2725,7 @@ struct syntax* parseTopDecl(SyntaxCtx sc) {
     else if ((inner = parseExternFuncDecl(sc))) {}
     else if ((inner = parseFuncDef(sc))) {}
     else if ((inner = parseVarDecl(sc))) {}
+    else if ((inner = parseMultiDeclStmnt(sc))) {}
     else if ((inner = parseTestDecl(sc))) {}
     else return NULL;
     struct syntax* s = newNode(SNTX_TOP_DECL);
@@ -3390,6 +3465,16 @@ static void parseTopItem(SyntaxCtx sc, struct list* out) {
         return;
     }
     if (sc->itemIncomplete) addSntx(partSntxOf(decl), newNode(SNTX_BODY_INCOMPLETE)); //S8b
+    //D12b: several globals declared at once are each a declaration of their own from here on
+    struct syntax* inner = partSntxOf(decl);
+    if (inner->type == SNTX_VAR_DECLS) {
+        for (int i = 0; i < inner->parts.len; i++) {
+            struct syntax* one = newNode(SNTX_TOP_DECL);
+            addSntx(one, ((struct syntaxPart*)ListGetIdx(&inner->parts, i))->sntx);
+            ListAdd(out, one);
+        }
+        return;
+    }
     ListAdd(out, decl);
 }
 

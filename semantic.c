@@ -6052,15 +6052,41 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     return op;
 }
 
+//a hidden local holding x, declared by a statement appended to out - x evaluated where that statement runs. A
+//reference keeps x's own scope; a global's initializer, which has no block, gives the local a scope of its own.
+static int hiddenCounter = 0;
+static bool adoptInitializerScope(struct checkCtx* ctx, struct type* t, struct operand* init, bool* unnamed);
+static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
+                                struct list* out) {
+    char* nm = MallocOrCrash(32);
+    snprintf(nm, 32, "$%s%d", tag, ++hiddenCounter);
+    struct token ht = tok;
+    ht.type = TOK_IDEN;
+    ht.str = StrFromCStr(nm);
+    struct type dt = x->type;
+    bool unnamed = false;
+    if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
+    reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok);
+    struct scope* sc = ctx->scope;
+    if (!sc) { sc = MallocOrCrash(sizeof(struct scope)); *sc = scopePush(NULL); }
+    struct var* hv = scopeDeclare(ctx->mod, sc, ht.str, ht, dt, true);
+    hv->scopeUnnamed = unnamed;
+    hv->scopeBindings = x->scopeBindings;
+    struct statement d = (struct statement){0};
+    d.sType = STATEMENT_VAR_DECL;
+    d.var = *hv;
+    d.op = x;
+    ListAdd(out, &d);
+    return hv;
+}
+
 //E29: "x in c" - c.Has(x), or c.Contains(x) when x is of the collection's own type (a contiguous run of it: a
 //substring of text). x is evaluated first, as written: unless it is a literal or a variable, it is held in a hidden
 //local ahead of the call, whose receiver would otherwise be evaluated before it.
 static struct var* methodNamedOn(struct type t, const char* name);
-static bool adoptInitializerScope(struct checkCtx* ctx, struct type* t, struct operand* init, bool* unnamed);
 struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
                                 struct syntax* argsNode, struct list scopeArgNodes, bool* reported);
 static struct list* prebuiltMethodArgs = NULL;
-static int membershipCounter = 0;
 static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNode, struct syntax* cNode,
                                        bool negated, struct token tok) {
     struct operand* x = buildExprFromSyntax(ctx, xNode);
@@ -6080,29 +6106,9 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     struct operand* arg = x;
     bool plain = x->isLiteral || x->isNullLiteral || OperandIsWrittenText(x) || x->opType == OPERATION_READ_VAR;
     if (!plain) {
-        char* nm = MallocOrCrash(32);
-        snprintf(nm, 32, "$in%d", ++membershipCounter);
-        struct token ht = tok;
-        ht.type = TOK_IDEN;
-        ht.str = StrFromCStr(nm);
-        struct type dt = x->type;
-        bool unnamed = false;
-        if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
-        reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok);
-        //a global's initializer has no block of its own: the hidden local gets a scope of its own
-        struct scope* sc = ctx->scope;
-        if (!sc) { sc = MallocOrCrash(sizeof(struct scope)); *sc = scopePush(NULL); }
-        struct var* hv = scopeDeclare(ctx->mod, sc, ht.str, ht, dt, true);
-        hv->scopeUnnamed = unnamed;
-        hv->scopeBindings = x->scopeBindings;
-        struct statement d = (struct statement){0};
-        d.sType = STATEMENT_VAR_DECL;
-        d.var = *hv;
-        d.op = x;
         seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
         seq->comprBody = ListInit(sizeof(struct statement));
-        ListAdd(&seq->comprBody, &d);
-        arg = OperandReadVar(hv, tok);
+        arg = OperandReadVar(holdInHidden(ctx, x, tok, "in", &seq->comprBody), tok);
     }
     struct token mTok = tok;
     mTok.type = TOK_IDEN;
@@ -7242,10 +7248,47 @@ static bool destructTargetName(struct syntax* t, struct token* out) {
 //ordinary declaration or assignment per target reading its field - so every rule a declaration or an
 //assignment has (fit, O25's exact scope, the binding a call made) applies per element with nothing new.
 static int destructCounter;
+//S4c: "t1, t2 = v1, v2" - every value evaluated, left to right, before any target is written, so "a, b = b, a"
+//swaps; a value no write could change (a literal) is used where it stands, every other one held in a hidden local
+//first. "t1, t2 := v1, v2" declares each name from its value, in order.
+static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
+                                struct list* out);
+static void buildParallel(struct checkCtx* ctx, struct list targets, struct list values, bool declare,
+                          struct token opTok, struct list* out) {
+    if (values.len != targets.len) { ErrMsgSemantic(opTok, ASSIGN_LIST_COUNT); return; }
+    if (declare) {
+        for (int i = 0; i < targets.len; i++) {
+            struct syntax* t = *(struct syntax**)ListGetIdx(&targets, i);
+            struct token nameTok;
+            if (!destructTargetName(t, &nameTok)) { ErrMsgSemantic(firstTokAnywhere(t), DESTRUCT_DECLARES_NAMES); continue; }
+            struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&values, i));
+            if (StrCmp(strFromTok(nameTok), StrFromCStr("_"))) continue;
+            struct statement st = buildVarDeclFromOperand(ctx, nameTok, v);
+            ListAdd(out, &st);
+        }
+        return;
+    }
+    struct list held = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < values.len; i++) {
+        struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&values, i));
+        if (!(v->isLiteral || v->isNullLiteral)) v = OperandReadVar(holdInHidden(ctx, v, opTok, "par", out), opTok);
+        ListAdd(&held, &v);
+    }
+    for (int i = 0; i < targets.len; i++) {
+        struct syntax* t = *(struct syntax**)ListGetIdx(&targets, i);
+        struct token nameTok;
+        if (destructTargetName(t, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_"))) continue;
+        struct statement st = buildAssignCore(ctx, buildExprFromSyntax(ctx, t), *(struct operand**)ListGetIdx(&held, i), opTok);
+        ListAdd(out, &st);
+    }
+}
+
 static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* out) {
     struct list targets = allPartsOfType(s, SNTX_EXPR_POSTFIX);
     bool declare = hasTokOfType(s, TOK_ASS_INFER);
     struct token opTok = firstTokOfType(s, declare ? TOK_ASS_INFER : TOK_ASS);
+    struct list values = allPartsOfType(s, SNTX_EXPR);
+    if (values.len > 1) { buildParallel(ctx, targets, values, declare, opTok, out); return; }
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!rhs->type.isTuple || rhs->opType != OPERATION_FUNCCALL) { ErrMsgSemantic(rhs->tok, DESTRUCT_NEEDS_RESULTS); return; }
     if (rhs->type.vars.len != targets.len) { ErrMsgSemantic(opTok, DESTRUCT_COUNT_MISMATCH); return; }
@@ -7326,6 +7369,14 @@ void buildStatementsInto(struct checkCtx* ctx, struct syntax* s, struct list* ou
         stmt.line = kw.lineNr;
         if (kw.owner) stmt.file = TokenGetFileName(kw.owner);
         ListAdd(out, &stmt);
+        return;
+    }
+    if (actual->type == SNTX_VAR_DECLS) { //D12b: one declaration per name, in order
+        for (int i = 0; i < actual->parts.len; i++) {
+            struct syntax* one = newNode(SNTX_STMNT);
+            addSntx(one, partSntx(actual, i));
+            buildStatementsInto(ctx, one, out);
+        }
         return;
     }
     if (actual->type == SNTX_STMNT_DESTRUCT) {

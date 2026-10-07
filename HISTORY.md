@@ -7386,3 +7386,15 @@ from their original form.
   for `Bool`s and would silently change meaning, where every ordering chain was a type error before. The user
   chose ordering comparisons only. The shared operand is evaluated once by caching its value on the operand
   (`cgCached`/`ctCached`) for the next comparison, which reads it through the ordinary paths.
+
+- **Parallel assignment and multi-name declarations (S4c/D12b, 2026-10-07).** Proposed among the smaller
+  natural-language items as "swap"; the user asked for general parallel assignment and for several names sharing
+  one type in declarations. The assignment reuses D8c's destructuring statement: the value side may now be a list,
+  and `buildParallel` holds every non-literal value in a hidden local (the helper the membership operator already
+  used, factored out as `holdInHidden`) before any target is assigned - a literal cannot be changed by an earlier
+  write, a variable read can, which is the swap. A `:=` list needs no holding: its targets are new names.
+  Multi-name declarations are parsed into one ordinary declaration per name sharing the type subtree, so nothing
+  downstream changed: locals arrive as a `SNTX_VAR_DECLS` statement the checker unrolls, globals are split into
+  separate top-level declarations in `parseTopItem`, and constructor fields are spliced into the body - the last
+  mattering because a field list in a constructor body would otherwise have fallen through to the statement parser
+  and become locals, silently. A count mismatch is reported by the parser.

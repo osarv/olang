@@ -2459,6 +2459,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   evaluated once (an operand's value cached on it for the next comparison). An operand may now carry statements
   run in the enclosing block (`OPERATION_SEQ`), which the hidden local uses. `repeat` was proposed and dropped
   (the user: every loop is a `for`).
+- **Parallel assignment and multi-name declarations (S4c/D12b, 2026-10-07, the user's call).** `a, b = b, a`,
+  `x, y = y, x + y`, `arr[i], arr[j] = arr[j], arr[i]`: every value evaluated before any target is written (each
+  held in a hidden local unless a literal), so a swap needs no temporary. `a, b := 1, 2` declares in order. Still
+  no tuple: the list exists only in the statement, as `return a, b` does. The user added several names with one
+  type - `x, y Int32`, `X, Y mut Int32 = 0, 0` (globals), and constructor fields `x, y mut` / `p, q Int32 = ...` /
+  `r, s := ...` - parsed into one ordinary declaration per name, so each initializer sees the names before it, as
+  in C. (A `:=` list in a constructor body declares fields; elsewhere it is a destructuring.)
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
