@@ -60,6 +60,7 @@ enum tokenType {
     TOK_MUL,
     TOK_DIV,
     TOK_MOD,
+    TOK_AT,    //E31: "@" - an operator with no built-in meaning, declared as a method
     TOK_COMMA,
     TOK_DOT,
     TOK_STMNT_END, //synthetic only - see asiTriggerType in token.c; ';' is not valid syntax and has no literal form
@@ -127,6 +128,7 @@ void TokenFeedPast(TokenCtx tc, enum tokenType type);
 void TokenUnfeed(TokenCtx tc);
 int TokenGetStrStart(struct token tok);
 int TokenGetLineStart(TokenCtx tc, int charIdx);
+int TokenGetStrLen(struct token tok);
 int TokenGetLineEnd(TokenCtx tc, int charIdx);
 char TokenGetChar(TokenCtx tc, int charIdx);
 struct token TokenMerge(struct token head, struct token tail);

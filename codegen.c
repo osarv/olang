@@ -2999,13 +2999,13 @@ char* cgCmpChain(struct cgCtx* ctx, struct operand* op) {
     char* prev = NULL;
     for (int i = 0; i < op->args.len; i++) {
         struct operand* cmp = *(struct operand**)ListGetIdx(&op->args, i);
-        struct operand* l = *(struct operand**)ListGetIdx(&cmp->args, 0);
-        struct operand* r = *(struct operand**)ListGetIdx(&cmp->args, 1);
+        struct operand* l = *(struct operand**)ListGetIdx(&op->chainOperands, i);
+        struct operand* r = *(struct operand**)ListGetIdx(&op->chainOperands, i + 1);
         char* lv = prev ? prev : cgValue(ctx, l);
         char* rv = cgValue(ctx, r);
         l->cgCached = lv;
         r->cgCached = rv;
-        char* res = cgValue(ctx, cmp);
+        char* res = cgValue(ctx, cmp); //a built-in comparison, or a declared "<" (E31) - either reads the cache
         l->cgCached = NULL;
         r->cgCached = NULL;
         prev = rv;

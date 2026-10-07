@@ -6596,6 +6596,69 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert CnAreaBaked == 16
 }
 
+# E31: operators are methods named by their symbol, reached only through the operator. "<" is the one ordering a
+# type declares; ">", "<=" and ">=" come from it, and chains of them work (E30).
+type OpVec struct(x Int32, y Int32) {
+    x mut
+    y mut
+}
+
+fn (a OpVec) +(b OpVec) OpVec { return OpVec(a.x + b.x, a.y + b.y) }
+fn (a OpVec) -(b OpVec) OpVec { return OpVec(a.x - b.x, a.y - b.y) }
+fn (a OpVec) -() OpVec { return OpVec(-a.x, -a.y) }
+fn (a OpVec) *(k Int32) OpVec { return OpVec(a.x * k, a.y * k) }
+fn (a OpVec) <(b OpVec) Bool { return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y }
+fn (a OpVec) @(b OpVec) Int32 { return a.x * b.x + a.y * b.y }
+
+type OpMoney Int64
+
+fn (a OpMoney) +(b OpMoney) OpMoney { return OpMoney(Int64(a) + Int64(b) + 1) }
+
+type OpAddable<T> interface {
+    +(b <T>) <T>
+}
+
+fn opTwice(x <T OpAddable<<T>>>) <T> { return x + x }
+
+fn opSum(xs Array<<T>>&, zero <T>) <T> {
+    t <T> = zero
+    for x in xs { t = t + x }
+    return t
+}
+
+OpDotBaked Int32 = (OpVec(1, 2) + OpVec(3, 4)) @ OpVec(1, 1)
+
+test "E31: operators declared as methods - arithmetic, negation, ordering, @, compound assignment" {
+    a := OpVec(1, 2)
+    b := OpVec(3, 4)
+    c := a + b
+    assert c.x == 4 and c.y == 6
+    d := -a
+    assert d.x == -1 and d.y == -2
+    e := (b - a) * 2
+    assert e.x == 4 and e.y == 4
+    assert a < b and b > a and a <= b and not (a >= b)
+    assert a < b < OpVec(10, 10)
+    assert a @ b == 11
+    v OpVec = a
+    v += b
+    assert v.x == 4 and v.y == 6
+    m := OpMoney(5) + OpMoney(6)
+    assert Int64(m) == 12
+}
+
+test "E31: operators in generic code, in a constraint, through an interface value, and while compiling" {
+    a := OpVec(1, 2)
+    s := opSum(OpVec[a, OpVec(3, 4)], OpVec(0, 0))
+    assert s.y == 6
+    t := opTwice(a)
+    assert t.x == 2
+    w OpAddable<OpVec>& = a
+    r := w + OpVec(10, 10)
+    assert r.x == 11
+    assert OpDotBaked == 10
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

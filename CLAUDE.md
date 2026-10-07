@@ -2482,7 +2482,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   written `##` by convention (a single `#` already began a line comment), so 2,046 comments were rewritten to `#`
   by a script that skips string and character literals, and the `# check:` / `# flags:` headers with them. The user
   chose `##` over the unused `###`, which would have needed no migration.
-- **Pending, deferred by the user (2026-10-07): default methods, constraints, operator overloading.** Recorded,
+- **Pending, deferred by the user (2026-10-07): default methods** (constraints and operators since built - G19, E31). Recorded,
   not decided. *Default methods*: chosen to be reachable only through the interface (an interface value or a
   constrained `<T>`), never as a concrete type's own methods - which M19a's interface-receiver methods already are.
   On top of that the user wants `default` to mark an *optional* interface member a type may supply itself (an
@@ -2509,6 +2509,17 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Has`/`Contains` and `Map`'s key are constrained by them - so `Has` on an array of a type without `Eq` fails at the
   call, not inside the prelude, which is the case that started the discussion. No evaluator change: constraints are
   resolved before anything runs.
+- **Operators declared as methods (E31, 2026-10-07, the user's design).** `fn (a Vec2) +(b Vec2) Vec2`; declarable
+  `+ - * / %`, `@` (no built-in meaning - matrix multiplication), unary `-` (`-()`), and `<`, from which `>`, `<=`,
+  `>=` are derived (and chain, E30). Not declarable: `==`/`!=` (E10 stays) and `$` (E11a stays). Reached only through
+  the operator: the parser renames the method to a name no program can write (`$add`, `$neg`, ...). One operand
+  besides the receiver, one result of any value (built results under the ordinary scope rules), no errors. No
+  built-in type on the left - accepted by the user. Several right-hand types go through one generic method with a
+  constraint and `match <T>` (G19), so there is no overloading by parameter type. Works in generic code, through
+  interface values (an interface may require `+(b <T>) <T>`), in `op=`, and in compile-time evaluation with no
+  evaluator change, since an operator is a method call by the time it is checked. A declared `+` on a named numeric
+  type replaces the built-in one. The long road there: free functions, groups, `Self`, Rust traits, "is it worth
+  it" - see HISTORY.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

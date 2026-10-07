@@ -67,6 +67,7 @@ struct tokRule tokRules[] = {
     {TOK_MUL, "*", NULL},
     {TOK_DIV, "/", NULL},
     {TOK_MOD, "%", NULL},
+    {TOK_AT, "@", NULL},
     {TOK_COMMA, ",", NULL},
     {TOK_DOT, ".", NULL},
     {TOK_STMNT_END, "", "end of statement"}, //no literal form - only ever synthesized, see stmntEndTriggerType
@@ -571,8 +572,25 @@ void TokenUnfeed(TokenCtx tc) {
     tc->tokIdx--;
 }
 
+//where a token's text starts in its file. A token whose text was replaced by the parser (E31: an operator in a
+//method's name position is renamed) no longer points into the file, and is located through the token it came from
+static struct token tokenAsWritten(struct token tok) {
+    char* base = (char*)tok.owner->chars.ptr;
+    if (tok.str.ptr >= base && tok.str.ptr < base + tok.owner->chars.len) return tok;
+    for (int i = 0; i < tok.owner->tokens.len; i++) {
+        struct token* t = ListGetIdx(&tok.owner->tokens, i);
+        if (t->tokId == tok.tokId) return *t;
+    }
+    return tok;
+}
+
 int TokenGetStrStart(struct token tok) {
+    tok = tokenAsWritten(tok);
     return (int)(tok.str.ptr - (char*)tok.owner->chars.ptr);
+}
+
+int TokenGetStrLen(struct token tok) {
+    return tokenAsWritten(tok).str.len;
 }
 
 int TokenGetLineStart(TokenCtx tc, int charIdx) {

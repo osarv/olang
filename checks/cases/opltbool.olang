@@ -1,0 +1,7 @@
+# check: fail '<' gives a Bool
+# E31: an operator method's shape
+type V struct(x Int32) {
+    x
+}
+fn (a V) <(b V) Int32 { return 1 }
+fn main() ? { }

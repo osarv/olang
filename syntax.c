@@ -402,6 +402,50 @@ struct syntax* parseParamList(SyntaxCtx sc);
 struct syntax* parseFuncSig(SyntaxCtx sc);
 struct syntax* parseStructCtor(SyntaxCtx sc);
 
+//E31: an operator written where a method's name goes ("fn (a Vec2) +(b Vec2) Vec2"), or NONE. The method is
+//named internally by what the operator is, in a spelling no program can write - "$" cannot begin a name - so it
+//is reached only through the operator. "-" is resolved once the parameters are known: none is negation.
+static struct token acceptOperatorName(SyntaxCtx sc) {
+    int before = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    const char* nm = NULL;
+    switch (t.type) {
+        case TOK_ADD: nm = "$add"; break;
+        case TOK_SUB: nm = "$sub"; break;
+        case TOK_MUL: nm = "$mul"; break;
+        case TOK_DIV: nm = "$div"; break;
+        case TOK_MOD: nm = "$mod"; break;
+        case TOK_LST: nm = "$lt"; break;
+        case TOK_AT:  nm = "$at"; break;
+        default: TokenSetCursor(sc->tc, before); return (struct token){0};
+    }
+    t.type = TOK_IDEN;
+    //a copy of its own: a declaration is told apart by where its name token's text lives, so two operator
+    //methods (on different receivers) must not share one string
+    char* own = MallocOrCrash(strlen(nm) + 1);
+    strcpy(own, nm);
+    t.str = StrFromCStr(own);
+    return t;
+}
+
+//E31: "-" with no parameter of its own is unary negation
+static void settleMinusName(struct token* name, struct syntax* sig) {
+    if (!StrCmp(name->str, StrFromCStr("$sub"))) return;
+    for (int i = 0; i < sig->parts.len; i++) {
+        struct syntaxPart* sp = ListGetIdx(&sig->parts, i);
+        if (!sp->isToken && sp->sntx->type == SNTX_PARAM_LIST) {
+            int n = 0;
+            for (int j = 0; j < sp->sntx->parts.len; j++) if (!((struct syntaxPart*)ListGetIdx(&sp->sntx->parts, j))->isToken) n++;
+            if (n == 0) {
+                char* own = MallocOrCrash(5);
+                strcpy(own, "$neg");
+                name->str = StrFromCStr(own);
+            }
+            return;
+        }
+    }
+}
+
 //one entry of an interface body: "[mut] IDEN func-sig" (T30). No leading "func" - the name followed by "("
 //is already unambiguous here, and the list reads as the set of calls the interface admits rather than as a
 //list of declarations. The optional "mut" says the method needs a MUTABLE receiver; it is written on the
@@ -413,9 +457,11 @@ struct syntax* parseMethodSig(SyntaxCtx sc) {
     struct token mut = TokenFeed(sc->tc);
     if (mut.type != TOK_MUT) { TokenSetCursor(sc->tc, beforeMut); mut.type = TOK_NONE; }
     struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE) name = acceptOperatorName(sc); //E31: an interface may require an operator
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* sig = parseFuncSig(sc);
     if (!sig) { TokenSetCursor(sc->tc, cur); return NULL; }
+    settleMinusName(&name, sig);
     struct syntax* s = newNode(SNTX_METHOD_SIG);
     if (mut.type != TOK_NONE) addTok(s, mut);
     addTok(s, name);
@@ -860,12 +906,14 @@ struct syntax* parseFuncDef(SyntaxCtx sc) {
         addTok(receiver, rClose);
     }
     struct token name = acceptTok(sc, TOK_IDEN);
+    if (name.type == TOK_NONE && receiver) name = acceptOperatorName(sc); //E31: an operator is a method
     if (name.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     //O3: "func f&b(...)" - scope declarations ride on the signature node, where resolveFuncSig finds them
     //alongside everything else it needs
     struct list scopeDecls = parseScopeDecls(sc);
     struct syntax* sig = parseFuncSig(sc);
     if (!sig) { TokenSetCursor(sc->tc, cur); return NULL; }
+    settleMinusName(&name, sig);
     for (int i = 0; i < scopeDecls.len; i++) addSntx(sig, *(struct syntax**)ListGetIdx(&scopeDecls, i));
     //the receiver becomes parameter 0 of the signature. Every rule that governs a parameter - D9's axes,
     //E12's conversions, §8's containment - then governs it with no special case, which is the property M19
@@ -2654,7 +2702,7 @@ int binOpPrecedence(enum tokenType t) {
         case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE: case TOK_IN: return 8; //E29: "in" beside them
         case TOK_BTSFT_L: case TOK_BTSFT_R: return 9;
         case TOK_ADD: case TOK_SUB: return 10;
-        case TOK_MUL: case TOK_DIV: case TOK_MOD: return 11;
+        case TOK_MUL: case TOK_DIV: case TOK_MOD: case TOK_AT: return 11; //E31: "@" beside "*"
         default: return 0; //not a binary operator
     }
 }

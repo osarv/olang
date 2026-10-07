@@ -7448,3 +7448,25 @@ from their original form.
   to differ and skips the table's scope-count check. A test name collision (`CtShape` already existed for the
   compile-time tests) briefly looked like a missed duplicate-declaration error; it was reported, just filtered out of
   the output I was reading.
+
+- **Operators declared as methods (E31, 2026-10-07).** The design was the user's, arrived at in steps: first
+  "operators only on value returns", then sets of types that "play well together" (heterogeneous `A op B -> C`, after
+  asking whether mathematics only defines S x S -> S - it does for groups, not for vector spaces or affine time),
+  then - after I argued the machinery was expensive and that matrix operators allocate - reserved method names
+  (`Add`, `Mul`), and finally the operator symbols themselves as method names, with built-in types never on the
+  left, `==`/`!=` and `$` excluded, `@` added, and `<` the one declared ordering. Several right-hand types need no
+  overloading because a generic method with a constraint and `match <T>` covers them, which is why constraints came
+  first.
+  **How it is built.** The parser accepts an operator token where a method's name goes and renames it - `$add`,
+  `$sub`, `$neg` for a `-` with no parameter, ... - to a name no program can write (`$` cannot begin a name), which
+  is what makes "only through the operator" true without a rule. `buildBinaryOp` replaces the direct `OperandBinary`
+  call for operators written in the program: it looks for the method on the receiver's type and builds an ordinary
+  method call (with `prebuiltMethodArgs`, the hook membership already used), swapping and negating for the derived
+  orderings and holding the left operand in a hidden local when it would otherwise run second. Chains now keep their
+  operands in a list of their own, because a comparison may be a method call whose arguments are in another order.
+  Unary minus and compound assignment go the same way. Codegen and the evaluator needed nothing.
+  **Two bugs of mine on the way.** Two operator methods on different receivers confused each other: the renamed token
+  pointed both at one string constant, and some declarations are told apart by where their name token's text lives.
+  Each renamed token now owns its text. And then every diagnostic on an operator method crashed the compiler, because
+  the error printer finds a token in the source by that same pointer; it now falls back to the token as written,
+  found by its id.

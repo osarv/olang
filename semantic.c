@@ -3425,6 +3425,15 @@ void checkMethodOverloads(struct semaModule* mod) {
                 continue;
             }
             if (receiverIsBuiltin(*ra) && !isPreludeModule(mod)) { ErrMsgSemantic(a->tok, METHOD_ON_BUILTIN_TYPE); continue; }
+            //E31: an operator method's shape - one operand besides the receiver (none for negation), a result,
+            //no errors (an operator has nowhere to write "try"), and "<" answering with a Bool
+            if (a->name.len > 0 && a->name.ptr[0] == '$') {
+                bool neg = StrCmp(a->name, StrFromCStr("$neg"));
+                if (a->type.vars.len != (neg ? 1 : 2)) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
+                else if (!a->type.hasRetType || a->type.retType->isTuple) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
+                else if (a->type.errors.len > 0) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
+                else if (StrCmp(a->name, StrFromCStr("$lt")) && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
+            }
         }
         for (int j = 0; j < i; j++) {
             struct var* b = ListGetIdx(&mod->vars, j);
@@ -6118,6 +6127,69 @@ struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s);
 
 static bool isOrderingTok(enum tokenType t) { return t == TOK_LST || t == TOK_LSE || t == TOK_GRT || t == TOK_GRE; }
 
+//E31: the method an operator stands for, by its internal name, called on recv - with arg, or none for negation
+static struct var* methodNamedOn(struct type t, const char* name);
+static struct list* prebuiltMethodArgs;
+struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
+                                struct syntax* argsNode, struct list scopeArgNodes, bool* reported);
+static struct operand* operatorCall(struct checkCtx* ctx, struct operand* recv, struct operand* arg, const char* name,
+                                    struct token tok) {
+    struct token mTok = tok;
+    mTok.type = TOK_IDEN;
+    mTok.str = StrFromCStr((char*)name);
+    struct list args = ListInit(sizeof(struct operand*));
+    if (arg) ListAdd(&args, &arg);
+    struct list* prev = prebuiltMethodArgs;
+    prebuiltMethodArgs = &args;
+    bool reported = false;
+    struct operand* call = buildMethodCall(ctx, recv, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
+    prebuiltMethodArgs = prev;
+    return call;
+}
+
+//E31: "a op b" written in the program - the operator method a's type declares for op, or the built-in operation.
+//"<" is the one ordering a type declares: "a > b" is "b < a", "a <= b" is "not (b < a)", "a >= b" "not (a < b)".
+//Where b becomes the receiver, a is still evaluated first: held in a hidden local unless it is a literal or a
+//variable, or the operands are a chain's, which evaluates each once and in order itself (E30).
+static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
+                                struct list* out);
+static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
+                                     bool inChain) {
+    const char* name = NULL;
+    bool swap = false, negate = false;
+    switch (opTok.type) {
+        case TOK_ADD: name = "$add"; break;
+        case TOK_SUB: name = "$sub"; break;
+        case TOK_MUL: name = "$mul"; break;
+        case TOK_DIV: name = "$div"; break;
+        case TOK_MOD: name = "$mod"; break;
+        case TOK_AT: name = "$at"; break;
+        case TOK_LST: name = "$lt"; break;
+        case TOK_GRT: name = "$lt"; swap = true; break;
+        case TOK_LSE: name = "$lt"; swap = true; negate = true; break;
+        case TOK_GRE: name = "$lt"; negate = true; break;
+        default: break;
+    }
+    struct operand* recv = swap ? b : a;
+    if (name && methodNamedOn(recv->type, name)) {
+        struct operand* seq = NULL;
+        struct operand* other = swap ? a : b;
+        bool plain = a->isLiteral || a->isNullLiteral || a->opType == OPERATION_READ_VAR;
+        if (swap && !inChain && !plain) {
+            seq = operandNew(opTok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
+            seq->comprBody = ListInit(sizeof(struct statement));
+            other = OperandReadVar(holdInHidden(ctx, a, opTok, "op", &seq->comprBody), opTok);
+        }
+        struct operand* call = operatorCall(ctx, recv, other, name, opTok);
+        if (StrCmp(StrFromCStr((char*)name), StrFromCStr("$lt")) && !OperandIsBool(call)) ErrMsgSemantic(opTok, OPERATOR_LT_BOOL);
+        struct operand* r = call;
+        if (seq) { seq->type = call->type; ListAdd(&seq->args, &call); r = seq; }
+        return negate ? OperandUnary(r, OPERATION_NOT, opTok) : r;
+    }
+    if (opTok.type == TOK_AT) { ErrMsgSemantic(opTok, OPERATOR_AT_UNDECLARED); return OperandIntLiteral(opTok); }
+    return OperandBinary(a, b, opFromTokType(opTok.type), opTok);
+}
+
 //E30: "a < b <= c" - the comparisons joined by "and", each sharing its middle operand, which is built (and
 //evaluated) once. Only the four ordering comparisons chain: "a == b == c" keeps meaning "(a == b) == c".
 static struct operand* buildCmpChain(struct checkCtx* ctx, struct syntax* s) {
@@ -6129,13 +6201,16 @@ static struct operand* buildCmpChain(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* innermost = *(struct syntax**)ListGetIdx(&nodes, nodes.len - 1);
     struct operand* left = buildExprFromSyntax(ctx, partSntx(innermost, 0));
     struct operand* chain = operandNew(partAt(innermost, 1)->tok, OPERATION_CMP_CHAIN, TypeVanilla(BASETYPE_BOOL));
+    chain->chainOperands = ListInit(sizeof(struct operand*));
+    ListAdd(&chain->chainOperands, &left);
     for (int i = nodes.len - 1; i >= 0; i--) {
         struct syntax* n = *(struct syntax**)ListGetIdx(&nodes, i);
         struct token opTok = partAt(n, 1)->tok;
         struct operand* right = buildExprFromSyntax(ctx, partSntx(n, 2));
-        struct operand* cmp = OperandBinary(left, right, opFromTokType(opTok.type), opTok);
+        struct operand* cmp = buildBinaryOp(ctx, left, right, opTok, true); //E31: a declared "<" chains too
         ListAdd(&chain->args, &cmp);
-        left = cmp->args.len == 2 ? *(struct operand**)ListGetIdx(&cmp->args, 1) : right;
+        ListAdd(&chain->chainOperands, &right);
+        left = right;
     }
     return chain;
 }
@@ -6266,7 +6341,7 @@ struct operand* buildBinChain(struct checkCtx* ctx, struct syntax* s) {
     for (int i = 1; i < s->parts.len; i += 2) {
         struct token opTok = partAt(s, i)->tok;
         struct operand* rhs = buildExprFromSyntax(ctx, partSntx(s, i +1));
-        result = OperandBinary(result, rhs, opFromTokType(opTok.type), opTok);
+        result = buildBinaryOp(ctx, result, rhs, opTok, false);
     }
     return result;
 }
@@ -6291,6 +6366,8 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     for (int i = n -2; i >= 0; i--) {
         struct syntax* opNode = partSntx(s, i); //SNTX_EXPR_UNARY_OP
         struct token opTok = partAt(opNode, 0)->tok;
+        //E31: negation a type declares ("fn (v Vec2) -() Vec2")
+        if (opTok.type == TOK_SUB && methodNamedOn(result->type, "$neg")) { result = operatorCall(ctx, result, NULL, "$neg", opTok); continue; }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
     }
     return result;
@@ -7962,7 +8039,20 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     bool isCompound;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct operand* value = rhs;
-    if (isCompound) value = OperandBinary(target, rhs, compoundOp, opTok);
+    if (isCompound) {
+        //E31: "v += w" is "v = v + w", through the operator v's type declares when it declares one
+        const char* nm = NULL;
+        switch (compoundOp) {
+            case OPERATION_ADD: nm = "$add"; break;
+            case OPERATION_SUB: nm = "$sub"; break;
+            case OPERATION_MUL: nm = "$mul"; break;
+            case OPERATION_DIV: nm = "$div"; break;
+            case OPERATION_MOD: nm = "$mod"; break;
+            default: break;
+        }
+        if (nm && methodNamedOn(target->type, nm)) value = operatorCall(ctx, target, rhs, nm, opTok);
+        else value = OperandBinary(target, rhs, compoundOp, opTok);
+    }
     else {
         //a target's own "&name" tag may name a scope variable of the TYPE it is a field of, never anything
         //in this function's frame - so it has to be resolved through the target's own binding map before

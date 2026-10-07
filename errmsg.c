@@ -100,7 +100,7 @@ void printErrorLine(TokenCtx tc, int errStart, int errEnd) {
 
 void printTokErrorLineOneTok(struct token tok) {
     int startIndex = TokenGetStrStart(tok);
-    printErrorLine(tok.owner, startIndex, startIndex + tok.str.len -1);
+    printErrorLine(tok.owner, startIndex, startIndex + TokenGetStrLen(tok) -1);
 }
 
 #define NO_LINE_NR -1

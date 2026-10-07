@@ -1452,7 +1452,7 @@ operators groups left-to-right):
 | 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
-| 11 (tightest) | `*` `/` `%` |
+| 11 (tightest) | `*` `/` `%` `@` (E31) |
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
 exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
@@ -1957,6 +1957,26 @@ error, not a loop while `x` is in `c`. That loop is written `for { if x not in c
 ...`, is a chain: `a op1 b and b op2 c and ...`, each operand evaluated once, left to right, and evaluation stopping at
 the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. `==` and `!=` do not chain:
 `a == b == c` is `(a == b) == c`, a comparison of `Bool`s.
+
+### 5.15 Operators declared by types
+
+**E31.** A method may be named by an operator: `fn (a Vec2) +(b Vec2) Vec2`. The operators a type may declare are
+`+ - * / %`, `@`, unary `-` (written with no parameter, `fn (a Vec2) -() Vec2`) and `<`. Such a method takes exactly
+one parameter besides its receiver (none for unary `-`), gives one result - any value, a built one following the
+ordinary rules for a built result (§8) - and declares no errors; `<` gives a `Bool`. It is reached **only through the
+operator**: it has no name a program can write, so `a.+(b)` is not a call. The coherence rules for methods (M19)
+apply unchanged, so the built-in types' operators stay the language's.
+
+Where the left operand's type declares the operator, `a op b` is that method called with `a` as receiver and `b` as
+its argument, including inside generic code (compiled per instantiation, G16), through an interface value whose
+interface requires it, and in `a op= b`, which is `a = a op b`; otherwise the operator is the built-in one, which
+for `@` does not exist (a compile-time error). Unary `-x` is likewise the type's `-()` when it declares one.
+
+`<` is the one ordering a type declares: `a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` -
+each looked up on the type of the operand that becomes the receiver, `a` still evaluated before `b`. They chain
+(E30). `==` and `!=` are never declared: equality stays E10's. `$` is never declared: rendering stays E11a's.
+An interface may require an operator, written as a method signature named by it (`+(b <T>) <T>`), and a constraint
+(G19) may then require one of a type variable.
 
 ## 6. Statements
 

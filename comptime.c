@@ -1188,8 +1188,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             bool all = true;
             for (int i = 0; i < op->args.len && all; i++) {
                 struct operand* cmp = *(struct operand**)ListGetIdx(&op->args, i);
-                struct operand* l = *(struct operand**)ListGetIdx(&cmp->args, 0);
-                struct operand* r = *(struct operand**)ListGetIdx(&cmp->args, 1);
+                struct operand* l = *(struct operand**)ListGetIdx(&op->chainOperands, i);
+                struct operand* r = *(struct operand**)ListGetIdx(&op->chainOperands, i + 1);
                 struct ctVal* lv = prev ? prev : ctEval(st, l);
                 if (!lv) return NULL;
                 struct ctVal* rv = ctEval(st, r);
