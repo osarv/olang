@@ -2115,7 +2115,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   references that mean nothing to the reader), so it is two other problems. **Serialization** - an encoder
   walking a value field by field, JSON as one encoder and a compact binary one beside it, in std - needs a
   **compile-time reflection** facility (iterate a type's fields, in the spirit of `match <T>`); both are
-  recorded as future work, not next. **Exact layout** (drivers, wire headers, C structs) wants a
+  recorded as future work, not next. **An `is` test for enum cases** (`shape is Shape.Circle`, true for any
+  payload) was proposed 2026-10-07 and deferred by the user to the same facility - its only gain over `==` is
+  asking which case a payload enum holds without writing the payload. **Exact layout** (drivers, wire headers, C structs) wants a
   declared-layout type whose size is a compile-time constant, not a measurement of arbitrary values;
   deferred until something needs it (MMIO itself is still inexpressible, X3b).
 
