@@ -60,18 +60,21 @@ fn (m mut Map<<K>, <V>>&) grow() {
     }
 }
 
-## the value for key, and whether there was one - the type's zero value when not
-fn (m Map<<K>, <V>>&) Get(key <K>) (<V>, Bool) {
+## the value for key - failing with the default error when there is none, so a miss is never read as a value:
+## "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
+fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
     for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
-        if s.key.Eq(key) { return s.value, true }
+        if s.key.Eq(key) { return s.value }
     }
-    none <V>
-    return none, false
+    error
 }
 
+## whether key has a value - what "key in m" asks (E29)
 fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
-    v, found := m.Get(key)
-    return found
+    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+        if s.key.Eq(key) { return true }
+    }
+    return false
 }
 
 ## removes key and its value, and says whether it was there
@@ -129,13 +132,13 @@ test "put, get, replace, remove" {
     m := Map<Int32, Int64>()
     m.Put(1, 10)
     m.Put(2, 20)
-    v, found := m.Get(1)
-    assert found and v == 10
+    assert (try m.Get(1) catch default -1) == 10
     m.Put(1, 11)
-    v, found = m.Get(1)
-    assert v == 11 and m.Len() == 2
-    v, found = m.Get(3)
-    assert not found and v == 0
+    assert (try m.Get(1) catch default -1) == 11 and m.Len() == 2
+    assert (try m.Get(3) catch default -1) == -1
+    missed := false
+    try m.Get(3) catch { missed = true }
+    assert missed
     assert m.Remove(1) and not m.Remove(1)
     assert not m.Has(1) and m.Has(2) and m.Len() == 1
 }
@@ -145,8 +148,7 @@ test "a map grows, and keeps every key through it" {
     for i in range 1000 { m.Put(i, i * i) }
     assert m.Len() == 1000
     for i in range 1000 {
-        v, found := m.Get(i)
-        assert found and v == i * i
+        assert (try m.Get(i) catch default -1) == i * i
     }
 }
 
@@ -155,8 +157,7 @@ test "text keys compare by what they say" {
     m.Put("apple", 1)
     m.Put("pear", 2)
     key := String(Byte['p', 'e', 'a', 'r'])
-    v, found := m.Get(key)
-    assert found and v == 2
+    assert (try m.Get(key) catch default -1) == 2
 }
 
 test "for ... in visits every entry once" {
@@ -174,8 +175,7 @@ test "for ... in visits every entry once" {
 test "a pair is a key when both its parts are" {
     m := Map<Pair<Int32, Int32>, Int32>()
     for i in range 20 { m.Put(Pair(Int32(i), Int32(i) + 1), Int32(i)) }
-    v, found := m.Get(Pair(7, 8))
-    assert found and v == 7
+    assert (try m.Get(Pair(7, 8)) catch default -1) == 7
     assert not m.Has(Pair(8, 7))
 }
 
@@ -184,4 +184,18 @@ test "membership in a Map is by key" {
     m.Put("k", 1)
     assert "k" in m
     assert "z" not in m
+}
+
+## a lookup and a miss, computed while compiling (K2) - the same answers as at run time
+fn lookupBoth() Int32 {
+    m := Map<Int32, Int32>()
+    m.Put(4, 40)
+    return (try m.Get(4) catch default 0) + (try m.Get(5) catch default 1)
+}
+
+LookupBaked := lookupBoth()
+
+test "a miss is an error, evaluated while compiling as at run time" {
+    assert LookupBaked == 41
+    assert lookupBoth() == LookupBaked
 }

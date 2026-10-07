@@ -2271,7 +2271,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **`std/map` - `Map<K, V>` (2026-10-05).** A key is any type with `Hash() Int64` and `Eq(other) Bool` methods; the
   prelude (`std/prelude/hash.olang`) gives them to Int32, Int64, Byte and String (FNV-1a over text, a golden-ratio
   multiply and fold for integers - relying on integer arithmetic wrapping, now stated as E6c). Chained buckets, power-of-two count, doubled at three-quarters full by re-linking slots; everything
-  lives where the Map does (bare fields, C2d). `Put`, `Get` -> `(V, Bool)`, `Has`, `Remove`, `Len`, and `for e in m`
+  lives where the Map does (bare fields, C2d). `Put`, `Get` (fails with the default error on a miss - 2026-10-07, the user's call; it returned `(V, Bool)`
+  first), `Has`, `Remove`, `Len`, and `for e in m`
   giving `e.Key`/`e.Value` through a two-number `MapIter`, as `ListIter` does - an iterator holding the map as a
   `&p` field cannot walk its slots itself, so the map answers `entryAt`. Writing it found two inference gaps (G9a
   for text, G9b for already-bound variables) and a pre-existing use-after-free (O17: a borrowed value argument did
@@ -2466,6 +2467,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   type - `x, y Int32`, `X, Y mut Int32 = 0, 0` (globals), and constructor fields `x, y mut` / `p, q Int32 = ...` /
   `r, s := ...` - parsed into one ordinary declaration per name, so each initializer sees the names before it, as
   in C. (A `:=` list in a constructor body declares fields; elsewhere it is a destructuring.)
+- **"No value" is an error, not a flag (2026-10-07, the user's call).** `Map.Get` fails with the default error on
+  a miss instead of returning `(V, Bool)`: `try m.Get(k) catch default 0` is the fallback, a bare call does not
+  compile, so a miss can never be read as a zero value. A proposed `m.Get(k) else 0` shorthand was dropped - the
+  user: it swallows one result of two while reading as though it applies to both. Iterators keep `Next() (T, Bool)`,
+  since running out is not a failure and `for ... in` handles it.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

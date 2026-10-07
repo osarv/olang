@@ -7398,3 +7398,14 @@ from their original form.
   separate top-level declarations in `parseTopItem`, and constructor fields are spliced into the body - the last
   mattering because a field list in a constructor body would otherwise have fallen through to the statement parser
   and become locals, silently. A count mismatch is reported by the parser.
+
+- **Map.Get fails instead of flagging (2026-10-07).** The last small natural-language item was a fallback,
+  `v := m.Get(k) else 0`, for calls returning `(T, Bool)`. The user asked why the map was not using errors, since
+  `try ... catch default` already does exactly this. The honest answer was habit: the `(V, Bool)` shape was copied
+  from Go when std/map was written. An olang error is a return code, not an exception, so it costs the same; a bare
+  fallible call does not compile, so a miss cannot be silently read as a zero value as `v, _ := m.Get(k)` allowed;
+  and the default error fits a lookup that can fail one way. The user dropped the `else` idea - syntactically it
+  swallows the flag of a two-result call while reading as if it covered both - and asked for the map and anything
+  built on the same pattern to be migrated. Only `Map.Get` was public; `Map.entryAt` and `List.elementAt` are the
+  iterators' internals, where running out is the ordinary end of a sequence, as it is for `Next()`. `Has` no longer
+  goes through `Get`. A global computed through a hit and a miss bakes to the run-time answer.
