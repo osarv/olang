@@ -1142,7 +1142,11 @@ static struct ctVal* ctEval(struct ctState* st, struct operand* op) {
 static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
     if (!ctStep(st, op->tok)) return NULL;
     switch (op->opType) {
-        case OPERATION_NONE: return ctLiteral(st, op);
+        case OPERATION_NONE:
+            //what the checker leaves where an expression failed is a placeholder, not a value - deciding anything
+            //from it would add a second, false error (S8a's "dead branch", say) to the real one
+            if (!op->isLiteral && !op->isNullLiteral) return ctFail(st, op->tok, "it uses an expression that did not check");
+            return ctLiteral(st, op);
         case OPERATION_READ_VAR: case OPERATION_MEMBER: case OPERATION_INDEX: {
             struct ctVal* node = ctLvalue(st, op, false);
             if (!node) return NULL; //a checked index's own failure is taken by ctEval

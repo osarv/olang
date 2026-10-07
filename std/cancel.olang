@@ -1,0 +1,120 @@
+## cancel - telling tasks to stop. A task is an OS thread, and nothing can stop one safely from outside: killed
+## part way, it could leave a mutex locked or a structure half written. So stopping is the task's own decision,
+## taken where it is safe, and a Token is the signal it checks. Whoever made the token calls Cancel(); the tasks
+## handed it read Cancelled() in their loops, and pass it to anything that waits (chan's RecvUntil/SendUntil),
+## which gives up when it fires. A timeout is the same signal, fired by a deadline instead of a call.
+## Ordinary olang on top of "extern fn", as chan and io are.
+
+## why a wait gave up
+error Stopped {
+    CANCELLED,
+    TIMED_OUT
+}
+
+## Linux's clock ids, and a timespec as the two words it is
+ClockRealtime Int32 = 0
+ClockMonotonic Int32 = 1
+extern fn clock_gettime(clock Int32, ts Array<Int64>) Int32
+
+## now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set
+fn NowNs() Int64 {
+    ts := Array<Int64>(2)
+    clock_gettime(ClockMonotonic, ts)
+    return ts[0] * 1000000000 + ts[1]
+}
+
+## the wall clock in nanoseconds - only what pthread_cond_timedwait measures its deadlines against
+fn wallNs() Int64 {
+    ts := Array<Int64>(2)
+    clock_gettime(ClockRealtime, ts)
+    return ts[0] * 1000000000 + ts[1]
+}
+
+## a stop signal, with a deadline when deadlineNs (on NowNs's clock) is not 0. The flag is only ever touched
+## atomically (P9), since Cancel() runs on one thread while the tasks read it on others; the deadline is fixed
+## at construction, before any task can see it.
+type Token struct(deadlineNs Int64 = 0) {
+    flag mut Int32 = 0
+    deadline Int64 = deadlineNs
+}
+
+## a token that fires by itself once ms milliseconds have passed - and on Cancel(), like any other
+fn After(ms Int64) Token& {
+    return Token(NowNs() + ms * 1000000)
+}
+
+## fires the token: every Cancelled() from now on is true, and every wait given it gives up
+fn (t mut Token&) Cancel() {
+    atomicStore(t.flag, 1)
+}
+
+## true once the token was cancelled or its deadline has passed
+fn (t Token&) Cancelled() Bool {
+    return t.Why() != 0
+}
+
+## 0 while the token has not fired; otherwise 1 when it was cancelled, 2 when its deadline passed
+fn (t Token&) Why() Int32 {
+    if atomicLoad(t.flag) != 0 { return 1 }
+    if t.deadline != 0 and NowNs() >= t.deadline { return 2 }
+    return 0
+}
+
+## the error a wait gives up with, for a token that has fired
+fn (t Token&) Reason() ? Stopped {
+    if t.Why() == 1 { error Stopped.CANCELLED }
+    error Stopped.TIMED_OUT
+}
+
+## the wall-clock time, as a timespec, a wait should next wake at: the deadline if it is near, else soon enough
+## to notice a Cancel() - which no wait can be woken for directly, since the token does not know who is waiting
+PollNs Int64 = 10000000
+fn (t Token&) WakeAt(ts mut Array<Int64>&) {
+    wait Int64 = PollNs
+    if t.deadline != 0 {
+        left Int64 = t.deadline - NowNs()
+        if left < wait { wait = left }
+        if wait < 0 { wait = 0 }
+    }
+    at Int64 = wallNs() + wait
+    ts[0] = at / 1000000000
+    ts[1] = at % 1000000000
+}
+
+test "a token fires on Cancel, and not before" {
+    t Token& = Token()
+    assert not t.Cancelled()
+    t.Cancel()
+    assert t.Cancelled()
+    try t.Reason() catch Stopped.CANCELLED { done } catch { fail }
+}
+
+test "a token with a deadline fires by itself" {
+    t := After(20)
+    assert not t.Cancelled()
+    start := NowNs()
+    for not t.Cancelled() { }
+    assert NowNs() - start >= 15000000
+    try t.Reason() catch Stopped.TIMED_OUT { done } catch { fail }
+}
+
+## a task doing work checks the token itself, at points where stopping is safe
+fn spin(t Token&, n mut Count&) {
+    for not t.Cancelled() { n.v++ }
+}
+
+type Count struct() {
+    v mut Int64 = 0
+}
+
+test "a busy task stops when the token is cancelled" {
+    t Token& = Token()
+    n Count& = Count()
+    join {
+        spawn spin(t, n)
+        start := NowNs()
+        for NowNs() - start < 5000000 { }
+        t.Cancel()
+    }
+    assert n.v > 0
+}

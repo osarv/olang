@@ -7313,3 +7313,21 @@ from their original form.
   asserted that a second `for` over an exhausted by-value iterator ran zero times; it runs again, because S9a gives
   the loop its own copy of a by-value iterator - the spec was right and the test now pins it. A global computed
   through `a.Iter()` is baked (K2), matching the run time.
+
+- **Cancellation and timeout (2026-10-07).** The last concurrency gap, closed as a library on the user's choice of
+  "both" kinds - waits that give up and tasks that stop. The user did not at first see what a token was for; the
+  explanation that settled it: a task is an OS thread, nothing can stop one safely from outside (a thread killed
+  part way can leave a mutex locked forever or a structure half written), so stopping must be the task's own
+  decision, and the token is only the signal it checks. A timeout is the same signal fired by a deadline. The
+  alternative offered - `RecvTimeout(ms)` with no token - covers waits but cannot stop a computing task or stop
+  several with one signal. `std/cancel` holds `Token` (an atomic flag plus a fixed monotonic deadline), `After`,
+  `NowNs`, and `WakeAt`, which picks the wall-clock time a condition-variable wait should next wake at: the
+  deadline when near, else 10ms, since a token keeps no list of waiters to wake. `chan` gained `SendUntil` and
+  `RecvUntil` beside the blocking forms, which stay infallible so no existing caller changes. Clean under `-race`.
+  Two compiler issues met writing it. `atomicLoad` required a writable target (P9 said "mutable lvalue" for all
+  five builtins), which made a read-only `Token&` unreadable - relaxed for the one builtin that only reads. And a
+  failed `atomicLoad` inside an `if` produced a second error, S8a's "this condition is the same on every build":
+  the checker leaves an `OPERATION_NONE` placeholder where an expression fails, and the evaluator treated every
+  `OPERATION_NONE` as a literal. It now refuses a placeholder that is not one.
+  Noted for the user, not changed: error words are comma-separated (T19) while enum cases are separated by line
+  ends, and writing the error the enum way fails with "expected '}'".

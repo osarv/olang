@@ -2369,7 +2369,9 @@ atomicSwap(t, v)           -> T      writes v to t, yielding the value it held b
 atomicCas(t, expected, v)  -> T      writes v to t only if t holds `expected`, yielding what it found
 ```
 
-`t` must be a **mutable lvalue of an integer type** — `Byte`, `Int32` or `Int64`. Atomicity is a property
+`t` must be an **lvalue of an integer type** — `Byte`, `Int32` or `Int64` — and a **mutable** one for every builtin
+but `atomicLoad`, which only reads: a task reading a flag another task sets holds it through a read-only reference
+(T25b), and needs no permission to write it in order to read it. Atomicity is a property
 of a single machine word, so there is nothing it could mean for an aggregate, a reference or a float. Each
 value argument must already have `t`'s type, a numeric literal adapting by representability as anywhere
 else (§5.2 T6); the operation is one machine instruction, with no point at which a conversion could run.

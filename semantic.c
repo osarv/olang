@@ -5174,8 +5174,10 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
         ErrMsgSemantic(target->tok, ATOMIC_NOT_INTEGER);
         return operandNew(tok, OPERATION_NONE, resT);
     }
-    if (!OperandIsLvalue(target) || !OperandIsMutableLvalue(target)) {
-        ErrMsgSemantic(target->tok, ATOMIC_NOT_MUTABLE);
+    //P9: atomicLoad only reads, so a read-only place serves - a flag set by one task is read by others through
+    //read-only references
+    if (!OperandIsLvalue(target) || (kind != OPERATION_ATOMIC_LOAD && !OperandIsMutableLvalue(target))) {
+        ErrMsgSemantic(target->tok, kind == OPERATION_ATOMIC_LOAD ? ATOMIC_LOAD_NOT_LVALUE : ATOMIC_NOT_MUTABLE);
         return operandNew(tok, OPERATION_NONE, resT);
     }
     if (kind != OPERATION_ATOMIC_STORE) resT = target->type;

@@ -136,6 +136,7 @@
 #define SPAWN_ARG_TOO_SHORT "this argument does not outlive the enclosing 'join' block, so the task could still be running when its storage is reclaimed. It is declared inside a nested block that closes first; declare it at the join block's own level or wider"
 #define SPAWN_REQUIRES_CALL "the operand of 'spawn' must be a call - that is what a task is. There are no closures, so an argument list is the only way to state what a task may touch"
 #define ATOMIC_NOT_INTEGER "an atomic operation's target must be an integer variable ('Byte', 'Int32' or 'Int64'). Atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float"
+#define ATOMIC_LOAD_NOT_LVALUE "atomicLoad reads one storage location, so its target must be a variable, a field or an array element (P9)"
 #define ATOMIC_NOT_MUTABLE "an atomic operation writes its target, so the target must be a mutable lvalue - a variable, a field or an array element"
 #define ATOMIC_VALUE_TYPE "an atomic operation's value arguments must have exactly the target's type - the operation is one machine instruction, so there is no point at which a conversion could happen"
 #define SPAWN_RESULT_VOID "'spawn TARGET = CALL' binds what the call returns, but this call returns nothing. Drop the target and write the spawn as a plain statement"

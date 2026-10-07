@@ -1344,7 +1344,15 @@ Go through this for every change to what olang means - a rule added, revised or 
   **P9a states the one sharp edge**: a plain access racing an atomic access to the same location is still
   a race. There is no type marking a location as atomically-accessed, so keeping every access atomic is
   the program's job, and `-race` is what checks it.
-  **Still open under 7: cancellation and timeout.** Neither has a design yet.
+  **7b. DONE (2026-10-07, the user's call: "both") - cancellation and timeout, as a library.** `std/cancel`'s
+  `Token`: `Cancel()`, `Cancelled()`, `cancel.After(ms)` for one that fires at a deadline, `Reason()` raising
+  `Stopped.CANCELLED`/`TIMED_OUT`. A task checks it where stopping is safe; `chan.SendUntil`/`RecvUntil` take one
+  and give up when it fires (`pthread_cond_timedwait`, waking at the deadline and every 10ms to notice a Cancel -
+  a token does not know who waits on it). No forced kill (a thread killed part way leaves locks and structures
+  broken) and no `join` timeout (a task would outlive its block, P1b). **P9 relaxed**: `atomicLoad` takes any
+  integer lvalue, not only a writable one - the token's readers hold it read-only (T25b). **Found on the way,
+  pre-existing**: the evaluator read the checker's placeholder for a failed expression as a literal, so a bad
+  condition got a second, false S8a "dead branch" error.
 - **Data races are detected dynamically (`-race`, P7), not checked statically - and that is Go's answer
   too.** The static route was closed deliberately (P3 withdrawn, no borrow checker), which left the
   language with no race story at all. `olang -t -race f.olang` (or `-b`, or `-c`) now builds everything
