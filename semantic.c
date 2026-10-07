@@ -2431,13 +2431,17 @@ bool ChoiceHasPayload(struct type t) {
 
 //the payload buffer's size: the largest case's, since exactly one is live at a time. That is the whole
 //space saving a choice has over a struct holding every alternative at once.
+//the payload buffer's size: the largest case's, rounded up to whole 8-byte words. Held as words (T17) so that a
+//copy is a few word moves rather than a byte at a time, which kept small functions taking an enum from being
+//inlined; and rounded because the tag makes the whole value 8-aligned anyway - a 4-byte payload used to be
+//counted as 12 bytes against LLVM's 16, an array of such values allocated short of its stride
 long long ChoicePayloadSize(struct type t) {
     long long max = 0;
     for (int i = 0; i < t.vars.len; i++) {
         long long n = TypeGetSize((*(struct var*)ListGetIdx(&t.vars, i)).type);
         if (n > max) max = n;
     }
-    return max;
+    return (max + 7) / 8 * 8;
 }
 
 

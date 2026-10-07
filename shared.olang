@@ -6867,6 +6867,30 @@ test "M19e: interface methods reach satisfying types; a type's own method wins" 
     assert IfmCountBaked == 2
 }
 
+# T17: an enum's payload is held as whole 8-byte words. A payload smaller than a word was counted short of LLVM's
+# layout (12 bytes against 16), so an array of such values was allocated short and corrupted the heap.
+type SmallPay enum {
+    SpA(x Int32)
+    SpB(y Int32)
+}
+
+fn smallPayVal(e SmallPay) Int32 {
+    match e {
+        case SmallPay.SpA(x) { return x }
+        case SmallPay.SpB(y) { return y }
+    }
+}
+
+test "T17: an array of enums with a small payload is laid out at its real stride" {
+    n Int64 = 1000
+    es := Array<SmallPay>(n)
+    for i in range n { es[i] = SmallPay.SpA(Int32(i)) if i % 2 == 0 else SmallPay.SpB(Int32(i) * 2) }
+    churn := Array<Int64>(1000, 9)
+    t Int64 = 0
+    for i in range n { t = t + Int64(smallPayVal(es[i])) }
+    assert t == 749500 and churn[0] == 9
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

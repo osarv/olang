@@ -2572,6 +2572,17 @@ Go through this for every change to what olang means - a rule added, revised or 
   **Found on the way, pre-existing**: `try f() catch default Int32[9]` crashed the compiler for any fallible
   function returning an array - the slot's type still named the callee's result scope; it is now built where the
   call's result lands.
+- **Enum payloads are whole words; switch dispatch measured and deferred (T17, 2026-10-07).** The user asked
+  whether switch dispatch for interface values was worth it (and rightly objected to a design needing a separate
+  mode or recompiling everything - it would be generated in the root object, as instantiations are). Measured on
+  100M calls over a mixed collection: olang's interface tables already match C's tables (0.17s vs 0.16s
+  predictable, 0.46s vs 0.49s random), and C's switch beats tables 3x / 1.35x - but olang's enum `match`, the
+  switch it would generate, was *slower* than its tables (0.27s / 0.51s): the payload was `[K x i8]`, copied a byte
+  at a time, which also kept the small function taking it from being inlined. Holding it as `[K/8 x i64]` took the
+  enum match to 0.06s / 0.39s against C's 0.05s / 0.36s. Rounding the payload to whole words also fixed a
+  pre-existing **heap corruption**: a payload smaller than a word was sized at 12 bytes where LLVM strides 16, so an
+  array of such enums was allocated short (the old compiler aborts on the corpus test). Switch dispatch for interfaces
+  is now worth building - recommended next, user's call.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

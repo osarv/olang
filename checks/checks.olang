@@ -204,3 +204,12 @@ test "a private operator works only in its own module" {
     assert sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0 or failed("opvis", dir)
     assert sh(dir, "\"$OLANG\" -b usepriv.olang > out.txt 2>&1") != 0
 }
+
+# T17: an enum's payload is whole words, so copying one is word moves, not one byte at a time - which is what let
+# a match over a collection of enums run at the speed of a C switch
+test "an enum's payload is held as words" {
+    dir := fresh("enumwords")
+    os.Run("cp checks/fixtures/enumwords/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b enumwords.olang > out.txt 2>&1 && ./build/enumwords") == 0 or failed("enumwords", dir)
+    assert sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0
+}

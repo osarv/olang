@@ -271,7 +271,7 @@ void llvmType(struct type t, char* buf, size_t n) {
         //T17: a payload-free choice is the bare i32 ordinal it always was; one carrying a payload is a
         //tag plus a buffer big enough for the largest case, since exactly one case is live at a time
         case BASETYPE_CHOICE:
-            if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i8] }", ChoicePayloadSize(t));
+            if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
             else snprintf(buf, n, "i32");
             return;
         //T33: the (concrete type, instance) pair - a dispatch-table pointer and the instance it names.
@@ -1916,7 +1916,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
 }
 
 //T17: a payload-carrying choice value - "Shape.Circle(3)". Built the way an aggregate literal is, into
-//{ i64 tag, [N x i8] payload }: zero the whole thing first (so a smaller case leaves no stale bytes behind
+//{ i64 tag, [N x i64] payload }: zero the whole thing first (so a smaller case leaves no stale bytes behind
 //in the tail), write the tag, then write the payload's fields through the case's own struct shape. The
 //buffer is sized for the LARGEST case, which is the whole space saving over a struct holding every
 //alternative at once.
@@ -5181,13 +5181,18 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
         }
         fputs(" ]", f);
     } else if (t.bType == BASETYPE_CHOICE && ChoiceHasPayload(t) && (v->kind == CT_AGG || v->kind == CT_INT)) {
-        //T17: { i64 tag, [K x i8] } - the live case's fields written as the bytes they occupy (K2d)
+        //T17: { i64 tag, [K x i64] } - the live case's fields written as the bytes they occupy (K2d), packed into
+        //the payload's words, little-endian as the target lays them out
         long long k = ChoicePayloadSize(t);
         unsigned char* bytes = calloc((size_t)(8 + k), 1);
         ok = cgConstBytes(v, t, bytes, 8 + k);
         if (ok) {
-            fprintf(f, "{ i64 %lld, [%lld x i8] [", v->i, k);
-            for (long long i = 0; i < k; i++) fprintf(f, "%s i8 %d", i ? "," : "", (int)(signed char)bytes[8 + i]);
+            fprintf(f, "{ i64 %lld, [%lld x i64] [", v->i, k / 8);
+            for (long long w = 0; w < k / 8; w++) {
+                unsigned long long word = 0;
+                for (int b = 7; b >= 0; b--) word = (word << 8) | bytes[8 + w * 8 + b];
+                fprintf(f, "%s i64 %lld", w ? "," : "", (long long)word);
+            }
             fputs(" ] }", f);
         }
         free(bytes);

@@ -1,0 +1,11 @@
+type Shape enum {
+    Sq(s Int64)
+    Rect(w Int64, h Int64)
+}
+fn main() ? {
+    s := Shape.Rect(2, 3)
+    match s {
+        case Shape.Rect(w, h) { assert w * h == 6 }
+        nomatch { fail }
+    }
+}

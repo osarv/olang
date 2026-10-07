@@ -7555,3 +7555,13 @@ from their original form.
   compiler for any fallible function returning an array, plain functions included - the try's slot was stored at
   the call's result type, whose scope is the callee's result-scope variable, which codegen tried to look up in the
   caller. The slot (both the success and the default path) is now stored in the scope the call's result lands in.
+
+- **Enum payloads as words (T17, 2026-10-07).** Measuring whether switch dispatch for interface values would pay,
+  the hand-written equivalent - an enum with payloads and a `match` - came out slower than the interface tables,
+  where C's switch is three times faster than C's tables on a predictable pattern. The optimized IR showed each
+  element copied as sixteen byte loads reassembled into `[16 x i8]` and passed by value to a call that was then not
+  inlined. The payload is now `[K x i64]`, its size rounded to whole words: the match reached C's switch speed
+  (0.06s against 0.05s, 0.39s against 0.36s random). The rounding mattered for correctness too - TypeGetSize had
+  counted a 4-byte payload as 12 bytes where LLVM's layout is 16, so `Array<E>(n)` allocated short of its stride and
+  the heap was corrupted; the corpus now has the test that aborts on the old compiler. Compile-time baking writes
+  the payload's bytes packed into words. A check greps the IR for the word layout.
