@@ -1363,7 +1363,7 @@ and therefore the method.
 **E1.** Expressions are built in four layers, tightest-binding first:
 
 ```
-expr     ::= binary
+expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
 unary    ::= "not" binary | text | { unary-op } postfix
 unary-op ::= "-" | "~" | "++" | "--" | "$"
@@ -1418,14 +1418,13 @@ operators groups left-to-right):
 | 5 | `^` |
 | 6 | `&` |
 | 7 | `==` `!=` |
-| 8 | `<` `<=` `>` `>=` |
+| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
 | 11 (tightest) | `*` `/` `%` |
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
-exception (E7a). There is
-no ternary/conditional operator.
+exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
 
 **E6.** `+ - * / %` require both operands to be the same numeric type (T5, T27) and produce that
 type, subject to T6's own numeric-literal adaptation. `%` requires both operands to be integer types.
@@ -1870,7 +1869,7 @@ but that is the hardware's behaviour rather than the language's.
 
 ### 5.11 Comprehensions
 
-**E27.** `comprehension ::= elem-type "[" expr "for" IDEN [ "," IDEN ] "in" ( expr | range ) [ "if" expr ] "]"` is
+**E27.** `comprehension ::= elem-type "[" expr "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"` is
 a new array holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk, in order — only those for
 which the condition after `if` is `true`, when there is one. It is an `array-literal` (E19) whose one item is followed
 by the `for` clause, and its `elem-type` is written as a literal's is; every element must fit it as a literal's items
@@ -1888,6 +1887,45 @@ length or a range's count, at most - and otherwise grows: room for 100 elements,
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
 `Int32[x * 2 for x in a if x > 3]`, `Int64[Int64(i) * Int64(i) for i in range n]`, `Byte[c - 32 for c in t]`.
+
+The source after `in` and the condition after `if` are each a `binary`, not an `expr`: an `if` there belongs to the
+comprehension, so a conditional (E28) in either position is written in parentheses. The element may be one freely:
+`Int32[x if x > 0 else 0 for x in a]`.
+
+### 5.12 Conditional expressions
+
+**E28.** `binary "if" binary "else" expr` is a conditional: the condition after `if` (a `Bool`) is evaluated first,
+then exactly one of the two values - the first when it is `true`, the one after `else` otherwise - and that is the
+expression's value. It binds looser than every binary operator and groups to the right: `a if c else b if d else e`
+is `a if c else (b if d else e)`. An `if` with no `else` after its condition does not begin one.
+
+The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
+E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
+wider of their types. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
+own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
+`:=` takes one when it would take each value on its own (D15).
+
+### 5.13 Membership
+
+**E29.** `x in c` and `x not in c` (one operator spelled with two words, at the ordering comparisons' precedence)
+ask whether `x` is in the collection `c`. When `x` has the collection's own type (references aside - or is text
+written in place and `c` is text), it is `c.Contains(x)`: whether `x` occurs in `c` as a contiguous run, a
+substring for text. Otherwise it is `c.Has(x)`, whether `x` is one of its elements (a key, for a `Map`). The method
+must exist and give a `Bool`. `not in` is `not (x in c)`. `x` is evaluated before `c`.
+
+The prelude gives every array `Has` and `Contains`, both comparing elements by the element type's `Eq` method, so
+text is found by what it says (E10 would compare a reference's identity); `List` and `Map` have `Has`.
+
+Where a `for` declares its names (`for x in c`, a comprehension's `for x in c`, S9a), `in` belongs to the loop and
+never means membership: since the names are new (D3/D3a), `for x in c` with `x` already declared is a compile-time
+error, not a loop while `x` is in `c`. That loop is written `for { if x not in c { break } ... }`.
+
+### 5.14 Comparison chains
+
+**E30.** A run of the ordering comparisons `<`, `<=`, `>`, `>=` with no parentheses between them, `a op1 b op2 c
+...`, is a chain: `a op1 b and b op2 c and ...`, each operand evaluated once, left to right, and evaluation stopping at
+the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. `==` and `!=` do not chain:
+`a == b == c` is `(a == b) == c`, a comparison of `Bool`s.
 
 ## 6. Statements
 

@@ -1,0 +1,7 @@
+## check: fail the two values of 'a if c else b' must have the same type
+## E28: nothing but a literal adapts between the two values
+fn main() ? {
+    n Int32 = 1
+    m Int64 = 2
+    x Int64 = n if true else m
+}

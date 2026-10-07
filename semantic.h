@@ -393,6 +393,10 @@ enum operation {
     OPERATION_LEN, //"len(arr)" - a compiler builtin, not an ordinary function (needs to work over any
                     //array type regardless of element type/dimensionality, which no user-space signature
                     //can express without generics) - see the report
+    OPERATION_COND,          //E28: "a if c else b" - args [c, a, b], op->type what both give
+    OPERATION_CMP_CHAIN,     //E30: "a < b <= c" - args are the comparisons, each next one's left operand the
+                             //previous one's right operand (one operand, evaluated once)
+    OPERATION_SEQ,           //comprBody's statements run (in the enclosing block, not one of their own), then args[0]
     OPERATION_COMPREHENSION, //E27: "T[e for x in src if c]" - comprBody is the lowered loop; the array is built
                              //where it lands, as "Array<T>(n)" is (op->type is the same run-time-length type)
     OPERATION_COMPR_PUSH,    //E27: appends args[0] to the innermost comprehension being built
@@ -481,6 +485,8 @@ struct operand {
                          //adapted type's zero value rather than treat it as an aggregate literal.
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand
+    void* ctCached;             //the evaluator's same (a struct ctVal*)
     struct list comprBody;      //E27: OPERATION_COMPREHENSION only - struct statement, the loop that fills it
     struct list catchClauses;   //R9b: a try in value position with catch clauses - struct catchClause, in
                                 //order. Empty for a plain propagating try.

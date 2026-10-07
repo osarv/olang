@@ -1128,6 +1128,11 @@ struct type* SemanticBuiltinType(struct str name);
 //construction, so it adapts to the prelude's String the way a numeric literal adapts to a width
 bool OperandIsWrittenText(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
+    //E28: a conditional choosing between two pieces of written text is written text
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        return OperandIsWrittenText(*(struct operand**)ListGetIdx(&op->args, 1))
+            && OperandIsWrittenText(*(struct operand**)ListGetIdx(&op->args, 2));
+    }
     return op->isLiteral && op->type.bType == BASETYPE_ARRAY && !op->type.owner && op->type.arrElem
            && op->type.arrElem->bType == BASETYPE_BYTE && !op->type.arrElem->owner && op->opType == OPERATION_NONE
            && op->args.len == 0;
@@ -4228,6 +4233,11 @@ bool callIsLanding(struct operand* op);
 void landCall(struct operand* op, struct var* dst, int depth);
 bool OperandGivesWritable(struct operand* op);
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
+        return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+    }
     FinalizeLambda(op, &target); //D16a: a lambda is checked against what it is written for
     //T25c: a read-only reference never becomes writable by being put somewhere
     if (TypeIsPermRef(target) && target.refMut && !OperandGivesWritable(op)) return TYPE_FIT_READ_ONLY;
@@ -4467,6 +4477,11 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
     if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
+    //E28: "x := a if c else b" - when each value would name its type for ":=" on its own
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 1))
+            && OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 2));
+    }
     //a conversion names its type as plainly as a constructor call does - "String(bytes)", "Int64(n)"
     if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT) return true;
     //D15: a field read - its type is the field's declared one, as a call's is its callee's result, and it is how
@@ -5979,7 +5994,146 @@ enum operation prefixOpFromTok(enum tokenType t) {
 
 struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s);
 
+static bool isOrderingTok(enum tokenType t) { return t == TOK_LST || t == TOK_LSE || t == TOK_GRT || t == TOK_GRE; }
+
+//E30: "a < b <= c" - the comparisons joined by "and", each sharing its middle operand, which is built (and
+//evaluated) once. Only the four ordering comparisons chain: "a == b == c" keeps meaning "(a == b) == c".
+static struct operand* buildCmpChain(struct checkCtx* ctx, struct syntax* s) {
+    struct list nodes = ListInit(sizeof(struct syntax*)); //the binary nodes, outermost first
+    for (struct syntax* n = s; n->type == SNTX_EXPR_BINARY && n->parts.len == 3 && isOrderingTok(partAt(n, 1)->tok.type);
+         n = partSntx(n, 0)) {
+        ListAdd(&nodes, &n);
+    }
+    struct syntax* innermost = *(struct syntax**)ListGetIdx(&nodes, nodes.len - 1);
+    struct operand* left = buildExprFromSyntax(ctx, partSntx(innermost, 0));
+    struct operand* chain = operandNew(partAt(innermost, 1)->tok, OPERATION_CMP_CHAIN, TypeVanilla(BASETYPE_BOOL));
+    for (int i = nodes.len - 1; i >= 0; i--) {
+        struct syntax* n = *(struct syntax**)ListGetIdx(&nodes, i);
+        struct token opTok = partAt(n, 1)->tok;
+        struct operand* right = buildExprFromSyntax(ctx, partSntx(n, 2));
+        struct operand* cmp = OperandBinary(left, right, opFromTokType(opTok.type), opTok);
+        ListAdd(&chain->args, &cmp);
+        left = cmp->args.len == 2 ? *(struct operand**)ListGetIdx(&cmp->args, 1) : right;
+    }
+    return chain;
+}
+
+//can this operand's type give way to the other value's in "a if c else b" - a literal, text written here, null
+static bool condAdapts(struct operand* op) { return op->isLiteral || op->isNullLiteral || OperandIsWrittenText(op); }
+
+//E28: "a if c else b" - c decides which one is evaluated; both must have one type, a literal adapting to the other
+static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
+    struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
+    struct token ifTok = partAt(s, 1)->tok;
+    struct operand* c = buildExprFromSyntax(ctx, partSntx(s, 2));
+    if (!OperandIsBool(c)) ErrMsgSemantic(c->tok, OPERATION_REQUIRES_BOOL);
+    struct operand* b = buildExprFromSyntax(ctx, partSntx(s, 4));
+    FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
+    FinalizeLambda(b, &a->type);
+    struct type t = a->type;
+    if (!TypeIsSame(a->type, b->type)) {
+        if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && a->isLiteral && b->isLiteral) {
+            t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
+            OperandFitsType(ctx->func, a, t);
+            OperandFitsType(ctx->func, b, t);
+        } else if (condAdapts(b) && !(condAdapts(a) && a->isLiteral && !b->isLiteral)
+                   && OperandFitsType(ctx->func, b, a->type) == TYPE_FIT_OK) {
+            t = a->type; //the adaptable value gives way - of two, a literal gives way to text built here
+        } else if (condAdapts(a) && OperandFitsType(ctx->func, a, b->type) == TYPE_FIT_OK) {
+            t = b->type;
+        } else {
+            ErrMsgSemantic(ifTok, COND_BRANCH_TYPES);
+        }
+    }
+    struct operand* op = operandNew(ifTok, OPERATION_COND, t);
+    ListAdd(&op->args, &c);
+    ListAdd(&op->args, &a);
+    ListAdd(&op->args, &b);
+    return op;
+}
+
+//E29: "x in c" - c.Has(x), or c.Contains(x) when x is of the collection's own type (a contiguous run of it: a
+//substring of text). x is evaluated first, as written: unless it is a literal or a variable, it is held in a hidden
+//local ahead of the call, whose receiver would otherwise be evaluated before it.
+static struct var* methodNamedOn(struct type t, const char* name);
+static bool adoptInitializerScope(struct checkCtx* ctx, struct type* t, struct operand* init, bool* unnamed);
+struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
+                                struct syntax* argsNode, struct list scopeArgNodes, bool* reported);
+static struct list* prebuiltMethodArgs = NULL;
+static int membershipCounter = 0;
+static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNode, struct syntax* cNode,
+                                       bool negated, struct token tok) {
+    struct operand* x = buildExprFromSyntax(ctx, xNode);
+    struct operand* c = buildExprFromSyntax(ctx, cNode);
+    struct type ct = c->type;
+    ct.structMAlloc = false;
+    struct type xt = x->type;
+    xt.structMAlloc = false;
+    bool whole = TypeIsSame(xt, ct) || (OperandIsWrittenText(x) && ct.bType == BASETYPE_ARRAY && ct.arrElem
+                                        && ct.arrElem->bType == BASETYPE_BYTE);
+    const char* mName = whole ? "Contains" : "Has";
+    if (!methodNamedOn(c->type, mName)) {
+        ErrMsgSemantic(tok, MEMBERSHIP_NO_METHOD);
+        return OperandBoolLiteral(tok);
+    }
+    struct operand* seq = NULL;
+    struct operand* arg = x;
+    bool plain = x->isLiteral || x->isNullLiteral || OperandIsWrittenText(x) || x->opType == OPERATION_READ_VAR;
+    if (!plain) {
+        char* nm = MallocOrCrash(32);
+        snprintf(nm, 32, "$in%d", ++membershipCounter);
+        struct token ht = tok;
+        ht.type = TOK_IDEN;
+        ht.str = StrFromCStr(nm);
+        struct type dt = x->type;
+        bool unnamed = false;
+        if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
+        reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok);
+        //a global's initializer has no block of its own: the hidden local gets a scope of its own
+        struct scope* sc = ctx->scope;
+        if (!sc) { sc = MallocOrCrash(sizeof(struct scope)); *sc = scopePush(NULL); }
+        struct var* hv = scopeDeclare(ctx->mod, sc, ht.str, ht, dt, true);
+        hv->scopeUnnamed = unnamed;
+        hv->scopeBindings = x->scopeBindings;
+        struct statement d = (struct statement){0};
+        d.sType = STATEMENT_VAR_DECL;
+        d.var = *hv;
+        d.op = x;
+        seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
+        seq->comprBody = ListInit(sizeof(struct statement));
+        ListAdd(&seq->comprBody, &d);
+        arg = OperandReadVar(hv, tok);
+    }
+    struct token mTok = tok;
+    mTok.type = TOK_IDEN;
+    mTok.str = StrFromCStr((char*)mName);
+    struct list args = ListInit(sizeof(struct operand*));
+    ListAdd(&args, &arg);
+    prebuiltMethodArgs = &args;
+    bool reported = false;
+    struct operand* call = buildMethodCall(ctx, c, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
+    prebuiltMethodArgs = NULL;
+    if (!OperandIsBool(call)) ErrMsgSemantic(tok, MEMBERSHIP_NO_METHOD);
+    struct operand* result = call;
+    if (seq) { ListAdd(&seq->args, &call); result = seq; }
+    return negated ? OperandUnary(result, OPERATION_NOT, tok) : result;
+}
+
 struct operand* buildBinChain(struct checkCtx* ctx, struct syntax* s) {
+    if (s->type == SNTX_EXPR && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_COND) {
+        return buildCond(ctx, partSntx(s, 0));
+    }
+    if (s->type == SNTX_EXPR_BINARY) {
+        struct token opTok = partAt(s, s->parts.len - 2)->tok;
+        if (opTok.type == TOK_IN) {
+            return buildMembership(ctx, partSntx(s, 0), partSntx(s, s->parts.len - 1), s->parts.len == 4, opTok);
+        }
+        //E30: a comparison whose left operand is itself one, unparenthesized
+        if (isOrderingTok(opTok.type) && partSntx(s, 0)->type == SNTX_EXPR_BINARY && partSntx(s, 0)->parts.len == 3
+                && isOrderingTok(partAt(partSntx(s, 0), 1)->tok.type)) {
+            return buildCmpChain(ctx, s);
+        }
+    }
     struct operand* result = buildExprFromSyntax(ctx, partSntx(s, 0));
     for (int i = 1; i < s->parts.len; i += 2) {
         struct token opTok = partAt(s, i)->tok;
@@ -6732,7 +6886,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
             }
             bool allowedD = ctx->allowFallibleCall;
             ctx->allowFallibleCall = false;
-            struct list dArgs = buildArgs(ctx, argsNode);
+            struct list dArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
             ctx->allowFallibleCall = allowedD;
             //the receiver becomes parameter 0 of a synthetic signature, so arity, argument fits, scope
             //binding and the mut/& immutability check all come from the ordinary call path with nothing
@@ -6765,7 +6919,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     //T10: every array has "Len()", supplied by the compiler
     if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("Len"))) {
         *reported = true;
-        if (allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
         return OperandLen(recvOp, mTok);
     }
     //a field always wins, and a method that shadows one is a name clash rather than a silent preference -
@@ -6794,7 +6948,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     }
     bool allowedM = ctx->allowFallibleCall;
     ctx->allowFallibleCall = false;
-    struct list mArgs = buildArgs(ctx, argsNode);
+    struct list mArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode); //E29
     ctx->allowFallibleCall = allowedM;
     struct list withRecv = ListInit(sizeof(struct operand*));
     ListAdd(&withRecv, &recvOp);
@@ -8349,6 +8503,21 @@ static struct var* forInMethod(struct type t, char* name) {
     return m;
 }
 
+//E29: a method a value of type t has under this name, of any arity
+static struct var* methodNamedOn(struct type t, const char* name) {
+    if (t.bType == BASETYPE_INTERFACE) {
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* m = ListGetIdx(&t.vars, i);
+            if (StrCmp(m->name, StrFromCStr((char*)name))) return m;
+        }
+        return NULL;
+    }
+    struct var* m = VarGetMethod(t.owner, StrFromCStr((char*)name), t);
+    if (!m || m->type.bType != BASETYPE_FUNC || m->type.vars.len < 1) return NULL;
+    if (!MethodReceiverAccepts((*(struct var*)ListGetIdx(&m->type.vars, 0)).type, t)) return NULL;
+    return m;
+}
+
 //"recv.name()" built exactly as the program would have written it
 static struct operand* forInCall(struct checkCtx* ctx, struct operand* recv, struct token at, char* name) {
     struct syntax noArgs = (struct syntax){ SNTX_EXPR_ARGS, ListInit(sizeof(struct syntaxPart)) };
@@ -8513,6 +8682,14 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     struct token* idxTok = names.len == 2 ? ListGetIdx(&names, 0) : NULL;
     struct token elemTok = *(struct token*)ListGetIdx(&names, names.len - 1);
+    //E29: a name already in scope makes this a declaration error, never a membership test - said so plainly
+    for (int i = 0; i < names.len; i++) {
+        struct token nt = *(struct token*)ListGetIdx(&names, i);
+        if (scopeFindLocal(ctx->scope, strFromTok(nt)) || VarGetList(&ctx->mod->vars, strFromTok(nt))) {
+            ErrMsgSemantic(nt, FOR_IN_NAME_EXISTS);
+            return (struct statement){0};
+        }
+    }
     struct syntax* rangeNode = firstPartOfType(s, SNTX_RANGE);
     if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 

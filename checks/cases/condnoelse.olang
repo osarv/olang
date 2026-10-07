@@ -1,0 +1,6 @@
+## check: fail expected 'else'
+## E28: "a if c" with no else is not an expression
+fn main() ? {
+    n := 1
+    x Int32 = n if n > 0
+}

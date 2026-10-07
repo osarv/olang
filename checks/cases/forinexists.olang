@@ -1,0 +1,7 @@
+## check: fail to loop while x is in c, write 'for { if x not in c { break } ... }'
+## E29: "for x in c" is always a loop over c - with x already declared it is an error, never a membership test
+fn main() ? {
+    x := 2
+    c := Int32[1, 2]
+    for x in c { }
+}

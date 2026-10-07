@@ -2445,6 +2445,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   a use-after-free, the E11b bug again for a different temporary; every fresh temporary now goes through one
   predicate (`cgIsFreshTemp`). And a syntax error at an expression's first token was recorded one position short,
   so it lost to an earlier alternative's failure and the message pointed at the wrong token.
+- **Conditional expressions, membership, comparison chains (E28/E29/E30, 2026-10-07, the user's designs).**
+  `a if c else b` - Python's form, kept despite the comprehension filter (the user's call): a comprehension's
+  source and filter are `binary` rather than `expr`, so a conditional there is parenthesized, and the element takes
+  one freely. Both values one type, a literal adapting; each fits the target on its own. **`x in c` / `x not in c`**
+  call `c.Has(x)`, or `c.Contains(x)` when `x` has the collection's own type (the user's generalization: a
+  substring is a sub-collection) - the operator picks, since olang has no overloading by argument type; the
+  prelude gives arrays both (by `Eq`), and `String.Contains` became the inherited array one. `x` is evaluated first
+  through a hidden local (the user asked for proper order). **The for-in clash** (`for x in m {`) is settled by
+  D3/D3a, the user's acceptance after rejecting parentheses, `has` and `for if`: a for-in's names are new, so an
+  existing `x` is a compile error whose message gives `for { if x not in m { break } }`, never silently membership.
+  **Chains only for `<` `<=` `>` `>=`** (the user's call): `a == b == c` keeps meaning `(a == b) == c`; each operand
+  evaluated once (an operand's value cached on it for the next comparison). An operand may now carry statements
+  run in the enclosing block (`OPERATION_SEQ`), which the hidden local uses. `repeat` was proposed and dropped
+  (the user: every loop is a `for`).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

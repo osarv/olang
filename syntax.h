@@ -131,6 +131,7 @@ enum syntaxType {
     SNTX_EXPR_UNARY_OP,
     SNTX_EXPR_UNARY,
     SNTX_EXPR_TEXT, //E11b: adjacent text pieces - string literals and "$x" renderings - joined into one
+    SNTX_EXPR_COND,   //E28: "a if c else b" - parts: the value (a binary-level node), "if", the condition, "else", an EXPR
     SNTX_EXPR_BINARY, //generic "left op right" - precedence resolved by the parser itself (precedence
                        //climbing), not by grammar nesting - see the report
     SNTX_EXPR,

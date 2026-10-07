@@ -6418,6 +6418,84 @@ test "E27/T7: a comprehension or Array<T>(n) returned through a reference result
     assert m[1] == 5
 }
 
+## E28: "a if c else b" - only the chosen value is evaluated; both have one type, a literal adapting
+fn condMax(a Int32, b Int32) Int32 { return a if a > b else b }
+
+fn condSign(x Int32) Int32 { return 1 if x > 0 else -1 if x < 0 else 0 }
+
+type CondLog struct() {
+    s mut Int32 = 0
+}
+
+fn condMark(l mut CondLog&, d Int32) Int32 {
+    l.s = l.s * 10 + d
+    return d
+}
+
+fn condColl(l mut CondLog&) Array<Int32> {
+    condMark(l, 2)
+    return Int32[1, 2]
+}
+
+CondMaxBaked := condMax(3, 9)
+ChainBaked Bool = 0 <= 5 < 10
+InBaked Bool = 3 in Int32[1, 2, 3]
+
+test "E28: a conditional expression evaluates only the value its condition chooses" {
+    assert condMax(4, 2) == 4 and condMax(1, 7) == 7
+    assert condSign(5) == 1 and condSign(-2) == -1 and condSign(0) == 0
+    l CondLog& = CondLog()
+    v := condMark(l, 1) if l.s == 0 else condMark(l, 2)
+    assert v == 1 and l.s == 1
+    name String& = "bob"
+    n := 3
+    label String& = name if n > 2 else "anon"
+    assert label.Eq("bob")
+    t := $n if n > 5 else "small"
+    assert t.Eq("small")
+    clipped := Int32[x if x > 0 else 0 for x in Int32[-1, 2, -3]]
+    assert clipped[0] == 0 and clipped[1] == 2
+    pt := ComprPt(1, 2) if n > 0 else ComprPt(3, 4)
+    assert pt.y == 2
+}
+
+test "E30: ordering comparisons chain, each operand evaluated once; == does not chain" {
+    i := 5
+    assert 0 <= i < 10
+    assert not (0 <= i < 3)
+    assert 1 < 2 <= 2 < 3
+    l CondLog& = CondLog()
+    assert 0 < condMark(l, 1) < 5
+    assert l.s == 1
+    assert not (9 < condMark(l, 2) < 20)
+    assert l.s == 12
+    f := false
+    assert f == f == true
+}
+
+test "E29: membership - Has for an element, Contains for a run of the collection's own type" {
+    a := Int32[1, 2, 3]
+    assert 2 in a
+    assert 7 not in a
+    s := "hello"
+    assert 'e' in s and 'z' not in s
+    assert "ll" in s and "lx" not in s
+    assert "" in s
+    vowels := "aeiou"
+    found := Int32[1 for ch in "banana" if ch in vowels]
+    assert found.Len() == 3
+    l CondLog& = CondLog()
+    assert condMark(l, 1) in condColl(l)
+    assert l.s == 12
+}
+
+test "E28/E29/E30: evaluated while compiling, as at run time" {
+    assert CondMaxBaked == 9 and ChainBaked and InBaked
+    n := 9
+    n++
+    assert condMax(3, n - 1) == CondMaxBaked
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

@@ -98,6 +98,14 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
 
 ## what a function value lets a list do (D16) - each walks the elements in the order they were pushed
 
+## whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
+fn (l List<<T>>&) Has(x <T>) Bool {
+    for y in l {
+        if y.Eq(x) { return true }
+    }
+    return false
+}
+
 fn (l List<<T>>&) Any(keep fn(x <T>) Bool) Bool {
     for x in l {
         if keep(x) { return true }
@@ -291,4 +299,12 @@ test "a comprehension walks a List" {
     assert evens[124] == 248
     all := Int32[x for x in l]
     assert all.Len() == 250 and all[249] == 249
+}
+
+test "membership in a List" {
+    l List<Int32>& = List<Int32>()
+    l.Push(4)
+    l.Push(9)
+    assert 9 in l
+    assert 5 not in l
 }

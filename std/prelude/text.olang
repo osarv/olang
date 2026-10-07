@@ -92,9 +92,7 @@ fn (a String&) Find(sub String&) Int64 {
     return -1
 }
 
-fn (a String&) Contains(sub String&) Bool {
-    return a.Find(sub) >= 0
-}
+## (Contains - whether sub occurs in it - is every array's, std/prelude/array.olang: text is an array of bytes)
 
 ## the pieces of the text between each occurrence of sep, in order - borrows of the receiver's own storage,
 ## so no text is copied, held in an array that lives where the receiver does. Adjacent separators, or one at

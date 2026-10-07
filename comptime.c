@@ -229,6 +229,7 @@ static double ctAsF(struct ctVal* v) { return v->kind == CT_FLOAT ? v->f : (doub
 
 static struct ctVal* ctEval(struct ctState* st, struct operand* op);
 static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type dst);
+static void ctExec(struct ctState* st, struct statement* s);
 static void ctExecBlock(struct ctState* st, struct list* block);
 
 static bool ctStep(struct ctState* st, struct token tok) {
@@ -1138,6 +1139,7 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
 
 //R20: a tried expression whose own check failed runs its clauses; an error from anywhere else passes through
 static struct ctVal* ctEval(struct ctState* st, struct operand* op) {
+    if (op->ctCached) return op->ctCached; //E30: a chain's shared operand, evaluated once
     struct ctVal* r = ctEvalOp(st, op);
     if (!r && op->isTried && op->checkRoot == op && st->flow == CF_ERROR && st->errCheckRoot == op)
         return ctHandleTry(st, op);
@@ -1175,6 +1177,38 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             v = ctCopy(v);
             v->type = op->type;
             return v;
+        }
+        case OPERATION_COND: { //E28: only the chosen value is evaluated
+            struct ctVal* c = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+            if (!c) return NULL;
+            return ctFit(st, *(struct operand**)ListGetIdx(&op->args, ctDeref(c)->i ? 1 : 2), op->type);
+        }
+        case OPERATION_CMP_CHAIN: { //E30: each comparison in turn, the shared operand evaluated once
+            struct ctVal* prev = NULL;
+            bool all = true;
+            for (int i = 0; i < op->args.len && all; i++) {
+                struct operand* cmp = *(struct operand**)ListGetIdx(&op->args, i);
+                struct operand* l = *(struct operand**)ListGetIdx(&cmp->args, 0);
+                struct operand* r = *(struct operand**)ListGetIdx(&cmp->args, 1);
+                struct ctVal* lv = prev ? prev : ctEval(st, l);
+                if (!lv) return NULL;
+                struct ctVal* rv = ctEval(st, r);
+                if (!rv) return NULL;
+                l->ctCached = lv;
+                r->ctCached = rv;
+                struct ctVal* res = ctEval(st, cmp);
+                l->ctCached = NULL;
+                r->ctCached = NULL;
+                if (!res) return NULL;
+                all = ctDeref(res)->i != 0;
+                prev = rv;
+            }
+            return ctBool(all);
+        }
+        case OPERATION_SEQ: { //statements in the enclosing block, then the value
+            for (int i = 0; i < op->comprBody.len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(&op->comprBody, i));
+            if (st->flow != CF_NORMAL) return NULL;
+            return ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
         }
         case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended
             if (st->comprDepth >= 64) return ctFail(st, op->tok, "comprehensions nest deeper than compile-time evaluation allows");

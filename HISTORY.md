@@ -7358,3 +7358,31 @@ from their original form.
   of statement'". The primary-expression parser recorded its failure at the cursor before the token, while
   `acceptTok` records just past it, so it lost every tie for "furthest". It now records past the token, and a `[`
   there says an element type belongs before it.
+
+- **Conditional expressions, membership, comparison chains (E28/E29/E30, 2026-10-07).** From a list of
+  "natural language" candidates the user asked for. Taken: a conditional, `in`, chains. Deferred: `is` for enum
+  cases (to reflection - its only gain over `==` is testing a payload case without its payload). Dropped:
+  `repeat` (every loop is a `for`, the reason `while` went), `unless`/`until`.
+  **The conditional.** I first proposed `if c then a else b` because Python's `a if c else b` clashes with a
+  comprehension's filter; the user asked whether it could be built anyway. It can, by position, as Python does: in
+  the element an `if` must be followed by `else`; after the source it is the filter, so the source and filter are
+  parsed without a top-level conditional. The parser tries `if ... else` after any binary expression and backs off
+  when no `else` follows, which also records "expected 'else'" as the furthest failure for `x := a if c`.
+  Each value is fitted to the conditional's target on its own (OperandFitsType recurses), so scopes and temporaries
+  follow every existing rule; codegen stores each through `cgStoreInto` into one slot, the pattern a try default
+  uses. A first version stored the raw value, which for a literal was the address of its constant - invalid IR.
+  **Membership.** First as `Has` only; the user wanted substrings too and proposed one method measuring a
+  sub-collection. Without overloading by argument type one method cannot take both an element and a collection,
+  so the operator picks by the left operand's type. The user then proposed operator overloading restricted to value
+  results, plus overloading by argument types - answered separately, not built. The clash with `for x in m` was
+  the hard part: parentheses (rejected by the user, on either form), a separate word `has`, a `for if` marker
+  (the user's, which reads oddly), or the rule that settled it - a for-in's names must be new (D3/D3a), so
+  `for x in m` with `x` existing is already an error and can be given a message naming the rewrite. The user's
+  worry that an accidentally in-scope variable would be used was answered: the parser never asks what exists, so
+  the loop either declares a fresh name or fails. Left-to-right order needs `x` held ahead of the method call
+  (a receiver is evaluated before its arguments); the hidden local is an `OPERATION_SEQ`, statements run in the
+  enclosing block then a value - in a global initializer, which has no block, the local gets a scope of its own.
+  **Chains.** The user proposed chaining `==`/`!=` as well; the difference is that `a == b == c` already compiles
+  for `Bool`s and would silently change meaning, where every ordering chain was a type error before. The user
+  chose ordering comparisons only. The shared operand is evaluated once by caching its value on the operand
+  (`cgCached`/`ctCached`) for the next comparison, which reads it through the ordinary paths.

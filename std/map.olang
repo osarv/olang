@@ -178,3 +178,10 @@ test "a pair is a key when both its parts are" {
     assert found and v == 7
     assert not m.Has(Pair(8, 7))
 }
+
+test "membership in a Map is by key" {
+    m := Map<String&, Int32>()
+    m.Put("k", 1)
+    assert "k" in m
+    assert "z" not in m
+}

@@ -1256,6 +1256,10 @@ static bool cgIsFreshClosure(struct operand* op) {
 //storage made by the expression itself, with nothing to borrow - built in the scope of whatever it lands in
 //(E12c): rendered or joined text, a capturing lambda's closure, "Array<T>(n)" and a comprehension (E27)
 static bool cgIsFreshTemp(struct operand* op) {
+    //E28: a conditional either of whose values is one - only that value is built in the target's scope
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        return cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 1)) || cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 2));
+    }
     return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
@@ -2956,6 +2960,72 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     return agg2;
 }
 
+//E28: "a if c else b" - the chosen value, converted to the conditional's type on its own path, through one slot.
+//A value built here (text, an array) is built in the target's scope, which reaches the branch as the override.
+char* cgCond(struct cgCtx* ctx, struct operand* op) {
+    struct operand* c = *(struct operand**)ListGetIdx(&op->args, 0);
+    char ty[256];
+    llvmType(op->type, ty, sizeof(ty));
+    char* slot = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(op->type));
+    char* cv = cgValue(ctx, c);
+    int id = ctx->lblCtr++;
+    char thenLbl[32], elseLbl[32], endLbl[32];
+    snprintf(thenLbl, sizeof(thenLbl), "cond.then.%d", id);
+    snprintf(elseLbl, sizeof(elseLbl), "cond.else.%d", id);
+    snprintf(endLbl, sizeof(endLbl), "cond.end.%d", id);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", cv, thenLbl, elseLbl);
+    ctx->terminated = true;
+    for (int b = 1; b <= 2; b++) {
+        cgLabel(ctx, b == 1 ? thenLbl : elseLbl);
+        struct operand* v = *(struct operand**)ListGetIdx(&op->args, b);
+        char* val = cgValueForTarget(ctx, v, op->type, ctx->targetScopeOverride);
+        cgStoreInto(ctx, op->type, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+        cgBr(ctx, endLbl);
+    }
+    cgLabel(ctx, endLbl);
+    return cgLoadOrAddr(ctx, op->type, slot, false);
+}
+
+//E30: "a < b <= c" - each comparison in turn, stopping at the first false; each operand is computed once, by
+//the comparison that first reads it, and handed to the next through the operand's cache
+char* cgCmpChain(struct cgCtx* ctx, struct operand* op) {
+    char* slot = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca i1\n", slot);
+    fprintf(ctx->fnOut, "  store i1 false, ptr %s\n", slot);
+    int id = ctx->lblCtr++;
+    char endLbl[32];
+    snprintf(endLbl, sizeof(endLbl), "chain.end.%d", id);
+    char* prev = NULL;
+    for (int i = 0; i < op->args.len; i++) {
+        struct operand* cmp = *(struct operand**)ListGetIdx(&op->args, i);
+        struct operand* l = *(struct operand**)ListGetIdx(&cmp->args, 0);
+        struct operand* r = *(struct operand**)ListGetIdx(&cmp->args, 1);
+        char* lv = prev ? prev : cgValue(ctx, l);
+        char* rv = cgValue(ctx, r);
+        l->cgCached = lv;
+        r->cgCached = rv;
+        char* res = cgValue(ctx, cmp);
+        l->cgCached = NULL;
+        r->cgCached = NULL;
+        prev = rv;
+        if (i == op->args.len - 1) {
+            fprintf(ctx->fnOut, "  store i1 %s, ptr %s\n", res, slot);
+            cgBr(ctx, endLbl);
+        } else {
+            char nextLbl[40];
+            snprintf(nextLbl, sizeof(nextLbl), "chain.next.%d.%d", id, i);
+            fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", res, nextLbl, endLbl);
+            ctx->terminated = true;
+            cgLabel(ctx, nextLbl);
+        }
+    }
+    cgLabel(ctx, endLbl);
+    char* out = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i1, ptr %s\n", out, slot);
+    return out;
+}
+
 //E27: a comprehension - its loop emitted with an empty buffer in hand, each element appended to it. The storage
 //comes from the scope the result lands in, as "Array<T>(n)"'s does; growing allocates the next one there and
 //copies (the arena frees nothing before the scope closes, and nothing can hold the buffer before it is done).
@@ -3911,9 +3981,18 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
     return uncaught;
 }
 
+void cgStatement(struct cgCtx* ctx, struct statement* s);
+char* cgCond(struct cgCtx* ctx, struct operand* op);
+char* cgCmpChain(struct cgCtx* ctx, struct operand* op);
 char* cgValue(struct cgCtx* ctx, struct operand* op) {
+    if (op->cgCached) return op->cgCached; //E30: a chain's shared operand, computed once
     if (op->tryNeedsSlot && ctx->tdOp != op) return cgTryDefaultValue(ctx, op);
     switch (op->opType) {
+        case OPERATION_COND: return cgCond(ctx, op);
+        case OPERATION_CMP_CHAIN: return cgCmpChain(ctx, op);
+        case OPERATION_SEQ:
+            for (int i = 0; i < op->comprBody.len; i++) cgStatement(ctx, ListGetIdx(&op->comprBody, i));
+            return cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
         case OPERATION_NONE: return cgLiteral(ctx, op);
         case OPERATION_ATOMIC_LOAD:
         case OPERATION_ATOMIC_STORE:

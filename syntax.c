@@ -1214,10 +1214,11 @@ static struct syntax* parseStmntIfRuntime(SyntaxCtx sc, int cur, struct token kw
 
 //S9a/S9b: what follows a for's "in" - an expression, or "range end" / "range start, end [, step]" (one to three
 //expressions, no parentheses)
-static struct syntax* parseForInSource(SyntaxCtx sc) {
+struct syntax* parseExprNoCond(SyntaxCtx sc);
+static struct syntax* parseForInSource(SyntaxCtx sc, bool inComprehension) {
     int cur = TokenGetCursor(sc->tc);
     struct token rangeKw = acceptTok(sc, TOK_RANGE);
-    if (rangeKw.type == TOK_NONE) return parseExpr(sc);
+    if (rangeKw.type == TOK_NONE) return inComprehension ? parseExprNoCond(sc) : parseExpr(sc);
     struct syntax* e = newNode(SNTX_RANGE);
     addTok(e, rangeKw);
     int n = 0;
@@ -1248,7 +1249,7 @@ static struct syntax* parseComprehensionClause(SyntaxCtx sc) {
     if (in.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     ListAdd(&sc->localNames, &n1.str);
     if (n2.type != TOK_NONE) ListAdd(&sc->localNames, &n2.str);
-    struct syntax* src = parseForInSource(sc);
+    struct syntax* src = parseForInSource(sc, true);
     if (!src) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_COMPREHENSION);
     addTok(s, kw);
@@ -1258,7 +1259,7 @@ static struct syntax* parseComprehensionClause(SyntaxCtx sc) {
     addSntx(s, src);
     struct token ifKw = acceptTok(sc, TOK_IF);
     if (ifKw.type != TOK_NONE) {
-        struct syntax* cond = parseExpr(sc);
+        struct syntax* cond = parseExprNoCond(sc);
         if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
         addTok(s, ifKw);
         addSntx(s, cond);
@@ -1281,7 +1282,7 @@ static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     if (in.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     ListAdd(&sc->localNames, &n1.str); //S8b: the loop's names are locals
     if (n2.type != TOK_NONE) ListAdd(&sc->localNames, &n2.str);
-    struct syntax* e = parseForInSource(sc);
+    struct syntax* e = parseForInSource(sc, false);
     if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* block = parseBlock(sc);
     if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
@@ -2547,7 +2548,7 @@ int binOpPrecedence(enum tokenType t) {
         case TOK_BTWSE_XOR: return 5;
         case TOK_BTWSE_AND: return 6;
         case TOK_EQ: case TOK_NEQ: return 7;
-        case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE: return 8;
+        case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE: case TOK_IN: return 8; //E29: "in" beside them
         case TOK_BTSFT_L: case TOK_BTSFT_R: return 9;
         case TOK_ADD: case TOK_SUB: return 10;
         case TOK_MUL: case TOK_DIV: case TOK_MOD: return 11;
@@ -2580,12 +2581,16 @@ struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
     while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token opTok = TokenFeed(sc->tc);
+        //E29: "not in" - the one operator spelled with two words; "not" anywhere else after an operand ends it
+        struct token notTok = (struct token){0};
+        if (opTok.type == TOK_NOT && peekTok(sc).type == TOK_IN) { notTok = opTok; opTok = TokenFeed(sc->tc); }
         int prec = binOpPrecedence(opTok.type);
         if (prec == 0 || prec < minPrec) { TokenSetCursor(sc->tc, before); break; }
         struct syntax* right = parseBinaryExpr(sc, prec + 1); //left-assoc: recurse tighter, not equal
         if (!right) { TokenSetCursor(sc->tc, before); break; }
         struct syntax* bin = newNode(SNTX_EXPR_BINARY);
         addSntx(bin, left);
+        if (notTok.type != TOK_NONE) addTok(bin, notTok);
         addTok(bin, opTok);
         addSntx(bin, right);
         left = bin;
@@ -2593,9 +2598,41 @@ struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
     return left;
 }
 
+//an expression with no top-level "a if c else b" - what a comprehension takes after "in" and after "if", where an
+//"if" belongs to the comprehension (E27); a conditional there is written in parentheses
+struct syntax* parseExprNoCond(SyntaxCtx sc) {
+    struct syntax* inner = parseBinaryExpr(sc, 1);
+    if (!inner) return NULL;
+    struct syntax* s = newNode(SNTX_EXPR);
+    addSntx(s, inner);
+    return s;
+}
+
+//E28: "value if cond else other" - looser than every operator, and grouping to the right, so "a if c else b if d
+//else e" is "a if c else (b if d else e)". An "if" with no "else" after its condition is not one, and is left
+//to whatever follows the expression (a comprehension's filter)
 struct syntax* parseExpr(SyntaxCtx sc) {
     struct syntax* inner = parseBinaryExpr(sc, 1);
     if (!inner) return NULL;
+    int before = TokenGetCursor(sc->tc);
+    struct token ifKw = acceptTok(sc, TOK_IF);
+    if (ifKw.type != TOK_NONE) {
+        struct syntax* cond = parseBinaryExpr(sc, 1);
+        struct token elseKw = cond ? acceptTok(sc, TOK_ELSE) : (struct token){0};
+        struct syntax* other = elseKw.type != TOK_NONE ? parseExpr(sc) : NULL;
+        if (other) {
+            struct syntax* c = newNode(SNTX_EXPR_COND);
+            addSntx(c, inner);
+            addTok(c, ifKw);
+            addSntx(c, cond);
+            addTok(c, elseKw);
+            addSntx(c, other);
+            struct syntax* s = newNode(SNTX_EXPR);
+            addSntx(s, c);
+            return s;
+        }
+        TokenSetCursor(sc->tc, before);
+    }
     struct syntax* s = newNode(SNTX_EXPR);
     addSntx(s, inner);
     return s;
