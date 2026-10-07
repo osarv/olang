@@ -2628,6 +2628,22 @@ Go through this for every change to what olang means - a rule added, revised or 
   its try was emitted (recorded per operand: `cgSlots`/`cgDepth`) and runs at the try's depth. **Found on the way**:
   a clause naming an error type its call cannot produce crashed codegen (`errorTypeOrdinal`) - reachable since E31a,
   whenever one try covers a Try form and a built-in check.
+- **`is` and `as`; type cases; interface widening (E32/E32a/S13c, 2026-10-07, the user's calls).** `x is T`,
+  `x as T`, and `match s { case c Circle& { } ... }` on an interface value; extended to enums at the user's request
+  (`x is Shape.Circle`, `x as Shape.Rect` giving the payload - one field, or several as several results). `as` that
+  does not hold aborts like a slice, or under `try` fails with `INVALID`; `as T&` is the very instance, `as T` a copy.
+  The user preferred `as` to a `Cast` call once the collisions were laid out: `Circle(s)` is a constructor call, a
+  marker would have to sit in front of a call (`Circle&(s)`, which is the scope-argument syntax), and it would be the
+  only conversion that can fail. **Mechanism (my call)**: every dispatch table now starts with a type-identity word
+  (`@olang.typeid.T`, `linkonce_odr`), the interface value pointing just past it; the program's root object (main or
+  tests - never a `-c` object, whose view of the program is partial) defines one lookup per interface converted to,
+  over every concrete type the checker saw become an interface value (`SemanticConvSources`) - no run-time hashing,
+  no allocation, and no extra rebuilding, since the root is rebuilt anyway (B3d). The pairs' defaults (M19e) are
+  compiled as sources and targets are first seen, codegen being unable to instantiate. Widening (an interface value
+  to an interface its own covers) is implicit and uses the same lookup. **Found on the way**: a widening that the
+  checker had accepted was silently stored as the wider interface's pair, so the narrower one dispatched through the
+  wrong table slots - the store path (`cgValueForTarget`) had no case for it.
+  **Pending (the user)**: a general talk about casting and unifying the conversion syntax.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1,0 +1,8 @@
+# check: fail after 'is' or 'as' on an enum value comes one of its cases
+# E32: a name that is not a case of the value's enum
+type T enum {
+    A(v Int32)
+    B
+}
+fn f(t T) Bool { return t is T.C }
+fn main() ? { }

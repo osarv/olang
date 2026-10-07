@@ -1286,6 +1286,45 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
             return ctFail(st, op->tok, "it uses an atomic operation");
         case OPERATION_SLICE: return ctSlice(st, op);
+        case OPERATION_IS: case OPERATION_AS: { //E32
+            struct ctVal* x = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+            if (!x) return NULL;
+            bool isAs = op->opType == OPERATION_AS;
+            if (op->castEnum) {
+                struct ctVal* v = ctDeref(x);
+                bool hit = v->i == op->castTag;
+                if (!isAs) return ctBool(hit);
+                if (!hit) {
+                    if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                    return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
+                }
+                if (!op->type.isTuple) return ctCopy(v->elems[0]);
+                struct ctVal* t = ctNew(CT_AGG, op->type);
+                t->n = v->n;
+                t->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(v->n ? v->n : 1));
+                for (int i = 0; i < v->n; i++) t->elems[i] = ctCopy(v->elems[i]);
+                return t;
+            }
+            //an interface value: the instance it names, whose own type is the dynamic one
+            struct ctVal* inst = x->kind == CT_REF ? x->target : NULL;
+            bool hit = false;
+            if (inst) {
+                struct type have = inst->type;
+                have.structMAlloc = false;
+                struct type want = *op->castType;
+                want.structMAlloc = false;
+                hit = want.bType == BASETYPE_INTERFACE ? TypeSatisfiesInterface(have, want, NULL) : TypeIsSame(have, want);
+            }
+            if (!isAs) return ctBool(hit);
+            if (!hit) {
+                if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
+            }
+            if (!ctIsRef(op->type)) return ctCopy(inst); //"as T": a copy of the instance
+            struct ctVal* r = ctNew(CT_REF, op->type);
+            r->target = inst;
+            return r;
+        }
         case OPERATION_BOUNDS: { //E31: a derived TryAt/TrySlice's check
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             struct ctVal* lo = v ? ctEval(st, *(struct operand**)ListGetIdx(&op->args, 1)) : NULL;

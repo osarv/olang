@@ -1517,11 +1517,28 @@ struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_CASE);
     if (kw.type == TOK_NONE) return NULL;
+    int afterKw = TokenGetCursor(sc->tc);
     struct syntax* val = typeMatch ? parseTypeExpr(sc) : parseCasePattern(sc);
     if (!val) val = typeMatch ? NULL : parseExpr(sc);
-    if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct syntax* block = parseBlock(sc);
-    if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
+    struct syntax* block = val ? parseBlock(sc) : NULL;
+    if (!block && !typeMatch) {
+        //E32: a type case of a match on an interface value - "case c Circle& { }", "case Square& { }"
+        TokenSetCursor(sc->tc, afterKw);
+        val = newNode(SNTX_CASE_TYPE);
+        int at = TokenGetCursor(sc->tc);
+        struct token name = acceptTok(sc, TOK_IDEN);
+        struct syntax* t = name.type != TOK_NONE ? parseTypeExpr(sc) : NULL;
+        if (t && peekTok(sc).type == TOK_CURLY_O) addTok(val, name);
+        else {
+            TokenSetCursor(sc->tc, at);
+            t = parseTypeExpr(sc);
+        }
+        if (t) {
+            addSntx(val, t);
+            block = parseBlock(sc);
+        }
+    }
+    if (!val || !block) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_STMNT_CASE);
     addTok(s, kw);
     addSntx(s, val);
@@ -2683,6 +2700,20 @@ static struct syntax* parseExprUnaryOne(SyntaxCtx sc) {
     struct syntax* postfix = parseExprPostfix(sc);
     if (!postfix) return NULL; //note: any consumed unary-op tokens are simply not attached to anything;
                                 //a real prefix-op-with-no-operand is always a hard error further up anyway
+    //E32: "x as T" binds as tightly as a postfix - "(s as Circle&).r" - and a prefix operator applies to its result
+    while (peekTok(sc).type == TOK_AS) {
+        int before = TokenGetCursor(sc->tc);
+        struct token asTok = TokenFeed(sc->tc);
+        struct syntax* t = parseTypeExpr(sc);
+        if (!t) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* a = newNode(SNTX_EXPR_AS);
+        addSntx(a, postfix);
+        addTok(a, asTok);
+        addSntx(a, t);
+        struct syntax* wrap = newNode(SNTX_EXPR_POSTFIX);
+        addSntx(wrap, a);
+        postfix = wrap;
+    }
     struct syntax* s = newNode(SNTX_EXPR_UNARY);
     for (int i = 0; i < ops.len; i++) {
         struct token* opTok = ListGetIdx(&ops, i);
@@ -2743,6 +2774,18 @@ struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
         //E29: "not in" - the one operator spelled with two words; "not" anywhere else after an operand ends it
         struct token notTok = (struct token){0};
         if (opTok.type == TOK_NOT && peekTok(sc).type == TOK_IN) { notTok = opTok; opTok = TokenFeed(sc->tc); }
+        //E32: "x is T" - at the comparisons' level, its right side a type
+        if (opTok.type == TOK_IS) {
+            if (8 < minPrec) { TokenSetCursor(sc->tc, before); break; }
+            struct syntax* t = parseTypeExpr(sc);
+            if (!t) { TokenSetCursor(sc->tc, before); break; }
+            struct syntax* is = newNode(SNTX_EXPR_IS);
+            addSntx(is, left);
+            addTok(is, opTok);
+            addSntx(is, t);
+            left = is;
+            continue;
+        }
         int prec = binOpPrecedence(opTok.type);
         if (prec == 0 || prec < minPrec) { TokenSetCursor(sc->tc, before); break; }
         struct syntax* right = parseBinaryExpr(sc, prec + 1); //left-assoc: recurse tighter, not equal

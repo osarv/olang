@@ -7606,3 +7606,14 @@ from their original form.
   `blockSlots` entries saved and restored around it since the clause's own blocks reuse them. And `cgCatchDispatch`
   asked for the ordinal of every type a clause named in the callee's error list, crashing when a try covering a Try
   form and a built-in check named `BuiltinError` at the Try form's call.
+
+- **`is`, `as`, type cases (E32/S13c), 2026-10-07.** The user asked for interface conversions. Proposed: `x is T`, a
+  `match` with type cases, `x as T` (aborting, or failing under `try`), implicit widening between interfaces. The user
+  questioned `as` against a `Cast`; the answer was that `Circle(s)` already means a constructor call (overloading by
+  argument type would be needed to tell them apart), that reference-or-copy needs a marker in front of a call, which
+  collides with `f&x()`, and that every existing `Name(x)` conversion is infallible. The user took `is` and `as` and
+  asked for them on enums too. Implementation: a type-identity word in front of every table; the program root defines
+  per-target lookups over the checker-recorded sources (the conversion sources are recorded at the interface fit, the
+  targets at `is`/`as`/type cases/widening), as weak_odr functions other objects declare; a `-c` object never defines
+  them, since its program view is partial and a weak definition from it could win the link. Found: widening had been
+  accepted by the fit check but codegen's store path copied the wider pair unchanged.

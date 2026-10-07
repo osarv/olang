@@ -46,6 +46,8 @@ struct tokRule tokRules[] = {
     {TOK_FOR, "for", NULL},
     {TOK_DO, "do", NULL},
     {TOK_IN, "in", NULL},
+    {TOK_IS, "is", NULL},
+    {TOK_AS, "as", NULL},
     {TOK_RANGE, "range", NULL},
     {TOK_MATCH, "match", NULL},
     {TOK_CASE, "case", NULL},

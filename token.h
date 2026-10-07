@@ -34,6 +34,8 @@ enum tokenType {
     TOK_FOR,
     TOK_DO,
     TOK_IN,    //"for x in a" (S9a)
+    TOK_IS,    //"x is T" (E32)
+    TOK_AS,    //"x as T" (E32)
     TOK_RANGE, //"for i in range(end, start, step)" (S9b)
     TOK_MATCH,
     TOK_CASE,

@@ -98,6 +98,7 @@ spelling: see §4.3 (visibility).
 ```
 if        else    try     catch   return  done    fail    assert
 for       do      in      range   match   case    nomatch break   continue
+is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut
 interface spawn   join
@@ -2046,6 +2047,31 @@ error, as for any other non-numeric type.
 `==`, `!=` (E10) and `$` (E11a) are never declared, nor are `and`, `or`, `not` (they short-circuit, E7), `=`, `.`,
 `try` and `match`.
 
+### 5.16 `is` and `as`
+
+**E32.** `is-expr ::= operand "is" type-ref` (at the comparisons' precedence) and `as-expr ::= postfix "as" type-ref`
+(binding as tightly as a postfix, so `(s as Circle&).r` reads a field and `-x as T` is `-(x as T)`) ask what a value is
+and give it as that:
+
+- On an **interface value** (T30), `type-ref` names a concrete type or an interface. `x is T` is whether the
+  instance's own type is `T` (the marker does not matter), or for an interface whether that type satisfies it; a
+  null value is nothing. `x as T&` is **the very instance** as that type, living where `x`'s instance does and
+  writable exactly when `x` is; `x as T` (no marker) is a copy of it; `x as I&` for an interface `I` is the
+  instance seen through `I`. A concrete `T` that does not satisfy `x`'s interface can never be the answer, and is
+  a compile-time error.
+- On an **enum value** (T17), `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that
+  case is live, whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many
+  results as it has, received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with
+  no payload is an error (`is` is the question it asks).
+
+An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `try` (E15a) it fails with
+`BuiltinError.INVALID` instead: `q := try (s as Square) catch default Square(0)`. `is` never fails. The safe forms
+are `is` before `as`, and a `match` (S13c).
+
+**E32a (widening).** An interface value goes, with nothing written, wherever an interface is wanted whose every
+method its own interface declares with the same signature - it can always be seen through that one. Only narrowing
+needs `as`.
+
 ## 6. Statements
 
 ### 6.1 Blocks
@@ -2261,6 +2287,12 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 case-clause    ::= "case" expr block
 nomatch-clause ::= "nomatch" block
 ```
+
+**S13c (type cases).** A `match` on an **interface value** asks which type it holds. Its cases are
+`case-type ::= "case" [ IDEN ] type-ref block`: `case c Circle& { }` runs when the value is a `Circle` (E32's
+`is`), with `c` declared as `x as Circle&` for the block; `case Square { }` binds nothing; a bare type name is a
+type case too. The value is evaluated once, the cases are tried in order, and `nomatch` runs when none holds - an
+interface is open, so no exhaustiveness is asked.
 
 **S13a.** A `match` whose matched value is a **enum type** must cover every one of that type's cases, or
 carry a `nomatch` clause. This is the only type for which exhaustiveness is checked, and the reason is that

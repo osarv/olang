@@ -1,0 +1,10 @@
+# check: fail no value of this interface can be this type
+# E32: a type that cannot be held by the interface
+type S interface {
+    Area() Int32
+}
+type P struct() {
+    x Int32 = 0
+}
+fn f(s S&) Bool { return s is P& }
+fn main() ? { }

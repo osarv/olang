@@ -415,6 +415,8 @@ enum operation {
                       //point (an omitted bound is materialised as 0 or len(base) when the operand is built).
                       //op->type is a runtime-length reference to base's element type, tagged to the scope
                       //base's own storage belongs to: a slice is a borrow, not an allocation.
+    OPERATION_IS, //E32: "x is T" - args [x]; castType the type asked about, or castEnum with castTag a case
+    OPERATION_AS, //E32: "x as T" - args [x]; op->type the result (castType the type named), or castEnum's payload
     OPERATION_BOUNDS, //E31: a derived TryAt/TrySlice's bounds check - args [v, lo, hi]: v itself, once lo <= v < hi
                       //(<= hi when isInclusive); only ever built under "try", so it always has a checkRoot
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
@@ -502,6 +504,9 @@ struct operand {
                                 //a "try" around the loop does not check it
     int cgSlots, cgDepth;       //codegen: the open block scopes where a tried operand with clauses is emitted - a
     bool cgDepthSet;            //failure deeper inside it (a comprehension's loop) unwinds to there before a clause
+    struct type* castType;      //E32: OPERATION_IS/AS on an interface value - the concrete type or interface named
+    bool castEnum;              //E32: OPERATION_IS/AS on an enum value - castTag is the case
+    long long castTag;
     bool isInclusive;           //E31: OPERATION_BOUNDS only - the upper bound itself is allowed (a slice's)
     bool isAtCall;              //E31: "x[i]" written on a type declaring At - args [x, i]; "x[i] = v" becomes SetAt
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
@@ -554,6 +559,8 @@ struct operand {
 //T17: does any case of this choice type carry a payload, and how big is the largest? A choice where none
 //does keeps the bare-i32 representation it has always had; one that does is { i64 tag, [N x i8] payload }.
 bool ChoiceHasPayload(struct type t);
+struct list* SemanticConvSources(void); //E32: struct type - every type an interface value is made from
+struct list* SemanticConvTargets(void); //E32: struct type - every interface converted to at run time
 long long ChoicePayloadSize(struct type t);
 
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m);

@@ -1,0 +1,6 @@
+# check: fail what an interface value holds, or which case an enum value is - this is neither
+# E32: is on a plain value
+fn main() ? {
+    x := 5
+    if x is Int32 { }
+}

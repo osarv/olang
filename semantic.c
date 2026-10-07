@@ -4318,6 +4318,59 @@ static bool unifyThroughMethods(struct type iface, struct type concrete, struct 
 //T31: structural, implicit satisfaction - every method the interface declares, supplied by the concrete
 //type's own module. On failure, *failed (when non-NULL) names the first method that is missing, which is
 //what the diagnostic needs to say something more useful than "does not satisfy".
+//E32: the program's run-time conversions. Every concrete type an interface value is made from (a source), and
+//every interface something is converted to at run time (a target) - "as", "is", a type case, a widening. The root
+//object emits, per target, a lookup from a source's type identity to its table; the pairs' defaults (M19e) are
+//compiled here, as each source or target is first seen, since codegen cannot instantiate.
+static struct list convSources, convTargets;
+static bool convListsInit;
+struct list* SemanticConvSources(void) { return &convSources; }
+struct list* SemanticConvTargets(void) { return &convTargets; }
+static bool convListHas(struct list* l, struct type t) {
+    for (int i = 0; i < l->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(l, i), t)) return true;
+    return false;
+}
+static void convPrepare(struct type concrete, struct type iface) {
+    if (!TypeSatisfiesInterface(concrete, iface, NULL)) return;
+    struct list ds = ListInit(sizeof(struct var*));
+    SemanticInterfaceDefaults(iface, &ds);
+    for (int i = 0; i < ds.len; i++) SemanticDefaultEntry(concrete, iface, *(struct var**)ListGetIdx(&ds, i));
+}
+bool TypeIsGeneric(struct type t);
+static void noteConvSource(struct type t) {
+    if (!convListsInit) { convSources = ListInit(sizeof(struct type)); convTargets = ListInit(sizeof(struct type)); convListsInit = true; }
+    t.structMAlloc = false;
+    t.refMut = false;
+    t.scopeParam = NULL;
+    t.scopeDepth = 0;
+    if (TypeIsGeneric(t) || convListHas(&convSources, t)) return;
+    ListAdd(&convSources, &t);
+    for (int i = 0; i < convTargets.len; i++) convPrepare(t, *(struct type*)ListGetIdx(&convTargets, i));
+}
+static void noteConvTarget(struct type t) {
+    if (!convListsInit) { convSources = ListInit(sizeof(struct type)); convTargets = ListInit(sizeof(struct type)); convListsInit = true; }
+    t.structMAlloc = false;
+    t.refMut = false;
+    t.scopeParam = NULL;
+    t.scopeDepth = 0;
+    if (TypeIsGeneric(t) || convListHas(&convTargets, t)) return;
+    ListAdd(&convTargets, &t);
+    for (int i = 0; i < convSources.len; i++) convPrepare(*(struct type*)ListGetIdx(&convSources, i), t);
+}
+
+//E32: whether interface `have` declares every method `want` does, with the same signature - so any value of it is
+//a value of `want`
+static bool ifaceCovers(struct type have, struct type want) {
+    if (have.bType != BASETYPE_INTERFACE || want.bType != BASETYPE_INTERFACE) return false;
+    if (have.owner == want.owner && StrCmp(have.name, want.name) && TypeIsSame(have, want)) return false;
+    for (int i = 0; i < want.vars.len; i++) {
+        struct var* m = ListGetIdx(&want.vars, i);
+        struct var* h = VarGetList(&have.vars, m->name);
+        if (!h || !TypeIsSame(h->type, m->type)) return false;
+    }
+    return true;
+}
+
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed) {
     if (iface.bType != BASETYPE_INTERFACE || concrete.bType == BASETYPE_INTERFACE) return false;
     for (int i = 0; i < iface.vars.len; i++) {
@@ -4679,7 +4732,14 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             struct type concrete = op->type;
             concrete.structMAlloc = false;
             for (int i = 0; i < ds.len; i++) SemanticDefaultEntry(concrete, target, *(struct var**)ListGetIdx(&ds, i));
+            noteConvSource(concrete); //E32: a type an interface value may hold
             return borrowLifetimeFits(func, op, target);
+        }
+        //E32: an interface value fits an interface every method of which its own interface declares - the
+        //instance's table for the target is found at run time (it depends on the concrete type), and always exists
+        if (op->type.bType == BASETYPE_INTERFACE && ifaceCovers(op->type, target)) {
+            noteConvTarget(target);
+            return TYPE_FIT_OK;
         }
         recordInterfaceFitFailure(target, op->type, missing);
         return TYPE_FIT_INTERFACE;
@@ -4801,6 +4861,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
     if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
+    if (op->opType == OPERATION_AS) return true; //E32: "x as T" names its type
     //E28: "x := a if c else b" - when each value would name its type for ":=" on its own
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 1))
@@ -6789,6 +6850,75 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     return seq;
 }
 
+//E32: "x is T" / "x as T". On an interface value, T is a concrete type (the instance's own, "as T&" the very
+//instance, "as T" a copy of it) or an interface (the instance seen through it); on an enum value, T is one of its
+//cases, "as" giving the payload - its one field, or several as several results. "as" that does not hold aborts, as an
+//out-of-range slice does, or under "try" fails with BuiltinError.INVALID.
+static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t) {
+    struct list out = ListInit(sizeof(struct token));
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* p = partAt(s, i);
+        if (p->isToken) { if (p->tok.type == t) ListAdd(&out, &p->tok); continue; }
+        struct list sub = allTokOfTypeDeep(p->sntx, t);
+        for (int k = 0; k < sub.len; k++) ListAdd(&out, ListGetIdx(&sub, k));
+    }
+    return out;
+}
+
+struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
+    bool isAs = s->type == SNTX_EXPR_AS;
+    struct token kw = firstTokOfType(s, isAs ? TOK_AS : TOK_IS);
+    struct operand* x = buildExprFromSyntax(ctx, partSntx(s, 0));
+    struct syntax* tNode = firstPartOfType(s, SNTX_TYPE_EXPR);
+    struct operand* op = operandNew(kw, isAs ? OPERATION_AS : OPERATION_IS, TypeVanilla(BASETYPE_BOOL));
+    ListAdd(&op->args, &x);
+    struct type xt = x->type;
+    if (xt.bType == BASETYPE_CHOICE) {
+        struct list idens = allTokOfTypeDeep(tNode, TOK_IDEN);
+        struct var* c = NULL;
+        if (idens.len >= 2) {
+            struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+            struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
+            for (int i = 0; StrCmp(strFromTok(typeTok), xt.name) && i < xt.vars.len; i++) {
+                struct var* v = ListGetIdx(&xt.vars, i);
+                if (StrCmp(v->name, strFromTok(caseTok))) { op->castTag = i; c = v; }
+            }
+        }
+        if (!c) { ErrMsgSemantic(firstTokAnywhere(tNode), AS_ENUM_CASE); return op; }
+        op->castEnum = true;
+        if (!isAs) return op;
+        if (c->type.vars.len == 0) { ErrMsgSemantic(kw, AS_NOTHING); return op; }
+        if (c->type.vars.len == 1) op->type = ((struct var*)ListGetIdx(&c->type.vars, 0))->type;
+        else {
+            struct list ts = ListInit(sizeof(struct type));
+            for (int i = 0; i < c->type.vars.len; i++) ListAdd(&ts, &((struct var*)ListGetIdx(&c->type.vars, i))->type);
+            op->type = TypeTuple(&ts);
+        }
+        return op;
+    }
+    if (xt.bType != BASETYPE_INTERFACE) { ErrMsgSemantic(kw, IS_AS_OPERAND); return op; }
+    struct type t = resolveTypeExpr(ctx->mod, tNode, NULL);
+    op->castType = MallocOrCrash(sizeof(struct type));
+    *op->castType = t;
+    struct type bare = t;
+    bare.structMAlloc = false;
+    if (t.bType == BASETYPE_INTERFACE) noteConvTarget(bare);
+    else if (!TypeSatisfiesInterface(bare, xt, NULL)) { ErrMsgSemantic(firstTokAnywhere(tNode), IS_AS_NEVER); return op; }
+    if (!isAs) return op;
+    //the result lives where the instance does and may be written as far as x may: it IS the instance
+    struct type r = t;
+    if (t.structMAlloc || t.bType == BASETYPE_INTERFACE) {
+        r.structMAlloc = true;
+        r.scopeParam = xt.scopeParam;
+        r.scopeDepth = xt.scopeDepth;
+        r.scopeWritten = xt.scopeWritten;
+        r.refMut = xt.refMut;
+        op->scopeBindings = x->scopeBindings;
+    }
+    op->type = r;
+    return op;
+}
+
 //E31: a derived check's operand: v once lo <= v < hi (<= hi when inclusive), failing with OUT_OF_BOUNDS
 static struct operand* operandBounds(struct operand* v, struct operand* lo, struct operand* hi, bool inclusive,
                                      struct token tok) {
@@ -7260,6 +7390,7 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                      && !(t.bType == BASETYPE_INT64) && !(t.bType == BASETYPE_INT32 && a0->type.bType == BASETYPE_BYTE)) w = ovf;
             break;
         case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
+        case OPERATION_AS: w = inv; break; //E32: the value is not what "as" names
         case OPERATION_INDEX: if (!op->noCheck) w = oob; break;
         default: break;
     }
@@ -7986,6 +8117,7 @@ struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
             return op;
         }
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
+        case SNTX_EXPR_IS: case SNTX_EXPR_AS: return buildIsAs(ctx, s);
         case SNTX_EXPR_TEXT: return buildText(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);
         case SNTX_EXPR_PRIMARY: return buildPrimary(ctx, s);
@@ -8083,7 +8215,11 @@ static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* o
     struct list values = allPartsOfType(s, SNTX_EXPR);
     if (values.len > 1) { buildParallel(ctx, targets, values, declare, opTok, out); return; }
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!rhs->type.isTuple || rhs->opType != OPERATION_FUNCCALL) { ErrMsgSemantic(rhs->tok, DESTRUCT_NEEDS_RESULTS); return; }
+    //a call returning several values, or (E32) an enum case's payload of several fields taken with "as"
+    if (!rhs->type.isTuple || (rhs->opType != OPERATION_FUNCCALL && rhs->opType != OPERATION_AS)) {
+        ErrMsgSemantic(rhs->tok, DESTRUCT_NEEDS_RESULTS);
+        return;
+    }
     if (rhs->type.vars.len != targets.len) { ErrMsgSemantic(opTok, DESTRUCT_COUNT_MISMATCH); return; }
     char* nm = MallocOrCrash(24);
     snprintf(nm, 24, "$results%d", destructCounter++); //"$" cannot begin an identifier, so this never collides
@@ -10170,10 +10306,105 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
     return buildEmptyIfStmnt(ctx, opTok);
 }
 
+static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t);
+struct operand* typeMatchAlwaysTrue(struct token tok);
+//E32: a match on an interface value asks which type it holds - "case c Circle& { }" binds the instance as that type,
+//"case Square& { }" only asks. Lowered to what the program could write: the value held once, then
+//"if v is T1 { c := v as T1& ... } else if v is T2 { ... } else { nomatch }"
+static struct operand* buildIsOp(struct operand* x, struct type t, bool isAs, struct token tok) {
+    struct operand* op = operandNew(tok, isAs ? OPERATION_AS : OPERATION_IS, TypeVanilla(BASETYPE_BOOL));
+    ListAdd(&op->args, &x);
+    op->castType = MallocOrCrash(sizeof(struct type));
+    *op->castType = t;
+    if (isAs) {
+        struct type r = t;
+        if (t.structMAlloc || t.bType == BASETYPE_INTERFACE) {
+            r.structMAlloc = true;
+            r.scopeParam = x->type.scopeParam;
+            r.scopeDepth = x->type.scopeDepth;
+            r.scopeWritten = x->type.scopeWritten;
+            r.refMut = x->type.refMut;
+            op->scopeBindings = x->scopeBindings;
+        }
+        op->type = r;
+    }
+    return op;
+}
+
+static struct statement buildIfaceMatch(struct checkCtx* ctx, struct syntax* s, struct operand* matched) {
+    struct scope wrapScope = scopePush(ctx->scope);
+    struct checkCtx wctx = *ctx;
+    wctx.scope = &wrapScope;
+    wctx.blockDepth = ctx->blockDepth + 1;
+    struct token mtok = firstTokOfType(s, TOK_MATCH);
+    struct list body = ListInit(sizeof(struct statement));
+    struct operand* m = matched;
+    if (matched->opType != OPERATION_READ_VAR) m = OperandReadVar(holdInHidden(&wctx, matched, mtok, "match", &body), mtok);
+    struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
+    struct statement head = (struct statement){0};
+    struct statement* tail = NULL; //the last if built, whose else the next case becomes
+    for (int i = 0; i < cases.len; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        struct syntax* ct = firstPartOfType(c, SNTX_CASE_TYPE);
+        struct syntax* tNode = ct ? firstPartOfType(ct, SNTX_TYPE_EXPR) : NULL;
+        struct token kw = firstTokOfType(c, TOK_CASE);
+        struct type t;
+        if (tNode) t = resolveTypeExpr(ctx->mod, tNode, NULL);
+        else {
+            //a bare name parsed as an expression - "case Circle { }"
+            struct list idens = allTokOfTypeDeep(c, TOK_IDEN);
+            struct type* nt = idens.len == 1 ? typeNamed(ctx->mod, strFromTok(*(struct token*)ListGetIdx(&idens, 0))) : NULL;
+            if (!nt) { ErrMsgSemantic(kw, MATCH_CASE_TYPE_MISMATCH); continue; }
+            t = *nt;
+        }
+        struct type bare = t;
+        bare.structMAlloc = false;
+        if (t.bType == BASETYPE_INTERFACE) noteConvTarget(bare);
+        else if (!TypeSatisfiesInterface(bare, matched->type, NULL)) {
+            ErrMsgSemantic(tNode ? firstTokAnywhere(tNode) : kw, IS_AS_NEVER);
+            continue;
+        }
+        //the arm: the binding, then the program's own block one level in
+        struct scope armScope = scopePush(wctx.scope);
+        struct checkCtx actx = wctx;
+        actx.scope = &armScope;
+        actx.blockDepth = wctx.blockDepth + 1;
+        struct list arm = ListInit(sizeof(struct statement));
+        struct token nameTok = ct ? firstTokOfType(ct, TOK_IDEN) : (struct token){0};
+        if (nameTok.type == TOK_IDEN) {
+            struct statement d = buildVarDeclFromOperand(&actx, nameTok, buildIsOp(m, t, true, kw));
+            ListAdd(&arm, &d);
+        }
+        struct list user = buildBlock(&actx, firstPartOfType(c, SNTX_BLOCK));
+        ListAdd(&arm, &(struct statement){ .sType = STATEMENT_IF, .op = typeMatchAlwaysTrue(kw), .block = user });
+        struct statement st = rangeIf(buildIsOp(m, t, false, kw), arm);
+        if (!tail) { head = st; tail = &head; }
+        else {
+            tail->elseStmnt = MallocOrCrash(sizeof(struct statement));
+            *tail->elseStmnt = st;
+            tail = tail->elseStmnt;
+        }
+    }
+    struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
+    if (nomatchNode) {
+        struct list nb = buildBlock(&wctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
+        struct statement wrap = rangeIf(typeMatchAlwaysTrue(mtok), nb);
+        if (!tail) { head = wrap; tail = &head; }
+        else {
+            tail->elseStmnt = MallocOrCrash(sizeof(struct statement));
+            *tail->elseStmnt = (struct statement){ .sType = STATEMENT_IF, .block = nb };
+            tail->elseIsBlock = true;
+        }
+    }
+    if (tail) ListAdd(&body, &head);
+    return rangeIf(typeMatchAlwaysTrue(mtok), body);
+}
+
 struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
     if (varNode) return buildTypeMatchStmnt(ctx, s, varNode);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    if (matched->type.bType == BASETYPE_INTERFACE) return buildIfaceMatch(ctx, s, matched);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
     stmt.op = matched;
@@ -11833,6 +12064,9 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     ListAdd(&bareErrorType.words, &bareErrorWord);
 
     instantiations = ListInit(sizeof(struct instantiation));
+    convSources = ListInit(sizeof(struct type)); //E32: this program's own, not an earlier build's in this process
+    convTargets = ListInit(sizeof(struct type));
+    convListsInit = true;
     allLambdas = ListInit(sizeof(struct var*)); //D16
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));

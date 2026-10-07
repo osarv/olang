@@ -132,6 +132,9 @@ enum syntaxType {
     SNTX_EXPR_PRIMARY,
     SNTX_EXPR_POSTFIX,
     SNTX_EXPR_UNARY_OP,
+    SNTX_EXPR_IS,   //E32: [operand, "is", TYPE_EXPR]
+    SNTX_EXPR_AS,   //E32: [operand, "as", TYPE_EXPR]
+    SNTX_CASE_TYPE, //E32: a type case of a match on an interface value - [IDEN binding]? TYPE_EXPR
     SNTX_EXPR_UNARY,
     SNTX_EXPR_TEXT, //E11b: adjacent text pieces - string literals and "$x" renderings - joined into one
     SNTX_EXPR_COND,   //E28: "a if c else b" - parts: the value (a binary-level node), "if", the condition, "else", an EXPR

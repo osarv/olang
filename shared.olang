@@ -7124,6 +7124,104 @@ test "E29/S9e: try reaches a fallible Has, and a comprehension's own calls" {
     for k in range 1000 { assert txCollect(4, 3) == -1 }
 }
 
+# E32: "is" and "as" - what an interface value holds (a concrete type, or another interface), which case an enum value
+# is; "match" with type cases on an interface value; a wider interface widening to a narrower one implicitly
+type IcShape interface {
+    Area() Int32
+}
+
+type IcNamed interface {
+    Name() String&
+}
+
+type IcBoth interface {
+    Area() Int32
+    Name() String&
+}
+
+type IcCircle struct(r Int32) {
+    r mut
+}
+
+fn (c IcCircle&) Area() Int32 { return 3 * c.r * c.r }
+fn (c IcCircle&) Name() String& { return "circle" }
+
+type IcSquare struct(s Int32) {
+    s
+}
+
+fn (q IcSquare) Area() Int32 { return q.s * q.s }
+
+type IcTok enum {
+    Num(v Int32)
+    Pair(a Int32, b Int64)
+    End
+}
+
+fn icDescribe(s IcShape&) Int32 {
+    t := 0
+    if s is IcCircle& { t += 1 }
+    if s is IcSquare { t += 10 }
+    if s is IcNamed& { t += 100 }
+    match s {
+        case c IcCircle& { t += c.r * 1000 }
+        case q IcSquare { t += q.s * 10000 }
+        nomatch { t = -1 }
+    }
+    return t
+}
+
+fn icGrow(s mut IcShape&) Int32 {
+    c := s as IcCircle&
+    c.r = c.r + 1
+    return s.Area()
+}
+
+fn icNamed(b IcBoth&) Int64 {
+    n IcNamed&b = b
+    return n.Name().Len()
+}
+
+fn icChecked(s IcShape&) Int32 {
+    q := try (s as IcSquare) catch default IcSquare(-7)
+    return q.s
+}
+
+fn icToks() Int64 {
+    t := 0
+    x := IcTok.Num(5)
+    y := IcTok.Pair(2, 40)
+    if x is IcTok.Num { t += 1 }
+    if y is IcTok.Num { t += 100 }
+    e := IcTok.End
+    if e is IcTok.End { t += 1000 }
+    v := x as IcTok.Num
+    a, b := y as IcTok.Pair
+    w := try (y as IcTok.Num) catch default -1
+    return Int64(t + v + a + w) + b
+}
+
+fn icSum() Int32 {
+    c IcCircle& = IcCircle(2)
+    q IcSquare = IcSquare(3)
+    return icDescribe(c) + icDescribe(q) + icGrow(c) + icChecked(c) + icChecked(q) + Int32(icNamed(c))
+}
+
+IcSumBaked := icSum()
+IcToksBaked := icToks()
+
+test "E32: is and as on interface values and enum values; type cases; widening" {
+    c IcCircle& = IcCircle(2)
+    q IcSquare = IcSquare(3)
+    assert icDescribe(c) == 1 + 100 + 2000
+    assert icDescribe(q) == 10 + 30000
+    assert icGrow(c) == 27 and c.r == 3
+    assert icChecked(c) == -7 and icChecked(q) == 3
+    assert icNamed(c) == 6
+    assert icToks() == Int64(1 + 1000 + 5 + 2 - 1 + 40)
+    assert IcSumBaked == icSum() and IcToksBaked == icToks()
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2
