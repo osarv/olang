@@ -249,6 +249,7 @@ bool isPublic(struct str name);
 //an import. The prelude never falls back to itself.
 //M19d: the prelude is every file of <std>/prelude, each its own module
 static struct list preludeModules;
+static struct list preludeTypeNames; //struct str: every prelude file's declared type names, scanned before parsing
 static bool isPreludeModule(struct semaModule* mod) {
     for (int i = 0; i < preludeModules.len; i++) if (*(struct semaModule**)ListGetIdx(&preludeModules, i) == mod) return true;
     return false;
@@ -612,13 +613,11 @@ bool isKnownTypeForParsing(void* ctxPtr, struct list aliasChain, struct str name
         struct str* n = ListGetIdx(&target->declaredTypeNames, i);
         if (StrCmp(*n, name)) return true;
     }
-    //M19d: the prelude's exported types are named bare in every module ("Pair<Int32, Int32>(1, 2)")
+    //M19d: the prelude's exported types are named bare in every module ("Pair<Int32, Int32>(1, 2)") - and inside the
+    //prelude itself, whose files are parsed one after another, which is why they are scanned up front
     if (aliasChain.len == 0 && isPublic(name)) {
-        for (int m = 0; m < preludeModules.len; m++) {
-            struct semaModule* pm = *(struct semaModule**)ListGetIdx(&preludeModules, m);
-            for (int i = 0; i < pm->declaredTypeNames.len; i++) {
-                if (StrCmp(*(struct str*)ListGetIdx(&pm->declaredTypeNames, i), name)) return true;
-            }
+        for (int i = 0; i < preludeTypeNames.len; i++) {
+            if (StrCmp(*(struct str*)ListGetIdx(&preludeTypeNames, i), name)) return true;
         }
     }
     return false;
@@ -10984,6 +10983,14 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     char preludePath[PATH_MAX + 16];
     snprintf(preludePath, sizeof(preludePath), "%s/prelude", stdRoot());
     struct list pfiles = olangFilesIn(preludePath);
+    //every prelude file's type names, before any of them is parsed: they name each other's types (Iterator's Map
+    //builds a List), and they are parsed one after another
+    preludeTypeNames = ListInit(sizeof(struct str));
+    for (int i = 0; i < pfiles.len; i++) {
+        TokenCtx ptc = TokenizeFile(*(char**)ListGetIdx(&pfiles, i));
+        struct scanResult ps = ScanTopLevelDecls(ptc);
+        ListAddList(&preludeTypeNames, ps.typeNames);
+    }
     for (int i = 0; i < pfiles.len; i++) {
         struct semaModule* pm = semaLoadModule(StrFromCStr(*(char**)ListGetIdx(&pfiles, i)));
         ListAdd(&preludeModules, &pm);

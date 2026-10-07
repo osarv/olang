@@ -2530,6 +2530,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   interface at the call (`x.Iterator.Count()`) and `:` as the module separator were weighed - the user found them
   confusing for now and deferred `:` and the naming as open questions. Called this way the method runs through the
   interface's dispatch table; compiling it per concrete type is possible later.
+- **`List` is part of the prelude (2026-10-07, the user's call).** `std/list` moved to `std/prelude/list.olang`, so
+  `List<T>` is named bare everywhere and `Iterator<T>` gained `Map` and `Filter` (they build a `List`); `List` keeps
+  `Push`, `Len`, `Iter`, `ToArray` and `Has` (for `x in l`). Prelude files name each other's types, so every prelude
+  file's type names are now scanned before any is parsed. The `twolists` check (a std module beside a same-named
+  local file) uses `std/map` instead.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

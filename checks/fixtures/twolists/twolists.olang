@@ -1,8 +1,8 @@
-import "std/list"
-import mine "list"
+import "std/map"
+import mine "map"
 error E { X }
 fn main() ? E {
-    l list.List<Int32>& = list.List<Int32>()
-    l.Push(mine.Mine())
-    assert l.Len() == 1
+    m := map.Map<Int32, Int32>()
+    m.Put(1, mine.Mine())
+    assert m.Len() == 1
 }

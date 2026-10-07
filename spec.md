@@ -1183,8 +1183,8 @@ fetches and two separate sets of modules. A fetch that fails is a compile-time e
 import.
 
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
-path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/list"`
-and `import list "std/list"`. If the derived alias is not a legal identifier
+path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/map"`
+and `import map "std/map"`. If the derived alias is not a legal identifier
 (L6 — e.g. the file name contains a hyphen or starts with a digit), that is a compile-time error;
 such a file must be imported with an explicit alias instead.
 

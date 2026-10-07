@@ -44,3 +44,21 @@ fn (it mut Iterator<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     }
     return acc
 }
+
+# a new List - in the caller's scope - of f applied to every element
+fn (it mut Iterator<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
+    out List<<U>>&return = List<<U>>()
+    for x in it {
+        out.Push(f(x))
+    }
+    return out
+}
+
+# a new List - in the caller's scope - of the elements keep holds for
+fn (it mut Iterator<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
+    out List<<T>>&return = List<<T>>()
+    for x in it {
+        if keep(x) { out.Push(x) }
+    }
+    return out
+}

@@ -96,8 +96,8 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
     return out
 }
 
-# what a function value lets a list do (D16) - each walks the elements in the order they were pushed. Any, All,
-# Count and Fold are every iterator's (the prelude's Iterator, M19e): "l.Iter().Count(f)".
+# Any, All, Count, Fold, Map and Filter are every iterator's (Iterator, M19e): "l.Iter().Map(f)" walks the elements
+# in the order they were pushed.
 
 # whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
 fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
@@ -111,23 +111,7 @@ fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
 
 
 
-# a new list - in the caller's scope - of f applied to every element
-fn (l List<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
-    out List<<U>>&return = List<<U>>()
-    for x in l {
-        out.Push(f(x))
-    }
-    return out
-}
 
-# a new list - in the caller's scope - of the elements keep holds for
-fn (l List<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
-    out List<<T>>&return = List<<T>>()
-    for x in l {
-        if keep(x) { out.Push(x) }
-    }
-    return out
-}
 
 test "an empty list" {
     l List<Int32>& = List<Int32>()
@@ -258,9 +242,9 @@ test "a list's elements, walked through a lambda" {
     assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
     assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
     assert l.Iter().Fold(Int64(0), fn(acc, x) { return acc + Int64(x) }) == 190
-    big := l.Filter(fn(x) { return x >= limit })
+    big := l.Iter().Filter(fn(x) { return x >= limit })
     assert big.Len() == 5 and big.ToArray()[0] == 15
-    halves := l.Map(fn(x) { return Float64(x) / 2.0 })
+    halves := l.Iter().Map(fn(x) { return Float64(x) / 2.0 })
     assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
 }
 
