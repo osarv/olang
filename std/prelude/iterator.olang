@@ -62,3 +62,28 @@ fn (it mut Iterator<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
     }
     return out
 }
+
+# a collection with positions (S9d): "for x in c" walks one directly, as a counted loop over At(0) .. At(Len()-1);
+# Iter() is derived here for one that has no Iter of its own, so the helpers above reach it too
+type Indexable<T> interface {
+    At(i Int64) <T>
+    Len() Int64
+}
+
+# a position in an Indexable - the collection by reference, and the next index
+type IndexIter<T> struct(of Indexable<<T>>&) {
+    c Indexable<<T>>&of = of
+    i mut Int64 = 0
+}
+
+fn (it mut IndexIter<<T>>&) Next() (<T>, Bool) {
+    if it.i >= it.c.Len() {
+        none <T>
+        return none, false
+    }
+    it.i++
+    return it.c.At(it.i - 1), true
+}
+
+# a fresh position at the start, for any type with At and Len and no Iter of its own (M19e)
+fn (c Indexable<<T>>&) Iter() IndexIter<<T>> { return IndexIter<<T>>(c) }

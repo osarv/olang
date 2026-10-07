@@ -7565,3 +7565,11 @@ from their original form.
   counted a 4-byte payload as 12 bytes where LLVM's layout is 16, so `Array<E>(n)` allocated short of its stride and
   the heap was corrupted; the corpus now has the test that aborts on the old compiler. Compile-time baking writes
   the payload's bytes packed into words. A check greps the IR for the word layout.
+
+- **Indexable types (S9d, 2026-10-07).** The user asked whether At + Len made iterators unnecessary: no - they
+  cover what has cheap positions, iterators what has none (List's chunks, Map's buckets, trees) or no length
+  (input, generators). The two meet through the prelude's `Indexable<T>`, whose default `Iter()` walks positions,
+  so indexable types get the iterator helpers. `Len` was asked about: compiler-supplied only for arrays, a
+  recognised protocol method elsewhere, now shape-checked like the operators. The precedence first proposed - Next,
+  then At + Len, then Iter - was corrected by the user mid-build: a type writing its own `Iter` is saying how to be
+  walked, and `List` given an `At` would otherwise be walked position by position, each `At` searching the chunks.

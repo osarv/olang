@@ -140,6 +140,8 @@
 #define ATOMIC_NOT_INTEGER "an atomic operation's target must be an integer variable ('Byte', 'Int32' or 'Int64'). Atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float"
 #define OPERATOR_ARITY "a method named for an operator takes that operator's operands besides its receiver: one for Plus, Minus, Mul, Div, Rem, MatMul, Less, At and two for SetAt and Slice, none for Neg (E31)"
 #define SETAT_UNDECLARED "this type declares At, so 'x[i]' reads, but not SetAt, which 'x[i] = v' calls (E31)"
+#define LEN_SHAPE "Len, which slicing and for-in call, gives an Int64 (E31)"
+#define FOR_IN_AT_FALLIBLE "for-in walks a type through At, and this At can fail - a loop has nowhere to write 'try'; walk it with an index and 'try c[i]' (S9d)"
 #define SETAT_FALLIBLE "this SetAt can fail, and an assignment has nowhere to write 'try' - call it as 'try x.SetAt(i, v)' (E31)"
 #define SLICE_NEEDS_LEN "a slice with its end left out is 'x[lo:x.Len()]', and this type has no Len (E31)"
 #define OPERATOR_SETAT_RESULT "SetAt, which 'x[i] = v' calls, gives no result (E31)"

@@ -3439,6 +3439,7 @@ static const struct operatorShape operatorShapes[] = {
     {"At", 1, true, true}, {"SetAt", 2, false, true}, {"Slice", 2, true, true}, {"BitAnd", 1, true, false},
     {"BitOr", 1, true, false}, {"BitXor", 1, true, false}, {"ShiftLeft", 1, true, false},
     {"ShiftRight", 1, true, false}, {"BitNot", 0, true, false}, {"Inc", 0, true, false}, {"Dec", 0, true, false},
+    {"Len", 0, true, false},
 };
 
 //a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
@@ -3456,6 +3457,7 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
+        else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) ErrMsgSemantic(a->tok, LEN_SHAPE);
         if (pub) {
             char low[16];
             snprintf(low, sizeof(low), "%s", sh->name);
@@ -9415,6 +9417,9 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     struct operand* src = buildExprFromSyntax(&wctx, firstPartOfType(s, SNTX_EXPR));
     bool isArray = src->type.bType == BASETYPE_ARRAY;
+    bool indexable = false; //S9d: walked through At and Len
+    const char* atName = NULL;
+    const char* lenName = NULL;
     struct var* arr = NULL;
     struct var* iter = NULL;
     struct var* nextM = NULL;
@@ -9442,6 +9447,32 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct statement r = comprOpStmt(OPERATION_COMPR_RESERVE, OperandLen(OperandReadVar(arr, kw), kw), kw);
             ListAdd(&pre, &r);
         }
+    } else if (!forInMethod(src->type, "Next") && !forInMethod(src->type, "Iter") && operatorMethodName(&wctx, src->type, "At")
+               && operatorMethodName(&wctx, src->type, "Len")) {
+        //S9d: a type with At and Len - and neither a Next nor an Iter of its own, either of which says how it wants
+        //to be walked (a List indexed by position would search its chunks for every element) - is walked as an
+        //array is: a counted loop over
+        //positions 0 to Len()-1, each element At(i), Len() read every iteration. The collection is borrowed
+        //(E12c), never copied, so writes through it in the body are seen.
+        indexable = true;
+        atName = operatorMethodName(&wctx, src->type, "At");
+        lenName = operatorMethodName(&wctx, src->type, "Len");
+        struct var* atM = methodNamedOn(src->type, atName);
+        if (atM && atM->type.errors.len > 0) { ErrMsgSemantic(src->tok, FOR_IN_AT_FALLIBLE); return (struct statement){0}; }
+        struct type refT = src->type;
+        refT.structMAlloc = true;
+        bool unnamed = false;
+        if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
+        reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok);
+        struct token ct = forInHiddenTok(kw, "Col");
+        arr = scopeDeclare(wctx.mod, wctx.scope, ct.str, ct, refT, true);
+        arr->scopeUnnamed = unnamed;
+        arr->scopeBindings = src->scopeBindings;
+        struct statement d = (struct statement){0};
+        d.sType = STATEMENT_VAR_DECL;
+        d.var = *arr;
+        d.op = src;
+        ListAdd(&pre, &d);
     } else {
         //T35a: anything that satisfies the built-in Iterator<T> for some T - the T read off its Next(), and
         //then checked by ordinary satisfaction, so a Next() without a mutable receiver does not qualify
@@ -9490,7 +9521,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement loop = (struct statement){0};
     loop.sType = STATEMENT_FOR;
     struct var* counter = NULL;
-    if (isArray || idxTok) {
+    if (isArray || indexable || idxTok) {
         struct token zero = kw;
         zero.type = TOK_INT_LIT;
         zero.str = StrFromCStr("0");
@@ -9510,15 +9541,19 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (isArray) {
         loop.op = OperandBinary(OperandReadVar(counter, kw), OperandLen(OperandReadVar(arr, kw), kw),
                                 OPERATION_LST, kw);
+    } else if (indexable) {
+        struct operand* n = operatorCall(&lctx, OperandReadVar(arr, kw), NULL, lenName, kw);
+        loop.op = OperandBinary(OperandReadVar(counter, kw), n, OPERATION_LST, kw);
     }
 
     struct list baseline = snapshotScopeBindings(lctx.scope);
     lctx.inLoop = true;
     //the body starts with what the loop hands it; the program's own statements follow
     struct list body = ListInit(sizeof(struct statement));
-    if (isArray) {
+    if (isArray || indexable) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
-        struct operand* elem = OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
+        struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
+                                         : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
         struct statement d = buildVarDeclFromOperand(&lctx, elemTok, elem);
         ListAdd(&body, &d);
     } else {

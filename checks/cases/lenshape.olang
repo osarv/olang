@@ -1,0 +1,4 @@
+# check: fail gives an Int64 (E31)
+type Bag struct() { n Int32 = 0 }
+fn (b Bag&) Len() Int32 { return b.n }
+fn main() ? { }

@@ -820,6 +820,10 @@ function; a method with type variables its receiver does not determine satisfies
 
 **T35b (built-in interfaces).** The prelude (M19d) declares `type Iterator<T> interface { mut Next() (<T>,
 Bool) }`, visible in every module. It is what `for ... in` walks besides an array and a range (S9a).
+The prelude declares `type Indexable<T> interface { At(i Int64) <T>  Len() Int64 }` and, as its default (M19e),
+`Iter()` giving an `IndexIter<T>` over positions `0` to `Len() - 1` - so a type with `At` and `Len` and no `Iter` of
+its own reaches the iterator helpers (`g.Iter().Count(f)`).
+
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`). There is no `Iterable` interface: a function wanting "anything that can be walked" takes
@@ -1990,6 +1994,7 @@ type declares one:
 | `~a` | `BitNot` | none, a result |
 | `x++`, `x--` (either side) | `Inc`, `Dec` | none, a result |
 | `f(args)` on a value `f` | `Call` | any parameters, any result |
+| `x[lo:]`, `for x in c` (S9d) | `Len` | none, an `Int64` |
 
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
 name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
@@ -2160,6 +2165,10 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   Each iteration calls `Next()`; `false` ends the loop and `x` is the `T` otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
+- an **indexable** value (S9d): one whose type has `At(i Int64) T` and `Len() Int64` (E31) and neither a `Next()` nor
+  an `Iter()` of its own - either of which says how the type wants to be walked. It is walked as an array is: a
+  counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
+  borrowed (E12c), never copied. An `At` that can fail is an error here, a loop having nowhere to write `try`.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.

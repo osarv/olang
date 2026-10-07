@@ -6891,6 +6891,60 @@ test "T17: an array of enums with a small payload is laid out at its real stride
     assert t == 749500 and churn[0] == 9
 }
 
+# S9d: a type with At and Len is walked by for-in as an array is - a counted loop - unless it has a Next or an Iter of
+# its own, which says how it wants to be walked; Indexable derives an Iter for the iterator helpers
+type IxGrid struct(n Int64) {
+    n
+    cells mut Array<Int32>& = Array<Int32>(n)
+}
+
+fn (g IxGrid&) At(i Int64) Int32 { return g.cells[i] }
+fn (g mut IxGrid&) SetAt(i Int64, v Int32) { g.cells[i] = v }
+fn (g IxGrid&) Len() Int64 { return g.n }
+
+# At and Len, but an Iter of its own too - which for-in prefers (it yields 100s, not the cells)
+type IxOwn struct() {
+    v Int32 = 1
+}
+
+fn (o IxOwn&) At(i Int64) Int32 { return o.v }
+fn (o IxOwn&) Len() Int64 { return 3 }
+fn (o IxOwn&) Iter() ArrayIter<Int32> { return Int32[100, 100].Iter() }
+
+fn ixSum(c <C Indexable<<T>>>) <T> {
+    t <T> = 0
+    for x in c { t = t + x }
+    return t
+}
+
+fn ixBaked() Int64 {
+    g IxGrid& = IxGrid(4)
+    for i in range Int64(4) { g[i] = Int32(i) * 10 }
+    t Int64 = 0
+    for i, x in g { t = t + i + Int64(x) }
+    return t
+}
+
+IxBaked := ixBaked()
+
+test "S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexable derives Iter" {
+    g IxGrid& = IxGrid(5)
+    for i in range Int64(5) { g[i] = Int32(i) }
+    t := 0
+    for x in g { t += x }
+    assert t == 10
+    n Int64 = 0
+    for i, x in g { n = n + i }
+    assert n == 10
+    assert g.Iter().Count(fn(x) { return x > 2 }) == 2
+    assert ixSum(g) == 10
+    assert IxBaked == 66
+    o IxOwn& = IxOwn()
+    u := 0
+    for x in o { u += x }
+    assert u == 200
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<Int32, Int64>(1, 2)
     assert p.Second == 2

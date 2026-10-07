@@ -2586,6 +2586,14 @@ Go through this for every change to what olang means - a rule added, revised or 
   in random order tables are level or ahead), a cutoff version (at most 4 types) begun - and **dropped by the user**:
   "it gains very little and causes a lot of problems". Interface calls stay table calls; a closed set of types
   written as an enum is the static, fast choice.
+- **Indexable types walk like arrays; `Len` is a protocol method (S9d, E31, 2026-10-07, the user's calls).**
+  `for x in c` over a type with `At` and `Len` is a counted loop (`Len()` read every iteration, elements copied,
+  the collection borrowed) - unless the type has its own `Next` or `Iter`, which win: the user caught that `List`,
+  with `Len` and an `At` it might gain, is walked far better by its iterator. The prelude's `Indexable<T>` (At + Len)
+  derives `Iter()` as its default, giving the iterator helpers to any indexable type. `Len` joins `Has`, `At` and
+  the rest: on arrays it is compiler-supplied (a load of the length word), on user types an ordinary method the
+  compiler recognises (slicing's default end, the loop), shaped `Len() Int64`, lowercase `len` module-private.
+  Iterators stay - they walk what has no positions (List, Map, trees) and what has no length (files, generators).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
