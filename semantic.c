@@ -3432,14 +3432,21 @@ static struct type underlyingArray(struct type t);
 
 //E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
-struct operatorShape { const char* name; int operands; bool result; bool mayFail; };
+struct operatorShape { const char* name; int operands; bool result; bool mayFail; bool mustFail; };
 static const struct operatorShape operatorShapes[] = {
-    {"Plus", 1, true, false}, {"Minus", 1, true, false}, {"Mul", 1, true, false}, {"Div", 1, true, false},
-    {"Rem", 1, true, false}, {"MatMul", 1, true, false}, {"Neg", 0, true, false}, {"Less", 1, true, false},
-    {"At", 1, true, true}, {"SetAt", 2, false, true}, {"Slice", 2, true, true}, {"BitAnd", 1, true, false},
-    {"BitOr", 1, true, false}, {"BitXor", 1, true, false}, {"ShiftLeft", 1, true, false},
-    {"ShiftRight", 1, true, false}, {"BitNot", 0, true, false}, {"Inc", 0, true, false}, {"Dec", 0, true, false},
-    {"Len", 0, true, false},
+    {"Plus", 1, true, false, false}, {"Minus", 1, true, false, false}, {"Mul", 1, true, false, false},
+    {"Div", 1, true, false, false}, {"Rem", 1, true, false, false}, {"MatMul", 1, true, false, false},
+    {"Neg", 0, true, false, false}, {"Less", 1, true, false, false}, {"At", 1, true, false, false},
+    {"SetAt", 2, false, false, false}, {"Slice", 2, true, false, false}, {"BitAnd", 1, true, false, false},
+    {"BitOr", 1, true, false, false}, {"BitXor", 1, true, false, false}, {"ShiftLeft", 1, true, false, false},
+    {"ShiftRight", 1, true, false, false}, {"BitNot", 0, true, false, false}, {"Inc", 0, true, false, false},
+    {"Dec", 0, true, false, false}, {"Len", 0, true, false, false},
+    //the checked forms, which "try" calls (TryAt and TrySlice are derived from At/Slice and Len when not declared)
+    {"TryPlus", 1, true, true, true}, {"TryMinus", 1, true, true, true}, {"TryMul", 1, true, true, true},
+    {"TryDiv", 1, true, true, true}, {"TryRem", 1, true, true, true}, {"TryMatMul", 1, true, true, true},
+    {"TryNeg", 0, true, true, true}, {"TryAt", 1, true, true, true}, {"TrySetAt", 2, false, true, true},
+    {"TrySlice", 2, true, true, true}, {"TryShiftLeft", 1, true, true, true}, {"TryShiftRight", 1, true, true, true},
+    {"TryInc", 0, true, true, true}, {"TryDec", 0, true, true, true},
 };
 
 //a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
@@ -3456,10 +3463,11 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
         else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
+        else if (a->type.errors.len == 0 && sh->mustFail) ErrMsgSemantic(a->tok, TRY_OPERATOR_MUST_FAIL);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) ErrMsgSemantic(a->tok, LEN_SHAPE);
         if (pub) {
-            char low[16];
+            char low[24];
             snprintf(low, sizeof(low), "%s", sh->name);
             low[0] = (char)(low[0] - 'A' + 'a');
             if (varGetMethodIn(mod, StrFromCStr(low), *ra)) ErrMsgSemantic(a->tok, OPERATOR_BOTH_CASES);
@@ -3674,6 +3682,9 @@ struct checkCtx {
                        //even though only the former also sets func (see the field above); false for a
                        //global initializer, which has no enclosing scope at all
     struct syntax* incDecRoot; //S3a: the one expression an increment may be - a statement's whole expression
+    bool buildingTarget; //E31: building an assignment's target - "x[i]" there may name only SetAt
+    bool checkingTry; //E31: building what a "try" checks (not a written call's arguments, not a nested try) - an
+                      //operator, index or slice on a declared type calls its Try form here
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
     struct var* destructSelfVar; //non-NULL only while checking a destruct{} body: a bare identifier that
@@ -4783,6 +4794,9 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
+    //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
+    if (op->opType == OPERATION_SEQ && op->args.len)
+        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
     //E11a/E11b: a rendering or a join is always byte[], and the "$" or the quotes say so where it is written
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
@@ -6366,9 +6380,32 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
     struct list* prev = prebuiltMethodArgs;
     prebuiltMethodArgs = &args;
     bool reported = false;
+    //a Try form is fallible, and only ever called for what a "try" checks (E31)
+    bool prevAllow = ctx->allowFallibleCall;
+    ctx->allowFallibleCall = (name[0] == 'T' || name[0] == 't') && name[1] == 'r' && name[2] == 'y'
+                             && name[3] >= 'A' && name[3] <= 'Z';
     struct operand* call = buildMethodCall(ctx, recv, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
+    ctx->allowFallibleCall = prevAllow;
     prebuiltMethodArgs = prev;
+    if (call && call->opType == OPERATION_FUNCCALL) call->isOperatorCall = true;
     return call;
+}
+
+//E31: the checked form of an operator on t - "TryX", or its private "tryX" - when t declares it
+static const char* tryOperatorName(struct checkCtx* ctx, struct type t, const char* capName) {
+    char* tn = MallocOrCrash(strlen(capName) + 4);
+    sprintf(tn, "Try%s", capName);
+    return operatorMethodName(ctx, t, tn);
+}
+
+//E31: the method an operator calls on t - under "try" (checkingTry) its checked form when declared. A type with only
+//the checked form is reached only under "try".
+static const char* operatorFor(struct checkCtx* ctx, struct type t, const char* capName, struct token tok) {
+    const char* tn = tryOperatorName(ctx, t, capName);
+    if (tn && ctx->checkingTry) return tn;
+    const char* n = operatorMethodName(ctx, t, capName);
+    if (!n && tn) ErrMsgSemantic(tok, ONLY_TRY_VARIANT);
+    return n;
 }
 
 //E31: "a op b" written in the program - the operator method a's type declares for op, or the built-in operation.
@@ -6400,7 +6437,7 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
         default: break;
     }
     struct operand* recv = swap ? b : a;
-    const char* name = capName ? operatorMethodName(ctx, recv->type, capName) : NULL;
+    const char* name = capName ? operatorFor(ctx, recv->type, capName, opTok) : NULL;
     if (name) {
         struct operand* seq = NULL;
         struct operand* other = swap ? a : b;
@@ -6598,7 +6635,7 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
         struct syntax* opNode = partSntx(s, i); //SNTX_EXPR_UNARY_OP
         struct token opTok = partAt(opNode, 0)->tok;
         //E31: negation a type declares ("fn (v Vec2) -() Vec2")
-        const char* negName = opTok.type == TOK_SUB ? operatorMethodName(ctx, result->type, "Neg")
+        const char* negName = opTok.type == TOK_SUB ? operatorFor(ctx, result->type, "Neg", opTok)
                             : opTok.type == TOK_BTWSE_INV ? operatorMethodName(ctx, result->type, "BitNot") : NULL;
         if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
         if (opTok.type == TOK_INC || opTok.type == TOK_DEC) {
@@ -6718,10 +6755,13 @@ static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* call
 //NULL when the type has neither, leaving the built-in form and its error.
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok) {
-    if (TypeIsNumeric(target->type) || target->type.bType == BASETYPE_TYPEVAR) return NULL;
-    const char* own = operatorMethodName(ctx, target->type, inc ? "Inc" : "Dec");
-    const char* arith = own ? NULL : operatorMethodName(ctx, target->type, inc ? "Plus" : "Minus");
-    if (!own && !arith) return NULL;
+    if (target->type.bType == BASETYPE_TYPEVAR) return NULL;
+    //under "try" (E31) a number's increment is "x = x + 1", which the try then checks for overflow
+    bool num = TypeIsNumeric(target->type);
+    if (num && !ctx->checkingTry) return NULL;
+    const char* own = num ? NULL : operatorFor(ctx, target->type, inc ? "Inc" : "Dec", tok);
+    const char* arith = own || num ? NULL : operatorFor(ctx, target->type, inc ? "Plus" : "Minus", tok);
+    if (!own && !arith && !num) return NULL;
     struct operand* seq = operandNew(tok, OPERATION_SEQ, target->type);
     seq->isIncDec = true;
     seq->comprBody = ListInit(sizeof(struct statement));
@@ -6730,7 +6770,8 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     one.type = TOK_INT_LIT;
     one.str = StrFromCStr("1");
     struct operand* next = own ? operatorCall(ctx, target, NULL, own, tok)
-                               : operatorCall(ctx, target, OperandIntLiteral(one), arith, tok);
+                         : arith ? operatorCall(ctx, target, OperandIntLiteral(one), arith, tok)
+                                 : OperandBinary(target, OperandIntLiteral(one), inc ? OPERATION_ADD : OPERATION_SUB, tok);
     struct token eq = tok;
     eq.type = TOK_ASS;
     eq.str = StrFromCStr("=");
@@ -6740,7 +6781,105 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     return seq;
 }
 
+//E31: a derived check's operand: v once lo <= v < hi (<= hi when inclusive), failing with OUT_OF_BOUNDS
+static struct operand* operandBounds(struct operand* v, struct operand* lo, struct operand* hi, bool inclusive,
+                                     struct token tok) {
+    struct operand* b = operandNew(tok, OPERATION_BOUNDS, v->type);
+    ListAdd(&b->args, &v);
+    ListAdd(&b->args, &lo);
+    ListAdd(&b->args, &hi);
+    b->isInclusive = inclusive;
+    return b;
+}
+
+//x itself when reading it twice is harmless (a literal or a variable), else a hidden local holding it - which
+//creates *seq on first use, whose statements run ahead of the expression
+static struct operand* heldOnce(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
+                                struct operand** seq) {
+    if (x->isLiteral || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
+    if (!*seq) {
+        *seq = operandNew(tok, OPERATION_SEQ, x->type);
+        (*seq)->comprBody = ListInit(sizeof(struct statement));
+    }
+    return OperandReadVar(holdInHidden(ctx, x, tok, tag, &(*seq)->comprBody), tok);
+}
+
+static struct operand* finishSeq(struct operand* seq, struct operand* call) {
+    if (!seq) return call;
+    seq->type = call->type;
+    ListAdd(&seq->args, &call);
+    return seq;
+}
+
+//an Int64 operand of a method's parameter k: a literal adapts to it, so the bounds check sees the type At takes
+static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* method, int k, struct operand* x) {
+    struct var* m = methodNamedOn(t, method);
+    if (!m || m->type.vars.len <= k) return x;
+    struct type pt = ((struct var*)ListGetIdx(&m->type.vars, k))->type;
+    if (x->isLiteral && TypeIsNumeric(pt)) reportTypeFit(OperandFitsType(ctx->func, x, pt), x->tok);
+    return x;
+}
+
+//E31: "c[i]" on a declared type - At; under "try", TryAt when declared, else At after checking i against Len()
+static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct operand* idx, struct token sq) {
+    const char* atName = operatorFor(ctx, base->type, "At", sq);
+    if (!atName) return OperandIntLiteral(sq);
+    struct operand* seq = NULL;
+    bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
+    if (derived) {
+        const char* lenName = operatorMethodName(ctx, base->type, "Len");
+        if (!lenName) ErrMsgSemantic(sq, TRY_INDEX_NEEDS_LEN);
+        else {
+            base = heldOnce(ctx, base, sq, "col", &seq);
+            idx = asParam(ctx, base->type, atName, 1, idx);
+            struct operand* len = operatorCall(ctx, base, NULL, lenName, sq);
+            idx = operandBounds(idx, OperandIntLiteral(sq), len, false, sq);
+        }
+    }
+    struct operand* call = operatorCall(ctx, base, idx, atName, sq);
+    if (!derived) call->isAtCall = true;
+    return finishSeq(seq, call);
+}
+
+//E31: "c[lo:hi]" under "try" - TrySlice when declared, else Slice after checking 0 <= lo <= hi <= Len(). An absent
+//bound is 0, or Len().
+static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base, struct operand* lo, struct operand* hi,
+                                      struct token sq) {
+    const char* slName = operatorFor(ctx, base->type, "Slice", sq);
+    if (!slName) return OperandIntLiteral(sq);
+    const char* lenName = operatorMethodName(ctx, base->type, "Len");
+    struct operand* seq = NULL;
+    bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
+    if ((derived || !hi) && !lenName) {
+        ErrMsgSemantic(sq, derived ? TRY_SLICE_NEEDS_LEN : SLICE_NEEDS_LEN);
+        derived = false;
+    }
+    if (derived || !hi) base = heldOnce(ctx, base, sq, "col", &seq);
+    if (!lo) lo = OperandIntLiteral(sq);
+    if (derived) {
+        lo = heldOnce(ctx, asParam(ctx, base->type, slName, 1, lo), sq, "lo", &seq);
+        //an absent end is Len() itself, which the check then reads a second time
+        struct operand* hiAgain = NULL;
+        if (hi) hi = hiAgain = heldOnce(ctx, asParam(ctx, base->type, slName, 2, hi), sq, "hi", &seq);
+        else {
+            hi = operatorCall(ctx, base, NULL, lenName, sq);
+            hiAgain = operatorCall(ctx, base, NULL, lenName, sq);
+        }
+        struct operand* len = operatorCall(ctx, base, NULL, lenName, sq);
+        lo = operandBounds(lo, OperandIntLiteral(sq), hiAgain, true, sq);
+        hi = operandBounds(hi, OperandIntLiteral(sq), len, true, sq);
+    } else if (!hi) {
+        hi = lenName ? operatorCall(ctx, base, NULL, lenName, sq) : OperandIntLiteral(sq);
+    }
+    struct list sargs = ListInit(sizeof(struct operand*));
+    ListAdd(&sargs, &lo);
+    ListAdd(&sargs, &hi);
+    return finishSeq(seq, operatorCallArgs(ctx, base, sargs, slName, sq));
+}
+
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
+    bool asTarget = ctx->buildingTarget; //this postfix is an assignment's target, its last part the place written
+    ctx->buildingTarget = false;
     //E13b: a "try" covers the chain's last call, not a call inside it
     struct syntaxPart* lastPart = partAt(s, s->parts.len - 1);
     bool allowLast = false;
@@ -6764,12 +6903,21 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
         } else if (p->sntx->type == SNTX_EXPR_INDEX) {
             struct syntax* idxExprNode = firstPartOfType(p->sntx, SNTX_EXPR);
             struct operand* idx = buildExprFromSyntax(ctx, idxExprNode);
-            //E31: "x[i]" on a type declaring At
-            const char* atName = result->type.bType != BASETYPE_ARRAY ? operatorMethodName(ctx, result->type, "At") : NULL;
-            if (atName) {
-                result = operatorCall(ctx, result, idx, atName, firstTokOfType(p->sntx, TOK_SQUARE_O));
-                result->isAtCall = true;
-            } else result = OperandIndex(result, idx, firstTokOfType(p->sntx, TOK_SQUARE_O));
+            //E31: "x[i]" on a type declaring At - or, under "try", TryAt
+            struct token sq = firstTokOfType(p->sntx, TOK_SQUARE_O);
+            bool hasAt = operatorMethodName(ctx, result->type, "At") || tryOperatorName(ctx, result->type, "At");
+            bool hasSet = operatorMethodName(ctx, result->type, "SetAt") || tryOperatorName(ctx, result->type, "SetAt");
+            if (result->type.bType != BASETYPE_ARRAY && hasAt) {
+                result = buildIndexCall(ctx, result, idx, sq);
+            } else if (result->type.bType != BASETYPE_ARRAY && hasSet) {
+                //a type that only stores: "x[i]" is a place for SetAt, and nothing to read (E31)
+                if (!(asTarget && i == s->parts.len - 1)) ErrMsgSemantic(sq, AT_UNDECLARED);
+                struct operand* place = operandNew(sq, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
+                ListAdd(&place->args, &result);
+                ListAdd(&place->args, &idx);
+                place->isAtCall = true;
+                result = place;
+            } else result = OperandIndex(result, idx, sq);
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
             //either bound may be absent; the colon's own position is what says which side a present one
             //sits on (see parseExprIndex)
@@ -6785,8 +6933,17 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             struct operand* lo = loNode ? buildExprFromSyntax(ctx, loNode) : NULL;
             struct operand* hi = hiNode ? buildExprFromSyntax(ctx, hiNode) : NULL;
             struct token sq = firstTokOfType(p->sntx, TOK_SQUARE_O);
-            //E31: "x[lo:hi]" on a type declaring Slice - an absent bound is 0, or the value's Len()
+            //E31: "x[lo:hi]" on a type declaring Slice - an absent bound is 0, or the value's Len(); under "try", TrySlice
+            if (result->type.bType != BASETYPE_ARRAY && !operatorMethodName(ctx, result->type, "Slice")
+                && tryOperatorName(ctx, result->type, "Slice")) {
+                result = buildSliceCall(ctx, result, lo, hi, sq);
+                continue;
+            }
             const char* slName = result->type.bType != BASETYPE_ARRAY ? operatorMethodName(ctx, result->type, "Slice") : NULL;
+            if (slName && ctx->checkingTry) {
+                result = buildSliceCall(ctx, result, lo, hi, sq);
+                continue;
+            }
             if (slName) {
                 if (!lo) lo = OperandIntLiteral(sq);
                 if (!hi) {
@@ -6827,7 +6984,10 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
     struct list exprs = allPartsOfType(argsNode, SNTX_EXPR);
     for (int i = 0; i < exprs.len; i++) {
         struct syntax* e = *(struct syntax**)ListGetIdx(&exprs, i);
+        bool prevChecking = ctx->checkingTry; //a written call's arguments are not what its "try" checks (R20)
+        ctx->checkingTry = false;
         struct operand* op = buildExprFromSyntax(ctx, e);
+        ctx->checkingTry = prevChecking;
         //D8d: a call returning several values, as the only argument, is its results as the arguments - "f(g())".
         //Each argument reads one result of the one evaluation, in order
         if (op->type.isTuple && exprs.len == 1) {
@@ -7044,9 +7204,28 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
 
 //R20: marks every operation in a tried expression that can fail a check as checked by root, and returns the
 //BuiltinError words they can produce. Not through a call (which has its own signature) or a nested try.
-static unsigned markChecked(struct operand* op, struct operand* root) {
-    if (!op || op->opType == OPERATION_FUNCCALL || (op != root && (op->isTried || op->checkRoot))) return 0;
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs);
+//E31: an operator, index or slice a declared type implements is a call the compiler made, and is reached through as the
+//built-in operation would be; one that is a Try form can fail, so it is checked by root too, its errors added to errs.
+static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs) {
+    if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && (op->isTried || op->checkRoot)))
+        return 0;
     unsigned w = 0;
+    if (op->opType == OPERATION_SEQ) w |= markCheckedStmts(&op->comprBody, root, errs); //held operands, an increment
+    if (op->opType == OPERATION_FUNCCALL) {
+        struct list* es = &op->readVar->type.errors;
+        if (es->len) {
+            if (op != root) op->checkRoot = root;
+            for (int i = 0; i < es->len; i++) {
+                struct type* e = *(struct type**)ListGetIdx(es, i);
+                bool seen = false;
+                for (int k = 0; k < errs->len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(errs, k), *e);
+                if (!seen) ListAdd(errs, &e);
+            }
+        }
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
+        return w;
+    }
     unsigned dbz = 1u << SemanticBuiltinErrorWord("DIVIDE_BY_ZERO"), ovf = 1u << SemanticBuiltinErrorWord("OVERFLOW");
     unsigned inv = 1u << SemanticBuiltinErrorWord("INVALID"), oob = 1u << SemanticBuiltinErrorWord("OUT_OF_BOUNDS");
     struct type t = op->type;
@@ -7071,22 +7250,38 @@ static unsigned markChecked(struct operand* op, struct operand* root) {
             else if (a0 && !TypeIsFloat(t) && TypeIsNumeric(a0->type) && a0->type.bType != t.bType
                      && !(t.bType == BASETYPE_INT64) && !(t.bType == BASETYPE_INT32 && a0->type.bType == BASETYPE_BYTE)) w = ovf;
             break;
-        case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_INDEX: case OPERATION_SLICE: w = oob; break;
+        case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
         default: break;
     }
     if (w) op->checkRoot = root;
-    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root);
+    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
     return w;
+}
+
+//E31: whether a try's operand is, as written, a call - "try f(x)", "try a.b().c()" - whose own signature says what
+//can fail; anything else is what "try" checks (R20), its operators calling their Try forms
+static bool tryOperandIsWrittenCall(struct syntax* n) {
+    if (!n) return false;
+    if (n->type == SNTX_EXPR_POSTFIX && n->parts.len > 1) {
+        struct syntaxPart* last = partAt(n, n->parts.len - 1);
+        if (last->isToken) return false;
+        if (last->sntx->type == SNTX_EXPR_VALUE_CALL) return true;
+        return last->sntx->type == SNTX_EXPR_MEMBR && firstPartOfType(last->sntx, SNTX_EXPR_ARGS);
+    }
+    if (n->type == SNTX_EXPR_POSTFIX) return tryOperandIsWrittenCall(partSntx(n, 0));
+    return n->type == SNTX_EXPR_PRIMARY && firstPartOfType(n, SNTX_EXPR_CALL);
 }
 
 struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_TRY);
-    bool prevAllow = ctx->allowFallibleCall;
+    bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
     ctx->allowFallibleCall = true;
     struct syntax* operandNode = firstPartOfType(s, SNTX_EXPR_POSTFIX);
     if (!operandNode) operandNode = firstPartOfType(s, SNTX_EXPR_PRIMARY);
+    ctx->checkingTry = !tryOperandIsWrittenCall(operandNode);
     struct operand* callOp = buildExprFromSyntax(ctx, operandNode);
     ctx->allowFallibleCall = prevAllow;
+    ctx->checkingTry = prevChecking;
     bool hasClauses = firstPartOfType(s, SNTX_CATCH_CLAUSE) != NULL;
     //R9a's catch-everything shorthand, retired by R9b: a default belongs to a clause, and handling every
     //error is written as one - so what a default covers is always what is written to its left
@@ -7107,12 +7302,16 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     //failure the same way a slice does, by propagating the bare error.
     struct list errors;
     struct type* rt;
-    unsigned checkWords = callOp->opType == OPERATION_FUNCCALL ? 0 : markChecked(callOp, callOp);
-    if (checkWords) {
-        //R20: "try a[i]", "try (a + b)" - the checks inside, each failing with a word of BuiltinError
+    struct list opErrs = ListInit(sizeof(struct type*));
+    bool writtenCall = callOp->opType == OPERATION_FUNCCALL && !callOp->isOperatorCall;
+    unsigned checkWords = writtenCall ? 0 : markChecked(callOp, callOp, &opErrs);
+    if (checkWords || opErrs.len) {
+        //R20: "try a[i]", "try (a + b)" - the checks inside, each failing with a word of BuiltinError, and (E31) the
+        //errors of the Try forms of a declared type's operators
         errors = ListInit(sizeof(struct type*));
         struct type* builtin = SemanticBuiltinErrorType();
-        if (builtin) ListAdd(&errors, &builtin);
+        if (builtin && checkWords) ListAdd(&errors, &builtin);
+        for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
         rt = &callOp->type;
     } else if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar->type.errors.len > 0) {
         errors = callOp->readVar->type.errors;
@@ -7797,6 +7996,7 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     struct checkCtx innerCtx = *ctx;
     innerCtx.scope = &inner;
     innerCtx.blockDepth = ctx->blockDepth + 1;
+    innerCtx.checkingTry = false; //a lambda's or a clause's block is no part of what a "try" checks
 
     struct list result = ListInit(sizeof(struct statement));
     struct list stmts = allPartsOfType(blockNode, SNTX_STMNT);
@@ -8402,7 +8602,13 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
 
 struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* lhsNode = firstPartOfType(s, SNTX_EXPR_POSTFIX);
+    //a target is a place, not a read: "x[i]" there is SetAt's business, which "try" reaches in buildSetAt (E31)
+    bool prevChecking = ctx->checkingTry;
+    ctx->checkingTry = false;
+    ctx->buildingTarget = true;
     struct operand* target = buildExprFromSyntax(ctx, lhsNode);
+    ctx->buildingTarget = false;
+    ctx->checkingTry = prevChecking;
     struct syntax* opNode = firstPartOfType(s, SNTX_ASSIGN_OP);
     struct token opTok = partAt(opNode, 0)->tok;
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
@@ -8418,18 +8624,26 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
     struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
-    const char* setName = operatorMethodName(ctx, base->type, "SetAt");
-    if (!setName) { ErrMsgSemantic(opTok, SETAT_UNDECLARED); return (struct statement){0}; }
-    struct var* setM = methodNamedOn(base->type, setName);
-    if (setM && setM->type.errors.len > 0) { ErrMsgSemantic(opTok, SETAT_FALLIBLE); return (struct statement){0}; }
+    //under "try" (E31): TrySetAt when declared, else SetAt after checking i against Len()
+    const char* setName = operatorFor(ctx, base->type, "SetAt", opTok);
+    if (!setName) {
+        if (!tryOperatorName(ctx, base->type, "SetAt")) ErrMsgSemantic(opTok, SETAT_UNDECLARED);
+        return (struct statement){0};
+    }
+    bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
+    const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
+    if (derived && !lenName) { ErrMsgSemantic(opTok, TRY_SETAT_NEEDS_LEN); derived = false; }
     bool isCompound = false;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct list pre = ListInit(sizeof(struct statement));
     struct operand* value = rhs;
-    if (isCompound) {
+    if (isCompound || derived) {
         if (!(base->opType == OPERATION_READ_VAR)) base = OperandReadVar(holdInHidden(ctx, base, opTok, "base", &pre), opTok);
         if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) idx = OperandReadVar(holdInHidden(ctx, idx, opTok, "idx", &pre), opTok);
-        struct operand* cur = operatorCall(ctx, base, idx, operatorMethodName(ctx, base->type, "At"), opTok);
+    }
+    if (isCompound) {
+        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok)
+                                               : operatorCall(ctx, base, idx, operatorMethodName(ctx, base->type, "At"), opTok);
         struct token binTok = opTok;
         switch (compoundOp) {
             case OPERATION_ADD: binTok.type = TOK_ADD; break;
@@ -8445,6 +8659,10 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             default: binTok.type = TOK_NONE; break;
         }
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
+    }
+    if (derived) {
+        idx = asParam(ctx, base->type, setName, 1, idx);
+        idx = operandBounds(idx, OperandIntLiteral(opTok), operatorCall(ctx, base, NULL, lenName, opTok), false, opTok);
     }
     struct list args = ListInit(sizeof(struct operand*));
     ListAdd(&args, &idx);
@@ -8492,7 +8710,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             case OPERATION_BTSFT_R: cap = "ShiftRight"; break;
             default: break;
         }
-        const char* nm = cap ? operatorMethodName(ctx, target->type, cap) : NULL;
+        const char* nm = cap ? operatorFor(ctx, target->type, cap, opTok) : NULL;
         if (nm) value = operatorCall(ctx, target, rhs, nm, opTok);
         else value = OperandBinary(target, rhs, compoundOp, opTok);
     }
@@ -9380,6 +9598,85 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     return rangeIf(OperandBoolLiteral(t), pre);
 }
 
+//S9e: a "break" or "continue" in a for-in's catch clause that would leave a loop the clause is not inside - the
+//clause runs once the loop has ended, so it could only mean an enclosing loop, which the lowering cannot reach
+static struct token clauseLoopExit(struct syntax* n) {
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = partAt(n, i);
+        if (p->isToken) continue;
+        enum syntaxType t = p->sntx->type;
+        if (t == SNTX_STMNT_BREAK || t == SNTX_STMNT_CONTINUE) return firstTokAnywhere(p->sntx);
+        if (t == SNTX_STMNT_FOR || t == SNTX_STMNT_FOR_IN || t == SNTX_STMNT_DO || t == SNTX_LAMBDA) continue;
+        struct token r = clauseLoopExit(p->sntx);
+        if (r.type != TOK_NONE) return r;
+    }
+    return (struct token){0};
+}
+
+//S9e: what a for-in calls by itself - the source, Iter(), Next(), TryAt() - when it can fail. Under "in try" each such
+//call is tried with the loop's catch clauses, every clause ending by leaving the loop (a "break" appended), so an error
+//ends the loop and what follows it runs; unnamed errors propagate. Without "try" a fallible one is an error.
+struct forInTry {
+    bool on;              //"in try" was written
+    struct syntax* s;     //the for-in, whose clauses these are
+    struct list errors;   //every error the loop's own calls can produce (struct type*)
+    struct list calls;    //the fallible calls (struct operand*), clauses attached once all are known
+    struct checkCtx ctxs[8]; //each call's context, for building its clauses where the call is
+    struct token kw;
+};
+
+static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct operand* call) {
+    if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar || !call->readVar->type.errors.len) return;
+    if (!ft->on) { ErrMsgSemantic(ft->kw, FOR_IN_NEEDS_TRY); return; }
+    if (ft->calls.len >= 8) return;
+    call->isTried = true;
+    struct list* es = &call->readVar->type.errors;
+    for (int i = 0; i < es->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(es, i);
+        bool seen = false;
+        for (int k = 0; k < ft->errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&ft->errors, k), *e);
+        if (!seen) ListAdd(&ft->errors, &e);
+    }
+    ft->ctxs[ft->calls.len] = *ctx;
+    ListAdd(&ft->calls, &call);
+}
+
+static void forInTryFinish(struct forInTry* ft) {
+    if (!ft->on) return;
+    if (!ft->calls.len) { ErrMsgSemantic(ft->kw, FOR_IN_TRY_NOTHING); return; }
+    bool hasClauses = firstPartOfType(ft->s, SNTX_CATCH_CLAUSE) != NULL;
+    struct token bad = (struct token){0};
+    for (int i = 0; hasClauses && i < ft->s->parts.len && bad.type == TOK_NONE; i++) {
+        struct syntaxPart* p = partAt(ft->s, i);
+        if (!p->isToken && p->sntx->type == SNTX_CATCH_CLAUSE) bad = clauseLoopExit(p->sntx);
+    }
+    if (bad.type != TOK_NONE) ErrMsgSemantic(bad, FOR_IN_CLAUSE_LOOP_EXIT);
+    for (int c = 0; c < ft->calls.len; c++) {
+        struct operand* call = *(struct operand**)ListGetIdx(&ft->calls, c);
+        struct checkCtx* cctx = &ft->ctxs[c];
+        if (!hasClauses) {
+            if (c == 0) {
+                struct type et = (struct type){0};
+                et.errors = ft->errors;
+                checkTrySuperset(cctx, ft->kw, et);
+            }
+            continue;
+        }
+        //built once per call, each in its own place - a clause's block is code, emitted where the call is; reported once
+        if (c > 0) ErrMsgMuteStart();
+        cctx->inLoop = true;
+        buildCatchClauses(cctx, ft->s, call, &ft->errors, false, NULL, ft->kw, &call->catchClauses);
+        if (c > 0) ErrMsgMuteEnd();
+        for (int k = 0; k < call->catchClauses.len; k++) {
+            struct catchClause* cc = ListGetIdx(&call->catchClauses, k);
+            if (!cc->hasBlock) { cc->hasBlock = true; cc->block = ListInit(sizeof(struct statement)); }
+            struct statement brk = (struct statement){0};
+            brk.sType = STATEMENT_BREAK;
+            ListAdd(&cc->block, &brk);
+        }
+    }
+}
+
 //S9a: "for x in a" / "for i, x in a". Lowered, in a block of its own, to what the program could have written:
 //for an array, a borrow of it and a counted loop whose body starts by copying out element i; for an
 //iterator (a type with "mut Next() (T, bool)"), or a value whose "Iter()" returns one, a hidden iterator
@@ -9406,6 +9703,13 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         }
     }
     struct syntax* rangeNode = firstPartOfType(s, SNTX_RANGE);
+    struct forInTry ft = (struct forInTry){0};
+    ft.on = hasTokOfType(s, TOK_TRY);
+    ft.s = s;
+    ft.kw = kw;
+    ft.errors = ListInit(sizeof(struct type*));
+    ft.calls = ListInit(sizeof(struct operand*));
+    if (rangeNode && ft.on) ErrMsgSemantic(firstTokOfType(s, TOK_TRY), FOR_IN_TRY_NOTHING);
     if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 
     //the block the whole lowering lives in, so its hidden names end with the loop
@@ -9415,7 +9719,11 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     wctx.blockDepth = ctx->blockDepth + 1;
     struct list pre = ListInit(sizeof(struct statement));
 
+    //S9e: what the loop calls by itself may fail - checked below, under "in try" or as an error
+    wctx.allowFallibleCall = true;
     struct operand* src = buildExprFromSyntax(&wctx, firstPartOfType(s, SNTX_EXPR));
+    wctx.allowFallibleCall = false;
+    forInTryNote(&ft, &wctx, src);
     bool isArray = src->type.bType == BASETYPE_ARRAY;
     bool indexable = false; //S9d: walked through At and Len
     const char* atName = NULL;
@@ -9447,7 +9755,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct statement r = comprOpStmt(OPERATION_COMPR_RESERVE, OperandLen(OperandReadVar(arr, kw), kw), kw);
             ListAdd(&pre, &r);
         }
-    } else if (!forInMethod(src->type, "Next") && !forInMethod(src->type, "Iter") && operatorMethodName(&wctx, src->type, "At")
+    } else if (!forInMethod(src->type, "Next") && !forInMethod(src->type, "Iter")
+               && (operatorMethodName(&wctx, src->type, "At") || tryOperatorName(&wctx, src->type, "At"))
                && operatorMethodName(&wctx, src->type, "Len")) {
         //S9d: a type with At and Len - and neither a Next nor an Iter of its own, either of which says how it wants
         //to be walked (a List indexed by position would search its chunks for every element) - is walked as an
@@ -9455,10 +9764,10 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         //positions 0 to Len()-1, each element At(i), Len() read every iteration. The collection is borrowed
         //(E12c), never copied, so writes through it in the body are seen.
         indexable = true;
+        //a type with only TryAt, the checked form, is walked through it - which "in try" then covers (S9e)
         atName = operatorMethodName(&wctx, src->type, "At");
+        if (!atName) atName = tryOperatorName(&wctx, src->type, "At");
         lenName = operatorMethodName(&wctx, src->type, "Len");
-        struct var* atM = methodNamedOn(src->type, atName);
-        if (atM && atM->type.errors.len > 0) { ErrMsgSemantic(src->tok, FOR_IN_AT_FALLIBLE); return (struct statement){0}; }
         struct type refT = src->type;
         refT.structMAlloc = true;
         bool unnamed = false;
@@ -9480,7 +9789,10 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         //S9c: an ITERABLE - no Next() of its own, but an Iter() handing out a fresh iterator - is walked
         //through that iterator, so the collection keeps no position and every loop gets its own
         if (!forInMethod(src->type, "Next") && forInMethod(src->type, "Iter")) {
+            wctx.allowFallibleCall = true;
             itOp = forInCall(&wctx, src, kw, "Iter");
+            wctx.allowFallibleCall = false;
+            forInTryNote(&ft, &wctx, itOp);
             src = itOp;
         }
         nextM = forInMethod(src->type, "Next");
@@ -9495,7 +9807,12 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         }
         bool ok = nextM && rt && rt->isTuple && rt->vars.len == 2
                   && (*(struct var*)ListGetIdx(&rt->vars, 1)).type.bType == BASETYPE_BOOL;
-        if (ok && src->type.bType != BASETYPE_INTERFACE) {
+        //S9e: a Next that can fail is not Iterator<T>'s (whose Next cannot), so its shape is what is checked - a
+        //writable receiver, as Iterator<T> asks
+        if (ok && nextM->type.errors.len > 0) {
+            struct var* r0 = nextM->type.vars.len ? ListGetIdx(&nextM->type.vars, 0) : NULL;
+            ok = r0 && (r0->mut || r0->type.refMut);
+        } else if (ok && src->type.bType != BASETYPE_INTERFACE) {
             struct list b = ListInit(sizeof(struct typeBinding));
             struct typeBinding tb = (struct typeBinding){0};
             tb.name = StrFromCStr("T");
@@ -9554,10 +9871,14 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
                                          : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
+        if (indexable) forInTryNote(&ft, &lctx, elem);
         struct statement d = buildVarDeclFromOperand(&lctx, elemTok, elem);
         ListAdd(&body, &d);
     } else {
+        lctx.allowFallibleCall = true;
         struct operand* call = forInCall(&lctx, OperandReadVar(iter, kw), kw, "Next");
+        lctx.allowFallibleCall = false;
+        forInTryNote(&ft, &lctx, call);
         struct token rt = forInHiddenTok(kw, "R");
         struct type ht = call->type;
         ht.scopeDepth = lctx.blockDepth;
@@ -9586,6 +9907,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list user = forInBody(&lctx, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
+    forInTryFinish(&ft);
     struct list after = snapshotScopeBindings(lctx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -9600,6 +9922,15 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     wrap.sType = STATEMENT_IF;
     wrap.op = OperandBoolLiteral(t);
     wrap.block = pre;
+    if (ft.on && ft.calls.len && firstPartOfType(s, SNTX_CATCH_CLAUSE)) {
+        //S9e: the block runs once, as a loop, so a clause's "break" ends it whether the call was ahead of the loop
+        //or inside it - the inner loop's own end then reaches this one's
+        struct statement brk = (struct statement){0};
+        brk.sType = STATEMENT_BREAK;
+        ListAdd(&wrap.block, &brk);
+        wrap.sType = STATEMENT_FOR;
+        wrap.op = NULL;
+    }
     return wrap;
 }
 
@@ -10810,6 +11141,76 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
 
 }
 
+//R20/E31: marks every check in statements built under "try" by root, as markChecked does for an expression
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs) {
+    unsigned w = 0;
+    for (int i = 0; i < stmts->len; i++) {
+        struct statement* st = ListGetIdx(stmts, i);
+        w |= markChecked(st->target, root, errs) | markChecked(st->op, root, errs) | markChecked(st->fillValue, root, errs);
+        w |= markCheckedStmts(&st->block, root, errs);
+        if (st->elseStmnt) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, st->elseStmnt);
+            w |= markCheckedStmts(&one, root, errs);
+        }
+    }
+    return w;
+}
+
+//E31: "try x[i] = v", "try x[i] op= v", "try x++" - the statement checked as "try (...)" checks an expression: the
+//store (TrySetAt, or SetAt after a check against Len(); an array's bounds), the value, and an operator it implies
+//(the Try forms, or the built-in checks). An error a clause takes continues after the statement.
+struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_TRY);
+    struct syntax* inner = partSntx(s, 1);
+    struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
+    root->comprBody = ListInit(sizeof(struct statement));
+    root->isTryStmt = true;
+    bool prevChecking = ctx->checkingTry;
+    ctx->checkingTry = true;
+    struct statement st;
+    if (inner->type == SNTX_STMNT_ASSIGN) st = buildAssignStmnt(ctx, inner);
+    else {
+        struct syntax* prevRoot = ctx->incDecRoot;
+        struct syntax* n = inner;
+        while (n->parts.len == 1 && !partAt(n, 0)->isToken) n = partSntx(n, 0);
+        ctx->incDecRoot = n;
+        st = (struct statement){0};
+        st.sType = STATEMENT_EXPR;
+        st.op = buildExprFromSyntax(ctx, inner);
+        ctx->incDecRoot = prevRoot;
+    }
+    ctx->checkingTry = prevChecking;
+    //a hidden-locals wrapper ("if true { ... }") is flattened, so a clause's jump to after the statement leaves no
+    //block of its own behind
+    if (st.sType == STATEMENT_IF && !st.elseStmnt && st.op && st.op->isLiteral && st.op->opType == OPERATION_NONE
+            && !st.op->isNullLiteral && st.block.len) {
+        for (int i = 0; i < st.block.len; i++) ListAdd(&root->comprBody, ListGetIdx(&st.block, i));
+    } else ListAdd(&root->comprBody, &st);
+    struct list opErrs = ListInit(sizeof(struct type*));
+    unsigned w = markCheckedStmts(&root->comprBody, root, &opErrs);
+    struct statement out = (struct statement){0};
+    out.sType = STATEMENT_EXPR;
+    out.op = root;
+    if (!w && !opErrs.len) { ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL); return out; }
+    struct list errors = ListInit(sizeof(struct type*));
+    struct type* builtin = SemanticBuiltinErrorType();
+    if (builtin && w) ListAdd(&errors, &builtin);
+    for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
+    root->isTried = true;
+    if (firstPartOfType(s, SNTX_CATCH_CLAUSE)) {
+        unsigned prevMask = builtinWordMask;
+        if (w) builtinWordMask = w;
+        buildCatchClauses(ctx, s, root, &errors, false, NULL, tok, &root->catchClauses);
+        builtinWordMask = prevMask;
+    } else {
+        struct type et = (struct type){0};
+        et.errors = errors;
+        checkTrySuperset(ctx, tok, et);
+    }
+    return out;
+}
+
 struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_TRY);
     //parseStmntTryCatch takes a POSTFIX expression (so "try a[lo:hi] catch" reaches here at all rather than
@@ -10820,10 +11221,12 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_TRY_CATCH;
 
-    bool prevAllow = ctx->allowFallibleCall;
+    bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
     ctx->allowFallibleCall = true;
+    ctx->checkingTry = !tryOperandIsWrittenCall(primaryNode);
     struct operand* callOp = buildExprFromSyntax(ctx, primaryNode);
     ctx->allowFallibleCall = prevAllow;
+    ctx->checkingTry = prevChecking;
     stmt.op = callOp;
 
     //the catch-STATEMENT form handles a fallible call. A tried slice (E16c) is deliberately not accepted
@@ -10881,6 +11284,7 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_ASSERT: return buildAssertStmnt(ctx, actual);
         case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
         case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
+        case SNTX_STMNT_TRY_STORE: return buildTryStoreStmnt(ctx, actual);
         case SNTX_STMNT_EXPR: return buildExprStmnt(ctx, actual);
         default: ErrorBugFound(); return (struct statement){0};
     }

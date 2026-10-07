@@ -7573,3 +7573,25 @@ from their original form.
   recognised protocol method elsewhere, now shape-checked like the operators. The precedence first proposed - Next,
   then At + Len, then Iter - was corrected by the user mid-build: a type writing its own `Iter` is saying how to be
   walked, and `List` given an `At` would otherwise be walked position by position, each `At` searching the chunks.
+
+- **Checked forms (E31a), `try` on stores (R21), `for x in try c` (S9e), 2026-10-07.** Asked "won't pretty much every
+  At be able to fail with a bad index?" - no, indexing is unchecked unless `try` asks (E16), and the loop only passes
+  valid positions; but a user type could not offer both `c[i]` and a checked `try c[i]` the way an array does. The
+  user proposed `CheckedAt`, "maybe both" - a derived check plus a declarable override, the pattern of `Inc` derived
+  from `Plus`. Settled: plain forms never fail, `Try` forms (the user preferred `TryAt` to `CheckedAt`) declare errors
+  and are what `try` calls, `TryAt`/`TrySlice`/`TrySetAt` derived from the plain form and `Len`; the same split for
+  every operator that can reasonably fail. The user then raised "try only binds to the nearest thing"; three binding
+  designs (a wide try that checks everything, a wide try plus a `checked` word, try covering whole postfix chains)
+  were laid out, and the user clarified the real complaint: loops call methods implicitly and there is nowhere to put
+  `try`. Answer: `try` on the loop's source covers the loop's own calls, with catch clauses after the body; this also
+  lets `Next` fail, so an iterator over I/O can report errors.
+  Implementation notes: a derived check is an `OPERATION_BOUNDS` operand (value, lower, upper) in the At/Slice/SetAt
+  call's arguments; `markChecked` reaches through operator calls (flagged `isOperatorCall`), collecting fallible Try
+  forms' errors; a nested fallible call dispatches to its root's clauses (`checkRoot`); a `try` statement is an
+  `OPERATION_SEQ` root with `isTryStmt`, its clauses falling through to a label emitted after it; the for-in builds
+  the clauses once per fallible implicit call against the union of their errors (muted after the first) and appends a
+  `break`, the whole lowering becoming a one-shot loop. Four pre-existing defects turned up: an unknown character in a
+  function body hung the parser forever (the top-level loop stopped in front of a stray `}` it never consumed); a
+  type with `SetAt` and no `At` crashed the compiler on `x[i] = v`; the evaluator's `errBypass` made a tried index
+  ignore a failure of a check nested in its own index, where the generated code takes it; and an absent slice end
+  evaluated the sliced expression twice.

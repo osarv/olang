@@ -1732,7 +1732,8 @@ compile-time error.
 
 **E15a (checked operations).** `try` applied to anything other than a call - an index, a slice, or a
 parenthesized expression, `try (a * b / c)` - **checks every operation inside it that can fail**, other than
-inside a call (which has its own signature) or a nested `try`. Each check fails with a word of `BuiltinError`
+inside a call (which has its own signature) or a nested `try`. An operation a type declares (E31) is checked by
+calling its checked form (E31a), whose own errors the tried expression then can produce too. Each check fails with a word of `BuiltinError`
 (§7.7) instead of doing what the unchecked operation does:
 
 | operation | fails with |
@@ -1998,9 +1999,25 @@ type declares one:
 
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
 name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
-by one of these names without its shape. Only `At`, `SetAt`, `Slice` and `Call` may declare errors - the others have
-nowhere to write `try`: a fallible `At` is read as `try x[i]`, a fallible `Slice` as `try x[lo:hi]`, a fallible `Call`
-as `try f(x)`; a fallible `SetAt` cannot be reached by `x[i] = v`, which has no `try`, and is called by name.
+by one of these names without its shape. None of them may declare errors except `Call`, which stands for a function
+and is called `try f(x)` when it can fail.
+
+**E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
+`TryAt`, `TrySetAt`, `TrySlice`, `TryPlus`, `TryMinus`, `TryMul`, `TryDiv`, `TryRem`, `TryMatMul`, `TryNeg`,
+`TryShiftLeft`, `TryShiftRight`, `TryInc` and `TryDec` - each with its operation's shape, and each **declaring the
+errors it fails with** (one declaring none is an error). The lowercase spelling is private, as above. The plain form
+is what the operator calls; the checked form is what it calls **where `try` checks it** (E15a, R21, S9e). Where a
+type declares no checked form:
+
+- `TryAt` is **derived** from `At` and `Len`: the position is checked against `[0, x.Len())`, failing with
+  `BuiltinError.OUT_OF_BOUNDS` (R20), and `At` is called - so `try x[i]` on such a type checks exactly as it does on
+  an array. `TrySlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and `TrySetAt`
+  from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or stored into
+  under `try` - a compile-time error.
+- every other operation is its plain form, which the `try` then does not check.
+
+A type declaring only the checked form of an operation (`TryAt` and no `At`) has that operation only under `try`:
+`x[i]` without it is an error. A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors are exactly the function type's (and a generic function type's variables are inferred from them):
@@ -2039,7 +2056,7 @@ closing `}`.
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | done-stmnt | fail-stmnt | abort-stmnt
 | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt` and `try-catch-stmnt` in §7;
+| try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and `try-store-stmnt` in §7;
 `spawn-stmnt` and `join-stmnt` in §6.8.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
@@ -2139,6 +2156,7 @@ for-stmnt ::= "for" block                                   (forever)
             | "for" expr block                              (while expr holds)
             | "for" for-init "," expr "," simple-stmnt block (three clauses)
             | "for" IDEN [ "," IDEN ] "in" expr block        (S9a)
+            | "for" IDEN [ "," IDEN ] "in" "try" expr block { catch-clause }   (S9e)
             | "for" IDEN [ "," IDEN ] "in" range-expr block  (S9b)
 ```
 
@@ -2168,13 +2186,22 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
 - an **indexable** value (S9d): one whose type has `At(i Int64) T` and `Len() Int64` (E31) and neither a `Next()` nor
   an `Iter()` of its own - either of which says how the type wants to be walked. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
-  borrowed (E12c), never copied. An `At` that can fail is an error here, a loop having nowhere to write `try`.
+  borrowed (E12c), never copied. A type with `TryAt` and `Len` but no `At` is walked through `TryAt`, under S9e.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
 
 Anything else after `in` is a compile-time error. `break` and `continue` (S11) apply as in every loop;
 `continue` moves to the next value.
+
+**S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
+a call, `Iter()`, `Next()`, `TryAt()` - and any of them may declare errors. Such a loop is written with `try` after
+`in`, which covers exactly those calls (a call written in the body takes its own `try`); one whose own calls cannot
+fail may not be written with it, and one whose own calls can fail must be. `Next()` may then declare errors - the
+iterator does not satisfy `Iterator<T>`, whose `Next` cannot fail, and needs only its shape and a writable
+receiver. An error from one of these calls **ends the loop**: the first clause naming it runs its block, and control
+continues after the loop; an error no clause names propagates, as from any `try`. A clause runs once the loop has
+ended, so a `break` or `continue` directly in one is a compile-time error.
 
 **S9b (`range`).** After a `for`'s `in` (and nowhere else), `range-expr ::= "range" expr [ "," expr [ "," expr ] ]`
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its
@@ -2774,6 +2801,14 @@ default v` in value position - which catches whatever no earlier clause took (R1
 uncaught past `main` (§10.3 B5), the diagnostic says so rather than naming a type and word that do not exist.
 
 ### 7.7 Built-in errors
+
+**R21 (checked statements).** `try-store-stmnt ::= "try" ( lvalue assign-op expr | increment ) { catch-clause }
+STMNT_END`, where `increment` is one of `x++`, `x--`, `++x`, `--x`. The statement is checked as E15a checks an
+expression: the store (an array's bounds; a declared type's `TrySetAt`, or its derived form, E31a), the value, and
+the operator an assignment or increment implies (`x[i] += v` reads through `TryAt` and adds through `TryPlus` when
+declared, or the built-in checked addition; `x++` on a number checks for overflow, on a declared type calls `TryInc`,
+else `TryPlus`, else the plain forms). Its clauses are a statement's (R10): one that takes an error runs its block
+and control continues after the statement; an error no clause names propagates.
 
 **R20.** The checks the language itself makes report **`BuiltinError`**, an error type declared in the prelude:
 

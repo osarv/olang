@@ -1354,6 +1354,7 @@ static struct syntax* parseComprehensionClause(SyntaxCtx sc) {
     return s;
 }
 
+struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk);
 //S9a: "for NAME [, NAME] in expr block"
 static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     int cur = TokenGetCursor(sc->tc);
@@ -1369,6 +1370,8 @@ static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     if (in.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
     ListAdd(&sc->localNames, &n1.str); //S8b: the loop's names are locals
     if (n2.type != TOK_NONE) ListAdd(&sc->localNames, &n2.str);
+    //S9e: "for x in try c" - the try covers what the loop calls by itself, with catch clauses after the body
+    struct token tryKw = acceptTok(sc, TOK_TRY);
     struct syntax* e = parseForInSource(sc, false);
     if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* block = parseBlock(sc);
@@ -1378,8 +1381,13 @@ static struct syntax* parseStmntForIn(SyntaxCtx sc, struct token kw) {
     addTok(s, n1);
     if (n2.type != TOK_NONE) addTok(s, n2);
     addTok(s, in);
+    if (tryKw.type != TOK_NONE) addTok(s, tryKw);
     addSntx(s, e);
     addSntx(s, block);
+    if (tryKw.type != TOK_NONE) {
+        struct syntax* clause;
+        while ((clause = parseCatchClause(sc, false))) addSntx(s, clause);
+    }
     return s;
 }
 
@@ -1849,6 +1857,53 @@ struct syntax* parseStmntTryCatch(SyntaxCtx sc) {
     return s;
 }
 
+//an increment written as a whole expression: "x++" (a postfix ending in the operator) or "++x" (a unary starting with it)
+static bool syntaxIsIncDec(struct syntax* n) {
+    while (n->parts.len == 1 && !((struct syntaxPart*)ListGetIdx(&n->parts, 0))->isToken)
+        n = ((struct syntaxPart*)ListGetIdx(&n->parts, 0))->sntx;
+    if (n->parts.len < 2) return false;
+    struct syntaxPart* last = ListGetIdx(&n->parts, n->parts.len - 1);
+    if (n->type == SNTX_EXPR_POSTFIX) return last->isToken && (last->tok.type == TOK_INC || last->tok.type == TOK_DEC);
+    if (n->type == SNTX_EXPR_UNARY && n->parts.len == 2) {
+        struct syntaxPart* op = ListGetIdx(&n->parts, 0);
+        if (op->isToken || op->sntx->parts.len != 1) return false;
+        struct syntaxPart* t = ListGetIdx(&op->sntx->parts, 0);
+        return t->isToken && (t->tok.type == TOK_INC || t->tok.type == TOK_DEC);
+    }
+    return false;
+}
+
+//E31: "try" before an assignment or an increment checks the statement as "try (...)" checks an expression - the
+//store, the value and the operator it implies - with catch clauses, as a try-catch statement has, after it
+struct syntax* parseStmntTryStore(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_TRY);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* inner = NULL;
+    int at = TokenGetCursor(sc->tc);
+    struct syntax* lhs = parseExprPostfix(sc);
+    struct syntax* op = lhs ? parseAssignOp(sc) : NULL;
+    struct syntax* rhs = op ? parseExpr(sc) : NULL;
+    if (rhs) {
+        inner = newNode(SNTX_STMNT_ASSIGN);
+        addSntx(inner, lhs);
+        addSntx(inner, op);
+        addSntx(inner, rhs);
+    } else {
+        TokenSetCursor(sc->tc, at);
+        struct syntax* e = parseExpr(sc);
+        if (!e || !syntaxIsIncDec(e)) { TokenSetCursor(sc->tc, cur); return NULL; }
+        inner = e;
+    }
+    struct syntax* s = newNode(SNTX_STMNT_TRY_STORE);
+    addTok(s, kw);
+    addSntx(s, inner);
+    struct syntax* clause;
+    while ((clause = parseCatchClause(sc, false))) addSntx(s, clause);
+    if (!acceptStmntEnd(sc)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
 //wrapped in a genuine SNTX_STMNT node - buildBlock finds statements by searching for that exact type
 //(allPartsOfType(blockNode, SNTX_STMNT)), and buildStatement then unwraps part[0] itself - same reasoning
 //as parseTopDecl's own wrapper
@@ -1904,6 +1959,7 @@ struct syntax* parseStmnt(SyntaxCtx sc) {
     if ((inner = parseStmntDestruct(sc))) {}
     else if ((inner = parseMultiDeclStmnt(sc))) {}
     else if ((inner = parseVarDecl(sc))) {}
+    else if ((inner = parseStmntTryStore(sc))) {}
     else if ((inner = parseStmntAssign(sc))) {}
     else if ((inner = parseStmntIf(sc))) {}
     else if ((inner = parseStmntFor(sc))) {}
@@ -3594,6 +3650,13 @@ struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKno
     while (true) {
         struct token peek = peekTok(&sc);
         if (peek.type == TOK_NONE) break;
+        //a "}" closing nothing - the end of a function whose body failed to parse partway, its item skipped only
+        //that far - is skipped too: skipTopItem stops in front of a "}" it did not open, which at the top level
+        //would be forever
+        if (peek.type == TOK_CURLY_C) {
+            TokenFeed(sc.tc);
+            continue;
+        }
 
         parseTopItem(&sc, &mod.decls);
     }

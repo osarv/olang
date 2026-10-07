@@ -103,6 +103,7 @@ enum syntaxType {
     SNTX_CATCH_ERR_LIST,
     SNTX_CATCH_CLAUSE,
     SNTX_STMNT_TRY_CATCH,
+    SNTX_STMNT_TRY_STORE, //E31: "try x[i] = v", "try x[i] += v", "try x++" - [try, ASSIGN | EXPR, clauses...]
     SNTX_STMNT,
     SNTX_BLOCK,
     SNTX_SCOPE_DECL,     //"&name" right after a func/type declaration's own name (§8 O3) - declares a

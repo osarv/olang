@@ -1,9 +1,0 @@
-# check: fail this At can fail
-error E { X }
-type Bag struct() { n Int64 = 2 }
-fn (b Bag&) At(i Int64) Int32 ? E { return 1 }
-fn (b Bag&) Len() Int64 { return b.n }
-fn main() ? {
-    b Bag& = Bag()
-    for x in b { }
-}

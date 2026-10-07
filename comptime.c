@@ -346,7 +346,8 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
             struct ctVal* base = ctDeref(ctLvalue(st, baseOp, forWrite));
             struct ctVal* idx = base ? ctEval(st, idxOp) : NULL;
             if (!base || !idx) {
-                if (st->flow == CF_ERROR && op->isTried) st->errBypass = true; //not this index's own failure
+                //not this index's own failure - unless it is a check this try asked for (R20)
+                if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
                 return NULL;
             }
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it indexes a null array");
@@ -823,7 +824,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         struct operand* a0 = *(struct operand**)ListGetIdx(&op->args, 0);
         recv = ctFit(st, a0, ((struct var*)ListGetIdx(&func->type.vars, 0))->type);
         if (!recv) {
-            if (st->flow == CF_ERROR) st->errBypass = true;
+            if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
             return NULL;
         }
         if (recv->kind == CT_NULL) return ctFail(st, op->tok, "it calls a method through a null interface value");
@@ -860,7 +861,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         //a dispatched method's receiver: the instance the interface names, or a copy for a by-value receiver
         struct ctVal* v = recv && i == 0 ? (ctIsRef(p->type) ? recv : recv->target) : ctFit(st, a, p->type);
         if (!v) {
-            if (st->flow == CF_ERROR) st->errBypass = true; //from an argument, not from this call
+            //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
+            if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
             return NULL;
         }
         //a parameter is a node of its own: a value one holds a copy, a reference one points where the
@@ -887,7 +889,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     st->depth--;
     st->locals = saved;
     st->func = savedFunc;
-    if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = NULL; } //this call's clauses see it
+    //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
+    if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
     if (st->flow == CF_RETURN) {
         st->flow = CF_NORMAL;
         struct ctVal* r = st->ret;
@@ -1141,7 +1144,7 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
 static struct ctVal* ctEval(struct ctState* st, struct operand* op) {
     if (op->ctCached) return op->ctCached; //E30: a chain's shared operand, evaluated once
     struct ctVal* r = ctEvalOp(st, op);
-    if (!r && op->isTried && op->checkRoot == op && st->flow == CF_ERROR && st->errCheckRoot == op)
+    if (!r && op->isTried && st->flow == CF_ERROR && st->errCheckRoot == op)
         return ctHandleTry(st, op);
     return r;
 }
@@ -1208,6 +1211,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_SEQ: { //statements in the enclosing block, then the value
             for (int i = 0; i < op->comprBody.len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(&op->comprBody, i));
             if (st->flow != CF_NORMAL) return NULL;
+            if (!op->args.len) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID)); //E31: a "try x[i] = v" statement
             return ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
         }
         case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended
@@ -1282,6 +1286,15 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
             return ctFail(st, op->tok, "it uses an atomic operation");
         case OPERATION_SLICE: return ctSlice(st, op);
+        case OPERATION_BOUNDS: { //E31: a derived TryAt/TrySlice's check
+            struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+            struct ctVal* lo = v ? ctEval(st, *(struct operand**)ListGetIdx(&op->args, 1)) : NULL;
+            struct ctVal* hi = lo ? ctEval(st, *(struct operand**)ListGetIdx(&op->args, 2)) : NULL;
+            if (!hi) return NULL;
+            long long x = ctDeref(v)->i, l = ctDeref(lo)->i, h = ctDeref(hi)->i;
+            if (x < l || (op->isInclusive ? x > h : x >= h)) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
+            return v;
+        }
         case OPERATION_STR_OF: case OPERATION_CONCAT: return ctText(st, op);
     }
     return ctFail(st, op->tok, "it uses an operation compile-time evaluation does not model");

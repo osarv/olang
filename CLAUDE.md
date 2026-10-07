@@ -2569,6 +2569,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   The user saw where it fits after I first argued it was only notation (a lambda can forward to a stateful struct,
   but `next()` is the honest spelling for a callable thing). `At`, `SetAt`, `Slice` and `Call` may declare errors
   (`try x[i]`, `try x[lo:hi]`, `try f(x)`); a fallible `SetAt` is called by name, since `x[i] = v` has no `try`.
+  **(Superseded the same day by E31a, below: only `Call` may fail; the others have Try forms.)**
   **Found on the way, pre-existing**: `try f() catch default Int32[9]` crashed the compiler for any fallible
   function returning an array - the slot's type still named the callee's result scope; it is now built where the
   call's result lands.
@@ -2594,6 +2595,29 @@ Go through this for every change to what olang means - a rule added, revised or 
   the rest: on arrays it is compiler-supplied (a load of the length word), on user types an ordinary method the
   compiler recognises (slicing's default end, the loop), shaped `Len() Int64`, lowercase `len` module-private.
   Iterators stay - they walk what has no positions (List, Map, trees) and what has no length (files, generators).
+- **Checked forms, `try` on stores, and `for x in try c` (E31a/R21/S9e, 2026-10-07, the user's calls).** The user
+  asked whether every `At` would end up fallible; it need not - indexing is unchecked by default (E16) - but a type
+  then had to choose between fast `c[i]` and checked `try c[i]`, where an array has both. So an operation that can
+  fail has a **checked form named with `Try`** (`TryAt`, `TrySetAt`, `TrySlice`, `TryDiv`, `TryPlus`, ... - the name
+  `TryAt` over `CheckedAt` was the user's), declaring its errors, which `try` calls; the plain forms may no longer fail
+  (only `Call` may, standing for a function). `TryAt`/`TrySlice`/`TrySetAt` are **derived** from the plain form and
+  `Len` when not declared (an `OPERATION_BOUNDS` check failing with `OUT_OF_BOUNDS`), so `try c[i]` on a user type
+  checks exactly as on an array. `try` reaches through operator calls as through built-in operations, collecting a
+  Try form's errors into the try's set (several fallible ones in one expression work: each dispatches to the root's
+  clauses, in codegen and the evaluator). **R21**: `try x[i] = v`, `try x[i] += v`, `try x++` check the statement - the
+  user's "SetAt, Slice, any that can reasonably fail" needed somewhere to write `try` on a store; it is an
+  `OPERATION_SEQ` root whose clauses are a statement's (falling through to `cgEndLbl`). **S9e**: the user's real
+  problem was not how `try` binds ("I don't mind writing several trys") but that a loop calls methods by itself with
+  nowhere to write `try`; `for x in try c { } catch E { }` covers the loop's own calls (source, `Iter`, `Next`,
+  `TryAt`), an error ending the loop. `Next` may now fail (an I/O iterator), satisfying by shape rather than
+  `Iterator<T>`. Lowered with each fallible call tried by the loop's clauses plus an appended `break`, inside a
+  one-shot loop, so leaving unwinds scopes the ordinary way; `break`/`continue` written directly in such a clause is
+  an error. Rejected along the way: a wide `try` (Swift's), or a separate `checked` keyword - both answered a binding
+  question the user did not have. **Found on the way, pre-existing**: any unknown character in a function body hung
+  the parser (the `}` left after a skipped item was never consumed at the top level); `x[i] = v` on a type with
+  `SetAt` and no `At` crashed the compiler; the evaluator did not let a tried index's own clauses take a check failing
+  inside its index (`try a[b[i]]`), disagreeing with the run time; and a slice with its end left out evaluated its
+  base twice.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

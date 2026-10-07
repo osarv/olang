@@ -1,0 +1,9 @@
+# check: fail but not At, which reading
+type Bag struct() {
+    v mut Int32 = 0
+}
+fn (b mut Bag&) SetAt(i Int64, x Int32) { b.v = x }
+fn main() ? {
+    b Bag& = Bag()
+    y := b[0]
+}

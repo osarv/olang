@@ -415,6 +415,8 @@ enum operation {
                       //point (an omitted bound is materialised as 0 or len(base) when the operand is built).
                       //op->type is a runtime-length reference to base's element type, tagged to the scope
                       //base's own storage belongs to: a slice is a borrow, not an allocation.
+    OPERATION_BOUNDS, //E31: a derived TryAt/TrySlice's bounds check - args [v, lo, hi]: v itself, once lo <= v < hi
+                      //(<= hi when isInclusive); only ever built under "try", so it always has a checkRoot
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
     OPERATION_NOMINAL_CONVERT, //T29: "Name(x)" between a declared type and its underlying one - same
                                 //representation, so it emits nothing
@@ -491,6 +493,12 @@ struct operand {
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
+    bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
+                                //through it to what is inside, as it does through a built-in operation (R20)
+    bool isTryStmt;             //E31: an OPERATION_SEQ standing for "try x[i] = v" - its clauses are a statement's,
+                                //falling through to after it; cgEndLbl is where (codegen)
+    char* cgEndLbl;
+    bool isInclusive;           //E31: OPERATION_BOUNDS only - the upper bound itself is allowed (a slice's)
     bool isAtCall;              //E31: "x[i]" written on a type declaring At - args [x, i]; "x[i] = v" becomes SetAt
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
                                 //the comparisons on either side of it

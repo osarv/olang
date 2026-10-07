@@ -1,0 +1,13 @@
+# check: fail has only the checked form of this operation
+# E31: a type with only TryAt is indexed under "try"
+error E {
+    X
+}
+type Bag struct() {
+    n Int64 = 2
+}
+fn (b Bag&) TryAt(i Int64) Int32 ? E { return 1 }
+fn main() ? {
+    b Bag& = Bag()
+    x := b[0]
+}

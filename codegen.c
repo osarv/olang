@@ -2795,7 +2795,9 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     //via the generic cgValue/cgFuncCall path was written as "try f(...)" (isTried) - a bare unhandled call
     //is a compile error, and the catch-statement form is codegenned separately by cgTryCatch, never through
     //here. On error, propagate to the caller (which is guaranteed to declare a superset of these errors).
-    if (!op->isTried) ErrorBugFound();
+    //E31: a Try form called for an operator inside a tried expression fails through that try (R20)
+    struct operand* root = op->checkRoot ? op->checkRoot : op;
+    if (!root->isTried) ErrorBugFound();
     char wrapTy[256];
     llvmFuncRetType(func->type, wrapTy, sizeof(wrapTy));
     char* raw = cgNewTmp(ctx);
@@ -2814,7 +2816,7 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", isErr, errLbl, okLbl);
     ctx->terminated = true;
     cgLabel(ctx, errLbl);
-    if (!op->catchClauses.len || cgCatchDispatch(ctx, op, &op->catchClauses, code, &func->type, NULL)) {
+    if (!root->catchClauses.len || cgCatchDispatch(ctx, root, &root->catchClauses, code, &func->type, root->cgEndLbl)) {
         cgPropagateError(ctx, func->type, code);
     }
     cgLabel(ctx, okLbl);
@@ -3302,7 +3304,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
     int wordOrd = SemanticBuiltinErrorWord(word);
     ctx->staticErrType = builtin;
     ctx->staticErrWord = wordOrd;
-    if (op->catchClauses.len && !cgCatchDispatch(ctx, op, &op->catchClauses, NULL, NULL, NULL)) {
+    if (op->catchClauses.len && !cgCatchDispatch(ctx, op, &op->catchClauses, NULL, NULL, op->cgEndLbl)) {
         //R9b: a clause took the error - its default stands in for the result
     } else if (op->isTried) {
         long long code = errorCode(ctx->curFunc->type, *builtin, wordOrd);
@@ -3324,6 +3326,40 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
         } else { fputs("  unreachable\n", ctx->fnOut); ctx->terminated = true; }
     }
     cgLabel(ctx, okLbl);
+}
+
+//E31: a derived TryAt/TrySlice's check - v itself, once lo <= v < hi (<= hi when inclusive), compared as Int64
+static char* cgAsI64(struct cgCtx* ctx, struct operand* x, char* v) {
+    if (x->type.bType == BASETYPE_INT64) return v;
+    char ty[64];
+    llvmType(x->type, ty, sizeof(ty));
+    char* w = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", w, x->type.bType == BASETYPE_BYTE ? "zext" : "sext", ty, v);
+    return w;
+}
+
+static char* cgBoundsValue(struct cgCtx* ctx, struct operand* op) {
+    struct operand* vOp = *(struct operand**)ListGetIdx(&op->args, 0);
+    struct operand* loOp = *(struct operand**)ListGetIdx(&op->args, 1);
+    struct operand* hiOp = *(struct operand**)ListGetIdx(&op->args, 2);
+    char* v = cgValue(ctx, vOp);
+    char* v64 = cgAsI64(ctx, vOp, v);
+    char* lo = cgAsI64(ctx, loOp, cgValue(ctx, loOp));
+    char* hi = cgAsI64(ctx, hiOp, cgValue(ctx, hiOp));
+    char* a = cgNewTmp(ctx);
+    char* b = cgNewTmp(ctx);
+    char* both = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp sge i64 %s, %s\n", a, v64, lo);
+    fprintf(ctx->fnOut, "  %s = icmp %s i64 %s, %s\n", b, op->isInclusive ? "sle" : "slt", v64, hi);
+    fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", both, a, b);
+    int id = ctx->lblCtr++;
+    char okLbl[32], badLbl[32];
+    snprintf(okLbl, sizeof(okLbl), "bounds.ok.%d", id);
+    snprintf(badLbl, sizeof(badLbl), "bounds.bad.%d", id);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", both, okLbl, badLbl);
+    ctx->terminated = true;
+    cgBoundsFailed(ctx, op, okLbl, badLbl);
+    return v;
 }
 
 char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
@@ -4144,6 +4180,15 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_COND: return cgCond(ctx, op);
         case OPERATION_CMP_CHAIN: return cgCmpChain(ctx, op);
         case OPERATION_SEQ:
+            if (op->isTryStmt) { //E31: "try x[i] = v" - a clause that takes an error continues after it
+                char* end = MallocOrCrash(32);
+                snprintf(end, 32, "trystore.end.%d", ctx->lblCtr++);
+                op->cgEndLbl = end;
+                for (int i = 0; i < op->comprBody.len; i++) cgStatement(ctx, ListGetIdx(&op->comprBody, i));
+                cgBr(ctx, end);
+                cgLabel(ctx, end);
+                return "";
+            }
             for (int i = 0; i < op->comprBody.len; i++) cgStatement(ctx, ListGetIdx(&op->comprBody, i));
             return cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
         case OPERATION_NONE: return cgLiteral(ctx, op);
@@ -4164,6 +4209,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         }
         case OPERATION_STR_OF: case OPERATION_CONCAT: return cgText(ctx, op);
         case OPERATION_SLICE: return cgSliceValue(ctx, op);
+        case OPERATION_BOUNDS: return cgBoundsValue(ctx, op);
         case OPERATION_SIZED_ARRAY_ALLOC: return cgSizedArrayAlloc(ctx, op);
         case OPERATION_COMPREHENSION: return cgComprehension(ctx, op);
         case OPERATION_COMPR_PUSH: cgComprPush(ctx, op); return "";

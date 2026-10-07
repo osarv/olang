@@ -1,0 +1,10 @@
+# check: fail has SetAt but neither TrySetAt nor Len
+# E31: a derived TrySetAt checks the position against Len()
+type Bag struct() {
+    v mut Int32 = 0
+}
+fn (b mut Bag&) SetAt(i Int64, x Int32) { b.v = x }
+fn main() ? {
+    b Bag& = Bag()
+    try b[0] = 1 catch { }
+}

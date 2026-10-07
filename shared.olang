@@ -6713,12 +6713,12 @@ type OpSafe struct(n Int64) {
     cells mut Array<Int32>& = Array<Int32>(n)
 }
 
-fn (g OpSafe&) At(i Int64) Int32 ? OpGridError {
+fn (g OpSafe&) TryAt(i Int64) Int32 ? OpGridError {
     if i < 0 or i >= g.n { error OpGridError.OUT }
     return g.cells[i]
 }
 
-fn (g OpSafe&) Slice(lo Int64, hi Int64) Array<Int32> ? OpGridError {
+fn (g OpSafe&) TrySlice(lo Int64, hi Int64) Array<Int32> ? OpGridError {
     if lo < 0 or hi > g.n { error OpGridError.OUT }
     return Int32[g.cells[i] for i in range lo, hi]
 }
@@ -6777,7 +6777,7 @@ test "E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from P
     assert OpBitsBaked == 15
 }
 
-test "E31: Call makes a value callable and passable as a function; At and Slice may fail under try" {
+test "E31: Call makes a value callable and passable as a function; try calls TryAt and TrySlice" {
     next OpIdGen& = OpIdGen()
     a := next()
     b := next()
@@ -6943,6 +6943,147 @@ test "S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexabl
     u := 0
     for x in o { u += x }
     assert u == 200
+}
+
+# E31/S9e: the checked forms. "try" calls TryAt, TrySlice, TrySetAt, TryDiv, TryInc ... when a type declares them, and
+# derives TryAt, TrySlice and TrySetAt from At, Slice, SetAt and Len otherwise; "try" before a store or an increment
+# checks the statement; "for x in try c" covers what the loop calls by itself
+type TxGrid struct(n Int64) {
+    n
+    cells mut Array<Int32>& = Array<Int32>(n)
+}
+
+fn (g TxGrid&) At(i Int64) Int32 { return g.cells[i] }
+fn (g mut TxGrid&) SetAt(i Int64, v Int32) { g.cells[i] = v }
+fn (g TxGrid&) Len() Int64 { return g.n }
+fn (g TxGrid&) Slice(lo Int64, hi Int64) Array<Int32>&g { return g.cells[lo:hi] }
+
+error TxErr {
+    MISSING
+    ZERO
+}
+
+type TxSparse struct(bad Int64) {
+    bad
+}
+
+fn (s TxSparse&) TryAt(i Int64) Int32 ? TxErr {
+    if i == s.bad { error TxErr.MISSING }
+    return Int32(i) * 10
+}
+fn (s TxSparse&) Len() Int64 { return 4 }
+
+type TxQ struct(v Int32) {
+    v
+}
+
+fn (a TxQ) Div(b TxQ) TxQ { return TxQ(a.v / b.v) }
+fn (a TxQ) TryDiv(b TxQ) TxQ ? TxErr {
+    if b.v == 0 { error TxErr.ZERO }
+    return TxQ(a.v / b.v)
+}
+fn (a TxQ) Plus(b TxQ) TxQ { return TxQ(a.v + b.v) }
+
+type TxCtr struct(n Int32) {
+    n mut
+}
+
+fn (c TxCtr) TryInc() TxCtr ? TxErr {
+    if c.n >= 2 { error TxErr.ZERO }
+    return TxCtr(c.n + 1)
+}
+
+type TxLines struct(n Int32, failAt Int32) {
+    n
+    failAt
+    i mut Int32 = 0
+}
+
+fn (l mut TxLines&) Next() (Int32, Bool) ? TxErr {
+    if l.i == l.failAt { error TxErr.MISSING }
+    if l.i >= l.n { return 0, false }
+    l.i++
+    return l.i, true
+}
+
+# only stores: "x[i] = v" calls SetAt with no At beside it
+type TxSink struct() {
+    last mut Int32 = 0
+}
+
+fn (k mut TxSink&) SetAt(i Int64, v Int32) { k.last = v + Int32(i) }
+
+fn txReads() Int32 {
+    g TxGrid& = TxGrid(4)
+    for i in range Int64(4) { g[i] = Int32(i) * 10 }
+    a := try g[2] catch default -1
+    b := try g[7] catch BuiltinError.OUT_OF_BOUNDS default -1
+    s := try g[1:3] catch default Int32[0]
+    t := try g[3:9] catch default Int32[5, 5, 5]
+    sp TxSparse& = TxSparse(1)
+    x := try sp[3] catch default 0
+    y := try sp[1] catch TxErr default 7
+    z := try (TxQ(10) / TxQ(0) + TxQ(1)) catch TxErr default TxQ(99)
+    w := try (TxQ(10) / TxQ(2) + TxQ(1)) catch TxErr default TxQ(99)
+    return a + b + Int32(s.Len()) + Int32(t.Len()) + x + y + z.v + w.v
+}
+
+fn txStores() Int32 {
+    g TxGrid& = TxGrid(3)
+    m := 0
+    try g[1] = 5 catch { m += 1 }
+    try g[5] = 9 catch BuiltinError.OUT_OF_BOUNDS { m += 10 }
+    try g[1] += 2 catch { m += 100 }
+    a := Int32[1, 2]
+    try a[2] = 3 catch { m += 1000 }
+    n Int32 = 2147483647
+    try n++ catch BuiltinError.OVERFLOW { m += 10000 }
+    c TxCtr = TxCtr(1)
+    try c++ catch { m += 100000 }
+    try c++ catch { m += 200000 }
+    return m + g[1] + c.n
+}
+
+fn txWalk(n Int32, failAt Int32) Int32 {
+    t := 0
+    l TxLines& = TxLines(n, failAt)
+    for x in try l {
+        if x == 2 { continue }
+        t += x
+    } catch TxErr {
+        t += 1000
+    }
+    sp TxSparse& = TxSparse(Int64(failAt))
+    for x in try sp {
+        t += x
+    } catch { t += 100 }
+    return t
+}
+
+fn txWalkPropagates() Int32 ? TxErr {
+    t := 0
+    l TxLines& = TxLines(5, 2)
+    for x in try l { t += x }
+    return t
+}
+
+TxReadsBaked := txReads()
+TxStoresBaked := txStores()
+TxWalkBaked := txWalk(5, 3)
+
+test "E31/S9e: try calls the Try forms or derives them from Len; try on a store or an increment; for x in try c" {
+    assert txReads() == 20 - 1 + 2 + 3 + 30 + 7 + 99 + 6
+    assert TxReadsBaked == txReads()
+    assert txStores() == 10 + 1000 + 10000 + 200000 + 7 + 2
+    assert TxStoresBaked == txStores()
+    assert txWalk(3, 99) == 4 + 60
+    assert txWalk(5, 3) == 1004 + 30 + 100
+    assert TxWalkBaked == txWalk(5, 3)
+    k TxSink& = TxSink()
+    k[2] = 40
+    assert k.last == 42
+    try txWalkPropagates() catch TxErr { done }
+    fail
 }
 
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
