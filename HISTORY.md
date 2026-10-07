@@ -7502,3 +7502,17 @@ from their original form.
   0.07s, since after inlining LLVM sees the concrete table. A check now greps the emitted IR for the exit block.
   The same session measured binary size, which the user wanted minimal: LTO already strips every unreached prelude
   function, so nothing was needed there.
+
+- **Operators by name (E31 revised, 2026-10-07).** The symbol-named methods lasted an afternoon. The user asked
+  whether operators were public, which exposed that they could not be: the hidden name (`$add`) failed M6's
+  capital-letter rule, so a `+` declared on an exported type was unusable from any other module. The user's
+  follow-up was the better argument - `Next`, `Iter`, `Has` and `Contains` already are operators in effect,
+  compiler-called methods with ordinary names - so operators became names too: `Plus`, `Minus`, `Mul` (the user's
+  choice over `Times`), `Div`, `Rem`, `Neg`, `Less`, `MatMul`, plus `At`, `SetAt` and `Slice` for the indexing forms
+  that had been skipped. The user added the private form: a lowercase first letter is the same operator, usable
+  only in its module, and one type may not declare both. The parser's symbol-renaming went away (the token-position
+  fallback added for it in the error printer stays: it is correct in general). `x[i] op= v` lowers to
+  `SetAt(i, At(i) op v)` with the container and index held in hidden locals; an absent slice end is `Len()`.
+  **Found writing the indexing test:** `return g.cells[lo:hi]` from `fn (g G&) ... Array<Int32>&g` was rejected
+  though `return g.cells` was accepted. `lvalueStorageScope` took a bare reference field's empty tag as this
+  function's own scope; O20's walk out to the container, already in the fit check, now applies there too.

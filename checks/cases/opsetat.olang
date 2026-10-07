@@ -1,0 +1,10 @@
+# check: fail this type declares At, so 'x[i]' reads, but not SetAt
+# E31: assigning through an index calls SetAt
+type R struct() {
+    v mut Int32 = 0
+}
+fn (r R&) At(i Int64) Int32 { return r.v }
+fn main() ? {
+    r R& = R()
+    r[0] = 1
+}

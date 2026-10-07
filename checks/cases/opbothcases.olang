@@ -1,0 +1,8 @@
+# check: fail this type declares this operator twice, by its public and its private name
+# E31: one operator, one method
+type V struct(x Int32) {
+    x
+}
+fn (a V) Plus(b V) V { return a }
+fn (a V) plus(b V) V { return b }
+fn main() ? { }

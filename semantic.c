@@ -3414,6 +3414,40 @@ static struct var* varGetMethodIn(struct semaModule* mod, struct str name, struc
 static bool isDeclaredArray(struct type t);
 static struct type underlyingArray(struct type t);
 
+//E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
+//whether it gives a result. The same name with a lowercase first letter is the module's private operator.
+struct operatorShape { const char* name; int operands; bool result; };
+static const struct operatorShape operatorShapes[] = {
+    {"Plus", 1, true}, {"Minus", 1, true}, {"Mul", 1, true}, {"Div", 1, true}, {"Rem", 1, true},
+    {"MatMul", 1, true}, {"Neg", 0, true}, {"Less", 1, true}, {"At", 1, true}, {"SetAt", 2, false},
+    {"Slice", 2, true},
+};
+
+//a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
+//claimed twice on one type, by its public and its private name
+static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct type* ra) {
+    for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++) {
+        const struct operatorShape* sh = &operatorShapes[k];
+        size_t n = strlen(sh->name);
+        if ((size_t)a->name.len != n || strncmp(a->name.ptr + 1, sh->name + 1, n - 1) != 0) continue;
+        char c = a->name.ptr[0];
+        bool pub = c == sh->name[0], priv = c == sh->name[0] - 'A' + 'a';
+        if (!pub && !priv) continue;
+        if (a->type.vars.len != sh->operands + 1) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
+        else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
+        else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
+        else if (a->type.errors.len > 0) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
+        else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
+        if (pub) {
+            char low[16];
+            snprintf(low, sizeof(low), "%s", sh->name);
+            low[0] = (char)(low[0] - 'A' + 'a');
+            if (varGetMethodIn(mod, StrFromCStr(low), *ra)) ErrMsgSemantic(a->tok, OPERATOR_BOTH_CASES);
+        }
+        return;
+    }
+}
+
 void checkMethodOverloads(struct semaModule* mod) {
     for (int i = 0; i < mod->vars.len; i++) {
         struct var* a = ListGetIdx(&mod->vars, i);
@@ -3438,13 +3472,7 @@ void checkMethodOverloads(struct semaModule* mod) {
             if (receiverIsBuiltin(*ra) && !isPreludeModule(mod)) { ErrMsgSemantic(a->tok, METHOD_ON_BUILTIN_TYPE); continue; }
             //E31: an operator method's shape - one operand besides the receiver (none for negation), a result,
             //no errors (an operator has nowhere to write "try"), and "<" answering with a Bool
-            if (a->name.len > 0 && a->name.ptr[0] == '$') {
-                bool neg = StrCmp(a->name, StrFromCStr("$neg"));
-                if (a->type.vars.len != (neg ? 1 : 2)) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
-                else if (!a->type.hasRetType || a->type.retType->isTuple) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
-                else if (a->type.errors.len > 0) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
-                else if (StrCmp(a->name, StrFromCStr("$lt")) && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
-            }
+            checkOperatorMethod(mod, a, ra);
         }
         for (int j = 0; j < i; j++) {
             struct var* b = ListGetIdx(&mod->vars, j);
@@ -4293,7 +4321,24 @@ struct var* lvalueStorageScope(struct operand* op, bool* outIsGlobal, int* outDe
     //a reference-shaped operand already says where its storage is: that is what its own tag means. Reached
     //when slicing one ("buf byte[]&s" -> the slice lives in s, not in this function's own scope), and never
     //by the borrow check, which only ever asks about a value.
-    if (op->type.structMAlloc) return resolveEffectiveScopeVar(op, op->type.scopeParam);
+    if (op->type.structMAlloc) {
+        //O20: a reference field or element with no scope of its own holds a referent living where its container
+        //does - walked out to the first container whose scope is stated, as the fit check walks it. Taking the
+        //slot's own empty tag read it as this function's scope, so "return g.cells[lo:hi]" was rejected
+        if (!op->type.scopeParam && (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX)) {
+            struct operand* b = op;
+            while (b->opType == OPERATION_MEMBER || b->opType == OPERATION_INDEX) {
+                b = *(struct operand**)ListGetIdx(&b->args, 0);
+                if (b->type.structMAlloc && (b->type.scopeParam
+                        || (b->opType != OPERATION_MEMBER && b->opType != OPERATION_INDEX))) break;
+            }
+            *outDepth = b->type.scopeDepth;
+            if (b->type.structMAlloc) return resolveEffectiveScopeVar(b, b->type.scopeParam);
+            if (b->opType == OPERATION_READ_VAR && b->readVar && b->readVar->owner) *outIsGlobal = true;
+            return NULL;
+        }
+        return resolveEffectiveScopeVar(op, op->type.scopeParam);
+    }
     while (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
         *outDepth = base->type.scopeDepth;
@@ -6163,13 +6208,31 @@ static struct var* methodNamedOn(struct type t, const char* name);
 static struct list* prebuiltMethodArgs;
 struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, struct token mTok,
                                 struct syntax* argsNode, struct list scopeArgNodes, bool* reported);
+static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
+                                        struct token tok);
 static struct operand* operatorCall(struct checkCtx* ctx, struct operand* recv, struct operand* arg, const char* name,
                                     struct token tok) {
+    struct list args = ListInit(sizeof(struct operand*));
+    if (arg) ListAdd(&args, &arg);
+    return operatorCallArgs(ctx, recv, args, name, tok);
+}
+
+//E31: the method an operator calls on a value of type t - its capitalized name, or the same name with a lowercase
+//first letter, which only the declaring module reaches. NULL when t declares neither.
+static const char* operatorMethodName(struct checkCtx* ctx, struct type t, const char* capName) {
+    if (methodNamedOn(t, capName)) return capName;
+    char* low = MallocOrCrash(strlen(capName) + 1);
+    strcpy(low, capName);
+    low[0] = (char)(low[0] - 'A' + 'a');
+    struct var* m = methodNamedOn(t, low);
+    return m && m->owner == ctx->mod ? low : NULL;
+}
+
+static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
+                                        struct token tok) {
     struct token mTok = tok;
     mTok.type = TOK_IDEN;
     mTok.str = StrFromCStr((char*)name);
-    struct list args = ListInit(sizeof(struct operand*));
-    if (arg) ListAdd(&args, &arg);
     struct list* prev = prebuiltMethodArgs;
     prebuiltMethodArgs = &args;
     bool reported = false;
@@ -6186,23 +6249,24 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
                                 struct list* out);
 static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
                                      bool inChain) {
-    const char* name = NULL;
+    const char* capName = NULL;
     bool swap = false, negate = false;
     switch (opTok.type) {
-        case TOK_ADD: name = "$add"; break;
-        case TOK_SUB: name = "$sub"; break;
-        case TOK_MUL: name = "$mul"; break;
-        case TOK_DIV: name = "$div"; break;
-        case TOK_MOD: name = "$mod"; break;
-        case TOK_AT: name = "$at"; break;
-        case TOK_LST: name = "$lt"; break;
-        case TOK_GRT: name = "$lt"; swap = true; break;
-        case TOK_LSE: name = "$lt"; swap = true; negate = true; break;
-        case TOK_GRE: name = "$lt"; negate = true; break;
+        case TOK_ADD: capName = "Plus"; break;
+        case TOK_SUB: capName = "Minus"; break;
+        case TOK_MUL: capName = "Mul"; break;
+        case TOK_DIV: capName = "Div"; break;
+        case TOK_MOD: capName = "Rem"; break;
+        case TOK_AT: capName = "MatMul"; break;
+        case TOK_LST: capName = "Less"; break;
+        case TOK_GRT: capName = "Less"; swap = true; break;
+        case TOK_LSE: capName = "Less"; swap = true; negate = true; break;
+        case TOK_GRE: capName = "Less"; negate = true; break;
         default: break;
     }
     struct operand* recv = swap ? b : a;
-    if (name && methodNamedOn(recv->type, name)) {
+    const char* name = capName ? operatorMethodName(ctx, recv->type, capName) : NULL;
+    if (name) {
         struct operand* seq = NULL;
         struct operand* other = swap ? a : b;
         bool plain = a->isLiteral || a->isNullLiteral || a->opType == OPERATION_READ_VAR;
@@ -6212,7 +6276,7 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
             other = OperandReadVar(holdInHidden(ctx, a, opTok, "op", &seq->comprBody), opTok);
         }
         struct operand* call = operatorCall(ctx, recv, other, name, opTok);
-        if (StrCmp(StrFromCStr((char*)name), StrFromCStr("$lt")) && !OperandIsBool(call)) ErrMsgSemantic(opTok, OPERATOR_LT_BOOL);
+        if (StrCmp(StrFromCStr((char*)capName), StrFromCStr("Less")) && !OperandIsBool(call)) ErrMsgSemantic(opTok, OPERATOR_LT_BOOL);
         struct operand* r = call;
         if (seq) { seq->type = call->type; ListAdd(&seq->args, &call); r = seq; }
         return negate ? OperandUnary(r, OPERATION_NOT, opTok) : r;
@@ -6398,7 +6462,8 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
         struct syntax* opNode = partSntx(s, i); //SNTX_EXPR_UNARY_OP
         struct token opTok = partAt(opNode, 0)->tok;
         //E31: negation a type declares ("fn (v Vec2) -() Vec2")
-        if (opTok.type == TOK_SUB && methodNamedOn(result->type, "$neg")) { result = operatorCall(ctx, result, NULL, "$neg", opTok); continue; }
+        const char* negName = opTok.type == TOK_SUB ? operatorMethodName(ctx, result->type, "Neg") : NULL;
+        if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
     }
     return result;
@@ -6514,7 +6579,12 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
         } else if (p->sntx->type == SNTX_EXPR_INDEX) {
             struct syntax* idxExprNode = firstPartOfType(p->sntx, SNTX_EXPR);
             struct operand* idx = buildExprFromSyntax(ctx, idxExprNode);
-            result = OperandIndex(result, idx, firstTokOfType(p->sntx, TOK_SQUARE_O));
+            //E31: "x[i]" on a type declaring At
+            const char* atName = result->type.bType != BASETYPE_ARRAY ? operatorMethodName(ctx, result->type, "At") : NULL;
+            if (atName) {
+                result = operatorCall(ctx, result, idx, atName, firstTokOfType(p->sntx, TOK_SQUARE_O));
+                result->isAtCall = true;
+            } else result = OperandIndex(result, idx, firstTokOfType(p->sntx, TOK_SQUARE_O));
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
             //either bound may be absent; the colon's own position is what says which side a present one
             //sits on (see parseExprIndex)
@@ -6529,7 +6599,20 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             }
             struct operand* lo = loNode ? buildExprFromSyntax(ctx, loNode) : NULL;
             struct operand* hi = hiNode ? buildExprFromSyntax(ctx, hiNode) : NULL;
-            result = OperandSlice(result, lo, hi, firstTokOfType(p->sntx, TOK_SQUARE_O));
+            struct token sq = firstTokOfType(p->sntx, TOK_SQUARE_O);
+            //E31: "x[lo:hi]" on a type declaring Slice - an absent bound is 0, or the value's Len()
+            const char* slName = result->type.bType != BASETYPE_ARRAY ? operatorMethodName(ctx, result->type, "Slice") : NULL;
+            if (slName) {
+                if (!lo) lo = OperandIntLiteral(sq);
+                if (!hi) {
+                    if (methodNamedOn(result->type, "Len")) hi = operatorCall(ctx, result, NULL, "Len", sq);
+                    else { ErrMsgSemantic(sq, SLICE_NEEDS_LEN); hi = OperandIntLiteral(sq); }
+                }
+                struct list sargs = ListInit(sizeof(struct operand*));
+                ListAdd(&sargs, &lo);
+                ListAdd(&sargs, &hi);
+                result = operatorCallArgs(ctx, result, sargs, slName, sq);
+            } else result = OperandSlice(result, lo, hi, sq);
         } else if (p->sntx->type == SNTX_EXPR_VALUE_CALL) {
             result = buildValueCall(ctx, result, p->sntx, i == s->parts.len - 1 && allowLast);
         } else { //SNTX_EXPR_MEMBR
@@ -8118,7 +8201,54 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
 
 //every check an assignment gets, on operands already built - shared by a written assignment and by each
 //target of a destructuring one (D8c)
+//E31: "x[i] = v" on a type declaring At is x.SetAt(i, v); "x[i] op= v" is x.SetAt(i, x.At(i) op v), with x and i
+//held in hidden locals so each is evaluated once
+static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
+                                     bool inChain);
+static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
+    struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
+    const char* setName = operatorMethodName(ctx, base->type, "SetAt");
+    if (!setName) { ErrMsgSemantic(opTok, SETAT_UNDECLARED); return (struct statement){0}; }
+    bool isCompound = false;
+    enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
+    struct list pre = ListInit(sizeof(struct statement));
+    struct operand* value = rhs;
+    if (isCompound) {
+        if (!(base->opType == OPERATION_READ_VAR)) base = OperandReadVar(holdInHidden(ctx, base, opTok, "base", &pre), opTok);
+        if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) idx = OperandReadVar(holdInHidden(ctx, idx, opTok, "idx", &pre), opTok);
+        struct operand* cur = operatorCall(ctx, base, idx, operatorMethodName(ctx, base->type, "At"), opTok);
+        struct token binTok = opTok;
+        switch (compoundOp) {
+            case OPERATION_ADD: binTok.type = TOK_ADD; break;
+            case OPERATION_SUB: binTok.type = TOK_SUB; break;
+            case OPERATION_MUL: binTok.type = TOK_MUL; break;
+            case OPERATION_DIV: binTok.type = TOK_DIV; break;
+            case OPERATION_MOD: binTok.type = TOK_MOD; break;
+            default: binTok.type = TOK_NONE; break;
+        }
+        value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
+    }
+    struct list args = ListInit(sizeof(struct operand*));
+    ListAdd(&args, &idx);
+    ListAdd(&args, &value);
+    struct statement call = (struct statement){0};
+    call.sType = STATEMENT_EXPR;
+    call.op = operatorCallArgs(ctx, base, args, setName, opTok);
+    if (pre.len == 0) return call;
+    ListAdd(&pre, &call);
+    struct token t = opTok;
+    t.type = TOK_BOOL_LIT;
+    t.str = StrFromCStr("true");
+    struct statement wrap = (struct statement){0};
+    wrap.sType = STATEMENT_IF;
+    wrap.op = OperandBoolLiteral(t);
+    wrap.block = pre;
+    return wrap;
+}
+
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    if (target->isAtCall) return buildSetAt(ctx, target, rhs, opTok);
     if (rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE);
     if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
     else if (!OperandIsMutableLvalue(target)) {
@@ -8131,16 +8261,17 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     struct operand* value = rhs;
     if (isCompound) {
         //E31: "v += w" is "v = v + w", through the operator v's type declares when it declares one
-        const char* nm = NULL;
+        const char* cap = NULL;
         switch (compoundOp) {
-            case OPERATION_ADD: nm = "$add"; break;
-            case OPERATION_SUB: nm = "$sub"; break;
-            case OPERATION_MUL: nm = "$mul"; break;
-            case OPERATION_DIV: nm = "$div"; break;
-            case OPERATION_MOD: nm = "$mod"; break;
+            case OPERATION_ADD: cap = "Plus"; break;
+            case OPERATION_SUB: cap = "Minus"; break;
+            case OPERATION_MUL: cap = "Mul"; break;
+            case OPERATION_DIV: cap = "Div"; break;
+            case OPERATION_MOD: cap = "Rem"; break;
             default: break;
         }
-        if (nm && methodNamedOn(target->type, nm)) value = operatorCall(ctx, target, rhs, nm, opTok);
+        const char* nm = cap ? operatorMethodName(ctx, target->type, cap) : NULL;
+        if (nm) value = operatorCall(ctx, target, rhs, nm, opTok);
         else value = OperandBinary(target, rhs, compoundOp, opTok);
     }
     else {

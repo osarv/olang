@@ -1,0 +1,7 @@
+import "vec"
+fn main() ? {
+    c := vec.Vec(1) + vec.Vec(2)
+    assert c.X == 3
+    d := vec.Diff(vec.Vec(5), vec.Vec(2))
+    assert d.X == 3
+}

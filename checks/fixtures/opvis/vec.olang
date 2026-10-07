@@ -1,0 +1,6 @@
+type Vec struct(x Int32) {
+    X Int32 = x
+}
+fn (a Vec) Plus(b Vec) Vec { return Vec(a.X + b.X) }
+fn (a Vec) minus(b Vec) Vec { return Vec(a.X - b.X) }
+fn Diff(a Vec, b Vec) Vec { return a - b }

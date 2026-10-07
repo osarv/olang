@@ -1460,7 +1460,7 @@ operators groups left-to-right):
 | 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
-| 11 (tightest) | `*` `/` `%` `@` (E31) |
+| 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
 exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
@@ -1968,23 +1968,37 @@ the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in ran
 
 ### 5.15 Operators declared by types
 
-**E31.** A method may be named by an operator: `fn (a Vec2) +(b Vec2) Vec2`. The operators a type may declare are
-`+ - * / %`, `@`, unary `-` (written with no parameter, `fn (a Vec2) -() Vec2`) and `<`. Such a method takes exactly
-one parameter besides its receiver (none for unary `-`), gives one result - any value, a built one following the
-ordinary rules for a built result (§8) - and declares no errors; `<` gives a `Bool`. It is reached **only through the
-operator**: it has no name a program can write, so `a.+(b)` is not a call. The coherence rules for methods (M19)
-apply unchanged, so the built-in types' operators stay the language's.
+**E31.** An operator written in the program calls a **method named for it** on its left operand's type, when that
+type declares one:
 
-Where the left operand's type declares the operator, `a op b` is that method called with `a` as receiver and `b` as
-its argument, including inside generic code (compiled per instantiation, G16), through an interface value whose
-interface requires it, and in `a op= b`, which is `a = a op b`; otherwise the operator is the built-in one, which
-for `@` does not exist (a compile-time error). Unary `-x` is likewise the type's `-()` when it declares one.
+| Written | Calls | Shape (besides the receiver) |
+|---|---|---|
+| `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | `Plus`, `Minus`, `Mul`, `Div`, `Rem` | one operand, a result |
+| `a @ b` | `MatMul` | one operand, a result |
+| `-a` | `Neg` | none, a result |
+| `a < b` | `Less` | one operand, a `Bool` |
+| `x[i]` | `At` | one operand, a result |
+| `x[i] = v` | `SetAt` | two operands, no result |
+| `x[lo:hi]` | `Slice` | two operands, a result |
 
-`<` is the one ordering a type declares: `a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` -
-each looked up on the type of the operand that becomes the receiver, `a` still evaluated before `b`. They chain
-(E30). `==` and `!=` are never declared: equality stays E10's. `$` is never declared: rendering stays E11a's.
-An interface may require an operator, written as a method signature named by it (`+(b <T>) <T>`), and a constraint
-(G19) may then require one of a type variable.
+The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
+name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
+by one of these names without its shape or declaring errors (there is nowhere to write `try` on an operator). The
+methods are ordinary methods otherwise, callable by name (`a.Plus(b)`), and M19's coherence rules apply, so the
+built-in types' operators stay the language's. A result may be any value; a built one follows the ordinary rules for
+a built result (§8).
+
+Where the left operand's type declares the operator, the operator is that call - in generic code (G16), through an
+interface value whose interface requires the method, and in `a op= b`, which is `a = a op b`; otherwise it is the
+built-in operation, which for `@` does not exist (an error), and for indexing and slicing exists only on arrays.
+`a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` - `Less` looked up on the type of the operand
+that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
+
+`x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. An `At`
+returning a writable borrowed reference (`At(i Int64) mut T&x`) makes `x[i].f = v` write the element. In `x[lo:hi]`
+an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
+
+`==`, `!=` (E10) and `$` (E11a) are never declared.
 
 ## 6. Statements
 

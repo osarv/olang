@@ -6596,26 +6596,27 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert CnAreaBaked == 16
 }
 
-# E31: operators are methods named by their symbol, reached only through the operator. "<" is the one ordering a
-# type declares; ">", "<=" and ">=" come from it, and chains of them work (E30).
+# E31: an operator calls a method named for it - Plus, Minus, Mul, Div, Rem, Neg, Less, MatMul, and At, SetAt and
+# Slice for indexing. A lowercase first letter is the module's private operator. "<" is the one ordering a type
+# declares; ">", "<=" and ">=" come from it, and chains of them work (E30).
 type OpVec struct(x Int32, y Int32) {
     x mut
     y mut
 }
 
-fn (a OpVec) +(b OpVec) OpVec { return OpVec(a.x + b.x, a.y + b.y) }
-fn (a OpVec) -(b OpVec) OpVec { return OpVec(a.x - b.x, a.y - b.y) }
-fn (a OpVec) -() OpVec { return OpVec(-a.x, -a.y) }
-fn (a OpVec) *(k Int32) OpVec { return OpVec(a.x * k, a.y * k) }
-fn (a OpVec) <(b OpVec) Bool { return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y }
-fn (a OpVec) @(b OpVec) Int32 { return a.x * b.x + a.y * b.y }
+fn (a OpVec) Plus(b OpVec) OpVec { return OpVec(a.x + b.x, a.y + b.y) }
+fn (a OpVec) Minus(b OpVec) OpVec { return OpVec(a.x - b.x, a.y - b.y) }
+fn (a OpVec) Neg() OpVec { return OpVec(-a.x, -a.y) }
+fn (a OpVec) Mul(k Int32) OpVec { return OpVec(a.x * k, a.y * k) }
+fn (a OpVec) Less(b OpVec) Bool { return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y }
+fn (a OpVec) MatMul(b OpVec) Int32 { return a.x * b.x + a.y * b.y }
 
 type OpMoney Int64
 
-fn (a OpMoney) +(b OpMoney) OpMoney { return OpMoney(Int64(a) + Int64(b) + 1) }
+fn (a OpMoney) plus(b OpMoney) OpMoney { return OpMoney(Int64(a) + Int64(b) + 1) }
 
 type OpAddable<T> interface {
-    +(b <T>) <T>
+    Plus(b <T>) <T>
 }
 
 fn opTwice(x <T OpAddable<<T>>>) <T> { return x + x }
@@ -6626,9 +6627,24 @@ fn opSum(xs Array<<T>>&, zero <T>) <T> {
     return t
 }
 
+type OpGrid struct(w Int64, h Int64) {
+    w
+    h
+    cells mut Array<Int32>& = Array<Int32>(w * h)
+}
+
+fn (g OpGrid&) At(i Int64) Int32 { return g.cells[i] }
+fn (g mut OpGrid&) SetAt(i Int64, v Int32) { g.cells[i] = v }
+fn (g OpGrid&) Len() Int64 { return g.cells.Len() }
+fn (g OpGrid&) Slice(lo Int64, hi Int64) Array<Int32> { return Int32[g.cells[i] for i in range lo, hi] }
+
+# O20: a slice of a reference field lives where the field's array does - its container's scope - so returning one
+# borrowed from the receiver is legal
+fn (g OpGrid&) Row(lo Int64, hi Int64) Array<Int32>&g { return g.cells[lo:hi] }
+
 OpDotBaked Int32 = (OpVec(1, 2) + OpVec(3, 4)) @ OpVec(1, 1)
 
-test "E31: operators declared as methods - arithmetic, negation, ordering, @, compound assignment" {
+test "E31: operators call methods named for them - arithmetic, negation, ordering, @, compound assignment" {
     a := OpVec(1, 2)
     b := OpVec(3, 4)
     c := a + b
@@ -6646,6 +6662,25 @@ test "E31: operators declared as methods - arithmetic, negation, ordering, @, co
     m := OpMoney(5) + OpMoney(6)
     assert Int64(m) == 12
 }
+
+test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {
+    g OpGrid& = OpGrid(2, 3)
+    g[4] = 7
+    g[4] += 1
+    assert g[4] == 8 and g.At(4) == 8
+    s := g[3:5]
+    assert s.Len() == 2 and s[1] == 8
+    t := g[4:]
+    assert t.Len() == 2
+    v OpVec = OpVec(1, 1)
+    assert v.Plus(v).x == 2
+    r := g.Row(3, 5)
+    c := opChurn()
+    g[3] = 9
+    assert r[0] == 9 and r.Len() == 2
+}
+
+fn opChurn() Array<Int32>& { return Array<Int32>(1000, 7) }
 
 test "E31: operators in generic code, in a constraint, through an interface value, and while compiling" {
     a := OpVec(1, 2)

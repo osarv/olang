@@ -196,3 +196,11 @@ test "an aggregate is returned through one slot" {
     assert sh(dir, "\"$OLANG\" -b retslot.olang > out.txt 2>&1 && ./build/retslot") == 0 or failed("retslot", dir)
     assert sh(dir, "grep -q '^ret.common:' build/retslot.main.ll") == 0
 }
+
+# E31: a capitalized operator method is the operator everywhere; a lowercase one only in its own module
+test "a private operator works only in its own module" {
+    dir := fresh("opvis")
+    os.Run("cp checks/fixtures/opvis/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0 or failed("opvis", dir)
+    assert sh(dir, "\"$OLANG\" -b usepriv.olang > out.txt 2>&1") != 0
+}

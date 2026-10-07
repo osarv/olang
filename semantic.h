@@ -490,6 +490,7 @@ struct operand {
                          //adapted type's zero value rather than treat it as an aggregate literal.
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    bool isAtCall;              //E31: "x[i]" written on a type declaring At - args [x, i]; "x[i] = v" becomes SetAt
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
                                 //the comparisons on either side of it
     char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand

@@ -2509,17 +2509,18 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Has`/`Contains` and `Map`'s key are constrained by them - so `Has` on an array of a type without `Eq` fails at the
   call, not inside the prelude, which is the case that started the discussion. No evaluator change: constraints are
   resolved before anything runs.
-- **Operators declared as methods (E31, 2026-10-07, the user's design).** `fn (a Vec2) +(b Vec2) Vec2`; declarable
-  `+ - * / %`, `@` (no built-in meaning - matrix multiplication), unary `-` (`-()`), and `<`, from which `>`, `<=`,
-  `>=` are derived (and chain, E30). Not declarable: `==`/`!=` (E10 stays) and `$` (E11a stays). Reached only through
-  the operator: the parser renames the method to a name no program can write (`$add`, `$neg`, ...). One operand
-  besides the receiver, one result of any value (built results under the ordinary scope rules), no errors. No
-  built-in type on the left - accepted by the user. Several right-hand types go through one generic method with a
-  constraint and `match <T>` (G19), so there is no overloading by parameter type. Works in generic code, through
-  interface values (an interface may require `+(b <T>) <T>`), in `op=`, and in compile-time evaluation with no
-  evaluator change, since an operator is a method call by the time it is checked. A declared `+` on a named numeric
-  type replaces the built-in one. The long road there: free functions, groups, `Self`, Rust traits, "is it worth
-  it" - see HISTORY.
+- **Operators call methods named for them (E31, 2026-10-07, the user's design).** `a + b` calls `Plus` - and `Minus`,
+  `Mul`, `Div`, `Rem`, `MatMul` (`@`, no built-in meaning), `Neg` (unary `-`), `Less` (`<`, with `> <= >=` derived and
+  chaining), and for indexing `At` (`x[i]`), `SetAt` (`x[i] = v`, `x[i] op= v`) and `Slice` (`x[lo:hi]`, an absent end
+  meaning `Len()`). A lowercase first letter (`plus`) is the module's private operator; declaring both spellings is
+  an error. Ordinary methods otherwise, callable by name. Not declarable: `==`/`!=`, `$`. This replaced, the same
+  day, a first version where the method was named by the symbol itself (`fn (a V) +(b V) V`): the user noticed
+  those were private across modules (the hidden name was not capitalized) and that the compiler already talks to
+  types through named methods (`Next`, `Iter`, `Has`, `Contains`), so names make visibility M6's rule and the design
+  one mechanism. `Mul` rather than `Times` (the user). Built on: no built-in type on the left; several right-hand
+  types through one generic method with a constraint (G19); works in generic code, interface values, compile-time
+  evaluation. Found on the way: a slice of a reference field took the slot's empty scope tag as this function's, so
+  `return g.cells[lo:hi]` was rejected - O20's container walk now applies to slices too.
 - **Interface methods reach every satisfying type (M19e, 2026-10-07, the user's call).** A method declared on an
   interface (M19a) is callable on any value whose type satisfies it, implicitly, when the type has no method of
   its own by that name - so `Iterator<T>` in the prelude declares `Any`/`All`/`Count`/`Fold` once and
