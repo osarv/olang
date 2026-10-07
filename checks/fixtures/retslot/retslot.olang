@@ -1,0 +1,9 @@
+# a function giving several results returns them through one slot and one exit
+fn pick(n Int32) (Int32, Bool) {
+    if n > 3 { return n, true }
+    return 0, false
+}
+fn main() ? {
+    v, ok := pick(5)
+    assert ok and v == 5
+}

@@ -114,6 +114,13 @@ struct cgCtx {
     //the literal itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
     //NULL when nothing is currently being promoted (the common case - most values never touch this).
     char* targetScopeOverride;
+    //a function returning an aggregate returns it through one slot and one exit block, written by every return
+    //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
+    //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
+    //iterator's "Next") was then never vectorized. NULL where a body returns no aggregate.
+    char* retSlot;
+    char retSlotTy[256];
+    bool retSlotUsed;
     //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
     //allocas), the scope its storage comes from, and its element type
     struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
@@ -401,7 +408,7 @@ static FILE* cgAllocaOut(struct cgCtx* ctx) { return ctx->allocaOut ? ctx->alloc
 //the two can be written out entry-block-first. The caller emits its own "define ... {" and "entry:" to
 //the real stream before beginning, and the body's closing brace is part of the buffered half.
 struct cgBodyBuf { FILE* savedFn; FILE* savedAlloca; FILE* aOut; FILE* bOut; char* abuf; char* bbuf; size_t asz; size_t bsz;
-                   int dbgSp; int dbgLine; };
+                   int dbgSp; int dbgLine; char* savedRetSlot; bool savedRetUsed; char savedRetTy[256]; };
 
 // ---- B2e: debug info ----
 //
@@ -576,6 +583,21 @@ static void cgBodyBegin(struct cgCtx* ctx, struct cgBodyBuf* b) {
     b->dbgLine = ctx->dbgCurLine;
     ctx->dbgPendingSp = 0;
     if (b->dbgSp) ctx->dbgCurSp = b->dbgSp;
+    b->savedRetSlot = ctx->retSlot; //a helper reached mid-body returns on its own terms
+    b->savedRetUsed = ctx->retSlotUsed;
+    memcpy(b->savedRetTy, ctx->retSlotTy, sizeof(b->savedRetTy));
+    ctx->retSlot = NULL;
+    ctx->retSlotUsed = false;
+}
+
+//a return of val, of LLVM type ty, from the body being emitted - through the function's return slot when it has one
+static void cgEmitRet(struct cgCtx* ctx, const char* ty, const char* val) {
+    if (ctx->retSlot && strcmp(ty, ctx->retSlotTy) == 0) {
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n  br label %%ret.common\n", ty, val, ctx->retSlot);
+        ctx->retSlotUsed = true;
+        return;
+    }
+    fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
 }
 
 static void cgBodyEnd(struct cgCtx* ctx, struct cgBodyBuf* b) {
@@ -598,6 +620,9 @@ static void cgBodyEnd(struct cgCtx* ctx, struct cgBodyBuf* b) {
     free(b->bbuf);
     ctx->fnOut = b->savedFn;
     ctx->allocaOut = b->savedAlloca;
+    ctx->retSlot = b->savedRetSlot;
+    ctx->retSlotUsed = b->savedRetUsed;
+    memcpy(ctx->retSlotTy, b->savedRetTy, sizeof(ctx->retSlotTy));
 }
 
 struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name);
@@ -669,7 +694,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
             llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
             char* v = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %s, 0\n", v, wrapTy, erased);
-            fprintf(ctx->fnOut, "  ret %s %s\n", wrapTy, v);
+            cgEmitRet(ctx, wrapTy, v);
         }
         ctx->terminated = true;
         return;
@@ -710,7 +735,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
         llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
         char* v = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %s, 0\n", v, wrapTy, newCode);
-        fprintf(ctx->fnOut, "  ret %s %s\n", wrapTy, v);
+        cgEmitRet(ctx, wrapTy, v);
     }
     ctx->terminated = true;
 }
@@ -3175,7 +3200,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
             llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
             char* v = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %lld, 0\n", v, wrapTy, code);
-            fprintf(ctx->fnOut, "  ret %s %s\n", wrapTy, v);
+            cgEmitRet(ctx, wrapTy, v);
         } else {
             fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
         }
@@ -4690,7 +4715,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     ctx->targetScopeOverride = prevTarget;
     cgCloseOwnScope(ctx);
     if (!fallible) {
-        fprintf(ctx->fnOut, "  ret %s %s\n", ty, val);
+        cgEmitRet(ctx, ty, val);
         ctx->terminated = true;
         return;
     }
@@ -4700,7 +4725,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 0, 0\n", agg, wrapTy);
     char* agg2 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue %s %s, %s %s, 1\n", agg2, wrapTy, agg, ty, val);
-    fprintf(ctx->fnOut, "  ret %s %s\n", wrapTy, agg2);
+    cgEmitRet(ctx, wrapTy, agg2);
     ctx->terminated = true;
 }
 
@@ -4768,7 +4793,7 @@ void cgError(struct cgCtx* ctx, struct statement* s) {
     llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
     char* v = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %lld, 0\n", v, wrapTy, code);
-    fprintf(ctx->fnOut, "  ret %s %s\n", wrapTy, v);
+    cgEmitRet(ctx, wrapTy, v);
     ctx->terminated = true;
 }
 
@@ -6058,6 +6083,11 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     struct cgBodyBuf bb;
     cgBodyBegin(ctx, &bb);
     ctx->terminated = false;
+    if (retTy[0] == '{' || retTy[0] == '%' || retTy[0] == '[') {
+        ctx->retSlot = cgNewTmp(ctx);
+        snprintf(ctx->retSlotTy, sizeof(ctx->retSlotTy), "%s", retTy);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", ctx->retSlot, retTy);
+    }
 
     for (int i = 0; i < func->type.scopeVars.len; i++) {
         struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
@@ -6140,14 +6170,20 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
             //function's implicit zero-value return below - zeroinitializer's i32 field is code 0
-            if (func->type.hasRetType) fprintf(ctx->fnOut, "  ret %s zeroinitializer\n", retTy);
+            if (func->type.hasRetType) cgEmitRet(ctx, retTy, "zeroinitializer");
             else fputs("  ret i32 0\n", ctx->fnOut);
         } else if (!func->type.hasRetType) fputs("  ret void\n", ctx->fnOut);
         else {
             char* z = cgZeroValue(*func->type.retType);
-            fprintf(ctx->fnOut, "  ret %s %s\n", retTy, z);
+            cgEmitRet(ctx, retTy, z);
         }
     }
+    if (ctx->retSlotUsed) {
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "ret.common:\n  %s = load %s, ptr %s\n  ret %s %s\n", r, retTy, ctx->retSlot, retTy, r);
+    }
+    ctx->retSlot = NULL;
+    ctx->retSlotUsed = false;
     fputs("}\n\n", ctx->fnOut);
     cgBodyEnd(ctx, &bb);
     ctx->curFunc = NULL;

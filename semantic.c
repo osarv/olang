@@ -1815,6 +1815,18 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     spec->type.scopeVars = ListInit(sizeof(struct var*));
     for (int i = 0; i < generic->type.scopeVars.len; i++) ListAdd(&spec->type.scopeVars, ListGetIdx(&generic->type.scopeVars, i));
     assignImplicitParamScopes(&spec->type);
+    //M19e: an interface's method called on a concrete type is compiled for that type - its receiver is the
+    //concrete type itself, so every call through it inside the body is a direct one, as in hand-written code
+    struct type* self = bindingGet(bindings, StrFromCStr("$Self"));
+    if (self && spec->type.vars.len > 0) {
+        struct var* recv = ListGetIdx(&spec->type.vars, 0);
+        struct type rt = *self;
+        rt.structMAlloc = recv->type.structMAlloc;
+        rt.refMut = recv->type.refMut;
+        rt.scopeParam = recv->type.scopeParam;
+        rt.scopeDepth = recv->type.scopeDepth;
+        recv->type = rt;
+    }
     spec->origin = spec;
     spec->codeBlock = ListInit(sizeof(struct statement));
 
@@ -5094,9 +5106,23 @@ void flushPendingDischarges(void) {
 
 static struct operand* spreadSourceOf(struct operand* arg);
 void reportArgCount(struct list args, struct token tok);
+static struct type* selfForInterfaceCall = NULL; //M19e: set by buildMethodCall for the one call it is about to make
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
     struct var* callerFunc = ctx ? ctx->func : NULL;
+    //M19e: taken at once, so no call made while this one is being checked (a lambda argument's body) sees it
+    struct type* selfType = selfForInterfaceCall;
+    selfForInterfaceCall = NULL;
+    //a method of a non-generic interface, called on a concrete value, is instantiated for that value's type here,
+    //a generic one where its own type arguments are bound below
+    if (selfType && func->type.typeParams.len == 0) {
+        struct list sb = ListInit(sizeof(struct typeBinding));
+        struct typeBinding b = (struct typeBinding){0};
+        b.name = StrFromCStr("$Self");
+        b.type = *selfType;
+        ListAdd(&sb, &b);
+        func = instantiateFunc(func, &sb);
+    }
     //G9: a call to a generic never writes its type arguments - each is inferred by matching the actual
     //argument types against the declared parameter types, which G4 guarantees reaches every variable.
     //Done before anything else here, so everything below (arity, fit checking, scope bindings, the return
@@ -5174,6 +5200,12 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             bad->readVar = func;
             bad->args = args;
             return bad;
+        }
+        if (selfType) { //M19e: and compiled for the receiver's concrete type
+            struct typeBinding sb = (struct typeBinding){0};
+            sb.name = StrFromCStr("$Self");
+            sb.type = *selfType;
+            ListAdd(&bindings, &sb);
         }
         //G10c: a generic type's constructor called with no written type arguments infers them as a generic
         //function's are inferred, and the call targets that instantiation's own constructor (G10a)
@@ -7208,7 +7240,17 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     ListAdd(&withRecv, &recvOp);
     for (int i = 0; i < mArgs.len; i++) ListAdd(&withRecv, ListGetIdx(&mArgs, i));
     if (m->type.errors.len > 0 && !allowedM) ErrMsgSemantic(mTok, UNHANDLED_FALLIBLE_CALL);
-    return OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
+    if (viaInterface) {
+        struct type* self = MallocOrCrash(sizeof(struct type));
+        *self = recvType;
+        self->structMAlloc = false;
+        self->scopeParam = NULL;
+        self->scopeDepth = 0;
+        selfForInterfaceCall = self;
+    }
+    struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
+    selfForInterfaceCall = NULL;
+    return call;
 }
 
 

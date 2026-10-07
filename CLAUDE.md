@@ -2535,6 +2535,17 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Push`, `Len`, `Iter`, `ToArray` and `Has` (for `x in l`). Prelude files name each other's types, so every prelude
   file's type names are now scanned before any is parsed. The `twolists` check (a std module beside a same-named
   local file) uses `std/map` instead.
+- **Loops over iterators run at hand-loop speed (2026-10-07; the user: "a loop has to be fast always").** Two
+  changes. (1) An interface's method called on a concrete value (M19e) is instantiated for that value's type - its
+  receiver *is* the concrete type in the copy, so `Next()` inside is a direct call; the interface-value path stays
+  for values mixed at run time. (2) The real blocker, found by reading the optimized IR: a function returning an
+  aggregate (several results, an error union, a struct) emitted a `ret` at each return, so once inlined the result
+  was an aggregate `phi`, and the loop's exit test extracted its `Bool` from that - which LLVM cannot thread, so the
+  loop never vectorized (C, returning through memory, did). Every return now stores to one slot and branches to a
+  single `ret.common` exit, as clang does; SROA then splits the slot into scalar phis. Measured on 20M elements x 20:
+  `a.Iter().Count(f)` 0.29s -> 0.08s, through an `Iterator<Int32>&` value 0.20s -> 0.07s, the hand loop 0.08s.
+  Binary size was already minimal: LTO drops every prelude function a program does not reach (an empty program is
+  15.8 KB, one using `List` and text 16.5 KB), so "import only what is used" needed nothing for the output.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

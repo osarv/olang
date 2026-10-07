@@ -7487,3 +7487,18 @@ from their original form.
   `Fold` from `List` to `Iterator<T>`, which gives them to `Map`'s and arrays' iterators and to any iterator a program
   writes; `Map` and `Filter` could not move, because they build a `List` and an interface's methods must live in the
   interface's module, the prelude, which cannot name `std/list`.
+
+- **Iterator loops at hand-loop speed (2026-10-07).** The user, on interface calls going through a table: "a loop has
+  to be fast always. this has to be solved." First, M19e calls were made to instantiate the interface's method for
+  the concrete receiver (a `$Self` binding that replaces the receiver's type in the instance), which made `Next()` a
+  direct call. Benchmarking then showed it did not help at all - 0.29s against a hand loop's 0.08s, and slower than
+  the interface-value path. The machine code was fully inlined and in registers, just scalar. A C version of the
+  identical iterator pattern vectorized, with and without LTO across files, so the protocol was not the problem.
+  Reproducing LTO by hand (`llvm-link` + `opt`) showed the cause: `Next()` returns `{ i32, i1 }`, its two return
+  paths merged into a phi of that aggregate, and after inlining the loop branched on an `extractvalue` of the phi.
+  JumpThreading does not look through that, so the exit stayed opaque to the vectorizer. clang never produces it,
+  because it returns through a `retval` slot that SROA splits into scalar phis. Doing the same - every return site
+  stores to one slot and branches to `ret.common` - took the iterator loop to 0.08s, and the interface-value loop to
+  0.07s, since after inlining LLVM sees the concrete table. A check now greps the emitted IR for the exit block.
+  The same session measured binary size, which the user wanted minimal: LTO already strips every unreached prelude
+  function, so nothing was needed there.

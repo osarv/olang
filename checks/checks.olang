@@ -187,3 +187,12 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
 }
+
+# a function returning an aggregate returns it through one slot and one exit block, so that inlined, its result's
+# fields reach the caller as separate values LLVM can see into - without it an iterator loop never vectorized
+test "an aggregate is returned through one slot" {
+    dir := fresh("retslot")
+    os.Run("cp checks/fixtures/retslot/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b retslot.olang > out.txt 2>&1 && ./build/retslot") == 0 or failed("retslot", dir)
+    assert sh(dir, "grep -q '^ret.common:' build/retslot.main.ll") == 0
+}
