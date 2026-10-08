@@ -15,3 +15,5 @@
 - [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via try only; do not even offer it
 - [Number the questions](feedback_numbered_questions.md) — flagged calls and open questions always as a numbered list
 - [No Claude attribution in commits](feedback_no_claude_attribution.md) — author as the user, no Co-Authored-By / Claude-Session lines
+- [Dictated messages](user_dictation.md) — expect misheard words and spoken self-corrections; read for intent, state the reading taken when ambiguous
+- [Usage and subagents](feedback_usage_and_agents.md) — time matters: parallel agents in worktrees, cheaper model for search; pace by weekly usage (rate_limit_event)

@@ -7892,3 +7892,13 @@ from their original form.
   sentence saying text compares "by E10, not by content" was stale too since E10a (`==` on a `String` calls `Eq`).
   `checks/cases/b10text` pins it - a call deciding a top-level condition, a comparison at run time, a `String&`
   argument - and fails with five errors on the previous compiler.
+
+## No labeled `break`/`continue` (2026-10-08)
+
+- Proposed in the self-hosting survey: lexers and parsers are full of nested loops, and the usual way out of an
+  outer loop is a flag checked after the inner one. The spelling offered was the loop's own variable
+  (`for line in lines { ... break line }`), with a label only for loops that have no variable.
+- Declined by the user: they do not like labeled jumps, and the spelling breaks down exactly where it would be
+  needed for loops with no variable (`for { }`, `for cond { }`). `break` and `continue` keep acting on the innermost
+  loop (S11). The ways out of an outer loop stay a flag or moving the loops into a function and using `return`
+  (which `defer`, being built at the same time, makes cheaper to write when state has to be restored).

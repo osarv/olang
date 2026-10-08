@@ -12,15 +12,19 @@ Rewritten 2026-10-08 from an audit of CLAUDE.md, HISTORY.md and the old ledger; 
 work long since done) is in git before this commit. Open QUESTIONS live in the ledger [[project-olang-pending-decisions]];
 this file is the work order and the future work nobody owes an answer on.
 
-**Now: self-hosting prep, decided by the user 2026-10-08, in this order** (details in the ledger):
+**Now: self-hosting prep, decided by the user 2026-10-08** (details in the ledger). Items 1-4, 5 (minus the
+expression form) and 6 are being built in parallel by agents in worktrees (/home/user/wt/*, branches wt-*), merged by me:
 1. `os.Args()` / `os.Env(name)` over runtime functions; `main` unchanged.
 2. Creating and writing files, file-system calls (stat, mkdir, readlink) in std.
-3. Value-level bits for F16, BF16, F32, F64 (`x.Bits()`, `F64.FromBits(u)`).
+3. Value-level bits for F16, BF16, F32, F64 (`x.Bits()`, `F64.FromBits(u)` - spelling may change, see the agent's call).
 4. `List.At`/`SetAt` and a text builder - without making loops stop using iterators (S9d: a type's own Iter wins);
    also fix `ListIter`, which walks the chunk list from the head for every element (its comment's reason, satisfying
    an interface with no receiver scope, went with interfaces and O4b).
-5. `match` as an expression; several values per `case`.
+5. Several values per `case`, `case` guards, nested patterns; `match` as an expression once its syntax is chosen
+   (ledger question 3).
 6. `defer`, block-scoped as Zig's.
+7. Float literals default to F64 (T6a).
+Then runtime interfaces back in some form (ledger question 2; the user wants GUI widgets eventually).
 Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 

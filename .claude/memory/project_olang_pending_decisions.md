@@ -15,26 +15,26 @@ effect and my recommendation. See [[feedback-record-flagged-decisions]]. Rebuilt
 CLAUDE.md, HISTORY.md and the old ledger (the full old ledger is in git at bc9f9c9). Recorded future work that asks
 nothing of the user is in [[project-olang-next-steps]], not here.
 
-**Decided 2026-10-08, being built** (order and details in next-steps): os.Args/os.Env; files and file system in std;
-value-level bits for F16/BF16/F32/F64; List.At/SetAt + a text builder, keeping loops on iterators; `match` as an
-expression + several values per `case`; `defer` (block-scoped, my call on the user's "if you think it is good").
+**Decided 2026-10-08, being built** (by parallel agents in worktrees; order in next-steps): os.Args/os.Env; files and
+file system in std; value-level bits for F16/BF16/F32/F64; List.At/SetAt + a text builder, keeping loops on iterators;
+several values per `case`, `case` guards, nested patterns (the user: "case guards are good", "I think the nested
+patterns are fine" - read as yes); `defer` (block-scoped); float literals default to F64 (T6a).
+**Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user**
+**QUESTIONS for the user** (numbers 6-9 are unused since the 2026-10-08 renumbering; my calls keep 10-46)
 1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
    scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
-2. Labeled `break`/`continue` (explained 2026-10-08). Default: none. Rec: yes, naming a loop by its variable
-   (`break line`), with a label only for loops that have no variable.
-3. `case` guards (`case X if cond`) (explained 2026-10-08). Default: none. Rec: yes, cheap.
-4. Nested patterns in `case` (explained 2026-10-08). Default: none. Rec: later, after guards.
-5. Runtime interfaces back? Default: removed (T30). Rec: keep out; tripwire = the first struct of function values in
-   real code (the removed implementation is at T30 in git).
-6. Float literals default to `F32` (T6a), so `x := 0.1` and a generic `describe(0.1)` print 0.10000000149011612.
-   C, Go and Rust default to 64-bit. Default: F32. Rec: F64 (found 2026-10-08 by the audit; noted in history, never asked).
-7. A generated `Trait.From(x)` (struct of function values) for mixing an open set at run time. Default: none. Rec: only
-   if the tripwire in 5 fires.
-8. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
+2. Runtime interfaces back (the user 2026-10-08: "we're probably gonna have to", for GUI widgets; asked for ideas).
+   (a) `any Widget&`: a trait stays a constraint, `any Trait&` is a run-time value written on purpose (Swift's
+   `any`), itself satisfying the trait so generic code takes it; only structs/enums convert (no array boxing), no
+   widening at first, defaults/overrides through the table, `is`/`as` kept; the removed code comes back from git.
+   (b) revert T30 wholesale (`Widget&` is a run-time value again). Default: none until chosen. Rec: (a).
+3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
+   a block that provably leaves, and the match must be exhaustive (or have a value-giving `nomatch`). Default: not
+   built. Rec: (a).
+4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
    rejected. Rec: leave until real code needs it.
-9. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
+5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
 
 **OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later

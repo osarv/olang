@@ -34,7 +34,9 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_record_flagged_decisions.md
 @.claude/memory/feedback_style_form_conciseness.md
 @.claude/memory/feedback_surface_and_fix_bugs.md
+@.claude/memory/feedback_usage_and_agents.md
 @.claude/memory/user_olang_natural_language.md
+@.claude/memory/user_dictation.md
 @.claude/memory/project_olang_concurrency_gaps.md
 @.claude/memory/project_olang_next_steps.md
 @.claude/memory/project_olang_open_language_gaps.md
@@ -2882,6 +2884,10 @@ Go through this for every change to what olang means - a rule added, revised or 
   expected Y" where the intent is clear: `name T(args)` shows both spellings with `=` and `:=`, built from the line
   itself; `?error` says `?` alone is the default error. A missing `main` is not reported when a syntax error may
   have hidden it. Not a language change - no rule moved.
+- **No labeled `break`/`continue` (2026-10-08, the user's call).** Proposed for the self-hosted compiler's nested
+  loops, spelled by the loop's variable (`break line`); declined - the user does not like them, and some loops have
+  no variable to name. `break`/`continue` act on the innermost loop only (S11); leaving an outer loop is a flag or a
+  function with `return`.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
