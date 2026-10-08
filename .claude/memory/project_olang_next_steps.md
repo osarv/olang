@@ -32,6 +32,12 @@ expression form) and 6 are being built in parallel by agents in worktrees (/home
 your choice"):** feature batch first (lit, match, defer agents; merge each), then the REVIEW, then the REFACTOR - review
 first because its fixes must land before code moves (and the refactor keeps behaviour identical, bugs included), and
 because what it finds about structure feeds the refactor.
+- Decided 2026-10-08 (my authority, for the port): **recursive enums** - an enum may be held by reference (`Expr&`)
+  and a payload may hold one (`Add(a Expr&, b Expr&)`), so a syntax tree is an enum and nested patterns read through
+  the references (`case Expr.Add(Expr.Lit(a), Expr.Lit(b))`, a null matching no nested pattern). The match agent's
+  T17d ("an enum is never a reference") was a stopgap for references that never worked; this replaces it. An agent
+  after the 00:30 reset, beside defer, before the review. Also decided: `:=` from a match/if expression keeps D15's
+  rule per value (arithmetic does not name its type), so `area := match ... => 3.14 * r * r` stays an error.
 - Review: five read-only agents by area - (1) token.c + syntax.c, (2) semantic.c types/modules/generics half,
   (3) semantic.c operands/statements/scopes half, (4) codegen.c incl. the runtime IR, (5) comptime.c, main.c, util,
   errmsg + std/prelude. Each reports only findings it reproduced with a small olang program on the current compiler
