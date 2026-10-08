@@ -3029,8 +3029,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   (after the result is computed; a returned array value is copied first when a defer is pending), `break`/`continue`,
   an error leaving the function - last registered first, innermost block first, only if reached, reading variables when
   it runs. Checked where written, as a nested block. It may not leave (no `return`, `error`, escaping `try`, or loop
-  jump out of it; a `spawn` in it needs its own `join`). At a block's exit: join waits, then deferred code, then the
-  scope closes and its destructors run. `done`/`fail`/`abort`/`unreachable`/a failed check run none - in a test the
+  jump out of it; a `spawn` in it needs its own `join`). At a block's exit: deferred code (the block's last statements),
+  then a join block's wait, then the scope closes and its destructors run - the coordinator's call, so a deferred
+  `Cancel()` lets a join's tasks finish on any way out (with the wait first, that program deadlocks). `done`/`fail`/`abort`/`unreachable`/a failed check run none - in a test the
   unwinder closes scopes but cannot run deferred code (disproportionate: a closure over the frame or setjmp pads),
   recorded as S19c. Codegen emits it inline per exit (`cgLeaveBlocks` shared by fall-through, return/error and
   break/continue); the evaluator runs it in `ctExecBlock`, so it bakes, decides asserts and runs under `-i`. **Found on

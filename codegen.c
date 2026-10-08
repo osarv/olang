@@ -464,17 +464,18 @@ static void cgRunDefersAt(struct cgCtx* ctx, int depth, int from) {
 }
 
 //O2a/S11a/S19: leaves every open block deeper than `toDepth`, innermost first, each in the order its own end
-//would: its tasks waited for (P1b), its deferred code run, its destructors and arena released. The body's own
-//level (depth 1) has no entry in blockSlots - its scope is the caller's to close - but its deferred code runs here.
+//would: its deferred code run (the block's last statements), its tasks waited for (P1b - the block's end), its
+//destructors and arena released. The body's own level (depth 1) has no entry in blockSlots - its scope is the
+//caller's to close - but its deferred code runs here.
 static void cgLeaveBlocks(struct cgCtx* ctx, int toDepth) {
     int top = ctx->blockDepth;
     if (ctx->blockSlots.len + 1 > top) top = ctx->blockSlots.len + 1;
     for (int d = top; d > toDepth; d--) {
         int i = d - 2;
         bool hasSlot = i >= 0 && i < ctx->blockSlots.len;
+        cgRunDefersAt(ctx, d, 0);
         char* jh = hasSlot ? *(char**)ListGetIdx(&ctx->blockJoins, i) : NULL;
         if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
-        cgRunDefersAt(ctx, d, 0);
         if (hasSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
     }
 }
@@ -4608,14 +4609,15 @@ void cgBlockJoining(struct cgCtx* ctx, struct list* block, char* joinHead) {
         if (ctx->terminated) cgDeadLabel(ctx); //written after a return, a break or an error
         cgStatement(ctx, s);
     }
+    //S19: its deferred code - falling off the end is one more way out - as the block's last statements, so before
+    //a join block's end waits for its tasks (a deferred Cancel() is what lets them finish)
+    if (!ctx->terminated) cgRunDefersAt(ctx, ctx->blockDepth, deferBase);
+    ctx->defers.len = deferBase;
     //P1: the join happens before this block's arena is reclaimed - a task may still hold storage from it,
     //and its sub-scopes are folded back here too
     if (joinHead && !ctx->terminated) {
         fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", joinHead);
     }
-    //S19: then its deferred code, while its scope is still open - falling off the end is one more way out
-    if (!ctx->terminated) cgRunDefersAt(ctx, ctx->blockDepth, deferBase);
-    ctx->defers.len = deferBase;
     if (slot) {
         //a block that ended in a return already closed this on its way out (cgCloseOwnScope)
         if (!ctx->terminated) {

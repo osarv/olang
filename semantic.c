@@ -11994,7 +11994,8 @@ struct statement buildJoinStmnt(struct checkCtx* ctx, struct syntax* s) {
 //defer's own: it sees exactly the names declared before it, and every scope rule treats it as code of that
 //block, which it is - it runs before the block's scope closes. What it may not do is leave (S19b): it runs
 //while the block is being left, so it starts no loop jump of its own, returns nothing and lets no error out.
-//A spawn in it needs a join in it too (P1a): it runs after the enclosing join, if any, has waited.
+//A spawn in it needs a join in it too (P1a): it runs on every way out of its block, so no join outside it is
+//certain to be the one that waits.
 struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_DEFER;

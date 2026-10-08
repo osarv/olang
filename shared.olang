@@ -9058,8 +9058,8 @@ test "S19: deferred code runs on every way out of its block, while compiling and
 }
 
 # S19a: a block's deferred code runs before its scope closes - so it reads the block's locals and what was allocated
-# there - and before the destructors registered there; a join block waits for its tasks first, so its deferred code
-# sees their results. Run time only: building a value with a destructor, and tasks, are not evaluated (K1).
+# there - and before the destructors registered there (a join block's, before it waits for its tasks: std/cancel's
+# tests show a deferred Cancel). Run time only: building a value with a destructor is not evaluated (K1).
 dfClosed mut I64 = 0
 type DfRes struct(id I64) {
     id
@@ -9081,21 +9081,10 @@ fn dfScoped(n I64) I64 {
     }
     return 0
 }
-fn dfSquare(n I64) I64 { return n * n }
-fn dfJoined() I64 {
-    out := Array<I64>(3)
-    sum I64 = 0
-    join {
-        defer sum = out[0] + out[1] + out[2]
-        for i in range 3 { spawn out[i] = dfSquare(i + 1) }
-    }
-    return sum
-}
-test "S19a: deferred code runs after its join's tasks and before its scope closes" {
+test "S19a: deferred code runs before its block's scope closes" {
     dfClosed = 0
     assert dfScoped(WdMutable / 1000000000 + 1) == 3
     assert dfClosed == 7231             # q's deferred code, q's destructor, the body's deferred code, r's destructor
-    assert dfJoined() == 14
 }
 
 # blocks inside a catch clause - in a statement or in value position - have arenas of their own like any block, so

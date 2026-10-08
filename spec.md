@@ -2654,7 +2654,7 @@ about one body. It stays purely additive if it is ever wanted.
 **P1b.** The join is on **every path out of the block**, not only its last statement: a `return`, a
 `break`, a `continue` and a propagated error all wait for the block's tasks before leaving it. The block's
 arena (§8, O2) is reclaimed on the way out, and a task may still be holding storage from it. The block's
-deferred code (§6.9 S19a) runs after the wait, so it sees what the tasks did (P8).
+deferred code (§6.9 S19a) runs before the wait, as the block's last statements.
 
 `done`, `fail`, `abort` and `unreachable` (§6.7) are the exceptions, and are not joins: each ends the
 process immediately, so there is no frame left for a task to outlive. A `test` left early by a failing
@@ -2908,18 +2908,19 @@ defer ctx.inLoop = saved      # put back however this block is left
 before the `defer`, and every rule of §8 treats it as code of that block, which it is. It reads variables as they are
 when it **runs**, not as they were when the `defer` was reached, so `defer x = saved` stores whatever `saved` holds
 then. Several pieces registered in one block run in the **reverse** of the order they were registered, and a way out
-of several nested blocks runs each block's own, innermost first. Leaving one block happens in this order: a `join`
-block waits for its tasks (P1b), so its deferred code sees what they did (P8); then the block's deferred code runs,
-while its scope is still open, so it may read the block's locals and what was allocated in its scope; then the scope
-closes and the destructors registered there run (O15). A value being returned is computed before any deferred code
+of several nested blocks runs each block's own, innermost first. Leaving one block happens in this order: its
+deferred code runs, as the block's last statements and while its scope is still open, so it may read the block's
+locals and what was allocated in its scope; then, for a `join` block, its end waits for its tasks (P1b) - so deferred
+code there runs alongside them, as every statement of a join block does, and is what lets them finish (a deferred
+`Cancel()` of a token they watch); then the scope closes and the destructors registered there run (O15). A value being returned is computed before any deferred code
 runs, so deferred code changing what a local holds does not change the result - an array's elements included. A
 constructor's instance is likewise assembled (C6) before the deferred code at the top of its body runs.
 
 **S19b.** Deferred code may not leave: it runs while its block is being left, and runs to its own end. A `return` or
 an `error` statement in it, a `try` an error can leave it through (every error a `try` in it can produce is caught
 there, as in a destructor), and a `break` or `continue` other than one inside a loop written in the deferred code are
-compile-time errors. A `spawn` in it needs a `join` written in it (P1a): it runs after its block's own `join` has
-waited. A `defer` inside deferred code is the deferred code of the block it is written in, as anywhere.
+compile-time errors. A `spawn` in it needs a `join` written in it (P1a): it runs on every way out of its block, so no
+`join` outside it is certain to be the one that waits. A `defer` inside deferred code is the deferred code of the block it is written in, as anywhere.
 
 **S19c.** `done`, `fail`, `abort`, `unreachable` and a failed `assert` or run-time check end the test or the process
 (§6.6, §6.7) rather than leave a block, and run no deferred code - neither what is pending where they are reached nor,

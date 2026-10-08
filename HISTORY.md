@@ -8384,15 +8384,20 @@ from their original form.
   of their own (`DEFER_RETURNS`, `DEFER_ERROR_ESCAPES`, `DEFER_LOOP_JUMP`) - one `inDefer` flag on the check context,
   consulted where a return, an error statement and the two propagation checks already look, and `inLoop` reset at the
   defer so a loop inside the deferred code still takes its own `break`. A `spawn` in it needs a `join` in it
-  (`SPAWN_IN_DEFER`): the deferred code runs after its block's own join has waited (below), so that join would not wait
-  for the task. A `defer` inside deferred code is that code's own block's, like any other, so `defer defer x` simply
+  (`SPAWN_IN_DEFER`): the deferred code runs on every way out of its block, and at a deep `return` the emission's
+  innermost join is not its block's, so no join outside it is certain to be the one that waits. A `defer` inside deferred code is that code's own block's, like any other, so `defer defer x` simply
   runs `x` as the deferred code ends; nothing needed forbidding.
-  **The order at a block's exit**, decided: a join block's tasks are waited for first (P1b), then its deferred code,
-  then its scope closes and the destructors registered there run. Waiting first means deferred code sees the tasks'
-  results (P8's join edge) and cannot race them - the motivating "put this back" would otherwise be a data race with a
-  task still reading the field. The cost is that deferred code in a join block cannot be what tells its tasks to stop
-  (a `Cancel()` in a defer there would wait for tasks waiting for it); cancellation is written before the block ends.
-  Running before the close is what lets deferred code read the block's locals and what was allocated in its scope.
+  **The order at a block's exit: deferred code, then a join block's wait, then the scope's close and destructors.** I
+  first built the wait before the deferred code - so it would see the tasks' results and could not race them - and the
+  coordinator reversed it (with the user's authority over details): deferred code is the block's last statements and
+  the join is the block's end; code in a join block already runs alongside its tasks (the spawner keeps going between
+  `spawn` and the end), so a defer there is no less safe than any statement there, and a task's result is readable
+  only after the block, as P1 already says. What it buys is cancel-on-exit, `join { defer tok.Cancel()  spawn
+  worker(tok)  try step() }`: on an error the defer cancels and the join then waits for a worker that can now finish -
+  with the wait first, that program deadlocks. std/cancel's test pins it on the success path and the error path, with
+  a worker that records whether the Cancel or its 5-second deadline stopped it, so a regression fails rather than hangs
+  (it failed on the first order, after waiting the deadline out). Running before the close is what lets deferred code
+  read the block's locals and what was allocated in its scope.
   **A result is computed before deferred code runs**, and that needed one real piece of work: a returned array
   *value* is a `{len, ptr}` descriptor naming its source's elements until the caller copies them, so `defer a[0] = 9`
   after `return a` changed what the caller received at run time - while the evaluator, which copies at the return,
@@ -8412,7 +8417,7 @@ from their original form.
   **Codegen** emits deferred code inline on every path out, as Zig does: when emission passes a `defer` it records the
   statement, its block's depth and the codegen scope current there; a block's fall-through, `cgCloseOwnScope` (return
   and every propagated error) and `cgUnwindToLoop` (break/continue) now share one `cgLeaveBlocks`, which for each level
-  left waits for its join, emits that level's deferred code, then closes its scope. Each emission runs as a block
+  left emits that level's deferred code, waits for its join, then closes its scope. Each emission runs as a block
   nested in the defer's own - depth, names and open scopes reset to that block's, the deeper blocks' entries put aside
   and restored, the defer stack, a promotion target, a try default and a failed check's static error put aside - so a
   copy emitted at a deep `return` is the same code as one emitted at the block's end. The unwind chain needs no change:
