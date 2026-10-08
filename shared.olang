@@ -732,6 +732,22 @@ test "T6a: a float literal is an F64 where nothing adapts it, and still adapts w
     assert y == FloatLitSum and floatWidth(y) == 64
 }
 
+# E4a/S13: a case value that is a literal-only expression adapts to the matched type as a single literal does - the
+# literal work and the match work each fixed case literals separately, and the merge had to keep both
+fn pickCaseLit(u U8) I32 {
+    match u {
+        case 1 + 2 { return 3 }
+        case 1 << 2, 250 + 5 { return 4 }
+    }
+    return 0
+}
+
+test "E4a/S13: a literal-only case value adapts to the matched type" {
+    assert pickCaseLit(3) == 3 and pickCaseLit(4) == 4 and pickCaseLit(255) == 4 and pickCaseLit(7) == 0
+    a U8 = 3
+    assert pickCaseLit(a) == 3
+}
+
 # E4a: an expression built only from numeric literals adapts to its target as one literal does - computed while
 # compiling, an integer exactly (never wrapped) and a float in F64, then fitting as the literal holding that value.
 # The globals are baked (K2) and the fixed locals' asserts decided while compiling (S18c); the written locals and the
