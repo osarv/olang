@@ -1,9 +1,17 @@
-# check: fail an enum is a value and is never a reference
-# T17: an enum naming itself with "&" was read as a struct no value could fit, and reported at every use
+# check: run
+# T17d: an enum may be held by reference, and a payload may hold a reference to its own enum - this was an error
+# ("an enum is a value and is never a reference") until recursive enums, and before that accepted and broken at every use
 type E enum {
     Lit(v I64)
     Add(a E&, b E&)
 }
+fn sum(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Add(a, b) => sum(a) + sum(b)
+    }
+}
 fn main() ? {
-    x := E.Lit(1)
+    x E& = E.Add(E.Lit(1), E.Add(E.Lit(2), E.Lit(3)))
+    if sum(x) != 6 { fail }
 }

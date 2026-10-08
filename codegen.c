@@ -283,7 +283,8 @@ void llvmType(struct type t, char* buf, size_t n) {
         //T17: a payload-free choice is the bare i32 ordinal it always was; one carrying a payload is a
         //tag plus a buffer big enough for the largest case, since exactly one case is live at a time
         case BASETYPE_CHOICE:
-            if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
+            if (t.structMAlloc) snprintf(buf, n, "ptr");
+            else if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
             else snprintf(buf, n, "i32");
             return;
         case BASETYPE_INTERFACE: ErrorBugFound(); return; //T30: a trait is a constraint, never a value
@@ -881,7 +882,7 @@ struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name) {
 char* cgZeroValue(struct type t) {
     char* buf = MallocOrCrash(16);
     bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_SCOPE) ||
-        (t.bType == BASETYPE_STRUCT && t.structMAlloc) ||
+        ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc) ||
         (t.bType == BASETYPE_ARRAY && t.structMAlloc && !t.arrMalloc);
     strcpy(buf, isPtr ? "null" : "zeroinitializer");
     return buf;
@@ -910,6 +911,7 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
 
 static bool typeIsRefShaped(struct type t);
 static bool cgIsReference(struct type t);
+char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv);
 
 //resolves the scope base's own "&"-heap-indirect storage lives in - the type-level rule a bare "&"
 //field/element is now defined by: its effective scope is always the SAME as whatever contains it,
@@ -990,11 +992,11 @@ void cgBlock(struct cgCtx* ctx, struct list* block);
 //out a run-time-length array; testing containers with it made "b.a[0] = N(...)" allocate the new node in the
 //writing function's own scope while storing it in the caller's array - a use-after-free
 static bool cgIsReference(struct type t) {
-    return t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY);
+    return t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
 }
 
 static bool typeIsRefShaped(struct type t) {
-    return (t.bType == BASETYPE_STRUCT) || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
+    return (t.bType == BASETYPE_STRUCT) || t.bType == BASETYPE_CHOICE || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
 
 //a parameter's own declared type may name ANOTHER parameter of the *same* signature as its scope tag
@@ -1046,7 +1048,16 @@ char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct op
                     || (typeIsRefShaped(paramT) && paramT.structMAlloc)
                     || (paramT.bType == BASETYPE_FUNC && paramT.structMAlloc); //D16: so does a function value's
     if (!paramT.scopeParam || !refLike) return NULL;
-    return cgResolveScope(ctx, SemanticBoundScope(callOp, paramT.scopeParam), ctx->blockDepth);
+    return cgBoundScopeArg(ctx, callOp, paramT.scopeParam);
+}
+
+//the scope a call bound its scope variable sv to, as the hidden argument passes it. O2d: a binding to one of our
+//blocks names WHICH block - the one the argument lives in, or where the result landed. O1b: one bound to a global's
+//referent is the program's scope - building into the caller's own instead left a borrowed result built from a global
+//("H = f(G)", f returning "String&t") in a scope that closed at the caller's return
+char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv) {
+    if (SemanticBindingIsUnnamed(callOp, sv)) return "@__olang_global_scope";
+    return cgResolveScope(ctx, SemanticBoundScope(callOp, sv), SemanticBoundScopeDepth(callOp, sv, ctx->blockDepth));
 }
 
 //if t declares a destructor, registers the instance at heapPtr with scopeVal so it runs when that scope
@@ -1078,7 +1089,7 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
 bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
     if (dstT.bType != srcT.bType) return false;
     if (!dstT.structMAlloc || srcT.structMAlloc) return false;
-    if (dstT.bType == BASETYPE_STRUCT) return true;
+    if (dstT.bType == BASETYPE_STRUCT || dstT.bType == BASETYPE_CHOICE) return true;
     if (dstT.bType == BASETYPE_ARRAY) return !dstT.arrMalloc;
     return false;
 }
@@ -1237,7 +1248,15 @@ static char* cgBorrowValue(struct cgCtx* ctx, struct type dstT, struct type srcT
 //true when op is an lvalue being taken as a reference: E12c borrows it rather than copying
 static bool cgIsBorrow(struct type dstT, struct type srcT, bool srcIsLvalue) {
     return dstT.structMAlloc && !srcT.structMAlloc && srcIsLvalue
-        && (srcT.bType == BASETYPE_STRUCT || srcT.bType == BASETYPE_ARRAY);
+        && (srcT.bType == BASETYPE_STRUCT || srcT.bType == BASETYPE_ARRAY || srcT.bType == BASETYPE_CHOICE);
+}
+
+char* cgAddr(struct cgCtx* ctx, struct operand* op);
+char* cgValue(struct cgCtx* ctx, struct operand* op);
+//what a borrow takes from op: cgValue's address for a by-ref type or an array's descriptor - and for an enum, held in
+//a register as a value, the address of the storage it was read from (T17d)
+static char* cgBorrowSource(struct cgCtx* ctx, struct operand* op) {
+    return op->type.bType == BASETYPE_CHOICE ? cgAddr(ctx, op) : cgValue(ctx, op);
 }
 
 //dstHoldsLiveValue says whether dstAddr already contains a valid value of dstT - true only for an
@@ -1336,8 +1355,11 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
-        char* loaded = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
+        char* loaded = src; //an enum is already the value (T17d); anything else is the address of one
+        if (typeIsByRef(srcT)) {
+            loaded = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
+        }
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", heap, dstAddr);
         cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, heap);
@@ -1371,7 +1393,9 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
     }
     char ty[256];
     llvmType(dstT, ty, sizeof(ty));
-    if (typeIsByRef(dstT)) {
+    //T17d: a reference to an enum copied out into a value - read through it
+    bool enumCopyOut = dstT.bType == BASETYPE_CHOICE && !dstT.structMAlloc && srcT.structMAlloc;
+    if (typeIsByRef(dstT) || enumCopyOut) {
         char* tmp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", tmp, ty, src);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, tmp, dstAddr);
@@ -1509,6 +1533,7 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     //is. Building them in the block the expression sits in instead made every string-building function
     //impossible: the result could never outlive the block, so "return "hi " + name" was rejected.
     bool isFreshText = cgIsFreshTemp(op);
+    if (op->type.bType == BASETYPE_CHOICE && cgIsBorrow(dstT, op->type, OperandIsLvalue(op))) return cgBorrowSource(ctx, op);
     if (!isFreshText && !typeNeedsMallocPromotion(dstT, op->type) && !typeNeedsRuntimeLengthPromotion(dstT, op->type))
         return cgValue(ctx, op);
     char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
@@ -1549,7 +1574,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
     //instance the caller named. This is what E12a used to forbid outright, back when the only thing that
     //could happen here was a silent copy.
     if (cgIsBorrow(dstT, op->type, OperandIsLvalue(op))) {
-        return cgBorrowValue(ctx, dstT, op->type, cgValue(ctx, op));
+        return cgBorrowValue(ctx, dstT, op->type, cgBorrowSource(ctx, op));
     }
     //E12's other direction: a reference crossing into a VALUE parameter copies out, so the aggregate has
     //to be loaded from the pointer the reference holds. cgStoreInto has done this for a var-decl or an
@@ -1559,8 +1584,8 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
     //structs only: D9a forbids a by-value array parameter, so a struct is the only thing that can be a
     //by-value target here - and including arrays wrongly caught E12's T[N]& -> T[] widening, which keeps
     //the pointer and materialises a length rather than loading anything
-    if (!dstT.structMAlloc && op->type.structMAlloc && dstT.bType == BASETYPE_STRUCT
-            && op->type.bType == BASETYPE_STRUCT) {
+    if (!dstT.structMAlloc && op->type.structMAlloc && (dstT.bType == BASETYPE_STRUCT || dstT.bType == BASETYPE_CHOICE)
+            && op->type.bType == dstT.bType) {
         char* refPtr = cgValue(ctx, op);
         char ty[256];
         llvmType(dstT, ty, sizeof(ty));
@@ -1578,8 +1603,11 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         ctx->targetScopeOverride = prev;
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
-        char* loaded = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
+        if (typeIsByRef(op->type)) {
+            loaded = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        }
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
         return heap;
@@ -1873,7 +1901,9 @@ static char* cgChoiceValue(struct cgCtx* ctx, struct operand* op) {
             //resolved through this construction's own binding map, exactly as a call argument's is.
             //Without it cgResolveScope looked "s" up as a caller-local, found nothing, and mangled a var
             //with no owning module.
-            char* fieldScope = cgResolveParamScopeOverride(ctx, NULL, op, fieldT);
+            //C2d: a payload the checker never landed lives where the value is being built into, as a constructor's does
+            char* fieldScope = fieldT.scopeParam && SemanticBindingIsLanding(op, fieldT.scopeParam) && ctx->targetScopeOverride
+                               ? ctx->targetScopeOverride : cgResolveParamScopeOverride(ctx, NULL, op, fieldT);
             char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
             cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
         }
@@ -2317,7 +2347,7 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     //threaded back out through every level of cgDeepEq's recursion, where a function simply returns from
     //each arm and leaves every call site straight-line. "linkonce_odr" because
     //the comparison belongs to the type, every object that needs it emits it, and the linker keeps one.
-    if (t.bType == BASETYPE_CHOICE && ChoiceHasPayload(t)) {
+    if (t.bType == BASETYPE_CHOICE && ChoiceHasPayload(t) && !t.structMAlloc) { //a reference is identity (E10)
         char* fn = cgChoiceEqFn(ctx, t);
         char ty[256];
         llvmType(t, ty, sizeof(ty));
@@ -2530,7 +2560,7 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, v, fp);
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
-        char* sval = cgResolveScope(ctx, SemanticBoundScope(op, sv), SemanticBoundScopeDepth(op, sv, ctx->blockDepth));
+        char* sval = cgBoundScopeArg(ctx, op, sv);
         char* sp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, field++);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sp);
@@ -2617,7 +2647,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* ar
         //C2d: a constructor's bare parameter that nothing determined is built where the instance lands
         char* sval = ctor && sv->isImplicitScope && SemanticBindingIsLanding(op, sv) ? here
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
-                     : cgResolveScope(ctx, SemanticBoundScope(op, sv), SemanticBoundScopeDepth(op, sv, ctx->blockDepth));
+                     : cgBoundScopeArg(ctx, op, sv);
         char piece[512];
         snprintf(piece, sizeof(piece), "%sptr %s", i > 0 || ctor || closure ? ", " : "", sval);
         strncat(argsBuf, piece, argsBufN - strlen(argsBuf) -1);
@@ -3283,20 +3313,55 @@ static char* cgBoundsValue(struct cgCtx* ctx, struct operand* op) {
 }
 
 
-//E32: "x is Enum.Case" and "x as Enum.Case" - the tag tested, and for "as" the payload read
+//E32: "x is Enum.Case" and "x as Enum.Case" - the tag tested, and for "as" the payload read. On a reference to an enum
+//(T17d) the tag and payload are read through it, and a null one holds no case: "is" is false, "as" does not hold
 static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
     struct operand* x = *(struct operand**)ListGetIdx(&op->args, 0);
     bool isAs = op->opType == OPERATION_AS;
     char* v = cgValue(ctx, x);
+    bool viaRef = x->type.structMAlloc;
+    struct type vt = x->type;
+    vt.structMAlloc = false;
+    bool payload = ChoiceHasPayload(vt);
     char xty[256];
-    llvmType(x->type, xty, sizeof(xty));
-    char* tag = v;
-    if (ChoiceHasPayload(x->type)) {
-        tag = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", tag, xty, v);
+    llvmType(vt, xty, sizeof(xty));
+    char* hit;
+    if (viaRef && isAs && op->noCheck) hit = "true"; //S13b: its case - and so that it is not null - was just tested
+    else if (viaRef) {
+        char* slot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca i1\n", slot);
+        fprintf(ctx->fnOut, "  store i1 false, ptr %s\n", slot);
+        char* live = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp ne ptr %s, null\n", live, v);
+        int id = ctx->lblCtr++;
+        char loadLbl[32], endLbl[32];
+        snprintf(loadLbl, sizeof(loadLbl), "isas.load.%d", id);
+        snprintf(endLbl, sizeof(endLbl), "isas.end.%d", id);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", live, loadLbl, endLbl);
+        ctx->terminated = true;
+        cgLabel(ctx, loadLbl);
+        char* tag = cgNewTmp(ctx);
+        if (payload) {
+            char* tp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", tp, xty, v);
+            fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", tag, tp);
+        } else fprintf(ctx->fnOut, "  %s = load i32, ptr %s\n", tag, v);
+        char* h = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", h, payload ? "i64" : "i32", tag, op->castTag);
+        fprintf(ctx->fnOut, "  store i1 %s, ptr %s\n", h, slot);
+        cgBr(ctx, endLbl);
+        cgLabel(ctx, endLbl);
+        hit = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load i1, ptr %s\n", hit, slot);
+    } else {
+        char* tag = v;
+        if (payload) {
+            tag = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", tag, xty, v);
+        }
+        hit = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", hit, payload ? "i64" : xty, tag, op->castTag);
     }
-    char* hit = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", hit, ChoiceHasPayload(x->type) ? "i64" : xty, tag, op->castTag);
     if (!isAs) return hit;
     if (!op->noCheck) { //S13b: a pattern reads a payload only once its own test has selected the case
         int id = ctx->lblCtr++;
@@ -3307,14 +3372,18 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
         ctx->terminated = true;
         cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID", "@__olang_msg_as");
     }
-    //the payload: spilled, then its one field, or all of them as several results (a tuple of the same layout)
+    //the payload: in place behind a reference, else spilled - then its one field, or all of them as several results
+    //(a tuple of the same layout)
     {
-        struct var* c = ListGetIdx(&x->type.vars, (int)op->castTag);
+        struct var* c = ListGetIdx(&vt.vars, (int)op->castTag);
         char payTy[2048];
         structAggSpelling(c->type, payTy, sizeof(payTy));
-        char* slot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, xty);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", xty, v, slot);
+        char* slot = v;
+        if (!viaRef) {
+            slot = cgNewTmp(ctx);
+            fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, xty);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", xty, v, slot);
+        }
         char* pay = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 1\n", pay, xty, slot);
         char* at = pay;
@@ -3745,7 +3814,7 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
     int id = ctx->lblCtr++;
     bool markedRuntime = t.bType == BASETYPE_ARRAY && t.arrMalloc && t.structMAlloc;
     bool markedPtr = t.structMAlloc && !markedRuntime
-            && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY);
+            && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
     //a reference: "null", "..." past the depth limit, or its referent one level deeper
     if (markedRuntime || markedPtr) {
         struct type referent = t;
@@ -5261,8 +5330,41 @@ static struct type cgElementsType(struct type arrT, int n) {
 //K2d: a value's bytes as the target lays them out (little-endian, natural alignment - TypeGetAlign's rule), for
 //a choice payload, whose LLVM type is an untyped byte buffer. False where a byte would have to be an address
 //(a reference, a function, a run-time-length array): those have no constant byte spelling
+//K2e: where a payload's bytes hold an address - the byte offset of its word, and the private global it points at.
+//NULL while nothing is collecting them, when an address has no byte spelling
+struct cgPtrWord { long long off; char* name; };
+static struct list* cgPtrWords;
+static unsigned char* cgPtrBase;
+
 static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, long long size) {
     if (v->kind == CT_NULL) return true; //all-zero bits (T2a), already zero
+    //K2e: a reference to a struct or an enum is the address of its referent's own private global - one word,
+    //8-aligned like every pointer, so it fills a whole word of the payload
+    if (cgPtrWords && v->kind == CT_REF && t.structMAlloc && v->target
+            && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE)
+            && (v->target->kind == CT_AGG || (t.bType == BASETYPE_CHOICE && v->target->kind == CT_INT))) {
+        struct type vt = t;
+        vt.structMAlloc = false;
+        vt.scopeParam = NULL;
+        char* g = cgAuxGlobal(v->target, vt);
+        if (!g) return false;
+        struct cgPtrWord pw = { (long long)(buf - cgPtrBase), g };
+        ListAdd(cgPtrWords, &pw);
+        return true;
+    }
+    //...and an array of a run-time length is { length, storage }: the length's bytes, then its elements' global
+    if (cgPtrWords && t.bType == BASETYPE_ARRAY && t.arrMalloc
+            && (v->kind == CT_AGG || (v->kind == CT_REF && v->target && v->target->kind == CT_AGG))) {
+        struct ctVal* elems = v->kind == CT_REF ? v->target : v;
+        unsigned long long n = (unsigned long long)elems->n;
+        for (int i = 0; i < 8; i++) buf[i] = (unsigned char)(n >> (8 * i));
+        if (elems->n == 0) return true; //null storage: zero bits
+        char* g = cgAuxGlobal(elems, cgElementsType(t, elems->n));
+        if (!g) return false;
+        struct cgPtrWord pw = { (long long)(buf + 8 - cgPtrBase), g };
+        ListAdd(cgPtrWords, &pw);
+        return true;
+    }
     switch (t.bType) {
         case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_ERROR:
         case BASETYPE_I8: case BASETYPE_I16: case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64: {
@@ -5333,8 +5435,9 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
             if (!g) ok = false;
             else fprintf(f, "{ i64 %d, ptr %s }", elems->n, g);
         }
-    } else if (v->kind == CT_REF && t.bType == BASETYPE_STRUCT && t.structMAlloc && v->target->kind == CT_AGG) {
-        //a reference to a struct: its referent in a global of its own
+    } else if (v->kind == CT_REF && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc
+               && (v->target->kind == CT_AGG || (t.bType == BASETYPE_CHOICE && v->target->kind == CT_INT))) {
+        //a reference to a struct or an enum (T17d): its referent in a global of its own
         struct type vt = t;
         vt.structMAlloc = false;
         vt.scopeParam = NULL;
@@ -5356,10 +5459,24 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
         //the payload's words, little-endian as the target lays them out
         long long k = ChoicePayloadSize(t);
         unsigned char* bytes = calloc((size_t)(8 + k), 1);
+        //K2e: a payload holding a reference holds an address there - its referent's private global
+        struct list ptrWords = ListInit(sizeof(struct cgPtrWord));
+        struct list* savedWords = cgPtrWords;
+        unsigned char* savedBase = cgPtrBase;
+        cgPtrWords = &ptrWords;
+        cgPtrBase = bytes;
         ok = cgConstBytes(v, t, bytes, 8 + k);
+        cgPtrWords = savedWords;
+        cgPtrBase = savedBase;
         if (ok) {
             fprintf(f, "{ i64 %lld, [%lld x i64] [", v->i, k / 8);
             for (long long w = 0; w < k / 8; w++) {
+                char* addr = NULL;
+                for (int p = 0; p < ptrWords.len; p++) {
+                    struct cgPtrWord* pw = ListGetIdx(&ptrWords, p);
+                    if (pw->off == 8 + w * 8) addr = pw->name;
+                }
+                if (addr) { fprintf(f, "%s i64 ptrtoint (ptr %s to i64)", w ? "," : "", addr); continue; }
                 unsigned long long word = 0;
                 for (int b = 7; b >= 0; b--) word = (word << 8) | bytes[8 + w * 8 + b];
                 fprintf(f, "%s i64 %lld", w ? "," : "", (long long)word);

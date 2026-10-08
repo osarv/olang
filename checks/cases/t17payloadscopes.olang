@@ -1,0 +1,17 @@
+# check: fail holds references to existing storage in two different scopes
+# T17c/O25: two writable payload references must both live exactly where the value does, so they cannot come from two
+# different blocks
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Link enum {
+    Two(a mut Node&, b mut Node&)
+}
+fn main() ? {
+    x Node& = Node(1)
+    if TargetOs == "linux" {
+        y Node& = Node(2)
+        l Link& = Link.Two(x, y)
+    }
+}

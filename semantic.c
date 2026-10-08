@@ -118,7 +118,7 @@ long long TypeGetAlign(struct type t) {
         //T17: a payload-free choice is exactly the i32 ordinal it always was. One that carries a payload
         //is { i64 tag, [N x i8] }, and the i64 tag is what puts the payload at an 8-aligned offset - an
         //i32 tag would leave a pointer or an i64 inside a payload under-aligned.
-        case BASETYPE_CHOICE: return ChoiceHasPayload(t) ? 8 : 4;
+        case BASETYPE_CHOICE: return t.structMAlloc ? PTR_SIZE : ChoiceHasPayload(t) ? 8 : 4; //T17d: a reference is a pointer
         case BASETYPE_ERROR: return 4;
         case BASETYPE_FUNC: return PTR_SIZE;
         case BASETYPE_INTERFACE: return PTR_SIZE; //"{ ptr itab, ptr data }" - two pointers, 8-aligned
@@ -178,7 +178,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_BOOL: return 1;
         case BASETYPE_ARRAY: return getArraySize(t);
         case BASETYPE_STRUCT: return getStructSize(t);
-        case BASETYPE_CHOICE: return ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
+        case BASETYPE_CHOICE: return t.structMAlloc ? PTR_SIZE : ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
         case BASETYPE_FUNC: return PTR_SIZE;
         case BASETYPE_INTERFACE: return 2 * PTR_SIZE; //T33: the (concrete type, instance) pair
         case BASETYPE_ERROR: return ERROR_SIZE;
@@ -2500,15 +2500,12 @@ static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, s
 
 struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list* scopeParams) {
     if (!markerNode) return t;
-    //G11a: "<T>&" is a reference to whatever T is bound to - which must then be a struct or an array, checked where
+    //G11a: "<T>&" is a reference to whatever T is bound to - which must then be a struct, an enum or an array, checked where
     //the variable is bound
     //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
-            && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE) {
-        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND),
-                       t.bType == BASETYPE_CHOICE ? ENUM_NOT_REFERENCE : INVALID_REFERENCE_TARGET);
-        //an enum naming itself is still being resolved, so what it would be is not known yet - nothing more to report
-        if (t.bType == BASETYPE_CHOICE && t.placeholder) t.unknown = true;
+            && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE && t.bType != BASETYPE_CHOICE) {
+        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND), INVALID_REFERENCE_TARGET);
         return t;
     }
     t.structMAlloc = true;
@@ -2695,6 +2692,10 @@ struct type resolveChoiceBody(struct semaModule* mod, struct token nameTok, stru
     //case's payload shares one namespace: two cases naming "&s" name the same variable, which is what lets
     //a caller bind it once at construction and have it mean the same thing whichever case is live.
     t.scopeVars = ListInit(sizeof(struct var*));
+    //T17c/C2d: every reference in a payload lives where the enum value does - its instance scope, as a constructor's
+    t.hereVar = VarAllocSetOrigin();
+    t.hereVar->name = StrFromCStr("here");
+    t.hereVar->isInstanceScope = true;
     struct list cases = allPartsOfType(bodyNode, SNTX_CHOICE_CASE);
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
@@ -3029,6 +3030,7 @@ struct type TypeScope(void) {
 }
 
 bool TypeHoldsReferences(struct type t);
+bool RefNarrowingMatters(struct type t);
 //O13: the implicit result scope of a signature, appended to its scope variables after every parameter's - so
 //a scope argument, which binds the first variable no parameter names (E25), reaches it
 static struct var* newResultScope(struct type* ft, struct token tok) {
@@ -3130,7 +3132,7 @@ static bool typeIsBareRefShaped(struct type t) {
 //function's). Its container list must be kept in step with TypeValueChildren by hand - it is the only
 //walker where that is still true.
 bool structContainsBareScopeField(struct type t) {
-    if (t.bType == BASETYPE_STRUCT && t.structMAlloc) return false;
+    if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc) return false;
     if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && t.structMAlloc) return false;
     if (t.bType == BASETYPE_ARRAY && !t.arrMalloc) return structContainsBareScopeField(*t.arrElem);
     //T17: a choice is a plain VALUE that can carry a reference inside a case's payload, so returning one
@@ -4281,7 +4283,7 @@ bool OperandIsNumeric(struct operand* op) {
 }
 
 static bool typeIsRefShaped(struct type t) {
-    return t.bType == BASETYPE_STRUCT || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
+    return t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
 
 //a function's own parameters get resolved into TWO distinct struct var instances that are never the same
@@ -5086,6 +5088,8 @@ static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct 
     return call;
 }
 
+bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct var** outVar, int* outDepth,
+                   bool* unnamed);
 //T29d: a literal whose constructor runs while compiling, and the call that runs it
 struct litCtorRec { struct operand* lit; struct operand* call; };
 static struct list litCtorRecs;
@@ -5250,10 +5254,24 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             struct var* effectiveSrc = resolveEffectiveScopeVar(op, op->type.scopeParam);
             int srcDepth = op->type.scopeDepth;
             if (op->lambdaHomeSet) { effectiveSrc = op->lambdaHome; srcDepth = op->lambdaHomeDepth; } //D16c
+            //T17c/O5: a reference read out of a payload with "as" lives where the enum's payload does - the case's own
+            //scope variable means nothing here. Where that is not known (a value parameter's payload) it reads as an
+            //unnamed scope does, as a match binding of it would
+            struct operand* asOp = op->opType == OPERATION_AS ? op : NULL;
+            if (op->opType == OPERATION_MEMBER && (*(struct operand**)ListGetIdx(&op->args, 0))->opType == OPERATION_AS)
+                asOp = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (asOp && asOp->castEnum) {
+                struct var* pv;
+                int pd;
+                bool pu;
+                if (!RefExactScope(NULL, op, true, &pv, &pd, &pu) || pu || pv == SCOPE_AMBIGUOUS) { pv = NULL; pd = 0; }
+                effectiveSrc = pv;
+                srcDepth = pd;
+            }
             //O20: a reference slot with no scope name of its own - a field or element - holds a referent that
             //lives where its container does, so that is the scope read out of it. Taking the slot's own bare
             //tag at face value read it as this function's scope and rejected "cur = cur.left" outright.
-            if (!op->type.scopeParam && (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX)) {
+            if (!asOp && !op->type.scopeParam && (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX)) {
                 //...walking on through containers that are themselves such slots ("m.buckets[b]"), to the
                 //first one whose scope is stated - a tag, or a variable
                 struct operand* b = op;
@@ -5668,8 +5686,10 @@ static int firstScopeVarIndex(struct var* func) {
 }
 
 int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDepth);
+//hereDepth >= 0 marks the other kind of entry: an enum value built from existing storage (T17c/C2d), checked where
+//it landed once the statement ends - or, never landed, against the block it was built in (hereDepth)
 struct pendingDischarge { struct checkCtx* ctx; struct operand* op; struct var* func; struct list args;
-                          struct token tok; int obligation; };
+                          struct token tok; int obligation; int hereDepth; };
 static struct list pendingDischarges;
 static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                                 struct token tok, struct scopeObligation* o);
@@ -5683,6 +5703,16 @@ static bool bindingIsLanding(struct operand* op, struct var* sv) {
 }
 
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv) { return bindingIsLanding(callOp, sv); }
+
+//O1b/O25: a scope variable a call bound to a caller scope the caller cannot name - a global's referent, the program's
+//scope - which is where anything the callee builds into it has to go
+bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv) {
+    for (int i = 0; i < callOp->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&callOp->scopeBindings, i);
+        if (canonicalVar(b->typeParam) == canonicalVar(sv)) return b->boundUnnamed && !b->landing;
+    }
+    return false;
+}
 
 //O18a: whether any of a call's scopes still follows its result
 static bool opIsCtorCall(struct operand* op) {
@@ -5710,10 +5740,34 @@ bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth) {
     return true;
 }
 
+//T17c/C2d: an enum value built with a payload - a constructor of its own, whose payload lives where it lands
+static bool opIsEnumCtor(struct operand* op) {
+    return op->opType == OPERATION_NONE && op->isLiteral && op->type.bType == BASETYPE_CHOICE && !op->type.structMAlloc
+           && op->args.len > 0;
+}
+
+//an array literal - its elements live where it lands (O5, G11), so each of them lands there with it
+static bool opIsArrayLiteral(struct operand* op) {
+    return op->opType == OPERATION_NONE && op->isLiteral && op->type.bType == BASETYPE_ARRAY && op->args.len > 0
+           && op->tok.type != TOK_STR_LIT;
+}
+
 bool callIsLanding(struct operand* op) {
+    if (opIsArrayLiteral(op)) {
+        for (int i = 0; i < op->args.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&op->args, i))) return true;
+        return false;
+    }
+    //E28/S12b: a conditional or a match lands where its value does - each value it can give
+    if (op->opType == OPERATION_COND && op->args.len == 3)
+        return callIsLanding(*(struct operand**)ListGetIdx(&op->args, 1)) || callIsLanding(*(struct operand**)ListGetIdx(&op->args, 2));
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&vs, i))) return true;
+        return false;
+    }
     //an enum case built with a payload binds its scopes as a call does (T17c), and lands as one
     if (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0) return false;
-    if (opIsCtorCall(op) && !op->ctorLanded) return true; //C2d: its instance follows it too
+    if ((opIsCtorCall(op) || opIsEnumCtor(op)) && !op->ctorLanded) return true; //C2d: its instance follows it too
     for (int i = 0; i < op->scopeBindings.len; i++) {
         if (((struct scopeBinding*)ListGetIdx(&op->scopeBindings, i))->landing) return true;
     }
@@ -5723,8 +5777,22 @@ bool callIsLanding(struct operand* op) {
 //O18a: the call's result lands in (dst, depth) - every scope that followed it is bound there, and so is every
 //call passed for a parameter whose scope followed it
 void landCall(struct operand* op, struct var* dst, int depth) {
+    if (op && opIsArrayLiteral(op)) {
+        for (int i = 0; i < op->args.len; i++) landCall(*(struct operand**)ListGetIdx(&op->args, i), dst, depth);
+        return;
+    }
+    if (op && op->opType == OPERATION_COND && op->args.len == 3) { //E28: whichever value is chosen lands there
+        landCall(*(struct operand**)ListGetIdx(&op->args, 1), dst, depth);
+        landCall(*(struct operand**)ListGetIdx(&op->args, 2), dst, depth);
+        return;
+    }
+    if (op && op->opType == OPERATION_MATCH) { //S12b: the same, for each of a match's values
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) landCall(*(struct operand**)ListGetIdx(&vs, i), dst, depth);
+        return;
+    }
     if (!op || (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0)) return;
-    if (opIsCtorCall(op) && !op->ctorLanded) {
+    if ((opIsCtorCall(op) || opIsEnumCtor(op)) && !op->ctorLanded) {
         op->ctorLanded = true;
         op->landedTo = dst;
         op->landedDepth = depth;
@@ -5794,12 +5862,12 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             //a scope this function cannot name may still be READ through a callee - but a callee holding
             //the variable may allocate into it and store the result through the reference, which would land
             //in the wrong scope wherever the referent can hold references
-            if (argUnnamed && TypeHoldsReferences(arg->type)) ErrMsgSemantic(arg->tok, UNNAMED_SCOPE_BOUND);
+            bool results = func->type.hasRetType && paramTypeNamesScope(*func->type.retType, sv);
+            if (argUnnamed && RefNarrowingMatters(pt)) ErrMsgSemantic(arg->tok, UNNAMED_SCOPE_BOUND);
             //C2d/O23: a callee may build into a parameter it can write, or into one its borrowed result names -
             //neither can be the right place for a field whose real scope is not known here
-            if (TypeHoldsReferences(arg->type) && scopeViaFallback(arg)) {
+            if (RefNarrowingMatters(pt) && scopeViaFallback(arg)) {
                 struct var* pv = ListGetIdx(&func->type.vars, j);
-                bool results = func->type.hasRetType && paramTypeNamesScope(*func->type.retType, sv);
                 if (pv->mut || results) ErrMsgSemantic(arg->tok, BUILD_THROUGH_UNKNOWN_SCOPE);
             }
             boundTo = argScope;
@@ -5837,7 +5905,10 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
         if (spreadSourceOf(arg)) arg = spreadSourceOf(arg); //D8d: its results land together, with the first
         struct var* psv = (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam;
-        if (arg->opType != OPERATION_FUNCCALL || !psv || !callIsLanding(arg)) continue;
+        //T17c: an enum value built for the parameter, and a conditional or match giving one, land as a call's result does
+        bool lands = arg->opType == OPERATION_FUNCCALL || opIsEnumCtor(arg) || arg->opType == OPERATION_COND
+                     || arg->opType == OPERATION_MATCH;
+        if (!lands || !psv || !callIsLanding(arg)) continue;
         for (int k = 0; k < op->scopeBindings.len; k++) {
             struct scopeBinding* pb = ListGetIdx(&op->scopeBindings, k);
             if (canonicalVar(pb->typeParam) != canonicalVar(psv)) continue;
@@ -5863,7 +5934,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
     for (int i = 0; i < func->type.scopeObligations.len; i++) {
         struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
         if (bindingIsLanding(op, o->longer) || (!o->shorterViaParam && bindingIsLanding(op, o->shorter))) {
-            struct pendingDischarge pd = { ctx, op, func, args, tok, i };
+            struct pendingDischarge pd = { ctx, op, func, args, tok, i, -1 };
             ListAdd(&pendingDischarges, &pd);
             continue;
         }
@@ -5922,9 +5993,16 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
 
 //O18a: the obligations deferred until their call's result landed - discharged at the end of the statement
 //(or field, or initializer) the call is in, by when every landing site in it has been resolved
+void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok);
 void flushPendingDischarges(void) {
     for (int i = 0; i < pendingDischarges.len; i++) {
         struct pendingDischarge* pd = ListGetIdx(&pendingDischarges, i);
+        if (pd->hereDepth >= 0) {
+            if (pd->op->hereChecked) continue;
+            if (pd->op->ctorLanded) checkCtorHereFits(pd->ctx, pd->op, pd->op->landedTo, pd->op->landedDepth, pd->tok);
+            else checkCtorHereFits(pd->ctx, pd->op, NULL, pd->hereDepth, pd->tok);
+            continue;
+        }
         dischargeObligation(pd->ctx, pd->op, pd->func, pd->args, pd->tok,
                             ListGetIdx(&pd->func->type.scopeObligations, pd->obligation));
     }
@@ -6020,7 +6098,8 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
             if (pt.bType != BASETYPE_TYPEVAR || !pt.structMAlloc) continue;
             struct type* bt = bindingGet(&bindings, pt.name);
-            if (bt && bt->bType != BASETYPE_STRUCT && bt->bType != BASETYPE_ARRAY && bt->bType != BASETYPE_TYPEVAR) {
+            if (bt && bt->bType != BASETYPE_STRUCT && bt->bType != BASETYPE_ARRAY && bt->bType != BASETYPE_CHOICE
+                    && bt->bType != BASETYPE_TYPEVAR) {
                 ErrMsgSemantic(tok, REF_TYPEVAR_NOT_AGGREGATE);
                 ok = false;
             }
@@ -6946,7 +7025,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
 bool TypeIsNullable(struct type t) {
     if (t.bType == BASETYPE_FUNC && t.structMAlloc) return true; //D16: a function value is a reference
     if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return true;
-    if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY) && t.structMAlloc) return true;
+    if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE) && t.structMAlloc) return true;
     return false;
 }
 
@@ -7080,6 +7159,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                        struct token tok, struct list scopeArgNodes);
 struct var* resolveEffectiveScopeVar(struct operand* op, struct var* typeParam);
 
+static void bindEnumHere(struct checkCtx* ctx, struct operand* op, struct var* synth);
 struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType, struct token wordTok,
                                    struct syntax* argsNode, struct list scopeArgNodes) {
     struct operand* op = operandNew(wordTok, OPERATION_NONE, choiceType);
@@ -7111,14 +7191,24 @@ struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType,
     //O18: a scope variable no argument determined is supplied by a written scope argument, defaulting to
     //the caller's own scope. That is the only way to build a payload that is a FRESH value into a scope
     //outliving this function - an already-reference-shaped argument determines the tag by itself (O17).
-    bindCallScopeVars(ctx, op, &synth, args, wordTok, scopeArgNodes);
+    bindCallScopeVars(ctx, op, &synth, args, wordTok, (struct list){0});
+    op->args = args;
     for (int i = 0; i < args.len; i++) {
         struct operand* a = *(struct operand**)ListGetIdx(&args, i);
         struct type want = (*(struct var*)ListGetIdx(&c->type.vars, i)).type;
         if (want.scopeParam) want.scopeParam = resolveEffectiveScopeVar(op, want.scopeParam);
         reportTypeFit(OperandFitsType(ctx ? ctx->func : NULL, a, want), a->tok);
     }
-    op->args = args;
+    //T17c/C2d: the payload lives where the value lands - existing storage stored in it held to that place
+    if (ctx) bindEnumHere(ctx, op, &synth);
+    //E25: a scope argument lands the value - and the temporaries built for its payload - where the named variable lives
+    if (scopeArgNodes.len > 1) ErrMsgSemantic(wordTok, SCOPE_ARG_NOT_ACCEPTED);
+    if (scopeArgNodes.len > 0 && ctx) {
+        bool ok = false;
+        int wDepth = 0;
+        struct var* w = resolveScopeArg(ctx, *(struct syntax**)ListGetIdx(&scopeArgNodes, 0), &ok, &wDepth);
+        if (ok) landCall(op, w, wDepth);
+    }
     return op;
 }
 
@@ -9468,6 +9558,61 @@ bool TypeHoldsReferences(struct type t) {
     return false;
 }
 
+//O25: whether a write through a reference of type t can store a reference where its referent lives - into a slot it
+//may write (a "mut" field through a writable reference, an element of a writable array), or through a writable
+//reference reached from it at any depth. Only then does a narrowed scope matter: what such a store builds is built in
+//the reference's scope and kept where the referent really is. Through anything else - an enum, whose payloads are
+//never assigned, a read-only reference - nothing is ever stored, so a reference that merely outlives where it is put
+//serves exactly as well as an exact one. A value (not a reference) answers as TypeHoldsReferences does.
+struct narrowSeen { struct semaModule* owner; struct str name; bool writable; };
+static bool valueAdmitsStores(struct type v, bool writable, struct list* seen, int depth);
+static bool refAdmitsStores(struct type t, struct list* seen, int depth) {
+    struct type v = t;
+    v.structMAlloc = false;
+    return valueAdmitsStores(v, t.refMut, seen, depth);
+}
+static bool partAdmitsStores(struct type p, bool writable, struct list* seen, int depth) {
+    bool holds = p.structMAlloc || (p.bType == BASETYPE_ARRAY && p.arrMalloc) || TypeHoldsReferences(p);
+    if (writable && holds) return true; //the slot itself may be written, with references in what is written
+    if (p.structMAlloc) return refAdmitsStores(p, seen, depth + 1);
+    return valueAdmitsStores(p, writable, seen, depth + 1);
+}
+static bool valueAdmitsStores(struct type v, bool writable, struct list* seen, int depth) {
+    if (depth > 64 || v.bType == BASETYPE_TYPEVAR) return true; //a pattern, not a type: assume the worst
+    if (v.unknown) return false;
+    if (v.owner && v.name.len && (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE)) {
+        for (int i = 0; i < seen->len; i++) {
+            struct narrowSeen* n = ListGetIdx(seen, i);
+            if (n->owner == v.owner && StrCmp(n->name, v.name) && (n->writable || !writable)) return false;
+        }
+        struct narrowSeen n = { v.owner, v.name, writable };
+        ListAdd(seen, &n);
+    }
+    switch (v.bType) {
+        case BASETYPE_ARRAY: return v.arrElem && partAdmitsStores(*v.arrElem, writable, seen, depth);
+        case BASETYPE_STRUCT:
+            for (int i = 0; i < v.vars.len; i++) {
+                struct var* f = ListGetIdx(&v.vars, i);
+                if (partAdmitsStores(f->type, writable && f->mut, seen, depth)) return true;
+            }
+            return false;
+        case BASETYPE_CHOICE: //T17: a payload is never assigned - only what its references let through
+            for (int i = 0; i < v.vars.len; i++) {
+                struct var* c = ListGetIdx(&v.vars, i);
+                for (int k = 0; k < c->type.vars.len; k++) {
+                    if (partAdmitsStores(((struct var*)ListGetIdx(&c->type.vars, k))->type, false, seen, depth)) return true;
+                }
+            }
+            return false;
+        default: return false; //a number, a function value (nothing is written through one, D16d)
+    }
+}
+bool RefNarrowingMatters(struct type t) {
+    if (!t.structMAlloc) return TypeHoldsReferences(t);
+    struct list seen = ListInit(sizeof(struct narrowSeen));
+    return refAdmitsStores(t, &seen, 0);
+}
+
 bool varIsParamOf(struct var* v, struct var* func);
 
 //O25: where the referent of a reference-shaped operand (asRef), or the storage of a value lvalue (!asRef),
@@ -9475,6 +9620,29 @@ bool varIsParamOf(struct var* v, struct var* func);
 //*unnamed says it is a caller's scope this function has no name for - a bare "&" parameter's (O4a) or a
 //global's - which is fine to read from and nameable for nothing. False for a value with no storage yet (a
 //temporary, null): it has no scope to adopt, and is allocated wherever it lands.
+//T17c/O5: where a reference read out of an enum's payload lives. From an enum held BY REFERENCE, exactly where the
+//referent does: a reference was stored into a payload there only in that scope, or - for plain data - one outliving
+//it (O25c), so the container's scope is exact or an underestimate, never a claim. From one held by value, where the
+//value's own binding of the case's scope variable says (the argument's scope, or where a temporary was built), and
+//nowhere this function can name when no binding is known - a value parameter, built by the caller. A payload that is
+//itself a value (a by-value struct holding references) lives where the enum does, in either case.
+static bool payloadExactScope(struct checkCtx* ctx, struct operand* asOp, struct var* fieldScope, bool asRef,
+                              struct var** outVar, int* outDepth, bool* unnamed) {
+    struct operand* x = *(struct operand**)ListGetIdx(&asOp->args, 0);
+    if (x->type.structMAlloc || !asRef || !fieldScope) return RefExactScope(ctx, x, x->type.structMAlloc, outVar, outDepth, unnamed);
+    for (int i = 0; i < x->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&x->scopeBindings, i);
+        if (canonicalVar(b->typeParam) != canonicalVar(fieldScope) || b->landing) continue;
+        if (b->boundTo == SCOPE_AMBIGUOUS || b->containerFallback) { *unnamed = true; return true; }
+        *outVar = b->boundTo;
+        *outDepth = b->boundTo ? 0 : b->boundDepth;
+        *unnamed = b->boundUnnamed;
+        return true;
+    }
+    *unnamed = true;
+    return true;
+}
+
 bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct var** outVar, int* outDepth,
                    bool* unnamed) {
     *outVar = NULL;
@@ -9489,6 +9657,14 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         *outDepth = op->lambdaHomeDepth;
         return true;
     }
+    //T17c/O5: a payload read with "as" - its one field, or one of several
+    struct operand* asOp = op->opType == OPERATION_AS ? op : NULL;
+    if (op->opType == OPERATION_MEMBER) {
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->opType == OPERATION_AS) asOp = b;
+    }
+    if (asOp && asOp->castEnum) return payloadExactScope(ctx, asOp, asRef ? op->type.scopeParam : NULL, asRef, outVar,
+                                                         outDepth, unnamed);
     if (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) {
         //a named field tag is its own scope, resolved through the container's binding (O22)
         if (asRef && op->type.scopeParam) {
@@ -9587,8 +9763,24 @@ static bool scopeNamedByField(struct type* t, struct var* sv) {
     return false;
 }
 
+static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var* func, struct var* here,
+                         struct type* namedBy);
 void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) {
-    struct var* here = func->type.retType->hereVar;
+    bindHereFrom(ctx, call, func, func->type.retType->hereVar, func->type.retType);
+}
+
+//T17c/C2d: an enum value built with a payload - its instance scope bound from the existing storage stored in it, held
+//to wherever it lands once the statement ends, or to the block it is built in where nothing lands it
+static void bindEnumHere(struct checkCtx* ctx, struct operand* op, struct var* synth) {
+    int before = op->scopeBindings.len;
+    bindHereFrom(ctx, op, synth, op->type.hereVar, NULL);
+    if (op->scopeBindings.len == before) return;
+    struct pendingDischarge pd = { ctx, op, NULL, (struct list){0}, op->tok, 0, normDepth(ctx->blockDepth) };
+    ListAdd(&pendingDischarges, &pd);
+}
+
+static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var* func, struct var* here,
+                         struct type* namedBy) {
     if (!here || !ctx || !ctx->hasOwnScope) return;
     bool determined = false, bu = false, exact = false;
     struct var* bv = NULL;
@@ -9601,7 +9793,7 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
         //a bare parameter has an implicit scope of its own (C2c), but what it fills lives in the instance
         if ((pt.scopeParam && !pt.scopeParam->isImplicitScope) || !refLike) continue;
         //C2d: a parameter a field names ("&p") is tracked by that field, not held against the instance
-        if (pt.scopeParam && scopeNamedByField(func->type.retType, pt.scopeParam)) continue;
+        if (namedBy && pt.scopeParam && scopeNamedByField(namedBy, pt.scopeParam)) continue;
         struct operand* arg = *(struct operand**)ListGetIdx(&call->args, j);
         bool asRef = arg->type.structMAlloc;
         if (!asRef && !OperandNamesExistingStorage(arg)) continue; //a temporary: built where the instance lands
@@ -9610,13 +9802,26 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
         bool su;
         if (!RefExactScope(ctx, arg, asRef, &sv, &sd, &su)) continue;
         if (determined && (su != bu || (!su && !sameExactScope(sv, sd, bv, bd)))) {
+            //neither stored reference needs its exact scope (O25): the instance must merely outlive neither, so the
+            //shorter-lived of the two is what it is held to, where the two are ordered here (a block within a block,
+            //a block within a scope variable's, anything within the program's)
+            if (!exact && !RefNarrowingMatters(pt) && bv != SCOPE_AMBIGUOUS && sv != SCOPE_AMBIGUOUS) {
+                if (su) continue;
+                if (bu || scopeOutlives(ctx->func, bv, normDepth(bd), sv, normDepth(sd))) {
+                    bv = sv;
+                    bd = sd;
+                    bu = false;
+                    continue;
+                }
+                if (scopeOutlives(ctx->func, sv, normDepth(sd), bv, normDepth(bd))) continue;
+            }
             //two of this function's scope variables: the instance must not outlive either, so both are kept
             //and wherever it lands is checked against each (O13b's candidates) - which is what lets a
             //node be built from a key in one scope and a link in another
             bool bothVars = !su && !bu && sv && bv && sv != SCOPE_AMBIGUOUS && varIsOwnParam(canonicalVar(sv), ctx->func)
                             && (bv == SCOPE_AMBIGUOUS || varIsOwnParam(canonicalVar(bv), ctx->func));
             if (!bothVars) {
-                ErrMsgSemantic(arg->tok, SCOPE_ARGS_DISAGREE);
+                ErrMsgSemantic(arg->tok, namedBy ? SCOPE_ARGS_DISAGREE : ENUM_ARGS_DISAGREE);
                 return;
             }
             if (bv != SCOPE_AMBIGUOUS) {
@@ -9626,7 +9831,7 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
                 bv = SCOPE_AMBIGUOUS;
             }
             ListAdd(&cands, &sv);
-            bool ex = TypeHoldsReferences(arg->type);
+            bool ex = RefNarrowingMatters(pt);
             ListAdd(&candExact, &ex);
             continue;
         }
@@ -9634,7 +9839,7 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
         bv = sv;
         bd = sd;
         bu = su;
-        if (TypeHoldsReferences(arg->type)) exact = true;
+        if (RefNarrowingMatters(pt)) exact = true;
     }
     if (!determined) return;
     struct scopeBinding b = (struct scopeBinding){0};
@@ -9652,7 +9857,24 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
 //C2d: a constructed value landing in (dstVar, dstDepth) - NULL at a depth being one of this function's own
 //block scopes - may not outlive the storage its constructor call stored by reference
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok) {
-    if (!ctx || !ctx->hasOwnScope || val->type.bType != BASETYPE_STRUCT || !val->type.hereVar) return;
+    //E28/S12b: a conditional or a match puts whichever value it gives there
+    if (val->opType == OPERATION_COND && val->args.len == 3) {
+        checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&val->args, 1), dstVar, dstDepth, tok);
+        checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&val->args, 2), dstVar, dstDepth, tok);
+        return;
+    }
+    if (val->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(val);
+        for (int i = 0; i < vs.len; i++) checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&vs, i), dstVar, dstDepth, tok);
+        return;
+    }
+    if (opIsArrayLiteral(val) && val->type.arrElem && val->type.arrElem->bType == BASETYPE_CHOICE) { //its elements, there
+        for (int i = 0; i < val->args.len; i++) checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&val->args, i), dstVar, dstDepth, tok);
+        return;
+    }
+    bool isEnum = val->type.bType == BASETYPE_CHOICE && !val->type.structMAlloc; //T17c: an enum's payload is its fields
+    if (!ctx || !ctx->hasOwnScope || (val->type.bType != BASETYPE_STRUCT && !isEnum) || !val->type.hereVar) return;
+    val->hereChecked = true;
     for (int i = 0; i < val->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&val->scopeBindings, i);
         if (canonicalVar(b->typeParam) != canonicalVar(val->type.hereVar)) continue;
@@ -9674,7 +9896,7 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
         else if (b->boundUnnamed) ok = !dstVar && !b->needExact;
         else if (b->needExact) ok = sameExactScope(b->boundTo, b->boundDepth, dstVar, dstDepth);
         else ok = scopeCanFlowInto(ctx->func, b->boundTo, normDepth(b->boundDepth), dstVar, normDepth(dstDepth));
-        if (!ok) ErrMsgSemantic(tok, CTOR_ARG_OUTLIVED);
+        if (!ok) ErrMsgSemantic(tok, isEnum ? ENUM_ARG_OUTLIVED : CTOR_ARG_OUTLIVED);
     }
 }
 
@@ -9779,7 +10001,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (rhs && rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE); //D8c: destructure it instead
     bool homeChecked = false;
     //C2d/O23: a local holding such a field's referent would claim a scope it does not really have
-    if (rhs && ctx->hasOwnScope && declType.structMAlloc && TypeHoldsReferences(declType) && scopeViaFallback(rhs))
+    if (rhs && ctx->hasOwnScope && declType.structMAlloc && RefNarrowingMatters(declType) && scopeViaFallback(rhs))
         ErrMsgSemantic(rhs->tok, BUILD_THROUGH_UNKNOWN_SCOPE);
     //O18a: a by-value result holding references, landing in a value local, is built in the function's own
     //scope - as a constructor's value instance is - so a copy of it out of an inner block cannot dangle
@@ -10011,7 +10233,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 //own can satisfy no named scope - but say which kind of own this is (see ownOutliveMsg)
                 if (!srcScope) ErrMsgSemantic(opTok, ownOutliveMsg(rhs, ctx->func));
                 else scopeObligationAddDerived(ctx->func, srcScope, targetType.scopeParam, derivedVia,
-                                               TypeHoldsReferences(rhs->type));
+                                               RefNarrowingMatters(target->type));
             }
             targetType.scopeParam = NULL; //checked by the obligation above, not by the generic fit below
         }
@@ -10039,7 +10261,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         if (ctx->hasOwnScope && !rhsExisting && !rhs->isNullLiteral
                 && (target->type.structMAlloc || TypeHoldsReferences(target->type)) && scopeViaFallback(target))
             ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
-        if (ctx->hasOwnScope && target->opType == OPERATION_READ_VAR && rhsExisting && TypeHoldsReferences(rhs->type)
+        if (ctx->hasOwnScope && target->opType == OPERATION_READ_VAR && rhsExisting && RefNarrowingMatters(target->type)
                 && scopeViaFallback(rhs))
             ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
         if (ctx->hasOwnScope && target->type.structMAlloc && !derivedVia) {
@@ -10049,7 +10271,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             bool inSlot = target->opType == OPERATION_MEMBER || target->opType == OPERATION_INDEX;
             if (RefExactScope(ctx, target, true, &tv, &td, &tu) && rhsExisting && !tu) {
                 bool mustMatch = target->type.bType != BASETYPE_FUNC //D16c: a function value need only outlive
-                                 && (!inSlot || TypeHoldsReferences(rhs->type));
+                                 && (!inSlot || RefNarrowingMatters(target->type));
                 if (mustMatch) {
                     //two different scope variables of this function: the scopes must be one, which the body
                     //cannot decide - so it is an obligation both ways, and each caller binds them equal
@@ -11343,17 +11565,24 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
     struct str name = strFromTok(tok);
     if (StrCmp(name, StrFromCStr("_"))) return;
     bool refLike = t.structMAlloc || (t.bType == BASETYPE_ARRAY && t.arrMalloc);
+    bool unnamed = true;
     if (refLike) {
-        t.scopeParam = NULL;
+        //T17c/O5: it lives where the payload's reference does - exactly the enum's own scope when the enum is held by
+        //reference, so a tree of them can be walked and passed on (payloadExactScope)
+        struct var* sv = NULL;
+        int sd = 0;
+        if (!at || !ctx->hasOwnScope || !RefExactScope(ctx, at, true, &sv, &sd, &unnamed) || sv == SCOPE_AMBIGUOUS)
+            unnamed = true;
+        t.scopeParam = unnamed ? NULL : sv;
         t.scopeWritten = false;
-        t.scopeDepth = 0;
+        t.scopeDepth = unnamed || sv ? 0 : sd;
     }
     struct var* v = NULL;
     if (altIdx == 0) {
         v = scopeDeclare(ctx->mod, ctx->scope, name, tok, t, false);
         if (!v) return;
         v->mayBeInitialized = true;
-        if (refLike) v->scopeUnnamed = true;
+        if (refLike && unnamed) v->scopeUnnamed = true;
         ListAdd(&clause->caseBindings, &v);
     } else {
         v = caseBindingNamed(clause, name);
@@ -11823,7 +12052,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                 int rd;
                 bool ru;
                 bool asRef = v->type.structMAlloc;
-                if (et.structMAlloc && TypeHoldsReferences(et) && (asRef || OperandIsLvalue(v))
+                if (et.structMAlloc && RefNarrowingMatters(et) && (asRef || OperandIsLvalue(v))
                         && RefExactScope(ctx, v, asRef, &rv, &rd, &ru)
                         && (ru || canonicalVar(rv) != canonicalVar(et.scopeParam))) {
                     ErrMsgSemantic(v->tok, REFERENCE_NARROWED);
@@ -11889,7 +12118,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         int rd;
         bool ru;
         bool asRef = val->type.structMAlloc;
-        if (rt.structMAlloc && TypeHoldsReferences(rt) && (asRef || OperandIsLvalue(val))
+        if (rt.structMAlloc && RefNarrowingMatters(rt) && (asRef || OperandIsLvalue(val))
                 && RefExactScope(ctx, val, asRef, &rv, &rd, &ru)
                 && (ru || canonicalVar(rv) != canonicalVar(rt.scopeParam))) {
             ErrMsgSemantic(val->tok, REFERENCE_NARROWED);

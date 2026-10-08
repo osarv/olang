@@ -136,8 +136,7 @@
 #define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
 #define TYPE_MATCH_NOT_EXHAUSTIVE "no 'case' of this 'match' covers the type this generic was instantiated with, and there is no 'nomatch' clause - unlike a match over a value, a match over a type must cover every instantiation, or the generic would silently do nothing for some of them"
 #define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. A struct holds itself through a reference ('next Node&'); an enum through a struct holding a reference to it (T17)"
-#define ENUM_NOT_REFERENCE "an enum is a value and is never a reference ('&', T17) - an enum that holds itself does it through a struct: 'type Node struct(e Expr) { e }' and a case 'Add(a Node&, b Node&)'"
-#define INVALID_REFERENCE_TARGET "only a struct or array type can be marked as a reference with '&' - primitives are always by value"
+#define INVALID_REFERENCE_TARGET "only a struct, enum or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----
 
@@ -239,6 +238,8 @@ then stores (T7a, C2e)"
 multi-dimensional arrays. An array of arrays holds references: 'Array<I32>&[r0, r1]' (E21)"
 #define EMPTY_DESTRUCTOR "this destructor does nothing - remove it. A destructor is for releasing something \
 when an instance's scope closes (C7a)"
+#define ENUM_ARG_OUTLIVED "this enum value holds a reference to existing storage in its payload, and a payload lives where the value does - so here it would outlive what the reference points at, or, where that can itself hold references, live somewhere other than exactly where it does (T17c). Build the value where that storage lives ('v E&x = ...', 'E.Case&x(...)', a result 'E&x'), or keep it in that block"
+#define ENUM_ARGS_DISAGREE "this enum value's payload holds references to existing storage in two different scopes, and a payload lives in one place - where the value does (T17c). Build what it holds in one scope"
 #define CTOR_ARG_OUTLIVED "this value was constructed from a reference to existing storage, stored in a field that lives with the instance - so the instance holds that reference, and here it would outlive what the reference points at (C2d). Build the instance where that storage lives ('T&x(...)'), or give the field the parameter's scope ('f T&p = p')"
 #define SCOPE_ARGS_DISAGREE "two arguments are in different scopes where this signature requires one - one parameter is written as living where the other does ('&p'), so the values passed for them must share a scope"
 #define OBLIGATION_ORIGIN_NOTE "the called function requires it because of this statement in its body"
@@ -269,7 +270,7 @@ constructor, in a position whose parameter declares a default value"
 #define TYPE_CANNOT_BE_INFERRED "a variable declared with ':=' takes its type from its initializer, so the initializer must have one: a literal, a call returning a value, a field read or a slice - not 'null', a variable read, or an expression built from them (write the type)"
 #define OPERANDS_NOT_SAME_TYPE "both operands must have the same type"
 #define METHOD_NOT_INHERITED "this type has no method of this name, and its base does - but a declared type inherits its base's methods only when it is declared with 'extends' (T29f)"
-#define REF_TYPEVAR_NOT_AGGREGATE "a '<T>&' parameter is a reference to what T is, and here T is a number, an enum or another type that cannot be one - only a struct or an array can (G11a)"
+#define REF_TYPEVAR_NOT_AGGREGATE "a '<T>&' parameter is a reference to what T is, and here T is a number or another type that cannot be one - only a struct, an enum or an array can (G11a)"
 #define TRAIT_NOT_A_TYPE "a trait is a constraint, not a type: it is written only where a type variable is constrained - 'x <T Shape>', '<I Iterator<<E>>>' (T30, G19). A value of one of several types is an enum (T17); one thing that can be called, a function value (T21)"
 #define OVERRIDE_SIGNATURE_DIFFERS "this type satisfies a trait with a default method of this name, and this method does not have the default's signature - an override must match it exactly; give the method the default's signature or another name (M19e)"
 #define EXTENDS_NOT_BASE "only a type declared over a number or an array extends it - a struct, an enum, a trait or a function type has no base to inherit from (T29f)"

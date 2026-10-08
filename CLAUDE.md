@@ -3020,7 +3020,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   `-O3`. **Found on the way**: S13's "case value must have the same type" refused `case 3` against an `I64` (a literal
   adapts now); the removed interface type cases still parsed (`case c Circle& {`) and crashed the checker; an enum
   naming itself with `&` (`Add(a Expr&, ...)`) was taken for a struct no value fit (T17d: an enum is never a reference -
-  it holds itself through a struct), and that struct route itself failed (`a.e` an unknown member, or invalid IR with
+  it holds itself through a struct; superseded hours later by recursive enums, below), and that struct route itself failed (`a.e` an unknown member, or invalid IR with
   the enum declared first) since enum payload snapshots were never refreshed; T16's "a type cannot embed itself by
   value" was never enforced (invalid IR) - now an error; and the evaluator returned a value built in a `return` through
   a reference result bare, so `label(5) == "5+10"` was false while compiling and true at run time.
@@ -3038,6 +3038,34 @@ Go through this for every change to what olang means - a rule added, revised or 
   the way**: destructors took their instance by value while the runtime passes a pointer, so a field read in one was
   garbage; blocks inside catch clauses and expression-held blocks got no arena (destructors ran at the function's
   return); a statement after a `return` emitted invalid IR. `errdefer` not added (cheap: one flag where errors leave).
+- **Recursive enums: an enum may be held by reference (T17d, T17c, O25g, 2026-10-08; decided for the self-hosted
+  compiler's syntax trees, the details mine).** `type Expr enum { Lit(v I64)  Add(a Expr&, b Expr&) }` - `Expr&` is a
+  reference to an enum value, and a payload may hold one of its own type; this replaces the stopgap "an enum is never a
+  reference" from the match work. **Built where it lands**: `e Expr& = Expr.Add(Expr.Lit(1), Expr.Neg(Expr.Lit(2)))`
+  builds every node where `e` lives, and an lvalue is borrowed. **A payload lives where the value does** (T17c now
+  C2d's rule): existing storage stored in one is held to wherever the value lands - exactly where something can be
+  stored through it, else outliving it - checked at declarations, assignments, returns and, for a value nested in
+  another payload, an argument or an array literal, where it lands. **Read through**: `match` (nested patterns at any
+  depth through references; a null reference matches no case pattern, `case null` matches it, a value match no clause
+  selects aborts as `unreachable`), `is`/`as` (null is no case), a copy into a value; a match binding of a payload
+  reference takes the container's exact scope, so trees recurse. `==` on `Expr&` is identity unless `Eq` is declared,
+  `$` follows references 8 deep, the zero value is null, `<T>&` may be bound to an enum (G11a), and K2 bakes a tree as
+  data - a payload's reference written as the address of its referent's private global (a run-time-length array's
+  too). **O25g, the refinement that makes trees practical**: exactness was asked wherever a referent "can hold
+  references"; it is now asked only where something can be **stored through** the reference - a `mut` field through a
+  writable reference, an element of a writable array, at any depth - since that is the only store a narrowed scope
+  misplaces. A payload is never assigned, so a read-only tree never needs it: a `List<Ast&>` hands its elements out
+  (`At` and iteration failed for any element referent holding references - pre-existing, and still so for a struct
+  with `mut` reference fields), a global tree can be passed to a function, nodes from an outer block go into an inner
+  block's tree. **Found and fixed on the way (pre-existing)**: `p = Parcel.Held(cc)` and `p = parcelOf(cc)` with `cc`
+  dying each iteration compiled (a payload outlived its referent); a match or conditional value never landed its
+  calls, so `return match e { ... => Add(fold(a), fold(b)) }` built the subtree in the function's own scope; a call
+  building into a scope variable a global determined (`H = f(G)`, f borrowing from its argument) built in the caller's
+  scope - now the program's (`@__olang_global_scope`); temporaries for a payload or argument were built at the current
+  block rather than at their binding's depth. **Found, not fixed (a design question)**: a callee's scope obligations
+  (O10b) are discharged only if its body was checked before the call - never for a generic instantiation or a function
+  declared later - so `for i in range n { l.Push(Node(i)) }` or `m.Put($i, i)` builds the element in the loop's arena
+  and stores it in the outer container (reproduced with the previous compiler).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

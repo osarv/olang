@@ -1,0 +1,5 @@
+# check: fail only a struct, enum or array type can be marked as a reference
+# T24: a number has no field to write through, so a reference to one means nothing
+fn main() ? {
+    x I32& = 3
+}

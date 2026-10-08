@@ -1095,7 +1095,7 @@ static bool ctRenderFields(struct ctState* st, struct ctText* b, struct ctVal* v
 //rdBody's rules, for a value the evaluator holds
 static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth, bool row,
                          struct token tok) {
-    bool marked = t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY);
+    bool marked = t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
     if (marked) {
         if (!v || v->kind == CT_NULL) { ctTextStr(b, "null"); return true; }
         if (depth >= 8) { ctTextStr(b, "..."); return true; }
@@ -1459,7 +1459,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             bool isAs = op->opType == OPERATION_AS;
             if (op->castEnum) {
                 struct ctVal* v = ctDeref(x);
-                bool hit = v->i == op->castTag;
+                bool hit = v && v->kind != CT_NULL && v->i == op->castTag; //T17d: a null reference holds no case
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
                     if (op->checkRoot) return ctCheckFail(st, op, "INVALID");

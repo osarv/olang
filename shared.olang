@@ -5116,7 +5116,7 @@ test "the evaluator matches cases, guards and nested patterns as the run time do
         mtSide(MtShape.Square(6 + z)) * 10000
 }
 
-# T17: an enum is never a reference, so one holding itself does it through a struct - in either declaration order.
+# T17: an enum may also hold itself through a struct - in either declaration order (and directly, T17d, below).
 # Its payload's struct was left the empty snapshot taken while the enum was still being resolved, so "a.e" was an
 # unknown member; and with the enum declared first, the struct's field held the enum's unfinished snapshot
 type MtNode struct(e MtExpr) { e }
@@ -5152,6 +5152,220 @@ test "an enum holds itself through a struct, declared in either order" {
     z I64 = I64(mtRuntimeZero)
     assert mtEval(MtExpr.Add(MtNode(MtExpr.Lit(3 + z)), MtNode(MtExpr.Lit(4)))) == 7
     assert mtEval2(MtExpr2.Neg(MtNode2(MtExpr2.Neg(MtNode2(MtExpr2.Lit(6 + z)))))) == 6
+}
+
+# T17d: an enum held by reference, and a payload holding a reference to its own enum - a syntax tree. A tree is built
+# where it lands (E12c, T17c: every temporary in it, at any depth, is built where the whole value lives), matched
+# through its references with nested patterns (S13d - a null reference matches no case pattern), compared by identity
+# where no Eq is declared (E10), rendered following references eight deep (E11a), and folded while compiling exactly
+# as at run time (K1, K2 - a global tree is baked as data, node by node)
+type Ast enum {
+    Num(v I64)
+    Var(name String&)
+    Add(a Ast&, b Ast&)
+    Mul(a Ast&, b Ast&)
+    Neg(e Ast&)
+}
+
+fn astEval(e Ast&, x I64) I64 {
+    return match e {
+        case Ast.Num(v) => v
+        case Ast.Var(_) => x
+        case Ast.Add(a, b) => astEval(a, x) + astEval(b, x)
+        case Ast.Mul(a, b) => astEval(a, x) * astEval(b, x)
+        case Ast.Neg(a) => -astEval(a, x)
+    }
+}
+
+# one node, its operands already folded: numbers combine, x + 0, x * 1 and x * 0 simplify, -(-e) is e. The result is
+# borrowed from n (O13) - built where n lives, or a part of n handed back as it is
+fn astSimplify(n Ast&) Ast&n {
+    return match n {
+        case Ast.Add(Ast.Num(a), Ast.Num(b)) => Ast.Num(a + b)
+        case Ast.Mul(Ast.Num(a), Ast.Num(b)) => Ast.Num(a * b)
+        case Ast.Add(a, Ast.Num(0)), Ast.Add(Ast.Num(0), a), Ast.Mul(a, Ast.Num(1)), Ast.Mul(Ast.Num(1), a) => a
+        case Ast.Mul(_, Ast.Num(0)), Ast.Mul(Ast.Num(0), _) => Ast.Num(0)
+        case Ast.Neg(Ast.Num(v)) => Ast.Num(-v)
+        case Ast.Neg(Ast.Neg(a)) => a
+        nomatch => n
+    }
+}
+
+fn astFold(e Ast&) Ast&e {
+    return match e {
+        case Ast.Add(a, b) => astSimplify(Ast.Add(astFold(a), astFold(b)))
+        case Ast.Mul(a, b) => astSimplify(Ast.Mul(astFold(a), astFold(b)))
+        case Ast.Neg(a) => astSimplify(Ast.Neg(astFold(a)))
+        nomatch => e
+    }
+}
+
+# the leaves, left to right, into a list living where the tree does (G11: a List of enum references)
+fn astLeaves(e Ast&, out mut List<Ast&>&e) {
+    match e {
+        case Ast.Num(_), Ast.Var(_) { out.Push(e) }
+        case Ast.Add(a, b), Ast.Mul(a, b) {
+            astLeaves(a, out)
+            astLeaves(b, out)
+        }
+        case Ast.Neg(a) { astLeaves(a, out) }
+    }
+}
+
+# (depth + 1) * (depth) * ... * 2 * (x + 0), built in the result scope wherever the call's result lands
+fn astBuild(depth I64) Ast& {
+    if depth == 0 { return Ast.Add(Ast.Var("x"), Ast.Num(0)) }
+    return Ast.Mul(Ast.Add(Ast.Num(depth), Ast.Num(1)), astBuild(depth - 1))
+}
+
+# trees built and folded inside a loop, each in that iteration's block - which hands its chunks back to be reused
+fn astChurn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        t Ast& = Ast.Add(Ast.Num(i), Ast.Neg(Ast.Num(7)))
+        s += astEval(astFold(t), 0)
+    }
+    return s
+}
+
+AstFolded Ast& = astFold(Ast.Neg(Ast.Neg(Ast.Add(Ast.Num(2), Ast.Mul(Ast.Num(3), Ast.Num(4))))))
+AstAt4 I64 = astEval(astFold(astBuild(3)), 4)
+AstTree Ast& = Ast.Add(Ast.Var("x"), Ast.Mul(Ast.Num(2), Ast.Var("y")))
+
+test "T17d: an expression tree of enums held by reference, folded with nested patterns" {
+    assert $AstFolded == "Ast.Num(14)"            # computed while compiling and baked as data (K2)
+    assert AstAt4 == 4 * 3 * 2 * 4                # decided while compiling (S18c)
+    e := astBuild(3)
+    f := astFold(e)
+    assert $f == "Ast.Mul(Ast.Num(4), Ast.Mul(Ast.Num(3), Ast.Mul(Ast.Num(2), Ast.Var(\"x\"))))"
+    leaves := List<Ast&>()
+    astLeaves(f, leaves)
+    assert leaves.Len() == 4
+    n I64 = 0
+    for l in leaves { if l is Ast.Num { n += l as Ast.Num } }
+    assert n == 9
+    c := astChurn()                               # the arena reuses what the loop's blocks gave back...
+    assert c == 3000 * 2999 / 2 - 7 * 3000
+    assert astEval(f, 5) == 4 * 3 * 2 * 5         # ...and the folded tree, read back after it, is intact
+    assert astEval(e, 5) == 4 * 3 * 2 * 5
+    assert $f == "Ast.Mul(Ast.Num(4), Ast.Mul(Ast.Num(3), Ast.Mul(Ast.Num(2), Ast.Var(\"x\"))))"
+    assert f != astFold(e)                        # two folds, two trees: a reference compares by identity (E10)
+    assert Ast.Neg(f) == Ast.Neg(f) and Ast.Neg(f) != Ast.Neg(astFold(e)) # by value: the case, then the payload
+}
+
+test "T17d: a tree baked into a global, matched through its references" {
+    assert $AstTree == "Ast.Add(Ast.Var(\"x\"), Ast.Mul(Ast.Num(2), Ast.Var(\"y\")))"
+    match AstTree {
+        case Ast.Add(Ast.Var(n), Ast.Mul(_, Ast.Var(m))) { assert n == "x" and m == "y" }
+        nomatch { unreachable }
+    }
+    assert astEval(AstTree, 3) == 3 + 2 * 3
+}
+
+test "T17d: a null reference to an enum holds no case" {
+    none Ast& = null
+    assert not (none is Ast.Num) and none == null
+    r I64 = match none {
+        case Ast.Num(v) => v
+        case null => -1
+        nomatch => -2
+    }
+    assert r == -1
+    half Ast& = Ast.Add(null, Ast.Num(1))
+    k I64 = match half {
+        case Ast.Add(Ast.Num(a), _) => a           # a null operand is not a number...
+        case Ast.Add(null, Ast.Num(b)) => 100 + b  # ...but it is null
+        nomatch => 0
+    }
+    assert k == 101
+    assert $half == "Ast.Add(null, Ast.Num(1))"
+}
+
+# a BUILT result (O13) copied node by node through a match's values: each value's calls land where the match's value
+# does - the result scope - and a node built by "Ast.Add(astCopy(a), astCopy(b))" used to be built in the copying
+# function's own scope instead, freed at its return
+fn astCopy(e Ast&) Ast& {
+    return match e {
+        case Ast.Add(a, b) => Ast.Add(astCopy(a), astCopy(b))
+        case Ast.Mul(a, b) => Ast.Mul(astCopy(a), astCopy(b))
+        case Ast.Neg(a) => Ast.Neg(astCopy(a))
+        case Ast.Num(v) => Ast.Num(v)
+        case Ast.Var(n) => Ast.Var(n)
+    }
+}
+
+# O25g: nothing can be stored through an Ast& (a payload is never assigned, and its references are read-only), so one
+# from an outer block may go into a tree in an inner one - it need only outlive the tree - and a List hands its
+# elements out
+test "T17d: a copy built in the result scope, and trees across blocks" {
+    c := astCopy(astBuild(2))
+    x := astChurn()
+    assert x != 0 and $c == "Ast.Mul(Ast.Add(Ast.Num(2), Ast.Num(1)), Ast.Mul(Ast.Add(Ast.Num(1), Ast.Num(1)), Ast.Add(Ast.Var(\"x\"), Ast.Num(0))))"
+    outer Ast& = Ast.Num(10)
+    sum I64 = 0
+    for i in range 3 {
+        t Ast& = Ast.Add(outer, Ast.Num(i))      # outer lives longer than the iteration's tree
+        sum += astEval(t, 0)
+    }
+    assert sum == 33
+    l := List<Ast&>()
+    l.Push(Ast.Num(0))
+    l.Push(Ast.Num(1))
+    l.Push(Ast.Num(2))
+    assert astEval(l[2], 0) == 2
+    n I64 = 0
+    for e in l { n += astEval(e, 0) }
+    assert n == 3
+}
+
+# the zero value of a reference to an enum is null, and of an enum whose first case holds one, that case holding null
+type AstHole enum {
+    Gap(e Ast&)
+    Filled
+}
+type AstSlot struct() {
+    tree mut Ast&
+    hole mut AstHole
+}
+test "T17d: zero values hold null references" {
+    s := AstSlot()
+    assert s.tree == null and s.hole is AstHole.Gap
+    assert match s.hole { case AstHole.Gap(null) => true  nomatch => false }
+    s.tree = Ast.Num(3)                            # built where s lives
+    s.hole = AstHole.Gap(s.tree)
+    assert astEval(s.hole as AstHole.Gap, 0) == 3
+}
+
+# T17d with structs on both sides: a struct holding an enum by reference, an enum holding a struct by reference, and a
+# method whose receiver is an enum reference
+type AstDef struct(name String&, body Ast&) {
+    name
+    body
+}
+type AstStmt enum {
+    Let(d AstDef&)
+    Show(e Ast&)
+}
+fn (s AstStmt&) Size() I64 {
+    return match s {
+        case AstStmt.Let(d) => astSize(d.body)
+        case AstStmt.Show(e) => astSize(e)
+    }
+}
+fn astSize(e Ast&) I64 {
+    return match e {
+        case Ast.Add(a, b), Ast.Mul(a, b) => 1 + astSize(a) + astSize(b)
+        case Ast.Neg(a) => 1 + astSize(a)
+        nomatch => 1
+    }
+}
+test "T17d: structs and enums holding each other by reference" {
+    d AstDef& = AstDef("y", Ast.Mul(Ast.Var("x"), Ast.Num(2)))
+    prog := AstStmt&[AstStmt.Let(d), AstStmt.Show(Ast.Neg(Ast.Var("y")))]
+    total I64 = 0
+    for st in prog { total += st.Size() }
+    assert total == 3 + 2
+    assert prog[0] is AstStmt.Let and (prog[0] as AstStmt.Let).name == "y"
 }
 
 # S12b: a match used as a value - "case P => v" gives the value; the clause forms are the statement's (several values,

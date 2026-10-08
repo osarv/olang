@@ -286,7 +286,7 @@ declaration.
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
-exactly the **nullable** ones — a `&`/`&x`-marked struct or compile-time-length array, a runtime-length
+exactly the **nullable** ones — a `&`/`&x`-marked struct, enum or compile-time-length array, a runtime-length
 array (`Array<T>`, always pointer-backed per T11), and a function type (T21, D16d). Used
 against any other type it is a compile-time error. Calling through a null function value is a null dereference
 (T2b).
@@ -485,12 +485,44 @@ declares **no constructor** (§9 C1) — selecting a case is what an ordinary fu
 and a private case name (M6a) already restricts who may construct one, at finer grain than a constructor
 could.
 
-**T17c.** A payload parameter written with a reference marker is a **reference parameter** of its case, as a
-function's is (§8 O4b): a bare one's scope is determined by the argument (O17), a temporary argument is built
-where the enum value lands (O18a), and the constructed value carries that binding, so an enum can hold a
-reference that outlives the function which built it. A payload parameter may name an earlier one of the same
-case (`&p`, O4a). A scope argument written between the case name and its arguments
-(`Parcel.Held&x(Crate(3))`, E25) puts the value — and the temporaries built for it — where `x` lives.
+**T17c.** A payload parameter written with a reference marker is a **reference parameter** of its case, and what it
+refers to lives **where the enum value does**, as a constructor's bare field lives with its instance (§9 C2d). A
+temporary argument is built there: wherever the value lands (O18a), so every temporary in its payload, at any depth,
+is built in that one scope - a tree written as one expression lives in one scope. An argument that already lives
+somewhere is stored as it is, and the value may not outlive it: it must live in exactly the value's scope where
+something can be stored through it (O25g, O25c), and otherwise outlive it. That is checked wherever the value lands - a
+declaration, an assignment, a return, an argument, another payload - and two such arguments from two scopes hold the
+value to the shorter-lived where only outliving is asked, and are an error where exactness is. A payload parameter may
+name an earlier one of the same case (`&p`, O4a), which is the same scope. A scope argument written between the case
+name and its arguments (`Parcel.Held&x(Crate(3))`, E25) puts the value — and the temporaries built for it — where `x`
+lives.
+
+A reference read out of a payload (a match binding, S13b, or `as`, E32) lives where the payload does: exactly in the
+reference's scope for an enum held by reference (T17d), and for one held by value where the argument it was built from
+lives, or where it was built.
+
+**T17d (an enum held by reference).** An enum type may carry a reference marker, as a struct type may (T24): `Expr&`
+is a reference to an enum value held in a scope's storage (§8) - nullable (T2a), compared by identity unless the type
+declares `Eq` (E10), rendered by following it (E11a). A payload may hold a reference to an enum, its own included,
+which is how an enum holds itself (T16):
+
+```
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+    Neg(e Expr&)
+}
+e Expr& = Expr.Add(Expr.Lit(1), Expr.Neg(Expr.Lit(2)))
+```
+
+An enum value becomes a reference as a struct value does (E12): a temporary is built where the reference lands
+(E12c) - `e` above, with every node of its tree (T17c) - and an lvalue is borrowed. A reference to an enum is read
+through wherever its value is asked for: by a pattern (S13b - a null reference holds no case, so no pattern matches
+it), by `is` and `as` (E32), and by a copy into a value (E12). Nothing is ever written through one: a payload is
+never assigned, so a reference to an enum whose payloads hold only read-only references can be stored through
+nowhere (O25g), and may be held wherever it outlives the holder. An enum may also hold itself through a struct
+holding it by value, reached by reference (`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)`),
+in either declaration order.
 
 **G8a (composition).** A `type-arg` (G8) may be a **type variable**, so one generic can be written in terms
 of another — `Vec<<T>>` inside a declaration that has a `T`. This is what makes a generic type's own
@@ -542,7 +574,7 @@ substituted; otherwise it is a compile-time error **there**, naming the type, th
 missing. Satisfaction is T31's.
 
 A type variable may carry a reference marker (`x <T>&`, `it mut <I Iterator<<E>>>&`): a reference to whatever the
-variable is bound to, which must then be a struct or an array - a number, an enum or another type that cannot be a
+variable is bound to, which must then be a struct, an enum or an array - a number or another type that cannot be a
 reference is a compile-time error where the variable is bound (G11a).
 
 A variable named only in a constraint (`E` in `<I Iterator<<E>>>`) counts as appearing in the signature (G4): it is
@@ -550,15 +582,12 @@ bound through the methods of the type its constrained variable is bound to (G9c)
 
 A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
 
-**T17d.** An enum is a value and is never a reference: a reference marker on an enum type is a compile-time error,
-in a payload as anywhere. An enum that holds itself does so through a struct holding it, reached by reference -
-`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)` - in either declaration order.
-
 **T18.** An enum type must declare at least one case; case names must be unique within the type. A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
 reference in a later case's payload is unreachable without a `match` whose tag test selects that case
 (S13b). A first case carrying no payload therefore makes the type's zero value a complete, meaningful one —
-which is exactly `Option`-shaped when the other case holds a reference.
+which is exactly `Option`-shaped when the other case holds a reference. A reference in the first case's payload is
+null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern does not match (S13d).
 
 ### 2.6 Error types
 
@@ -608,9 +637,9 @@ whose scope is fixed by its position. The full semantics are specified in §8.
 `reference-marker ::= "&" [ IDEN | "return" ]`, `type-args` is defined in §12.3 G8 (required when, and only when, the
 named type is generic, and always for `Array`, T7), and `alias-chain IDEN` (§4.4 M8) names a primitive
 type, `Array`, or a struct/enum/error type (or, in a constraint, a trait) declared in the referencing module or reached through
-an import alias chain. This is the `type-ref` alternative of `type-expr` (T2). A struct or array type may
-carry a reference marker, making that type **reference-shaped** instead of embedded. A primitive type may
-never carry a reference marker; doing so is a compile-time error.
+an import alias chain. This is the `type-ref` alternative of `type-expr` (T2). A struct, enum or array type may
+carry a reference marker, making that type **reference-shaped** instead of embedded (an enum: T17d). A primitive type
+may never carry a reference marker; doing so is a compile-time error.
 
 ```
 Point&                 a reference to a Point
@@ -683,7 +712,7 @@ element) is the constant data itself: no storage is allocated and nothing is cop
 plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
 parameter or field - gets a copy of its own. Which happens is not observable except as speed.
 
-**T26.** A reference-shaped struct or array is heap-indirect: the value held by a variable, field,
+**T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
 pointer identity rather than structural content (see
 §5.2 E10). An unmarked struct or array is a plain value.
@@ -940,9 +969,9 @@ capitalized.
 the module's `types` set (D2) — an error type and a struct/enum type may not share a name within
 one module.
 
-**D6.** A named struct type may embed itself (directly or through a chain of other named types) only
-through a reference marker at some point in the chain (T16). An enum or error type may never
-reference any other type (T17, T19).
+**D6.** A named struct or enum type may embed itself (directly or through a chain of other named types) only
+through a reference marker at some point in the chain (T16, T17d). An error type may never reference any other type
+(T19).
 
 ### 3.4 Function declarations
 
@@ -2194,14 +2223,15 @@ error, as for any other non-numeric type.
 ### 5.16 `is` and `as`
 
 **E32.** `is-expr ::= operand "is" type-ref` (at the comparisons' precedence) and `as-expr ::= postfix "as" type-ref`
-(binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) is, and give
-its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
+(binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) - or a
+reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
 whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
 received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
 (`is` is the question it asks). On anything else `is` and `as` are a compile-time error.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `try` (E15a) it fails with
-`BuiltinError.INVALID` instead. `is` never fails. The safe forms are `is` before `as`, and a `match` (S13).
+`BuiltinError.INVALID` instead. `is` never fails. A null reference to an enum is no case: `is` is false and `as`
+does not hold. The safe forms are `is` before `as`, and a `match` (S13).
 
 ### 5.17 A float's bits
 
@@ -2488,7 +2518,9 @@ area F64 = match s {
 clause is selected when one of its alternatives matches (S13c) and its guard, if any, is true (S13e); its body runs,
 and no other clause or `nomatch` does. If none is selected the `nomatch` body runs, if there is one; otherwise a
 match statement does nothing - a match over an enum must be exhaustive (S13a), and over any other type no
-exhaustiveness is asked. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
+exhaustiveness is asked. A null **reference to an enum** (T17d) holds no case, so no pattern matches it - a `null`
+value alternative or the `nomatch` does; where neither is written, a match statement does nothing and a match used
+as a value aborts as `unreachable` does (S16d), having no value to give. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
 decides it (E10a); it must have the matched value's type (T27), a literal or a literal-only expression (E4a) adapting to it (T6) as it would beside it in
 `==`, written text adapting to text (T29c) and `null` to a reference (T2a).
 
@@ -2512,10 +2544,11 @@ naming every field. A position is one of:
 - a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
 
 A case that matched has the case it names, so its payload is read only where its tag has been tested - which is what
-makes reading it sound. A binding of a reference reads, walks and passes on what the payload names, and nothing is
-built into it: where it lives is the matched value's business, which the clause cannot name (as through a borrowed
-field, C2d). A `case-alt` that does not parse as a pattern is a value: `case Shape.Circle(r + 1)` compares with
-the value that call builds.
+makes reading it sound. A binding of a reference lives where the payload does (T17c) - exactly in the matched
+reference's scope for an enum held by reference, so a tree is walked, passed on and built beside recursively. Where
+that is not known - the payload of an enum value a parameter holds - the binding is read, walked and passed on, and
+nothing is built into it (as through a borrowed field, C2d). A `case-alt` that does not parse as a pattern is a value:
+`case Shape.Circle(r + 1)` compares with the value that call builds.
 
 **S13c (several alternatives).** `case A, B, ...` is selected when any one alternative matches, tried in order;
 `case 1, 2, 3`, `case Shape.Circle, Shape.Square`. Alternatives that bind names all bind **the same names, each
@@ -2526,9 +2559,10 @@ compile-time error. Each alternative counts for S13a on its own.
 **S13d (nested patterns and literals).** A position of a payload holding an enum may hold a pattern of that enum,
 to any depth: `case Wrap.Two(Shape.Rect(w, h), Shape.Dot)`. A position may hold a literal, compared with the field by
 `==`: `case Msg.Text("quit")` compares text through `String`'s `Eq`; `case Slot.Held(null)` matches a null reference,
-which `==` holds equal only to `null`. An enum is never a reference (T17d), so a nested pattern never reads through
-one; a reference field is matched by a name, `_`, `null` or a literal its type's `==` compares. Nested patterns and
-literals are refutable, so a clause holding one covers nothing for S13a.
+which `==` holds equal only to `null`. A position holding a **reference to an enum** (T17d) may hold a pattern too,
+read through the reference - `case Expr.Add(Expr.Lit(a), Expr.Lit(b))` - and a null reference matches no pattern there
+(`null` matches it). Any other reference field is matched by a name, `_`, `null` or a literal its type's `==` compares.
+Nested patterns and literals are refutable, so a clause holding one covers nothing for S13a.
 
 **S13e (guards).** `case P if cond` - once an alternative has matched and its names are bound, `cond` (a `Bool`
 expression, which may read them) is evaluated; when it is false the match goes on to the next clause, as though the
@@ -3151,7 +3185,8 @@ when that scope closes.
 
 **O1b.** The program has one more scope, opened before any global initializer runs and never closed.
 Whatever a global's initializer builds is built there, so a global may hold a reference (or an array) that
-lives as long as the program. Destructors registered in it do not run at exit. `&g`, for a global `g`, names
+lives as long as the program; and what a call builds into a scope variable a global's referent determined (a
+result borrowed from it, O13) is built there too. Destructors registered in it do not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
@@ -3369,16 +3404,25 @@ value where it dangles. Accordingly:
   exact scope; between two of the function's scope variables that is an equality obligation on its callers
   (O10c).
 - **O25c.** Storing an existing reference into a reference-holding **slot** — a field, element or payload —
-  requires the value's exact scope to be the slot's whenever the value's referent can itself hold
-  references. Otherwise the value must outlive the slot (O10), since nothing written through a reference to
-  plain data can be misplaced.
+  requires the value's exact scope to be the slot's whenever something can be stored through it (O25g).
+  Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced.
 - **O25d.** A returned reference follows O14.
 - **O25e.** A scope variable determined by arguments (O17) is bound to their **exact** scope, and two
   arguments determining it must agree exactly — depth included. An argument living in the program's scope
-  (a global's referent) cannot determine a scope variable of a parameter whose referent can hold references,
-  since the callee may allocate into that variable and store through it.
-- **O25f.** A derived obligation (O22) recorded for a value whose referent can hold references is one of
-  equality, discharged only by the same scope.
+  (a global's referent) cannot determine a scope variable of a parameter through which something can be stored
+  (O25g), since the callee may allocate into that variable and store through it; what a callee builds into such
+  a variable otherwise - a result borrowed from it - is built in the program's scope.
+- **O25f.** A derived obligation (O22) recorded for a value through which something can be stored (O25g) is one
+  of equality, discharged only by the same scope.
+- **O25g (what a narrowed scope can misplace).** Something **can be stored through** a reference when a write
+  through it can store a reference: assigning a `mut` field (C3) through a writable reference (T25b), an element
+  through a writable array reference, or either through a writable reference reached from it at any depth - the
+  value assigned holding a reference. An enum's payload is never assigned (T17), and nothing is written through a
+  read-only reference, so through a reference to an enum whose payloads hold only read-only references, or to a struct
+  none of whose `mut` fields holds a reference, nothing can be stored. Exactness protects exactly those stores - what
+  one builds is built in the reference's scope and kept where the referent really is - so where none can happen, a
+  reference held somewhere it merely outlives misplaces nothing, and O25c, O25e, O25f, O14 and C2d ask only that it
+  outlive. A reference to plain data is the simplest such case.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it, since no function's code allocates into the program's scope.
@@ -3432,7 +3476,7 @@ returning a temporary, or by naming it: `&return` (O26).
 - for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
   result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
   borrowed form (`T&p`), and so is one into the function's own storage, which closes at the return;
-- for a **borrowed** result `&p`: a value in exactly `p`'s scope where its referent can hold references,
+- for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
   (O10b). A temporary is built in `p`'s scope.
 
@@ -3598,7 +3642,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
-be exactly it when the argument can itself hold references (O25c). An argument for a parameter a field names
+be exactly it when something can be stored through the argument (O25g, O25c). An argument for a parameter a field names
 (`&p`) is not held against the instance: that field keeps the argument's own scope.
 A violation is a compile-time error at that point.
 
@@ -4039,7 +4083,7 @@ an error.
 
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate
 copy compiled for each distinct set of type arguments it is used with. Enum and error types can
-never be generic — neither may reference any other type at all (T17, T19), so there is nothing to
+never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
 parameterize.
 
 ### 12.1 Type variables
@@ -4271,9 +4315,10 @@ program either. Anything built inside a function it calls — including a constr
 refused, since that function's scopes close.
 
 **K2b.** K2 reaches a global holding an **array** or a **reference** too: what it points at is written out
-as data beside it, so a table computed by a loop, or a linked structure built by constructors, costs nothing
-at startup. Two references to one instance remain one instance, and a structure referring to itself is
-written as such. The data lives as long as the program (O1b).
+as data beside it, so a table computed by a loop, a linked structure built by constructors, or a tree of enums
+holding each other by reference (T17d), costs nothing at startup - a reference in an enum's payload is written as the
+address of its referent's data. Two references to one instance remain one instance, and a structure referring to
+itself is written as such. The data lives as long as the program (O1b).
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

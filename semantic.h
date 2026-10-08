@@ -509,6 +509,7 @@ struct operand {
     bool ctorLanded;
     struct var* landedTo;
     int landedDepth;
+    bool hereChecked; //C2d/T17c: checkCtorHereFits has judged this value where it landed - once is enough
     struct list args; //list of struct operand*: operator operands, call args, or [base, index]/[base] for index/member
     enum operation opType;
     bool isLiteral;
@@ -707,6 +708,7 @@ int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15)
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
+bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit
 void SemanticSetUpdate(bool on);
 

@@ -8450,3 +8450,92 @@ from their original form.
   function's generalisation - reaches `cgLeaveBlocks` through `cgCloseOwnScope`, so one flag there selects it, and the
   evaluator's `ctRunDeferred` already knows the flow it is putting aside is `CF_ERROR`. An error a clause or a default
   takes does not leave, so it would run none - the natural reading.
+
+- **Recursive enums: an enum may be held by reference (T17d, T17c, O25g, 2026-10-08).** Decided for the self-hosted
+  compiler, whose syntax trees and types are enums; the details were left to me. It replaces T17d's stopgap "an enum is
+  a value and is never a reference" from the match work hours earlier, which existed only because enum references had
+  never worked: `Add(a Expr&, b Expr&)` was accepted at the declaration and failed at every use.
+  **The representation was the easy part.** A reference to an enum is a pointer to the `{ i64 tag, [K x i64] }` (or
+  `i32`) value in an arena, exactly as a struct reference is a pointer to its aggregate; most of the work was finding
+  every place that asked "a struct or an array?" where it meant "anything a marker can make a reference" - the marker
+  check itself, sizes and alignment (a reference to an enum was sized as the enum, so an `Expr` holding `Expr&`
+  recursed forever), nullability, the zero value, rendering, identity, promotion (an enum is held in a register, so
+  promoting one stores the value rather than loading through an address, and borrowing one takes the address of the
+  storage it was read from), copying out, and `is`/`as`, which read the tag and payload through the pointer. A null
+  reference holds no case: `is` is false and an `as` that does not hold aborts as before, which is what makes a nested
+  pattern over a null operand simply not match - the behaviour asked for - and, consistently, a top-level match over
+  a null reference selects no case clause (`case null` or `nomatch` does; a value match with neither aborts as the
+  checked `unreachable` already did). The evaluator needed one line (null is no case) and its existing reference model
+  did the rest; `-i` runs trees as the built program does.
+  **Where a payload lives was the real decision, and the brief named the answer: as a struct field does (C2d).** T17c
+  had given each payload reference its own scope variable, bound by the argument and carried with the value - the
+  model of a function parameter. It read precisely from a value enum, but nothing ever checked those bindings against
+  where the value went: `p = Parcel.Held(cc)` with `cc` declared inside a loop and `p` outside compiled, and so did `p
+  = parcelOf(cc)` - a payload outliving its referent, reproduced on the previous compiler (the struct version of both
+  was already an error, C2d). Now a payload lives where the enum value does: a temporary in it is built there - every
+  temporary of a tree, at any depth, in the one scope the whole value lands in - and existing storage stored in it is
+  held to that place, exactly where something can be stored through it, else outliving it. The machinery is C2d's:
+  the enum type gets an instance-scope variable, its construction records the arguments' scopes as that variable's
+  binding (`bindHereFrom`, shared with constructors), the construction lands like a constructor call (`landCall`), and
+  `checkCtorHereFits` judges it where it lands. For a value nested in another payload, an argument or an array literal,
+  which no declaration names, the judgement is queued with the statement's pending discharges and made once the
+  statement has landed everything. Reading stays precise: a binding read from a value enum takes the per-parameter
+  binding (where that argument really lives), one read through a reference takes the reference's exact scope.
+  **Two arguments from two scopes** used to be "two arguments are in different scopes where this signature requires
+  one" (the `&p` message, wrong here). Where neither needs exactness the value is now held to the shorter-lived of the
+  two, which is what "must outlive both" means; where exactness is needed it stays an error, with a message of its own.
+  **O25g - and why `List<Expr&>` did not work.** The first full tree test failed in the prelude, not in anything
+  enum-specific: `List<N&>.At` and iterating a `List<N&>` were rejected for every `N` holding references (structs
+  included - pre-existing), because O25 demanded the element's exact scope at the generic's `return`, and a generic
+  cannot write the borrowed form `<T>&l`. Two fixes were considered. An obligation-based one (let a type-variable
+  result tie its scope to a parameter's by an equality obligation) needed the result scope to be determined by that
+  obligation at every call, and broke on iteration: inside `ListIter.Next` the element's scope is only the O23 fallback
+  (the iterator's), so an exact obligation would have been a false claim. The one taken asks what exactness protects:
+  O25's own justification is that "anything written through a reference is allocated into the reference's scope and
+  stored where its referent lives". So it matters only where something **can be stored through** the reference -
+  assigning a `mut` field through a writable reference, an element of a writable array, or either through a writable
+  reference reached from it at any depth (permission is shallow, T25b, so a read-only `N&` whose `N` holds a `mut M&`
+  field still counts). An enum's payload is never assigned; a tree of enums whose payloads hold read-only references
+  can be stored through nowhere, and narrowing such a reference misplaces nothing - it need only outlive where it is
+  put, as a reference to plain data always could. `RefNarrowingMatters` answers it (a walk over fields, payloads and
+  elements with a seen-set, since the types are recursive) and replaces `TypeHoldsReferences` at the nine places it
+  stood for exactness; the places it stood for "this value holds references" (result scopes, value homes, landing)
+  are unchanged. Every existing must-fail check still fails. What it buys beyond lists: a global tree can be passed to
+  a function (O25e), nodes from an outer block go into an inner block's tree, and `fn neg(x Expr&) Expr& { return
+  Expr.Neg(x) }` is an obligation on callers rather than an error. A `List` of references to a struct with `mut`
+  reference fields still cannot hand elements out - that needs the iterator's element scope to be precise, below.
+  **K2 bakes trees.** A payload is a buffer of words, so a reference in it could not be written as constant data and
+  such a global was set at startup (K2d said so). A word holding a reference is now `ptrtoint` of its referent's private
+  global, and a run-time-length array's two words its length and its elements' global - so `AstTree Ast& = Ast.Add(
+  Ast.Var("x"), ...)` is data, node by node, text included.
+  **Found on the way, all pre-existing, all fixed:**
+  (1) A match or conditional used as a value never landed the calls in its values: `return match e { case Add(a, b) =>
+  Expr.Add(fold(a), fold(b)) }` with a built result built the recursive results in the function's own scope, freed at
+  its return. `landCall`, `callIsLanding` and `checkCtorHereFits` now reach through a conditional's and a match's
+  values, and through an array literal's elements.
+  (2) A call building into a scope variable a global's referent determined - a result borrowed from its argument, `H =
+  f(G)` - built in the caller's own scope, which closed under the global it was stored in. Codegen now passes the
+  program's scope (`@__olang_global_scope`, O1b) for such a binding. Caveat: that scope has no lock, so a task doing
+  this concurrently with another would race in the allocator; before, it was a use-after-free on one thread.
+  (3) `cgResolveParamScopeOverride` built a temporary argument at the current block instead of at the depth its
+  binding names (O2d), unlike the hidden scope argument beside it.
+  (4) Passing `x as E.C` (a payload reference read with `as`) straight to a reference parameter was rejected: the fit
+  check took the case's own scope variable at face value. It now resolves it as a binding would.
+  **Found, not fixed - it needs a design decision.** A callee's scope obligations (O10b) are discharged at a call only
+  if its body was checked first. A function declared after its caller, and every generic instantiation (checked once
+  every other body is), owes nothing at its calls - so `for i in range n { l.Push(Node(i)) }` builds each node in the
+  loop body's arena and stores it in the list, and `m.Put($i, i)` (std/map's own test shape) does the same with text:
+  use-after-free, reproduced on the previous compiler with an arena churn. A prototype that discharged the missed
+  obligations once every body was checked, and built a temporary where the obligation says it must live (so `l.Push(
+  Node(i))` would simply be correct), turned the silent bug into compile errors - but also rejected safe code: `for w
+  in ws { mine.Push(w) }` over a `List<String&>`, because the iterator hands out elements at the iterator's own scope
+  (O23's fallback through `ListIter`'s `&of` field), not the list's. Making that precise means a result's relation to a
+  field's construction binding (O22's derived obligations, for results) - a design question, left with the prototype's
+  description in the report rather than half-built.
+  **What was checked**: corpus tests (shared.olang: a constant folder with nested patterns read back after an arena
+  churn, a global tree baked and matched, null operands, zero values, structs and enums holding each other, a List of
+  enum references, a built copy through match values); the evaluator decides `AstAt4` and bakes `AstFolded`/`AstTree`;
+  checks/cases `t17payloadoutlived`, `t17payloadwrite` (a writable payload must live exactly where the value does),
+  `t17payloadscopes`, `t24primref`, and `t17enumref` turned from "must fail" into "runs"; the `-i` fixture prints a
+  folded tree identically interpreted and built. `-r` could not be checked: the container has no ThreadSanitizer
+  runtime to link.
