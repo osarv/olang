@@ -2764,8 +2764,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `U8`, so raw bits can be set), built from an `F64` (`F8E4M3(x)`, nearest-even) and read with `F64()`, rendering
   as their value through `Str`. Encoding is arithmetic in olang (no bit reinterpretation exists), checked against the
   OCP bit patterns. Both formats **saturate** (the user: "do what the industry does" - the hardware's satfinite
-  conversion, which FP8 training uses; framework casts default to NaN/inf instead); `==` compares bits (a NaN equals
-  itself, flagged).
+  conversion, which FP8 training uses; framework casts default to NaN/inf instead); `==` compares values as IEEE does (the user:
+  "compare by value, follow the standard") - NaN equals nothing, -0 equals 0.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

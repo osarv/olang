@@ -1342,7 +1342,8 @@ The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the wi
 The prelude declares two 8-bit float formats as storage types: `F8E4M3` (4 exponent bits, bias 7, 3 mantissa bits;
 no infinity, one NaN, largest value 448) and `F8E5M2` (5 exponent bits, bias 15, 2 mantissa bits; IEEE-style, with
 infinities and NaNs, largest finite value 57344). Conversion into either **saturates**: a value beyond the largest
-finite one, an infinity included, becomes that value with its sign, and NaN stays NaN. Each is a struct holding its `Bits` (a `U8`), built
+finite one, an infinity included, becomes that value with its sign, and NaN stays NaN. `==` compares values as IEEE 754 does: a NaN
+equals nothing, itself included, and `-0` equals `0`. Each is a struct holding its `Bits` (a `U8`), built
 from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
 it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
 

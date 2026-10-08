@@ -72,6 +72,8 @@ fn (f F8E4M3) F64() F64 {
 }
 
 fn (f F8E4M3) Str() String { return $f.F64() }
+# "==" compares values, as IEEE 754 does: a NaN equals nothing, itself included, and -0 equals 0 (E10a)
+fn (a F8E4M3) Eq(b F8E4M3) Bool { return a.F64() == b.F64() }
 
 type F8E5M2 struct(value F64) {
     Bits mut U8 = f8E5M2Bits(value)
@@ -96,6 +98,7 @@ fn (f F8E5M2) F64() F64 {
 }
 
 fn (f F8E5M2) Str() String { return $f.F64() }
+fn (a F8E5M2) Eq(b F8E5M2) Bool { return a.F64() == b.F64() }
 
 test "8-bit floats encode to their bit patterns and decode back" {
     assert F8E4M3(1).Bits == 56 and F8E4M3(448).Bits == 126 and F8E4M3(0.5).Bits == 48 and F8E4M3(-2).Bits == 192
@@ -105,6 +108,8 @@ test "8-bit floats encode to their bit patterns and decode back" {
     assert F8E5M2(1).Bits == 60 and F8E5M2(57344).Bits == 123 and F8E5M2(1.5).Bits == 62 and F8E5M2(1e9).Bits == 123
     assert F8E5M2(-0.25).F64() == -0.25 and F8E5M2(0.0000152587890625).Bits == 1
     assert F8E5M2(-1.0 / 0.0).F64() == -57344 and F8E4M3(1.0 / 0.0).F64() == 448
+    nan := F8E4M3(0.0 / 0.0)
+    assert nan != nan and F8E5M2(-0.0) == F8E5M2(0) and F8E4M3(1) == F8E4M3(1.01)
     n := F8E4M3(0.0 / 0.0).F64()
     assert n != n
 }
