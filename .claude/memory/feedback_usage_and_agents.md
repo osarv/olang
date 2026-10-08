@@ -30,8 +30,9 @@ the window and the time to its reset; two of the six were paused (TaskStop) and 
 continues a stopped agent with its context). The user asked to be reminded of this rule: "Remember the rule about
 matching usage to agent spawning".
 
-**Waking up after a reset** (the user: "can you start yourself again after a ... five hour window reset ... So I don't
-have to start you manually"): whenever work is left that the window will not cover, arm `send_later` (claude-code-
+**Waking up after a reset - a standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are
+back as your usage runs out"; earlier: "So I don't have to start you manually"): whenever work is left that the
+window will not cover - the five-hour one or the weekly one, whichever runs out first - arm `send_later` (claude-code-
 remote MCP) for a few minutes after `resetsAt`, with a message saying what to resume. Arm it BEFORE the window runs
 out - a session stopped by the limit cannot arm anything. Uncommitted worktree changes survive only as long as the
 container, so have agents commit as they finish.
