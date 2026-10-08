@@ -1,0 +1,4 @@
+# check: fail unknown function or type 'Float64' - did you mean 'F64'?
+fn main() ? {
+    x := Float64(3)
+}

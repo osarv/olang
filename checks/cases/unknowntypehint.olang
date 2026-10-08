@@ -1,0 +1,5 @@
+# check: fail unknown type 'Int32' - did you mean 'I32'?
+# T4: an unknown type is named, with the type it most likely meant - and the value it was given is not a second error
+fn main() ? {
+    n Int32 = 3
+}

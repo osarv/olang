@@ -43,7 +43,6 @@
 #define CHOICE_PATTERN_ARITY "a case pattern must name every field of the case's payload, in declaration order - a partial list would leave it ambiguous which field each name refers to"
 #define CHOICE_CASE_ALREADY_IN_USE "enum case already in use"
 #define ERROR_WORD_ALREADY_IN_USE "error word already in use"
-#define UNKNOWN_TYPE "unknown type"
 #define UNKNOWN_ERROR "unknown error"
 #define UNKNOWN_VAR "unknown variable"
 #define UNKNOWN_SCOPE "a reference marker names a variable that lives where the reference should (O4a) - an earlier parameter, any parameter from the result type, a local, parameter or global in scope, or a constructor's parameter or earlier field - and no such variable is visible here. A scope has no name of its own"
@@ -276,8 +275,8 @@ constructor, in a position whose parameter declares a default value"
 #define RETURN_VALUE_IN_VOID_FUNC "this function has no declared return type - a return statement must not have a value here"
 #define RETURN_MISSING_VALUE "this function's declared return type requires a return value"
 #define RETURN_TYPE_MISMATCH "return value's type doesn't match the function's declared return type"
-#define MAIN_FUNC_NOT_FOUND "could not find the main function"
-#define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare at least one error, e.g. 'func main() ? MyError { ... }'"
+#define MAIN_FUNC_NOT_FOUND "this program has no main function - '-b' builds an executable, which starts at 'fn main() ? { }' (B1)"
+#define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare that it can fail ('?'), e.g. 'fn main() ? { ... }' (or '? MyError' to name how it fails)"
 
 // ---- errors, try/catch ----
 
@@ -312,6 +311,9 @@ void ErrMsgBufferDiscard(void);
 void ErrMsgMuteStart(void);
 void ErrMsgMuteEnd(void);
 void ErrMsgFile(struct str fileName, char* errMsg);
+void ErrMsgSyntax(struct token tok, char* errMsg);
+int ErrMsgGetNSyntaxErrors();
+void ErrMsgFlush(void);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
 #define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"

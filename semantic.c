@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <limits.h>
+#include <ctype.h>
 #include "util.h"
 #include "token.h"
 #include "syntax.h"
@@ -269,6 +270,78 @@ static struct type* preludeType(struct str name) {
 struct type* typeNamed(struct semaModule* mod, struct str name) {
     struct type* t = TypeGetList(&mod->types, name);
     return t ? t : preludeType(name);
+}
+
+struct str strFromTok(struct token tok);
+//T4: case-insensitive edit distance, for suggesting the type a misspelt name probably meant
+static int nameDistance(struct str a, struct str b) {
+    if (a.len > 40 || b.len > 40) return 99;
+    int d[41][41];
+    for (int i = 0; i <= a.len; i++) d[i][0] = i;
+    for (int j = 0; j <= b.len; j++) d[0][j] = j;
+    for (int i = 1; i <= a.len; i++) for (int j = 1; j <= b.len; j++) {
+        int sub = d[i-1][j-1] + (tolower((unsigned char)a.ptr[i-1]) != tolower((unsigned char)b.ptr[j-1]));
+        int del = d[i-1][j] + 1, ins = d[i][j-1] + 1;
+        d[i][j] = sub < del ? (sub < ins ? sub : ins) : (del < ins ? del : ins);
+    }
+    return d[a.len][b.len];
+}
+
+static void considerName(struct str name, struct str cand, struct str* best, int* bestD) {
+    int dist = nameDistance(name, cand);
+    if (dist < *bestD) { *bestD = dist; *best = cand; }
+}
+
+//the name a misspelt one most likely meant: a number's name shortened to its letter and width (Int32 -> I32,
+//Float64 -> F64, Uint8 -> U8), else the nearest type - declared, the prelude's or built in - or, withVars, global
+static struct str suggestName(struct semaModule* mod, struct str name, bool withVars) {
+    struct str best = {0};
+    if (name.len >= 2 && isDigit(name.ptr[name.len -1])) {
+        int k = name.len;
+        while (k > 0 && isDigit(name.ptr[k -1])) k--;
+        char buf[16];
+        if (name.len - k < 8) {
+            buf[0] = (char)toupper((unsigned char)name.ptr[0]);
+            memcpy(buf + 1, name.ptr + k, name.len - k);
+            buf[1 + name.len - k] = '\0';
+            enum baseType pb;
+            if (PrimByName(StrFromCStr(buf), &pb)) return StrFromCStr((char*)PrimInfo(pb)->name);
+        }
+    }
+    if (StrCmp(name, StrFromCStr("Byte"))) return StrFromCStr("U8");
+    int bestD = name.len <= 4 ? 2 : 3;
+    for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++) considerName(name, StrFromCStr((char*)prims[i].name), &best, &bestD);
+    considerName(name, StrFromCStr("Bool"), &best, &bestD);
+    considerName(name, StrFromCStr("Array"), &best, &bestD);
+    if (mod) for (int i = 0; i < mod->types.len; i++) considerName(name, ((struct type*)ListGetIdx(&mod->types, i))->name, &best, &bestD);
+    for (int i = 0; i < preludeTypeNames.len; i++) considerName(name, *(struct str*)ListGetIdx(&preludeTypeNames, i), &best, &bestD);
+    if (withVars && mod) for (int i = 0; i < mod->vars.len; i++) {
+        struct var* v = ListGetIdx(&mod->vars, i);
+        if (v->name.len && v->name.ptr[0] != '$' && !memchr(v->name.ptr, '$', v->name.len)) considerName(name, v->name, &best, &bestD);
+    }
+    return best;
+}
+
+//"<what> 'Int32' - did you mean 'I32'?", or "<what> 'x' - <otherwise>"
+static void reportUnknownName(struct semaModule* mod, struct token tok, const char* what, bool withVars, const char* otherwise) {
+    struct str name = strFromTok(tok);
+    struct str best = suggestName(mod, name, withVars);
+    char msg[512];
+    if (best.len) {
+        bool number = PrimByName(best, &(enum baseType){0});
+        snprintf(msg, sizeof(msg), "%s '%.*s' - did you mean '%.*s'?%s", what, name.len, name.ptr, best.len, best.ptr,
+                 number ? " The numbers are I8 I16 I32 I64, U8 U16 U32 U64 and F16 BF16 F32 F64 (T4)" : "");
+    } else {
+        snprintf(msg, sizeof(msg), "%s '%.*s' - %s", what, name.len, name.ptr, otherwise);
+    }
+    ErrMsgSemantic(tok, msg);
+}
+
+static struct type unknownTypeStandIn(void) { struct type t = TypeVanilla(BASETYPE_INT32); t.unknown = true; return t; }
+
+static void reportUnknownType(struct semaModule* mod, struct token nameTok) {
+    reportUnknownName(mod, nameTok, "unknown type", false,
+                      "no type of this name is declared in this module or the prelude; another module's type is written 'alias.Name'");
 }
 
 
@@ -2210,8 +2283,8 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
             if (PrimByName(name, &pb)) { struct type v = TypeVanilla(pb); v.tok = nameTok; return v; } //T4
             found = SemanticBuiltinType(name);
             if (!found) {
-                ErrMsgSemantic(nameTok, UNKNOWN_TYPE);
-                return TypeVanilla(BASETYPE_INT32);
+                reportUnknownType(mod, nameTok);
+                return unknownTypeStandIn();
             }
         }
     } else {
@@ -2220,7 +2293,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
-        if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_TYPE); return TypeVanilla(BASETYPE_INT32); }
+        if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
         if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
     }
 
@@ -2462,8 +2535,8 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
             if (StrCmp(name, StrFromCStr("Bool"))) return TypeVanilla(BASETYPE_BOOL);
             enum baseType pb;
             if (PrimByName(name, &pb)) return TypeVanilla(pb); //T4
-            ErrMsgSemantic(nameTok, UNKNOWN_TYPE);
-            return TypeVanilla(BASETYPE_INT32);
+            reportUnknownType(mod, nameTok);
+            return unknownTypeStandIn();
         }
     } else {
         struct semaModule* target = resolveAliasChain(mod, idens, 1);
@@ -2471,7 +2544,7 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
         struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
-        if (!found) { ErrMsgSemantic(nameTok, UNKNOWN_TYPE); return TypeVanilla(BASETYPE_INT32); }
+        if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
         if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
     }
     resolveTypeDecl(found);
@@ -3943,7 +4016,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
-    if (!v) { ErrMsgSemantic(tok, UNKNOWN_VAR); return NULL; }
+    if (!v) { reportUnknownName(ctx->mod, tok, "unknown name", true, "nothing of this name is declared here, in this module or in the prelude"); return NULL; }
     return v;
 }
 
@@ -3983,7 +4056,8 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
             if (ctor) return ctor;
             if (t->hasCtor) return NULL; //already reported
         }
-        ErrMsgSemantic(tok, moduleHasMethodNamed(ctx->mod, name) ? METHOD_CALLED_AS_FUNCTION : UNKNOWN_VAR);
+        if (moduleHasMethodNamed(ctx->mod, name)) ErrMsgSemantic(tok, METHOD_CALLED_AS_FUNCTION);
+        else reportUnknownName(ctx->mod, tok, "unknown function or type", true, "nothing of this name is declared here, in this module or in the prelude");
         return NULL;
     }
 
@@ -4679,6 +4753,7 @@ static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct 
 struct litCtorRec { struct operand* lit; struct operand* call; };
 static struct list litCtorRecs;
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    if (target.unknown || op->type.unknown) return TYPE_FIT_OK; //already reported as an unknown type
     if (target.bType == BASETYPE_INTERFACE) return TYPE_FIT_OK; //T30: reported where the trait was written as a type
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
@@ -8279,7 +8354,7 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
     bool crossModule = target != ctx->mod;
     struct type* t = TypeGetList(&target->types, strFromTok(typeTok));
     if (!t) {
-        ErrMsgSemantic(typeTok, UNKNOWN_TYPE);
+        reportUnknownType(target, typeTok);
         return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
     if (crossModule && !isPublic(strFromTok(typeTok))) {
@@ -12784,7 +12859,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
 
     if (requireMain) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
-        if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND);
+        //a syntax error may have hidden main - one that did not parse - so it is reported missing only when none was
+        if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND); }
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
         //stderr) - no other success type is meaningful as a process exit code, so none is allowed
         else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.errors.len == 0) {

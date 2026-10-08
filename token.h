@@ -142,5 +142,6 @@ void TokenSetCursor(TokenCtx tc, int cursor);
 int TokenGetCharCursor(TokenCtx tc);
 int TokenGetLineNr(TokenCtx tc);
 char* TokenStrFromType(enum tokenType type);
+struct token TokenBefore(struct token t);
 
 #endif //TOKEN_H
