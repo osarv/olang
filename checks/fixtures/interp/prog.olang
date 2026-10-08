@@ -1,5 +1,5 @@
 # B3e: a program -i runs as the built program runs - globals, std's maps and lists, text, an extern from libm, a
-# file written and read back through the C library, and main ending in an error nothing catches
+# file written and read back through the C library, deferred code (S19), and main ending in an error nothing catches
 import "std/io"
 import "std/map"
 import "std/os"
@@ -23,7 +23,18 @@ fn risky(n I32) I32 ? Oops {
     return n * 10
 }
 
+fn steps() String {
+    b := StringBuilder()
+    for i in range 4 {
+        defer b.Push("d" $i " ")
+        if i == 1 { continue }
+        if i == 3 { break }
+        b.Push("s" $i " ")
+    }
+    return b.ToString()
+}
 fn main() ? Oops + io.IoError + os.OsError {
+    defer try io.Print("main's deferred code ran\n") catch { }
     Count++
     m := map.Map<String&, I32>()
     for i, n in Names { m.Put(n, I32(i) + Count) }
@@ -33,6 +44,7 @@ fn main() ? Oops + io.IoError + os.OsError {
     l := List<I64>()
     for i in range 5 { l.Push(i * i) }
     try io.Print("count " $Count " total " $total " sum " $p.Sum() " squares " $l.ToArray() "\n")
+    try io.Print("steps " $steps() "\n")
     try io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range 10 if x % 2 == 0] "\n")
     os.Run("echo written > prog.txt")
     t := try os.ReadFile("prog.txt")

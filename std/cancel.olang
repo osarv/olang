@@ -118,3 +118,35 @@ test "a busy task stops when the token is cancelled" {
     }
     assert n.v > 0
 }
+
+# S19a: a join block's deferred code runs as its last statements, before the block's end waits for its tasks - so a
+# deferred Cancel() is what lets a worker stop, however the block is left, an error included. The worker records what
+# stopped it: 1 the Cancel, 2 its deadline - which would mean the join had waited the deadline out first.
+error stepFailed {
+    BAD
+}
+type stopCount struct() {
+    v mut I64 = 0
+    why mut I32 = 0
+}
+fn spinRecord(t Token&, n mut stopCount&) {
+    for not t.Cancelled() { n.v++ }
+    n.why = t.Why()
+}
+fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
+    t := After(5000)
+    join {
+        defer t.Cancel()
+        spawn spinRecord(t, n)
+        if fails { error stepFailed.BAD }
+    }
+}
+
+test "a deferred Cancel lets a join block's tasks stop, on an error too" {
+    n stopCount& = stopCount()
+    try cancelOnExit(false, n) catch { fail }
+    assert n.why == 1
+    m stopCount& = stopCount()
+    try cancelOnExit(true, m) catch stepFailed { }
+    assert m.why == 1
+}

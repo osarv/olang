@@ -4109,6 +4109,9 @@ struct checkCtx {
                   //ret-type (the struct being built), but that value is assembled by the compiler from the
                   //field bindings, never written by hand - so "return" is rejected outright (C13) rather
                   //than checked against it, which would otherwise be a way to hand back some other instance.
+    bool inDefer; //S19b: checking deferred code, which runs while its block is being left and may only reach its
+                  //own end - so no return, no error statement, no error a try lets through, and (with inLoop
+                  //reset at the defer) no break or continue but those of a loop written inside it
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -8232,6 +8235,7 @@ void rejectDefaultArgs(struct list args) {
 //types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
 //deliberate simplification (checking only the escaping subset would need catch-exhaustiveness analysis)
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
+    if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return; } //S19b
     if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
@@ -11782,6 +11786,10 @@ static bool checkBuiltResult(struct checkCtx* ctx, struct operand* v, struct typ
 }
 
 struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
+    if (ctx->inDefer) { //S19b: what it would return is beside the point - it may not leave at all
+        ErrMsgSemantic(firstTokOfType(s, TOK_RET), DEFER_RETURNS);
+        return (struct statement){.sType = STATEMENT_RET};
+    }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
     struct syntax* exprNode = exprNodes.len > 0 ? *(struct syntax**)ListGetIdx(&exprNodes, 0) : NULL;
     struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
@@ -11901,6 +11909,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ERROR;
 
+    if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return stmt; } //S19b
     if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
@@ -11981,6 +11990,23 @@ struct statement buildJoinStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//S19: "defer { ... }" - the deferred code is checked here, where it is written, as a block nested in the
+//defer's own: it sees exactly the names declared before it, and every scope rule treats it as code of that
+//block, which it is - it runs before the block's scope closes. What it may not do is leave (S19b): it runs
+//while the block is being left, so it starts no loop jump of its own, returns nothing and lets no error out.
+//A spawn in it needs a join in it too (P1a): it runs on every way out of its block, so no join outside it is
+//certain to be the one that waits.
+struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_DEFER;
+    struct checkCtx dctx = *ctx;
+    dctx.inDefer = true;
+    dctx.inLoop = false;
+    dctx.joinHasSpawn = NULL;
+    stmt.block = buildBlock(&dctx, firstPartOfType(s, SNTX_BLOCK));
+    return stmt;
+}
+
 struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_SPAWN);
     struct statement stmt = (struct statement){0};
@@ -12036,7 +12062,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     stmt.op = call;
 
-    if (!ctx->joinHasSpawn) { ErrMsgSemantic(tok, SPAWN_OUTSIDE_JOIN); return stmt; }
+    if (!ctx->joinHasSpawn) { ErrMsgSemantic(tok, ctx->inDefer ? SPAWN_IN_DEFER : SPAWN_OUTSIDE_JOIN); return stmt; }
     *ctx->joinHasSpawn = true;
 
     if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) {
@@ -12520,7 +12546,7 @@ static bool blockLeavesValue(struct list* block) {
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     if (!ctx->inLoop) ErrMsgSemantic(firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE),
-                                     BREAK_OUTSIDE_LOOP);
+                                     ctx->inDefer ? DEFER_LOOP_JUMP : BREAK_OUTSIDE_LOOP); //S19b
     return (struct statement){.sType = kind};
 }
 
@@ -12644,6 +12670,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
     for (int i = 0; i < errors->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(errors, i);
         if (StatementCatchCoversType(matches, *e)) continue;
+        if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return; } //S19b
         if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
         bool found = false;
         for (int j = 0; j < ctx->func->type.errors.len; j++) {
@@ -12795,6 +12822,7 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_JOIN: return buildJoinStmnt(ctx, actual);
         case SNTX_STMNT_SPAWN: return buildSpawnStmnt(ctx, actual);
+        case SNTX_STMNT_DEFER: return buildDeferStmnt(ctx, actual);
         case SNTX_STMNT_BREAK: return buildBreakStmnt(ctx, actual, STATEMENT_BREAK);
         case SNTX_STMNT_CONTINUE: return buildBreakStmnt(ctx, actual, STATEMENT_CONTINUE);
         case SNTX_STMNT_ABORT: return buildAbortLikeStmnt(ctx, actual, STATEMENT_ABORT);

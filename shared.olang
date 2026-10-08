@@ -8926,3 +8926,216 @@ test "E33a: a signalling NaN keeps its payload, quieted or not" {
     for b in U64[s64.Bits(), h.d.Bits()] { assert b == 0x7FF0000000000001 or b == 0x7FF8000000000001 }
     assert s16 != s16 and sb != sb and s32 != s32 and s64 != s64
 }
+
+# S19: deferred code runs on every way out of its block - falling off its end, a return (once the result is
+# computed), a break, a continue, an error leaving the function - last registered first, the innermost block's first,
+# reading variables as they are when it runs, never when the defer was reached; only a defer that was reached runs.
+# Run while compiling (DeferBaked, K2) exactly as at run time.
+type DfLog struct() {
+    n mut I64 = 0
+}
+fn (l mut DfLog&) Note(d I64) { l.n = l.n * 10 + d }
+error DfErr {
+    BAD
+}
+fn dfOrder(l mut DfLog&) I64 {
+    defer l.Note(1)
+    defer {
+        l.Note(2)
+    }
+    l.Note(3)
+    return l.n                          # 3: computed before either deferred piece runs
+}
+fn dfLoop(l mut DfLog&) {
+    for i in range 5 {
+        defer l.Note(1)                 # at the end of every iteration, however it ends
+        if i == 1 { continue }
+        if i == 3 { break }
+        l.Note(2)
+    }
+}
+fn dfFails(l mut DfLog&, n I64) I64 ? DfErr {
+    defer l.Note(5)
+    for i in range 3 {
+        defer l.Note(6)
+        if i == n { error DfErr.BAD }
+    }
+    return 0
+}
+fn dfNested(l mut DfLog&, n I64) I64 {
+    defer l.Note(1)
+    if n > 0 {
+        defer l.Note(2)
+        for i in range 3 {
+            defer l.Note(3)
+            if i == n { return i }
+        }
+    }
+    return -1
+}
+fn dfLate(l mut DfLog&) I64 {
+    x I64 = 1
+    defer l.Note(x)                     # 4: x as it is when the deferred code runs
+    x = 4
+    if x > 9 {
+        defer l.Note(9)                 # never reached, so never run
+    }
+    return x
+}
+fn dfArray() Array<I64> {
+    a := I64[1, 2]
+    defer a[0] = 9                      # after the result was computed, so it does not change it
+    return a
+}
+fn dfCaught(l mut DfLog&) {
+    try dfFails(l, 0) catch DfErr {
+        defer l.Note(7)
+        l.Note(8)
+    }
+}
+fn dfMatch(l mut DfLog&, n I64) I64 {
+    match n {
+        case 1 {
+            defer l.Note(1)
+            return 10
+        }
+        nomatch { defer l.Note(2) }
+    }
+    return 20
+}
+fn dfGen(l mut DfLog&, x <T>) <T> {
+    defer l.Note(6)
+    return x
+}
+fn dfTwice(l mut DfLog&) {
+    defer defer l.Note(5)               # the deferred code's own: it runs as that code ends
+    l.Note(4)
+}
+type DfBox struct(v I64, l mut DfLog&) {
+    defer l.Note(1)                     # once the instance is assembled
+    w I64 = v * 2
+    v
+}
+fn dfAll(k I64) Bool {
+    l := DfLog()
+    order Bool = dfOrder(l) == 3 and l.n == 321
+    l.n = 0
+    dfLoop(l)
+    loops Bool = l.n == 211211
+    l.n = 0
+    r := try dfFails(l, k - 2) catch default -1        # fails when i is 1
+    errs Bool = r == -1 and l.n == 665
+    l.n = 0
+    nested Bool = dfNested(l, k - 2) == 1 and l.n == 3321
+    l.n = 0
+    late Bool = dfLate(l) == 4 and l.n == 4
+    a := dfArray()
+    arr Bool = a[0] == 1 and a[1] == 2
+    l.n = 0
+    dfCaught(l)
+    caught Bool = l.n == 6587
+    l.n = 0
+    matched Bool = dfMatch(l, 1) == 10 and dfMatch(l, k) == 20 and l.n == 12
+    l.n = 0
+    lr DfLog& = l
+    f := fn(n I64) I64 {
+        defer lr.Note(7)
+        return n + 1
+    }
+    other Bool = dfGen(l, k) == k and dfGen(l, "x") == "x" and f(k) == k + 1 and l.n == 667
+    l.n = 0
+    dfTwice(l)
+    b := DfBox(k, l)
+    more Bool = l.n == 451 and b.w == 2 * k
+    return order and loops and errs and nested and late and arr and caught and matched and other and more
+}
+DeferBaked := dfAll(3)
+
+test "S19: deferred code runs on every way out of its block, while compiling and at run time" {
+    assert dfAll(WdMutable / 1000000000 + 1)
+    assert dfAll(3)                     # S18c: decided while compiling
+    assert DeferBaked
+}
+
+# S19a: a block's deferred code runs before its scope closes - so it reads the block's locals and what was allocated
+# there - and before the destructors registered there (a join block's, before it waits for its tasks: std/cancel's
+# tests show a deferred Cancel). Run time only: building a value with a destructor is not evaluated (K1).
+dfClosed mut I64 = 0
+type DfRes struct(id I64) {
+    id
+} destruct {
+    dfClosed = dfClosed * 10 + id       # C9: a destructor reads its own instance's fields
+}
+fn dfScoped(n I64) I64 {
+    t := Array<I64>(64, n)
+    defer dfClosed = dfClosed * 10 + t[63]
+    r DfRes& = DfRes(1)
+    for i in range 50 {
+        u := Array<I64>(64, I64(i))     # each iteration's arena reclaimed and reused while t's is not
+        dfClosed = dfClosed + u[0] - u[0]
+    }
+    if n > 0 {
+        q DfRes& = DfRes(2)
+        defer dfClosed = dfClosed * 10 + q.id + 5
+        return n
+    }
+    return 0
+}
+test "S19a: deferred code runs before its block's scope closes" {
+    dfClosed = 0
+    assert dfScoped(WdMutable / 1000000000 + 1) == 3
+    assert dfClosed == 7231             # q's deferred code, q's destructor, the body's deferred code, r's destructor
+}
+
+# blocks inside a catch clause - in a statement or in value position - have arenas of their own like any block, so
+# a destructor registered in one runs at its closing brace; they used to share the function's, and ran at its return
+fn dfThrows() ? DfErr { error DfErr.BAD }
+fn dfThrowsValue() I64 ? DfErr { error DfErr.BAD }
+fn dfInClause() I64 {
+    try dfThrows() catch DfErr {
+        if dfClosed == 0 {
+            r DfRes& = DfRes(1)
+            for i in range 2 {
+                q DfRes& = DfRes(2)
+            }
+        }
+        dfClosed = dfClosed * 10 + 3
+    }
+    x := try dfThrowsValue() catch DfErr {
+        if dfClosed > 0 {
+            r DfRes& = DfRes(4)
+        }
+    } default 5
+    return dfClosed * 10 + x
+}
+test "a block inside a catch clause closes at its own brace" {
+    dfClosed = 0
+    assert dfInClause() == 221345
+}
+
+# S19c: a test ended early - by done here - runs no deferred code, neither a helper's nor its own; its scopes are
+# still closed (S18b)
+dfDoneLog mut I64 = 0
+fn dfEndsEarly() {
+    defer dfDoneLog = 2
+    done
+}
+test "S19c: a test ended by done runs no deferred code" {
+    dfDoneLog = 0
+    defer dfDoneLog = 1
+    dfEndsEarly()
+}
+test "...neither the helper's nor the test's own" {
+    assert dfDoneLog == 0
+}
+
+# a statement after one that always leaves is dead, and compiles to a block nothing reaches - it used to follow the
+# terminator in the same block, which is invalid IR
+fn dfAfterReturn(n I64) I64 {
+    m I64 = n
+    return m
+    m = 7
+}
+test "a statement after a return compiles" {
+    assert dfAfterReturn(WdMutable / 1000000000) == 2
+}

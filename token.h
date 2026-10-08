@@ -23,6 +23,7 @@ enum tokenType {
     TOK_JOIN,  //"join { ... }" - a block that waits for every task spawned in it before it ends (P1)
     TOK_SPAWN, //"spawn <call>" - runs the call on its own thread, joined before the enclosing
                 //function returns (P1)
+    TOK_DEFER, //"defer STATEMENT" / "defer { ... }" - code run on every way out of the enclosing block (S19)
     TOK_BREAK,    //S11: leaves the innermost enclosing loop, closing every block scope it leaves
     TOK_CONTINUE, //S11: ends the current iteration, same unwinding
     TOK_ABORT,       //S16c: stop now, violently - no cleanup, a core dump, the OS's abort status

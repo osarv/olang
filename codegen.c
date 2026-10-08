@@ -37,7 +37,12 @@ struct cgLoop {
     char breakLbl[32];
     char contLbl[32];
     int slotsAtEntry;
+    int depthAtEntry; //S19: the depth of the block holding the loop - a jump leaves every block deeper than it
 };
+
+//S19: one piece of deferred code, registered when emission passes its "defer": the depth of the block it belongs
+//to, and the names it sees. It is emitted afresh on every path out of that block, as a block nested in it.
+struct cgDefer { struct statement* s; struct cgScope* scope; int depth; };
 
 struct cgDbgLoc { int sp; int line; int id; int file; };
 //B3d: the module this compilation was asked for (-b/-t's root, or -c's one module) - the only object that
@@ -97,6 +102,9 @@ struct cgCtx {
     //to wait for its tasks before the arena they may still be holding is reclaimed, exactly as the
     //fall-through path does; that is what this lets the unwinders see.
     struct list blockJoins;
+    //S19: the deferred code registered in the blocks currently open, innermost last (struct cgDefer)
+    struct list defers;
+    int dbgStmtLine, dbgStmtFile; //B2e: the statement being emitted, to locate what follows deferred code again
     //S18b/P1d: the runtime unwind chain's nodes - one %olang.unwind per block depth plus one for the
     //body's own scope, all alloca'd in the entry block beside the scope headers they describe. Their
     //`prev` and `scope` fields never change within a frame, so they are filled in once there and a block
@@ -377,6 +385,101 @@ void cgBr(struct cgCtx* ctx, char* label) {
 //functions - global-init, program-main, the test harness's own dispatch loop - which have no own scope
 //at all, ownScopeSlot stays NULL there). Reclaims this function's own private scope's chunks back to the
 //pool - see emitScopeRuntime. A safe no-op if the scope was never actually used (still empty).
+//a fresh block for whatever is emitted after a terminator - statements written after a return, or what follows
+//deferred code that ended the test or the process. Nothing branches to it, so it is dead and LLVM drops it; without
+//it those instructions would follow the terminator in the same block, which is invalid IR.
+static void cgDeadLabel(struct cgCtx* ctx) {
+    char lbl[32];
+    snprintf(lbl, sizeof(lbl), "dead.%d", ctx->lblCtr++);
+    cgLabel(ctx, lbl);
+}
+
+void cgBlock(struct cgCtx* ctx, struct list* block);
+
+//S19: one piece of deferred code, emitted where its block is being left - as a block nested in its own, with that
+//block's names, depth and open scopes, whatever deeper ones the path out has already closed. Everything a path
+//out may be in the middle of is put aside meanwhile: the blocks deeper than its own (their entries in blockSlots
+//are reused by its nested blocks), the deferred code still to run (it unwinds only within itself, S19b), and a
+//promotion, try default or failed check under way.
+static void cgEmitDeferred(struct cgCtx* ctx, struct cgDefer d) {
+    struct cgScope* scope = ctx->scope;
+    int depth = ctx->blockDepth;
+    int keep = d.depth - 1;
+    if (keep < 0) keep = 0;
+    if (keep > ctx->blockSlots.len) keep = ctx->blockSlots.len;
+    int open = ctx->blockSlots.len;
+    char** kept = MallocOrCrash(sizeof(char*) * 2 * (open - keep + 1));
+    for (int i = keep; i < open; i++) {
+        kept[2 * (i - keep)] = *(char**)ListGetIdx(&ctx->blockSlots, i);
+        kept[2 * (i - keep) + 1] = *(char**)ListGetIdx(&ctx->blockJoins, i);
+    }
+    struct list defers = ctx->defers;
+    char* override = ctx->targetScopeOverride;
+    struct type* staticErrType = ctx->staticErrType;
+    int staticErrWord = ctx->staticErrWord;
+    struct operand* tdOp = ctx->tdOp;
+    char* tdSlot = ctx->tdSlot;
+    char tdJoin[32];
+    memcpy(tdJoin, ctx->tdJoin, sizeof(tdJoin));
+    ctx->scope = d.scope;
+    ctx->blockDepth = d.depth;
+    ctx->blockSlots.len = keep;
+    ctx->blockJoins.len = keep;
+    ctx->defers = ListInit(sizeof(struct cgDefer));
+    ctx->targetScopeOverride = NULL;
+    ctx->tdOp = NULL;
+    cgBlock(ctx, &d.s->block);
+    if (ctx->terminated) cgDeadLabel(ctx); //it ended the test or the process (S19c)
+    ListDestroy(ctx->defers);
+    ctx->defers = defers;
+    ctx->targetScopeOverride = override;
+    ctx->staticErrType = staticErrType;
+    ctx->staticErrWord = staticErrWord;
+    ctx->tdOp = tdOp;
+    ctx->tdSlot = tdSlot;
+    memcpy(ctx->tdJoin, tdJoin, sizeof(tdJoin));
+    ctx->scope = scope;
+    ctx->blockDepth = depth;
+    ctx->blockSlots.len = keep;
+    ctx->blockJoins.len = keep;
+    for (int i = 0; i < open - keep; i++) {
+        ListAdd(&ctx->blockSlots, &kept[2 * i]);
+        ListAdd(&ctx->blockJoins, &kept[2 * i + 1]);
+    }
+    free(kept);
+    //B2e: what follows belongs to the statement being emitted, not to the deferred code's last line
+    if (ctx->debug && ctx->dbgStmtLine > 0) fprintf(ctx->fnOut, "; dbgloc %d %d\n", ctx->dbgStmtLine, ctx->dbgStmtFile);
+}
+
+//S19: the deferred code registered in the block at `depth` (from index `from` of the stack on), last registered
+//first. It sits on top of the stack once every deeper block's has been passed, so the scan skips those and stops
+//at the first shallower one.
+static void cgRunDefersAt(struct cgCtx* ctx, int depth, int from) {
+    for (int i = ctx->defers.len - 1; i >= from; i--) {
+        struct cgDefer d = *(struct cgDefer*)ListGetIdx(&ctx->defers, i);
+        if (d.depth > depth) continue;
+        if (d.depth < depth) break;
+        cgEmitDeferred(ctx, d);
+    }
+}
+
+//O2a/S11a/S19: leaves every open block deeper than `toDepth`, innermost first, each in the order its own end
+//would: its deferred code run (the block's last statements), its tasks waited for (P1b - the block's end), its
+//destructors and arena released. The body's own level (depth 1) has no entry in blockSlots - its scope is the
+//caller's to close - but its deferred code runs here.
+static void cgLeaveBlocks(struct cgCtx* ctx, int toDepth) {
+    int top = ctx->blockDepth;
+    if (ctx->blockSlots.len + 1 > top) top = ctx->blockSlots.len + 1;
+    for (int d = top; d > toDepth; d--) {
+        int i = d - 2;
+        bool hasSlot = i >= 0 && i < ctx->blockSlots.len;
+        cgRunDefersAt(ctx, d, 0);
+        char* jh = hasSlot ? *(char**)ListGetIdx(&ctx->blockJoins, i) : NULL;
+        if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
+        if (hasSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
+    }
+}
+
 void cgCloseOwnScope(struct cgCtx* ctx) {
     //nothing to emit after a terminator: a body ending in "done"/"fail" already left via __olang_end, so
     //these closes would land after an "unreachable" in the same basic block - invalid IR, and the block
@@ -385,11 +488,7 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     if (ctx->terminated) return;
     //O2a: innermost first, then the body's own - a return leaves every block it is nested in, and each
     //one's destructors have to run before the arena under it is reclaimed
-    for (int i = ctx->blockSlots.len - 1; i >= 0; i--) {
-        char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
-        if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
-        fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
-    }
+    cgLeaveBlocks(ctx, 0);
     if (ctx->ownScopeSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
     //and take this whole frame back off the unwind chain in one store - every node in it is gone now
     if (ctx->ownUnwindNode) {
@@ -912,6 +1011,16 @@ static bool typeIsRefShaped(struct type t) {
 static bool cgIsCtor(struct var* func) {
     return func->type.hasRetType && func->type.retType && func->type.retType->bType == BASETYPE_STRUCT
            && func->type.retType->ctorFunc == func;
+}
+
+//C9: a destructor - the function a struct type names as its own. Its scope calls it with a pointer to the
+//instance (__olang_scope_register_dtor), so its one parameter is that pointer, and the body's field reads go
+//through it to the very instance. It used to take the instance by value, so every field it read was the bits of
+//the pointer the runtime passed - garbage nothing caught, since no destructor in the corpus read a field.
+static bool cgIsDtor(struct var* func) {
+    if (func->type.vars.len != 1) return false;
+    struct var* p = ListGetIdx(&func->type.vars, 0);
+    return p->type.bType == BASETYPE_STRUCT && p->type.destructFunc == func;
 }
 
 //the scope a constructor call's instance lands in: the target being built into when there is one,
@@ -4393,12 +4502,49 @@ void cgJoin(struct cgCtx* ctx, struct statement* s) {
 //header per iteration - a stack overflow at a few million iterations, which is exactly the workload block
 //scopes exist to make cheap. One slot per depth is enough because only one block at a given depth is ever
 //open at a time within a frame, and closing resets the header to empty.
+static int cgMaxBlockDepth(struct list* block);
+
+//the blocks an expression holds - a catch clause's in value position, a comprehension's loop, a match used as a
+//value - nest like a statement's own, so they count too; a sequence's statements, which run in the enclosing
+//block, are counted as a block of their own, which only over-reserves
+static int cgMaxOperandDepth(struct operand* op) {
+    if (!op) return 0;
+    int deepest = cgMaxOperandDepth(op->callee);
+    for (int i = 0; i < op->args.len; i++) {
+        int d = cgMaxOperandDepth(*(struct operand**)ListGetIdx(&op->args, i));
+        if (d > deepest) deepest = d;
+    }
+    if (op->comprBody.len) {
+        int d = cgMaxBlockDepth(&op->comprBody);
+        if (d > deepest) deepest = d;
+    }
+    for (int c = 0; c < op->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        int d = cc->hasBlock ? cgMaxBlockDepth(&cc->block) : 0;
+        int v = cgMaxOperandDepth(cc->dflt);
+        if (d > deepest) deepest = d;
+        if (v > deepest) deepest = v;
+    }
+    return deepest;
+}
+
 static int cgMaxBlockDepth(struct list* block) {
     int deepest = 0;
     for (int i = 0; i < block->len; i++) {
         struct statement* s = ListGetIdx(block, i);
         int here = 0;
         if (s->block.len) here = cgMaxBlockDepth(&s->block);
+        struct operand* ops[] = { s->op, s->target, s->forInit, s->fillValue };
+        for (int k = 0; k < 4; k++) {
+            int d = cgMaxOperandDepth(ops[k]);
+            if (d > here) here = d;
+        }
+        if (s->forPost) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, s->forPost);
+            int d = cgMaxBlockDepth(&one) - 1;
+            if (d > here) here = d;
+        }
         if (s->elseStmnt) {
             int e = s->elseStmnt->block.len ? cgMaxBlockDepth(&s->elseStmnt->block) : 0;
             struct list one = ListInit(sizeof(struct statement));
@@ -4414,6 +4560,13 @@ static int cgMaxBlockDepth(struct list* block) {
         }
         if (s->nomatchBlock.len) {
             int d = cgMaxBlockDepth(&s->nomatchBlock);
+            if (d > here) here = d;
+        }
+        //a catch statement's clause blocks nest as deep as any other block - left out, the blocks inside one got
+        //no arena of their own and allocated into the function's scope, destructors running at its return
+        for (int c = 0; c < s->catchClauses.len; c++) {
+            struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+            int d = cc->hasBlock ? cgMaxBlockDepth(&cc->block) : 0;
             if (d > here) here = d;
         }
         if (here + 1 > deepest) deepest = here + 1;
@@ -4450,10 +4603,16 @@ void cgBlockJoining(struct cgCtx* ctx, struct list* block, char* joinHead) {
         ListAdd(&ctx->blockSlots, &slot);
         ListAdd(&ctx->blockJoins, &joinHead);
     }
+    int deferBase = ctx->defers.len;
     for (int i = 0; i < block->len; i++) {
         struct statement* s = ListGetIdx(block, i);
+        if (ctx->terminated) cgDeadLabel(ctx); //written after a return, a break or an error
         cgStatement(ctx, s);
     }
+    //S19: its deferred code - falling off the end is one more way out - as the block's last statements, so before
+    //a join block's end waits for its tasks (a deferred Cancel() is what lets them finish)
+    if (!ctx->terminated) cgRunDefersAt(ctx, ctx->blockDepth, deferBase);
+    ctx->defers.len = deferBase;
     //P1: the join happens before this block's arena is reclaimed - a task may still hold storage from it,
     //and its sub-scopes are folded back here too
     if (joinHead && !ctx->terminated) {
@@ -4627,11 +4786,7 @@ void cgIf(struct cgCtx* ctx, struct statement* s) {
 //own included. Without this a "continue" past an allocation would leak that iteration's chunks for the
 //rest of the call, and a destructor registered in the abandoned part would never run.
 static void cgUnwindToLoop(struct cgCtx* ctx, struct cgLoop* lp) {
-    for (int i = ctx->blockSlots.len - 1; i >= lp->slotsAtEntry; i--) {
-        char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
-        if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
-        fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
-    }
+    cgLeaveBlocks(ctx, lp->depthAtEntry); //S19: running each one's deferred code on the way
     //everything closed above is off the chain now, so the top is whatever sat below the loop's own level
     if (ctx->ownUnwindNode && ctx->blockSlots.len > lp->slotsAtEntry) {
         fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n",
@@ -4682,6 +4837,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     snprintf(lp.breakLbl, sizeof(lp.breakLbl), "%s", endLbl);
     snprintf(lp.contLbl, sizeof(lp.contLbl), "%s", postLbl);
     lp.slotsAtEntry = ctx->blockSlots.len;
+    lp.depthAtEntry = ctx->blockDepth;
     ListAdd(&ctx->loops, &lp);
 
     cgLabel(ctx, bodyLbl);
@@ -4706,6 +4862,7 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
     snprintf(lp.breakLbl, sizeof(lp.breakLbl), "%s", endLbl);
     snprintf(lp.contLbl, sizeof(lp.contLbl), "%s", condLbl); //S11: a do-loop re-checks its condition
     lp.slotsAtEntry = ctx->blockSlots.len;
+    lp.depthAtEntry = ctx->blockDepth;
     ListAdd(&ctx->loops, &lp);
 
     cgBr(ctx, bodyLbl);
@@ -4837,6 +4994,13 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     if (ctx->ctorHere) ctx->targetScopeOverride = ctx->ctorHere;
     char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
     ctx->targetScopeOverride = prevTarget;
+    //S19: the result is computed before deferred code runs - and a returned array value still shares its
+    //elements with the storage it came from until the caller copies them, so deferred code writing that storage
+    //would change the result. With deferred code pending, the result takes its own copy first, where it lands.
+    if (ctx->defers.len && retT.bType == BASETYPE_ARRAY && retT.arrMalloc && !retT.structMAlloc
+            && !cgIsFreshTemp(s->op)) {
+        val = cgCopyRuntimeLengthArray(ctx, retT, val, cgResolveScope(ctx, retT.scopeParam, retT.scopeDepth), NULL);
+    }
     cgCloseOwnScope(ctx);
     if (!fallible) {
         cgEmitRet(ctx, ty, val);
@@ -4963,8 +5127,17 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
 }
 
 void cgStatement(struct cgCtx* ctx, struct statement* s) {
-    if (ctx->debug && s->line > 0) fprintf(ctx->fnOut, "; dbgloc %d %d\n", s->line, cgDbgFileId(ctx, s->file)); //B2e
+    if (ctx->debug && s->line > 0) { //B2e
+        ctx->dbgStmtLine = s->line;
+        ctx->dbgStmtFile = cgDbgFileId(ctx, s->file);
+        fprintf(ctx->fnOut, "; dbgloc %d %d\n", ctx->dbgStmtLine, ctx->dbgStmtFile);
+    }
     switch (s->sType) {
+        case STATEMENT_DEFER: { //S19: nothing runs here - its code is emitted on each way out of this block
+            struct cgDefer d = { s, ctx->scope, ctx->blockDepth };
+            ListAdd(&ctx->defers, &d);
+            return;
+        }
         case STATEMENT_VAR_DECL: cgVarDecl(ctx, s); return;
         case STATEMENT_ASSIGN: cgAssign(ctx, s); return;
         case STATEMENT_EXPR: cgValue(ctx, s->op); return;
@@ -6428,10 +6601,12 @@ void cgEmitParamList(FILE* out, struct var* func, bool named) {
         if (named) fprintf(out, " %%sarg%d", i);
         anyScope = true;
     }
+    bool dtor = cgIsDtor(func);
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         char pty[256];
-        llvmType(p->type, pty, sizeof(pty));
+        if (dtor) snprintf(pty, sizeof(pty), "ptr");
+        else llvmType(p->type, pty, sizeof(pty));
         bool first = (i == 0 && !anyScope && !ctor);
         fprintf(out, "%s%s", first ? "" : ", ", pty);
         if (named) fprintf(out, " %%arg%d", i);
@@ -6563,6 +6738,14 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     }
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
+        if (cgIsDtor(func)) { //C9: the instance itself, in place - its storage is where the pointer passed points
+            struct cgLocal self = {0};
+            self.name = p->name;
+            self.type = p->type;
+            self.llvmVal = "%arg0";
+            ListAdd(&ctx->scope->locals, &self);
+            continue;
+        }
         char pty[256];
         llvmType(p->type, pty, sizeof(pty));
         char* slot = cgDeclareLocal(ctx, p->name, p->type);
@@ -6599,8 +6782,10 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     cgSetupUnwind(ctx);
     cgPushOwnUnwind(ctx);
 
+    ctx->defers.len = 0; //S19: the body's own deferred code - cgCloseOwnScope runs it on every way out
     for (int i = 0; i < func->codeBlock.len; i++) {
         struct statement* s = ListGetIdx(&func->codeBlock, i);
+        if (ctx->terminated) cgDeadLabel(ctx); //written after a return, a break or an error
         cgStatement(ctx, s);
     }
 
@@ -7004,6 +7189,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.scopePool = ListInit(sizeof(char*));
     ctx.joinPool = ListInit(sizeof(char*));
     ctx.loops = ListInit(sizeof(struct cgLoop));
+    ctx.defers = ListInit(sizeof(struct cgDefer));
 
     ctx.debug = debug;
     ctx.fnValues = ListInit(sizeof(struct var*));

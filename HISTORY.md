@@ -8363,3 +8363,90 @@ from their original form.
   first) took it for null: `label(5) == "5+10"` with `label` returning `String&` was false while compiling - an S18c
   assert failed to compile, a global baked `false` - and true at run time. A null now also equals only a null in the
   evaluator's identity test, so a bare value can never pass for one again.
+
+- **`defer` (S19/S19a-S19d, 2026-10-08, self-hosting prep item 6; the user's decision "block-scoped, as in Zig", the
+  details mine under the coordinator's authority).** The motivating use is the self-hosted compiler's: save a context
+  field, change it, and put it back on every way out - `saved := ctx.inLoop; ctx.inLoop = true; defer ctx.inLoop =
+  saved`. Destructors already release resources; `defer` is for "put this back", which a destructor cannot say because
+  it belongs to a type, not to a block.
+  **What it is.** `defer STATEMENT` or `defer { block }` (the first is the second holding one statement - the parser
+  wraps it, so the checker and both back ends see one shape). The deferred code belongs to the block the `defer` is
+  written in and runs on every way out of it: its end, `return` (after the result is computed), `break`/`continue`,
+  and an error leaving the function. Several run last-registered-first, innermost block first; only a reached `defer`
+  runs, once per time it was reached (a loop body's at each iteration's end). Deferred code reads variables when it
+  runs (Zig's reading, not Go's argument capture), which is what "put back what `saved` holds" needs.
+  **Checked where it is written.** The deferred code is built by the ordinary block builder, as a block nested in the
+  defer's own, so it sees exactly the names declared before it and every §8 rule treats it as code of that block -
+  which it is, since it runs before that block's scope closes. Nothing new had to be proved about scopes: everything
+  it can name is alive when it runs.
+  **It may not leave (S19b).** A `return`, an `error` statement, a `try` an error can escape through, and a
+  `break`/`continue` other than one inside a loop written in the deferred code are compile-time errors with messages
+  of their own (`DEFER_RETURNS`, `DEFER_ERROR_ESCAPES`, `DEFER_LOOP_JUMP`) - one `inDefer` flag on the check context,
+  consulted where a return, an error statement and the two propagation checks already look, and `inLoop` reset at the
+  defer so a loop inside the deferred code still takes its own `break`. A `spawn` in it needs a `join` in it
+  (`SPAWN_IN_DEFER`): the deferred code runs on every way out of its block, and at a deep `return` the emission's
+  innermost join is not its block's, so no join outside it is certain to be the one that waits. A `defer` inside deferred code is that code's own block's, like any other, so `defer defer x` simply
+  runs `x` as the deferred code ends; nothing needed forbidding.
+  **The order at a block's exit: deferred code, then a join block's wait, then the scope's close and destructors.** I
+  first built the wait before the deferred code - so it would see the tasks' results and could not race them - and the
+  coordinator reversed it (with the user's authority over details): deferred code is the block's last statements and
+  the join is the block's end; code in a join block already runs alongside its tasks (the spawner keeps going between
+  `spawn` and the end), so a defer there is no less safe than any statement there, and a task's result is readable
+  only after the block, as P1 already says. What it buys is cancel-on-exit, `join { defer tok.Cancel()  spawn
+  worker(tok)  try step() }`: on an error the defer cancels and the join then waits for a worker that can now finish -
+  with the wait first, that program deadlocks. std/cancel's test pins it on the success path and the error path, with
+  a worker that records whether the Cancel or its 5-second deadline stopped it, so a regression fails rather than hangs
+  (it failed on the first order, after waiting the deadline out). Running before the close is what lets deferred code
+  read the block's locals and what was allocated in its scope.
+  **A result is computed before deferred code runs**, and that needed one real piece of work: a returned array
+  *value* is a `{len, ptr}` descriptor naming its source's elements until the caller copies them, so `defer a[0] = 9`
+  after `return a` changed what the caller received at run time - while the evaluator, which copies at the return,
+  did not. With deferred code pending, a returned array value now takes its own copy in the result scope before the
+  deferred code runs (no change to any function without a `defer`). A constructor's instance is likewise assembled
+  before the deferred code at the top of its body runs, as a return value is.
+  **`done`, `fail`, `abort`, `unreachable` and a failed check run no deferred code (S19c)** - outside a test they end the
+  process, and Zig's `std.process.exit` and `@panic` do the same. Inside a test they end the test by `longjmp`, and the
+  runtime unwinder (P1d) closes the abandoned scopes and runs their destructors - but it cannot run deferred code,
+  and making it able to was judged disproportionate: the deferred code reads the frame's locals, its scope slots and
+  its hidden scope arguments, so running it from the unwinder means either compiling it as a closure over all of
+  those (every local it reads forced into memory and passed by address) or a `setjmp` landing pad per block with
+  deferred code in test builds, with every local it reads kept in memory across the `setjmp` (C's `volatile`
+  problem, X3b). Both are a second code generator for a path only an abandoned test takes. So a test ended early skips
+  its pending deferred code, and the spec says so; S18b's "tears down exactly what one that completes would" gained
+  that exception. A corpus test pins it (two tests in order, as P1d's are).
+  **Codegen** emits deferred code inline on every path out, as Zig does: when emission passes a `defer` it records the
+  statement, its block's depth and the codegen scope current there; a block's fall-through, `cgCloseOwnScope` (return
+  and every propagated error) and `cgUnwindToLoop` (break/continue) now share one `cgLeaveBlocks`, which for each level
+  left emits that level's deferred code, waits for its join, then closes its scope. Each emission runs as a block
+  nested in the defer's own - depth, names and open scopes reset to that block's, the deeper blocks' entries put aside
+  and restored, the defer stack, a promotion target, a try default and a failed check's static error put aside - so a
+  copy emitted at a deep `return` is the same code as one emitted at the block's end. The unwind chain needs no change:
+  the deferred code's own block pushes the node of the level just closed, whose predecessor is its own block's.
+  Deferred code that ends the process leaves the path in a fresh, unreachable block. Zero cost without `defer`.
+  **The evaluator** (`ctExecBlock`) records each reached defer and, when the block ends for any reason but a failed
+  evaluation, runs them last first with whatever was leaving (a return value, an error, a loop jump) put aside and
+  resumed after - so deferred code runs while compiling (K2, S18c) and under `-i` exactly as at run time. Proven by a
+  corpus global baked from a function exercising every way out (`DeferBaked`), an assert the evaluator decides
+  (`assert dfAll(3)`, which fails to compile if negated), a `k2` fixture global grepped as `global i32 7`, and the `-i`
+  fixture printing deferred output - a loop's `continue`/`break` and main's own deferred code before the unhandled
+  error report - identically to the built program.
+  **Found on the way, all pre-existing and fixed:**
+  (1) **A destructor read garbage from its own fields.** It was emitted taking its instance by value (`define void
+  @T$dtor(%T %arg0)`), while the scope that runs it calls it with a pointer to the instance - so every field it read
+  was bits of that pointer. The record says a destructor "reads its own fields bare"; no corpus destructor ever did,
+  which is why nothing noticed. A destructor now takes the pointer and its `.self` is the instance in place. Pinned by
+  the S19a corpus test, whose destructor writes its id.
+  (2) **Blocks inside a catch clause, or inside any block an expression holds, had no arena.** The per-depth scope
+  headers are sized by `cgMaxBlockDepth`, which looked only at statements' own blocks - so a block nested in a
+  statement's catch clause, a value-position catch clause, a comprehension or a match used as a value, two levels
+  deep, allocated into the function's own scope, and its destructors ran at the function's return instead of the
+  block's end. It now counts those too.
+  (3) **A statement after a `return`, `break` or error compiled to invalid IR** (instructions after a terminator in the
+  same block; clang rejected the module). It is legal code - dead, like a branch nothing reaches - and now goes into
+  a fresh unreachable block, which LLVM drops.
+  (4) E16b's spec text pointed at §6.9 for a failed assert's behaviour; that is §6.7 (and §6.9 is now `defer`).
+  **`errdefer` (Zig's, run only when an error leaves) was not asked for and is not built, but would be cheap**: every
+  way an error leaves a function - an `error` statement, a propagating `try`, a failed check under `try`, a bare-`?`
+  function's generalisation - reaches `cgLeaveBlocks` through `cgCloseOwnScope`, so one flag there selects it, and the
+  evaluator's `ctRunDeferred` already knows the flow it is putting aside is `CF_ERROR`. An error a clause or a default
+  takes does not leave, so it would run none - the natural reading.

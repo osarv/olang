@@ -318,6 +318,7 @@ enum statementType {
     STATEMENT_RET,
     STATEMENT_JOIN,  //"join { ... }" (P1): block waits for every task spawned in it
     STATEMENT_SPAWN, //"spawn f(args)" (P1): op is the call operand, run on its own thread
+    STATEMENT_DEFER, //S19: block is the deferred code, run on every way out of the block this statement is in
     STATEMENT_BREAK,    //S11: leaves the innermost enclosing loop
     STATEMENT_CONTINUE, //S11: ends the current iteration
     STATEMENT_ABORT,       //S16c

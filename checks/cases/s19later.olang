@@ -1,0 +1,6 @@
+# check: fail unknown name 'later'
+# S19a: deferred code is checked where it is written, so it sees only names declared before the defer
+fn main() ? {
+    defer z := later
+    later I32 = 3
+}

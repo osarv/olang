@@ -1,0 +1,9 @@
+# check: fail a 'spawn' in deferred code needs a 'join' written in the deferred code too
+# S19b/P1a: deferred code runs after its block's own join has waited, so that join does not wait for this task
+fn h() { }
+fn main() ? {
+    join {
+        spawn h()
+        defer spawn h()
+    }
+}

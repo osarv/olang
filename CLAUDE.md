@@ -3024,6 +3024,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   the enum declared first) since enum payload snapshots were never refreshed; T16's "a type cannot embed itself by
   value" was never enforced (invalid IR) - now an error; and the evaluator returned a value built in a `return` through
   a reference result bare, so `label(5) == "5+10"` was false while compiling and true at run time.
+- **`defer` (S19/S19a-S19d, 2026-10-08, the user's decision "block-scoped, as in Zig"; details decided by me).**
+  `defer STATEMENT` / `defer { block }` registers deferred code of its block, run on every way out - its end, `return`
+  (after the result is computed; a returned array value is copied first when a defer is pending), `break`/`continue`,
+  an error leaving the function - last registered first, innermost block first, only if reached, reading variables when
+  it runs. Checked where written, as a nested block. It may not leave (no `return`, `error`, escaping `try`, or loop
+  jump out of it; a `spawn` in it needs its own `join`). At a block's exit: deferred code (the block's last statements),
+  then a join block's wait, then the scope closes and its destructors run - the coordinator's call, so a deferred
+  `Cancel()` lets a join's tasks finish on any way out (with the wait first, that program deadlocks). `done`/`fail`/`abort`/`unreachable`/a failed check run none - in a test the
+  unwinder closes scopes but cannot run deferred code (disproportionate: a closure over the frame or setjmp pads),
+  recorded as S19c. Codegen emits it inline per exit (`cgLeaveBlocks` shared by fall-through, return/error and
+  break/continue); the evaluator runs it in `ctExecBlock`, so it bakes, decides asserts and runs under `-i`. **Found on
+  the way**: destructors took their instance by value while the runtime passes a pointer, so a field read in one was
+  garbage; blocks inside catch clauses and expression-held blocks got no arena (destructors ran at the function's
+  return); a statement after a `return` emitted invalid IR. `errdefer` not added (cheap: one flag where errors leave).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

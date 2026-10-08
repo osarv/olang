@@ -14,7 +14,7 @@ only depends on concepts already introduced by earlier ones:
 | 3 Declarations | Type, error, variable, and function declarations; scope of names |
 | 4 Modules | Files as modules, imports, visibility, cross-module name resolution, re-export |
 | 5 Expressions | Operators, precedence, literals as values, calls, member/index access |
-| 6 Statements | Control flow: if/for/do/match, assignment, return, assert, done/fail |
+| 6 Statements | Control flow: if/for/do/match, assignment, return, assert, done/fail, defer |
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Ownership and Scopes | Scopes, scope tags, reference markers, results, the static scope checker |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
@@ -101,7 +101,7 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join
+trait     spawn   join    defer
 import    test    destruct
 abort     unreachable
 extern    default
@@ -1936,7 +1936,7 @@ immutable array is itself immutable, and so cannot bind to a `mut` reference par
 that, slicing would launder immutability away.
 
 **E16b.** A slice's bounds **are** checked at run time: `0 <= lo <= hi <= base.Len()` must hold, and a
-violation aborts the program (the behaviour of a failed `assert`, §6.9 — it never returns, so no
+violation aborts the program (the behaviour of a failed `assert`, §6.7 — it never returns, so no
 execution continues with an out-of-range slice). **Indexing is not** (E16), and the asymmetry is the whole
 point: a bad index is a single wrong access at the point it is written, while a bad slice produces a
 *value* that remains wrong for as long as it lives — it can be returned, stored in a field, passed on, and
@@ -2247,8 +2247,8 @@ closing `}`.
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | done-stmnt | fail-stmnt | abort-stmnt
 | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and `try-store-stmnt` in §7;
-`spawn-stmnt` and `join-stmnt` in §6.8.
+| defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
+`try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
 either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4) or
@@ -2441,7 +2441,8 @@ the iteration is therefore reclaimed, and any destructor registered there runs, 
 at the closing brace. This is the same unwinding `return` performs (O2a); the difference is only where
 control lands afterwards. If one of the scopes being left is a `join` block, its tasks are waited for
 before it is reclaimed (§6.8 P1b) — a `join` is not a loop and is never what a `break` targets, but it can
-lie between the statement and the loop it does target.
+lie between the statement and the loop it does target. Each block left runs its deferred code (§6.9 S19)
+before its scope closes.
 
 Note that `continue` closes the loop body's scope and the next iteration opens it again. That is what makes
 a loop that allocates and sometimes `continue`s cost no more than one that never does.
@@ -2609,7 +2610,7 @@ in a `test` block is judged only in a test build (B3a), the only build that runs
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `done` or `fail` — runs the
 destructors of every value still live and reclaims every scope still open, innermost first, through
 function frames as well as the test body's own blocks. A test that does not run to completion tears down
-exactly what one that does would.
+exactly what one that does would, except that deferred code still pending is not run (§6.9 S19c).
 
 The unwinding happens **before** the `longjmp`, while those frames are still alive. Emitting it at the
 recovery point instead does not work and is not a matter of effort: an optimizer does not model the
@@ -2652,7 +2653,8 @@ about one body. It stays purely additive if it is ever wanted.
 
 **P1b.** The join is on **every path out of the block**, not only its last statement: a `return`, a
 `break`, a `continue` and a propagated error all wait for the block's tasks before leaving it. The block's
-arena (§8, O2) is reclaimed on the way out, and a task may still be holding storage from it.
+arena (§8, O2) is reclaimed on the way out, and a task may still be holding storage from it. The block's
+deferred code (§6.9 S19a) runs before the wait, as the block's last statements.
 
 `done`, `fail`, `abort` and `unreachable` (§6.7) are the exceptions, and are not joins: each ends the
 process immediately, so there is no frame left for a task to outlive. A `test` left early by a failing
@@ -2885,6 +2887,48 @@ detector and not a proof.
 ordering the foreign primitive defines. This composes with P8 rather than sitting beside it, because those
 are the same primitives the implementation uses for `spawn` and `join`, and it is what P7's detector
 follows to tell a synchronised program from a racy one.
+
+### 6.9 `defer`
+
+**S19.** `defer-stmnt ::= "defer" ( block | statement )`. A `defer` does nothing where it stands: it registers its
+block - in the second form a block holding just that one statement, so `defer x = y` is `defer { x = y }` - as
+**deferred code** of the block it is written in. Deferred code runs when that block is left, by **every** way out of
+it: falling off its end; a `return`, once the value returned has been computed; a `break` or `continue` (S11a); and an
+error leaving the function - an `error` statement, or a `try` whose error no clause takes (§7). Only deferred code
+whose `defer` was reached runs, once each time it was reached: a `defer` in a loop body registers anew in every
+iteration, and its code runs at that iteration's end.
+
+```
+saved := ctx.inLoop
+ctx.inLoop = true
+defer ctx.inLoop = saved      # put back however this block is left
+```
+
+**S19a.** Deferred code is checked where it is written, as a block nested in its own: it sees the names declared
+before the `defer`, and every rule of §8 treats it as code of that block, which it is. It reads variables as they are
+when it **runs**, not as they were when the `defer` was reached, so `defer x = saved` stores whatever `saved` holds
+then. Several pieces registered in one block run in the **reverse** of the order they were registered, and a way out
+of several nested blocks runs each block's own, innermost first. Leaving one block happens in this order: its
+deferred code runs, as the block's last statements and while its scope is still open, so it may read the block's
+locals and what was allocated in its scope; then, for a `join` block, its end waits for its tasks (P1b) - so deferred
+code there runs alongside them, as every statement of a join block does, and is what lets them finish (a deferred
+`Cancel()` of a token they watch); then the scope closes and the destructors registered there run (O15). A value being returned is computed before any deferred code
+runs, so deferred code changing what a local holds does not change the result - an array's elements included. A
+constructor's instance is likewise assembled (C6) before the deferred code at the top of its body runs.
+
+**S19b.** Deferred code may not leave: it runs while its block is being left, and runs to its own end. A `return` or
+an `error` statement in it, a `try` an error can leave it through (every error a `try` in it can produce is caught
+there, as in a destructor), and a `break` or `continue` other than one inside a loop written in the deferred code are
+compile-time errors. A `spawn` in it needs a `join` written in it (P1a): it runs on every way out of its block, so no
+`join` outside it is certain to be the one that waits. A `defer` inside deferred code is the deferred code of the block it is written in, as anywhere.
+
+**S19c.** `done`, `fail`, `abort`, `unreachable` and a failed `assert` or run-time check end the test or the process
+(§6.6, §6.7) rather than leave a block, and run no deferred code - neither what is pending where they are reached nor,
+when one is reached inside deferred code, the rest of it. A test ended early this way still waits for its tasks and
+closes its scopes, destructors included (S18b, P1d); its pending deferred code is not run. They may be written in
+deferred code.
+
+**S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
 ## 7. Error Handling
 
@@ -3120,7 +3164,8 @@ tagged to an inner block's scope therefore cannot flow into anything declared ou
 ordinary containment rule and with no rule of its own.
 
 A block's scope closes at the block's end and at every other exit from it: a `return` (`error` and a
-propagating `try` included, both being returns), `break` and `continue`. `done`/`fail`/`abort`/`unreachable`
+propagating `try` included, both being returns), `break` and `continue` - in each case after the block's
+deferred code has run (§6.9 S19a), so deferred code may read what the scope holds. `done`/`fail`/`abort`/`unreachable`
 (§6.6) end the test or the process; scopes left that way are closed by the unwinding §6.6 describes, or not
 at all.
 
