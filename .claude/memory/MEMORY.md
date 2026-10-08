@@ -17,3 +17,5 @@
 - [No Claude attribution in commits](feedback_no_claude_attribution.md) — author as the user, no Co-Authored-By / Claude-Session lines
 - [Dictated messages](user_dictation.md) — expect misheard words and spoken self-corrections; read for intent, state the reading taken when ambiguous
 - [Usage and subagents](feedback_usage_and_agents.md) — time matters: parallel agents in worktrees, cheaper model for search; pace by usage (rate_limit_event); ALWAYS arm a send_later resume for after the reset before usage runs out
+- [olang direction](user_olang_direction.md) — no manual memory mgmt, C-like perf, natural language, minimal syntax, multi-purpose; base of larger projects: solid and smooth
+- [Decide details myself](feedback_decide_details.md) — authority over details within the direction; record as decisions, ask only direction questions; short reports

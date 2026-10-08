@@ -1,6 +1,9 @@
 # olang design principles
 
 olang is a custom programming language. C-like structure, with quality-of-life improvements over C.
+Its direction (the user, 2026-10-08): no manual memory management, C-like performance, natural language as much as
+possible, minimal syntax, multi-purpose (AI/data science, scripting, GUI) - the base of larger projects, so the design
+has to be solid and smooth.
 Error handling is modeled on Zig (explicit error sets/unions, no exceptions). Longer-term direction:
 Rust-like compile-time memory/security guarantees (underway - see the ownership-scopes entry in
 Settled decisions below; scope-containment is checked at compile time, a general borrow checker is
@@ -23,6 +26,7 @@ with this file: a new standing rule or correction from the user gets a `feedback
 and every question put to the user goes into the pending-decisions ledger when it is asked.
 
 @.claude/memory/MEMORY.md
+@.claude/memory/feedback_decide_details.md
 @.claude/memory/feedback_errors_are_errors.md
 @.claude/memory/feedback_keep_evaluator_current.md
 @.claude/memory/feedback_keep_old_tests.md
@@ -35,6 +39,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_style_form_conciseness.md
 @.claude/memory/feedback_surface_and_fix_bugs.md
 @.claude/memory/feedback_usage_and_agents.md
+@.claude/memory/user_olang_direction.md
 @.claude/memory/user_olang_natural_language.md
 @.claude/memory/user_dictation.md
 @.claude/memory/project_olang_concurrency_gaps.md

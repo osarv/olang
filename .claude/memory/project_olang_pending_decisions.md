@@ -28,104 +28,22 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** (numbers 2 and 6-9 are unused since the 2026-10-08 answers; my calls keep 10 onward)
-1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
-   scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
-3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
-   a block that provably leaves, and the match must be exhaustive (or have a value-giving `nomatch`). Explained again
-   2026-10-08 with braceless one-line statements (the user asked; answer: not for `if`/`for` bodies - with no
-   parentheses around a condition there is no telling where it ends - `=>` works because it is a separator).
-   Default: not built. Rec: (a).
-4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
-   rejected. Rec: leave until real code needs it.
-5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
-10. A literal the other operand's type cannot hold (`0x7FF0000000000001 * one`, `one` an I32; `b + 300`, `b` a U8):
-    E6 makes it an error, while T6b would meet the two at the literal's own type (I64, I32), losing nothing. Today
-    E6 wins ("these two numbers do not meet"). Rec: T6b wins - the narrower value widens, as it would beside a
-    variable of the literal's type.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
+expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
+T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default
+for a by-value result holding references stays rejected until real code needs it; Split on an empty separator keeps
+Go's single bytes; pushing to a List during a loop over it is specified as built (the iterator re-reads the count);
+`-i`'s next stage, when -i matters, is the redesign (compact values, scope-mirroring freeing, destructors) - in
+next-steps.
 
 **OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later
 installed - built-then-installed temps, null-initialized cursors).
 
-**MY CALLS - built, flagged, never confirmed** (laid out for the user's review 2026-10-08, grouped) (default = as built; rec = keep unless noted)
-10. `-u` updates every repository the build reaches; one alone is deleting its line.
-11. `-u` keeps lock lines for repositories the build does not reach (programs in one directory share the lock).
-12. `-d` (debug) beside `-D` (define), differing only in case.
-13. The T6b cleanup kept six conversions on purpose (conversion tests, implicit-vs-explicit comparisons,
-    `I64(n).Hash()`, `OpMoney.plus`, `I64(i) * I64(i)`).
-14. `-i` stops with status 1, naming the place, on undefined behaviour and on what it does not run yet.
-15. Identity is spelled `same(a, b)`.
-16. A null reference hashes to 0; Hash never sees one.
-17. `Str` must be compile-time evaluable (K1a), since `$` may call it any number of times.
-18. `==` on a reference compares the referents when the type declares Eq (a null equals only a null), identity otherwise.
-19. The compiler supplies Hash for a value type declaring neither Hash nor Eq; declaring Eq requires declaring Hash.
-20. `match`, `in`/Has and Map keys all go through `==`.
-21. `extends`: an inherited array method returning its receiver's type returns the declared type; a number's methods
-    keep their results.
-22. An array's own operations (index, slice, Len, for-in, `$`) need no `extends`.
-23. `Array<T>(n)` of a type whose zero value holds references is an error, not a per-element constructor loop.
-24. A generic placeholder (`x <T>` with no value) of a type with no zero value errors inside the generic.
-25. A typed local takes a read-only initializer's permission (T25b).
-26. A built result is writable; a borrowed one read-only unless `mut` (T25b).
-27. An array literal's elements adapt to the target's permission when all may be written (T25b).
-28. Trim/Split results are read-only - no permission polymorphism (T25b).
-29. `Call` keeps the ability to fail (E31a).
-30. `try x[i] = v` checks the whole statement, the value included (R21).
-31. A Try form must declare errors (E31a).
-32. `break`/`continue` written directly in a for-in catch clause is an error (S9e).
-33. Has/Contains may declare errors directly; there is no TryHas (E29).
-34. `try T[e for x in c]` checks the element's arithmetic too (E15a), so clauses may need `+ BuiltinError`.
-35. The Iter that Indexable supplies does not count as a type's own Iter (S9d order).
-36. `f(g())` spreads g's results only when `g()` is f's only argument (D8d, Go's rule).
-37. Several names declared at once are sequential, each initializer seeing the names before it (D12b, as in C).
-38. `atomicLoad` takes any integer lvalue, not only a writable one (P9).
-39. `not` binds looser than comparisons (Python's rule).
-40. `@` has the precedence of `*` `/` `%`.
-41. A constraint may be written at any occurrence of its type variable, all occurrences agreeing (G19).
-42. The built-in build constants are named `TargetOs`, `TargetArch`, `DebugBuild`, `RaceBuild`, `TestBuild`.
-43. A `-D` value that is not true/false/a number is text (a String since 2026-10-08).
-44. `if pure(3) != 6 { fail }` is dead code (S8a/S8b) - self-checks use assert.
-45. `Verbose := false; if Verbose` in source is an error (S8a) - configuration knobs belong in `-D`.
-46. A literal whose constructor rejects it is a compile error, with no `try` (T29d).
-47. The new "an expression built from literals does not flow" message (T6a) covers integers too (`b U8 = 1 + 2`).
-std/os (X6/B3f, 8fb6afd):
-48. Names: `Args`, `Env`, `ReadFile`, `WriteFile`, `Create`, `Open`, `Close`, `Stat`, `FileInfo` (`Kind`/`Size`/
-    `ModTime`), `FileKind` (FILE/DIR/OTHER), `Exists`, `IsDir`, `MkDir`, `MkDirAll`, `Remove`, `Rename`, `ReadLink`,
-    `RealPath`, `Cwd`, `ReadDir` (not `ListDir`; `Cwd` not `WorkDir`).
-49. `Env` of an unset variable fails with the default error (as `Map.Get` on a miss), not `OsError.NOT_FOUND`.
-50. `OsError` has seven words (adds EXISTS, DENIED, NOT_DIR, IS_DIR, NOT_EMPTY); EPERM and EACCES are both DENIED.
-51. `Stat` goes through a runtime function filling three numbers, laid out by the compiler's own C headers - sound
-    while the target is the host; cross-compilation would revisit it.
-52. `ModTime` is one I64 of nanoseconds since the epoch (good to 2262), not seconds plus nanoseconds.
-53. `Args()[0]` is the program's name (C, Go, Python); under `-i` it is the source file.
-54. Under `-i` everything after the file goes to the program, so `olang -i f.olang -r` passes `-r` to it.
-55. `Create`/`Open` return a raw `I32` descriptor (as std/io), not a `File` type with a destructor.
-56. `Exists`/`IsDir` answer with a Bool (a yes/no question, not a missing value); `Stat` follows symlinks; no lstat.
-57. `MkDirAll` reports a file in the way as `NOT_DIR` (Go's rule); files are created 0666, directories 0777, both
-    reduced by the umask.
-List / text builder (42a4135):
-58. The builder is named `StringBuilder` (a prelude name is reserved everywhere, so not `Builder`/`Text`; alternative
-    `TextBuilder`), with `Push(String&)`, `PushChar(Char)`, `Len()`, `ToString()`; no `Str()` (so `$b` does not render
-    its text) and no way to write it out without flattening first (a chunk iterator could add that).
-59. `List.PushAll(a Array<T>&)` appends a whole array (alternatives `Append`, `Extend`).
-60. List finds the chunk for `l[i]` with six comparisons in olang rather than a new leading-zeros builtin.
-61. `l[i]` is a copy, so `l[i].x = v` is an error (a generic `At` cannot return a borrow - T might be a number).
-62. `MapIter` was rewritten too (same per-element walk defect, same cause).
-63. Pushing to a List while a loop walks it: the iterator re-reads the count, so it sees elements added before it
-    reaches the end (as a counted loop would). The spec says nothing - should it? Default: as built.
-Float bits (E33/E33a, 704ae42):
-64. The reverse is a method on the unsigned value - `u.F64FromBits()`, `u.F32FromBits()`, `u.F16FromBits()`,
-    `u.BF16FromBits()` - since nothing is called through a type name (`F64.FromBits(u)` would need type-level
-    functions); `u.AsF64()` rejected (`as` is E32 and reads as a numeric conversion).
-65. `Bits()`/`...FromBits()` reach a declared type only through `extends` (the method rule), unlike `Len()`.
-66. A signalling NaN may be quieted by any move (x86 returns a struct's third float through x87; LLVM 18 at -O0
-    passes BF16 through F32) rather than changing the struct-return ABI to keep it.
-67. Negation's NaN bits are unspecified (at -O0 F16 negation quiets), as every operation's NaN is.
-68. The evaluator refuses the bits of an operation's NaN or a signalling NaN (undefined, K1); `-i` gives what it holds.
-69. Every NaN renders `nan` with `$` (it was `-nan` at compile time and in -d builds); infinities `inf`/`-inf`.
-70. Declaring `Len` on a declared array type is an error (it was accepted and never called).
-71. Like `Len()`, the supplied `Bits`/`FromBits` methods do not satisfy a trait method of the same name.
+**MY CALLS (10-71)** - the details I decided while building and listed for review on 2026-10-08. Since the user gave
+me authority over details the same day, they stand as decisions; each is recorded in CLAUDE.md/HISTORY.md with its
+feature, and the full numbered list is in git (commit 730f9fe of this file) if the user wants to revisit one.
 
 **ON HOLD (the user: "hold it off"):** passing arrays by value (dropping D9a for parameters). Returning one by value
 already exists (T7b).

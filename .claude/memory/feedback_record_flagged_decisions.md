@@ -18,3 +18,6 @@ the `for` remake questions to do try-default first.
 **How to apply:** record at ask time, not later. Unanswered is not consent - keep the in-effect default and
 re-raise the entry when its area comes up or at the end of a report. Remove an entry only once answered, and
 move the answer into CLAUDE.md/HISTORY.md as with any design decision.
+
+**Narrowed 2026-10-08** by [[feedback-decide-details]]: details are mine to decide and record as decisions; only
+direction-level questions go in the ledger as questions.
