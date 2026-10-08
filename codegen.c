@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <stddef.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include "util.h"
 #include "token.h"
 #include "syntax.h"
@@ -5211,32 +5214,36 @@ void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
     }
 }
 
+void emitRuntimeDecls(FILE* out);
+
+//P1e/X7: an "extern fn" naming a function the runtime itself declares or defines refers to that very function, and
+//must not be declared a second time - LLVM rejects a duplicate "declare", and a "declare" beside a definition, even
+//when the signatures agree. So the runtime's own declaration stands for both. It can, because a call states its own
+//function type at the call site, and X3 marshals an array parameter to the same "ptr" the runtime uses; a prototype
+//that disagrees is an X1a error the program is already responsible for. The answer comes from the runtime's own
+//text, rendered once, rather than from a list kept beside it: a list missed "exit", "abort", "setjmp" and "longjmp",
+//so "extern fn exit(status I32)" failed to compile with an invalid redefinition reported against the IR.
+static bool cgRuntimeDeclaresSym(struct str name) {
+    static char* text;
+    static size_t len;
+    if (!text) {
+        FILE* f = open_memstream(&text, &len);
+        if (!f) ErrorBugFound();
+        emitRuntimeDecls(f);
+        fclose(f);
+    }
+    //"@NAME(" with nothing but the name between: a call, a declare or a define - each means the runtime has it
+    for (char* at = strchr(text, '@'); at; at = strchr(at + 1, '@')) {
+        if (!strncmp(at + 1, name.ptr, (size_t)name.len) && at[1 + name.len] == '(') return true;
+    }
+    return false;
+}
+
 //"declare RETTY @NAME(ARGTYS)" for every "extern func" (§11) in the program - the unmangled name (X5:
 //it's also the linker symbol, no module-prefix mangling like an ordinary olang function gets) and a
 //plain C-ABI signature (llvmType already gives an array-typed param/local its right shape everywhere
 //else; here it's simply overridden to "ptr", matching the marshalling cgExternFuncCall performs at
 //every call site - X3). No body, ever - an extern-func-decl has none to emit.
-//P1e: symbols the runtime declares for itself. An "extern func" naming one of these must not be declared
-//a second time - LLVM rejects a duplicate "declare" even when the signatures agree - so the runtime's own
-//declaration stands for both. It can, because these four have exactly one C signature and X3 marshals an
-//array parameter to the same "ptr" the runtime uses. A prototype that disagrees is an X1a error the
-//program is already responsible for, and LLVM reports it rather than it passing silently.
-static bool cgRuntimeDeclaresSym(struct str name) {
-    //LLVM rejects a duplicate "declare" even when the signatures agree, so any symbol the runtime declares
-    //has to be skipped when a program declares it too. "snprintf" and "aligned_alloc" joined the list when
-    //E11a's renderings and the arena's SIMD alignment started using them - without that, a program
-    //declaring "extern func snprintf" simply failed to compile, which is a hazard the pthread names
-    //already demonstrated.
-    static const char* owned[] = { "pthread_mutex_lock", "pthread_mutex_unlock",
-                                   "pthread_cond_wait", "pthread_cond_broadcast",
-                                   "pthread_create", "pthread_detach",
-                                   "snprintf", "aligned_alloc", "malloc", "free", "printf", "fputs" };
-    for (size_t i = 0; i < sizeof(owned)/sizeof(owned[0]); i++) {
-        if ((int)strlen(owned[i]) == name.len && !strncmp(owned[i], name.ptr, name.len)) return true;
-    }
-    return false;
-}
-
 void emitExternDecls(FILE* out) {
     struct list* all = SemanticAllModules();
     //X1 names the linker symbol directly, so two modules declaring the same external function name the
@@ -5274,6 +5281,7 @@ void emitExternDecls(FILE* out) {
 }
 
 void emitScopeRuntime(FILE* out);
+void emitOsRuntime(FILE* out);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
  * to a test harness's recovery point (when @__olang_jmp_target is set) or hard-abort (outside test mode,
@@ -5399,6 +5407,7 @@ void emitRuntimeDecls(FILE* out) {
         "  ret void\n"
         "}\n\n", out);
     emitScopeRuntime(out);
+    emitOsRuntime(out);
 }
 
 /* the real backing for "scope"/"own"/"&name" (see the report): every scope is a growable, chunked
@@ -6011,6 +6020,193 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n", out);
 }
 
+//a number of `bytes` bytes at `off` in the struct at %base, as an i64 named %name - sign- or zero-extended as the C
+//field is signed or not
+static void cgOsLoadField(FILE* out, const char* name, const char* base, size_t off, size_t bytes, bool isSigned) {
+    int bits = (int)bytes * 8;
+    fprintf(out, "  %%%s.p = getelementptr i8, ptr %%%s, i64 %zu\n", name, base, off);
+    fprintf(out, "  %%%s.v = load i%d, ptr %%%s.p\n", name, bits, name);
+    if (bits == 64) fprintf(out, "  %%%s = add i64 %%%s.v, 0\n", name, name);
+    else fprintf(out, "  %%%s = %s i%d %%%s.v to i64\n", name, isSigned ? "sext" : "zext", bits, name);
+}
+
+/* §11 X6 / B4a: what the runtime keeps of the process and offers std through "extern fn" - its command line, its
+ * environment, the error the last failing system call left, and the system calls whose C interface hands back a
+ * pointer or a struct, which X2 cannot receive. Each copies what it has into a buffer its caller supplies and returns
+ * a length (snprintf's contract: the whole length, whatever fitted), so nothing is ever handed back by address. A
+ * structure's offsets and the constants come from this compiler's own C headers rather than from numbers written
+ * here: the target is the host (B10a), so the host's C library is what the program links against. -i has its own
+ * version of each (comptime.c), since these live in the built program and not in the compiler's process. */
+void emitOsRuntime(FILE* out) {
+    fputs(
+        //the command line, saved by "main" before anything else runs - a global initializer may read it (B5a)
+        "@__olang_argc = linkonce_odr global i32 0\n"
+        "@__olang_argv = linkonce_odr global ptr null\n"
+        "declare i64 @strlen(ptr)\n"
+        "declare ptr @getenv(ptr)\n"
+        "declare ptr @__errno_location()\n"
+        "declare i32 @stat(ptr, ptr)\n"
+        "declare ptr @opendir(ptr)\n"
+        "declare ptr @readdir(ptr)\n"
+        "declare i32 @closedir(ptr)\n"
+        "declare ptr @realpath(ptr, ptr)\n\n"
+        //up to cap bytes of the NUL-terminated s into buf, and s's whole length
+        "define linkonce_odr i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap) {\n"
+        "entry:\n"
+        "  %len = call i64 @strlen(ptr %s)\n"
+        "  %pos = icmp sgt i64 %cap, 0\n"
+        "  %c = select i1 %pos, i64 %cap, i64 0\n"
+        "  %fits = icmp ult i64 %len, %c\n"
+        "  %n = select i1 %fits, i64 %len, i64 %c\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %s, i64 %n, i1 false)\n"
+        "  ret i64 %len\n"
+        "}\n\n"
+        "define linkonce_odr i64 @__olang_arg_count() {\n"
+        "entry:\n"
+        "  %n = load i32, ptr @__olang_argc\n"
+        "  %w = sext i32 %n to i64\n"
+        "  ret i64 %w\n"
+        "}\n\n"
+        //argument i, or -1 past the last
+        "define linkonce_odr i64 @__olang_arg(i64 %i, ptr %buf, i64 %cap) {\n"
+        "entry:\n"
+        "  %n = load i32, ptr @__olang_argc\n"
+        "  %w = sext i32 %n to i64\n"
+        "  %ok = icmp ult i64 %i, %w\n"
+        "  br i1 %ok, label %have, label %none\n"
+        "have:\n"
+        "  %argv = load ptr, ptr @__olang_argv\n"
+        "  %slot = getelementptr ptr, ptr %argv, i64 %i\n"
+        "  %s = load ptr, ptr %slot\n"
+        "  %len = call i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap)\n"
+        "  ret i64 %len\n"
+        "none:\n"
+        "  ret i64 -1\n"
+        "}\n\n"
+        //the variable "name" (NUL-terminated), or -1 when it is not set
+        "define linkonce_odr i64 @__olang_env(ptr %name, ptr %buf, i64 %cap) {\n"
+        "entry:\n"
+        "  %s = call ptr @getenv(ptr %name)\n"
+        "  %unset = icmp eq ptr %s, null\n"
+        "  br i1 %unset, label %none, label %have\n"
+        "have:\n"
+        "  %len = call i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap)\n"
+        "  ret i64 %len\n"
+        "none:\n"
+        "  ret i64 -1\n"
+        "}\n\n"
+        //the real path of "path" - absolute, with every symbolic link resolved - or -1 (errno says why)
+        "define linkonce_odr i64 @__olang_realpath(ptr %path, ptr %buf, i64 %cap) {\n"
+        "entry:\n"
+        "  %r = call ptr @realpath(ptr %path, ptr null)\n"
+        "  %bad = icmp eq ptr %r, null\n"
+        "  br i1 %bad, label %fail, label %have\n"
+        "have:\n"
+        "  %len = call i64 @__olang_copy_cstr(ptr %r, ptr %buf, i64 %cap)\n"
+        "  call void @free(ptr %r)\n"
+        "  ret i64 %len\n"
+        "fail:\n"
+        "  ret i64 -1\n"
+        "}\n\n", out);
+
+    //the class of the error the last failing call on this thread left in errno - the table -i reads too
+    fputs("define linkonce_odr i32 @__olang_err() {\n"
+          "entry:\n"
+          "  %p = call ptr @__errno_location()\n"
+          "  %e = load i32, ptr %p\n", out);
+    fputs("  %r0 = add i32 0, 0\n", out);
+    for (int i = 0; i < OsErrClassCount; i++) {
+        fprintf(out, "  %%is%d = icmp eq i32 %%e, %d\n", i, OsErrClasses[i].errnoVal);
+        fprintf(out, "  %%r%d = select i1 %%is%d, i32 %d, i32 %%r%d\n", i + 1, i, OsErrClasses[i].cls, i);
+    }
+    fprintf(out, "  ret i32 %%r%d\n}\n\n", OsErrClassCount);
+
+    //stat(path) into out: out[0] the kind (1 a file, 2 a directory, 0 anything else), out[1] the size in bytes,
+    //out[2] the modification time in nanoseconds since the epoch; 0, or -1 when stat fails (errno says why)
+    struct stat st;
+    fprintf(out, "define linkonce_odr i32 @__olang_stat(ptr %%path, ptr %%out) {\n"
+                 "entry:\n"
+                 "  %%st = alloca [%zu x i8], align 16\n"
+                 "  %%rc = call i32 @stat(ptr %%path, ptr %%st)\n"
+                 "  %%ok = icmp eq i32 %%rc, 0\n"
+                 "  br i1 %%ok, label %%have, label %%fail\n"
+                 "have:\n", sizeof(struct stat));
+    cgOsLoadField(out, "mode", "st", offsetof(struct stat, st_mode), sizeof(st.st_mode), false);
+    cgOsLoadField(out, "size", "st", offsetof(struct stat, st_size), sizeof(st.st_size), true);
+    cgOsLoadField(out, "sec", "st", offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_sec),
+                  sizeof(st.st_mtim.tv_sec), true);
+    cgOsLoadField(out, "nsec", "st", offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_nsec),
+                  sizeof(st.st_mtim.tv_nsec), true);
+    fprintf(out, "  %%fmt = and i64 %%mode, %d\n"
+                 "  %%isreg = icmp eq i64 %%fmt, %d\n"
+                 "  %%isdir = icmp eq i64 %%fmt, %d\n"
+                 "  %%k1 = select i1 %%isdir, i64 2, i64 0\n"
+                 "  %%kind = select i1 %%isreg, i64 1, i64 %%k1\n"
+                 "  store i64 %%kind, ptr %%out\n"
+                 "  %%o1 = getelementptr i64, ptr %%out, i64 1\n"
+                 "  store i64 %%size, ptr %%o1\n"
+                 "  %%ns = mul i64 %%sec, 1000000000\n"
+                 "  %%t = add i64 %%ns, %%nsec\n"
+                 "  %%o2 = getelementptr i64, ptr %%out, i64 2\n"
+                 "  store i64 %%t, ptr %%o2\n"
+                 "  ret i32 0\n"
+                 "fail:\n"
+                 "  ret i32 -1\n"
+                 "}\n\n", S_IFMT, S_IFREG, S_IFDIR);
+
+    //the names in directory "path" - "." and ".." left out, each followed by a NUL, in the order the directory
+    //gives them - as many whole names as fit in cap bytes, and the bytes all of them take; -1 when it cannot be
+    //opened (errno says why)
+    fprintf(out, "define linkonce_odr i64 @__olang_dir(ptr %%path, ptr %%buf, i64 %%cap) {\n"
+                 "entry:\n"
+                 "  %%d = call ptr @opendir(ptr %%path)\n"
+                 "  %%bad = icmp eq ptr %%d, null\n"
+                 "  br i1 %%bad, label %%fail, label %%loop\n"
+                 "loop:\n"
+                 "  %%at = phi i64 [ 0, %%entry ], [ %%at, %%skip ], [ %%after, %%next ]\n"
+                 "  %%e = call ptr @readdir(ptr %%d)\n"
+                 "  %%end = icmp eq ptr %%e, null\n"
+                 "  br i1 %%end, label %%done, label %%one\n"
+                 "one:\n"
+                 "  %%name = getelementptr i8, ptr %%e, i64 %zu\n"
+                 "  %%c0 = load i8, ptr %%name\n"
+                 "  %%dot0 = icmp eq i8 %%c0, 46\n"
+                 "  br i1 %%dot0, label %%dot1, label %%keep\n"
+                 "dot1:\n"
+                 "  %%p1 = getelementptr i8, ptr %%name, i64 1\n"
+                 "  %%c1 = load i8, ptr %%p1\n"
+                 "  %%nul1 = icmp eq i8 %%c1, 0\n"
+                 "  br i1 %%nul1, label %%skip, label %%dot2\n"
+                 "dot2:\n"
+                 "  %%isdot1 = icmp eq i8 %%c1, 46\n"
+                 "  br i1 %%isdot1, label %%dot3, label %%keep\n"
+                 "dot3:\n"
+                 "  %%p2 = getelementptr i8, ptr %%name, i64 2\n"
+                 "  %%c2 = load i8, ptr %%p2\n"
+                 "  %%nul2 = icmp eq i8 %%c2, 0\n"
+                 "  br i1 %%nul2, label %%skip, label %%keep\n"
+                 "skip:\n"
+                 "  br label %%loop\n"
+                 "keep:\n"
+                 "  %%len = call i64 @strlen(ptr %%name)\n"
+                 "  %%len1 = add i64 %%len, 1\n"
+                 "  %%after = add i64 %%at, %%len1\n"
+                 "  %%fits = icmp sle i64 %%after, %%cap\n"
+                 "  br i1 %%fits, label %%copy, label %%next\n"
+                 "copy:\n"
+                 "  %%dst = getelementptr i8, ptr %%buf, i64 %%at\n"
+                 "  call void @llvm.memcpy.p0.p0.i64(ptr %%dst, ptr %%name, i64 %%len1, i1 false)\n"
+                 "  br label %%next\n"
+                 "next:\n"
+                 "  br label %%loop\n"
+                 "done:\n"
+                 "  call i32 @closedir(ptr %%d)\n"
+                 "  ret i64 %%at\n"
+                 "fail:\n"
+                 "  ret i64 -1\n"
+                 "}\n\n", offsetof(struct dirent, d_name));
+}
+
 //B5a: one initializer per module, since one module is one object. The entry point calls them all, in
 //an order the ROOT object decides (cgInitGlobalsCalls) - imports before importers.
 void cgInitGlobalsName(struct semaModule* mod, char* buf, size_t n) {
@@ -6387,16 +6583,23 @@ void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
     fputs("\n", out);
 }
 
+//B4a: the process's command line, kept for the runtime's "__olang_arg" (X6) before anything else runs - a global's
+//initializer may already read it (B5a)
+static void cgSaveCommandLine(struct cgCtx* ctx) {
+    fputs("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n", ctx->fnOut);
+}
+
 //main's signature is fixed to "<errors> ? void" (checked in semantic.c: no params, no success type, at
 //least one declared error) - so its LLVM return is always a bare i32 code, no payload to worry about.
 //code 0 -> process exit 0. Nonzero -> prints which declared error it was to stderr, then exits 1 (the
 //OS-standard success/failure pair - see the report for why a finer-grained exit code isn't worth it).
 void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     struct var* mainFunc = VarGetList(&root->vars, StrFromCStr("main"));
-    fprintf(ctx->fnOut, "define i32 @main()%s {\nentry:\n", cgDbgSubprogram(ctx, StrFromCStr("olang.start"), "main", 1, (struct token){0}));
+    fprintf(ctx->fnOut, "define i32 @main(i32 %%argc, ptr %%argv)%s {\nentry:\n", cgDbgSubprogram(ctx, StrFromCStr("olang.start"), "main", 1, (struct token){0}));
     struct cgBodyBuf bb;
     cgBodyBegin(ctx, &bb);
     ctx->terminated = false;
+    cgSaveCommandLine(ctx);
     cgInitGlobalsCalls(ctx, root);
     char mname[256];
     mangleFuncSym(mainFunc, mname, sizeof(mname));
@@ -6467,10 +6670,11 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
     ctx->scope = NULL;
     cgPushScope(ctx);
 
-    fprintf(ctx->fnOut, "define i32 @main()%s {\nentry:\n", cgDbgSubprogram(ctx, StrFromCStr("olang.tests"), "main", 1, (struct token){0}));
+    fprintf(ctx->fnOut, "define i32 @main(i32 %%argc, ptr %%argv)%s {\nentry:\n", cgDbgSubprogram(ctx, StrFromCStr("olang.tests"), "main", 1, (struct token){0}));
     struct cgBodyBuf bb;
     cgBodyBegin(ctx, &bb);
     ctx->terminated = false;
+    cgSaveCommandLine(ctx);
     cgInitGlobalsCalls(ctx, root);
     //These two counters cross every setjmp below, which in C is exactly the case that would require
     //"volatile": LLVM promotes an alloca across a setjmp whether or not the declaration carries

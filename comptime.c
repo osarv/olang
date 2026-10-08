@@ -18,9 +18,10 @@
 //
 //B3e: under "-i" the same evaluation runs a whole program (CtRunProgram), and what it refuses above because
 //only a running program may do it is done instead: globals are read and written, an extern is called in this
-//process through libffi, done/fail exit, a guaranteed check aborts with the runtime's message, and there is no
-//step budget. What the built program leaves undefined still stops it, now naming the operation and its place.
-//Tasks and destructors are not interpreted yet. Memory is still never reclaimed, which a long run will notice.
+//process through libffi (the runtime's own functions, X6, by this file's versions of them), done/fail exit, a
+//guaranteed check aborts with the runtime's message, and there is no step budget. What the built program leaves
+//undefined still stops it, now naming the operation and its place. Tasks and destructors are not interpreted yet.
+//Memory is still never reclaimed, which a long run will notice.
 
 #define _GNU_SOURCE
 #include <stdlib.h>
@@ -31,6 +32,9 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include "comptime.h"
 #include "util.h"
 
@@ -1714,9 +1718,79 @@ bool CtIsPlainData(struct ctVal* v) {
 //program links against too, and libm on first need. A number is passed as itself; an array as a pointer to its
 //first element, which here is a buffer filled from the array's elements and read back into them after the
 //call, so a callee writing through it (read, say) is seen as it is at run time. Each prepared call is kept.
-struct ctExternCall { struct var* f; void* sym; ffi_cif cif; ffi_type** argTypes; };
+struct ctExternCall { struct var* f; void* sym; void (*rt)(void); ffi_cif cif; ffi_type** argTypes; };
 static struct list ctExternCalls;
 static bool ctExternReady;
+
+//§11 X6: errno values, by the class "__olang_err" reports for them (std/os's OsError words, in order)
+const struct osErrClass OsErrClasses[] = {
+    { ENOENT, 1 }, { EEXIST, 2 }, { EACCES, 3 }, { EPERM, 3 }, { ENOTDIR, 4 }, { EISDIR, 5 }, { ENOTEMPTY, 6 },
+};
+const int OsErrClassCount = (int)(sizeof(OsErrClasses) / sizeof(OsErrClasses[0]));
+
+//B3f/X6: the runtime's own functions live in the built program, not in this process, so -i has its own - the same
+//contracts over the interpreted program's command line, called through libffi exactly as any extern is
+static int ctArgc;
+static char** ctArgv;
+static int ctLastErrno; //what the last extern call left in errno, before the interpreter's own work could change it
+
+static long long ctRtCopy(const char* s, unsigned char* buf, long long cap) {
+    long long len = (long long)strlen(s);
+    long long n = len < cap ? len : cap > 0 ? cap : 0;
+    memcpy(buf, s, (size_t)n);
+    return len;
+}
+static long long ctRtArgCount(void) { return ctArgc; }
+static long long ctRtArg(long long i, unsigned char* buf, long long cap) {
+    return i >= 0 && i < ctArgc ? ctRtCopy(ctArgv[i], buf, cap) : -1;
+}
+static long long ctRtEnv(const char* name, unsigned char* buf, long long cap) {
+    const char* v = getenv(name);
+    return v ? ctRtCopy(v, buf, cap) : -1;
+}
+static int ctRtErr(void) {
+    for (int i = 0; i < OsErrClassCount; i++) if (OsErrClasses[i].errnoVal == ctLastErrno) return OsErrClasses[i].cls;
+    return 0;
+}
+static int ctRtStat(const char* path, long long* out) {
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    out[0] = S_ISREG(st.st_mode) ? 1 : S_ISDIR(st.st_mode) ? 2 : 0;
+    out[1] = (long long)st.st_size;
+    out[2] = (long long)st.st_mtim.tv_sec * 1000000000LL + (long long)st.st_mtim.tv_nsec;
+    return 0;
+}
+static long long ctRtDir(const char* path, unsigned char* buf, long long cap) {
+    DIR* d = opendir(path);
+    if (!d) return -1;
+    long long at = 0;
+    struct dirent* e;
+    while ((e = readdir(d))) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+        long long n = (long long)strlen(e->d_name) + 1;
+        if (at + n <= cap) memcpy(buf + at, e->d_name, (size_t)n);
+        at += n;
+    }
+    closedir(d);
+    return at;
+}
+static long long ctRtRealpath(const char* path, unsigned char* buf, long long cap) {
+    char* r = realpath(path, NULL);
+    if (!r) return -1;
+    long long len = ctRtCopy(r, buf, cap);
+    free(r);
+    return len;
+}
+typedef void (*ctRtFn)(void);
+static ctRtFn ctRuntimeSym(const char* name) {
+    static const struct { const char* name; ctRtFn fn; } syms[] = {
+        { "__olang_arg_count", (ctRtFn)ctRtArgCount }, { "__olang_arg", (ctRtFn)ctRtArg }, { "__olang_env", (ctRtFn)ctRtEnv },
+        { "__olang_err", (ctRtFn)ctRtErr }, { "__olang_stat", (ctRtFn)ctRtStat }, { "__olang_dir", (ctRtFn)ctRtDir },
+        { "__olang_realpath", (ctRtFn)ctRtRealpath },
+    };
+    for (size_t i = 0; i < sizeof(syms) / sizeof(syms[0]); i++) if (!strcmp(syms[i].name, name)) return syms[i].fn;
+    return NULL;
+}
 
 static ffi_type* ctFfiType(enum baseType b) {
     const struct primInfo* p = PrimInfo(b);
@@ -1758,13 +1832,14 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
     }
     char name[256];
     snprintf(name, sizeof(name), "%.*s", func->name.len, func->name.ptr);
-    void* sym = dlsym(RTLD_DEFAULT, name);
-    if (!sym) {
+    ctRtFn own = ctRuntimeSym(name); //X6: the runtime's own, which this process provides itself
+    void* sym = own ? NULL : dlsym(RTLD_DEFAULT, name);
+    if (!sym && !own) {
         static void* libm;
         if (!libm) libm = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
         if (libm) sym = dlsym(libm, name);
     }
-    if (!sym) { ctFail(st, op->tok, "it calls an external function -i cannot find in this process"); return NULL; }
+    if (!sym && !own) { ctFail(st, op->tok, "it calls an external function -i cannot find in this process"); return NULL; }
     int n = func->type.vars.len;
     ffi_type** at = MallocOrCrash(sizeof(ffi_type*) * (size_t)(n ? n : 1));
     for (int i = 0; i < n; i++) {
@@ -1775,7 +1850,7 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
     }
     ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
     if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type -i cannot receive"); return NULL; }
-    struct ctExternCall c = { func, sym, {0}, at };
+    struct ctExternCall c = { func, sym, own, {0}, at };
     if (ffi_prep_cif(&c.cif, FFI_DEFAULT_ABI, (unsigned)n, rt, at) != FFI_OK) {
         ctFail(st, op->tok, "it calls an external function -i cannot call");
         return NULL;
@@ -1820,7 +1895,8 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
     }
     union { ffi_arg a; ffi_sarg s; long long i; float f; double d; } rv;
     memset(&rv, 0, sizeof(rv));
-    ffi_call(&c->cif, FFI_FN(c->sym), &rv, values);
+    ffi_call(&c->cif, c->rt ? c->rt : FFI_FN(c->sym), &rv, values);
+    ctLastErrno = errno; //X6: kept for "__olang_err" before anything here can overwrite it
     for (int i = 0; i < n; i++) {
         if (!arrays[i]) continue;
         struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
@@ -1907,8 +1983,10 @@ static void* ctRunThread(void* p) {
     return NULL;
 }
 
-int CtRunProgram(struct var* mainFunc) {
+int CtRunProgram(struct var* mainFunc, int argc, char** argv) {
     ctRun = true;
+    ctArgc = argc;
+    ctArgv = argv;
     CtReset(); //globals start over: what analysis computed is not the running program's storage
     //the evaluation recurses on the C stack, a few frames per call written in the program, so it runs on a
     //thread whose stack is sized for CT_RUN_DEPTH_BUDGET calls - reserved, and touched only as it is used

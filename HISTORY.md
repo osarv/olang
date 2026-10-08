@@ -7955,3 +7955,70 @@ from their original form.
   literal beyond a narrower target's finite range adapts to infinity (`f F32 = 1e39`), where an out-of-range integer
   literal is an error - T6 defines a float literal as representable in any float type. Both are older than this
   change; before it, `x := 1e39` was itself an infinity.
+
+- **The command line, the environment and the file system (B4a/B3f/X6/X7, 2026-10-08, the first two items of the
+  self-hosting prep the user decided).** What a compiler written in olang needs from its process: its arguments, a
+  few environment variables (`OLANG_CACHE`, `HOME`), reading and writing whole files and streaming one, `stat` with the
+  modification time to the nanosecond (B3's staleness compares nanoseconds), `mkdir -p`, `readlink` (of
+  `/proc/self/exe`), `rename`, `unlink`, a directory listing (the prelude is every file of a directory), `realpath` and
+  `getcwd` (module identity). Listed from what main.c and semantic.c actually call.
+  **The constraints were decided before the work**: `main` keeps its fixed signature, so the command line comes from
+  the runtime - the generated `main` (and the test harness's) now takes `argc`/`argv` and stores them before anything
+  else runs, so a global's initializer may read them (B5a) - and an extern still never returns a pointer, so the
+  runtime's functions copy into a buffer the caller supplies and return lengths.
+  **X6, the runtime's functions**: `__olang_arg_count`, `__olang_arg`, `__olang_env`, `__olang_err`, `__olang_stat`,
+  `__olang_dir`, `__olang_realpath`, emitted `linkonce_odr` with the rest of the runtime. Only what C would hand back
+  as a pointer, a structure or `errno` goes through one; everything that takes and gives numbers (`open`, `creat`,
+  `mkdir`, `rename`, `remove`, `readlink`, `read`, `close`) std calls directly. Text comes back by snprintf's
+  contract: the whole length, whatever fitted, so a caller measures with an empty buffer and fills an exact one.
+  **`stat` (my call)**: a runtime function copying the three numbers std needs (kind, size, modification time in
+  nanoseconds as one `I64`) into an `Array<I64>`, rather than a `struct stat` blob with offsets in olang code. The
+  offsets, field widths and `S_IF*` constants are not written in codegen either: they come from `offsetof`/`sizeof` on
+  the compiler's own `<sys/stat.h>` (and `<dirent.h>` for `d_name`), which is sound because the target is the host
+  (B10a). Cross-compiling would have to revisit exactly these lines.
+  **`errno` (my call)**: `__olang_err()` classifies the thread's `errno` into seven classes, from one table
+  (`OsErrClasses`, comptime.c) that both codegen's emitted switch and `-i`'s version read, so the errno numbers are
+  the host's and never written in olang. std turns a class into an `OsError` word - `NOT_FOUND`, `EXISTS`, `DENIED`,
+  `NOT_DIR`, `IS_DIR`, `NOT_EMPTY`, `FAILED` (the old two words grew five; callers must tell "missing" from "already
+  there" from "in the way", which is what `MkDirAll` and a lock-file writer do). It has to be asked immediately after
+  the failing call, before anything else may set errno - so `closeAndRaise(fd, __olang_err())` reads it in its argument,
+  before the close it does.
+  **std/os** (all errors `OsError` unless said): `Args() Array<String&>&` (the program's name first), `Env(name)
+  String& ?` (the default error when unset - Map.Get's precedent for a keyed lookup that finds nothing; an empty value
+  is `""`), `ReadFile` (now also failing `IS_DIR` up front: a directory opens, and its `lseek` size is meaningless),
+  `WriteFile(path, data)` (create or truncate, write all through `io.Write`, close), `Create`/`Open`/`Close` (an `I32`
+  descriptor for `io.Write`/`io.Read`, as io already speaks), `Stat(path) FileInfo` (`Kind FileKind` - `FILE`, `DIR`,
+  `OTHER` -, `Size`, `ModTime` in nanoseconds since the epoch), `Exists` and `IsDir` (plain `Bool` questions, the two
+  the compiler asks most), `MkDir`, `MkDirAll` (Go's rule: a directory already there is fine, a file in the way is
+  `NOT_DIR`), `Remove` (C's `remove`: a file, a link or an empty directory), `Rename`, `ReadLink` (doubling its buffer
+  while the link fills it), `RealPath`, `Cwd` (`RealPath(".")`, which is what `getcwd` gives - no further runtime
+  function), and `ReadDir(path) Array<String&>&` (names sorted bytewise, `.` and `..` left out, split from the one
+  NUL-separated block the runtime fills, so the names borrow it and nothing is copied twice). A private `copyOut(fill)`
+  takes a lambda over the runtime function and repeats the fill if the text grew between measuring and filling, which a
+  directory being written to can do.
+  **`-i` (B3f)**: the runtime's functions live in the built program, not in the compiler's process, so comptime.c has
+  its own (`ctRuntimeSym`), called through libffi like any extern. Everything after the interpreted file is the
+  program's command line, flags included - main.c stops reading flags there - and its name is the file as written.
+  `__olang_err` reads an errno saved right after each extern call (`ctLastErrno`): between the call and the program
+  asking, the interpreter itself allocates, and nothing promises malloc leaves errno alone.
+  **Not built, flagged**: an exit status other than 0 and 1 (B5 says a process ends with exactly two values; a self-hosted
+  compiler's `-i` would need to pass a program's status on); `uname` (a natively built compiler's own `TargetOs` and
+  `TargetArch` are the host's); capturing a command's output (`Run` into a file, then `ReadFile`); appending, `lstat`,
+  permissions and recursive removal.
+  **Found on the way, pre-existing, both fixed:**
+  - **`extern fn exit(status I32)` did not compile**: "invalid redefinition of function 'exit'", reported against the IR.
+    The runtime's list of the symbols it declares itself - consulted so a program's extern of one is not declared twice
+    - had drifted from what the runtime declares: it lacked `exit`, `abort`, `setjmp` and `longjmp`. It is gone; the
+    answer now comes from the runtime's own text, rendered once (`cgRuntimeDeclaresSym`), so a symbol the runtime
+    declares, defines or calls can never be missed again. That also covers the new `__olang_*` functions, which std's
+    externs name while the runtime defines them, and the C functions they use (`strlen`, `stat`, ...). Written as X7.
+    `checks/cases/externruntime` declares `exit` and `strlen`.
+  - **`n := a.Len()` was rejected** ("a variable declared with ':=' takes its type from its initializer...") while
+    `l.Len()` on a `List` compiled: D15 admits any call returning a value, and an array's compiler-supplied `Len()`
+    (E23) is lowered as its own operation rather than a call, so the check never saw a call. Found writing
+    `Count := os.Args().Len()`. `Len()` and the atomic builtins that give a value (P9) are admitted now; D15 says so.
+    A shared.olang test has a local, two atomics and a global the evaluator bakes (`@shared_LenOfLiteral = global i64 4`).
+  Tests: ten new in std/os (every call, its errors by word, a nanosecond `ModTime` set with `touch -d`, and what Args,
+  Env, ReadDir, ReadLink and RealPath return read back after churning the arena), and a checks scenario building a
+  fixture that prints its arguments, an environment variable and the results of file calls - run with arguments and a
+  variable, interpreted with `-i` and the same arguments (identical output but for its own name), and run without.

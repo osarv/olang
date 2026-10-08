@@ -5067,6 +5067,10 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
+    //...and the calls the compiler supplies: an array's "Len()" (E23) and the atomic builtins that give a value (P9),
+    //written as calls and typed as plainly - "n := a.Len()" was rejected while "n := l.Len()" on a List compiled
+    if (op->opType == OPERATION_LEN) return true;
+    if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
     //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
     if (op->opType == OPERATION_SEQ && op->args.len)
         return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));

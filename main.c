@@ -239,8 +239,9 @@ void buildProgram(char* file) {
 }
 
 //"-i": the program analyzed as -b analyzes it, then run by compile-time evaluation instead of built (B3e) -
-//nothing generated, linked or written. Returns the program's exit status.
-int interpretProgram(char* file) {
+//nothing generated, linked or written. Returns the program's exit status. argv (argc of them) is the program's own
+//command line, the file first (B3f).
+int interpretProgram(char* file, int argc, char** argv) {
     struct semaModule* root = SemanticAnalyzeFile(file, true);
     CodegenCheckModuleNames();
     if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
@@ -251,7 +252,7 @@ int interpretProgram(char* file) {
     }
     if (!mainFunc) ErrMsgFatal(MAIN_FUNC_NOT_FOUND);
     fflush(NULL);
-    return CtRunProgram(mainFunc);
+    return CtRunProgram(mainFunc, argc, argv);
 }
 
 //returns 0 if this file's tests all passed, nonzero otherwise - never exits the process, so the rest of
@@ -334,9 +335,11 @@ static void defineBuiltinConsts(bool testBuild) {
 
 int main(int argc, char** argv) {
     //"-r", "-d", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
-    //stripped out before the mode dispatch below reads argv positionally
+    //stripped out before the mode dispatch below reads argv positionally - up to the file "-i" interprets: what
+    //follows it is that program's command line (B3f), passed on as written, flags included
     int outp = 1;
     for (int i = 1; i < argc; i++) {
+        if (outp >= 3 && !strcmp(argv[1], "-i")) { argv[outp++] = argv[i]; continue; }
         if (!strcmp(argv[i], "-r")) { gRace = true; continue; }
         //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
         if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
@@ -378,8 +381,8 @@ int main(int argc, char** argv) {
     }
 
     if (!strcmp(argv[1], "-i")) {
-        if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
-        return interpretProgram(argv[2]);
+        if (argc < 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        return interpretProgram(argv[2], argc - 2, argv + 2);
     }
 
     if (!strcmp(argv[1], "-t")) {

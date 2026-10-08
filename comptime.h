@@ -53,7 +53,14 @@ bool CtIsZero(struct ctVal* v);
 
 //B3e: "-i" - runs mainFunc (and every global's initializer before it, imports first) as the built program would,
 //performing what compile-time evaluation refuses; returns the process's exit status. done/fail and a failed check
-//end the process from inside, as they would there
-int CtRunProgram(struct var* mainFunc);
+//end the process from inside, as they would there. argv (argc of them) is the program's command line (B3f), the
+//file first
+int CtRunProgram(struct var* mainFunc, int argc, char** argv);
+
+//§11 X6: the class "__olang_err" reports for an errno value, 0 for any value not listed - one table, read by the
+//runtime codegen emits and by -i's own runtime, so the two cannot disagree
+struct osErrClass { int errnoVal; int cls; };
+extern const struct osErrClass OsErrClasses[];
+extern const int OsErrClassCount;
 
 #endif
