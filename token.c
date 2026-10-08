@@ -36,6 +36,7 @@ struct tokRule tokRules[] = {
     {TOK_RET, "return", NULL},
     {TOK_JOIN, "join", NULL},
     {TOK_SPAWN, "spawn", NULL},
+    {TOK_DEFER, "defer", NULL},
     {TOK_BREAK, "break", NULL},
     {TOK_CONTINUE, "continue", NULL},
     {TOK_ABORT, "abort", NULL},

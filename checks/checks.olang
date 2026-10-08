@@ -256,6 +256,7 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    # its temporary's destructor runs
     assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Deferred = global i32 7'" $ll) == 0              # S19: deferred code run while compiling
 }
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form

@@ -1525,9 +1525,45 @@ static bool ctTruth(struct ctState* st, struct operand* op) {
 
 static void ctExec(struct ctState* st, struct statement* s);
 
+//S19: one piece of a block's deferred code, run on a way out of the block. Whatever was leaving - a return and
+//its value, a loop jump, an error in flight - is put aside while it runs and resumed after it: deferred code
+//cannot leave itself (S19b), so it ends normally or stops the evaluation, and a stop stands.
+static void ctRunDeferred(struct ctState* st, struct statement* d) {
+    enum ctFlow flow = st->flow;
+    struct ctVal* ret = st->ret;
+    struct type errType = st->errType;
+    long long errWord = st->errWord;
+    struct operand* errCheckRoot = st->errCheckRoot;
+    bool errBypass = st->errBypass;
+    st->flow = CF_NORMAL;
+    st->ret = NULL;
+    st->errCheckRoot = NULL;
+    st->errBypass = false;
+    ctExecBlock(st, &d->block);
+    if (st->flow == CF_FAIL) return;
+    st->flow = flow;
+    st->ret = ret;
+    st->errType = errType;
+    st->errWord = errWord;
+    st->errCheckRoot = errCheckRoot;
+    st->errBypass = errBypass;
+}
+
 static void ctExecBlock(struct ctState* st, struct list* block) {
     int mark = st->locals->len;
-    for (int i = 0; i < block->len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(block, i));
+    struct list defers = {0}; //S19: the defers reached, in order - made on the first one
+    for (int i = 0; i < block->len && st->flow == CF_NORMAL; i++) {
+        struct statement* s = ListGetIdx(block, i);
+        if (s->sType == STATEMENT_DEFER) {
+            if (!defers.elemSize) defers = ListInit(sizeof(struct statement*));
+            ListAdd(&defers, &s);
+            continue;
+        }
+        ctExec(st, s);
+    }
+    //last registered first, before the block's locals go - deferred code reads them as they are now
+    for (int i = defers.len - 1; i >= 0 && st->flow != CF_FAIL; i--) ctRunDeferred(st, *(struct statement**)ListGetIdx(&defers, i));
+    if (defers.elemSize) ListDestroy(defers);
     st->locals->len = mark;
 }
 
@@ -1712,6 +1748,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             }
             ctFail(st, tok, "it ends the test or the process");
             return;
+        case STATEMENT_DEFER: return; //S19: registered by the block it is in (ctExecBlock), and run on its way out
         case STATEMENT_JOIN: case STATEMENT_SPAWN:
             ctFail(st, tok, ctRun ? "it starts tasks, which -i does not run yet" : "it starts tasks");
             return;

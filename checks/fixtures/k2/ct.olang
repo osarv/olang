@@ -31,12 +31,22 @@ fn loudOnce() I32 {
 }
 Kept Loud& = Loud(7)
 Dropped I32 = loudOnce()
+fn deferred(n I32) I32 {
+    t I32 = n
+    defer t = 0                         # S19: after the result is computed
+    for i in range 3 {
+        defer t += 1
+    }
+    return t
+}
+Deferred I32 = deferred(4)
 Fib I32 = fib(15)
 Table Array<I32>& = table()
 P CtPair = CtPair(fib(6), 0.5)
 seed mut I32 = 3
 Later I32 = seed * 2
 fn main() ? E {
+    assert Deferred == 7
     assert Fib == 610 and Table[3] == 233 and P.a == 8 and P.b == 0.5 and Later == 6
     assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring
     assert Kept.id == 7 and Dropped == 1 and closed == 1

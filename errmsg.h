@@ -292,6 +292,10 @@ constructor, in a position whose parameter declares a default value"
 #define RETURN_MISSING_VALUE "this function's declared return type requires a return value"
 #define RETURN_TYPE_MISMATCH "return value's type doesn't match the function's declared return type"
 #define MAIN_FUNC_NOT_FOUND "this program has no main function - '-b' builds an executable, which starts at 'fn main() ? { }' (B1)"
+#define DEFER_RETURNS "deferred code runs while its block is being left, and may only run to its own end - a 'return' here would leave in the middle of another way out (S19b). Compute what to return before the defer runs, or return after the block"
+#define DEFER_LOOP_JUMP "deferred code may not 'break' or 'continue' out of itself - it runs while its block is being left, and must run to its own end (S19b). A 'break' or 'continue' is fine inside a loop written in the deferred code"
+#define DEFER_ERROR_ESCAPES "an error may not leave deferred code - it runs while its block is being left, possibly by another error, and must run to its own end (S19b). Catch every error it can produce right here ('try f() catch { ... }', or 'catch default v')"
+#define SPAWN_IN_DEFER "a 'spawn' in deferred code needs a 'join' written in the deferred code too (S19b, P1a) - deferred code runs after the block's own join has waited, so nothing outside it would wait for this task"
 #define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare that it can fail ('?'), e.g. 'fn main() ? { ... }' (or '? MyError' to name how it fails)"
 
 // ---- errors, try/catch ----

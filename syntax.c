@@ -1737,6 +1737,25 @@ struct syntax* parseStmntSpawn(SyntaxCtx sc) {
     return s;
 }
 
+//S19: "defer { ... }" or "defer STATEMENT". The second is the first holding one statement, so both reach the
+//checker as a block: what is deferred is always a block, run as one nested in the block the defer is in.
+struct syntax* parseStmntDefer(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token kw = acceptTok(sc, TOK_DEFER);
+    if (kw.type == TOK_NONE) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) {
+        struct syntax* stmt = parseStmnt(sc);
+        if (!stmt) { TokenSetCursor(sc->tc, cur); return NULL; }
+        block = newNode(SNTX_BLOCK);
+        addSntx(block, stmt);
+    }
+    struct syntax* s = newNode(SNTX_STMNT_DEFER);
+    addTok(s, kw);
+    addSntx(s, block);
+    return s;
+}
+
 //S11: bare statements, the same shape as done/fail. Whether they sit inside a loop is a semantic
 //question (buildBreakStmnt), not a grammatical one.
 struct syntax* parseStmntBreak(SyntaxCtx sc) {
@@ -2063,6 +2082,7 @@ struct syntax* parseStmnt(SyntaxCtx sc) {
     else if ((inner = parseStmntRet(sc))) {}
     else if ((inner = parseStmntJoin(sc))) {}
     else if ((inner = parseStmntSpawn(sc))) {}
+    else if ((inner = parseStmntDefer(sc))) {}
     else if ((inner = parseStmntBreak(sc))) {}
     else if ((inner = parseStmntContinue(sc))) {}
     else if ((inner = parseStmntAbort(sc))) {}
