@@ -1157,7 +1157,7 @@ unsigned comparison would read as an enormous free capacity.
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
 returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
-`Len()` (E23) and an atomic builtin that gives a value (P9)), a **field read**
+`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic builtin that gives a value (P9)), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
 (`t := a[i]` — the array's element type), a **slice** (E16a), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
