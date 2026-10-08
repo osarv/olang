@@ -7745,3 +7745,25 @@ from their original form.
   temporary boxed into an interface pointed into a dead stack frame (fixed earlier the same day, then removed with
   the boxing). Benchmark: an iterator default from a direct call, from a generic function, and a hand loop - all
   0.07s on 20M x 20.
+
+- **The corpus widening cleanup, and a widened try that lost its checks (2026-10-08).** T6b's entry had left the
+  corpus's now-redundant `I64(x)`-style conversions for later; the user asked for them gone ("fix the corpus
+  widening"). Found by a temporary report rather than by searching text: in the fit check and in the operator
+  meeting, a written widening conversion of a non-literal whose target the context would widen to anyway. 38 reports;
+  32 removed (`shared.olang` and `std/map`, `std/prelude/hash`, `list`, `text`). Six kept on purpose - tests whose
+  subject is a conversion (`F64(f32) == F64(2.5)`, "converts both ways"), the T6b and `extends` tests that compare
+  the implicit result with the explicit one, `I64(n).Hash()` where the conversion picks the method, `OpMoney.plus`
+  where `I64(a)` keeps `a + ...` from calling `plus` again, and `I64(i) * I64(i)` where dropping one is uglier and
+  dropping both narrows the multiply. `checks/cases` was left alone: each case pins one rule, and its conversions are
+  part of what it pins. **Proof**: with the new regression test set aside, every function and global in the emitted
+  IR is identical to the baseline's (SSA, label and lambda numbering normalised); the std modules were byte-identical.
+  **The one that did not survive** was `ckByteAdd`, `return I32(try (a + b) catch default 0)` - without the `I32` the
+  R20 test failed, and alone the program exited 48 with nothing printed. The IR showed why: the overflow branch was
+  `unreachable` instead of the `catch default 0` clause. `operandWidenInPlace` turns an operand into its own widening
+  by copying it to a new node and writing the conversion where it was - so the parent holds the conversion - but every
+  check inside a `try (...)` records the try as its `checkRoot` by address, and that address now held the conversion,
+  which has no clauses. It reached all four implicit widenings of a tried value - returned, declared, an operand, an
+  argument - and the evaluator too, which refused such a call and so left the assert to the broken run time. Fixed by
+  pointing those checks at the moved node, walking exactly what `markChecked` walks (the only thing that sets a
+  root). Pinned by a test whose inputs come from a mutable global, so it runs at run time, and a global baked from the
+  same four calls (1016, written out as a constant); on the unfixed compiler the test build segfaults.

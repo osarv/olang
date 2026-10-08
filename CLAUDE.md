@@ -2693,8 +2693,15 @@ Go through this for every change to what olang means - a rule added, revised or 
   it with no site of its own, plus the same in `OperandBinary`; codegen already lowered the conversions
   (zext for `Byte`). **Generic inference followed (my extension, flagged)**: a variable a number bound through a
   bare `<T>` widens to a later, wider argument of its family (`max(i32, i64)` is `max` at `Int64`, either order),
-  never one a receiver fixed (G9b). New messages name T6b and say to write `T(x)`. Not done here: removing the
-  now-redundant `Int64(x)` conversions in the corpus (harmless), and **narrowing stays unchecked** (the user: "1 for sure.
+  never one a receiver fixed (G9b). New messages name T6b and say to write `T(x)`. **The corpus's now-redundant
+  widening conversions are gone** (the user: "fix the corpus widening") - 32 in `shared.olang` and std, found by a
+  temporary report in the fit check and the operator meeting, and proven to change nothing: the emitted IR is
+  identical to before. Kept where the conversion is the point (tests of conversion itself, of `extends`, of implicit
+  against explicit), where it stops an operator method calling itself (`OpMoney.plus`), or where dropping one of two
+  would change an operation's width. **Found on the way, pre-existing**: a widened `try (...)` value lost its checks -
+  `return try (a + b) catch default 0` into an `I32` emitted a failing check as `unreachable`, since the widening moved
+  the try to a new node and its checks named the old one; they are pointed at the new one now. And **narrowing stays
+  unchecked** (the user: "1 for sure.
   It's not even a question"): `Int32(i64)` wraps, a float out of range stays undefined (E26a), and `try Int32(x)` is
   the opt-in check (R20) - the standing rule that a per-operation run-time check never belongs in the language.
 - **`extends`; text is a `String` by type (T29f/T29c, 2026-10-08, stage 3 of the casting plan, the user: "use

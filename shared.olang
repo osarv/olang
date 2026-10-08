@@ -963,7 +963,7 @@ fn bufferLenAfterWrite(n I64) I64 {
 fn bufferReadAfterWrite(n I64) I64 {
     b Buffer& = Buffer(n)
     b.data[0] = U8(65)
-    return I64(b.data[0])
+    return b.data[0]
 }
 
 test "a run-time-sized constructor field is sized per construction" {
@@ -1145,7 +1145,7 @@ fn mixedAlignment(n I32) I32 {
         odd Array<I32>& = I32[1, 2, 3]
         w Wide& = Wide(7, 8)
         h Handle& = Handle(i)
-        total = total + w.a + I64(odd[0]) + I64(h.id)
+        total = total + w.a + odd[0] + h.id
     }
     return I32(total)
 }
@@ -1925,7 +1925,7 @@ fn (n Num) Tripled() Num { return n * 3 }
 
 fn (a Nums&) Summed() I64 {
     t I64 = 0
-    for i in range a.Len() { t = t + I64(a[i]) }
+    for i in range a.Len() { t = t + a[i] }
     return t
 }
 
@@ -2080,7 +2080,7 @@ test "T36: and in a loop, where a reordering optimizer has room to move things" 
     total I64 = 0
     for i in range 1000 {
         e Either = Either.Small(i)
-        total = total + I64(readSmall(e))
+        total = total + readSmall(e)
         e = Either.Big(I64(i) * 1000000)
         total = total + readBig(e)
     }
@@ -2137,7 +2137,7 @@ test "O2d: a call inside a block allocates into the scope its argument names, no
 test "O2d: and the same through a loop, which is what growing a buffer actually looks like" {
     c Growable& = Growable(1)
     for i in range 500 {
-        if I64(c.n) == c.data.Len() { c = c.regrow(c.n * 2) }
+        if c.n == c.data.Len() { c = c.regrow(c.n * 2) }
         c.data[c.n] = i
         c.n = c.n + 1
     }
@@ -2741,7 +2741,7 @@ fn sliceLenOrPropagate(buf Array<U8>&, n I32) I64 ? {
 
 fn expectSliceLen(buf Array<U8>&, n I32, want I32) ? {
     got I64 = try sliceLenOrPropagate(buf, n)
-    assert got == I64(want)
+    assert got == want
 }
 
 test "a tried slice yields its value when the bounds hold" {
@@ -4382,7 +4382,7 @@ fn (d Dot) Sides() I32 { return 1 }
 
 # a named primitive is a type like any other (T29), so it can carry methods and satisfy a trait
 type Ring I32
-fn (r Ring) Area() I32 { return I32(r) }
+fn (r Ring) Area() I32 { return r }
 fn (r Ring) Sides() I32 { return 0 }
 
 # M19e: a default - a method of every type satisfying the trait, declared once in the trait's module on a type
@@ -5751,7 +5751,7 @@ fn ktSumTo(n I32) I64 {
     do {
         i++
         if i % 2 == 0 { continue }
-        total = total + I64(i)
+        total = total + i
     } for i < n
     return total
 }
@@ -6270,7 +6270,7 @@ test "E27: comprehensions over arrays, ranges and text, with and without a filte
     assert e[0] == 10 and e[1] == 14
     s := comprSquares(4)
     assert s.Len() == 4 and s[3] == 9
-    idx := I64[i * 10 + I64(x) for i, x in a]
+    idx := I64[i * 10 + x for i, x in a]
     assert idx[3] == 37
     none := I32[x for x in a if x > 100]
     assert none.Len() == 0
@@ -6562,7 +6562,7 @@ fn opBitsBaked() I64 {
     c |= OpBits(1)
     k OpCtr = OpCtr(5)
     k++
-    return c.v + I64(k.n)
+    return c.v + k.n
 }
 
 OpBitsBaked := opBitsBaked()
@@ -6775,7 +6775,7 @@ test "T17: an array of enums with a small payload is laid out at its real stride
     for i in range n { es[i] = SmallPay.SpA(I32(i)) if i % 2 == 0 else SmallPay.SpB(I32(i) * 2) }
     churn := Array<I64>(1000, 9)
     t I64 = 0
-    for i in range n { t = t + I64(smallPayVal(es[i])) }
+    for i in range n { t = t + smallPayVal(es[i]) }
     assert t == 749500 and churn[0] == 9
 }
 
@@ -6814,7 +6814,7 @@ fn ixBaked() I64 {
     g IxGrid& = IxGrid(4)
     for i in range I64(4) { g[i] = I32(i) * 10 }
     t I64 = 0
-    for i, x in g { t = t + i + I64(x) }
+    for i, x in g { t = t + i + x }
     return t
 }
 
@@ -6946,7 +6946,7 @@ fn txWalk(n I32, failAt I32) I32 {
     } catch TxErr {
         t += 1000
     }
-    sp TxSparse& = TxSparse(I64(failAt))
+    sp TxSparse& = TxSparse(failAt)
     for x in try sp {
         t += x
     } catch { t += 100 }
@@ -7062,13 +7062,13 @@ fn icToks() I64 {
     v := x as IcTok.Num
     a, b := y as IcTok.Pair
     w := try (y as IcTok.Num) catch default -1
-    return I64(t + v + a + w) + b
+    return t + v + a + w + b
 }
 
 IcToksBaked := icToks()
 
 test "E32: is and as on enum values" {
-    assert icToks() == I64(1 + 1000 + 5 + 2 - 1 + 40)
+    assert icToks() == 1 + 1000 + 5 + 2 - 1 + 40
     assert IcToksBaked == icToks()
 }
 
@@ -7521,7 +7521,7 @@ fn (p Pct) PHalf() Pct { return p / 2 }
 
 fn pctCheck(n I32) I32 ? PctError {
     c := try PctChecked(n)
-    return I32(c)
+    return c
 }
 
 PctFull Pct = Pct(250)
@@ -7622,7 +7622,7 @@ fn ckNarrow(v I64) I32 { return try I32(v) catch default -1 }
 fn ckToInt(f F64) I32 { return try I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
 fn ckFdiv(a F64, b F64) F64 { return try (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1.0 catch default -2.0 }
 fn ckFmul(a F64, b F64) F64 { return try (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
-fn ckByteAdd(a U8, b U8) I32 { return I32(try (a + b) catch default 0) }
+fn ckByteAdd(a U8, b U8) I32 { return try (a + b) catch default 0 }
 fn ckNeg(a I32) I32 { return try (-a) catch default 7 }
 fn ckLen(n I32) I64 {
     a := try Array<I32>(n) catch default Array<I32>(0)
@@ -7653,6 +7653,27 @@ test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
     assert ckLen(3) == 3 and ckLen(-1) == 0
     arr := I32[1, 2]
     assert ckMixed(arr, 1, 3) == 6 and ckMixed(arr, 5, 3) == -1 and ckMixed(arr, 1, big) == -2
+}
+
+# T6b/R20: a tried value that widens where it lands - returned (ckByteAdd above), declared, an operand, an argument -
+# keeps its checks. The widening moved the try to a new node and its checks went on naming the old one, so a failing
+# check found no clauses and was emitted as unreachable. CkWideIn is mutable, so the test runs them at run time;
+# CkWideBaked runs the same calls while compiling (K2).
+fn ckWidenDecl(a U8, b U8) I32 {
+    x I32 = try (a + b) catch default 0
+    return x
+}
+fn ckWidenOperand(a U8, b U8, w I32) I32 { return (try (a + b) catch default 7) + w }
+fn ckId64(n I64) I64 { return n }
+fn ckWidenArg(a U8, b U8) I64 { return ckId64(try (a * b) catch default 9) }
+CkWideIn mut U8 = 200
+CkWideBaked I64 = ckByteAdd(200, 200) + ckWidenDecl(200, 200) + ckWidenOperand(200, 200, 1000) + ckWidenArg(200, 200)
+
+test "T6b/R20: a tried value widened where it lands keeps its checks" {
+    v U8 = CkWideIn
+    assert ckByteAdd(v, v) == 0 and ckWidenDecl(v, v) == 0 and ckWidenOperand(v, v, 1000) == 1007
+    assert ckWidenArg(v, v) == 9 and ckWidenArg(v, 1) == 200
+    assert CkWideBaked == 1016
 }
 
 # R20/K1: the compile-time evaluator runs checked operations as the generated code does - each global below is
@@ -8258,7 +8279,7 @@ test "T4: signed, unsigned and half-width float types" {
 # T29h: a Char is one byte of text - the type of 'a', rendering as a character where a U8 renders as a number, with
 # U8's arithmetic ('a' + 1 is 'b'). A String is Chars; it goes wherever an Array<U8> is wanted, and String(bytes) is
 # text again, neither copying anything.
-fn charBytes(b Array<U8>&) I64 { return I64(b[0]) + b.Len() }
+fn charBytes(b Array<U8>&) I64 { return b[0] + b.Len() }
 fn charAll(n I32) Bool {
     c Char = 'a'
     next Char = c + 1

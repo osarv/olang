@@ -176,7 +176,7 @@ test "an outer list flattened into an inner block" {
 
 test "a List is iterable: every loop over it gets its own position" {
     l List<I64>& = List<I64>()
-    for i in range 20 { l.Push(I64(i)) }        # crosses two chunks (8, then 16)
+    for i in range 20 { l.Push(i) }        # crosses two chunks (8, then 16)
     sum I64 = 0
     for x in l { sum += x }
     assert sum == 190
@@ -227,7 +227,7 @@ fn listChurn() I64 {
 
 test "pushing from inside a loop builds where the list lives" {
     l := List<I64>()
-    for i in range 100 { l.Push(I64(i)) }
+    for i in range 100 { l.Push(i) }
     assert listChurn() > 0
     sum I64 = 0
     for x in l { sum = sum + x }
@@ -240,7 +240,7 @@ test "a list's elements, walked through a lambda" {
     limit I32 = 15
     assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
     assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
-    assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + I64(x) }) == 190
+    assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 190
     big := l.Iter().Filter(fn(x) { return x >= limit })
     assert big.Len() == 5 and big.ToArray()[0] == 15
     halves := l.Iter().Map(fn(x) { return F64(x) / 2.0 })

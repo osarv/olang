@@ -6287,10 +6287,43 @@ bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase) {
     return primFlows(src.bType, dst.bType);
 }
 
-//T6b: op becomes the widening of itself to t, in place, so whatever holds it now holds the conversion
+//T6b/R20: a "try (...)" moved by a widening keeps its checks - each one inside that names the old address as its
+//root is pointed at the new one. Walks what markChecked walks, which is everything that can name a root.
+static void retargetChecksStmts(struct list* stmts, struct operand* from, struct operand* to);
+static void retargetChecks(struct operand* op, struct operand* from, struct operand* to) {
+    if (!op) return;
+    if (op->checkRoot == from) op->checkRoot = to;
+    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) retargetChecksStmts(&op->comprBody, from, to);
+    for (int i = 0; i < op->args.len; i++) retargetChecks(*(struct operand**)ListGetIdx(&op->args, i), from, to);
+}
+static void retargetChecksStmts(struct list* stmts, struct operand* from, struct operand* to) {
+    for (int i = 0; i < stmts->len; i++) {
+        struct statement* st = ListGetIdx(stmts, i);
+        retargetChecks(st->target, from, to);
+        retargetChecks(st->op, from, to);
+        retargetChecks(st->fillValue, from, to);
+        retargetChecks(st->forInit, from, to);
+        if (st->forPost) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, st->forPost);
+            retargetChecksStmts(&one, from, to);
+        }
+        retargetChecksStmts(&st->block, from, to);
+        if (st->elseStmnt) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, st->elseStmnt);
+            retargetChecksStmts(&one, from, to);
+        }
+    }
+}
+
+//T6b: op becomes the widening of itself to t, in place, so whatever holds it now holds the conversion. What op was
+//moves to a new address, so a tried expression's checks are pointed there (R20) - left naming op, they named the
+//conversion, which has no clauses, and a failing check was emitted as unreachable.
 static void operandWidenInPlace(struct operand* op, struct type t) {
     struct operand* inner = MallocOrCrash(sizeof(struct operand));
     *inner = *op;
+    if (inner->isTried) retargetChecks(inner, op, inner);
     struct type to = TypeVanilla(t.bType);
     to.scopeDepth = op->type.scopeDepth;
     struct operand* conv = OperandNumericConversion(to, inner, op->tok);

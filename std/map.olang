@@ -165,8 +165,8 @@ test "for ... in visits every entry once" {
     keys I64 = 0
     values I64 = 0
     for e in m {
-        keys = keys + I64(e.Key)
-        values = values + I64(e.Value)
+        keys = keys + e.Key
+        values = values + e.Value
     }
     assert keys == 1225 and values == 2450
 }

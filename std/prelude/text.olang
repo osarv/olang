@@ -28,7 +28,7 @@ error ParseError {
 fn (t String&) Hash() I64 {
     h I64 = -3750763034362895579
     for c in t {
-        h = (h ^ I64(c)) * 1099511628211
+        h = (h ^ c) * 1099511628211
     }
     return h
 }
@@ -178,7 +178,7 @@ fn (t String&) ParseInt() I64 ? ParseError {
         if c < '0' or c > '9' {
             error ParseError.INVALID
         }
-        d I64 = I64(c - '0')
+        d I64 = c - '0'
         if v < limit or (v == limit and d > 8) {
             error ParseError.OVERFLOW
         }

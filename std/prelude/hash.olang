@@ -16,12 +16,12 @@ fn mixHash(n I64) I64 {
 }
 
 fn (n I64) Hash() I64 { return mixHash(n) }
-fn (n I32) Hash() I64 { return mixHash(I64(n)) }
-fn (b U8) Hash() I64 { return mixHash(I64(b)) }
-fn (n I8) Hash() I64 { return mixHash(I64(n)) }
-fn (n I16) Hash() I64 { return mixHash(I64(n)) }
-fn (n U16) Hash() I64 { return mixHash(I64(n)) }
-fn (n U32) Hash() I64 { return mixHash(I64(n)) }
+fn (n I32) Hash() I64 { return mixHash(n) }
+fn (b U8) Hash() I64 { return mixHash(b) }
+fn (n I8) Hash() I64 { return mixHash(n) }
+fn (n I16) Hash() I64 { return mixHash(n) }
+fn (n U16) Hash() I64 { return mixHash(n) }
+fn (n U32) Hash() I64 { return mixHash(n) }
 fn (n U64) Hash() I64 { return mixHash(I64(n)) }
 
 
