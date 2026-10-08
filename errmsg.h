@@ -6,7 +6,7 @@
 
 #define NO_FILE_SPECIFIED "no file specified"
 #define EXPECTED_C_OR_T_FLAG "expected a mode first: -b (build), -c (compile one module), -t (test) or -i (interpret) (B1)"
-#define EXPECTED_ONE_COMPILE_FILE "-b, -c and -i take exactly one file"
+#define EXPECTED_ONE_COMPILE_FILE "-b and -c take exactly one file, and -i one file followed by the program's own arguments"
 #define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
 #define UNKNOWN_FLAG "unknown flag - every flag is one character: the modes -b -c -t -i, and the modifiers -r (race detector), -d (debug), -u (update olang.lock) and -D Name=value (B1)"
 #define NOT_A_REGULAR_FILE "not a regular file (is this a directory?)"

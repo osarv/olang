@@ -18,8 +18,8 @@ only depends on concepts already introduced by earlier ones:
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Ownership and Scopes | Scopes, scope tags, reference markers, results, the static scope checker |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
-| 10 Compilation Model | Compilation units, `-c`/`-t` modes, `main`, test blocks, process exit |
-| 11 External Functions | `extern fn` declarations, linkage, and the restricted C-ABI type boundary |
+| 10 Compilation Model | Compilation units, the `-c`/`-b`/`-t`/`-i` modes, `main`, the command line, test blocks, process exit |
+| 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type parameters on functions and struct types, inference, `match` over a type, monomorphization |
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
@@ -1150,7 +1150,8 @@ unsigned comparison would read as an enormous free capacity.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
-returns a value (E13, including a constructor call, `Array<T>(n)` and a `try` call), a **field read**
+returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
+`Len()` (E23) and an atomic builtin that gives a value (P9)), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
 (`t := a[i]` — the array's element type), a **slice** (E16a), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
@@ -3498,7 +3499,7 @@ type happens to declare a destructor.
 object file and linked with the others. The compiler operates in exactly one of four modes, selected
 by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
 (B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
-beginning with `-` is an error.
+beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f).
 
 **B2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
 linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
@@ -3586,8 +3587,13 @@ interpreter stops, naming the operation and where it is, with status 1. Two thin
 tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
 same way. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
-`-D` apply as to any build. Interpreting is much slower than running the built program, and in this
+`-D` apply as to any build. The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
+interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
 implementation memory is not reclaimed while the program runs, so `-i` suits short runs.
+
+**B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
+passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
+program's command line (B4a) is `<file>`, as written, followed by those arguments.
 
 **B3b.** A symbol a module defines is named from that module's **identity** (§4 M22a) — its path — never from
 anything about the compilation it happens to be part of: an object compiled on its own has to agree with one
@@ -3612,6 +3618,12 @@ no parameters, no success type, and at least one declared error
 (§3 D8) — `fn main() ? SomeError [+ ...] { ... }`. Any other
 shape (parameters, a `ret-type`, or no declared error at all) is a compile-time error. There is no
 other valid `main` signature; in particular, there is no "return an int/bool status" convention.
+
+**B4a (the command line and the environment).** A program's command line and environment are not passed to `main`.
+The runtime keeps them from the moment the process starts — before any global is initialized (B5a), so a global's
+initializer may read them — and a program reaches them through the runtime's functions (§11 X6). The command line is
+the program's own name first, as the operating system gave it (under `-i`, B3f, the file being interpreted), then
+each argument in order. A test binary's command line is its own name alone.
 
 ### 10.3 Process exit
 
@@ -3782,6 +3794,30 @@ like a non-fallible ordinary function (E13, E14); it can never be the operand of
 module-level name (§4.3 M6): capitalized is exported, lowercase is private to its own declaring
 module. The declared name is also the symbol the linker resolves against; this specification does
 not define what happens when no such symbol exists at link time (implementation-defined).
+
+**X6 (the runtime's functions).** The language's runtime support (B3c) provides functions a module calls through
+`extern fn` like any other external function, for what a program needs from its process that the C library would
+only hand over as something X2 cannot receive — a pointer, a structure, or the thread's `errno`. Each is named with the
+prefix `__olang_`, takes any text it is given NUL-terminated, and gives text back by copying it into an array its
+caller supplies (X3) and returning a length, so that nothing crosses the boundary by address. A declaration of one
+must state exactly the prototype below (X1a).
+
+| Declaration | What it does |
+|---|---|
+| `__olang_arg_count() I64` | the number of entries in the command line (B4a), the program's own name included |
+| `__olang_arg(i I64, buf Array<U8>, cap I64) I64` | copies up to `cap` bytes of entry `i` into `buf` and returns its whole length — `-1` when there is no entry `i` |
+| `__olang_env(name Array<U8>, buf Array<U8>, cap I64) I64` | the same for the value of the environment variable `name` — `-1` when it is not set |
+| `__olang_err() I32` | the class of the error the last failing call on this thread left in `errno`: `1` nothing is there, `2` something already is, `3` permission denied, `4` not a directory, `5` a directory, `6` a directory not empty, `0` any other. Meaningful only immediately after a call that reported failure, before anything else that may set `errno` |
+| `__olang_stat(path Array<U8>, out Array<I64>) I32` | what is at `path`, a symbolic link followed: `out[0]` its kind (`1` a regular file, `2` a directory, `0` anything else), `out[1]` its size in bytes, `out[2]` its modification time in nanoseconds since the Unix epoch, to the resolution the file system keeps; returns `0`, or `-1` when it fails (`__olang_err` says why) |
+| `__olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64` | the names of the entries of the directory `path`, `.` and `..` left out, each followed by a zero byte, in the order the directory gives them: copies as many whole names as fit in `cap` bytes into `buf` and returns the bytes all of them take — `-1` when the directory cannot be read |
+| `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
+
+A length a function returns may exceed `cap`, and then only part was copied: a caller allocates the length returned and
+calls again.
+
+**X7.** An `extern fn` naming a function the runtime itself provides or calls (X6, or a C library function the runtime
+uses, such as `exit` or `strlen`) refers to that very function: it is not a second definition, and declaring it is not
+an error.
 
 ## 12. Generics
 

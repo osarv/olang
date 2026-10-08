@@ -2882,6 +2882,21 @@ Go through this for every change to what olang means - a rule added, revised or 
   expected Y" where the intent is clear: `name T(args)` shows both spellings with `=` and `:=`, built from the line
   itself; `?error` says `?` alone is the default error. A missing `main` is not reported when a syntax error may
   have hidden it. Not a language change - no rule moved.
+- **The command line, the environment and the file system, in `std/os` (B4a/B3f/X6/X7, 2026-10-08, self-hosting prep
+  items 1-2, the user's design constraints: `main` unchanged, no pointer returns).** The generated `main` saves
+  `argc`/`argv` before any global initializes; the runtime's own functions (`__olang_arg_count`, `__olang_arg`,
+  `__olang_env`, `__olang_err`, `__olang_stat`, `__olang_dir`, `__olang_realpath`) copy into a caller's buffer and
+  return lengths, for what C would hand back as a pointer, a struct or errno - anything numeric std calls directly.
+  `os.Args()`, `os.Env(name)` (default error when unset, as Map.Get), `ReadFile`/`WriteFile`, `Create`/`Open`/`Close`
+  (an `I32` fd for io), `Stat` (`FileInfo`: `Kind`, `Size`, `ModTime` in ns), `Exists`, `IsDir`, `MkDir`, `MkDirAll`,
+  `Remove`, `Rename`, `ReadLink`, `RealPath`, `Cwd`, `ReadDir` (sorted); `OsError` grew `EXISTS`, `DENIED`, `NOT_DIR`,
+  `IS_DIR`, `NOT_EMPTY`. **My calls, flagged**: `stat` as three numbers in an `I64` buffer, offsets and constants from
+  the compiler's own C headers (sound while target = host); errno classified by one table shared with `-i`; the
+  API names. **`-i`** passes everything after the file to the program, flags included, with the file as its name, and
+  implements the runtime's functions itself. Not built: an exit status beyond 0/1 (B5), `uname`, output capture.
+  **Found on the way, pre-existing**: `extern fn exit` failed to compile (the runtime's hand-kept owned-symbol list
+  lacked `exit`/`abort`/`setjmp`/`longjmp`; it now reads the runtime's own text - X7), and `n := a.Len()` was rejected
+  by D15 (the built-in `Len()` and value-giving atomics are calls too now).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

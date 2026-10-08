@@ -2718,6 +2718,22 @@ test "':=' infers a slice's type from the slice expression" {
     assert inner.Len() == 2
 }
 
+# D15: an array's Len() and the atomic builtins that give a value are calls like any other, so ":=" reads their types
+# off them - "n := a.Len()" was rejected while the same call on a List compiled. The global is computed while
+# compiling (K2), so the evaluator agrees with the run time on it.
+LenOfLiteral := I32[4, 5, 6, 7].Len()
+
+test "':=' infers from an array's Len() and from an atomic builtin" {
+    a := I32[1, 2, 3]
+    n := a.Len()
+    assert n == 3 and LenOfLiteral == 4
+    c I64 = 5
+    old := atomicAdd(c, 2)
+    assert old == 5 and c == 7
+    now := atomicLoad(c)
+    assert now == 7
+}
+
 test "slicing a runtime-length array, and slicing a slice" {
     n I32 = 5
     b := Array<I32>(n)

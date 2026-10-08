@@ -193,6 +193,24 @@ test "-i interprets a program as the built program runs" {
     assert sh(dir, "cmp -s want.txt out.txt") == 0 or failed("-i ended unlike the built program", dir)
 }
 
+# B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -
+# built and run, and interpreted, it prints the same; under -i what follows the file is the program's command line,
+# flags included, and its own name is the file
+test "a program reads its arguments and environment, and uses the file system" {
+    dir := fresh("osargs")
+    os.Run("cp checks/fixtures/osargs/* " $os.Quote(dir))
+    args String& = " one 'two words' -x > out.txt 2>&1"
+    assert sh(dir, "\"$OLANG\" -b osargs.olang > out.txt 2>&1") == 0 or failed("osargs build", dir)
+    assert sh(dir, "OLANG_CHECK_VALUE=hi ./build/osargs" $args " && cp out.txt want.txt") == 0 or failed("osargs", dir)
+    assert outOf(dir).Contains("program: ./build/osargs\n3 arguments, 3 seen by a global\n[one]\n[two words]\n[-x]\n")
+    assert outOf(dir).Contains("value: hi\nsize 5 file true dated true\nin work/a: b\nin work/a: g.txt\n")
+    assert sh(dir, "rm -rf work && OLANG_CHECK_VALUE=hi \"$OLANG\" -i osargs.olang" $args) == 0 or failed("osargs -i", dir)
+    assert outOf(dir).Contains("program: osargs.olang\n")
+    assert sh(dir, "tail -n +2 want.txt > w.txt && tail -n +2 out.txt | cmp -s w.txt -") == 0 or failed("-i differs", dir)
+    assert sh(dir, "rm -rf work && ./build/osargs > out.txt 2>&1") == 0
+    assert outOf(dir).Contains("0 arguments, 0 seen by a global\nvalue: unset\n")
+}
+
 # S18c: an assert the compiler proves emits no run-time check at all
 test "a proven assert leaves no run-time check" {
     dir := fresh("s18c")
