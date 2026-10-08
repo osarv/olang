@@ -28,6 +28,21 @@ expression form) and 6 are being built in parallel by agents in worktrees (/home
 7. Float literals default to F64 (T6a) - DONE b7c8986. Debt found there: the B9a token evaluator reads a narrow-typed
    global (`X F32 = 0.1`, an `I32` that would wrap) as its exact value, so a top-level condition can disagree with the
    run time - fix by deferring such conditions to B9c's compile-time evaluation.
+**Overnight plan, 2026-10-08 (the user: "Do a big refactor of the compiler as well ... Also do a code review, order is
+your choice"):** feature batch first (lit, match, defer agents; merge each), then the REVIEW, then the REFACTOR - review
+first because its fixes must land before code moves (and the refactor keeps behaviour identical, bugs included), and
+because what it finds about structure feeds the refactor.
+- Review: five read-only agents by area - (1) token.c + syntax.c, (2) semantic.c types/modules/generics half,
+  (3) semantic.c operands/statements/scopes half, (4) codegen.c incl. the runtime IR, (5) comptime.c, main.c, util,
+  errmsg + std/prelude. Each reports only findings it reproduced with a small olang program on the current compiler
+  (CONFIRMED) or could not reproduce but traced (PLAUSIBLE, kept apart). Fixes go in worktrees with regression tests.
+- Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
+  (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
+  cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
+  statements and lowerings for the checker; runtime IR, expressions, statements, rendering, debug info for codegen -
+  each shaped like a future olang module for the port; remove dead code and comments about removed features
+  (interfaces, scope names, O10e...); unify hand-kept duplicate walkers (structContainsBareScopeField). One agent per
+  file at a time; the makefile gets the new files.
 Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
