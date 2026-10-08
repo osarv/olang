@@ -7767,3 +7767,18 @@ from their original form.
   pointing those checks at the moved node, walking exactly what `markChecked` walks (the only thing that sets a
   root). Pinned by a test whose inputs come from a mutable global, so it runs at run time, and a global baked from the
   same four calls (1016, written out as a constant); on the unfixed compiler the test build segfaults.
+
+- **`-update` for the lock file (M23c, 2026-10-08).** M23b had left updating as "delete the line"; the user asked for
+  the flag ("yes add the update flag"). Built as a modifier beside `-race`/`-debug`/`-D`, stripped from the arguments
+  before the mode dispatch, so it composes with `-b`, `-t` and `-c` in any position. In `fetchRemote` a locked line is
+  set aside the first time its repository is reached under `-update`, and the unlocked path - clone the ref's head,
+  read its commit, keep it in the cache by commit - runs as it does for a repository with no line; the repository is
+  then recorded as updated (keyed by lock path, so two roots' locks in one run stay separate), and every later import
+  of it in the same compilation reads the line just written. `lockAdd` became `lockSet`, which replaces a line or adds
+  one and leaves the file untouched when the commit is the same. Two choices were mine and are flagged in the
+  current-state entry: everything reached is updated, not a named repository (deleting a line already does one), and
+  unreached lines are kept - pruning would drop another program's pins whenever two programs share a directory, which
+  `-t a.olang b.olang` makes ordinary. The remote check gained a step: after the branch moves past the locked commit,
+  `-update` moves `example.com/me/tools` (remote.olang's compile-time assert then fails, as it does when the line is
+  deleted), reports it, and leaves `@v1`, whose tag has not moved, with the line it had. Checked by hand as well that
+  a repeated `-update` reports "already at" and fetches each repository once, and that the flag works after the file.

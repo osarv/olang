@@ -315,11 +315,13 @@ static void defineBuiltinConsts(bool testBuild) {
 }
 
 int main(int argc, char** argv) {
-    //"-race", "-debug" and "-D" are modifiers, valid alongside any mode and in any position, so they are
+    //"-race", "-debug", "-update" and "-D" are modifiers, valid alongside any mode and in any position, so they are
     //stripped out before the mode dispatch below reads argv positionally
     int outp = 1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-race")) { gRace = true; continue; }
+        //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
+        if (!strcmp(argv[i], "-update")) { SemanticSetUpdate(true); continue; }
         if (!strcmp(argv[i], "-debug")) { gDebug = true; continue; }
         if (!strcmp(argv[i], "-D")) {
             if (i + 1 >= argc) { fprintf(stderr, "olang: -D takes Name=value\n"); return EXIT_FAILURE; }

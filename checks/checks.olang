@@ -103,9 +103,9 @@ test "std/map beside a local map.olang" {
     assert outOf(dir).Contains("alias")
 }
 
-# M23a/M23b: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
-# branch, olang.lock pins each to a commit, and a second build reads the cache and never touches git - the remote is
-# removed to prove it
+# M23a/M23b/M23c: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
+# branch, olang.lock pins each to a commit, -update moves them on, and a second build reads the cache and never touches
+# git - the remote is removed to prove it
 test "a file in a remote repository, fetched once into the cache" {
     dir := fresh("remote")
     repo String& = $dir "/remote/example.com/me/tools"
@@ -129,6 +129,14 @@ test "a file in a remote repository, fetched once into the cache" {
     # with the cache gone, the locked commit is fetched again - not the branch's new head
     assert sh(dir, "rm -rf cache && touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked refetch", dir)
     assert outOf(dir).Contains("as olang.lock says")
+    # M23c: -update moves every repository the build reaches to its ref's current commit, once each - the branch's
+    # new head (so remote.olang's assert fails while compiling) - and leaves v1, which has not moved, as it was
+    assert sh(dir, "cp olang.lock before.lock && touch remote.olang && " $env "\"$OLANG\" -update -b remote.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("it is false")
+    assert outOf(dir).Contains("updated example.com/me/tools to") and outOf(dir).Contains("example.com/me/tools@v1 is already at")
+    assert sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "grep '^example.com/me/tools@v1 ' olang.lock > now.txt && grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "cp before.lock olang.lock") == 0
     # deleting a line updates that repository to its ref's current commit
     assert sh(dir, "cp olang.lock before.lock && sed -i '/^example.com\\/me\\/tools /d' olang.lock") == 0
     assert sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") != 0

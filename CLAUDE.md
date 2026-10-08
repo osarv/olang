@@ -2777,9 +2777,15 @@ Go through this for every change to what olang means - a rule added, revised or 
   the root module, `HOST/OWNER/REPO[@REF] COMMIT` per line, sorted. Locked: that commit, fetched by hash (a shallow
   fetch, else a full clone and checkout) when not cached, verified with `rev-parse`. Unlocked: the ref's head is
   cloned, its commit read and written in. The cache is now keyed by commit, so two projects locking different commits
-  of one repository share nothing that could conflict. Updating is deleting the line; no `-update` flag yet. The
+  of one repository share nothing that could conflict. Updating one repository is deleting its line. The
   remote check now moves the branch under a locked build, clears the cache and refetches the locked commit, and
   updates by deleting a line - shown by remote.olang's assert, which compile-time evaluation then proves false.
+  **`-update` (M23c, the user: "yes add the update flag")** is a modifier like `-race`: every remote repository the
+  build reaches is resolved as if unlocked - once per compilation, however many of its modules are imported - and its
+  line rewritten, reporting `updated KEY to NEW (was OLD)` or `KEY is already at C`; a line that does not change is
+  not rewritten. **My calls, flagged**: it updates everything the build reaches (one repository alone is still
+  deleting its line), and lines for repositories the build does not reach are kept rather than pruned, since several
+  programs in one directory share one lock file. The lock's header comment and the locked-fetch failure now name it.
 - **Default methods settled (M19e, 2026-10-08, the user: "do a)", "outside", "make it an error").** One kind: every
   method declared with an interface receiver is a default any satisfying type may override (no fixed helpers, no
   `default` keyword); bodies stay outside the interface. A same-named method with another signature, and an override

@@ -698,6 +698,25 @@ static void lockLoad(void) {
     fclose(f);
 }
 
+//M23c: "-update" - each repository the compilation reaches is resolved afresh, once, whatever its line says. Updated
+//keys are recorded with the lock file they belong to, so another root's lock in the same run is its own.
+static bool updateLocks;
+static struct list lockUpdated; //char*: lock path, a newline, the key
+
+void SemanticSetUpdate(bool on) { updateLocks = on; }
+
+static bool lockUpdatedNow(const char* key, bool mark) {
+    char k[PATH_MAX * 2 + 32];
+    snprintf(k, sizeof(k), "%s\n%s", lockPath, key);
+    if (!lockUpdated.elemSize) lockUpdated = ListInit(sizeof(char*));
+    for (int i = 0; i < lockUpdated.len; i++) if (!strcmp(*(char**)ListGetIdx(&lockUpdated, i), k)) return true;
+    if (mark) {
+        char* kc = heapCopy(k);
+        ListAdd(&lockUpdated, &kc);
+    }
+    return false;
+}
+
 static const char* lockFind(const char* key) {
     lockLoad();
     for (int i = 0; i < lockKeys.len; i++) {
@@ -706,16 +725,25 @@ static const char* lockFind(const char* key) {
     return NULL;
 }
 
-//records key at commit and writes the whole file back, sorted, so it reads the same however it was built up
-static void lockAdd(const char* key, const char* commit) {
+//records key at commit - replacing the line it had, or adding one - and writes the whole file back, sorted, so it
+//reads the same however it was built up. A line that already says commit is left alone, file and all.
+static void lockSet(const char* key, const char* commit) {
     lockLoad();
-    char* kc = heapCopy(key);
+    int at = -1;
+    for (int i = 0; i < lockKeys.len && at < 0; i++) if (!strcmp(*(char**)ListGetIdx(&lockKeys, i), key)) at = i;
+    if (at >= 0 && !strcmp(*(char**)ListGetIdx(&lockCommits, at), commit)) return;
     char* cc = heapCopy(commit);
-    ListAdd(&lockKeys, &kc);
-    ListAdd(&lockCommits, &cc);
+    if (at >= 0) {
+        *(char**)ListGetIdx(&lockCommits, at) = cc;
+    } else {
+        char* kc = heapCopy(key);
+        ListAdd(&lockKeys, &kc);
+        ListAdd(&lockCommits, &cc);
+    }
     FILE* f = fopen(lockPath, "w");
     if (!f) return;
-    fputs("# olang.lock - the commit each remote repository is built from (M23b). Delete a line to update it.\n", f);
+    fputs("# olang.lock - the commit each remote repository is built from (M23b). Delete a line to update that\n"
+          "# repository, or build with -update to update every one the build reaches (M23c).\n", f);
     bool* done = MallocOrCrash(sizeof(bool) * (size_t)(lockKeys.len + 1));
     for (int i = 0; i < lockKeys.len; i++) done[i] = false;
     for (int n = 0; n < lockKeys.len; n++) {
@@ -765,6 +793,12 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
     fits = fits && (size_t)snprintf(parent, sizeof(parent), "%s/%s/%s/%s", cache, host, owner, repo) < sizeof(parent);
     if (!fits) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
     const char* locked = lockFind(key);
+    //M23c: under -update a locked line is set aside the first time its repository is reached
+    char was[128] = "";
+    if (locked && updateLocks && !lockUpdatedNow(key, false)) {
+        snprintf(was, sizeof(was), "%s", locked);
+        locked = NULL;
+    }
     if (locked) {
         fits = fits && (size_t)snprintf(dir, sizeof(dir), "%s/%s", parent, locked) < sizeof(dir);
         if (pathIsDir(dir)) return heapCopy(dir);
@@ -802,7 +836,12 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
         ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
         return NULL;
     }
-    lockAdd(key, head);
+    lockSet(key, head);
+    if (updateLocks) {
+        lockUpdatedNow(key, true);
+        if (was[0] && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
+        else if (was[0]) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
+    }
     return heapCopy(dir);
 }
 

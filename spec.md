@@ -1229,6 +1229,13 @@ ref has moved since. A repository without one is resolved to its ref's current c
 and committing the file makes every checkout build the same code. A commit names its exact content, so the lock needs
 no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock.
 
+**M23c (updating).** `-update` is a **modifier**, valid in any position alongside any mode (B2b). Every remote
+repository the compilation reaches is resolved as though the lock file had no line for it - fetched at its ref's
+current commit (M23b) - and its line is rewritten; one whose ref has not moved keeps the line it had. A repository is
+updated at most once per compilation, however many of its modules are imported. Lines for repositories the
+compilation does not reach are kept as they are, since several programs in one directory share one lock file. Deleting
+a line (M23b) remains the way to update one repository alone.
+
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
 path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/map"`
 and `import map "std/map"`. If the derived alias is not a legal identifier
