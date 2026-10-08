@@ -1,0 +1,106 @@
+# 8-bit floats, part of the prelude (the user's call): storage for weights and activations rather than a type to
+# compute in - each holds its bits, converts from a number and back to F64, and renders as the value it holds.
+# Two formats exist and both are used, so both are here (the OCP 8-bit float formats):
+#   F8E4M3 - 4 exponent bits (bias 7), 3 mantissa bits: more precision. No infinity; the one NaN is all ones, and the
+#            largest value 448. A value beyond it saturates to +-448 (my call: the "satfinite" conversion ML uses).
+#   F8E5M2 - 5 exponent bits (bias 15), 2 mantissa bits: more range. IEEE-style, with infinities and NaNs - the top
+#            byte of an F16. A value beyond 57344 rounds to infinity.
+# Conversion in rounds to nearest, ties to even, as the hardware does.
+
+# 2 to the power e, exactly
+fn f8Pow2(e I32) F64 {
+    r F64 = 1
+    for i in range (e if e > 0 else -e) {
+        r = r * 2 if e > 0 else r / 2
+    }
+    return r
+}
+
+# x (finite, not NaN) to the nearest value with mant mantissa bits and the given bias, ties to even: the bits below the
+# sign, or -1 when it is past the format's largest normal exponent (the caller decides what overflow means)
+fn f8Encode(x F64, mant I32, bias I32, topExp I32) I32 {
+    if x == 0 { return 0 }
+    e I32 = 0
+    for f F64 = x, f >= 2, f = f / 2 { e++ }
+    for f F64 = x, f < 1, f = f * 2 { e-- }
+    if e < 1 - bias { e = 1 - bias }                     # a subnormal: the smallest exponent, no implied one
+    scaled F64 = x / f8Pow2(e) * f8Pow2(mant)            # the significand in units of the last mantissa bit
+    r I64 = I64(scaled)
+    rest F64 = scaled - F64(r)
+    if rest > 0.5 or (rest == 0.5 and r % 2 == 1) { r++ }
+    full I64 = I64(f8Pow2(mant))
+    if r >= full * 2 {                                   # rounded up to the next power of two
+        r = r / 2
+        e++
+    }
+    if r < full { return I32(r) }                        # subnormal (or rounded into the smallest normal: exact)
+    if e + bias > topExp { return -1 }
+    return ((e + bias) << mant) | I32(r - full)
+}
+
+# the bits below the sign back to a value
+fn f8Decode(b I32, mant I32, bias I32) F64 {
+    ex I32 = b >> mant
+    m F64 = F64(b & ((1 << mant) - 1))
+    if ex == 0 { return m * f8Pow2(1 - bias - mant) }
+    return (1 + m / f8Pow2(mant)) * f8Pow2(ex - bias)
+}
+
+type F8E4M3 struct(value F64) {
+    Bits mut U8 = f8E4M3Bits(value)
+}
+
+fn f8E4M3Bits(x F64) U8 {
+    if x != x { return 127 }                             # NaN: S.1111.111
+    sign I32 = 128 if x < 0 else 0
+    a F64 = -x if x < 0 else x
+    if a > 448 { return U8(sign | 126) }                 # saturates, infinity included
+    b I32 = f8Encode(a, 3, 7, 15)
+    if b < 0 or b == 127 { return U8(sign | 126) }       # S.1111.111 is NaN, so the top of the range is 1111.110
+    return U8(sign | b)
+}
+
+# the value it holds
+fn (f F8E4M3) F64() F64 {
+    b I32 = I32(f.Bits) & 127
+    if b == 127 { return 0.0 / 0.0 }
+    v F64 = f8Decode(b, 3, 7)
+    return -v if f.Bits >= 128 else v
+}
+
+fn (f F8E4M3) Str() String { return $f.F64() }
+
+type F8E5M2 struct(value F64) {
+    Bits mut U8 = f8E5M2Bits(value)
+}
+
+fn f8E5M2Bits(x F64) U8 {
+    if x != x { return 127 }                             # NaN: exponent all ones, a nonzero mantissa
+    sign I32 = 128 if x < 0 else 0
+    a F64 = -x if x < 0 else x
+    if a > 114688.0 { return U8(sign | 124) }           # beyond any rounding back down: infinity
+    b I32 = f8Encode(a, 2, 15, 30)
+    if b < 0 { return U8(sign | 124) }                   # rounded past the largest finite value: infinity
+    return U8(sign | b)
+}
+
+fn (f F8E5M2) F64() F64 {
+    b I32 = I32(f.Bits) & 127
+    if b == 124 { return (-1.0 if f.Bits >= 128 else 1.0) / 0.0 }
+    if b > 124 { return 0.0 / 0.0 }
+    v F64 = f8Decode(b, 2, 15)
+    return -v if f.Bits >= 128 else v
+}
+
+fn (f F8E5M2) Str() String { return $f.F64() }
+
+test "8-bit floats encode to their bit patterns and decode back" {
+    assert F8E4M3(1).Bits == 56 and F8E4M3(448).Bits == 126 and F8E4M3(0.5).Bits == 48 and F8E4M3(-2).Bits == 192
+    assert F8E4M3(0.001953125).Bits == 1 and F8E4M3(1000).Bits == 126 and F8E4M3(0).Bits == 0
+    assert F8E4M3(1.0625).F64() == 1 and F8E4M3(1.1875).F64() == 1.25     # ties to even, either way
+    assert F8E4M3(0.3).F64() == 0.3125 and $F8E4M3(1.5) == "1.5"
+    assert F8E5M2(1).Bits == 60 and F8E5M2(57344).Bits == 123 and F8E5M2(1.5).Bits == 62 and F8E5M2(1e9).Bits == 124
+    assert F8E5M2(-0.25).F64() == -0.25 and F8E5M2(0.0000152587890625).Bits == 1
+    n := F8E4M3(0.0 / 0.0).F64()
+    assert n != n
+}

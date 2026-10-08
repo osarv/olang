@@ -1339,6 +1339,12 @@ The prelude declares the complex numbers `Complex16`, `Complex32` and `Complex64
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
 (E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type.
 
+The prelude declares two 8-bit float formats as storage types: `F8E4M3` (4 exponent bits, bias 7, 3 mantissa bits;
+no infinity, one NaN, largest value 448, and a value beyond it saturating to +-448) and `F8E5M2` (5 exponent bits,
+bias 15, 2 mantissa bits; IEEE-style, with infinities and NaNs). Each is a struct holding its `Bits` (a `U8`), built
+from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
+it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
+
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
 
