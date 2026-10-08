@@ -1681,11 +1681,13 @@ static char* cgInterfaceValue(struct cgCtx* ctx, struct type ifaceT, struct oper
         fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", v, data);
     } else if (cgIfaceBoxesDescriptor(op->type)) {
         data = cgAddr(ctx, op);
-    } else if (typeIsByRef(op->type) || op->type.structMAlloc) {
-        data = cgValue(ctx, op); //already an address: a plain aggregate's storage, or the pointer a "&" holds
+    } else if (op->type.structMAlloc || (typeIsByRef(op->type) && OperandIsLvalue(op))) {
+        data = cgValue(ctx, op); //already an address: an lvalue aggregate's own storage, or the pointer a "&" holds
     } else if (OperandIsLvalue(op)) {
         data = cgAddr(ctx, op); //a scalar-shaped lvalue (a named primitive, a choice value) - borrow its slot
     } else {
+        //a temporary has no storage of its own: it is built in the target's scope. An aggregate temporary's value
+        //is a slot in this frame, which dies with it - so it is copied out, never pointed at (E12c)
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, ifaceT.scopeParam, ifaceT.scopeDepth);
         char storTy[256];
         llvmType(op->type, storTy, sizeof(storTy));
@@ -1693,7 +1695,10 @@ static char* cgInterfaceValue(struct cgCtx* ctx, struct type ifaceT, struct oper
         data = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n",
                 data, scopeVal, TypeGetSize(op->type));
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, v, data);
+        if (typeIsByRef(op->type))
+            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n",
+                    data, v, TypeGetSize(op->type));
+        else fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, v, data);
         cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, data);
     }
     char* w1 = cgNewTmp(ctx);

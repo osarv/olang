@@ -6902,7 +6902,15 @@ type IxOwn struct() {
 
 fn (o IxOwn&) At(i I64) I32 { return o.v }
 fn (o IxOwn&) Len() I64 { return 3 }
-fn (o IxOwn&) Iter() ArrayIter<I32> { return I32[100, 100].Iter() }
+# an override of Indexable's default Iter - the same signature (M19e), walking something else
+fn (o IxOwn&) Iter() IndexIter<I32> { return IndexIter<I32>(IxHundreds()) }
+
+type IxHundreds struct() {
+    v I32 = 100
+}
+
+fn (h IxHundreds&) At(i I64) I32 { return h.v }
+fn (h IxHundreds&) Len() I64 { return 2 }
 
 fn ixSum(c <C Indexable<<T>>>) <T> {
     t <T> = 0
@@ -8428,4 +8436,32 @@ CharBaked := charAll(1)
 test "T29h: Char is text's unit and String holds Chars" {
     assert charAll(WdMutable / 2000000000)
     assert CharBaked
+}
+
+# M19e: a type's own method overrides a default of a GENERIC interface through an interface value too (the default
+# was found by its decorated name, so the override was missed and the default ran)
+type OvSrc<T> interface {
+    Get() <T>
+}
+fn (s OvSrc<<T>>&) OvPlain(k I32) I32 { return 1 }
+type OvOne struct(v I32) {
+    v
+}
+fn (o OvOne&) Get() I32 { return o.v }
+fn (o OvOne&) OvPlain(k I32) I32 { return 2 }
+type OvOnes struct(n I32) {
+    left mut I32 = n
+}
+fn (o mut OvOnes&) Next() I32 ? Exhausted {
+    if o.left == 0 { error Exhausted.END }
+    o.left--
+    return 1
+}
+fn (o mut OvOnes&) Count(keep fn(x I32) Bool) I64 { return 99 }
+
+test "M19e: an override of a generic interface's default runs through an interface value" {
+    s OvSrc<I32>& = OvOne(WdMutable)
+    assert s.OvPlain(1) == 2
+    it Iterator<I32>& = OvOnes(3)
+    assert it.Count(fn(x) { return true }) == 99
 }

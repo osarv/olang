@@ -1380,9 +1380,12 @@ type satisfies both, the call is a compile-time error: it cannot choose.
 
 Such a method is the interface's **default**: a type with its own method of that name and signature (receiver
 mutability included) **overrides** it, and the override runs whichever way the method is called - directly on the
-value, or through an interface value holding it, whose dispatch (T31) reaches the type's own method. Through an
-interface value the call is dispatched, unless the default is generic in a type of its own beyond the interface's
-(`Fold`'s `U`): such a default is a family of functions rather than one, and the default itself runs.
+value, or through an interface value holding it, whose dispatch (T31) reaches the type's own method. Every default may be overridden
+this way. Two shapes are compile-time errors, reported at the type's method, for every interface the type satisfies
+among those M19e looks in: a method with a default's **name but another signature** (it could not answer both), and
+a method overriding a default that is **generic in a type of its own** beyond the interface's (`Fold`'s `U`) - such
+a default is a family of functions, with no dispatch-table slot to put an override in, so the override would hold on
+a direct call and not through an interface value.
 
 **M19b.** A method call's receiver need not be a name at all. Wherever a postfix `.` member access (§5.5)
 is followed by an argument list, everything to its left is the receiver: `items[i].Area()`, `f(x).Size()`.

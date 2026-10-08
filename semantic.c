@@ -1780,6 +1780,14 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
 static struct list instantiations;
 static int instantiationsCount(void) { return instantiations.len; }
 static struct instantiation* instantiationAt(int i) { return ListGetIdx(&instantiations, i); }
+//the generic function v was instantiated from, or v itself when it is no instantiation
+static struct var* genericOfInstance(struct var* v) {
+    for (int i = 0; i < instantiations.len; i++) {
+        struct instantiation* inst = ListGetIdx(&instantiations, i);
+        if (inst->specialized == v) return inst->generic;
+    }
+    return v;
+}
 //monomorphized copies of generic STRUCT types (G10/G16), kept as struct type* so their addresses are
 //stable: mod->types stores struct type BY VALUE, so adding to it during resolution would realloc and
 //invalidate every pointer already handed out, exactly as for mod->vars.
@@ -3591,6 +3599,60 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
     }
 }
 
+//M19e: a type's own method meeting a default of an interface it satisfies - an override, which must have the
+//default's signature (a same-named method with another one could not answer both), and only of a default that is one
+//function: one generic in a type of its own has no dispatch-table slot, so an override would hold on a direct call and
+//not through an interface value. Looked for in the interfaces the type's module sees: its own, its imports', the prelude's.
+static bool unifyIfaceReceiver(struct var* d, struct type iface, struct list* b);
+static void checkDefaultClashesIn(struct semaModule* mod, struct var* a, struct type concrete, struct semaModule* im) {
+    for (int i = 0; i < im->vars.len; i++) {
+        struct var* d = ListGetIdx(&im->vars, i);
+        if (!d->isMethod || !StrCmp(d->name, a->name) || d->type.bType != BASETYPE_FUNC) continue;
+        struct type* r = SemanticMethodReceiver(d);
+        if (!r || r->bType != BASETYPE_INTERFACE) continue;
+        if (im != mod && !isPublic(d->name)) continue;
+        struct type pattern = *r;
+        pattern.structMAlloc = false;
+        struct list b = ListInit(sizeof(struct typeBinding));
+        if (TypeIsGeneric(pattern) && !TypeUnify(pattern, concrete, &b)) continue;
+        struct type iface = TypeIsGeneric(pattern) ? TypeSubstitute(pattern, &b) : pattern;
+        if (TypeIsGeneric(iface) || !TypeSatisfiesInterface(concrete, iface, NULL)) continue;
+        struct list db = ListInit(sizeof(struct typeBinding));
+        if (!unifyIfaceReceiver(d, iface, &db)) continue;
+        bool closed = true;
+        for (int k = 0; k < d->type.typeParams.len && closed; k++)
+            closed = bindingGet(&db, *(struct str*)ListGetIdx(&d->type.typeParams, k)) != NULL;
+        if (!closed) { ErrMsgSemantic(a->tok, OVERRIDE_GENERIC_DEFAULT); return; }
+        struct type full = TypeSubstitute(d->type, &db);
+        struct var asMethod = *d; //the default's signature without its receiver, as an interface method reads
+        asMethod.type = full;
+        asMethod.type.vars = ListInit(sizeof(struct var));
+        for (int k = 1; k < full.vars.len; k++) ListAdd(&asMethod.type.vars, ListGetIdx(&full.vars, k));
+        asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type.refMut;
+        if (!InterfaceMethodImpl(concrete, &asMethod)) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
+    }
+}
+
+static void checkDefaultClashes(struct semaModule* mod) {
+    for (int i = 0; i < mod->vars.len; i++) {
+        struct var* a = ListGetIdx(&mod->vars, i);
+        struct type* ra = a->isMethod ? SemanticMethodReceiver(a) : NULL;
+        if (!ra || ra->bType == BASETYPE_INTERFACE || receiverIsBuiltin(*ra) || TypeIsGeneric(*ra)) continue;
+        struct type concrete = *ra;
+        concrete.structMAlloc = false;
+        concrete.refMut = false;
+        concrete.scopeParam = NULL;
+        int errs = ErrMsgGetNErrors();
+        checkDefaultClashesIn(mod, a, concrete, mod);
+        for (int k = 0; k < mod->imports.len && ErrMsgGetNErrors() == errs; k++)
+            checkDefaultClashesIn(mod, a, concrete, ((struct semaImport*)ListGetIdx(&mod->imports, k))->mod);
+        for (int k = 0; k < preludeModules.len && ErrMsgGetNErrors() == errs; k++) {
+            struct semaModule* pm = *(struct semaModule**)ListGetIdx(&preludeModules, k);
+            if (pm != mod) checkDefaultClashesIn(mod, a, concrete, pm);
+        }
+    }
+}
+
 void checkMethodOverloads(struct semaModule* mod) {
     for (int i = 0; i < mod->vars.len; i++) {
         struct var* a = ListGetIdx(&mod->vars, i);
@@ -4548,7 +4610,9 @@ struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct
     asMethod.type.vars = ListInit(sizeof(struct var));
     for (int i = 1; i < d->type.vars.len; i++) ListAdd(&asMethod.type.vars, ListGetIdx(&d->type.vars, i));
     asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type.refMut;
-    struct var* own = VarGetMethod(concrete.owner, d->name, concrete);
+    //an instantiated default (a generic interface's) carries a decorated name - the type's own method has the plain one
+    asMethod.name = genericOfInstance(d)->name;
+    struct var* own = VarGetMethod(concrete.owner, asMethod.name, concrete);
     if (own && own->owner && InterfaceMethodImpl(concrete, &asMethod) == own) return own;
     if (own && own->type.typeParams.len && InterfaceMethodImpl(concrete, &asMethod)) return InterfaceMethodImpl(concrete, &asMethod);
     struct var* generic = d->origin && d->origin != d ? d : d;
@@ -8595,7 +8659,8 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         struct list ds = ListInit(sizeof(struct var*));
         SemanticInterfaceDefaults(recvType, &ds);
         for (int k = 0; k < ds.len; k++) {
-            if (*(struct var**)ListGetIdx(&ds, k) != call->readVar) continue;
+            //one default instantiated twice for one generic interface is two vars - matched by the default they copy
+            if (genericOfInstance(*(struct var**)ListGetIdx(&ds, k)) != genericOfInstance(call->readVar)) continue;
             call->isIfaceDispatch = true;
             call->ifaceMethodIdx = recvType.vars.len + 1 + k;
             call->ifaceType = recvType;
@@ -12926,6 +12991,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     //M21: "is a method" is a fact about a resolved first parameter, so a name shared by several
     //declarations can only be judged once every signature in every module exists
     for (int i = 0; i < allModules.len; i++) checkMethodOverloads(*(struct semaModule**)ListGetIdx(&allModules, i));
+    for (int i = 0; i < allModules.len; i++) checkDefaultClashes(*(struct semaModule**)ListGetIdx(&allModules, i)); //M19e
     struct list inits = SemanticInitOrder();
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));

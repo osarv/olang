@@ -2773,6 +2773,17 @@ Go through this for every change to what olang means - a rule added, revised or 
   of one repository share nothing that could conflict. Updating is deleting the line; no `-update` flag yet. The
   remote check now moves the branch under a locked build, clears the cache and refetches the locked commit, and
   updates by deleting a line - shown by remote.olang's assert, which compile-time evaluation then proves false.
+- **Default methods settled (M19e, 2026-10-08, the user: "do a)", "outside", "make it an error").** One kind: every
+  method declared with an interface receiver is a default any satisfying type may override (no fixed helpers, no
+  `default` keyword); bodies stay outside the interface. A same-named method with another signature, and an override
+  of a default generic in its own types (Fold's U, which has no table slot), are errors at the type's method, checked
+  against the interfaces the type's module sees (`checkDefaultClashes`) - the first had crashed LLVM with a duplicate
+  symbol. **Two pre-existing bugs found**: an override of a GENERIC interface's default never ran through an
+  interface value (the default was looked up by its instantiated, decorated name `Plain$I32`, and the dispatch was
+  matched by var pointer, which two instantiations of one default never share); and a struct temporary converted to
+  an interface value was pointed at in the converting function's stack frame - `IndexIter<I32>(IxHundreds())`
+  returned from a method read freed stack (the S9d test, once its Iter had the right signature). Fixed: copied into the
+  target's scope, as a scalar temporary already was.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

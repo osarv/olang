@@ -1,0 +1,12 @@
+# check: fail does not have the default's signature
+# M19e: a same-named method with another signature than a default of an interface the type satisfies is an error
+type Shape interface {
+    Area() I32
+}
+fn (s Shape&) Twice() I32 { return s.Area() * 2 }
+type Sq struct(n I32) {
+    n
+}
+fn (q Sq&) Area() I32 { return q.n * q.n }
+fn (q Sq&) Twice(k I32) I32 { return k }
+fn main() ? { }
