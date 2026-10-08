@@ -28,6 +28,18 @@ entry with its history, is in git at commit bc9f9c9.
    would need every scope binding of default and result to agree. Want it?
 6. Split on an empty separator splits into single bytes (Go's behaviour) rather than being an error (Python's).
 
+**Self-hosting prep (asked 2026-10-08, the user: "the compiler should go self-hosted - any real features to add
+first?"). Recommended, in this order; nothing built yet:**
+- Blockers, all verified missing: program arguments and environment (main takes no parameters and an extern cannot
+  return a pointer - rec `os.Args()`/`os.Env(name)` over two runtime functions copying into a buffer, main unchanged);
+  creating/writing files and file-system calls (open has no mode, no WriteFile/stat/mkdir/readlink - std work);
+  a float's exact bits for LLVM constants (no reinterpretation exists - rec value-level `x.Bits() U64` /
+  `F64.FromBits(u)`, a bitcast, sound under T36); `List.At`/`SetAt` plus a text builder (std).
+- Worth having before the port, because they shape its code: labeled `break`/`continue`; `match` as an expression
+  and several values per `case`. Later or optional: `case` guards, nested patterns, `defer`.
+- Method: the C compiler frozen as stage 0; port module by module; acceptance = identical normalized IR from both
+  compilers over the corpus, then the stage-1 compiler rebuilding itself identically. 26.5k lines of C to port.
+
 **My calls, all built, flagged and never confirmed** - in effect as built until the user says otherwise:
 7. Today: `-u` updates every repository the build reaches (one alone = delete its line) and keeps lock lines for
    repositories not reached; `-d` (debug) kept beside `-D` (define); the T6b cleanup kept six conversions on purpose;
