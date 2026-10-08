@@ -26,7 +26,7 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** (numbers 2 and 9 are unused since the 2026-10-08 renumbering; my calls keep 10 onward)
+**QUESTIONS for the user** (number 2 is unused since the 2026-10-08 renumbering; my calls keep 10 onward)
 1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
    scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
 3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
@@ -44,6 +44,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
 8. Expressions built only from literals do not adapt (`f F32 = 0.5 * 2.0` and `b U8 = 1 + 2` are errors; `f32 < 1.0/3.0`
    compares in F64). Go and Rust adapt such constants. Default: no adapting. Rec: adapt - a literal-only expression is
    computed while compiling and then fits like one literal (an error only if its value does not fit).
+9. `os.Exit(code)`: B5 says a process ends with exactly two statuses, but a self-hosted `-i` must pass on a program's
+   status (134 after an abort), and `extern fn exit` already works in any program (X7). Default: none in std.
+   Rec: add `os.Exit(code I32)` to std, documented as the one way past B5; `main` keeps its two outcomes.
 
 **OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later
@@ -90,6 +93,21 @@ installed - built-then-installed temps, null-initialized cursors).
 45. `Verbose := false; if Verbose` in source is an error (S8a) - configuration knobs belong in `-D`.
 46. A literal whose constructor rejects it is a compile error, with no `try` (T29d).
 47. The new "an expression built from literals does not flow" message (T6a) covers integers too (`b U8 = 1 + 2`).
+std/os (X6/B3f, 8fb6afd):
+48. Names: `Args`, `Env`, `ReadFile`, `WriteFile`, `Create`, `Open`, `Close`, `Stat`, `FileInfo` (`Kind`/`Size`/
+    `ModTime`), `FileKind` (FILE/DIR/OTHER), `Exists`, `IsDir`, `MkDir`, `MkDirAll`, `Remove`, `Rename`, `ReadLink`,
+    `RealPath`, `Cwd`, `ReadDir` (not `ListDir`; `Cwd` not `WorkDir`).
+49. `Env` of an unset variable fails with the default error (as `Map.Get` on a miss), not `OsError.NOT_FOUND`.
+50. `OsError` has seven words (adds EXISTS, DENIED, NOT_DIR, IS_DIR, NOT_EMPTY); EPERM and EACCES are both DENIED.
+51. `Stat` goes through a runtime function filling three numbers, laid out by the compiler's own C headers - sound
+    while the target is the host; cross-compilation would revisit it.
+52. `ModTime` is one I64 of nanoseconds since the epoch (good to 2262), not seconds plus nanoseconds.
+53. `Args()[0]` is the program's name (C, Go, Python); under `-i` it is the source file.
+54. Under `-i` everything after the file goes to the program, so `olang -i f.olang -r` passes `-r` to it.
+55. `Create`/`Open` return a raw `I32` descriptor (as std/io), not a `File` type with a destructor.
+56. `Exists`/`IsDir` answer with a Bool (a yes/no question, not a missing value); `Stat` follows symlinks; no lstat.
+57. `MkDirAll` reports a file in the way as `NOT_DIR` (Go's rule); files are created 0666, directories 0777, both
+    reduced by the umask.
 
 **ON HOLD (the user: "hold it off"):** passing arrays by value (dropping D9a for parameters). Returning one by value
 already exists (T7b).

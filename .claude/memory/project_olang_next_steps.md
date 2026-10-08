@@ -14,8 +14,10 @@ this file is the work order and the future work nobody owes an answer on.
 
 **Now: self-hosting prep, decided by the user 2026-10-08** (details in the ledger). Items 1-4, 5 (minus the
 expression form) and 6 are being built in parallel by agents in worktrees (/home/user/wt/*, branches wt-*), merged by me:
-1. `os.Args()` / `os.Env(name)` over runtime functions; `main` unchanged.
-2. Creating and writing files, file-system calls (stat, mkdir, readlink) in std.
+1. `os.Args()` / `os.Env(name)` over runtime functions; `main` unchanged. DONE 8fb6afd (X6).
+2. Creating and writing files, file-system calls (stat, mkdir, readlink) in std. DONE 8fb6afd. Still missing for the
+   port: an exit status other than 0/1 (ledger 9), capturing a command's output (Run into a file then ReadFile), append
+   mode, lstat, permissions, recursive remove.
 3. Value-level bits for F16, BF16, F32, F64 (`x.Bits()`, `F64.FromBits(u)` - spelling may change, see the agent's call).
 4. `List.At`/`SetAt` and a text builder - without making loops stop using iterators (S9d: a type's own Iter wins);
    also fix `ListIter`, which walks the chunk list from the head for every element (its comment's reason, satisfying
