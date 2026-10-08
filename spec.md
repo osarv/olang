@@ -325,8 +325,9 @@ legal but useless, and exists only because the grammar constructing a named type
 **T5.** `Byte`, `Int32`, `Int64` are the integer types; `Float32`, `Float64` are the float types;
 together these five are the numeric types. `Bool` is not numeric.
 
-**T6.** There is no implicit conversion between any two distinct types: never between two non-numeric
-types, and never between two numeric types unless one side is a literal. A **numeric literal** (§5.1
+**T6.** There is no implicit conversion between any two distinct types except the two T6b states - a number
+widening within its family, and a declared type flowing into its base - and the adaptation of a literal. A
+**numeric literal** (§5.1
 E4 — a token literal, or one negated
 by a single leading unary `-`, §5.2 E11) is the one exception: it implicitly **adapts** to whatever
 numeric type it is used against, wherever that type would otherwise have to match exactly - an
@@ -339,8 +340,21 @@ float literal into an integer - but it is not restricted to widening either: `x 
 `b == 'a'` are as valid as `n Int64 = 1`, because the literal has no representation of its own yet and
 the value written fits. Where both operands of a same-type-requiring binary operator are literals of
 differing numeric types, the narrower adapts to the wider (`Byte` < `Int32` < `Int64` < `Float32` <
-`Float64`), subject to the same representability rule. A non-literal value of a different numeric type,
-in either direction, requires an **explicit** conversion instead - see §5.12 E26.
+`Float64`), subject to the same representability rule. A non-literal value of a different numeric type
+requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
+
+**T6b (numbers flow toward their base).** The numeric types form two families, each ordered from the more
+specific type to its **base**: `Byte` → `Int32` → `Int64`, and `Float32` → `Float64`. A value flows implicitly
+into any type further along its own family - the base can hold every value of the types before it, so nothing is
+lost - and a declared type over a numeric type (T29) flows into that type and on along its family. Nothing flows
+the other way, and nothing between the families: an `Int64` into an `Int32`, an `Int32` into a `Float64` and an
+`Int32` into a declared `Meters` are each written as a conversion (E26, or the declared type's own, T29/T29d).
+Where a value flows, it is converted at that point - sign-extended, zero-extended for `Byte`, or extended to the
+wider float - wherever a value fits a target (E12: an initializer, an assignment, an argument, a returned value).
+Two numeric operands of an operator requiring one type (E6, E8, E9, E10) **meet** when one flows into the
+other's type, and the operation is then the other's: `Int32 + Int64` is an `Int64`, `Byte < Int32` compares two
+`Int32`s, and a `Meters` beside an `Int32` is an `Int32`. Two that neither flows into - two declared types over one
+base, an integer and a float - do not meet, and that is a compile-time error.
 
 **T6a.** Where nothing adapts it, a literal's own type is: `Int64` for an integer literal whose value is
 not representable in `Int32` and `Int32` for every other integer literal, `Float32` for a float literal,
@@ -1479,8 +1493,8 @@ operators groups left-to-right):
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
 exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
 
-**E6.** `+ - * / %` require both operands to be the same numeric type (T5, T27) and produce that
-type, subject to T6's own numeric-literal adaptation. `%` requires both operands to be integer types.
+**E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
+type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
 Mixing distinct numeric types with neither side a literal (or with a literal whose written value the
 other side's type cannot represent) is a compile-time error - see §5.12 E26 for the explicit conversion this
 requires instead.
@@ -1522,8 +1536,8 @@ result depends on both.
 tighter than `and`/`or`, so an expression reads as the sentence it spells: `not a == b` is `not (a == b)`,
 and `not a and b` is `(not a) and b`.
 
-**E8.** `& | ^` require both operands to be the same integer type (T5) and produce that type, subject
-to T6's own numeric-literal adaptation; `~` is unary and requires one integer operand, producing that
+**E8.** `& | ^` require both operands to be of one integer type (T5) and produce that type, subject
+to T6's numeric-literal adaptation and T6b's meeting at the wider; `~` is unary and requires one integer operand, producing that
 type. `<< >>` each require their *shifted* (left) operand and their *shift-amount* (right) operand to
 independently be integer types, but the two need not be the same type as each other (T6's adaptation is
 therefore never relevant between them specifically - there is no "match" requirement to adapt into);
@@ -1539,8 +1553,8 @@ This is not merely undefined in the abstract: the result is architecture-depende
 to the low bits of the operand width, so `1 << 32` yields `1`; other targets yield `0` or trap. A program
 that shifts out of range has no portable meaning.
 
-**E9.** `< <= > >=` require both operands to be the same numeric type (subject to T6's own
-numeric-literal adaptation) and produce `Bool`; there is no ordering on any non-numeric type.
+**E9.** `< <= > >=` require both operands to be of one numeric type (subject to T6's numeric-literal
+adaptation and T6b's meeting at the wider) and produce `Bool`; there is no ordering on any non-numeric type.
 
 **E10.** `== !=` accept operands of any single type `T27`-matching pair (subject to T6's own
 numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. What `==` compares is fixed by
@@ -1932,9 +1946,9 @@ references, or a result borrowed from a parameter (O13) — is a compile-time er
 **E26.** `TypeName(x)`, where `TypeName` is one of the five numeric primitive types (T5: `Byte`,
 `Int32`, `Int64`, `Float32`, `Float64`) and `x` is a single expression of any numeric type, converts
 `x`'s *value* to `TypeName` and produces a value of that type - the explicit counterpart to T6's
-implicit literal-only adaptation, covering everything a numeric literal's own adaptation does not: a
-non-literal value crossing numeric types at all (in either direction), a literal whose written value the
-target type cannot represent, and any float-to-integer conversion at all (`Float64` → `Float32`,
+literal adaptation and T6b's widening, covering everything they do not: a value moving toward the narrower end
+of its family or across families, a literal whose written value the target type cannot represent, and any
+float-to-integer conversion at all (`Float64` → `Float32`,
 `Int64` → `Int32`/`Byte`, a float type → an integer type). Converting a value to its own type is accepted, producing that same value
 unchanged. Exactly one argument is required; anything else (zero, two or more, or a non-numeric
 argument) is a compile-time error. `TypeName` in this position is never shadowable by another
@@ -3845,7 +3859,9 @@ that matching while any other argument binds the same variable: the variable is 
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
 literal operands (§5.4). So `Pick(v, 7)` with `v Int64` instantiates `Pick` at `Int64`, and `Pick(1, 2.5)`
-at `Float64`.
+at `Float64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
+at `Int64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 
 Written text (a string literal, a `$` rendering or a join, E11a/E11b) is treated the same way: it binds nothing
 while another argument binds the variable, and is then built as a temporary of the bound type - so

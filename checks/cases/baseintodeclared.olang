@@ -1,0 +1,7 @@
+# check: fail a number flows implicitly only into a wider type
+# T6b/T29: a value flows to its base, never into a declared type over it - that is the constructor's (Meters(x))
+type Meters Int32
+fn main() ? {
+    a Int32 = 3
+    m Meters = a
+}

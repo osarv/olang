@@ -1,0 +1,9 @@
+# check: fail these two numbers do not meet
+# T6b: two declared types over one base meet in an operator only if one flows into the other - neither does here
+type Meters Int32
+type Feet Int32
+fn main() ? {
+    m := Meters(3)
+    f := Feet(3)
+    assert m < f
+}

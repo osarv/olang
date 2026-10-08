@@ -8265,3 +8265,36 @@ test "E11c: $ renders through a declared Str, wherever the value sits" {
     assert $n == "null"
     assert $StrCents(StrCount) == "250c"
 }
+
+# T6b: a number flows implicitly into a wider type of its own family - Byte into Int32 into Int64, Float32 into
+# Float64 - and a declared type into its base; two numbers in an operator meet at the wider; a generic variable a
+# number bound widens to a later, wider one. Run while compiling (WidenBaked, K2) and at run time.
+type WdMeters Int32
+WdMutable mut Int32 = 2000000000
+fn wdWide(x Int64) Int64 { return x }
+fn wdByte(b Byte) Int64 { return b }
+fn wdBig(a <T>, b <T>) <T> { return a if a > b else b }
+fn wdAll(a Int32) Bool {
+    b Int64 = 3000000000
+    c Int64 = a + b
+    d Int64 = a
+    d += a
+    by Byte = 200
+    i Int32 = by
+    f Float32 = 1.5
+    g Float64 = f
+    m := WdMeters(3)
+    n Int64 = m
+    l := List<Int32>()
+    l.Push(by)
+    sites Bool = c == Int64(a) + 3000000000 and d == Int64(a) * 2 and wdWide(a) == Int64(a) and wdByte(by) == 200
+    ops Bool = i == 200 and a < b and by < a and g + f == 3.0 and m + a == a + 3 and m < b and n == 3
+    generic Bool = wdBig(a, b) == 3000000000 and wdBig(b, a) == 3000000000 and l.Len() == 1
+    return sites and ops and generic
+}
+WidenBaked := wdAll(2000000000)
+
+test "T6b: numbers widen within their family, and meet at the wider" {
+    assert wdAll(WdMutable)
+    assert WidenBaked
+}

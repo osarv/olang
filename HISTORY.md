@@ -7658,3 +7658,18 @@ from their original form.
   the root's, the evaluator moves the error to the root when its own clauses pass on it, and the dead propagation
   past both became `unreachable` (`cgClausesCoverAll`) after the first build emitted `insertvalue i32` in an
   infallible function. A new check, `nextflag`, rejects a `(T, Bool)` Next with a message saying what Next gives.
+
+- **T6b: numbers widen within their family (2026-10-08).** Stage 2 of the casting plan, the part the user decided
+  outright in the casting talk ("only the lossless derivations are allowed. int64->int32 is not fine. int32->int64 is
+  since it loses nothing"; "int64 is the base of int32"; "this flow can be implicit (should be)"; "operators make
+  sense if the operator produces an Int64"). The fit check gained one rule ahead of type identity: a non-literal
+  number whose family rank is below the target's becomes an `OPERATION_NUMERIC_CONVERT` of itself, rewritten in
+  place so whichever statement holds the operand holds the conversion - which is why no assignment, argument,
+  return or compound-assignment site needed touching. `OperandBinary` meets two numbers at the wider the same way,
+  counting a declared type's flow to its base. Inference: G9a already widened literals, and values now widen a
+  binding a number made through a bare type variable (a receiver's binding is left alone, G9b - otherwise
+  `List<Int32>.Push(i64)` would retype the list). The two "doesn't match" messages for numbers became T6b ones
+  naming the fix, and two old checks' headers followed. Left open, and asked: whether `Int32(i64)` should abort out
+  of range - the ledger had recorded it as the user's decision, but the transcript shows it was my proposal, and
+  it conflicts with the user's earlier "a runtime check that costs per operation should never be done", which
+  removed the float-to-int check after it measured 3.3x on a loop.

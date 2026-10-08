@@ -4160,6 +4160,7 @@ bool scopeCanFlowInto(struct var* func, struct var* srcScope, int srcDepth, stru
 enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
+    TYPE_FIT_NUMBER,        //T6b - two numeric types, the value's not flowing into the target's
     TYPE_FIT_INTERFACE,     //E12d - the value's type does not supply every method the interface declares
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
     TYPE_FIT_SCOPE_OWN,     //O10d: own into a named scope. Rejected like the above, but told apart because
@@ -4625,6 +4626,9 @@ bool SemanticCallMatches(struct type t, struct type fnType) {
     return true;
 }
 
+static int numericFamilyRank(struct type t, int* family);
+bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
+static void operandWidenInPlace(struct operand* op, struct type t);
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
@@ -4687,6 +4691,17 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         enum typeFit r = OperandFitsType(func, op, target);
         if (r != TYPE_FIT_OK) op->type = saved;
         return r;
+    }
+    //T6b: a numeric value flows into a wider type of its own family - it becomes that widening, losing nothing
+    if (!op->isLiteral && NumericFlows(op->type, target, false)) {
+        operandWidenInPlace(op, target);
+        return TYPE_FIT_OK;
+    }
+    {
+        int fs = 0, fd = 0;
+        if (!op->isLiteral && !TypeIsSame(target, op->type) && numericFamilyRank(op->type, &fs) >= 0
+                && numericFamilyRank(target, &fd) >= 0 && !(op->type.owner && !target.owner && op->type.bType == target.bType))
+            return TYPE_FIT_NUMBER;
     }
     if (TypeIsSame(target, op->type)) {
         //a struct or compile-time-length array is reference-shaped only when explicitly "&"-marked (structMAlloc) - a
@@ -4876,6 +4891,7 @@ void reportTypeFit(enum typeFit fit, struct token tok) {
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) ErrMsgSemantic(tok, ELEM_REF_SHAPE_MISMATCH);
     else if (fit == TYPE_FIT_INTERFACE) ErrMsgSemantic(tok, interfaceFitMsg());
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
+    else if (fit == TYPE_FIT_NUMBER) ErrMsgSemantic(tok, NUMBER_DOES_NOT_FLOW);
     else if (fit == TYPE_FIT_CTOR) ErrMsgSemantic(tok, PRIM_CTOR_LITERAL);
     else if (fit == TYPE_FIT_READ_ONLY) ErrMsgSemantic(tok, READ_ONLY_TO_WRITABLE);
 }
@@ -5418,6 +5434,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     //type) sees an ordinary non-generic function: the instantiation IS one.
     if (func->type.typeParams.len != 0) {
         struct list bindings = ListInit(sizeof(struct typeBinding));
+        struct list numBound = ListInit(sizeof(struct str)); //T6b: variables a numeric argument bound
         bool ok = args.len == func->type.vars.len;
         //G9a: a numeric literal has no type worth defending (T6), so it binds nothing while any other
         //argument can: every non-literal is unified first, and a literal reaching an already-bound
@@ -5433,7 +5450,16 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             //G9b: a variable an earlier argument - a method's receiver, say - already bound is no longer
             //inferred from this one: the argument is checked against the bound type as in any call, so E12's
             //conversions apply ("m.Get(key)" borrows a String value for a String& key)
-            if (paramT.bType == BASETYPE_TYPEVAR && bindingGet(&bindings, paramT.name)) continue;
+            if (paramT.bType == BASETYPE_TYPEVAR && bindingGet(&bindings, paramT.name)) {
+                //T6b: a variable a number bound widens to a later number of its family that the first flows into -
+                //"max(i32, i64)" is max at Int64, as "i32 + i64" is an Int64. Never one a receiver bound (G9b).
+                bool byNumber = false;
+                for (int k = 0; k < numBound.len && !byNumber; k++) byNumber = StrCmp(*(struct str*)ListGetIdx(&numBound, k), paramT.name);
+                struct type* bt = bindingGet(&bindings, paramT.name);
+                if (byNumber && !arg->isLiteral && NumericFlows(*bt, arg->type, true)) *bt = TypeVanilla(arg->type.bType);
+                continue;
+            }
+            if (paramT.bType == BASETYPE_TYPEVAR && !arg->isLiteral && TypeIsNumeric(arg->type)) ListAdd(&numBound, &paramT.name);
             if (!TypeUnify(paramT, arg->type, &bindings)) ok = false;
         }
         //G9a: written text adapts as a numeric literal does - "m.Put("apple", 1)" on a Map<String&, Int32> is the
@@ -6204,6 +6230,39 @@ struct binOpRule binOpRules[] = {
     [OPERATION_DIV]       = {REQ_NUMERIC, true,  false},
 };
 
+//T6b: a numeric type's place in its family - integers Byte < Int32 < Int64, floats Float32 < Float64 - or -1
+static int numericFamilyRank(struct type t, int* family) {
+    if (t.structMAlloc) return -1;
+    switch (t.bType) {
+        case BASETYPE_BYTE: *family = 0; return 0;
+        case BASETYPE_INT32: *family = 0; return 1;
+        case BASETYPE_INT64: *family = 0; return 2;
+        case BASETYPE_FLOAT32: *family = 1; return 0;
+        case BASETYPE_FLOAT64: *family = 1; return 1;
+        default: return -1;
+    }
+}
+
+//T6b: whether a value of src flows into dst implicitly - dst is a built-in numeric type of src's family, wider, or
+//src's own base when src is declared over it (T29). Never into a declared type: that is its constructor's (T29d).
+bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase) {
+    if (dst.owner) return false;
+    int fs = 0, fd = 0;
+    int rs = numericFamilyRank(src, &fs), rd = numericFamilyRank(dst, &fd);
+    if (rs < 0 || rd < 0 || fs != fd) return false;
+    return rs < rd || (sameWidthToBase && rs == rd && src.owner);
+}
+
+//T6b: op becomes the widening of itself to t, in place, so whatever holds it now holds the conversion
+static void operandWidenInPlace(struct operand* op, struct type t) {
+    struct operand* inner = MallocOrCrash(sizeof(struct operand));
+    *inner = *op;
+    struct type to = TypeVanilla(t.bType);
+    to.scopeDepth = op->type.scopeDepth;
+    struct operand* conv = OperandNumericConversion(to, inner, op->tok);
+    *op = *conv;
+}
+
 struct operand* OperandBinary(struct operand* a, struct operand* b, enum operation opType, struct token tok) {
     //D16a: a lambda compared with a function value is written against that value's type
     FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
@@ -6256,6 +6315,12 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
             lit->type = other->type;
         }
     }
+    //T6b: two numeric values of one family meet at the wider - the narrower widened, losing nothing, so an Int32 and
+    //an Int64 add as Int64s; a declared type meets its base as the base. Two that neither flows into stay an error.
+    if (rule.sameType && !a->isLiteral && !b->isLiteral && !TypeIsSame(a->type, b->type)) {
+        if (NumericFlows(a->type, b->type, true)) operandWidenInPlace(a, b->type);
+        else if (NumericFlows(b->type, a->type, true)) operandWidenInPlace(b, a->type);
+    }
     //E8a: a constant shift amount out of range is settled here too, same split
     if ((opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R) && b->isLiteral && TypeIsInt(b->type)
             && TypeIsInt(a->type)) {
@@ -6279,7 +6344,8 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     bool bOk = operandMeetsReq(b, rule.require);
     if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
     if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
-    if (rule.sameType && aOk && bOk && !TypeIsSame(a->type, b->type)) ErrMsgSemantic(tok, OPERANDS_NOT_SAME_TYPE);
+    if (rule.sameType && aOk && bOk && !TypeIsSame(a->type, b->type))
+        ErrMsgSemantic(tok, TypeIsNumeric(a->type) && TypeIsNumeric(b->type) ? NUMBERS_DO_NOT_MEET : OPERANDS_NOT_SAME_TYPE);
     return op;
 }
 

@@ -2680,6 +2680,21 @@ Go through this for every change to what olang means - a rule added, revised or 
   a path past both that cannot happen is `unreachable`, not a propagation (which in a function declaring no errors was
   invalid IR). Speed unchanged: an iterator helper, the same through an interface value, and a hand loop all 0.07s
   on 20M x 20.
+- **Numbers flow toward their base (T6b, 2026-10-08, stage 2 of the casting plan; the user: "only the lossless
+  derivations are allowed", "Int64 is the base of Int32", "this flow can be implicit (should be)", and that an
+  operator "makes sense if it produces an Int64").** Two families, `Byte` -> `Int32` -> `Int64` and `Float32` ->
+  `Float64`; a value flows implicitly toward the base, and a declared type flows into its base and on. This
+  reverses T6's "no implicit conversion between numeric types". Nothing flows narrower, across families, or into a
+  declared type (its constructor, T29/T29d). Two numbers in an operator **meet** when one flows into the other's
+  type, at the other's: `Int32 + Int64` is `Int64`, `Meters + Int32` is `Int32`, `Meters < Feet` and `Int32 < Float64`
+  are errors. Implemented as one rule in the fit check (`NumericFlows`) that rewrites the operand **in place** into
+  the widening conversion, so every fit site - initializer, assignment, argument, return, compound assignment - gets
+  it with no site of its own, plus the same in `OperandBinary`; codegen already lowered the conversions
+  (zext for `Byte`). **Generic inference followed (my extension, flagged)**: a variable a number bound through a
+  bare `<T>` widens to a later, wider argument of its family (`max(i32, i64)` is `max` at `Int64`, either order),
+  never one a receiver fixed (G9b). New messages name T6b and say to write `T(x)`. Not done here: removing the
+  now-redundant `Int64(x)` conversions in the corpus (harmless), and narrowing (`Int32(i64)`) is unchanged - it
+  still wraps, pending the user's answer on whether it should check.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

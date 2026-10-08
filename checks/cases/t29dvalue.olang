@@ -1,4 +1,4 @@
-# check: fail doesn't match the target's declared type
+# check: fail a number flows implicitly only into a wider type
 # T29d: only a literal adapts to a type with a constructor - a typed value enters through the constructor
 type Percent Int32(v mut Int32) {
     if v > 100 { v = 100 }
