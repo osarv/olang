@@ -93,7 +93,7 @@ Open, in no fixed order - the user picks:
    a maybe-reference `<T>` (`List.Push`, `ToArray`) cannot write one at all. Corpus had 8 obligated functions
    (2026-10-05). Revisit when there is more code using the no-scope-names model.
 
-5. **STAGE 1 BUILT 2026-10-08 as `-i` (B3e, `1eac824`; the user: "Do -i for the interpreter").** Was: deferred, definitely wanted (user, 2026-10-07): `olang -run` - expose comptime.c as an interpreter. Agreed shape
+5. **STAGE 1 BUILT 2026-10-08 as `-i` (B3e, `e0f5d00`; the user: "Do -i for the interpreter").** Was: deferred, definitely wanted (user, 2026-10-07): `olang -run` - expose comptime.c as an interpreter. Agreed shape
    (my proposal, not yet confirmed in detail): stage 1 = mutable globals/writes, done/fail/abort, no step budget,
    extern calls via dlsym+shim or libffi (gives I/O); stage 2 = scopes + destructors + memory reclamation; stage 3 =
    spawn/join (threads; sequential would deadlock chan tests). Uses: fast edit-run, scripts, faster tests, later REPL.
@@ -103,8 +103,8 @@ Open, in no fixed order - the user picks:
 See [[feedback-surface-and-fix-bugs]].
 
 **2026-10-08 (cloud session, branch claude/github-environment-setup-ftu9va, all pushed):** T6b corpus widening
-cleanup + a fix for a widened `try (...)` losing its checks (`6a15c6e`); M23c `-update` (`a447ab6`, now `-u`);
-B1 one-character flags `-r -d -u` (`ff67eb5`); B3e `-i` stage 1 (`1eac824`): main run by the evaluator, externs
+cleanup + a fix for a widened `try (...)` losing its checks (`079cf73`); M23c `-update` (`e337c92`, now `-u`);
+B1 one-character flags `-r -d -u` (`db1515c`); B3e `-i` stage 1 (`e0f5d00`): main run by the evaluator, externs
 through libffi (compiler links -lffi -ldl), done/fail/aborts as the built program. Stage 1 limits: no destructors
 (so runner.olang stops at shared.olang's KtFromDropped), no tasks, nothing freed (~6KB per loop iteration; 100k
 iterations 1.5s/630MB). NEXT for -i, the user to choose: (a) temporary arena reset per statement + free locals at

@@ -213,7 +213,7 @@ read-only), (2) narrow rule - follow call results/locals/mut params, not stores 
 2026-10-07: T25b/T25c permission-in-types BUILT (user's design). Flagged, unanswered: built results writable by
 default; typed locals take a read-only initializer's permission; array literals adapt; shallow (C-like); Trim/Split
 results read-only (no permission polymorphism). NEXT: static (rodata) literals for read-only targets - the original goal.
-2026-10-07: T25d static literals BUILT (a00636b): literal -> read-only reference = constant data; immutable global
+2026-10-07: T25d static literals BUILT (cb5dc87): literal -> read-only reference = constant data; immutable global
 plain data = constant. Open from the to-do: tuples reconsideration; inferred obligations revisit.
 2026-10-07: user: KEEP SHALLOW permissions (decided). Built-result-writable / literal adaptation / no permission
 polymorphism not objected to after explanation.
@@ -225,7 +225,7 @@ function type cannot carry a marker (and `fn(...) Int32&f` would bind to the res
 spelling for function types (parenthesized?), or an obligation-style check at the call. Not fixed.
 2026-10-07: fn-value-return gap RESOLVED (user chose obligation option): O14a built. New small gap found, not fixed:
 calling a call's result directly (`id(dbl)(3)`) doesn't parse - postfix call only for methods (M19b). -> FIXED same day (E13b).
-2026-10-07: G9c BUILT (a525cb1) - inference through satisfaction (item (a) above is closed). ASKED, the rest of "3)s":
+2026-10-07: G9c BUILT (7e8be08) - inference through satisfaction (item (a) above is closed). ASKED, the rest of "3)s":
 (1) Iterable: rec = still no Iterable interface; instead give arrays an Iter() in the prelude so generic code takes
 Iterator<<T>>& and callers write xs.Iter() uniformly. (2) Comprehensions: rec `[x * 2 for x in a if x > 3]`, element type
 from the expression, sources = arrays and ranges only at first (filter: allocate source length, shrink len - no copy);
