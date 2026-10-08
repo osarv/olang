@@ -3485,8 +3485,13 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     char* cap = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = select i1 %%rd.measure, i64 0, i64 64\n", cap);
     char* k = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s, %s %s)\n",
-            k, isFloat ? "f64" : u64 ? "u64" : "i64", p, cap, isFloat ? "double" : "i64", wide);
+    if (isFloat) {
+        enum floatKind fk = t.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : t.bType == BASETYPE_F16 ? FLOAT_KIND_F16
+                          : t.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_float(ptr %s, i64 %s, double %s, i32 %d)\n", k, p, cap, wide, (int)fk);
+    } else {
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, cap, wide);
+    }
     rdAdvance(ctx, at, k);
 }
 
@@ -5303,6 +5308,8 @@ void emitRuntimeDecls(FILE* out) {
         "declare i32 @printf(ptr, ...)\n"
         "declare i32 @fputs(ptr, ptr)\n"
         "declare i32 @snprintf(ptr, i64, ptr, ...)\n"
+        "declare double @strtod(ptr, ptr)\n"
+        "declare i64 @strtol(ptr, ptr, i32)\n"
         "declare void @abort() noreturn\n"
         "declare void @exit(i32) noreturn\n"
         "declare ptr @malloc(i64)\n"
@@ -5566,7 +5573,7 @@ void emitScopeRuntime(FILE* out) {
         //the parent at the join rather than freed by their own thread.
         //E11a: the two renderings the compiler owns. snprintf's contract IS the one E11a states - write
         //what fits, return the length the rendering needs - so a caller can allocate an estimate and
-        //retry only when it was too small. "%.17g" is what makes a float read back as the same value.
+        //retry only when it was too small. A float's rendering is @__olang_fmt_float's, below.
         "@__olang_fmt_d = linkonce_odr unnamed_addr constant [5 x i8] c\"%lld\\00\"\n"
         "@__olang_fmt_u = linkonce_odr unnamed_addr constant [5 x i8] c\"%llu\\00\"\n"
         "@__olang_fmt_g = linkonce_odr unnamed_addr constant [6 x i8] c\"%.17g\\00\"\n"
@@ -5582,16 +5589,117 @@ void emitScopeRuntime(FILE* out) {
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
         "}\n\n"
-        //E11a: every NaN renders as "nan" - snprintf would print the sign, which for a NaN an operation made is
-        //unspecified (E33a): LLVM folds 0/0 to +NaN where x86 computes -NaN
-        "define linkonce_odr i64 @__olang_fmt_f64(ptr %buf, i64 %cap, double %v) {\n"
+        "", out);
+    fputs(
+        //E11a: a float as the shortest text reading back as it in its own type (kind: 0 F64, 1 F32, 2 F16, 3 BF16 -
+        //enum floatKind). FloatShortest (util.c) is the same algorithm in C, which the evaluator renders with, so the
+        //two give identical text: the fewest digits p for which "%.*e" (p - 1) reads back, rounded to the type, as v;
+        //then laid out as "%.17g" would - positional for a decimal exponent in [-4, 17), "d.ddde+XX" otherwise. An
+        //infinity or a NaN is "%.17g"'s own. v - v is 0 exactly when v is finite.
+        "@__olang_fmt_e = linkonce_odr unnamed_addr constant [5 x i8] c\"%.*e\\00\"\n"
+        "@__olang_fmt_s = linkonce_odr unnamed_addr constant [3 x i8] c\"%s\\00\"\n"
+        "@__olang_fmt_fpad = linkonce_odr unnamed_addr constant [15 x i8] c\"%.*s%c%.*s%.*s\\00\"\n"
+        "@__olang_fmt_fmid = linkonce_odr unnamed_addr constant [16 x i8] c\"%.*s%c%.*s.%.*s\\00\"\n"
+        "@__olang_fmt_fsmall = linkonce_odr unnamed_addr constant [17 x i8] c\"%.*s0.%.*s%c%.*s\\00\"\n"
+        "@__olang_fmt_minus = linkonce_odr unnamed_addr constant [2 x i8] c\"-\\00\"\n"
+        "@__olang_fmt_zeros = linkonce_odr unnamed_addr constant [20 x i8] c\"0000000000000000000\\00\"\n"
+        "define linkonce_odr i64 @__olang_fmt_float(ptr %buf, i64 %cap, double %v, i32 %kind) {\n"
         "entry:\n"
+        "  %e = alloca [40 x i8]\n"
+        "  %vv = fsub double %v, %v\n"
+        "  %fin = fcmp oeq double %vv, 0.0\n"
+        "  br i1 %fin, label %try, label %special\n"
+        //every NaN renders as "nan": snprintf would print the sign, which for a NaN an operation made is unspecified
+        //(E33a) - LLVM folds 0/0 to +NaN where x86 computes -NaN
+        "special:\n"
         "  %isnan = fcmp uno double %v, %v\n"
         "  %w = select i1 %isnan, double 0x7FF8000000000000, double %v\n"
-        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %w)\n"
+        "  %ns = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %w)\n"
+        "  %ns64 = sext i32 %ns to i64\n"
+        "  ret i64 %ns64\n"
+        "try:\n"
+        "  %p = phi i32 [ 1, %entry ], [ %p1, %next ]\n"
+        "  %pm1 = sub i32 %p, 1\n"
+        "  %ne = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %e, i64 40, ptr @__olang_fmt_e, i32 %pm1, double %v)\n"
+        "  %back = call double @strtod(ptr %e, ptr null)\n"
+        "  switch i32 %kind, label %r64 [ i32 1, label %r32 i32 2, label %r16 i32 3, label %rb16 ]\n"
+        "r32:\n"
+        "  %t32 = fptrunc double %back to float\n"
+        "  %w32 = fpext float %t32 to double\n"
+        "  br label %cmp\n"
+        "r16:\n"
+        "  %t16 = fptrunc double %back to half\n"
+        "  %w16 = fpext half %t16 to double\n"
+        "  br label %cmp\n"
+        "rb16:\n"
+        "  %tb16 = fptrunc double %back to bfloat\n"
+        "  %wb16 = fpext bfloat %tb16 to double\n"
+        "  br label %cmp\n"
+        "r64:\n"
+        "  br label %cmp\n"
+        "cmp:\n"
+        "  %r = phi double [ %w32, %r32 ], [ %w16, %r16 ], [ %wb16, %rb16 ], [ %back, %r64 ]\n"
+        "  %same = fcmp oeq double %r, %v\n"
+        "  %last = icmp sge i32 %p, 17\n"
+        "  %stop = or i1 %same, %last\n"
+        "  br i1 %stop, label %found, label %next\n"
+        "next:\n"
+        "  %p1 = add i32 %p, 1\n"
+        "  br label %try\n"
+        //e is "[-]d[.ddd]e+XX" with p digits: the sign, the first digit, the rest from s + 2, the exponent after the e
+        "found:\n"
+        "  %c0 = load i8, ptr %e\n"
+        "  %neg = icmp eq i8 %c0, 45\n"
+        "  %negi = zext i1 %neg to i32\n"
+        "  %neg64 = zext i1 %neg to i64\n"
+        "  %s = getelementptr i8, ptr %e, i64 %neg64\n"
+        "  %d1 = load i8, ptr %s\n"
+        "  %d1i = zext i8 %d1 to i32\n"
+        "  %rest = getelementptr i8, ptr %s, i64 2\n"
+        "  %onedig = icmp eq i32 %p, 1\n"
+        "  %p64 = sext i32 %p to i64\n"
+        "  %pp1 = add i64 %p64, 1\n"
+        "  %eoff = select i1 %onedig, i64 1, i64 %pp1\n"
+        "  %eat = getelementptr i8, ptr %s, i64 %eoff\n"
+        "  %xat = getelementptr i8, ptr %eat, i64 1\n"
+        "  %x64 = call i64 @strtol(ptr %xat, ptr null, i32 10)\n"
+        "  %x = trunc i64 %x64 to i32\n"
+        "  %xlo = icmp slt i32 %x, -4\n"
+        "  %xhi = icmp sge i32 %x, 17\n"
+        "  %sci = or i1 %xlo, %xhi\n"
+        "  br i1 %sci, label %wsci, label %fixed\n"
+        "wsci:\n"
+        "  %n1 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_s, ptr %e)\n"
+        "  br label %out\n"
+        "fixed:\n"
+        "  %pad = icmp sge i32 %x, %pm1\n"
+        "  br i1 %pad, label %wpad, label %notpad\n"
+        "wpad:\n"
+        "  %z = sub i32 %x, %pm1\n"
+        "  %n2 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fpad, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %d1i, i32 %pm1, ptr %rest, i32 %z, ptr @__olang_fmt_zeros)\n"
+        "  br label %out\n"
+        "notpad:\n"
+        "  %pos = icmp sge i32 %x, 0\n"
+        "  br i1 %pos, label %wmid, label %wsmall\n"
+        "wmid:\n"
+        "  %xs = sext i32 %x to i64\n"
+        "  %tail = getelementptr i8, ptr %rest, i64 %xs\n"
+        "  %tn = sub i32 %pm1, %x\n"
+        "  %n3 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fmid, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %d1i, i32 %x, ptr %rest, i32 %tn, ptr %tail)\n"
+        "  br label %out\n"
+        "wsmall:\n"
+        "  %nz = sub i32 -1, %x\n"
+        "  %n4 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fsmall, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %nz, ptr @__olang_fmt_zeros, i32 %d1i, i32 %pm1, ptr %rest)\n"
+        "  br label %out\n"
+        "out:\n"
+        "  %n = phi i32 [ %n1, %wsci ], [ %n2, %wpad ], [ %n3, %wmid ], [ %n4, %wsmall ]\n"
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
-        "}\n\n"
+        "}\n\n", out);
+    fputs(
         //E11a: appends n bytes at dst+at, or nothing while a rendering is only being measured (dst null)
         "define linkonce_odr void @__olang_rd_put(ptr %dst, i64 %at, ptr %src, i64 %n) {\n"
         "entry:\n"

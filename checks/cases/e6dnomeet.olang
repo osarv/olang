@@ -1,0 +1,7 @@
+# check: fail the two meet at the literal's own type
+# E6d: -1 does not fit a U32, so the two would meet at the literal's own type, I32 - but a U32 does not flow into an
+# I32 (only into the wider I64, T6b), so they do not meet; the fix is to convert, as I64(u) - 1, or to write u + 1
+fn main() ? {
+    u U32 = 5
+    v U32 = u - (-1)
+}

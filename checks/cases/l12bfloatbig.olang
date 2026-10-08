@@ -1,0 +1,5 @@
+# check: fail this float literal is beyond F64's range
+# L12b: a float literal beyond F64's range would be an infinity, which no literal is
+fn main() ? {
+    x := 1e400
+}

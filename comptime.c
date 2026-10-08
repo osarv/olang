@@ -142,15 +142,17 @@ static ctWide ctExact(struct ctVal* v) {
     return v->i;
 }
 
-//T4: a float rounded to its type, as the generated code rounds it
-static double ctRound(struct type t, double r) {
+static enum floatKind ctFloatKind(struct type t) {
     switch (t.bType) {
-        case BASETYPE_FLOAT32: return (double)(float)r;
-        case BASETYPE_F16: return MinifloatTo(MinifloatFrom(r, 5, 10), 5, 10);
-        case BASETYPE_BF16: return MinifloatTo(MinifloatFrom(r, 8, 7), 8, 7);
-        default: return r;
+        case BASETYPE_FLOAT32: return FLOAT_KIND_F32;
+        case BASETYPE_F16: return FLOAT_KIND_F16;
+        case BASETYPE_BF16: return FLOAT_KIND_BF16;
+        default: return FLOAT_KIND_F64;
     }
 }
+
+//T4: a float rounded to its type, as the generated code rounds it
+static double ctRound(struct type t, double r) { return FloatRoundTo(r, ctFloatKind(t)); }
 
 //R20: a float result's checks - infinite from finite operands is OVERFLOW, NaN from non-NaN operands INVALID
 static struct ctVal* ctCheckFloat(struct ctState* st, struct operand* op, struct type t, double x, double y,
@@ -1189,8 +1191,9 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
     if (TypeIsChar(t)) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
     if (ctIsFloat(t) || ctIsInt(t)) {
         char num[64];
-        //E11a: every NaN renders as "nan" - its sign is unspecified when an operation made it (E33a)
-        if (ctIsFloat(t)) snprintf(num, sizeof(num), "%.17g", isnan(ctDeref(v)->f) ? NAN : ctDeref(v)->f);
+        //E11a: as the runtime does - the shortest text in the value's own type, and every NaN as "nan" (its sign is
+        //unspecified when an operation made it, E33a)
+        if (ctIsFloat(t)) FloatShortest(num, sizeof(num), isnan(ctDeref(v)->f) ? NAN : ctDeref(v)->f, ctFloatKind(t));
         else if (t.bType == BASETYPE_U64) snprintf(num, sizeof(num), "%llu", (unsigned long long)ctDeref(v)->i); //T4
         else snprintf(num, sizeof(num), "%lld", ctDeref(v)->i);
         ctTextStr(b, num);

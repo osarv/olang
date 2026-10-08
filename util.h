@@ -63,4 +63,14 @@ void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void
 unsigned MinifloatFrom(double x, int expBits, int mantBits);
 double MinifloatTo(unsigned bits, int expBits, int mantBits);
 
+//T4: the four float types, numbered as the runtime's "@__olang_fmt_float" numbers them (E11a)
+enum floatKind { FLOAT_KIND_F64, FLOAT_KIND_F32, FLOAT_KIND_F16, FLOAT_KIND_BF16 };
+//T4: v rounded to a float type, as a conversion to it rounds - nearest, ties to even; beyond the type's largest
+//finite value it is an infinity
+double FloatRoundTo(double v, enum floatKind k);
+//E11a: v, a value of float type k, as the shortest decimal text reading back as it in that type - snprintf's
+//contract (writes what fits in cap, returns the length the text needs). The runtime's "@__olang_fmt_float" is the
+//same algorithm written in IR, through the same C library calls, so the two give identical text.
+int FloatShortest(char* out, size_t cap, double v, enum floatKind k);
+
 #endif //UTIL_H

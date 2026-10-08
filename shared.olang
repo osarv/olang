@@ -723,13 +723,103 @@ test "T6a: a float literal is an F64 where nothing adapts it, and still adapts w
     assert x == F64(0.1) and floatWidth(x) == 64
     assert floatWidth(0.1) == 64 and floatWidth(F32(0.1)) == 32
     assert PickSecond(1, 0.1) == F64(0.1)                  # G9a: a variable only literals reach is F64
-    assert renderOf(0.1) == $F64(0.1) and renderOf(0.1) != $F32(0.1)
+    assert renderOf(0.1) == "0.1" and $F64(F32(0.1)) == "0.10000000149011612"   # E11a: the F64 nearest the F32
     assert FloatLitSum == 0.30000000000000004 and FloatLitSum != F64(F32(0.1) + F32(0.2))
     f F32 = 0.1                                             # a typed target still adapts the literal
     assert floatWidth(f) == 32 and f == F32(0.1) and F64(f) != F64(0.1)
     y := 0.1
     y = y + 0.2                                             # written, so not fixed (S8c): this runs
     assert y == FloatLitSum and floatWidth(y) == 64
+}
+
+# E4a: an expression built only from numeric literals adapts to its target as one literal does - computed while
+# compiling, an integer exactly (never wrapped) and a float in F64, then fitting as the literal holding that value.
+# The globals are baked (K2) and the fixed locals' asserts decided while compiling (S18c); the written locals and the
+# mutable global run, and agree.
+fn litKind(v <T>) I32 {
+    match <T> {
+        case U8 { return 8 }
+        case Char { return 9 }
+        case I32 { return 32 }
+        case I64 { return 64 }
+        case U64 { return 65 }
+        case F32 { return 132 }
+        case F64 { return 164 }
+    }
+}
+
+fn litMax(a <T>, b <T>) <T> { return a if a > b else b }
+
+LitExprU8 U8 = 200 + 55
+LitExprExact I64 = 2147483647 + 1                           # an I32 computation would wrap it to -2147483648
+LitExprThird F32 = 1.0 / 3.0                                # computed in F64, rounded to F32 once
+LitExprMask U8 = 0xFF & ~0x0F
+LitExprSeen mut I64 = 0
+
+test "E4a: an expression built only from literals adapts to its target as one literal does" {
+    assert LitExprU8 == 255 and litKind(LitExprU8) == 8 and LitExprExact == 2147483648 and LitExprMask == 240
+    assert LitExprThird == F32(1.0 / 3.0) and LitExprThird == 1.0 / 3.0   # compared in F32, the literal side adapting
+    b U8 = 1 + 2
+    f F32 = 0.5 * 2.0
+    u U64 = 9223372036854775807 + 1                         # 2^63: only a U64 holds it
+    c Char = 'a' + 1
+    assert b == 3 and litKind(b) == 8 and f == 1.0 and litKind(f) == 132 and c == 'b'
+    assert u == U64(9223372036854775807) + 1 and litKind((1 + 2) * 0.5) == 164 and (1 + 2) * 0.5 == 1.5
+    assert litKind(litMax(b, 1 + 2)) == 8                   # G9a: binds nothing, as a literal does
+    LitExprSeen = 2147483647
+    LitExprSeen = LitExprSeen + 1                           # mutable: this runs, and agrees with the baked one
+    assert LitExprSeen == LitExprExact
+    g := F32(0.25)
+    g = g + F32(1.0 / 12.0)                                 # written, so the comparisons below run
+    assert g == 1.0 / 3.0 and litKind(g + 1.0 / 3.0) == 132 # in F32, as "g == 0.333..." would be
+    n := 0
+    n = n + 1
+    match U8(n) + 2 {                                       # S13: a case value adapts as beside it in "=="
+        case 1 + 1 { unreachable }
+        case 3 { }
+        nomatch { unreachable }
+    }
+}
+
+# E6d: a literal beside an operand whose type cannot hold it meets it at the literal's own type, losing nothing (T6b)
+test "E6d: a literal the other operand cannot hold meets it at the literal's own type" {
+    b U8 = 250
+    assert b + 300 == 550 and litKind(b + 300) == 32 and litKind(b + 3) == 8 and litKind(b + (200 + 100)) == 32
+    one I32 = 1
+    assert litKind(0x7FF0000000000001 * one) == 64 and 0x7FF0000000000001 * one == 0x7FF0000000000001
+    h F32 = 2.0
+    assert litKind(h + 1e300) == 164 and h < 1e39
+    w U8 = 250
+    w = w + 1                                               # written: this runs
+    assert w + 300 == 551 and w * 2 == 246                  # where the literal fits, U8 arithmetic, wrapping (E6c)
+}
+
+# E11a: a float renders as the shortest decimal text reading back as the same value of its own type, laid out as
+# "%.17g" would: positional for a decimal exponent in [-4, 17), "d.ddde+XX" otherwise. The fixed values' renderings
+# are made while compiling (S18c) and the baked global's (K2); the mutable global's at run time, identically.
+RenderShortBaked String = $0.1 " " $F32(0.1) " " $F16(0.1) " " $BF16(0.1) " " $(0.1 + 0.2) " " $F32(1.0 / 3.0)
+RenderShortSeen mut F64 = 0
+RenderShortSeen32 mut F32 = 0
+RenderShortSeen16 mut F16 = 0
+
+test "E11a: a float renders as the shortest text that reads back as it, in its own type" {
+    assert RenderShortBaked == "0.1 0.1 0.1 0.1 0.30000000000000004 0.33333334"
+    assert $100.0 == "100" and $1e16 == "10000000000000000" and $1e17 == "1e+17" and $123.456 == "123.456"
+    assert $0.0001 == "0.0001" and $0.00001 == "1e-05" and $-2.5 == "-2.5" and $(-0.0) == "-0" and $0.0 == "0"
+    assert $F16(65504) == "65500" and $F16(65500) == "65500" and $F32(16777216) == "16777216"
+    assert $(1.0 / 0.0) == "inf" and $(-1.0 / 0.0) == "-inf" and $1.7976931348623157e308 == "1.7976931348623157e+308"
+    assert $F64(F32(0.1)) == "0.10000000149011612" and $5e-324 == "5e-324"
+    RenderShortSeen = 0.1
+    RenderShortSeen = RenderShortSeen + 0.2                 # mutable: rendered at run time
+    RenderShortSeen32 = 0.1
+    RenderShortSeen16 = 0.1
+    assert $RenderShortSeen " " $RenderShortSeen32 " " $RenderShortSeen16 == "0.30000000000000004 0.1 0.1"
+    RenderShortSeen = 1e17
+    assert $RenderShortSeen == "1e+17"
+    RenderShortSeen = -0.000123
+    assert $RenderShortSeen == "-0.000123"
+    RenderShortSeen = 1e16 + 2
+    assert $RenderShortSeen == "10000000000000002"
 }
 
 # addLong was declared but never callable at all before this - there was no way to construct an I64
@@ -8330,6 +8420,23 @@ PrimsBaked := primAll(1)
 test "T4: signed, unsigned and half-width float types" {
     assert primAll(WdMutable / 2000000000)
     assert PrimsBaked
+}
+
+# T4: an F16 or BF16 zero is zero. MinifloatFrom, which rounds a value to either while compiling, read zero as a normal
+# number and gave -infinity's bits: "h F16 = 0.0" was emitted as a malformed constant, and the evaluator baked an F16
+# difference reaching zero as -inf. Run at run time and baked (K2), the two agreeing.
+fn halfZero(n I32) Bool {
+    h F16 = 0.0
+    k BF16 = 0
+    d F16 = F16(n) - F16(n)
+    e BF16 = BF16(n) - BF16(n)
+    return h == d and k == e and $h $k $d $e == "0000" and $F16(-0.0) == "-0" and F64(d) == 0.0
+}
+HalfZeroBaked := halfZero(1)
+
+test "T4: an F16 or BF16 zero is zero, while compiling and at run time" {
+    assert halfZero(WdMutable / 2000000000)
+    assert HalfZeroBaked
 }
 
 # T29h: a Char is one byte of text - the type of 'a', rendering as a character where a U8 renders as a number, with

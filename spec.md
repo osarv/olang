@@ -152,6 +152,10 @@ recognized only when the whole of it is present: `1e` is an `INT_LIT` followed b
 as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT`'s own type is `F64` (T6a); written
 against another float type, it adapts to that type (T6).
 
+**L12b.** A `FLOAT_LIT` denotes the `F64` nearest its decimal value. One beyond `F64`'s range, whose nearest `F64` would
+be an infinity (`1e400`), is a compile-time error: no literal is an infinity. One too small for `F64`'s range denotes
+zero or a subnormal, and is valid.
+
 **L13.** `CHAR_LIT ::= "'" char-content "'"`, where `char-content` is exactly one of:
 - any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\'`.
@@ -337,16 +341,22 @@ E4 — a token literal, or one negated
 by a single leading unary `-`, §5.2 E11) is the one exception: it implicitly **adapts** to whatever
 numeric type it is used against, wherever that type would otherwise have to match exactly - an
 assignability context (§5.3 E12: a var-decl initializer, an assignment, an argument, a returned
-value) or a binary operator requiring both operands to be the same type (§5.2 E6, E8, E9, E10) - **provided
-the value written is representable in that type**. An integer literal is representable in any integer type
-whose range contains its value (`U8` is unsigned, 0-255; T4) and in any float type; a float literal is
-representable only in a float type. Adaptation is therefore never a silent truncation, and never turns a
-float literal into an integer - but it is not restricted to widening either: `x U8 = 65` and
-`b == 'a'` are as valid as `n I64 = 1`, because the literal has no representation of its own yet and
-the value written fits. Where both operands of a same-type-requiring binary operator are literals of
-differing numeric types, the narrower adapts to the wider (`Char` < `I32` < `I64` < `F64`, the types T6a gives
-them), subject to the same representability rule. A non-literal value of a different numeric type
-requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
+value), a `case` value (S13), or a binary operator requiring both operands to be the same type (§5.2 E6, E8, E9,
+E10) - **provided the value written is representable in that type**. An integer literal is representable in any
+integer type whose range contains its value (`U8` is unsigned, 0-255; T4) and in any float type it does not
+overflow; a float literal is representable only in a float type, and only in one it does not overflow. A value
+**overflows** a float type when, rounded to that type as a conversion rounds it (to nearest, ties to even, T5), it
+would be an infinity: `F32`'s largest finite value is about 3.4028e38, `BF16`'s about 3.3895e38 and `F16`'s 65504,
+so `f F32 = 1e39`, `b BF16 = 3.4e38` and an `F16` parameter given `70000` are compile-time errors, while `65519.99`
+rounds to `F16`'s 65504 and fits. A value too small for the type rounds to zero or a subnormal, and fits.
+Adaptation is therefore never a silent truncation or overflow, and never turns a float literal into an integer - but
+it is not restricted to widening either: `x U8 = 65` and `b == 'a'` are as valid as `n I64 = 1`, because the literal
+has no representation of its own yet and the value written fits. A **literal-only expression** (E4a) adapts exactly
+as the one literal holding its value would. Where both operands of a same-type-requiring binary operator are literals
+(or literal-only expressions) of differing numeric types, the narrower adapts to the wider (`Char` < `I32` < `I64` <
+`F64`, the types T6a gives them), subject to the same representability rule. Beside an operand whose type cannot
+represent its value, a literal does not adapt: the two meet at the literal's own type (E6d). A non-literal value of a
+different numeric type requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
 
 **T6b (numbers flow toward their base).** A number flows implicitly into a type that holds every value of its own,
 so nothing is lost: into a wider type of the same signedness (`I8` → `I16` → `I32` → `I64`, `U8` → `U16` → `U32` →
@@ -361,7 +371,9 @@ wider float - wherever a value fits a target (E12: an initializer, an assignment
 Two numeric operands of an operator requiring one type (E6, E8, E9, E10) **meet** when one flows into the
 other's type, and the operation is then the other's: `I32 + I64` is an `I64`, `U8 < I32` compares two
 `I32`s, and a `Meters` beside an `I32` is an `I32`. Two that neither flows into - two declared types over one
-base, an integer and a float - do not meet, and that is a compile-time error.
+base, an integer and a float - do not meet, and that is a compile-time error. A literal has no fixed type of its own
+to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
+own type (E6d).
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
 not representable in `I32` and `I32` for every other integer literal, `F64` for a float literal,
@@ -369,10 +381,8 @@ not representable in `I32` and `I32` for every other integer literal, `F64` for 
 the type such a literal carries into a context that requires no particular type of it - a type variable only
 literals reach (G9a), a `-D` build constant (B10). It follows that an
 integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
-already `I64`, so T6 must adapt it, and the value does not fit. An expression built from literals is not itself
-a literal (E4), so it does not adapt: `0.5 * 2.0` is an `F64`, which flows into no narrower float (T6b), so
-`f F32 = 0.5 * 2.0` is a compile-time error - the conversion is written, `F32(0.5 * 2.0)` - and `g < 1.0 / 3.0`
-with `g` an `F32` compares two `F64`s.
+already `I64`, so T6 must adapt it, and the value does not fit. A literal-only expression (E4a) that nothing adapts
+is an ordinary expression of its literals' own types, computed as it is written (E6c's wrapping included).
 
 ### 2.3 Array types
 
@@ -1523,6 +1533,25 @@ own sub-expressions (array elements) are themselves literal expressions where
 required. A parenthesized literal, a variable read, and a function call are never literal
 expressions, even if their value is known at compile time.
 
+**E4a (literal-only expressions).** An expression built only from numeric literals (`INT_LIT`, `FLOAT_LIT`,
+`CHAR_LIT`), parentheses, prefix `-` and `~`, and the binary operators `+ - * / % & | ^ << >>` is a **literal-only
+expression**. It is not a literal expression (E4) - `x := 1 + 2` has no type to read - but wherever a literal adapts
+(T6: an initializer, an assignment, an argument, a returned value, a `try` default, a `case` value, an operand beside
+a typed one) it adapts exactly as one literal does: its value is computed while compiling, and it is then the one
+literal holding that value. The value is computed **exactly** - an integer as a mathematical integer, never wrapped
+(E6c is the run time's arithmetic, not this), and a float in `F64`, its literals' own type (T6a), each operator
+rounding once as `F64` arithmetic does, the result rounded once more to the target. Each operator applies to its
+operands as their types say, two literals of differing types meeting as T6 ranks them: `7 / 2` is `3` and
+`(1 + 2) * 0.5` is `1.5`. So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
+`g < 1.0 / 3.0` with `g` an `F32` compares two `F32`s as `g < 0.333` would, and `b U8 = 200 + 100` and
+`x I32 = 2147483647 + 1` are compile-time errors: the value does not fit. It is likewise an error where the value
+has none - a float computation whose finite operands give an infinity (`1e308 * 10.0`) - and an integer `/` or `%` by
+a literal-only divisor whose value is zero is an error wherever it is written (E6a). A float divided by zero is an
+infinity or a NaN (E6a), which are values of every float type. Only literals take part: a name - an immutable global
+or a build constant included - does not, nor does a conversion, a call, or an expression under `try` (E15a), which
+is a checked computation in its literals' own types. With nothing adapting it, a literal-only expression is an
+ordinary expression of its literals' own types (T6a).
+
 ### 5.2 Operators
 
 **E5.** Binary operators, loosest to tightest (all left-associative — a chain of same-precedence
@@ -1548,9 +1577,8 @@ exception (E7a). The conditional `a if c else b` (E28) binds looser than every b
 
 **E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
 type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
-Mixing distinct numeric types with neither side a literal (or with a literal whose written value the
-other side's type cannot represent) is a compile-time error - see §5.12 E26 for the explicit conversion this
-requires instead.
+Mixing distinct numeric types that do not meet - by T6b, or with a literal by E6d - is a compile-time error;
+see §5.12 E26 for the explicit conversion this requires instead.
 
 **E6a.** Integer `/` and `%` have **undefined behaviour** for two operand pairs, and neither is checked
 at run time:
@@ -1559,8 +1587,8 @@ at run time:
 - the **most negative value divided by `-1`**, for a signed type, whose true quotient is one past the
   type's maximum. `%` is included: its result is mathematically `0`, but the instruction is the same one.
 
-Where the divisor is a compile-time constant zero the check is made at compile time and is an error there,
-which costs nothing to apply. Float `/` is not undefined at all: IEEE 754 defines division by zero as an
+Where the divisor is a literal, or a literal-only expression (E4a), whose value is zero the check is made at
+compile time and is an error there, which costs nothing to apply. Float `/` is not undefined at all: IEEE 754 defines division by zero as an
 infinity and `0.0/0.0` as a NaN, which are values.
 
 Unlike E8a and E26a, both shapes here fault on common hardware — `#DE` on x86, reported as SIGFPE — so
@@ -1574,6 +1602,15 @@ negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
 rely on it. A program wanting overflow detected checks for it itself. Division is the exception, by E6a.
+
+**E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
+(T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value - does not adapt;
+the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
+float) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
+type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
+`I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
+type does not flow into the literal's own type - `u - (-1)` with `u` a `U32`, since a `U32` flows only into an `I64`;
+an integer beside a float literal - the two do not meet, and that is a compile-time error: one is converted.
 
 **E6b (withdrawn).** `+` does not apply to arrays; no arithmetic operator does. Text is joined by writing
 its pieces side by side (E11b). `+` with two array operands is a compile-time error that says so.
@@ -1598,8 +1635,8 @@ the result is the shifted operand's own type.
 
 **E8a.** A shift amount outside `[0, w)`, where `w` is the **shifted** operand's width in bits, is
 **undefined behaviour** — the two operands need not share a type (E5), and it is the left one's width that
-bounds the right one. Nothing is checked at run time. Where the amount is a compile-time constant the
-check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
+bounds the right one. Nothing is checked at run time. Where the amount is a literal or a literal-only expression
+(E4a) the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
 apply.
 
 This is not merely undefined in the abstract: the result is architecture-dependent. x86 masks the count
@@ -1666,8 +1703,13 @@ its type: the value written the way it would be in source:
 - `Bool` — `true` or `false`.
 - an integer type (`I8` ... `I64`, `U8` ... `U64`) — decimal, with a leading `-` for a negative value; an unsigned
   type's value as unsigned.
-- a float type — decimal. The digit count is implementation-defined, but the rendering always
-  reads back as the same value. An infinity is `inf` or `-inf`, and every NaN `nan`, whatever its sign and payload
+- a float type — the **shortest** decimal text reading back as the same value of the value's own type: the fewest
+  significant digits `p` (1 to 17) for which the value rounded to `p` decimal digits, read as an `F64` and rounded to
+  the value's type, is the value again - so `0.1` renders `0.1` whether it is an `F64`, `F32`, `F16` or `BF16`, and
+  `F64(F32(0.1))` renders `0.10000000149011612`. With `x` its decimal exponent, the digits are written positionally
+  when `-4 <= x < 17` - padded with zeros (`100`, `10000000000000000`) or split by a `.` (`123.456`, `0.0001`) - and
+  otherwise as `d.ddde+XX`, the exponent signed and at least two digits (`1e+17`, `1e-05`, `1.5e-07`), with a leading
+  `-` for a negative value (`-0` for negative zero). An infinity renders `inf` or `-inf`, and every NaN `nan`, whatever its sign and payload
   (E33a).
 - `Char` (T29h) — at the top level, the **character** it denotes, one byte long. Inside another value, that
   character written as a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
@@ -2421,7 +2463,7 @@ matched value's business, which the clause cannot name (as through a borrowed fi
 
 **S13.** `match`'s own `expr` is evaluated once. Each `case`'s own `expr`, in source order, is
 compared against it using the same equality rule as `==` (E10) and must be the same type (T27) as
-the matched value. The block belonging to the first matching `case` runs, and no other `case` or
+the matched value - a literal, or a literal-only expression (E4a), adapting to it (T6). The block belonging to the first matching `case` runs, and no other `case` or
 the `nomatch` block runs. If no `case` matches and a `nomatch` clause is present, its block runs. If
 no `case` matches and there is no `nomatch` clause, no block runs at all — this is not a
 compile-time error; `match` over a *value* performs no exhaustiveness checking over any type,
@@ -3971,7 +4013,7 @@ matching the actual argument types structurally against the declared parameter t
 every variable is reachable this way. If two positions bound to one variable are matched against
 different types, the call is a compile-time error.
 
-**G9a.** A numeric literal argument (T6) whose parameter is a bare type variable does not take part in
+**G9a.** A numeric literal argument (T6), or a literal-only one (E4a), whose parameter is a bare type variable does not take part in
 that matching while any other argument binds the same variable: the variable is determined by the other
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
