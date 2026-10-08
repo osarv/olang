@@ -39,6 +39,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
 4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
    rejected. Rec: leave until real code needs it.
 5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
+10. A literal the other operand's type cannot hold (`0x7FF0000000000001 * one`, `one` an I32; `b + 300`, `b` a U8):
+    E6 makes it an error, while T6b would meet the two at the literal's own type (I64, I32), losing nothing. Today
+    E6 wins ("these two numbers do not meet"). Rec: T6b wins - the narrower value widens, as it would beside a
+    variable of the literal's type.
 
 **OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later
@@ -110,6 +114,18 @@ List / text builder (42a4135):
 62. `MapIter` was rewritten too (same per-element walk defect, same cause).
 63. Pushing to a List while a loop walks it: the iterator re-reads the count, so it sees elements added before it
     reaches the end (as a counted loop would). The spec says nothing - should it? Default: as built.
+Float bits (E33/E33a, 704ae42):
+64. The reverse is a method on the unsigned value - `u.F64FromBits()`, `u.F32FromBits()`, `u.F16FromBits()`,
+    `u.BF16FromBits()` - since nothing is called through a type name (`F64.FromBits(u)` would need type-level
+    functions); `u.AsF64()` rejected (`as` is E32 and reads as a numeric conversion).
+65. `Bits()`/`...FromBits()` reach a declared type only through `extends` (the method rule), unlike `Len()`.
+66. A signalling NaN may be quieted by any move (x86 returns a struct's third float through x87; LLVM 18 at -O0
+    passes BF16 through F32) rather than changing the struct-return ABI to keep it.
+67. Negation's NaN bits are unspecified (at -O0 F16 negation quiets), as every operation's NaN is.
+68. The evaluator refuses the bits of an operation's NaN or a signalling NaN (undefined, K1); `-i` gives what it holds.
+69. Every NaN renders `nan` with `$` (it was `-nan` at compile time and in -d builds); infinities `inf`/`-inf`.
+70. Declaring `Len` on a declared array type is an error (it was accepted and never called).
+71. Like `Len()`, the supplied `Bits`/`FromBits` methods do not satisfy a trait method of the same name.
 
 **ON HOLD (the user: "hold it off"):** passing arrays by value (dropping D9a for parameters). Returning one by value
 already exists (T7b).

@@ -39,4 +39,5 @@ container, so have agents commit as they finish.
 
 **Memory, not just tokens (2026-10-08):** the test compiler grows to ~7GB on the big corpus files and the container has
 ~15GB, so two full `make test`/`make verify` runs at once can be OOM-killed. Tell agents to run only targeted tests
-while others are verifying, and run full verifies one at a time (I run the merged one).
+while others are verifying, and run full verifies one at a time (I run the merged one). The scratchpad is shared too: an agent's log there was
+overwritten by another's - tell agents to write logs inside their own worktree (e.g. build/verify.log).
