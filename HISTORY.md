@@ -7687,3 +7687,9 @@ from their original form.
   whose declared result equals their declared receiver. The missing-method message names `extends` when the base has
   the method. A stage-1 bug surfaced in my new test: `holdInHidden` built a held reference's declaration by hand and
   O25 rejected it for a borrowed result (`v.Trim() == "abc"`); it now goes through `buildVarDeclFromOperand`.
+  Part 3 the same day: a literal entering a type with a constructor runs it while compiling. The fit check no longer
+  returns TYPE_FIT_CTOR; it adapts the literal to the base, retypes it, and records a synthetic constructor call on a
+  copy of it. Once the program has checked, each record is evaluated (CtEvaluate) before K2 and S18c, and the result
+  is written back into the literal; a failure or an unevaluable constructor is reported at the literal with the
+  evaluator's reason. The old t29dliteral check asserted the reversed rule; its program became a corpus test and the
+  file now checks a constructor rejecting its literal; litctoreffect checks an effectful one.

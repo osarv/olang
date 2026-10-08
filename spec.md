@@ -693,8 +693,11 @@ It takes exactly **one** parameter, of the primitive it is declared over: the va
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
 constructor (C13). `Percent(x)` calls it **in place of** the plain conversion (T29), so it is the only way a
-value enters the type. A bare literal therefore does not adapt to such a type (`p Percent = 150` is an error;
-`Percent(150)` is written) — and where the type **extends** its base (T29f), the base's arithmetic produces it
+value enters the type. A **literal** entering the type - an initializer, an assignment, an argument, a returned
+value - goes through it too: `p Percent = 150` is `Percent(150)`, the constructor run on the literal **while
+compiling** (K1) and the literal standing for the value it gave, so nothing runs when the program does. A
+constructor that fails on the literal, or that cannot be evaluated at compile time at all (it writes a global, say),
+makes that a compile-time error at the literal - there is no `try` to write on a literal. And where the type **extends** its base (T29f), the base's arithmetic produces it
 **without** running the constructor: the constructor checks how a value enters, not what arithmetic later makes of
 it.
 

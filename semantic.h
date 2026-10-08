@@ -493,6 +493,7 @@ struct operand {
     bool noZeroFill; //D15b: OPERATION_SIZED_ARRAY_ALLOC only - allocate the storage and leave it as it
                       //comes. Set for a local "T[expr]" declaration, which is uninitialized like any
                       //other declared-size array; a D14a constructor field still zero-fills.
+    bool litCtorPending; //T29d: a literal entering a type with a constructor - recorded to be run while compiling
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.

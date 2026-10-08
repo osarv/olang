@@ -2261,7 +2261,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `type Percent Int32(v mut Int32) [? errors] { ... }`: one parameter of the underlying primitive - the value -
   which the body may check or change; its final value is the result, and `return` is rejected. `Percent(x)`
   calls it in place of the plain conversion, so a bare literal does not adapt to such a type either
-  (`Percent(150)` is written - the user's call, after briefly allowing it: on a constant the check is free), while
+  (`Percent(150)` is written - the user's call, after briefly allowing it: on a constant the check is free;
+  **reversed 2026-10-08 by the user's later call: a literal runs the constructor, while compiling - T29d below**), while
   **arithmetic keeps working and does not run it** - the user's call: a
   constructor checks how a value enters, not what arithmetic makes of it (running it after every operator would
   be a hidden call, and a fallible one would make `a + b` need `try`). **Primitive references (`Int32&`) and with
@@ -2711,7 +2712,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Array<Byte>`, so `id("hi").Trim()` failed). Corpus: eight types gained `extends`. **Found on the way, from stage
   1**: `s.Trim() == "abc"` on a local `String` was rejected - the Eq rewrite held the borrowed result in a hidden
   local declared by hand, whose scope did not match it (O25); a held reference is now declared exactly as `:=`
-  would. Not yet: a literal calling a declared type's constructor (part 3).
+  would. **Part 3, a literal runs the constructor (T29d, the user: "a literal initializing a declared type calls its
+  ctor implicitly")**: `p Percent = 150` is `Percent(150)`, run while compiling once the program has checked
+  (before globals bake and asserts decide, which may read the literal) - the literal then stands for the result
+  (`PctLit Pct = 180` is `global i32 100`), so nothing runs at run time. A constructor that fails on the literal, or
+  cannot be evaluated (an effect), is a compile error at the literal - my wording of "failure = compile error, no
+  try". Arithmetic's literals still adapt without running it (`p + 1` on an extending `Percent`).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -7647,7 +7647,7 @@ test "O26/O25a: &return as a scope argument, := adopting it, and a typed local n
 
 # T29d: a declared primitive type may have a constructor. Its one parameter is the value, which the body may
 # check (failing through its own error union) or change; "Pct(x)" runs it instead of the plain conversion. A
-# literal does not slide into such a type, and arithmetic produces it without running the constructor - Pct extends
+# literal entering such a type runs it too, while compiling, and arithmetic produces it without running the constructor - Pct extends
 # Int32 (T29f), so it has Int32's operators.
 error PctError { NEGATIVE }
 type Pct extends Int32(v mut Int32) {
@@ -7665,6 +7665,8 @@ fn pctCheck(n Int32) Int32 ? PctError {
 }
 
 PctFull Pct = Pct(250)
+PctLit Pct = 180          # T29d: a literal enters through the constructor, run while compiling - 100
+fn pctLit() Pct { return 150 }
 
 test "T29d: a primitive type's constructor checks the way in, and arithmetic keeps working" {
     assert Int32(Pct(150)) == 100
@@ -7673,6 +7675,8 @@ test "T29d: a primitive type's constructor checks the way in, and arithmetic kee
     assert Int32(q.PHalf()) == 20
     assert q + 1 == Pct(41)
     assert Int32(PctFull) == 100
+    lit Pct = 150
+    assert Int32(lit) == 100 and Int32(PctLit) == 100 and Int32(pctLit()) == 100
     assert (try pctCheck(5) catch default -1) == 5
     assert (try pctCheck(-5) catch default -1) == -1
 }

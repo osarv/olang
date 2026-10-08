@@ -4638,6 +4638,9 @@ bool SemanticCallMatches(struct type t, struct type fnType) {
 static int numericFamilyRank(struct type t, int* family);
 bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
 static void operandWidenInPlace(struct operand* op, struct type t);
+//T29d: a literal whose constructor runs while compiling, and the call that runs it
+struct litCtorRec { struct operand* lit; struct operand* call; };
+static struct list litCtorRecs;
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
@@ -4661,8 +4664,30 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         op->type.arrElem = e;
     }
     //T29d: a type with a constructor is entered through it - a literal does not slide in past its checks
+    //T29d: a literal entering a type with a constructor runs it - while compiling, once the program has checked; the
+    //literal then stands for the value the constructor gave, and one the constructor rejects is an error at it
     if (target.owner && target.hasCtor && target.bType != BASETYPE_STRUCT && op->isLiteral && !op->isNullLiteral
-            && !op->type.owner) return TYPE_FIT_CTOR;
+            && !op->type.owner && TypeIsNumeric(op->type) && TypeIsNumeric(target) && target.ctorFunc) {
+        struct type base = TypeVanilla(target.bType);
+        if (!TypeIsSame(op->type, base) && !numericLiteralFits(op, base)) return TYPE_FIT_LITERAL_RANGE;
+        if (TypeIsInt(op->type) && TypeIsFloat(base)) op->floatLiteralVal = (double)op->intLiteralVal;
+        if (!op->litCtorPending) {
+            struct operand* arg = MallocOrCrash(sizeof(struct operand));
+            *arg = *op;
+            arg->type = base;
+            struct type vt = target;
+            vt.structMAlloc = false;
+            vt.scopeParam = NULL;
+            struct operand* call = operandNew(op->tok, OPERATION_FUNCCALL, vt);
+            call->readVar = target.ctorFunc;
+            ListAdd(&call->args, &arg);
+            struct litCtorRec rec = { op, call };
+            ListAdd(&litCtorRecs, &rec);
+            op->litCtorPending = true;
+        }
+        op->type = target;
+        return TYPE_FIT_OK;
+    }
     //T29/T6: a LITERAL adapts to a declared type over an array, exactly as a numeric literal adapts to a
     //declared type over a number. A literal has no type worth defending - it is written right here, and
     //what it is written against is the only thing that says what it means - where a VALUE that already has
@@ -12669,6 +12694,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     nextBodyId = 0; //S8b: every attempt rebuilds every body
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
+    litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
     inlinePendings = ListInit(sizeof(struct inlinePending)); //C2e
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     bareErrorType = (struct type){0};
@@ -12739,6 +12765,25 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation
     //runs the checked program, and a program with errors has parts that were never checked.
     if (ErrMsgGetNErrors() == errsAtStart) {
+        CtReset();
+        //T29d: a literal entering a type with a constructor stands for what the constructor makes of it - decided
+        //first, since a global baked or an assert decided below may read it
+        for (int i = 0; i < litCtorRecs.len; i++) {
+            struct litCtorRec* r = ListGetIdx(&litCtorRecs, i);
+            struct ctVal* val = NULL;
+            struct token whyTok = (struct token){0};
+            const char* why = NULL;
+            if (CtEvaluate(r->call, r->call->type, &val, &whyTok, &why, NULL)) {
+                if (TypeIsFloat(r->lit->type)) r->lit->floatLiteralVal = val->f;
+                else r->lit->intLiteralVal = val->i;
+                continue;
+            }
+            char buf[1024];
+            snprintf(buf, sizeof(buf), LITERAL_CTOR_FAILS ": %s", why ? why : "it cannot be evaluated");
+            char* msg = MallocOrCrash(strlen(buf) + 1);
+            strcpy(msg, buf);
+            ErrMsgSemantic(r->lit->tok, msg);
+        }
         CtReset();
         struct list order = SemanticInitOrder();
         for (int m = 0; m < order.len; m++) {
