@@ -4,7 +4,7 @@
 # copies nothing. "==" on a "String&" stays reference identity (E10); comparing what two texts SAY is
 # "a.Eq(b)". There is no encoding check: a String is bytes.
 
-type String Array<Byte>
+type String extends Array<Byte>
 
 error ParseError {
     EMPTY

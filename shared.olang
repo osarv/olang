@@ -1343,9 +1343,10 @@ test "self-assignment of a runtime-length array is safe" {
 # T29: a declared type is NOMINAL even when its underlying shape is a primitive. "type Meters Int32" and
 # "type Feet Int32" are different types, and both differ from Int32 - which is the point of naming one, and
 # what lets a method belong to it. Before this a named primitive was a transparent alias: it had a name but
-# no identity, so nothing could be attached to it and nothing it was passed to could tell it apart.
-type Meters Int32
-type Feet Int32
+# no identity, so nothing could be attached to it and nothing it was passed to could tell it apart. They extend
+# Int32 (T29f), so Int32's arithmetic makes Meters from Meters.
+type Meters extends Int32
+type Feet extends Int32
 
 # M19: a method is declared with a receiver clause, "fn (a Meters) Name(...)", and called only as
 # "x.Name(...)" - never as a plain function. The receiver is an ordinary parameter 0 once resolved, so every
@@ -1930,8 +1931,8 @@ test "T29: a LITERAL adapts to it, exactly as a numeric literal adapts to a name
 # M19/M19d: a method is declared with a receiver clause - with no clause to say so, every
 # "fn helper(n Int32)" would have become a method of Int32. A built-in type's methods belong to the
 # prelude alone, so a program gives methods to a type of its own declared over a built-in one (T29).
-type Num Int32
-type Nums Array<Int32>
+type Num extends Int32
+type Nums extends Array<Int32>
 
 fn (n Num) Tripled() Num { return n * 3 }
 
@@ -7646,9 +7647,10 @@ test "O26/O25a: &return as a scope argument, := adopting it, and a typed local n
 
 # T29d: a declared primitive type may have a constructor. Its one parameter is the value, which the body may
 # check (failing through its own error union) or change; "Pct(x)" runs it instead of the plain conversion. A
-# literal does not slide into such a type, and arithmetic produces it without running the constructor.
+# literal does not slide into such a type, and arithmetic produces it without running the constructor - Pct extends
+# Int32 (T29f), so it has Int32's operators.
 error PctError { NEGATIVE }
-type Pct Int32(v mut Int32) {
+type Pct extends Int32(v mut Int32) {
     if v > 100 { v = 100 }
 }
 type PctChecked Int32(v Int32) ? PctError {
@@ -8098,8 +8100,9 @@ test "D16e: a spawned lambda captures its loop's variables per task" {
     assert out[7].n == 21 and sums[5] == 30
 }
 
-# T29e: a declared array type inherits every array method - text counts, maps and searches like any array
-type LamNums Array<Int32>
+# T29e/T29f: a declared array type extending its base inherits every array method - text counts, maps and searches
+# like any array
+type LamNums extends Array<Int32>
 fn (n LamNums&) Total() Int32 { return n.Fold(0, fn(acc, x) { return acc + x }) }
 LamVowels Int64 = "olang inherits".Count(fn(c) { return c == 'a' or c == 'e' or c == 'i' or c == 'o' or c == 'u' })
 
@@ -8297,4 +8300,30 @@ WidenBaked := wdAll(2000000000)
 test "T6b: numbers widen within their family, and meet at the wider" {
     assert wdAll(WdMutable)
     assert WidenBaked
+}
+
+# T29f: "extends" - a declared type takes its base's methods and operators. An extending number inherits Int64's Hash
+# (so it is a Map key) and its arithmetic, giving the declared type; an extending array's method returning the
+# receiver's own type gives the declared type (a String's Filter is a String). Without "extends", a type reads as
+# its base - compared, or beside a base value - and makes nothing of itself.
+type ExId extends Int64
+type ExPlain Int32
+fn exAll(n Int32) Bool {
+    a := ExId(Int64(n))
+    b ExId = a + a
+    h Bool = a.Hash() == Int64(n).Hash() and b == ExId(Int64(n) * 2)
+    s := "a-b-c".Filter(fn(c) { return c != '-' })
+    v String = "abc"
+    t Bool = s == "abc" and s.Trim() == "abc" and v.Trim() == "abc"   # a borrowed result held for Eq keeps its scope
+    p := ExPlain(n)
+    q Int32 = p + 1
+    r Int64 = p * Int64(2)
+    plain Bool = p < ExPlain(n + 1) and p == ExPlain(n) and q == n + 1 and r == Int64(n) * 2
+    return h and t and plain
+}
+ExBaked := exAll(4)
+
+test "T29f: extends inherits the base's methods and operators; without it a type reads as its base" {
+    assert exAll(WdMutable)
+    assert ExBaked
 }

@@ -100,7 +100,7 @@ if        else    try     catch   return  done    fail    assert
 for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
-type      struct  enum    fn      error   mut
+type      struct  enum    fn      error   mut     extends
 interface spawn   join
 import    test    destruct
 abort     unreachable
@@ -694,8 +694,9 @@ body is an ordinary block that may check it (failing through its own error list,
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
 constructor (C13). `Percent(x)` calls it **in place of** the plain conversion (T29), so it is the only way a
 value enters the type. A bare literal therefore does not adapt to such a type (`p Percent = 150` is an error;
-`Percent(150)` is written) — but arithmetic on the type keeps producing it **without** running the
-constructor: the constructor checks how a value enters, not what arithmetic later makes of it.
+`Percent(150)` is written) — and where the type **extends** its base (T29f), the base's arithmetic produces it
+**without** running the constructor: the constructor checks how a value enters, not what arithmetic later makes of
+it.
 
 ```
 type Percent Int32(v mut Int32) {
@@ -727,17 +728,32 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   always safe — and it is the same latitude `Int32(m)` already gives a named numeric, without needing a
   spelling for it.
 
-**T29e (inherited array methods).** A declared type over an array (T29a) has every method of the array it is
-declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<Byte>`'s `Count`, and a
-`type Nums Array<Int32>` sorts with `Sort`. An inherited method is never overridden: declaring a method whose
-name an inherited one already has is a compile-time error.
+**T29e (inherited array methods).** A declared type **extending** an array (T29f) has every method of the array it
+is declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<Byte>`'s `Count`, and a
+`type Nums extends Array<Int32>` sorts with `Sort`. An inherited method whose result is its receiver's own array
+type gives the declared type instead: a `String`'s `Filter` is a `String`. An inherited method is never overridden:
+declaring a method whose name an inherited one already has is a compile-time error.
 
-**T29c (`String`, text).** The prelude (§4 M19d) declares `type String Array<Byte>`, the text type, and
+**T29f (`extends`).** `type Name extends Base`, for a `Base` that is a numeric type or an array type, declares a type
+that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends
+Int64` has `Hash`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
+`Meters extends Int32` is a `Meters`). There is no dynamic dispatch and nothing is overridden. `extends` on a struct,
+enum, interface or function type is a compile-time error: none has a base.
+
+A declared type **without** `extends` inherits nothing it does not declare. It still reads as its base: it flows into
+it (T6b), so it compares with `<` and `==`, and beside a base value or a literal it is its base (`p + 1` on a
+`type Percent Int32` is an `Int32`). But no built-in operator makes a value of it: `+ - * / % & | ^ << >>`, unary
+`-` and `~`, and `++`/`--` on it alone or on two of it are a compile-time error unless the type declares the
+operator's method (E31). An array type's own operations - indexing, slicing, `Len()`, `for ... in`, `$` - are what
+its value is, and belong to it with or without `extends`.
+
+**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Byte>`, the text type, and
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
-(E11a), a join (E11b) — is a `String` wherever one is wanted: as a declaration's initializer with `:=`, as a
-method's receiver (`"  x ".Trim()`), against a `String` parameter or target, and as the other operand of a
-`String` value in `==` or `!=` (`unit == "cm"`). Like a literal (T29a) it is
-a temporary with no type worth defending, and it is text by construction. Any other bytes become a `String`
+(E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
+literal's is `Int32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
+bound to a type variable (G9a), and as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`).
+Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
+bytes it is written against - an `Array<Byte>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<Byte>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
@@ -902,7 +918,8 @@ never collide with a local.
 
 ### 3.3 Type and error declarations
 
-**D4.** `type-decl ::= "type" IDEN [ type-params ] type-expr [ prim-ctor ] [ STMNT_END ]`, with
+**D4.** `type-decl ::= "type" IDEN [ type-params ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]` (`extends`:
+T29f), with
 `prim-ctor ::= "(" param-list ")" [ "?" error-list ] block` valid only over a primitive (T29d), where `type-params`
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in

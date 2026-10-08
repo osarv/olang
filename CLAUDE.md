@@ -2696,6 +2696,22 @@ Go through this for every change to what olang means - a rule added, revised or 
   now-redundant `Int64(x)` conversions in the corpus (harmless), and **narrowing stays unchecked** (the user: "1 for sure.
   It's not even a question"): `Int32(i64)` wraps, a float out of range stays undefined (E26a), and `try Int32(x)` is
   the opt-in check (R20) - the standing rule that a per-operation run-time check never belongs in the language.
+- **`extends`; text is a `String` by type (T29f/T29c, 2026-10-08, stage 3 of the casting plan, the user: "use
+  extend to get methods, otherwise you have to declare them all yourself", keyword `extends`).** `type Meters extends
+  Int32`, `type String extends Array<Byte>`: the declared type inherits its base's methods (T29e's array methods, the
+  prelude's number methods - an `ExId extends Int64` has `Hash`) and its built-in operators, which give the declared
+  type. Without it the type inherits nothing it does not declare: it still reads as its base (T6b flow - comparisons,
+  and beside a base value or literal it *is* the base, `p + 1` an `Int32`), but `+ - * / % & | ^ << >>`, unary `-`/`~`
+  and `++`/`--` on one or two of it are an error naming `extends` or the operator method. T29e was unconditional and
+  is now gated on the keyword. **My calls, flagged**: an inherited array method whose declared result is its
+  receiver's own type gives the declared type (`String.Filter` is a `String`), but a number's methods keep their
+  results (`Int64.Hash` would otherwise make a hash a `Meters`); an array's own operations (index, slice, `Len`,
+  for-in, `$`) belong to it with or without `extends`, being what the value is. `extends` on a struct/enum/interface/
+  function type is an error. Text: a variable only text reaches binds `String` (G9a said so; the code bound
+  `Array<Byte>`, so `id("hi").Trim()` failed). Corpus: eight types gained `extends`. **Found on the way, from stage
+  1**: `s.Trim() == "abc"` on a local `String` was rejected - the Eq rewrite held the borrowed result in a hidden
+  local declared by hand, whose scope did not match it (O25); a held reference is now declared exactly as `:=`
+  would. Not yet: a literal calling a declared type's constructor (part 3).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

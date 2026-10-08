@@ -40,6 +40,7 @@ struct tokRule tokRules[] = {
     {TOK_CONTINUE, "continue", NULL},
     {TOK_ABORT, "abort", NULL},
     {TOK_UNREACHABLE, "unreachable", NULL},
+    {TOK_EXTENDS, "extends", NULL},
     {TOK_DONE, "done", NULL},
     {TOK_FAIL, "fail", NULL},
     {TOK_ASSERT, "assert", NULL},

@@ -7675,3 +7675,15 @@ from their original form.
   removed the float-to-int check after it measured 3.3x on a loop.
   Answered the same day: narrowing stays unchecked - "1 for sure. It's not even a question." The ledger entry that
   had recorded a checked narrowing constructor as decided was my error.
+
+- **`extends` and text as `String` (T29f/T29c), 2026-10-08.** Stage 3, parts 1-2. Text: everything but generic
+  inference already treated written text as `String` (T29c's adaptations), and G9a's spec text already said a
+  variable reached only by text is `String` - the code bound `Array<Byte>`. `extends`: a keyword token, a flag on the
+  declared type, and T29e's array-only fallback (`isDeclaredArray`) generalized to "declared over a number or an
+  array, and extends it". Operators are gated in `buildBinaryOp` (user-written operators only - `OperandBinary` is also
+  what lowerings call), `buildUnary` and `buildIncDec`. The design point the user's two statements left open was
+  results: "the base replaced by the type in inherited signatures" is right for `Filter` and wrong for `Int64.Hash`,
+  since for a number "the base" and "Self" are the same spelling; substitution is therefore limited to array methods
+  whose declared result equals their declared receiver. The missing-method message names `extends` when the base has
+  the method. A stage-1 bug surfaced in my new test: `holdInHidden` built a held reference's declaration by hand and
+  O25 rejected it for a borrowed result (`v.Trim() == "abc"`); it now goes through `buildVarDeclFromOperand`.

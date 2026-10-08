@@ -3339,6 +3339,7 @@ void resolveTypeDecl(struct type* t) {
                 if (t->destructFunc) t->destructFunc->type.typeParams = declaredParams;
             }
             currentTypeParamNames = prevTPN;
+            if (hasTokOfType(actual, TOK_EXTENDS)) ErrMsgSemantic(firstTokOfType(actual, TOK_EXTENDS), EXTENDS_NOT_BASE);
             break;
         }
 
@@ -3353,6 +3354,11 @@ void resolveTypeDecl(struct type* t) {
         t->owner = ownerSave;
         t->typeParams = declaredParams;
         t->typeConstraints = declaredConstraints;
+        //T29f: "extends" - only a declared number or array has a base whose methods and operators it can take
+        if (hasTokOfType(actual, TOK_EXTENDS)) {
+            if (TypeIsNumeric(*t) || t->bType == BASETYPE_ARRAY) t->extendsBase = true;
+            else ErrMsgSemantic(firstTokOfType(actual, TOK_EXTENDS), EXTENDS_NOT_BASE);
+        }
         struct syntax* primCtor = firstPartOfType(actual, SNTX_PRIM_CTOR);
         if (primCtor) resolvePrimCtor(owner, t, primCtor);
         currentTypeParamNames = prevTPN;
@@ -3579,7 +3585,10 @@ static struct var* varGetMethodIn(struct semaModule* mod, struct str name, struc
 
 //T29e: a declared array type inherits the built-in array methods (prelude) - the array it is declared over -
 //beside its own, so "s.Count(...)" works on a String as on any Array<Byte>
-static bool isDeclaredArray(struct type t) { return t.bType == BASETYPE_ARRAY && !receiverIsBuiltin(t); }
+//T29f: ...when it extends that array - and a declared number extending its base inherits that number's methods
+static bool isDeclaredArray(struct type t) {
+    return t.extendsBase && (t.bType == BASETYPE_ARRAY || TypeIsNumeric(t)) && !receiverIsBuiltin(t);
+}
 static struct type underlyingArray(struct type t) {
     t.owner = NULL;
     t.name = (struct str){0};
@@ -5469,7 +5478,11 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
             struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
             if (!(OperandIsWrittenText(arg) && paramT.bType == BASETYPE_TYPEVAR)) continue;
-            if (!bindingGet(&bindings, paramT.name) && !TypeUnify(paramT, arg->type, &bindings)) ok = false;
+            //T29c: text is a String by type, so a variable only text reaches is String - "id("hi").Trim()"
+            struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+            struct type tt = arg->type;
+            if (textT) { tt = *textT; tt.structMAlloc = false; }
+            if (!bindingGet(&bindings, paramT.name) && !TypeUnify(paramT, tt, &bindings)) ok = false;
         }
         for (int i = 0; ok && i < args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
@@ -6664,6 +6677,10 @@ static const char* operatorFor(struct checkCtx* ctx, struct type t, const char* 
 //variable, or the operands are a chain's, which evaluates each once and in order itself (E30).
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct list* out);
+//T29f: a declared number that does not extend its base
+static bool notExtendedNumber(struct type t) {
+    return t.owner && t.name.len > 0 && TypeIsNumeric(t) && !t.extendsBase && !t.structMAlloc;
+}
 static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token tok);
 static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
                                      bool inChain) {
@@ -6708,6 +6725,17 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
         return negate ? OperandUnary(r, OPERATION_NOT, opTok) : r;
     }
     if (opTok.type == TOK_AT) { ErrMsgSemantic(opTok, OPERATOR_AT_UNDECLARED); return OperandIntLiteral(opTok); }
+    //T29f: a declared number that does not extend its base has no built-in operator making a value of itself - two of
+    //it is an error; beside a base value or a literal it reads as its base (T6b), and the result is the base's
+    if (capName && strcmp(capName, "Less") != 0) {
+        bool da = notExtendedNumber(a->type), db = notExtendedNumber(b->type);
+        if ((da && TypeIsSame(a->type, b->type) && !b->isLiteral) || (db && TypeIsSame(a->type, b->type) && !a->isLiteral)) {
+            ErrMsgSemantic(opTok, NOT_EXTENDED_OP);
+        } else {
+            if (da) operandWidenInPlace(a, TypeVanilla(a->type.bType));
+            if (db) operandWidenInPlace(b, TypeVanilla(b->type.bType));
+        }
+    }
     return OperandBinary(a, b, opFromTokType(opTok.type), opTok);
 }
 
@@ -7049,6 +7077,7 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
 //reference keeps x's own scope; a global's initializer, which has no block, gives the local a scope of its own.
 static int hiddenCounter = 0;
 static bool adoptInitializerScope(struct checkCtx* ctx, struct type* t, struct operand* init, bool* unnamed);
+struct statement buildVarDeclFromOperand(struct checkCtx* ctx, struct token nameTok, struct operand* rhs);
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct list* out) {
     char* nm = MallocOrCrash(32);
@@ -7056,6 +7085,16 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
     struct token ht = tok;
     ht.type = TOK_IDEN;
     ht.str = StrFromCStr(nm);
+    //a reference is held exactly as "x := e" would hold it - in e's own scope, however e came to have it (a borrowed
+    //result, "s.Trim()" on a local value, included), so holding it changes nothing about where it lives
+    if (x->type.structMAlloc && ctx->scope) {
+        struct statement d = buildVarDeclFromOperand(ctx, ht, x);
+        struct var* hv = scopeFindLocal(ctx->scope, ht.str);
+        if (hv) {
+            ListAdd(out, &d);
+            return hv;
+        }
+    }
     struct type dt = x->type;
     bool unnamed = false;
     if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
@@ -7164,6 +7203,7 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
+static char* unknownMethodMsg(struct operand* recv, struct token name);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
@@ -7175,6 +7215,7 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
         const char* negName = opTok.type == TOK_SUB ? operatorFor(ctx, result->type, "Neg", opTok)
                             : opTok.type == TOK_BTWSE_INV ? operatorMethodName(ctx, result->type, "BitNot") : NULL;
         if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
+        if ((opTok.type == TOK_SUB || opTok.type == TOK_BTWSE_INV) && notExtendedNumber(result->type)) ErrMsgSemantic(opTok, NOT_EXTENDED_OP); //T29f
         if (opTok.type == TOK_INC || opTok.type == TOK_DEC) {
             if (!(s == ctx->incDecRoot && n == 2)) ErrMsgSemantic(opTok, INCDEC_IN_EXPRESSION); //S3a
             struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
@@ -7295,6 +7336,14 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     if (target->type.bType == BASETYPE_TYPEVAR) return NULL;
     //under "try" (E31) a number's increment is "x = x + 1", which the try then checks for overflow
     bool num = TypeIsNumeric(target->type);
+    //T29f: a declared number not extending its base increments only through an Inc or Plus of its own
+    if (notExtendedNumber(target->type)) {
+        if (!operatorFor(ctx, target->type, inc ? "Inc" : "Dec", tok) && !operatorFor(ctx, target->type, inc ? "Plus" : "Minus", tok)) {
+            ErrMsgSemantic(tok, NOT_EXTENDED_OP);
+            return NULL;
+        }
+        num = false;
+    }
     if (num && !ctx->checkingTry) return NULL;
     const char* own = num ? NULL : operatorFor(ctx, target->type, inc ? "Inc" : "Dec", tok);
     const char* arith = own || num ? NULL : operatorFor(ctx, target->type, inc ? "Plus" : "Minus", tok);
@@ -7575,7 +7624,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 struct operand* mc = buildMethodCall(ctx, result, memberTok, argsNode,
                                                      ListInit(sizeof(struct syntax*)), &mReported);
                 if (mc) { result = mc; continue; }
-                ErrMsgSemantic(memberTok, UNKNOWN_METHOD);
+                ErrMsgSemantic(memberTok, unknownMethodMsg(result, memberTok));
                 result = OperandIntLiteral(memberTok);
                 continue;
             }
@@ -8364,9 +8413,35 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
             break;
         }
     }
+    //T29f: an array method a declared type inherits gives the declared type where it gives its receiver's own type -
+    //a String's Filter is a String. Same representation, so only the type changes.
+    if (recvType.bType == BASETYPE_ARRAY && isDeclaredArray(recvType) && receiverIsBuiltin(p0) && m->type.hasRetType
+            && call->type.bType == BASETYPE_ARRAY && !call->type.owner) {
+        struct type r = *m->type.retType, pr = p0;
+        r.structMAlloc = pr.structMAlloc = false;
+        r.refMut = pr.refMut = false;
+        r.scopeParam = pr.scopeParam = NULL;
+        if (TypeIsSame(r, pr)) {
+            call->type.owner = recvType.owner;
+            call->type.name = recvType.name;
+            call->type.extendsBase = true;
+        }
+    }
     return call;
 }
 
+
+//M19/T29f: why no method was found - pointing at "extends" when the base has one by that name
+static char* unknownMethodMsg(struct operand* recv, struct token name) {
+    struct type t = recv->type;
+    if (t.owner && t.name.len && !t.extendsBase && (TypeIsNumeric(t) || t.bType == BASETYPE_ARRAY)) {
+        struct type base = t;
+        base.owner = NULL;
+        base.name = (struct str){0};
+        if (VarGetMethod(NULL, strFromTok(name), base)) return METHOD_NOT_INHERITED;
+    }
+    return UNKNOWN_METHOD;
+}
 
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
@@ -8549,7 +8624,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                                                  firstPartOfType(callNode, SNTX_EXPR_ARGS), scopeArgNodes, &mReported);
             if (mc) return mc;
             //M20 means a value is never also an import alias, so there is no other reading to fall back to
-            if (!mReported) ErrMsgSemantic(nameTok, UNKNOWN_METHOD);
+            if (!mReported) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
             buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             return OperandIntLiteral(nameTok);
         }

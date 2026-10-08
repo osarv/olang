@@ -9,7 +9,7 @@ fn Area(r rect.Rect) Int32 {
 
 # a method on a type this module declares over a primitive: reached through its receiver, from this
 # module and from every module holding a value of it
-type Side Int32
+type Side extends Int32
 
 fn (n Side) Squared() Side {
     return n * n

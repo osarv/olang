@@ -1,0 +1,8 @@
+# check: fail only a type declared over a number or an array extends it
+# T29f: a struct has no base to inherit from
+type P extends struct(x Int32) {
+    x
+}
+fn main() ? {
+    p := P(1)
+}

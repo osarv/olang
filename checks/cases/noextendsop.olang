@@ -1,0 +1,7 @@
+# check: fail this type does not extend its base
+# T29f: without "extends", Int32's arithmetic does not make a Meters - declare Plus, or extend Int32
+type Meters Int32
+fn main() ? {
+    a := Meters(1)
+    b Meters = a + a
+}

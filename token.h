@@ -27,6 +27,7 @@ enum tokenType {
     TOK_CONTINUE, //S11: ends the current iteration, same unwinding
     TOK_ABORT,       //S16c: stop now, violently - no cleanup, a core dump, the OS's abort status
     TOK_UNREACHABLE, //S16d: control was believed never to get here; aborts if it does
+    TOK_EXTENDS,     //T29f: "type Meters extends Int32" - the declared type inherits its base's methods and operators
     TOK_DONE,
     TOK_FAIL,
     TOK_ASSERT, //"assert EXPR" - a statement, takes its operand directly like "return" does, not a

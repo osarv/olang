@@ -493,6 +493,7 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     //("Vec<int32>") rather than attaching to "struct"; it also scopes over the whole declaration, not
     //just the body (G6), and keeps type parameters out of the anonymous struct-shape grammar (T3)
     struct syntax* typeParams = parseTypeArgsInto(sc, SNTX_TYPE_PARAMS);
+    struct token ext = acceptTok(sc, TOK_EXTENDS); //T29f
     //"type T&s struct(...)" - same fallback declaration, attached to the constructor node below (a plain
     //struct has no signature for a scope variable to mean anything in, and is rejected semantically)
     struct list scopeDecls = parseScopeDecls(sc);
@@ -525,6 +526,7 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_TYPE_DECL);
     addTok(s, kw);
     addTok(s, name);
+    if (ext.type != TOK_NONE) addTok(s, ext);
     if (typeParams) addSntx(s, typeParams);
     addSntx(s, type);
     if (primCtor) addSntx(s, primCtor);

@@ -1,0 +1,7 @@
+# check: fail inherits its base's methods only when it is declared with 'extends'
+# T29f: without "extends", a declared array type does not inherit the array methods
+type Nums Array<Int32>
+fn main() ? {
+    n := Nums(Int32[1, 2])
+    c := n.Count(fn(x) { return x > 1 })
+}

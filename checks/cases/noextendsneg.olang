@@ -1,0 +1,7 @@
+# check: fail this type does not extend its base
+# T29f: negation makes a value of the type, so it is the type's own (Neg) or inherited with "extends"
+type Meters Int32
+fn main() ? {
+    a := Meters(1)
+    b Meters = -a
+}

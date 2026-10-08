@@ -43,6 +43,8 @@ struct type {
     struct str name;
     struct token tok;
     bool placeholder; //name collected, body not resolved yet
+    bool extendsBase; //T29f: a declared type over a number or an array, written "extends" - it inherits the base's
+                      //methods and operators
     bool resolving;   //cycle guard while resolving this type's body
 
     //BASETYPE_ARRAY
