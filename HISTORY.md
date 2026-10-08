@@ -8061,9 +8061,9 @@ from their original form.
   infinity (`1e308 * 10.0`) has no value and is an error even into an `F64`. (e) An expression under `try` is not
   literal-only: `try (1 + 2)` is a checked computation in its own types, and folding it would discard its clauses.
   (f) Names do not take part - an immutable global or a build constant is a name, not a literal - though both could
-  join later (the token evaluator already folds such globals for conditions). (g) E8a's shift-amount check stays
-  against the shifted literal's own width, so `x I64 = 1 << 40` is still an error (write `I64(1) << 40`): the check is
-  made where the shift is built, before any target is known, and without a target the shift really is `I32`'s. (h) A
+  join later (the token evaluator already folds such globals for conditions). (g) E8a's shift-amount check stayed
+  against the shifted literal's own width, so `x I64 = 1 << 40` was still an error - **reversed the same day, below**.
+  (h) A
   character literal counts as a numeric one, so `c Char = 'a' + 1` works.
   **What changes meaning**: `x I64 = 2147483647 + 1` was `-2147483648` (an `I32` sum, wrapped, then widened) and is now
   2147483648; `x I32 = 1 << 31` was `INT_MIN` and is now an error; a generic reached only by `2147483647 + 1` is an
@@ -8121,3 +8121,24 @@ from their original form.
   run-time ones; the half-zero fix), the T6a test's rendering assert rewritten (`$F64(0.1)` and `$F32(0.1)` are both
   `0.1` now), and checks/cases `e4arange`, `e4aexact`, `e4afloatoverflow`, `e4azerodiv`, `t6f32range`, `t6f16range`,
   `t6f16intrange`, `t6bf16range`, `l12bfloatbig`, `e6dnomeet`; `t6afloatexpr` went with the rule it pinned.
+
+  **Follow-up the same day: a literal-only shift is exact too (E4a/E8a, the coordinator's decision on call (g)).**
+  Keeping E8a's width check for `1 << 40` was a rough edge against "integers are computed exactly": the width it checks
+  against is the shifted literal's own (`I32`'s), which is exactly what adapting throws away. Now a shift inside a
+  literal-only expression is `x` times 2^n (`>>` the floor of `x` over 2^n), the amount bounded by no width, so
+  `x I64 = 1 << 40` is 1099511627776 and `x U64 = 1 << 63` 2^63, while `x I32 = 1 << 31` is an error because 2147483648
+  does not fit - the result, not the amount, is judged. A negative amount stays an error where it is written; an amount
+  so large the exact value leaves the evaluator's 128 signed bits (`1 << 127`, `3 << 126`) gives the expression no
+  value, reported as one that does not fit. The width check stays for a shift that is not literal-only (`n << 40`).
+  **The catch is that the amount is written before anything knows whether the shift will adapt**: `$(1 << 40)` has no
+  target, stays an `I32` shift and is undefined (E8a), so it must still be an error. The check is therefore deferred:
+  a literal-only shift past its literal's width is recorded where it is built, and `checkLiteralShifts` reports it once
+  every body and instantiation has been checked, unless a fold took it away. A fold marks every node it replaces
+  (`litFoldedAway`; the root it rewrites in place stops being a shift), and a fit that judges an expression by its value
+  and rejects it marks it too, so `x I32 = 1 << 40` is one error (it does not fit), not two. The message for the
+  deferred case (`SHIFT_OUT_OF_RANGE_UNADAPTED`) says to write the shift where a wide enough type is wanted or to
+  convert the literal (`I64(1) << 40`). Inside a generic body it works per instantiation: `x + (1 << 40)` with `x` an
+  `I64` folds there. Tests: shared.olang bakes `LitExprShift I64 = 1 << 40` and `LitExprTop U64 = 1 << 63` and compares
+  them with an `I64` shift a mutable global does at run time; checks/cases `e4ashiftunadapted` (`$(1 << 40)`) and
+  `e4ashiftfit` (`x I32 = 1 << 31`). An atomic's literal-only value now goes through the fit check like any target (it
+  had kept a wrapping tree when the value did not fit its own type).

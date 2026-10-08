@@ -4450,6 +4450,8 @@ static bool operandIsLiteralLike(struct operand* op) { return op->isLiteral || o
 //E4a: what a literal-only expression is worth, computed while compiling - an integer exactly, never wrapped (E6c is
 //the run time's arithmetic, not this), a float in F64 as its literals are (T6a)
 struct litValue { bool isFloat; litWide i; double f; };
+//E4a/E8a: literal-only shifts whose amount is past the shifted literal's width - an error unless something folds them
+static struct list literalShifts;
 enum litValueFail { LIT_VALUE_OK, LIT_VALUE_NONE, LIT_VALUE_ZERO_DIV };
 
 //LIT_VALUE_NONE where it has no value any type could hold - an integer beyond 128 bits, a finite float computation
@@ -4540,6 +4542,26 @@ static enum litValueFail literalExprFold(struct operand* op) {
     return LIT_VALUE_OK;
 }
 
+//E4a: what a fold replaced - every node below saved, the tree op was before it became a literal - is gone from the
+//program, so a check deferred to the end (a shift's amount, E8a) no longer applies to it
+static void markFoldedAway(struct operand* saved) {
+    for (int i = 0; i < saved->args.len; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&saved->args, i);
+        a->litFoldedAway = true;
+        markFoldedAway(a);
+    }
+}
+
+//E4a/E8a: a literal-only shift past its literal's width that nothing folded is computed in that literal's own type at
+//run time, which E8a leaves undefined - so it is the error a written shift amount always was
+static void checkLiteralShifts(void) {
+    for (int i = 0; i < literalShifts.len; i++) {
+        struct operand* sh = *(struct operand**)ListGetIdx(&literalShifts, i);
+        if (sh->litFoldedAway || (sh->opType != OPERATION_BTSFT_L && sh->opType != OPERATION_BTSFT_R)) continue;
+        ErrMsgSemantic((*(struct operand**)ListGetIdx(&sh->args, 1))->tok, SHIFT_OUT_OF_RANGE_UNADAPTED);
+    }
+}
+
 //true if numeric LITERAL `lit` may implicitly adapt to a `to`-typed target - the one exception T6 carves
 //out of "no implicit conversion between distinct types." A literal has no fixed width/representation of
 //its own yet (unlike an already-evaluated non-literal value, which does, and needs an actual runtime
@@ -4566,6 +4588,7 @@ static bool operandAdaptLiteral(struct operand* op, struct type to) {
     struct operand saved = *op;
     if (!op->isLiteral && literalExprFold(op) != LIT_VALUE_OK) return false;
     if (!numericLiteralFits(op, to)) { *op = saved; return false; }
+    markFoldedAway(&saved);
     if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op);
     op->type = to;
     return true;
@@ -4915,8 +4938,11 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         enum litValueFail why = literalExprFold(op);
         if (why == LIT_VALUE_ZERO_DIV) return TYPE_FIT_OK; //reported where the division was built (E6a)
         enum typeFit r = why == LIT_VALUE_OK ? OperandFitsType(func, op, target) : TYPE_FIT_LITERAL_EXPR;
+        //judged by its value either way - one that does not fit, or has none, is that error, not also a shift's (E8a)
+        markFoldedAway(&saved);
         if (r == TYPE_FIT_OK) return r;
         *op = saved;
+        op->litFoldedAway = true;
         return r == TYPE_FIT_LITERAL_RANGE ? TYPE_FIT_LITERAL_EXPR : r;
     }
     //T25c: a read-only reference never becomes writable by being put somewhere
@@ -5982,7 +6008,8 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
         struct operand* v = *(struct operand**)ListGetIdx(&args, i);
         //a literal still adapts by representability, exactly as against any other same-type-requiring
         //position (T6); anything else must already be the target's type
-        if (!operandAdaptLiteral(v, target->type) && !TypeIsSame(v->type, target->type)) ErrMsgSemantic(v->tok, ATOMIC_VALUE_TYPE);
+        if (operandOnlyNumericLiterals(v)) reportTypeFit(OperandFitsType(NULL, v, target->type), v->tok);
+        else if (!TypeIsSame(v->type, target->type)) ErrMsgSemantic(v->tok, ATOMIC_VALUE_TYPE);
         ListAdd(&op->args, &v);
     }
     return op;
@@ -6646,7 +6673,9 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
             //E6d: a value the other's type cannot hold meets it at the literal's own type (T6a), as two numbers meet
             //(T6b) - "b + 300" with b a U8 is an I32, b widened; a literal-only expression is the literal holding its
             //value. Where the other's type does not flow there, they do not meet.
+            struct operand saved = *lit;
             enum litValueFail why = lit->isLiteral ? LIT_VALUE_OK : literalExprFold(lit);
+            if (!saved.isLiteral && why == LIT_VALUE_OK) markFoldedAway(&saved);
             unfit = true;
             if (why == LIT_VALUE_NONE) ErrMsgSemantic(lit->tok, LITERAL_EXPR_NOT_REPRESENTABLE);
             else if (why == LIT_VALUE_OK && NumericFlows(other->type, lit->type, true)) {
@@ -6677,9 +6706,13 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     bool bConst = (opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R || opType == OPERATION_DIV
                    || opType == OPERATION_MOD) && TypeIsInt(b->type) && operandOnlyNumericLiterals(b)
                   && literalExprValue(b, &bv) == LIT_VALUE_OK;
+    //...except a literal-only shift's amount past its width (E4a): such a shift is computed exactly where it adapts
+    //("x I64 = 1 << 40"), so its amount is judged only if nothing folds it - at the end, by checkLiteralShifts
+    bool deferShift = false;
     if ((opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R) && bConst && TypeIsInt(a->type)) {
         long long width = TypeGetSize(a->type) * 8;
-        if (bv.i < 0 || bv.i >= width) {
+        if (bv.i >= width && bv.i >= 0 && operandOnlyNumericLiterals(a)) deferShift = true;
+        else if (bv.i < 0 || bv.i >= width) {
             ErrMsgSemantic(b->tok, SHIFT_OUT_OF_RANGE_LITERAL);
         }
     }
@@ -6692,6 +6725,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : a->type);
     ListAdd(&op->args, &a);
     ListAdd(&op->args, &b);
+    if (deferShift) ListAdd(&literalShifts, &op);
 
     bool aOk = operandMeetsReq(a, rule.require);
     bool bOk = operandMeetsReq(b, rule.require);
@@ -12862,6 +12896,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
+    literalShifts = ListInit(sizeof(struct operand*)); //E4a
     zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
     inlinePendings = ListInit(sizeof(struct inlinePending)); //C2e
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
@@ -12942,6 +12977,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         drainTypeInstantiations();
     }
     checkFuncValueUses(); //T22a: every body's obligations are known now
+    checkLiteralShifts(); //E4a/E8a: every literal-only expression that adapts has been folded now
     if (ErrMsgGetNErrors() == errsAtStart) checkStrPurity();
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's

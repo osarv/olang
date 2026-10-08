@@ -754,6 +754,8 @@ LitExprU8 U8 = 200 + 55
 LitExprExact I64 = 2147483647 + 1                           # an I32 computation would wrap it to -2147483648
 LitExprThird F32 = 1.0 / 3.0                                # computed in F64, rounded to F32 once
 LitExprMask U8 = 0xFF & ~0x0F
+LitExprShift I64 = 1 << 40                                  # exact: the shift is not I32's, so 40 is no amount too far
+LitExprTop U64 = 1 << 63
 LitExprSeen mut I64 = 0
 
 test "E4a: an expression built only from literals adapts to its target as one literal does" {
@@ -769,6 +771,10 @@ test "E4a: an expression built only from literals adapts to its target as one li
     LitExprSeen = 2147483647
     LitExprSeen = LitExprSeen + 1                           # mutable: this runs, and agrees with the baked one
     assert LitExprSeen == LitExprExact
+    LitExprSeen = 1
+    LitExprSeen = LitExprSeen << 40                         # an I64 shift at run time, agreeing with the baked one
+    assert LitExprSeen == LitExprShift and LitExprShift == 1099511627776 and LitExprTop == U64(1) << 63
+    assert LitExprSeen + (1 << 40) == 2199023255552 and litKind(LitExprSeen + (1 << 40)) == 64
     g := F32(0.25)
     g = g + F32(1.0 / 12.0)                                 # written, so the comparisons below run
     assert g == 1.0 / 3.0 and litKind(g + 1.0 / 3.0) == 132 # in F32, as "g == 0.333..." would be

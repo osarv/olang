@@ -507,6 +507,8 @@ struct operand {
                       //other declared-size array; a D14a constructor field still zero-fills.
     bool zeroBits; //D13c: a zero-value constructor call found, while compiling, to give all zero bits - so nothing runs
     bool litCtorPending; //T29d: a literal entering a type with a constructor - recorded to be run while compiling
+    bool litFoldedAway;  //E4a: part of a literal-only expression folded into the one literal holding its value - no
+                          //longer in the program, so nothing deferred about it (a shift's amount, E8a) applies
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.

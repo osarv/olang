@@ -1525,7 +1525,11 @@ literal holding that value. The value is computed **exactly** - an integer as a 
 (E6c is the run time's arithmetic, not this), and a float in `F64`, its literals' own type (T6a), each operator
 rounding once as `F64` arithmetic does, the result rounded once more to the target. Each operator applies to its
 operands as their types say, two literals of differing types meeting as T6 ranks them: `7 / 2` is `3` and
-`(1 + 2) * 0.5` is `1.5`. So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
+`(1 + 2) * 0.5` is `1.5`. A shift is exact too - `x << n` is `x` times 2^n and `x >> n` the floor of `x` over 2^n,
+the amount bounded by no width - so `x I64 = 1 << 40` is 1099511627776 and `x I32 = 1 << 31` is an error, the value
+2147483648 not fitting (E8a's width check is for a shift nothing adapts). The exact computation is carried out in 128
+signed bits; a value past them - a nonzero literal shifted by 127 or more, say - has no value, and is an error like
+any other that does not fit, as is a negative amount (E8a). So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
 `g < 1.0 / 3.0` with `g` an `F32` compares two `F32`s as `g < 0.333` would, and `b U8 = 200 + 100` and
 `x I32 = 2147483647 + 1` are compile-time errors: the value does not fit. It is likewise an error where the value
 has none - a float computation whose finite operands give an infinity (`1e308 * 10.0`) - and an integer `/` or `%` by
@@ -1620,7 +1624,9 @@ the result is the shifted operand's own type.
 **undefined behaviour** — the two operands need not share a type (E5), and it is the left one's width that
 bounds the right one. Nothing is checked at run time. Where the amount is a literal or a literal-only expression
 (E4a) the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
-apply.
+apply. The one exception is a shift that is itself part of a literal-only expression something adapts (E4a): it is
+computed exactly while compiling, so only its result must fit (`x I64 = 1 << 40`); a negative amount is still an error,
+and with nothing adapting it the shift is its literal's own type's and the amount is judged against that width.
 
 This is not merely undefined in the abstract: the result is architecture-dependent. x86 masks the count
 to the low bits of the operand width, so `1 << 32` yields `1`; other targets yield `0` or trap. A program

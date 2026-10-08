@@ -2928,7 +2928,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   `operandAdaptLiteral`), and every site that let a literal adapt now asks `operandIsLiteralLike`; the evaluator sees
   only the folded literal, so it agrees by construction. With no target nothing changes (`x := 1 + 2` stays an error).
   Names (immutable globals, `-D` constants) do not join yet - flagged; nor does an expression under `try`, which is a
-  checked computation in its own types. Integer `/` `%` by a literal-only zero is an error anywhere; **a float division
+  checked computation in its own types. A shift in one is exact too (`x I64 = 1 << 40` compiles, `x I32 = 1 << 31` does
+  not fit; the coordinator's follow-up): E8a's width check is deferred for it to the end of checking and applies only
+  if nothing folded it (`$(1 << 40)`). Integer `/` `%` by a literal-only zero is an error anywhere; **a float division
   by zero stays an infinity/NaN** (IEEE; the prelude writes them that way) - my call against the literal wording,
   flagged. **E6d (the coordinator's addition)**: beside an operand whose type cannot hold it, a literal meets it at the
   literal's own type by T6b - `b + 300` (b `U8`) is an `I32`, `f32 + 1e300` an `F64` - and where that operand does not
