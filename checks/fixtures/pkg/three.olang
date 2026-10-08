@@ -1,2 +1,2 @@
 # M22: a neighbour in the same directory is not visible without an import
-fn Three() Int32 { return Two() + 1 }
+fn Three() I32 { return Two() + 1 }

@@ -1,8 +1,8 @@
 # check: fail C2d
 # the instance assigned to an outer variable would outlive the inner block its argument lives in
-type P struct(x Int32) { x }
+type P struct(x I32) { x }
 type NB struct(inner P&) { inner }
-fn bad(c Bool) Int32 {
+fn bad(c Bool) I32 {
     nb NB& = NB(P(1))
     if c {
         q P& = P(2)

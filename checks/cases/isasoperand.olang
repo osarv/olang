@@ -2,5 +2,5 @@
 # E32: is on a plain value
 fn main() ? {
     x := 5
-    if x is Int32 { }
+    if x is I32 { }
 }

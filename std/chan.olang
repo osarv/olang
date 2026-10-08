@@ -12,44 +12,44 @@ import "cancel"
 # true size is a property of the architecture rather than of C: glibc's own headers define three different
 # values for pthread_mutex_t (40, 32, 24) by machine, and other platforms differ again. 8 words is 64
 # bytes, comfortably above all of them, for a few bytes per channel.
-# Words: the ELEMENT TYPE is what supplies the alignment. "Int64" is 8-aligned, so "Int64[8]" is 8-aligned
+# Words: the ELEMENT TYPE is what supplies the alignment. "I64" is 8-aligned, so "I64[8]" is 8-aligned
 # wherever it sits - inline in a struct, in a local, in the arena - which is what pthread needs. A
-# "Byte[64]" would be alignment 1 and could land at any offset in its container: measured, a byte blob
+# "U8[64]" would be alignment 1 and could land at any offset in its container: measured, a byte blob
 # after a single byte field sits at offset 1, where a word blob sits at 8.
 # And they carry no "mut" because their bytes are pthread's, not ours - that stops olang writing them
 # while leaving pthread free to, since an extern-param carries no mutability and X3 hands over a bare
 # pointer.
-MutexWords Int32 = 8
-CondWords Int32 = 8
+MutexWords I32 = 8
+CondWords I32 = 8
 
-extern fn pthread_mutex_init(m Array<Int64>, attr Int64) Int32
-extern fn pthread_mutex_lock(m Array<Int64>) Int32
-extern fn pthread_mutex_unlock(m Array<Int64>) Int32
-extern fn pthread_cond_init(c Array<Int64>, attr Int64) Int32
-extern fn pthread_cond_wait(c Array<Int64>, m Array<Int64>) Int32
-extern fn pthread_cond_broadcast(c Array<Int64>) Int32
-extern fn pthread_cond_timedwait(c Array<Int64>, m Array<Int64>, ts Array<Int64>) Int32
+extern fn pthread_mutex_init(m Array<I64>, attr I64) I32
+extern fn pthread_mutex_lock(m Array<I64>) I32
+extern fn pthread_mutex_unlock(m Array<I64>) I32
+extern fn pthread_cond_init(c Array<I64>, attr I64) I32
+extern fn pthread_cond_wait(c Array<I64>, m Array<I64>) I32
+extern fn pthread_cond_broadcast(c Array<I64>) I32
+extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 
 # This type synchronises its own state, which is exactly what no compile-time rule could know. It used to
 # say so with a "shared" marker waiving P3's exclusivity for the whole type - a claim nothing verified.
 # Both are gone now: P3 could never be sound without an ownership discipline this language does not have,
 # so it stopped claiming and was then removed outright, and an exemption from a rule that no longer exists
 # has nothing to mean. A channel handed to a producer and a consumer is once again just a channel.
-type Chan<T> struct(cap Int32) {
+type Chan<T> struct(cap I32) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
     data mut Array<<T>>& = Array<<T>>(cap)
-    head mut Int64 = 0
-    tail mut Int64 = 0
-    count mut Int64 = 0
-    lock Array<Int64>& = Array<Int64>(MutexWords)
-    notEmpty Array<Int64>& = Array<Int64>(CondWords)
-    notFull Array<Int64>& = Array<Int64>(CondWords)
+    head mut I64 = 0
+    tail mut I64 = 0
+    count mut I64 = 0
+    lock Array<I64>& = Array<I64>(MutexWords)
+    notEmpty Array<I64>& = Array<I64>(CondWords)
+    notFull Array<I64>& = Array<I64>(CondWords)
 }
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
 # final address of the mutex and the constructed value has not reached its home yet.
-fn Init(c mut Chan<Int32>&) {
+fn Init(c mut Chan<I32>&) {
     pthread_mutex_init(c.lock, 0)
     pthread_cond_init(c.notEmpty, 0)
     pthread_cond_init(c.notFull, 0)
@@ -57,7 +57,7 @@ fn Init(c mut Chan<Int32>&) {
 
 # blocks while the channel is full, then appends. "while" is spelled as a do-loop guarded by a re-check,
 # since a condition variable may wake spuriously and the count must be re-read under the lock either way.
-fn Send(c mut Chan<Int32>&, v Int32) {
+fn Send(c mut Chan<I32>&, v I32) {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == c.data.Len() {
@@ -72,14 +72,14 @@ fn Send(c mut Chan<Int32>&, v Int32) {
 }
 
 # blocks while the channel is empty, then takes the oldest value
-fn Recv(c mut Chan<Int32>&) Int32 {
+fn Recv(c mut Chan<I32>&) I32 {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == 0 {
             pthread_cond_wait(c.notEmpty, c.lock)
         }
     } for c.count == 0
-    v Int32 = c.data[c.head]
+    v I32 = c.data[c.head]
     c.head = (c.head + 1) % c.data.Len()
     c.count = c.count - 1
     pthread_cond_broadcast(c.notFull)
@@ -89,8 +89,8 @@ fn Recv(c mut Chan<Int32>&) Int32 {
 
 # Send, giving up - with the token's reason - once the token fires while the channel is still full. The wait
 # wakes at the token's deadline, and every few milliseconds besides to notice a Cancel() (cancel.WakeAt).
-fn SendUntil(c mut Chan<Int32>&, v Int32, tok cancel.Token&) ? cancel.Stopped {
-    ts := Array<Int64>(2)
+fn SendUntil(c mut Chan<I32>&, v I32, tok cancel.Token&) ? cancel.Stopped {
+    ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() {
         if tok.Cancelled() {
@@ -108,8 +108,8 @@ fn SendUntil(c mut Chan<Int32>&, v Int32, tok cancel.Token&) ? cancel.Stopped {
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty
-fn RecvUntil(c mut Chan<Int32>&, tok cancel.Token&) Int32 ? cancel.Stopped {
-    ts := Array<Int64>(2)
+fn RecvUntil(c mut Chan<I32>&, tok cancel.Token&) I32 ? cancel.Stopped {
+    ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == 0 {
         if tok.Cancelled() {
@@ -119,7 +119,7 @@ fn RecvUntil(c mut Chan<Int32>&, tok cancel.Token&) Int32 ? cancel.Stopped {
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notEmpty, c.lock, ts)
     }
-    v Int32 = c.data[c.head]
+    v I32 = c.data[c.head]
     c.head = (c.head + 1) % c.data.Len()
     c.count = c.count - 1
     pthread_cond_broadcast(c.notFull)
@@ -128,26 +128,26 @@ fn RecvUntil(c mut Chan<Int32>&, tok cancel.Token&) Int32 ? cancel.Stopped {
 }
 
 # a producer and a consumer on separate tasks, communicating only through the channel. This is the shape
-# P3 used to reject and "shared" used to un-reject: one channel handed to both as "mut Chan<Int32>&".
+# P3 used to reject and "shared" used to un-reject: one channel handed to both as "mut Chan<I32>&".
 # Nothing about it is checked - the correctness is the mutex's, which is where it belongs.
-fn produce(c mut Chan<Int32>&, n Int32) {
+fn produce(c mut Chan<I32>&, n I32) {
     for i in range n {
         Send(c, i)
     }
 }
 
-fn consume(c mut Chan<Int32>&, n Int32, total mut Sum&) {
+fn consume(c mut Chan<I32>&, n I32, total mut Sum&) {
     for i in range n {
         total.v = total.v + Recv(c)
     }
 }
 
-type Sum struct(start Int32) {
-    v mut Int32 = start
+type Sum struct(start I32) {
+    v mut I32 = start
 }
 
 test "a bounded channel carries values between two tasks" {
-    c Chan<Int32>& = Chan<Int32>(4)
+    c Chan<I32>& = Chan<I32>(4)
     Init(c)
     total Sum& = Sum(0)
     join {
@@ -160,7 +160,7 @@ test "a bounded channel carries values between two tasks" {
 
 # and the same channel used sequentially, which exercises the ring buffer wrapping several times over
 test "the ring buffer wraps" {
-    c Chan<Int32>& = Chan<Int32>(4)
+    c Chan<I32>& = Chan<I32>(4)
     Init(c)
     total Sum& = Sum(0)
     for round in range 5 {
@@ -171,7 +171,7 @@ test "the ring buffer wraps" {
 }
 
 test "a wait with a token returns what is there, and gives up when the deadline passes" {
-    c Chan<Int32>& = Chan<Int32>(1)
+    c Chan<I32>& = Chan<I32>(1)
     Init(c)
     tok := cancel.After(30)
     try SendUntil(c, 5, tok) catch { fail }
@@ -185,12 +185,12 @@ test "a wait with a token returns what is there, and gives up when the deadline 
     fail
 }
 
-fn waitFor(c mut Chan<Int32>&, tok cancel.Token&, got mut Sum&) {
+fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut Sum&) {
     got.v = try RecvUntil(c, tok) catch cancel.Stopped.CANCELLED default -1 catch default -2
 }
 
 test "Cancel wakes a task blocked in a wait" {
-    c Chan<Int32>& = Chan<Int32>(1)
+    c Chan<I32>& = Chan<I32>(1)
     Init(c)
     tok cancel.Token& = cancel.Token()
     got Sum& = Sum(0)

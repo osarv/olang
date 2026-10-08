@@ -3,7 +3,7 @@
 error RangeError {
     NEGATIVE
 }
-type Checked Int32(v Int32) ? RangeError {
+type Checked I32(v I32) ? RangeError {
     if v < 0 { error RangeError.NEGATIVE }
 }
 fn main() ? {

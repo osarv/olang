@@ -1,7 +1,7 @@
 # check: fail Str must have no effect a program could observe
 # E11c: "$" calls Str as often as building the text needs, so one that writes a global is rejected
-Shown mut Int32 = 0
-type Pt struct(n Int32) {
+Shown mut I32 = 0
+type Pt struct(n I32) {
     n
 }
 fn (p Pt&) Str() String {

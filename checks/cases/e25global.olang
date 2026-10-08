@@ -1,10 +1,10 @@
 # check: fail the program's own scope
 # E25/O25: a scope argument naming a global - its referent lives in the program's scope, which no function
 # allocates into
-type GN struct(v Int32) { v }
-fn gmk(v Int32) GN& { return GN(v) }
+type GN struct(v I32) { v }
+fn gmk(v I32) GN& { return GN(v) }
 G GN& = GN(1)
-fn f() Int32 {
+fn f() I32 {
     x := gmk&G(2)
     return x.v
 }

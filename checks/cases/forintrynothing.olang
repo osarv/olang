@@ -1,6 +1,6 @@
 # check: fail nothing this loop calls can fail
 # S9e: try on a loop that calls nothing fallible
 fn main() ? {
-    a := Int32[1, 2]
+    a := I32[1, 2]
     for x in try a { }
 }

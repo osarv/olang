@@ -1,4 +1,4 @@
 # check: build
 error E { X }
 fn main() ? E { }
-Last Int32 = 7
+Last I32 = 7

@@ -100,17 +100,35 @@ static struct ctVal* ctCheckFail(struct ctState* st, struct operand* op, char* w
     return NULL;
 }
 
-//R20: does an exact integer result fit type t - two's complement for the signed types, 0..255 for Byte
+//R20: does an exact integer result fit type t - two's complement for the I types, 0 .. 2^w - 1 for the U types (T4)
 static bool ctFits(struct type t, ctWide v) {
-    if (t.bType == BASETYPE_BYTE) return v >= 0 && v <= 255;
-    if (t.bType == BASETYPE_INT32) return v >= INT32_MIN && v <= INT32_MAX;
-    return v >= INT64_MIN && v <= INT64_MAX;
+    const struct primInfo* p = PrimInfo(t.bType);
+    if (!p) return true;
+    if (p->kind == 'u') return v >= 0 && v <= (((ctWide)1 << p->bits) - 1);
+    return v >= -((ctWide)1 << (p->bits - 1)) && v < ((ctWide)1 << (p->bits - 1));
+}
+
+//T4: an integer value's exact mathematical value - a U64's bit pattern read unsigned; every other type's value is
+//kept normalized in its range already
+static ctWide ctExact(struct ctVal* v) {
+    if (v->type.bType == BASETYPE_U64) return (ctWide)(unsigned long long)v->i;
+    return v->i;
+}
+
+//T4: a float rounded to its type, as the generated code rounds it
+static double ctRound(struct type t, double r) {
+    switch (t.bType) {
+        case BASETYPE_FLOAT32: return (double)(float)r;
+        case BASETYPE_F16: return MinifloatTo(MinifloatFrom(r, 5, 10), 5, 10);
+        case BASETYPE_BF16: return MinifloatTo(MinifloatFrom(r, 8, 7), 8, 7);
+        default: return r;
+    }
 }
 
 //R20: a float result's checks - infinite from finite operands is OVERFLOW, NaN from non-NaN operands INVALID
 static struct ctVal* ctCheckFloat(struct ctState* st, struct operand* op, struct type t, double x, double y,
                                   bool binary, double r) {
-    if (t.bType == BASETYPE_FLOAT32) r = (double)(float)r;
+    r = ctRound(t, r);
     if (isinf(r) && isfinite(x) && (!binary || isfinite(y))) return ctCheckFail(st, op, "OVERFLOW");
     if (isnan(r) && !isnan(x) && (!binary || !isnan(y))) return ctCheckFail(st, op, "INVALID");
     return ctFloat(t, r);
@@ -169,19 +187,19 @@ static void ctAssign(struct ctVal* node, struct ctVal* v) {
     *node = *c;
 }
 
+//E6c: an integer reduced to its type's width - zero-extended for a U type, sign-extended for an I type (T4)
 static long long ctWrap(struct type t, long long v) {
-    switch (t.bType) {
-        case BASETYPE_BYTE:  return (long long)(uint8_t)v;
-        case BASETYPE_INT32: return (long long)(int32_t)v;
-        case BASETYPE_BOOL:  return v != 0;
-        default:             return v;
-    }
+    if (t.bType == BASETYPE_BOOL) return v != 0;
+    const struct primInfo* p = PrimInfo(t.bType);
+    if (!p || p->kind == 'f' || p->bits == 64) return v;
+    unsigned long long mask = (1ULL << p->bits) - 1, u = (unsigned long long)v & mask;
+    if (p->kind == 'u') return (long long)u;
+    unsigned long long sign = 1ULL << (p->bits - 1);
+    return (long long)((u ^ sign) - sign);
 }
 
-static bool ctIsInt(struct type t) {
-    return t.bType == BASETYPE_BYTE || t.bType == BASETYPE_INT32 || t.bType == BASETYPE_INT64;
-}
-static bool ctIsFloat(struct type t) { return t.bType == BASETYPE_FLOAT32 || t.bType == BASETYPE_FLOAT64; }
+static bool ctIsInt(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind != 'f'; }
+static bool ctIsFloat(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind == 'f'; }
 
 static struct ctVal* ctZero(struct type t) {
     if (ctIsRef(t) || t.bType == BASETYPE_FUNC) return ctNew(CT_NULL, t);
@@ -216,7 +234,7 @@ static struct ctVal* ctInt(struct type t, long long i) { struct ctVal* v = ctNew
 static struct ctVal* ctBool(bool b) { struct ctVal* v = ctNew(CT_BOOL, TypeVanilla(BASETYPE_BOOL)); v->i = b; return v; }
 static struct ctVal* ctFloat(struct type t, double f) {
     struct ctVal* v = ctNew(CT_FLOAT, t);
-    v->f = t.bType == BASETYPE_FLOAT32 ? (double)(float)f : f;
+    v->f = ctRound(t, f);
     return v;
 }
 
@@ -225,7 +243,7 @@ static struct ctVal* ctDeref(struct ctVal* v) {
     return v;
 }
 
-static double ctAsF(struct ctVal* v) { return v->kind == CT_FLOAT ? v->f : (double)v->i; }
+static double ctAsF(struct ctVal* v) { return v->kind == CT_FLOAT ? v->f : (double)ctExact(v); }
 
 static struct ctVal* ctEval(struct ctState* st, struct operand* op);
 static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type dst);
@@ -404,7 +422,7 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                 r = op->opType == OPERATION_LST ? x < y : op->opType == OPERATION_LSE ? x <= y
                   : op->opType == OPERATION_GRT ? x > y : x >= y;
             } else {
-                long long x = a->i, y = b->i;
+                ctWide x = ctExact(a), y = ctExact(b); //T4: a U64 compares unsigned
                 r = op->opType == OPERATION_LST ? x < y : op->opType == OPERATION_LSE ? x <= y
                   : op->opType == OPERATION_GRT ? x > y : x >= y;
             }
@@ -426,20 +444,19 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                 default: break;
             }
         } else if (ctIsInt(t)) {
-            int w = t.bType == BASETYPE_BYTE ? 8 : t.bType == BASETYPE_INT32 ? 32 : 64;
-            ctWide x = t.bType == BASETYPE_BYTE ? (uint8_t)a->i : a->i;
-            ctWide y = t.bType == BASETYPE_BYTE ? (uint8_t)b->i : b->i;
+            int w = PrimInfo(t.bType)->bits;
+            ctWide x = ctExact(a), y = ctExact(b);
             switch (op->opType) {
                 case OPERATION_ADD: if (!ctFits(t, x + y)) return ctCheckFail(st, op, "OVERFLOW"); break;
                 case OPERATION_SUB: if (!ctFits(t, x - y)) return ctCheckFail(st, op, "OVERFLOW"); break;
                 case OPERATION_MUL: if (!ctFits(t, x * y)) return ctCheckFail(st, op, "OVERFLOW"); break;
                 case OPERATION_DIV: case OPERATION_MOD:
                     if (y == 0) return ctCheckFail(st, op, "DIVIDE_BY_ZERO");
-                    if (t.bType != BASETYPE_BYTE && y == -1 && !ctFits(t, -x)) return ctCheckFail(st, op, "OVERFLOW");
+                    if (!TypeIsUnsigned(t) && y == -1 && !ctFits(t, -x)) return ctCheckFail(st, op, "OVERFLOW");
                     break;
                 case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: {
                     //the amount in its own type: a negative one, or one past the width, is INVALID
-                    long long n = bOp->type.bType == BASETYPE_BYTE ? (uint8_t)b->i : b->i;
+                    ctWide n = ctExact(b);
                     if (n < 0 || n >= w) return ctCheckFail(st, op, "INVALID");
                     break;
                 }
@@ -469,8 +486,10 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     }
     if (!ctIsInt(t)) return ctFail(st, op->tok, "it uses an operator on values compile-time evaluation does not model");
     long long x = a->i, y = b->i;
-    int bits = t.bType == BASETYPE_BYTE ? 8 : t.bType == BASETYPE_INT32 ? 32 : 64;
+    int bits = PrimInfo(t.bType)->bits;
+    bool uns = TypeIsUnsigned(t);
     unsigned long long ux = (unsigned long long)x, uy = (unsigned long long)y;
+    ctWide shift = ctExact(b); //a shift count in its own type
     switch (op->opType) {
         case OPERATION_ADD: return ctInt(t, (long long)(ux + uy));
         case OPERATION_SUB: return ctInt(t, (long long)(ux - uy));
@@ -478,12 +497,9 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
         case OPERATION_DIV: case OPERATION_MOD: {
             //E6a: undefined at run time, so refused here rather than given a value the program never had
             if (y == 0) return ctFail(st, op->tok, "it divides by zero");
-            long long minV = bits == 64 ? INT64_MIN : bits == 32 ? INT32_MIN : 0;
-            if (t.bType != BASETYPE_BYTE && x == minV && y == -1) return ctFail(st, op->tok, "it divides the most negative value by -1, which overflows");
-            if (t.bType == BASETYPE_BYTE) {
-                unsigned long long bx = (uint8_t)x, by = (uint8_t)y;
-                return ctInt(t, (long long)(op->opType == OPERATION_DIV ? bx / by : bx % by));
-            }
+            long long minV = bits == 64 ? INT64_MIN : -(1LL << (bits - 1));
+            if (!uns && x == minV && y == -1) return ctFail(st, op->tok, "it divides the most negative value by -1, which overflows");
+            if (uns) return ctInt(t, (long long)(op->opType == OPERATION_DIV ? ux / uy : ux % uy)); //held zero-extended
             return ctInt(t, op->opType == OPERATION_DIV ? x / y : x % y);
         }
         case OPERATION_BTWSE_AND: return ctInt(t, x & y);
@@ -491,10 +507,10 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
         case OPERATION_BTWSE_XOR: case OPERATION_XOR: return ctInt(t, x ^ y);
         case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: {
             //E8a: a count outside [0, width) is undefined at run time
-            if (y < 0 || y >= bits) return ctFail(st, op->tok, "it shifts by a count outside the type's width");
-            if (op->opType == OPERATION_BTSFT_L) return ctInt(t, (long long)(ux << y));
-            if (t.bType == BASETYPE_BYTE) return ctInt(t, (long long)((uint8_t)x >> y));
-            return ctInt(t, x >> y); //arithmetic for the signed types, as the generated code does
+            if (shift < 0 || shift >= bits) return ctFail(st, op->tok, "it shifts by a count outside the type's width");
+            if (op->opType == OPERATION_BTSFT_L) return ctInt(t, (long long)(ux << (int)shift));
+            if (uns) return ctInt(t, (long long)(ux >> (int)shift)); //logical for the U types
+            return ctInt(t, x >> (int)shift); //arithmetic for the I types, as the generated code does
         }
         default: return ctFail(st, op->tok, "it uses an operator compile-time evaluation does not model");
     }
@@ -512,6 +528,13 @@ bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y) {
     return x->i == y->i;
 }
 
+//T4: an integer type's range as doubles - lo inclusive, hi exclusive, both powers of two and so exact
+static void ctIntBounds(struct type t, double* lo, double* hi) {
+    const struct primInfo* p = PrimInfo(t.bType);
+    *lo = p->kind == 'u' ? 0.0 : -ldexp(1.0, p->bits - 1);
+    *hi = p->kind == 'u' ? ldexp(1.0, p->bits) : ldexp(1.0, p->bits - 1);
+}
+
 static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
     struct operand* src = *(struct operand**)ListGetIdx(&op->args, 0);
     struct ctVal* v = ctDeref(ctEval(st, src));
@@ -520,15 +543,14 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
     if (op->checkRoot) { //R20: a value the target cannot represent
         if (v->kind == CT_FLOAT && ctIsInt(t)) {
             if (!isfinite(v->f)) return ctCheckFail(st, op, "INVALID");
-            double f = trunc(v->f);
-            double lo = t.bType == BASETYPE_BYTE ? 0 : t.bType == BASETYPE_INT32 ? -2147483648.0 : -9223372036854775808.0;
-            double hi = t.bType == BASETYPE_BYTE ? 256 : t.bType == BASETYPE_INT32 ? 2147483648.0 : 9223372036854775808.0;
-            if (!(v->f >= lo && v->f < hi) || !(f >= lo && f < hi)) return ctCheckFail(st, op, "OVERFLOW");
-        } else if (v->kind == CT_FLOAT && t.bType == BASETYPE_FLOAT32) {
-            if (isfinite(v->f) && isinf((double)(float)v->f)) return ctCheckFail(st, op, "OVERFLOW");
+            double lo, hi;
+            ctIntBounds(t, &lo, &hi);
+            if (!(v->f >= lo && v->f < hi)) return ctCheckFail(st, op, "OVERFLOW");
+        } else if (ctIsFloat(t)) { //into a float: a finite value becoming infinite
+            double x = ctAsF(v);
+            if (isfinite(x) && isinf(ctRound(t, x))) return ctCheckFail(st, op, "OVERFLOW");
         } else if (v->kind != CT_FLOAT && ctIsInt(t)) {
-            ctWide x = src->type.bType == BASETYPE_BYTE ? (uint8_t)v->i : v->i;
-            if (!ctFits(t, x)) return ctCheckFail(st, op, "OVERFLOW");
+            if (!ctFits(t, ctExact(v))) return ctCheckFail(st, op, "OVERFLOW");
         }
     }
     if (ctIsFloat(t)) return ctFloat(t, ctAsF(v));
@@ -536,13 +558,13 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
         if (v->kind == CT_FLOAT) {
             //E26a: a float the target cannot represent is undefined at run time
             double f = trunc(v->f);
-            double lo = t.bType == BASETYPE_BYTE ? 0 : t.bType == BASETYPE_INT32 ? -2147483648.0 : -9223372036854775808.0;
-            double hi = t.bType == BASETYPE_BYTE ? 256 : t.bType == BASETYPE_INT32 ? 2147483648.0 : 9223372036854775808.0;
+            double lo, hi;
+            ctIntBounds(t, &lo, &hi);
             if (!(f >= lo && f < hi)) return ctFail(st, op->tok, "it converts a float the target type cannot represent");
-            return ctInt(t, (long long)f);
+            return ctInt(t, f >= 9223372036854775808.0 ? (long long)(unsigned long long)f : (long long)f);
         }
-        //an unsigned byte widens by zero-extending, as the generated code does
-        return ctInt(t, src->type.bType == BASETYPE_BYTE ? (long long)(uint8_t)v->i : v->i);
+        //a U type widens by zero-extending, an I type by sign-extending, as the generated code does (T4)
+        return ctInt(t, (long long)ctExact(v));
     }
     return ctFail(st, op->tok, "it converts to a type compile-time evaluation does not model");
 }
@@ -1123,6 +1145,7 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
     if (ctIsFloat(t) || ctIsInt(t)) {
         char num[64];
         if (ctIsFloat(t)) snprintf(num, sizeof(num), "%.17g", ctDeref(v)->f);
+        else if (t.bType == BASETYPE_U64) snprintf(num, sizeof(num), "%llu", (unsigned long long)ctDeref(v)->i); //T4
         else snprintf(num, sizeof(num), "%lld", ctDeref(v)->i);
         ctTextStr(b, num);
         return true;
@@ -1309,7 +1332,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!v) return NULL;
             if (op->checkRoot && ctIsInt(op->type)) { //R20
-                ctWide x = op->type.bType == BASETYPE_BYTE ? (uint8_t)v->i : v->i;
+                ctWide x = ctExact(v);
                 if (!ctFits(op->type, -x)) return ctCheckFail(st, op, "OVERFLOW");
             }
             return ctIsFloat(op->type) ? ctFloat(op->type, -v->f) : ctInt(op->type, (long long)(0ULL - (unsigned long long)v->i));

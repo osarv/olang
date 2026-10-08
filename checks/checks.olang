@@ -36,7 +36,7 @@ fn fresh(tag String&) String& {
 }
 
 # runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
-fn sh(dir String&, cmd String&) Int32 {
+fn sh(dir String&, cmd String&) I32 {
     return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote($root() "/build/out") " && " $cmd)
 }
 

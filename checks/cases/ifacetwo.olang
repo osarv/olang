@@ -1,17 +1,17 @@
 # check: fail this type satisfies two interfaces that each declare a method of this name
 # M19e: a method two satisfied interfaces both declare cannot be chosen between
 type Named interface {
-    Name() Int32
+    Name() I32
 }
 type Labelled interface {
-    Name() Int32
+    Name() I32
 }
-fn (n Named&) Shout() Int32 { return n.Name() * 2 }
-fn (l Labelled&) Shout() Int32 { return l.Name() * 3 }
-type P struct(v Int32) {
+fn (n Named&) Shout() I32 { return n.Name() * 2 }
+fn (l Labelled&) Shout() I32 { return l.Name() * 3 }
+type P struct(v I32) {
     v
 }
-fn (p P) Name() Int32 { return p.v }
+fn (p P) Name() I32 { return p.v }
 fn main() ? {
     p := P(1)
     x := p.Shout()

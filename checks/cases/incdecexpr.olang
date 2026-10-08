@@ -2,5 +2,5 @@
 # S3a: an increment is never part of an expression
 fn main() ? {
     i := 0
-    j Int32 = i++
+    j I32 = i++
 }

@@ -2,14 +2,14 @@
 # flags: -D Flag=true -D Ratio=0.75 -D Huge=5000000000 -D Level=1 -D Mode=fast -D Expect=-1
 error E { X }
 if Level > 2 and Mode == "fast" {
-    fn pick() Int32 { return Level * 10 }
+    fn pick() I32 { return Level * 10 }
 } else {
-    fn pick() Int32 { return -1 }
+    fn pick() I32 { return -1 }
 }
 fn main() ? E {
     assert pick() == Expect
     assert Flag
     assert Ratio >= 0.5
-    big Int64 = Huge
+    big I64 = Huge
     assert big == 5000000000
 }

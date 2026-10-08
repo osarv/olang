@@ -1,6 +1,6 @@
 # check: fail names the result scope, and this function has none
 # O26: "&return" exists only where there is a result scope - not in a function returning nothing
-type N struct(v Int32, nx N&) {
+type N struct(v I32, nx N&) {
     v
     next mut N& = nx
 }

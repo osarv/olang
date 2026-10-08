@@ -1,6 +1,6 @@
 # check: fail Eq and Str only read
 # E10a: a comparison writes nothing - a mut receiver is rejected
-type Pt struct(n mut Int32) {
+type Pt struct(n mut I32) {
     n
 }
 fn (p mut Pt&) Eq(q Pt&) Bool { return p.n == q.n }

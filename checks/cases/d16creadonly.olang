@@ -1,6 +1,6 @@
 # check: fail what a lambda captures from a value is read-only
 error E { X }
 fn main() ? E {
-    n Int32 = 1
+    n I32 = 1
     f := fn() { n = 2 }
 }

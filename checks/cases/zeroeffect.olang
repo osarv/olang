@@ -1,7 +1,7 @@
 # check: fail and that failed: it writes a global
 # D13c: a constructor with an effect gives no zero value - how often it ran would show (the user's counter)
-Made mut Int32 = 0
-type Counted struct(n Int32) {
+Made mut I32 = 0
+type Counted struct(n I32) {
     n
     Made++
 }

@@ -2,5 +2,5 @@
 # T25b: "mut" before a type makes a reference writable - on a value type it is an error
 error E { X }
 fn main() ? E {
-    a Array<mut Int32>& = Array<mut Int32>(2)
+    a Array<mut I32>& = Array<mut I32>(2)
 }

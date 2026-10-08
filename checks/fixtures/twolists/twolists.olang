@@ -2,7 +2,7 @@ import "std/map"
 import mine "map"
 error E { X }
 fn main() ? E {
-    m := map.Map<Int32, Int32>()
+    m := map.Map<I32, I32>()
     m.Put(1, mine.Mine())
     assert m.Len() == 1
 }

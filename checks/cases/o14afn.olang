@@ -1,12 +1,12 @@
 # check: fail needs one of the target's scopes to outlive another
 # O14a: a function value returned from a parameter must outlive where the result lands
-fn id(f fn() Int32) fn() Int32 { return f }
+fn id(f fn() I32) fn() I32 { return f }
 fn main() ? {
     s String& = "x"
-    keep := fn() Int32 { return 0 }
+    keep := fn() I32 { return 0 }
     if s.Len() > 0 {
         t String& = "inner"
-        y := fn() Int32 { return Int32(t.Len()) }
+        y := fn() I32 { return I32(t.Len()) }
         keep = id(y)
     }
 }

@@ -1,10 +1,10 @@
-# check: fail a number flows implicitly only into a wider type
+# check: fail a number flows implicitly only where nothing is lost
 # T29d: only a literal adapts to a type with a constructor - a typed value enters through the constructor
-type Percent Int32(v mut Int32) {
+type Percent I32(v mut I32) {
     if v > 100 { v = 100 }
 }
 fn main() ? {
-    n Int32 = 150
+    n I32 = 150
     p Percent = n
-    assert Int32(p) == 100
+    assert I32(p) == 100
 }

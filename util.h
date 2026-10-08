@@ -56,4 +56,9 @@ void ListRetract(struct list* l, int newLen);
 void* ListGetIdx(struct list* l, int idx);
 void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void* listElem)); //returns NULL if l is NULL
 
+//T4: a small IEEE-style float (1 sign bit, expBits, mantBits) - F16 is (5, 10), BF16 (8, 7). MinifloatFrom rounds to
+//nearest, ties to even, as the hardware does; MinifloatTo is exact. Shared by codegen's constants and the evaluator.
+unsigned MinifloatFrom(double x, int expBits, int mantBits);
+double MinifloatTo(unsigned bits, int expBits, int mantBits);
+
 #endif //UTIL_H

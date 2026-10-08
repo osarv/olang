@@ -3,13 +3,13 @@
 
 import "rect"
 
-fn Area(r rect.Rect) Int32 {
+fn Area(r rect.Rect) I32 {
     return r.W * r.H
 }
 
 # a method on a type this module declares over a primitive: reached through its receiver, from this
 # module and from every module holding a value of it
-type Side extends Int32
+type Side extends I32
 
 fn (n Side) Squared() Side {
     return n * n

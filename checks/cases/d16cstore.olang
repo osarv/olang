@@ -1,7 +1,7 @@
 # check: fail does not live as long as the container
 # D16d: nor stored into something that outlives what it captured
-type Point struct(x Int32) { x mut }
-type Box struct() { f mut fn(n Int32) Int32 = null }
+type Point struct(x I32) { x mut }
+type Box struct() { f mut fn(n I32) I32 = null }
 fn stash(b mut Box&) {
     p Point& = Point(5)
     b.f = fn(n) { return n + p.x }

@@ -2732,6 +2732,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   elements would share it. Also flagged: a generic placeholder (`x <T>` with no value) of such a type errors inside
   the generic, not at the instantiation. Nothing in the language leaves storage uninitialized any more (D15b's
   `noZeroFill` was already never set).
+- **The numeric primitives are `I8 I16 I32 I64`, `U8 U16 U32 U64`, `F16 BF16 F32 F64` (T4/T5/T6b, 2026-10-08, the
+  user's call).** Renamed from `Byte`/`Int32`/`Int64`/`Float32`/`Float64` (U8 replaces Byte); `Bool` kept. Everything
+  older in this record uses the old names. The user's reasons: brevity, and a family that scales (they also chose
+  F16 and BF16 "for neural nets"; F8 goes in the prelude as `F8E4M3`/`F8E5M2` storage types; complex numbers in the
+  prelude by component width - `Complex32` is two F32s; no Unicode `Char` - an 8-bit `Char` is next, and Utf8/Utf32
+  types later). **T6b became a lattice**: wider within a signedness, unsigned into a strictly wider signed (`U8 + I32`
+  is still `I32`), F16 and BF16 into F32 into F64 but not into each other; `U8 + I8` is an error, not `I16` (my call,
+  flagged - the meeting rule unchanged). **One table** (`PrimInfo`: name, bits, kind, LLVM type) now answers every
+  question about a primitive, replacing the scattered `Byte`-means-unsigned special cases in all three passes;
+  unsigned semantics (udiv/urem/ult/lshr/zext/uitofp/fptoui) follow the kind. F16/BF16 are LLVM `half`/`bfloat`;
+  their constants (`0xH`/`0xR`) and the evaluator's rounding share one nearest-even routine (`MinifloatFrom`), and
+  `try` conversion checks compare integers in i128 so every signedness/width pair is exact. A literal above `I64`'s
+  maximum cannot be written (`U64(0) - 1`). Max (`max(i32, i64)` at `I64`) was confirmed by the user, and `Exhausted`
+  kept. The user's untracked work was not migrated.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

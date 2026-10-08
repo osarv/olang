@@ -1,4 +1,4 @@
 # check: fail T7a
 # an array of arrays holds its rows by reference
-fn f(m Array<Array<Int32>>&) Int32 { return 0 }
+fn f(m Array<Array<I32>>&) I32 { return 0 }
 test "never runs" { }

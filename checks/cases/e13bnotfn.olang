@@ -1,5 +1,5 @@
 # check: fail this is not a function
 # E13b: only a function value can be called
 fn main() ? {
-    n := Int32[1, 2][0](3)
+    n := I32[1, 2][0](3)
 }

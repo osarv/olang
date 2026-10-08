@@ -1,1 +1,1 @@
-fn Plain() Int32 { return 1 }
+fn Plain() I32 { return 1 }

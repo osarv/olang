@@ -1,5 +1,5 @@
 # check: fail operand must be a boolean
 # E27: the filter after "if" is a condition
 fn main() ? {
-    a := Int32[x for x in range 3 if x]
+    a := I32[x for x in range 3 if x]
 }

@@ -1,9 +1,9 @@
 # check: fail this type has At but neither TryAt nor Len
 # E31: a derived TryAt checks the position against Len()
 type Bag struct() {
-    n Int64 = 2
+    n I64 = 2
 }
-fn (b Bag&) At(i Int64) Int32 { return 1 }
+fn (b Bag&) At(i I64) I32 { return 1 }
 fn main() ? {
     b Bag& = Bag()
     x := try b[0] catch default 0

@@ -4,9 +4,9 @@ error E {
     B
 }
 error F { C }
-fn f() Int32 ? E + F { error E.A }
+fn f() I32 ? E + F { error E.A }
 fn main() ? E { }
-fn t() Int32 ? E {
+fn t() I32 ? E {
     try f() catch E { } catch E.A { } catch { }
     return 0
 }

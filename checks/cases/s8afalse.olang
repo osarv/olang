@@ -1,9 +1,9 @@
 # check: fail S8a
 error E { X }
 Verbose := false
-Level Int32 = 2 + 1
+Level I32 = 2 + 1
 FromBuild Bool = DebugBuild or false
-fn helper3() Int32 { return 3 }
+fn helper3() I32 { return 3 }
 fn main() ? E {
     x := 3
     if false { fail }

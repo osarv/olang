@@ -4,9 +4,9 @@ error E {
     X
 }
 type Bag struct() {
-    n Int64 = 2
+    n I64 = 2
 }
-fn (b Bag&) TryAt(i Int64) Int32 ? E { return 1 }
+fn (b Bag&) TryAt(i I64) I32 ? E { return 1 }
 fn main() ? {
     b Bag& = Bag()
     x := b[0]

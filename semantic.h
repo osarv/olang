@@ -13,11 +13,20 @@ enum baseType {
                     //type of anything - OperandFitsType retags it to whatever nullable target it
                     //meets, exactly as a numeric literal is retagged, so it never reaches codegen.
     BASETYPE_BOOL,
+    //T4: the numeric primitives - their names, widths and kinds are the prim table's (PrimInfo), and every
+    //question about them goes through it. BYTE/INT32/INT64/FLOAT32/FLOAT64 are U8/I32/I64/F32/F64.
     BASETYPE_BYTE,
     BASETYPE_INT32,
     BASETYPE_INT64,
     BASETYPE_FLOAT32,
     BASETYPE_FLOAT64,
+    BASETYPE_I8,
+    BASETYPE_I16,
+    BASETYPE_U16,
+    BASETYPE_U32,
+    BASETYPE_U64,
+    BASETYPE_F16,
+    BASETYPE_BF16,
     BASETYPE_ARRAY,
     BASETYPE_STRUCT,
     BASETYPE_CHOICE,
@@ -634,6 +643,11 @@ bool TypeIsByteArray(struct type t);
 struct type* TypeGetList(struct list* l, struct str name);
 bool TypeIsSame(struct type a, struct type b);
 bool TypeIsSameRepr(struct type a, struct type b);
+//T4: one numeric primitive - its source name, width in bits, kind ('i' signed, 'u' unsigned, 'f' float) and LLVM type
+struct primInfo { enum baseType b; const char* name; int bits; char kind; const char* llvm; };
+const struct primInfo* PrimInfo(enum baseType b); //NULL for anything not a numeric primitive
+bool PrimByName(struct str name, enum baseType* out);
+bool TypeIsUnsigned(struct type t);
 bool TypeIsNumeric(struct type t);
 bool TypeIsInt(struct type t);
 bool TypeIsFloat(struct type t);

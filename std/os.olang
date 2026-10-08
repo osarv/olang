@@ -2,11 +2,11 @@
 
 import "io"
 
-extern fn system(cmd Array<Byte>) Int32
-extern fn open(path Array<Byte>, flags Int32) Int32
-extern fn close(fd Int32) Int32
-extern fn lseek(fd Int32, offset Int64, whence Int32) Int64
-extern fn read(fd Int32, buf Array<Byte>, count Int64) Int64
+extern fn system(cmd Array<U8>) I32
+extern fn open(path Array<U8>, flags I32) I32
+extern fn close(fd I32) I32
+extern fn lseek(fd I32, offset I64, whence I32) I64
+extern fn read(fd I32, buf Array<U8>, count I64) I64
 
 error OsError {
     NOT_FOUND
@@ -15,7 +15,7 @@ error OsError {
 
 # runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at
 # all, or one ended by a signal, is reported as a nonzero status like any other failure.
-fn Run(cmd String&) Int32 {
+fn Run(cmd String&) I32 {
     status := system($cmd "\0")
     if status < 0 { return 127 }
     if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
@@ -33,8 +33,8 @@ fn ReadFile(path String&) String& ? OsError {
         close(fd)
         error OsError.FAILED
     }
-    text String&return = String(Array<Byte>(size))
-    got Int64 = 0
+    text String&return = String(Array<U8>(size))
+    got I64 = 0
     for got < size {
         n := read(fd, text[got:], size - got)
         if n <= 0 {
@@ -50,7 +50,7 @@ fn ReadFile(path String&) String& ? OsError {
 # text quoted for the shell: one argument whatever it holds
 fn Quote(t String&) String& {
     out String& = "'"
-    start Int64 = 0
+    start I64 = 0
     for i in range t.Len() {
         if t[i] == '\'' {
             out = $out $t[start:i] "'\\''"

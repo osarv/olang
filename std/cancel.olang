@@ -12,20 +12,20 @@ error Stopped {
 }
 
 # Linux's clock ids, and a timespec as the two words it is
-ClockRealtime Int32 = 0
-ClockMonotonic Int32 = 1
-extern fn clock_gettime(clock Int32, ts Array<Int64>) Int32
+ClockRealtime I32 = 0
+ClockMonotonic I32 = 1
+extern fn clock_gettime(clock I32, ts Array<I64>) I32
 
 # now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set
-fn NowNs() Int64 {
-    ts := Array<Int64>(2)
+fn NowNs() I64 {
+    ts := Array<I64>(2)
     clock_gettime(ClockMonotonic, ts)
     return ts[0] * 1000000000 + ts[1]
 }
 
 # the wall clock in nanoseconds - only what pthread_cond_timedwait measures its deadlines against
-fn wallNs() Int64 {
-    ts := Array<Int64>(2)
+fn wallNs() I64 {
+    ts := Array<I64>(2)
     clock_gettime(ClockRealtime, ts)
     return ts[0] * 1000000000 + ts[1]
 }
@@ -33,13 +33,13 @@ fn wallNs() Int64 {
 # a stop signal, with a deadline when deadlineNs (on NowNs's clock) is not 0. The flag is only ever touched
 # atomically (P9), since Cancel() runs on one thread while the tasks read it on others; the deadline is fixed
 # at construction, before any task can see it.
-type Token struct(deadlineNs Int64 = 0) {
-    flag mut Int32 = 0
-    deadline Int64 = deadlineNs
+type Token struct(deadlineNs I64 = 0) {
+    flag mut I32 = 0
+    deadline I64 = deadlineNs
 }
 
 # a token that fires by itself once ms milliseconds have passed - and on Cancel(), like any other
-fn After(ms Int64) Token& {
+fn After(ms I64) Token& {
     return Token(NowNs() + ms * 1000000)
 }
 
@@ -54,7 +54,7 @@ fn (t Token&) Cancelled() Bool {
 }
 
 # 0 while the token has not fired; otherwise 1 when it was cancelled, 2 when its deadline passed
-fn (t Token&) Why() Int32 {
+fn (t Token&) Why() I32 {
     if atomicLoad(t.flag) != 0 { return 1 }
     if t.deadline != 0 and NowNs() >= t.deadline { return 2 }
     return 0
@@ -68,15 +68,15 @@ fn (t Token&) Reason() ? Stopped {
 
 # the wall-clock time, as a timespec, a wait should next wake at: the deadline if it is near, else soon enough
 # to notice a Cancel() - which no wait can be woken for directly, since the token does not know who is waiting
-PollNs Int64 = 10000000
-fn (t Token&) WakeAt(ts mut Array<Int64>&) {
-    wait Int64 = PollNs
+PollNs I64 = 10000000
+fn (t Token&) WakeAt(ts mut Array<I64>&) {
+    wait I64 = PollNs
     if t.deadline != 0 {
-        left Int64 = t.deadline - NowNs()
+        left I64 = t.deadline - NowNs()
         if left < wait { wait = left }
         if wait < 0 { wait = 0 }
     }
-    at Int64 = wallNs() + wait
+    at I64 = wallNs() + wait
     ts[0] = at / 1000000000
     ts[1] = at % 1000000000
 }
@@ -104,7 +104,7 @@ fn spin(t Token&, n mut Count&) {
 }
 
 type Count struct() {
-    v mut Int64 = 0
+    v mut I64 = 0
 }
 
 test "a busy task stops when the token is cancelled" {

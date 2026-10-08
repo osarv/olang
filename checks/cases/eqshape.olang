@@ -1,9 +1,9 @@
 # check: fail Eq, which '==' calls, takes one parameter of its receiver's own type
 # E10a: a method named Eq claims "==", so it must have the shape of an equality
-type Pt struct(n Int32) {
+type Pt struct(n I32) {
     n
 }
-fn (p Pt&) Eq(n Int32) Bool { return p.n == n }
+fn (p Pt&) Eq(n I32) Bool { return p.n == n }
 fn main() ? {
     assert Pt(1) == Pt(1)
 }

@@ -1,12 +1,12 @@
 # check: fail requires it because of this statement in its body
 # O10c: a call that fails an inferred obligation names the statement in the callee that required it
-type SSlot struct(key String&, val Int32, next SSlot&) {
+type SSlot struct(key String&, val I32, next SSlot&) {
     key
     val mut
     next mut
 }
 type SMap struct() { first mut SSlot& = null }
-fn (m mut SMap&) Put(key String&, val Int32) {
+fn (m mut SMap&) Put(key String&, val I32) {
     for s SSlot& = m.first, s != null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
@@ -15,7 +15,7 @@ fn (m mut SMap&) Put(key String&, val Int32) {
     }
     m.first = SSlot(key, val, m.first)
 }
-fn (m SMap&) Get(key String&) Int32 {
+fn (m SMap&) Get(key String&) I32 {
     for s SSlot& = m.first, s != null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }

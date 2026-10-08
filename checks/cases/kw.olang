@@ -2,6 +2,6 @@
 error E { X }
 fn main() ? E {
     compif := 1
-    compelse Int32 = compif
+    compelse I32 = compif
     assert compelse == 1
 }

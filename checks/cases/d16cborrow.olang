@@ -2,6 +2,6 @@
 # D16c: a captured value array is borrowed read-only
 error E { X }
 fn main() ? E {
-    a := Int32[1, 2]
+    a := I32[1, 2]
     f := fn() { a[0] = 9 }
 }

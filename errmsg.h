@@ -119,8 +119,8 @@
 #define TYPE_VAR_IN_ERROR_LIST "a generic function's error set is the same for every instantiation, so it may not mention a type variable"
 #define UNKNOWN_TYPE_VAR "unknown type variable - a generic type's parameters are declared in its own '<...>' list, after the type name"
 #define TYPE_ARGS_ON_NON_GENERIC "this type is not generic, so it takes no type arguments"
-#define CTOR_TYPE_ARGS_NOT_INFERABLE "this generic type's arguments can't be inferred from the constructor's arguments - a type parameter no constructor parameter mentions, or two arguments for one parameter that disagree. Write them: 'Name<Int32>(...)' (G10a/G10c)"
-#define MISSING_TYPE_ARGS "this type is generic and must be instantiated with a type argument list, e.g. 'Vec<Int32>'"
+#define CTOR_TYPE_ARGS_NOT_INFERABLE "this generic type's arguments can't be inferred from the constructor's arguments - a type parameter no constructor parameter mentions, or two arguments for one parameter that disagree. Write them: 'Name<I32>(...)' (G10a/G10c)"
+#define MISSING_TYPE_ARGS "this type is generic and must be instantiated with a type argument list, e.g. 'Vec<I32>'"
 #define WRONG_TYPE_ARG_COUNT "wrong number of type arguments for this generic type"
 #define TYPE_ARG_HAS_REFERENCE_MARKER "a type argument may be a reference only with a bare marker ('List<String&>') - its references live in the container's scope; a scope name here would belong to this function, inside generic code that cannot see it (G11)"
 #define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
@@ -137,7 +137,7 @@
 #define JOIN_WITHOUT_SPAWN "this 'join' block spawns nothing, so it waits for nothing - a join exists to bound the tasks started inside it"
 #define SPAWN_ARG_TOO_SHORT "this argument does not outlive the enclosing 'join' block, so the task could still be running when its storage is reclaimed. It is declared inside a nested block that closes first; declare it at the join block's own level or wider"
 #define SPAWN_REQUIRES_CALL "the operand of 'spawn' must be a call - that is what a task is. There are no closures, so an argument list is the only way to state what a task may touch"
-#define ATOMIC_NOT_INTEGER "an atomic operation's target must be an integer variable ('Byte', 'Int32' or 'Int64'). Atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float"
+#define ATOMIC_NOT_INTEGER "an atomic operation's target must be an integer variable ('U8', 'I32' or 'I64'). Atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float"
 #define OPERATOR_ARITY "a method named for an operator takes that operator's operands besides its receiver: one for Plus, Minus, Mul, Div, Rem, MatMul, Less, Eq, At and the bitwise ones, two for SetAt and Slice, none for Neg, BitNot, Inc, Dec, Len and Str - and the same for each one's Try form (E31)"
 #define AT_UNDECLARED "this type declares SetAt, so 'x[i] = v' stores, but not At, which reading 'x[i]' calls (E31)"
 #define SETAT_UNDECLARED "this type declares At, so 'x[i]' reads, but not SetAt, which 'x[i] = v' calls (E31)"
@@ -145,7 +145,7 @@
 #define EQ_SHAPE "Eq, which '==' calls, takes one parameter of its receiver's own type (T or T&) and gives a Bool (E10a)"
 #define STR_SHAPE "Str, which '$' calls, takes no parameters and gives a String (E11c)"
 #define EQ_STR_WRITES "Eq and Str only read: neither the receiver nor a parameter may be 'mut' (E10a, E11c)"
-#define LEN_SHAPE "Len, which slicing and for-in call, gives an Int64 (E31)"
+#define LEN_SHAPE "Len, which slicing and for-in call, gives an I64 (E31)"
 #define ONLY_TRY_VARIANT "this type has only the checked form of this operation (its Try method) - write it under 'try', as 'try c[i]' (E31)"
 #define TRY_INDEX_NEEDS_LEN "'try c[i]' calls TryAt, or checks the position against Len() before calling At - this type has At but neither TryAt nor Len (E31)"
 #define TRY_SLICE_NEEDS_LEN "'try c[lo:hi]' calls TrySlice, or checks the bounds against Len() before calling Slice - this type has Slice but neither TrySlice nor Len (E31)"
@@ -197,7 +197,7 @@ statement - only a call and the '++'/'--' forms are. A bare name declares nothin
 takes at most one '&' - the two marker positions (before and after the array suffixes) are the same \
 place here, and writing both would leave one of the two scope tags meaning nothing"
 #define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
-(e.g. 'Byte[]&'). Without it the array is copied at every call, in time proportional to its \
+(e.g. 'U8[]&'). Without it the array is copied at every call, in time proportional to its \
 length, and a 'mut' one would be written where the caller can never see it"
 #define MODULE_NAME_COLLISION "another module in this program has the same file base name - a module's \
 symbols are named from it (§10 B3b), so two modules sharing one would define the same symbols; rename \
@@ -225,7 +225,7 @@ share that storage while appearing to copy it (T7a)"
 cannot be stored in the instance - hold it as a reference ('Array<T>&'), which the instance's own scope \
 then stores (T7a, C2e)"
 #define NESTED_ARRAY_LITERAL "an array literal's items are values, never bracketed rows - there are no \
-multi-dimensional arrays. An array of arrays holds references: 'Array<Int32>&[r0, r1]' (E21)"
+multi-dimensional arrays. An array of arrays holds references: 'Array<I32>&[r0, r1]' (E21)"
 #define EMPTY_DESTRUCTOR "this destructor does nothing - remove it. A destructor is for releasing something \
 when an instance's scope closes (C7a)"
 #define CTOR_ARG_OUTLIVED "this value was constructed from a reference to existing storage, stored in a field that lives with the instance - so the instance holds that reference, and here it would outlive what the reference points at (C2d). Build the instance where that storage lives ('T&x(...)'), or give the field the parameter's scope ('f T&p = p')"
@@ -245,7 +245,7 @@ declared fields when the body completes; use 'error' to fail out of one instead"
 #define INVALID_CHOICE_VALUE_TYPE "only an enum type has values of the form 'Type.Case'"
 #define UNKNOWN_CHOICE_CASE "unknown enum case"
 #define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"
-#define LITERAL_NOT_REPRESENTABLE "this literal's value can't be represented in the target's type - an integer literal fits any integer type whose range contains it ('Byte' is unsigned: 0-255) and either float type, and a float literal fits only a float type; use an explicit conversion (Byte(x), Int32(x), Int64(x), ...) if a real, possibly lossy conversion is what you meant"
+#define LITERAL_NOT_REPRESENTABLE "this literal's value can't be represented in the target's type - an integer literal fits any integer type whose range contains it ('U8' is unsigned: 0-255) and either float type, and a float literal fits only a float type; use an explicit conversion (U8(x), I32(x), I64(x), ...) if a real, possibly lossy conversion is what you meant"
 #define DEFAULT_NOT_COMPUTABLE "a parameter's default value must be computable at compile time - it is \
 evaluated on behalf of callers you cannot see, so it must have a value and no other behaviour"
 #define DEFAULT_NOT_TRAILING "this parameter declares no default but a previous one does - defaulted \
@@ -258,8 +258,8 @@ constructor, in a position whose parameter declares a default value"
 #define METHOD_NOT_INHERITED "this type has no method of this name, and its base does - but a declared type inherits its base's methods only when it is declared with 'extends' (T29f)"
 #define EXTENDS_NOT_BASE "only a type declared over a number or an array extends it - a struct, an enum, an interface or a function type has no base to inherit from (T29f)"
 #define NOT_EXTENDED_OP "this type does not extend its base, so the base's operator does not make a value of it - declare the operator's method (Plus, Minus, Neg, ... E31), or declare the type with 'extends' (T29f)"
-#define NUMBERS_DO_NOT_MEET "these two numbers do not meet: one must flow into the other's type - a narrower one of the same family (Byte into Int32 into Int64, Float32 into Float64), or a declared type into its base (T6b). Convert one, as T(x)"
-#define NUMBER_DOES_NOT_FLOW "a number flows implicitly only into a wider type of its own family (Byte into Int32 into Int64, Float32 into Float64), or from a declared type into its base (T6b); anything else is a conversion, written T(x) - a declared type's own constructor included"
+#define NUMBERS_DO_NOT_MEET "these two numbers do not meet: one must flow into the other's type - a number flows losslessly into a wider one of the same signedness, an unsigned one into a wider signed one (U8 into I16), F16 and BF16 into F32 into F64, and a declared type into its base (T6b). Convert one, as T(x)"
+#define NUMBER_DOES_NOT_FLOW "a number flows implicitly only where nothing is lost - into a wider type of the same signedness, an unsigned one into a wider signed one (U8 into I16), F16 and BF16 into F32 into F64 - or from a declared type into its base (T6b); anything else is a conversion, written T(x) - a declared type's own constructor included"
 #define MATCH_CASE_TYPE_MISMATCH "case value must have the same type as the matched expression"
 #define OPERATION_REQUIRES_INT "operand must be an integer"
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
@@ -290,7 +290,7 @@ constructor, in a position whose parameter declares a default value"
 
 // ---- external functions ----
 
-#define EXTERN_TYPE_NOT_ALLOWED "an 'extern fn' parameter/return type must be a numeric primitive (Byte, Int32, Int64, Float32, Float64) or an array of one - no structs, references, or error unions cross the C ABI boundary"
+#define EXTERN_TYPE_NOT_ALLOWED "an 'extern fn' parameter/return type must be a numeric primitive (U8, I32, I64, F32, F64) or an array of one - no structs, references, or error unions cross the C ABI boundary"
 #define EXTERN_FUNC_NOT_FALLIBLE "an 'extern fn' call is never fallible - it has no error union, so it can't be the operand of try/try-catch"
 
 int ErrMsgGetNErrors();
@@ -311,7 +311,7 @@ void ErrMsgMuteEnd(void);
 void ErrMsgFile(struct str fileName, char* errMsg);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
-#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text Byte[]') and give that methods (M19d)"
+#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"
 #define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
 #define ARRAY_SIZE_MISMATCH "this array's length is known here and differs from the length of the fixed storage it is copied into - an array is never silently truncated or padded to fit (C2e)"
 

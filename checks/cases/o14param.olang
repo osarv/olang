@@ -1,5 +1,5 @@
 # check: fail returns a parameter's data
 # O14: a built result cannot be a parameter's data, even plain data - that is a borrowed result, T&p
-type P struct(v Int32) { v }
+type P struct(v I32) { v }
 fn f(p P&) P& { return p }
 fn main() ? { }

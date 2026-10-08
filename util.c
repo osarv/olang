@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "util.h"
 #include "token.h"
 
@@ -127,4 +128,37 @@ void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void
         if (cmpFunc(cmpVal, listElem)) return listElem;
     }
     return NULL;
+}
+
+unsigned MinifloatFrom(double x, int expBits, int mantBits) {
+    unsigned sign = signbit(x) ? 1u << (expBits + mantBits) : 0;
+    unsigned expMax = (1u << expBits) - 1;
+    int bias = (int)(expMax >> 1);
+    if (isnan(x)) return sign | (expMax << mantBits) | (1u << (mantBits - 1));
+    double a = fabs(x);
+    if (isinf(a)) return sign | (expMax << mantBits);
+    int e;
+    frexp(a, &e); //a = f * 2^e, f in [0.5, 1)
+    int unb = e - 1;
+    if (unb < 1 - bias) { //subnormal: units of 2^(1 - bias - mantBits)
+        double m = rint(ldexp(a, mantBits + bias - 1));
+        return sign | (unsigned)m; //m reaching 2^mantBits is exactly the smallest normal
+    }
+    double m = rint((ldexp(a, -unb) - 1.0) * (double)(1u << mantBits));
+    if (m >= (double)(1u << mantBits)) { m = 0; unb++; }
+    if (unb + bias >= (int)expMax) return sign | (expMax << mantBits); //overflows to infinity
+    return sign | ((unsigned)(unb + bias) << mantBits) | (unsigned)m;
+}
+
+double MinifloatTo(unsigned bits, int expBits, int mantBits) {
+    unsigned expMax = (1u << expBits) - 1;
+    int bias = (int)(expMax >> 1);
+    bool neg = (bits >> (expBits + mantBits)) & 1;
+    unsigned ex = (bits >> mantBits) & expMax;
+    unsigned m = bits & ((1u << mantBits) - 1);
+    double v;
+    if (ex == expMax) v = m ? NAN : INFINITY;
+    else if (ex == 0) v = ldexp((double)m, 1 - bias - mantBits);
+    else v = ldexp(1.0 + (double)m / (double)(1u << mantBits), (int)ex - bias);
+    return neg ? -v : v;
 }

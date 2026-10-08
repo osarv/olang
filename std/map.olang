@@ -1,5 +1,5 @@
-# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() Int64" agreeing with "==": the
-# prelude gives it to Int32, Int64, Byte and String, the compiler supplies one for a struct, enum or array value whose
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() I64" agreeing with "==": the
+# prelude gives it to I32, I64, U8 and String, the compiler supplies one for a struct, enum or array value whose
 # parts all have one (E10b), and a key type declaring Eq declares its Hash too.
 #
 # Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
@@ -7,7 +7,7 @@
 # needs no destructor. Growing re-links the existing slots into new buckets and copies nothing else; the old
 # bucket array stays in the scope until it closes, as anything an arena holds does.
 #
-# A key or value that is a reference ("Map<String&, Int32>") is stored as the reference - it must outlive the
+# A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
 # map, which every call checks (O10b).
 
 type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
@@ -18,7 +18,7 @@ type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
 
 type Map<K Hashable<<K>>, V> struct() {
     buckets mut Array<mut mapSlot<<K>, <V>>&>& = Array<mut mapSlot<<K>, <V>>&>(8)
-    count mut Int64 = 0
+    count mut I64 = 0
 }
 
 # one key and its value, as a "for ... in" over a Map gives them
@@ -27,9 +27,9 @@ type MapEntry<K, V> struct(key <K>, value <V>) {
     Value <V> = value
 }
 
-fn (m Map<<K>, <V>>&) Len() Int64 { return m.count }
+fn (m Map<<K>, <V>>&) Len() I64 { return m.count }
 
-fn (m Map<<K>, <V>>&) bucketOf(key <K>) Int64 { return key.Hash() & (m.buckets.Len() - 1) }
+fn (m Map<<K>, <V>>&) bucketOf(key <K>) I64 { return key.Hash() & (m.buckets.Len() - 1) }
 
 # sets the value for key, replacing the one it had
 fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
@@ -97,8 +97,8 @@ fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
 # numbers rather than a slot reference, as a ListIter is: a bucket, and how far along its chain.
 type MapIter<K, V> struct(of Map<<K>, <V>>&) {
     m Map<<K>, <V>>&of = of
-    bucket mut Int64 = 0
-    depth mut Int64 = 0
+    bucket mut I64 = 0
+    depth mut I64 = 0
 }
 
 fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
@@ -116,8 +116,8 @@ fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
 
 # the entry "depth" slots along bucket's chain, Exhausted when the chain is shorter - asked of the map, which knows
 # where its own slots live, rather than walked from an iterator that does not
-fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) MapEntry<<K>, <V>> ? Exhausted {
-    k Int64 = 0
+fn (m Map<<K>, <V>>&) entryAt(bucket I64, depth I64) MapEntry<<K>, <V>> ? Exhausted {
+    k I64 = 0
     for s mapSlot<<K>, <V>>&m = m.buckets[bucket], s != null, s = s.next {
         if k == depth { return MapEntry<<K>, <V>>(s.key, s.value) }
         k++
@@ -128,7 +128,7 @@ fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) MapEntry<<K>, <V>> ? Ex
 fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }
 
 test "put, get, replace, remove" {
-    m := Map<Int32, Int64>()
+    m := Map<I32, I64>()
     m.Put(1, 10)
     m.Put(2, 20)
     assert (try m.Get(1) catch default -1) == 10
@@ -143,7 +143,7 @@ test "put, get, replace, remove" {
 }
 
 test "a map grows, and keeps every key through it" {
-    m := Map<Int32, Int32>()
+    m := Map<I32, I32>()
     for i in range 1000 { m.Put(i, i * i) }
     assert m.Len() == 1000
     for i in range 1000 {
@@ -152,42 +152,42 @@ test "a map grows, and keeps every key through it" {
 }
 
 test "text keys compare by what they say" {
-    m := Map<String&, Int32>()
+    m := Map<String&, I32>()
     m.Put("apple", 1)
     m.Put("pear", 2)
-    key := String(Byte['p', 'e', 'a', 'r'])
+    key := String(U8['p', 'e', 'a', 'r'])
     assert (try m.Get(key) catch default -1) == 2
 }
 
 test "for ... in visits every entry once" {
-    m := Map<Int32, Int32>()
-    for i in range 50 { m.Put(Int32(i), Int32(i) * 2) }
-    keys Int64 = 0
-    values Int64 = 0
+    m := Map<I32, I32>()
+    for i in range 50 { m.Put(I32(i), I32(i) * 2) }
+    keys I64 = 0
+    values I64 = 0
     for e in m {
-        keys = keys + Int64(e.Key)
-        values = values + Int64(e.Value)
+        keys = keys + I64(e.Key)
+        values = values + I64(e.Value)
     }
     assert keys == 1225 and values == 2450
 }
 
 test "a pair is a key when both its parts are" {
-    m := Map<Pair<Int32, Int32>, Int32>()
-    for i in range 20 { m.Put(Pair(Int32(i), Int32(i) + 1), Int32(i)) }
+    m := Map<Pair<I32, I32>, I32>()
+    for i in range 20 { m.Put(Pair(I32(i), I32(i) + 1), I32(i)) }
     assert (try m.Get(Pair(7, 8)) catch default -1) == 7
     assert not m.Has(Pair(8, 7))
 }
 
 test "membership in a Map is by key" {
-    m := Map<String&, Int32>()
+    m := Map<String&, I32>()
     m.Put("k", 1)
     assert "k" in m
     assert "z" not in m
 }
 
 # a lookup and a miss, computed while compiling (K2) - the same answers as at run time
-fn lookupBoth() Int32 {
-    m := Map<Int32, Int32>()
+fn lookupBoth() I32 {
+    m := Map<I32, I32>()
     m.Put(4, 40)
     return (try m.Get(4) catch default 0) + (try m.Get(5) catch default 1)
 }
@@ -200,15 +200,15 @@ test "a miss is an error, evaluated while compiling as at run time" {
 }
 
 test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
-    a := Pair(1, Int64(2))
-    assert a == Pair(1, Int64(2)) and a != Pair(2, Int64(2))
-    m := Map<Pair<Int32, Int64>, Int32>()
+    a := Pair(1, I64(2))
+    assert a == Pair(1, I64(2)) and a != Pair(2, I64(2))
+    m := Map<Pair<I32, I64>, I32>()
     m.Put(a, 7)
-    assert try m.Get(Pair(1, Int64(2))) catch default 0 == 7
+    assert try m.Get(Pair(1, I64(2))) catch default 0 == 7
 }
 
 # E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
-type hPt struct(x Int32, y Int32) {
+type hPt struct(x I32, y I32) {
     x
     y
 }
@@ -217,25 +217,25 @@ type hTagged struct(name String&, at hPt) {
     at
 }
 type hShape enum {
-    Circle(r Int32)
-    Rect(w Int32, h Int32)
+    Circle(r I32)
+    Rect(w I32, h I32)
     Blank
 }
 fn hashKeys() Bool {
-    m := Map<hPt, Int32>()
+    m := Map<hPt, I32>()
     m.Put(hPt(1, 2), 5)
     m.Put(hPt(2, 1), 6)
-    t := Map<hTagged, Int32>()
+    t := Map<hTagged, I32>()
     s String& = "ab"
     t.Put(hTagged(s, hPt(0, 0)), 1)
-    e := Map<hShape, Int32>()
+    e := Map<hShape, I32>()
     e.Put(hShape.Rect(1, 2), 4)
     e.Put(hShape.Circle(1), 7)
     n String& = null
     pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
     tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
     shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
-    arrays Bool = Int32[1, 2].Hash() == Int32[1, 2].Hash() and Int32[1, 2].Hash() != Int32[2, 1].Hash()
+    arrays Bool = I32[1, 2].Hash() == I32[1, 2].Hash() and I32[1, 2].Hash() != I32[2, 1].Hash()
     return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
 }
 HashKeysBaked := hashKeys()

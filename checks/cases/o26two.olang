@@ -1,6 +1,6 @@
 # check: fail names the result scope, and this function has none
 # O26: a borrowed result (T&p) has no result scope - what it builds goes in p's, written "&p"
-type N struct(v Int32, nx N&) {
+type N struct(v I32, nx N&) {
     v
     next mut N& = nx
 }

@@ -1,7 +1,7 @@
 # check: fail these two numbers do not meet
 # T6b: integers and floats are separate families - nothing flows between them implicitly
 fn main() ? {
-    a Int32 = 3
-    f Float64 = 1.5
+    a I32 = 3
+    f F64 = 1.5
     assert a < f
 }

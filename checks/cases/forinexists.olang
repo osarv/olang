@@ -2,6 +2,6 @@
 # E29: "for x in c" is always a loop over c - with x already declared it is an error, never a membership test
 fn main() ? {
     x := 2
-    c := Int32[1, 2]
+    c := I32[1, 2]
     for x in c { }
 }

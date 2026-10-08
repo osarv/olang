@@ -1,7 +1,7 @@
 # check: fail a Try method is the checked form of an operation
 # E31: a Try form declares its errors
 type Bag struct() {
-    n Int64 = 2
+    n I64 = 2
 }
-fn (b Bag&) TryAt(i Int64) Int32 { return 1 }
+fn (b Bag&) TryAt(i I64) I32 { return 1 }
 fn main() ? { }

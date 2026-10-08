@@ -33,8 +33,8 @@ fn (it mut Iterator<<T>>&) All(keep fn(x <T>) Bool) Bool {
 }
 
 # how many values keep holds for
-fn (it mut Iterator<<T>>&) Count(keep fn(x <T>) Bool) Int64 {
-    n Int64 = 0
+fn (it mut Iterator<<T>>&) Count(keep fn(x <T>) Bool) I64 {
+    n I64 = 0
     for x in it {
         if keep(x) { n++ }
     }
@@ -71,14 +71,14 @@ fn (it mut Iterator<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
 # a collection with positions (S9d): "for x in c" walks one directly, as a counted loop over At(0) .. At(Len()-1);
 # Iter() is derived here for one that has no Iter of its own, so the helpers above reach it too
 type Indexable<T> interface {
-    At(i Int64) <T>
-    Len() Int64
+    At(i I64) <T>
+    Len() I64
 }
 
 # a position in an Indexable - the collection by reference, and the next index
 type IndexIter<T> struct(of Indexable<<T>>&) {
     c Indexable<<T>>&of = of
-    i mut Int64 = 0
+    i mut I64 = 0
 }
 
 fn (it mut IndexIter<<T>>&) Next() <T> ? Exhausted {

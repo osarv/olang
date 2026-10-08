@@ -1,7 +1,7 @@
 # check: fail reads a mutable global
 error E { X }
-seed mut Int32 = 1
-fn f() Int32 { return seed }
+seed mut I32 = 1
+fn f() I32 { return seed }
 if f() == 1 {
     fn g() { }
 }

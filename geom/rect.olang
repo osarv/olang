@@ -4,12 +4,12 @@
 
 import "measure"
 
-type Rect struct(W Int32, H Int32) {
+type Rect struct(W I32, H I32) {
     W mut
     H mut
 }
 
-fn Square(side Int32) Rect {
+fn Square(side I32) Rect {
     return Rect(side, side)
 }
 

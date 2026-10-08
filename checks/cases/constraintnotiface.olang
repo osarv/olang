@@ -1,4 +1,4 @@
 # check: fail a constraint on a type variable is an interface the variable's type must satisfy
 # G19: only an interface constrains
-fn f(x <T Int32>) Int32 { return 1 }
+fn f(x <T I32>) I32 { return 1 }
 fn main() ? { }

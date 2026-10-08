@@ -115,11 +115,11 @@ keyword either, for the same reason: it is `NULL_LIT` (L11a).
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `Int32` where it fits one, `Int64` otherwise (T6a).
+written value: `I32` where it fits one, `I64` otherwise (T6a).
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
-denotes a **bit pattern**, so the full width of `Int64` is writable: `0xFFFFFFFFFFFFFFFF` is `-1`.
+denotes a **bit pattern**, so the full width of `I64` is writable: `0xFFFFFFFFFFFFFFFF` is `-1`.
 
 A leading `0` on a decimal literal is **not** an octal prefix — `07` is seven. C's bare-`0` octal is
 widely held to be a mistake, and there is no octal syntax at all.
@@ -149,21 +149,21 @@ the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
 recognized only when the whole of it is present: `1e` is an `INT_LIT` followed by an identifier, exactly
-as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT` denotes a value of type `Float32` unless context requires `Float64` (see
+as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT` denotes a value of type `F32` unless context requires `F64` (see
 §5.2 on numeric literal typing).
 
 **L13.** `CHAR_LIT ::= "'" char-content "'"`, where `char-content` is exactly one of:
 - any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\'`.
 
-A `CHAR_LIT` is of type `Byte`. An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
+A `CHAR_LIT` is of type `U8`. An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
 a compile-time error.
 
 **L14.** `STR_LIT ::= '"' { str-content } '"'`, where each `str-content` element is:
 - any single byte other than `"`, `\`, or newline (including `'`, which needs no escaping here), or
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\"`.
 
-A `STR_LIT` is of type `Byte[N]`, a compile-time-length array of `Byte` (see
+A `STR_LIT` is of type `U8[N]`, a compile-time-length array of `U8` (see
 §2.3), where `N` is the number of bytes after escape processing. A
 `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
 newline-containing `STR_LIT` is a compile-time error.
@@ -230,8 +230,8 @@ this can never absorb a token a longer parse would have wanted. It is what makes
 writable on one line:
 
 ```
-fn g(a Int32) Int32 { return a }
-type Point struct(x Int32) { x }
+fn g(a I32) I32 { return a }
+type Point struct(x I32) { x }
 if n > 3 { n = 3 }
 ```
 
@@ -247,11 +247,11 @@ because the grammar never expects one there and L18 never produces one there eit
 - immediately after the `mut` of a constructor's bare-pun field (§9.1 C2, `open mut`) — the only
   statement-shaped form in the language whose last token is that keyword;
 - immediately after the `>` closing a type's argument list, or a type variable, that ends a declaration
-  with no initializer (`none <T>`, `q Pair<Int32, Int64>`). A `>` used as "greater than" is always followed
+  with no initializer (`none <T>`, `q Pair<I32, I64>`). A `>` used as "greater than" is always followed
   by its right operand, so it is never a complete statement's last token.
 
 Each of the last three applies only where its token is the last on its line (or of the file): a token after it
-on the same line continues the statement, so `s Array<Int32>(4)` is a syntax error at the `(`, not a declaration
+on the same line continues the statement, so `s Array<I32>(4)` is a syntax error at the `(`, not a declaration
 followed by a parenthesized expression.
 
 ## 2. Types
@@ -316,14 +316,18 @@ legal but useless, and exists only because the grammar constructing a named type
 | Name | Description |
 |---|---|
 | `Bool` | boolean, `true` or `false` |
-| `Byte` | 8-bit unsigned integer |
-| `Int32` | 32-bit signed integer |
-| `Int64` | 64-bit signed integer |
-| `Float32` | 32-bit IEEE 754 floating point |
-| `Float64` | 64-bit IEEE 754 floating point |
+| `I8`, `I16`, `I32`, `I64` | 8-, 16-, 32- and 64-bit signed (two's complement) integers |
+| `U8`, `U16`, `U32`, `U64` | 8-, 16-, 32- and 64-bit unsigned integers |
+| `F16` | 16-bit IEEE 754 floating point (binary16) |
+| `BF16` | 16-bit "brain" floating point: `F32`'s exponent range with 8 bits of precision |
+| `F32`, `F64` | 32- and 64-bit IEEE 754 floating point |
 
-**T5.** `Byte`, `Int32`, `Int64` are the integer types; `Float32`, `Float64` are the float types;
-together these five are the numeric types. `Bool` is not numeric.
+**T5.** The `I` and `U` types are the integer types, the `I` ones signed and the `U` ones unsigned; `F16`, `BF16`,
+`F32` and `F64` are the float types; together they are the numeric types. `Bool` is not numeric. An unsigned type's
+arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right shift and conversions treat its value
+as unsigned. `F16` and `BF16` round every result to their own precision, as the hardware does; where the target has
+no instructions for them the arithmetic is carried out in `F32` and rounded back, with the same result. A literal
+cannot be written above `I64`'s maximum; a larger `U64` is computed (`U64(0) - 1`).
 
 **T6.** There is no implicit conversion between any two distinct types except the two T6b states - a number
 widening within its family, and a declared type flowing into its base - and the adaptation of a literal. A
@@ -334,40 +338,42 @@ numeric type it is used against, wherever that type would otherwise have to matc
 assignability context (§5.3 E12: a var-decl initializer, an assignment, an argument, a returned
 value) or a binary operator requiring both operands to be the same type (§5.2 E6, E8, E9, E10) - **provided
 the value written is representable in that type**. An integer literal is representable in any integer type
-whose range contains its value (`Byte` is unsigned, 0-255; T4) and in either float type; a float literal is
+whose range contains its value (`U8` is unsigned, 0-255; T4) and in either float type; a float literal is
 representable only in a float type. Adaptation is therefore never a silent truncation, and never turns a
-float literal into an integer - but it is not restricted to widening either: `x Byte = 65` and
-`b == 'a'` are as valid as `n Int64 = 1`, because the literal has no representation of its own yet and
+float literal into an integer - but it is not restricted to widening either: `x U8 = 65` and
+`b == 'a'` are as valid as `n I64 = 1`, because the literal has no representation of its own yet and
 the value written fits. Where both operands of a same-type-requiring binary operator are literals of
-differing numeric types, the narrower adapts to the wider (`Byte` < `Int32` < `Int64` < `Float32` <
-`Float64`), subject to the same representability rule. A non-literal value of a different numeric type
+differing numeric types, the narrower adapts to the wider (`U8` < `I32` < `I64` < `F32` <
+`F64`), subject to the same representability rule. A non-literal value of a different numeric type
 requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
 
-**T6b (numbers flow toward their base).** The numeric types form two families, each ordered from the more
-specific type to its **base**: `Byte` → `Int32` → `Int64`, and `Float32` → `Float64`. A value flows implicitly
-into any type further along its own family - the base can hold every value of the types before it, so nothing is
-lost - and a declared type over a numeric type (T29) flows into that type and on along its family. Nothing flows
-the other way, and nothing between the families: an `Int64` into an `Int32`, an `Int32` into a `Float64` and an
-`Int32` into a declared `Meters` are each written as a conversion (E26, or the declared type's own, T29/T29d).
-Where a value flows, it is converted at that point - sign-extended, zero-extended for `Byte`, or extended to the
+**T6b (numbers flow toward their base).** A number flows implicitly into a type that holds every value of its own,
+so nothing is lost: into a wider type of the same signedness (`I8` → `I16` → `I32` → `I64`, `U8` → `U16` → `U32` →
+`U64`), an unsigned one into a strictly wider signed one (`U8` → `I16`, `U16` → `I32`, `U32` → `I64`), and a float
+into a wider float (`F16` → `F32`, `BF16` → `F32`, `F32` → `F64`; `F16` and `BF16` each keep something the other
+loses, so neither flows into the other). Integers and floats never flow into each other. A declared type over a
+numeric type (T29) flows into that type and on from it. Nothing flows
+the other way: an `I64` into an `I32`, an `I32` into a `U32` or a `F64`, and an `I32` into a declared `Meters` are
+each written as a conversion (E26, or the declared type's own, T29/T29d).
+Where a value flows, it is converted at that point - sign-extended, zero-extended for `U8`, or extended to the
 wider float - wherever a value fits a target (E12: an initializer, an assignment, an argument, a returned value).
 Two numeric operands of an operator requiring one type (E6, E8, E9, E10) **meet** when one flows into the
-other's type, and the operation is then the other's: `Int32 + Int64` is an `Int64`, `Byte < Int32` compares two
-`Int32`s, and a `Meters` beside an `Int32` is an `Int32`. Two that neither flows into - two declared types over one
+other's type, and the operation is then the other's: `I32 + I64` is an `I64`, `U8 < I32` compares two
+`I32`s, and a `Meters` beside an `I32` is an `I32`. Two that neither flows into - two declared types over one
 base, an integer and a float - do not meet, and that is a compile-time error.
 
-**T6a.** Where nothing adapts it, a literal's own type is: `Int64` for an integer literal whose value is
-not representable in `Int32` and `Int32` for every other integer literal, `Float32` for a float literal,
-`Byte` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
+**T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
+not representable in `I32` and `I32` for every other integer literal, `F32` for a float literal,
+`U8` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it. It follows that an
-integer literal too large for `Int32` is never silently truncated by an `Int32` target: its own type is
-already `Int64`, so T6 must adapt it, and the value does not fit.
+integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
+already `I64`, so T6 must adapt it, and the value does not fit.
 
 ### 2.3 Array types
 
 **T7.** `Array<T>` is the array type: a sequence of `T` values whose length is decided when the array is
-built and fixed for that array thereafter. The length is **not part of the type** — `Array<Int32>` is every
-array of `Int32`, of any length — and is read with `....Len()` (§5.9). `Array` is a built-in name, taking
+built and fixed for that array thereafter. The length is **not part of the type** — `Array<I32>` is every
+array of `I32`, of any length — and is read with `....Len()` (§5.9). `Array` is a built-in name, taking
 exactly one type argument; declaring a type named `Array` is a compile-time error. The element type may
 carry a bare reference marker (`Array<Point&>`, an array of references to `Point`), which belongs to the
 array's own scope (§8 O5); a marker naming a variable on the element is a compile-time error, since an element
@@ -415,7 +421,7 @@ agree on reference-shapedness (T25a).
 { ctor-body } [ destruct-block ]`. Its fields are the ones its `ctor-body` declares (§9.1 C2), and every
 instance is built by calling it (§9.3 C6). There is no field-list form and no struct literal. A struct
 whose fields are meant to be set by its user declares an empty parameter list and mutable fields, which
-take their zero values (D13) — `type P struct() { x mut Int32 }`, built as `P()`.
+take their zero values (D13) — `type P struct() { x mut I32 }`, built as `P()`.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -449,7 +455,7 @@ enum **none** of whose cases carries a payload has no payload storage at all.
 
 A case's **name is its own**, independent of any type in its payload: two cases of one enum may carry the
 same payload type and remain distinct, which is what makes an enum a *disjoint* union rather than an
-overlay. `Celsius(Int32)` and `Fahrenheit(Int32)` are two different cases of one type.
+overlay. `Celsius(I32)` and `Fahrenheit(I32)` are two different cases of one type.
 
 `==`/`!=` compare the **tag first, then the live case's payload** — two enum values are equal when they
 hold the same case and that case's payload compares equal. The payload is an ordinary struct, so each of
@@ -490,7 +496,7 @@ when `Wrap<Point>` is built; rewriting only its field types would leave a name d
 arguments, which nothing would match.
 
 A method declared over a still-generic application is a method of **every** application of that generic. A
-method declared over a concrete one (`Cell<Int32>`) applies only to that one and takes precedence, so M21's
+method declared over a concrete one (`Cell<I32>`) applies only to that one and takes precedence, so M21's
 overloading by receiver type is unaffected.
 
 **G16a.** An instantiation is identified by its generic and its type arguments, and distinct type
@@ -590,7 +596,7 @@ never carry a reference marker; doing so is a compile-time error.
 Point&                 a reference to a Point
 Array<Point>           an array of Point values
 Array<Point&>&         a reference to an array of references to Point
-Array<Array<Int32>&>   an array of references to arrays, each its own length
+Array<Array<I32>&>   an array of references to arrays, each its own length
 ```
 
 There is no reference-to-a-reference: at most one marker may be written on a type, so two in a row
@@ -609,12 +615,12 @@ concept with no effect on type identity (T12, T27) or on which operations are va
 
 **T25a.** Reference-shapedness itself **is** part of type identity (T27): `Point` and `Point&` are
 different types, one an aggregate and the other a pointer to one, and likewise `Array<Cell>` and
-`Array<Cell&>`, `Array<Byte>` and `Array<Byte>&`. Converting between a value and a reference to it is an
+`Array<Cell&>`, `Array<U8>` and `Array<U8>&`. Converting between a value and a reference to it is an
 *assignability* rule (§5.3 E12), not a statement that the two are the same type: a marker always changes
 the type.
 
 **T25b (reference permission).** A reference type is either **writable**, written with `mut` before it
-(`mut Point&`, `mut Array<Byte>&`), or **read-only**, written without it (`Point&`). Through a read-only
+(`mut Point&`, `mut Array<U8>&`), or **read-only**, written without it (`Point&`). Through a read-only
 reference nothing it refers to may be written: no field or element of the referent may be assigned, and the
 reference may not be passed or stored where a writable one is wanted. The permission is part of the type at
 every level - an array's element type, a type argument, a function type's parameters and result, a function's
@@ -679,16 +685,16 @@ typing for struct, enum, or error types: identity is always by declared name and
 never by shape.
 
 **T29.** A **declared** type is nominal, including one whose underlying shape is a primitive (T4).
-`type Meters Int32` and `type Feet Int32` are different types, and both differ from `Int32`: a value of one
+`type Meters I32` and `type Feet I32` are different types, and both differ from `I32`: a value of one
 is not assignable to the other, and only an explicit conversion crosses between them. `Meters(x)` converts
-into such a type exactly as `Int32(x)` converts out of it (§5.12 E26); where the two share a representation
+into such a type exactly as `I32(x)` converts out of it (§5.12 E26); where the two share a representation
 the conversion moves nothing. An undeclared primitive has no owning module and no name, so two occurrences
-of `Int32` remain the same type.
+of `I32` remain the same type.
 
 Nominality is what gives a named type an identity to attach methods to (§4.4 M19).
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
-constructor, written after the type on the same line: `type Percent Int32(v mut Int32) [? errors] { ... }`.
+constructor, written after the type on the same line: `type Percent I32(v mut I32) [? errors] { ... }`.
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
@@ -702,10 +708,10 @@ makes that a compile-time error at the literal - there is no `try` to write on a
 it.
 
 ```
-type Percent Int32(v mut Int32) {
+type Percent I32(v mut I32) {
     if v > 100 { v = 100 }        # Percent(150) is 100
 }
-type Checked Int32(v Int32) ? RangeError {
+type Checked I32(v I32) ? RangeError {
     if v < 0 { error RangeError.NEGATIVE }        # try Checked(x)
 }
 ```
@@ -713,9 +719,9 @@ type Checked Int32(v Int32) ? RangeError {
 A declared primitive type takes no destructor and there are no references to primitives (T24): the value is
 always copied, so there is no single instance for a destructor to release or a reference to name.
 
-**T29a (a declared type over an array).** Nominality reaches an **array** too: `type String Array<Byte>` is a
-distinct type from `Array<Byte>`, with its own identity and therefore its own methods. Its *representation* is
-unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) when its elements are `Byte`, renders under `$`
+**T29a (a declared type over an array).** Nominality reaches an **array** too: `type String Array<U8>` is a
+distinct type from `Array<U8>`, with its own identity and therefore its own methods. Its *representation* is
+unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) when its elements are `U8`, renders under `$`
 (E11a) and marshals across the `extern` boundary (X3) exactly as the array it is declared over. This is how
 a built-in array type is given methods at all.
 
@@ -727,38 +733,38 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
-  usable wherever a `Array<Byte>` is wanted. That direction discards a claim rather than making one, which is
-  always safe — and it is the same latitude `Int32(m)` already gives a named numeric, without needing a
+  usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
+  always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
   spelling for it.
 
 **T29e (inherited array methods).** A declared type **extending** an array (T29f) has every method of the array it
-is declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<Byte>`'s `Count`, and a
-`type Nums extends Array<Int32>` sorts with `Sort`. An inherited method whose result is its receiver's own array
+is declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<U8>`'s `Count`, and a
+`type Nums extends Array<I32>` sorts with `Sort`. An inherited method whose result is its receiver's own array
 type gives the declared type instead: a `String`'s `Filter` is a `String`. An inherited method is never overridden:
 declaring a method whose name an inherited one already has is a compile-time error.
 
 **T29f (`extends`).** `type Name extends Base`, for a `Base` that is a numeric type or an array type, declares a type
 that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends
-Int64` has `Hash`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
-`Meters extends Int32` is a `Meters`). There is no dynamic dispatch and nothing is overridden. `extends` on a struct,
+I64` has `Hash`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
+`Meters extends I32` is a `Meters`). There is no dynamic dispatch and nothing is overridden. `extends` on a struct,
 enum, interface or function type is a compile-time error: none has a base.
 
 A declared type **without** `extends` inherits nothing it does not declare. It still reads as its base: it flows into
 it (T6b), so it compares with `<` and `==`, and beside a base value or a literal it is its base (`p + 1` on a
-`type Percent Int32` is an `Int32`). But no built-in operator makes a value of it: `+ - * / % & | ^ << >>`, unary
+`type Percent I32` is an `I32`). But no built-in operator makes a value of it: `+ - * / % & | ^ << >>`, unary
 `-` and `~`, and `++`/`--` on it alone or on two of it are a compile-time error unless the type declares the
 operator's method (E31). An array type's own operations - indexing, slicing, `Len()`, `for ... in`, `$` - are what
 its value is, and belong to it with or without `extends`.
 
-**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Byte>`, the text type, and
+**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<U8>`, the text type, and
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
-literal's is `Int32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
+literal's is `I32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
 bound to a type variable (G9a), and as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`).
 Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
-bytes it is written against - an `Array<Byte>`, or a declared type over one. Any other bytes become a `String`
+bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
-goes wherever an `Array<Byte>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
+goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
 
 **T29b.** An array satisfies an interface (§2.11 T31) on the same terms as any other type, whether it is
@@ -845,7 +851,7 @@ right names a family of functions not chosen until a call; there is nothing for 
 **T35a (generic interfaces).** An interface type may declare type parameters, after its name exactly as a
 struct type does (G6): `type Source<T> interface { mut Next() <T> ? Exhausted }`. Its method signatures may use
 them, including in a result alone (G4 does not apply: the interface's own variables are fixed by its
-arguments, not inferred at a call). An **application** such as `Source<Int32>` is an ordinary interface
+arguments, not inferred at a call). An **application** such as `Source<I32>` is an ordinary interface
 type — its methods concrete, so every T30–T34 rule applies to it unchanged — and two applications are the
 same type exactly when their arguments are (G16a). A generic function may take `Source<<T>>&`, binding `T`
 from an interface value's arguments (G9). A method of a generic type (`fn (b mut Box<<T>>&) Next() <T> ?
@@ -857,7 +863,7 @@ interface { mut Next() <T> ? Exhausted }`, visible in every module: `Next()` giv
 `Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
 `v := try it.Next() catch Exhausted { break }`.
-The prelude declares `type Indexable<T> interface { At(i Int64) <T>  Len() Int64 }` and, as its default (M19e),
+The prelude declares `type Indexable<T> interface { At(i I64) <T>  Len() I64 }` and, as its default (M19e),
 `Iter()` giving an `IndexIter<T>` over positions `0` to `Len() - 1` - so a type with `At` and `Len` and no `Iter` of
 its own reaches the iterator helpers (`g.Iter().Count(f)`).
 
@@ -1127,7 +1133,7 @@ declaration with no initializer is D13's zero value. When present, `expr`'s type
 names with one type: it is one declaration per name, in the order written, each `name [mut] type-expr [= expr_i]`
 taking the i-th value - so each initializer sees the names declared before it, as in C. There is one value per name,
 or none (each then its zero value, D13); any other count is a compile-time error. It is valid wherever a declaration
-of that kind is - a local, a global (`X, Y mut Int32 = 0, 0`) - and as constructor fields (C2), where the names may
+of that kind is - a local, a global (`X, Y mut I32 = 0, 0`) - and as constructor fields (C2), where the names may
 also be puns (`x, y mut`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
@@ -1271,7 +1277,7 @@ A private word does not make its **type** uncatchable. `catch Lib.Err` (no word)
 that type, including ones the catching module could not name — a caller can handle "some `Err`" without
 being told which ones exist.
 
-**M19.** A **method** is a function declared with a receiver (§3.4 D7): `fn (p Point&) Norm() Int32`.
+**M19.** A **method** is a function declared with a receiver (§3.4 D7): `fn (p Point&) Norm() I32`.
 Methods live in a namespace of their own, keyed by receiver type, and a method is reached **only** as
 `receiver . IDEN ( args )` — a **method call**, resolved against the methods declared for the receiver
 value's type (up to the value/reference conversions of §5.3 E12). A method is never found by a plain name:
@@ -1285,7 +1291,7 @@ The receiver type may be:
 - an **interface** (T30), under the same own-module rule — see M19a;
 - a **built-in** type: a numeric primitive, `Bool`, or an unnamed array. Its methods are declared by the
   **prelude** (M19d) and by no other module, and are visible everywhere. An array receiver
-  is identified by its **element type** alone — `Array<Int32>&` and `Int32[4]` are receivers of the same method,
+  is identified by its **element type** alone — `Array<I32>&` and `I32[4]` are receivers of the same method,
   the call's E12 conversions deciding whether a given array reaches it — and an element that is a type
   variable (`Array<<T>>&`) makes the method one of every array. A method over a specific element type is a
   different receiver from the generic one and takes precedence where both apply, as G8a's concrete
@@ -1330,7 +1336,7 @@ the call — and a `mut` method requires the receiver to be a mutable lvalue, ex
 does at a plain call.
 
 A name that is *not* one of the interface's methods falls through to M19's ordinary lookup, which finds a
-method declared with the interface itself as its receiver (`fn (w Writer&) WriteAll(data Array<Byte>&)`) — a
+method declared with the interface itself as its receiver (`fn (w Writer&) WriteAll(data Array<U8>&)`) — a
 helper over every value of the interface, called statically. Such a method may not reuse the name of one
 of the interface's own methods, which would make `w.f` both a dispatch and a static call.
 
@@ -1354,7 +1360,7 @@ This is the only spelling that reaches a method on an indexed or returned value,
 `alias-chain IDEN ( args )` call form (E13) reaches only identifiers. Resolution is M19's and M19a's,
 unchanged; a name that is neither a method of the receiver's type nor, for an interface receiver, one of
 its declared methods is a compile-time error here rather than a member access. So a module may declare a
-method on its own interface (`fn (w Writer&) WriteAll(data Array<Byte>&) ? IoError`) and callers reach it as
+method on its own interface (`fn (w Writer&) WriteAll(data Array<U8>&) ? IoError`) and callers reach it as
 `w.WriteAll(data)` — one spelling for the methods a type must supply and the helpers built on top of them,
 with only the former dispatched.
 
@@ -1548,9 +1554,9 @@ undefined, the operation may be removed or transformed before it ever executes.
 
 **E6c.** Integer arithmetic **wraps**. The result of `+`, `-`, `*`, unary `-`, `++`, `--`, their compound
 assignments and `<<` on an integer type is the true result reduced modulo 2^w, `w` being the type's width: a
-signed type (`Int32`, `Int64`) is two's complement, so `Int32` 2147483647 + 1 is -2147483648 and `-` of the most
-negative value is itself; `Byte` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
-out; `>>` shifts in the sign bit for a signed type and zeros for `Byte`. Overflow is never undefined, never
+signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147483648 and `-` of the most
+negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
+out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
 rely on it. A program wanting overflow detected checks for it itself. Division is the exception, by E6a.
 
@@ -1617,10 +1623,10 @@ values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c
 built-in type declares none; its `==` is the language's.
 
 **E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
-`Hash() Int64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
+`Hash() I64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
 array value** whose type declares neither `Hash` nor `Eq` and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `Byte`, `Int32`, `Int64` and `String`; a float has none,
+prelude's `HashElements`). The prelude declares `Hash` for `U8`, `I32`, `I64` and `String`; a float has none,
 so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
 where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
 reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key, but an
@@ -1634,7 +1640,7 @@ operand and produces that type (negation). `++`/`--`, prefix or postfix, require
 float-typed, mutable (§6.2) lvalue operand, and both read and write it: postfix yields the
 pre-increment/decrement value, prefix yields the post-increment/decrement value, exactly as in C.
 
-**E11a (`$` — a value as text).** Prefix `$` produces text — an `Array<Byte>`, which is a `String` wherever
+**E11a (`$` — a value as text).** Prefix `$` produces text — an `Array<U8>`, which is a `String` wherever
 one is wanted (T29c) — holding its operand's textual rendering. It
 is a **value** and a **temporary**: it has no storage of its own to borrow, so it is built in the scope of
 whatever it flows into (E12c) — the current block for a local it initializes, the target's scope for a
@@ -1645,29 +1651,29 @@ A type may say how it renders by declaring **`Str`** (E11c); every other value h
 its type: the value written the way it would be in source:
 
 - `Bool` — `true` or `false`.
-- `Int32`, `Int64` — decimal, with a leading `-` for a negative value.
-- `Float32`, `Float64` — decimal. The digit count is implementation-defined, but the rendering always
+- `I32`, `I64` — decimal, with a leading `-` for a negative value.
+- `F32`, `F64` — decimal. The digit count is implementation-defined, but the rendering always
   reads back as the same value.
-- `Byte` — at the top level, the **character** it denotes, one byte long (`Byte` is this language's
-  character type, L11); its numeric rendering is `$Int32(b)`. Inside another value, that character written as
+- `U8` — at the top level, the **character** it denotes, one byte long (`U8` is this language's
+  character type, L11); its numeric rendering is `$I32(b)`. Inside another value, that character written as
   a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
-- an array of `Byte`, in any of its four shapes — at the top level, its bytes unchanged (copied: the result
+- an array of `U8`, in any of its four shapes — at the top level, its bytes unchanged (copied: the result
   is a new value, never a second name for the operand's storage). Inside another value, its bytes written as
   a string literal: `"text"`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\"` escaped. Any other byte is
   written as itself.
-- any other array — its element type as written, then its items: `Int32[1, 2, 3]`, `Point&[Point(1, 2)]`,
-  `Int32[]` when empty.
+- any other array — its element type as written, then its items: `I32[1, 2, 3]`, `Point&[Point(1, 2)]`,
+  `I32[]` when empty.
 - a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
-- a declared type over a primitive or an array — as the type it is declared over (a `type Meters Int32`
+- a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
   renders as a number).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
   alike, written unchanged (never quoted).
 - a function — its signature, `(params) results ? errors`, preceded by its name when the operand names a
-  declared function directly (`add(a Int32, b Int32) Int32`) and by `fn` for a function value, whose name is
-  not known where the `$` is written (`fn(a Int32, b Int32) Int32`). A null function value is `null`.
-- an interface — its name and its methods' signatures: `Writer{Write(d Array<Byte>&) Int32, mut Reset()}`. A null
+  declared function directly (`add(a I32, b I32) I32`) and by `fn` for a function value, whose name is
+  not known where the `$` is written (`fn(a I32, b I32) I32`). A null function value is `null`.
+- an interface — its name and its methods' signatures: `Writer{Write(d Array<U8>&) I32, mut Reset()}`. A null
   interface value is `null`.
 - a reference — `null` when it is null, otherwise its referent. References are followed at most **8**
   deep along any one path from the operand; the next one is rendered as `...`, which is what makes a cyclic
@@ -1801,7 +1807,7 @@ one value per call, with no evaluation order to observe.
 
 **E14a.** An argument may be the keyword `default`, which supplies that one parameter's declared default
 in place of a written value, letting a call reach a later parameter without restating the values before
-it: given `connect(host Array<Byte>, port Int32 = 80, timeout Int32 = 30, retries Int32 = 3)`, a call
+it: given `connect(host Array<U8>, port I32 = 80, timeout I32 = 30, retries I32 = 3)`, a call
 `connect(h, default, default, 5)` sets only `retries`. As an argument, `default` is valid **only** as a direct argument of
 a call (its other use, introducing a `try`'s fallback value, is §7 R9a), and only where the corresponding parameter declares a default (D8a); it is not an expression and
 may not be assigned, nested, or used as a value anywhere. Parameter *names* are deliberately not part of
@@ -1827,7 +1833,7 @@ calling its checked form (E31a), whose own errors the tried expression then can 
 | `<<`, `>>` | `INVALID` for an amount outside `[0, w)` (E8a) |
 | integer narrowing `T(x)` | `OVERFLOW` when the value does not fit `T` (instead of wrapping, T6) |
 | float to integer `T(f)` | `INVALID` for a NaN or infinity, `OVERFLOW` out of range (E26a) |
-| `Float32(f)` from `Float64` | `OVERFLOW` when a finite value becomes infinite |
+| `F32(f)` from `F64` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
 | `Array<T>(n)` | `OUT_OF_BOUNDS` for a negative `n` (D14b) |
 
@@ -1914,7 +1920,7 @@ element type, stated exactly once regardless of nesting depth (E21). The optiona
 out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
 tag. A primitive scalar type may never carry one (T24).
 
-An element type may itself be an **array**, always as a reference (T7a): `Array<Int32>&[r0, r1]` has two
+An element type may itself be an **array**, always as a reference (T7a): `Array<I32>&[r0, r1]` has two
 elements, references to the arrays `r0` and `r1`, each with its own length.
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` — a plain expression, or a nested
 bracketed group with no restated type, for a multi-dimensional literal.
@@ -1927,7 +1933,7 @@ afterward, against a target, if there is one.
 
 **E21.** A literal's items are never themselves bracket groups: there are no nested literals, since there
 is no multi-dimensional array (T7a). An array of arrays is a literal of references,
-`Array<Int32>&[r0, r1]`.
+`Array<I32>&[r0, r1]`.
 
 ### 5.8 Enum values
 
@@ -1940,9 +1946,9 @@ boundary both the type and the case must be public (M6, M6a).
 ### 5.9 An array's length
 
 **E23.** `arr.Len()` — every array type, declared ones like `String` included, has a method `Len()` giving
-its length as an `Int64`. It is supplied by the compiler rather than declared, since the length lives in the
-array's representation; in every other respect it is a method (§4.4 M19). An `Int64` converts to a narrower
-integer type only by an explicit conversion (`Int32(a.Len())`, T6).
+its length as an `I64`. It is supplied by the compiler rather than declared, since the length lives in the
+array's representation; in every other respect it is a method (§4.4 M19). An `I64` converts to a narrower
+integer type only by an explicit conversion (`I32(a.Len())`, T6).
 
 ### 5.10 `try` as an expression
 
@@ -1958,7 +1964,7 @@ one:
 
 ```
 makeVec&x()
-Vec<Int32>&x(4)
+Vec<I32>&x(4)
 ```
 
 `IDEN` names a local or parameter of the **calling** function, and binds the callee's result scope (§8 O13,
@@ -1975,20 +1981,19 @@ references, or a result borrowed from a parameter (O13) — is a compile-time er
 
 ### 5.12 Explicit numeric conversion
 
-**E26.** `TypeName(x)`, where `TypeName` is one of the five numeric primitive types (T5: `Byte`,
-`Int32`, `Int64`, `Float32`, `Float64`) and `x` is a single expression of any numeric type, converts
+**E26.** `TypeName(x)`, where `TypeName` is one of the numeric primitive types (T4/T5) and `x` is a single expression of any numeric type, converts
 `x`'s *value* to `TypeName` and produces a value of that type - the explicit counterpart to T6's
 literal adaptation and T6b's widening, covering everything they do not: a value moving toward the narrower end
 of its family or across families, a literal whose written value the target type cannot represent, and any
-float-to-integer conversion at all (`Float64` → `Float32`,
-`Int64` → `Int32`/`Byte`, a float type → an integer type). Converting a value to its own type is accepted, producing that same value
+float-to-integer conversion at all (`F64` → `F32`,
+`I64` → `I32`/`U8`, a float type → an integer type). Converting a value to its own type is accepted, producing that same value
 unchanged. Exactly one argument is required; anything else (zero, two or more, or a non-numeric
 argument) is a compile-time error. `TypeName` in this position is never shadowable by another
 declaration of the same name - a primitive type name is never otherwise a valid
 call target, so this introduces no ambiguity with an ordinary function or constructor call.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
 conversion cannot itself produce an error (a narrowing conversion outside its target type's
-representable range - e.g. `Byte(300)` - silently wraps, the same well-defined, unchecked behavior
+representable range - e.g. `U8(300)` - silently wraps, the same well-defined, unchecked behavior
 this language already accepts at every other point a value can silently lose information, such as
 E16's own unchecked array indexing).
 
@@ -2019,11 +2024,11 @@ length or a range's count, at most - and otherwise grows: room for 100 elements,
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
-`Int32[x * 2 for x in a if x > 3]`, `Int64[Int64(i) * Int64(i) for i in range n]`, `Byte[c - 32 for c in t]`.
+`I32[x * 2 for x in a if x > 3]`, `I64[I64(i) * I64(i) for i in range n]`, `U8[c - 32 for c in t]`.
 
 The source after `in` and the condition after `if` are each a `binary`, not an `expr`: an `if` there belongs to the
 comprehension, so a conditional (E28) in either position is written in parentheses. The element may be one freely:
-`Int32[x if x > 0 else 0 for x in a]`.
+`I32[x if x > 0 else 0 for x in a]`.
 
 ### 5.12 Conditional expressions
 
@@ -2080,7 +2085,7 @@ type declares one:
 | `~a` | `BitNot` | none, a result |
 | `x++`, `x--` (either side) | `Inc`, `Dec` | none, a result |
 | `f(args)` on a value `f` | `Call` | any parameters, any result |
-| `x[lo:]`, `for x in c` (S9d) | `Len` | none, an `Int64` |
+| `x[lo:]`, `for x in c` (S9d) | `Len` | none, an `I64` |
 
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
 name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
@@ -2119,7 +2124,7 @@ built-in operation, which for `@` does not exist (an error), and for indexing an
 that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
 
 `x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. An `At`
-returning a writable borrowed reference (`At(i Int64) mut T&x`) makes `x[i].f = v` write the element. In `x[lo:hi]`
+returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
@@ -2242,7 +2247,7 @@ reading only locals whose values are **fixed** (S8c) — and reads **no** build 
 through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an `assert`
 is not an `if`.)
 
-**S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `Byte`, or an enum without
+**S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `U8`, or an enum without
 payloads) declared with an initializer, and nothing anywhere in its function writes it afterwards — no
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
@@ -2282,7 +2287,7 @@ anywhere else. The loop runs: evaluate init once; while condition is true, run b
 clause, then re-check condition.
 
 **S9a (`for ... in`).** `for x in e` runs its body once for each value `e` yields, with `x` a new local
-holding it; `for i, x in e` also declares `i`, an `Int64` counting iterations from `0`. The names are
+holding it; `for i, x in e` also declares `i`, an `I64` counting iterations from `0`. The names are
 scoped to the body. `e` is evaluated once, before the first iteration, and must be one of:
 
 - an **array**, of any shape (T11, including a slice and a declared array type): `x` is each element in
@@ -2294,7 +2299,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
-- an **indexable** value (S9d): one whose type has `At(i Int64) T` and `Len() Int64` (E31) and neither a `Next()` nor
+- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()` nor
   an `Iter()` of its own - either of which says how the type wants to be walked. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
   borrowed (E12c), never copied. A type with `TryAt` and `Len` but no `At` is walked through `TryAt`, under S9e.
@@ -2316,7 +2321,7 @@ continues after the loop; an error no clause names propagates, as from any `try`
 ended, so a `break` or `continue` directly in one is a compile-time error.
 
 A **comprehension** (E27) makes the same calls and has no clauses of its own: one whose own calls can fail is
-written under `try` - `try Int32[f(x) for x in lines] catch default Int32[]` - which checks it as E15a checks any
+written under `try` - `try I32[f(x) for x in lines] catch default I32[]` - which checks it as E15a checks any
 expression, those calls included (`Exhausted` aside, which ends the walk); an error from them abandons the array
 being built.
 
@@ -2693,7 +2698,7 @@ atomicSwap(t, v)           -> T      writes v to t, yielding the value it held b
 atomicCas(t, expected, v)  -> T      writes v to t only if t holds `expected`, yielding what it found
 ```
 
-`t` must be an **lvalue of an integer type** — `Byte`, `Int32` or `Int64` — and a **mutable** one for every builtin
+`t` must be an **lvalue of an integer type** — `U8`, `I32` or `I64` — and a **mutable** one for every builtin
 but `atomicLoad`, which only reads: a task reading a flag another task sets holds it through a read-only reference
 (T25b), and needs no permission to write it in order to read it. Atomicity is a property
 of a single machine word, so there is nothing it could mean for an aggregate, a reference or a float. Each
@@ -2745,7 +2750,7 @@ takes on a wrong `extern` prototype and §5.9 E16e takes on an out-of-range inde
 define what such a program does, and no guarantee stated anywhere else applies to it.
 
 There is no exception for any type or size. olang has no atomic operations, so **no** access is atomic —
-not a `Byte`, not an `Int32`, not a pointer — and a concurrent read of something being written may observe
+not a `U8`, not an `I32`, not a pointer — and a concurrent read of something being written may observe
 a value that was never stored. `-race` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
 
@@ -3265,7 +3270,7 @@ returning a temporary, or by naming it: `&return` (O26).
 return a parameter's value, or a function value reached through a parameter's data, with no borrowed form. Nothing
 is ever written through a function value (D16d), so such a return needs only that the parameter outlive the
 result scope; it is an obligation of the function (O10b), and every call checks it once the result has landed
-(O18a). `fn id(f fn() Int32) fn() Int32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
+(O18a). `fn id(f fn() I32) fn() I32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
 where `y`'s closure lives in a block `keep` outlives.
 
 **O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
@@ -3333,7 +3338,7 @@ call has been checked, against the scope the result landed in. Where several des
 the fallback to the caller's block makes any target outliving that block fail the ordinary check, so the
 disagreement is reported rather than resolved by guessing.
 
-**O19.** Binding is per call. In `fn take(v Vec<Int32>&) Point&`, `v`'s scope is determined by the argument
+**O19.** Binding is per call. In `fn take(v Vec<I32>&) Point&`, `v`'s scope is determined by the argument
 and the result scope lands or is supplied: `take&x(v)` builds the result where `x` lives, `take(v)` where it
 lands. A scope variable's binding is not a value the program can observe; whether a callee needs the region at
 run time (because it allocates into it, O6) is an implementation matter with no user-visible parameter.
@@ -3388,7 +3393,7 @@ A field's declared type (explicit, or inferred by `:=`) may carry a reference ma
 naming a parameter or an earlier field of this same constructor (C2d).
 
 The `STMNT_END` terminating a `ctor-field` follows §1's own rules for any other statement, L20
-included, so a whole constructor may be written on one line (`type Point struct(x Int32) { x }`).
+included, so a whole constructor may be written on one line (`type Point struct(x I32) { x }`).
 
 **C2a.** The fields **are** the constructor's own top-level locals. A `ctor-field` declares, in
 addition to a field of the struct type, a local of the same name, initialized to the same value and
@@ -3403,7 +3408,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 **C2c.** A constructor's scope variables (§8 O3) are implicit: one per reference parameter (O4b), and the
 **instance scope** — where the instance lands, which a constructor has as a function has its result scope
 (O13): bound to wherever the call's result is put (O18a), or supplied by a scope argument (E25) —
-`Vec<Int32>&x(4)` builds the instance where `x` lives.
+`Vec<I32>&x(4)` builds the instance where `x` lives.
 
 **C2d.** In a constructor:
 
@@ -3428,8 +3433,8 @@ be exactly it when the argument can itself hold references (O25c). An argument f
 A violation is a compile-time error at that point.
 
 ```
-type Box struct(v Int32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does
-type Link struct(v Int32, next Link&) {
+type Box struct(v I32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does
+type Link struct(v I32, next Link&) {
     v
     next                                                   # lives wherever the Link does
 }
@@ -3438,7 +3443,7 @@ type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shor
 ```
 
 **C2e.** A field written as an array value initialized by `Array<T>(n)` or `Array<T>(n, v)` —
-`m Array<Float32> = Array<Float32>(16)`, or `m := Array<Float32>(16)` — whose `n` can be **computed at compile
+`m Array<F32> = Array<F32>(16)`, or `m := Array<F32>(16)` — whose `n` can be **computed at compile
 time** (§13 K1: a literal, a constant global, arithmetic, or a call the evaluator can run) is stored **in the
 instance itself**: its `n` elements are part of the struct's layout, as a primitive field is. The instance
 then remains plain data — copying it copies the elements, returning it by value needs no scope — and its
@@ -3693,7 +3698,7 @@ compares here as it does everywhere else (E10), not by content.
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
 shaped as an integer literal is an integer (typed by T6a), text shaped as a float literal a float, each
-optionally preceded by `-`; anything else — or anything in double quotes — is text, a `Byte[N]` holding it.
+optionally preceded by `-`; anything else — or anything in double quotes — is text, a `U8[N]` holding it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, as is defining one name twice.
@@ -3724,7 +3729,7 @@ compiler does not check. A declaration states a prototype, and the compiler take
 word: it verifies nothing about the function that actually links, its real signature, its calling
 convention, or what it does with the pointer an array parameter marshals to (X3). A wrong prototype is
 undefined behaviour, and a wrong *size* for a foreign type reached through a reserved array — a
-`pthread_mutex_t` held as `Array<Byte>(40)`, say — is silent memory corruption rather than a diagnosed error.
+`pthread_mutex_t` held as `Array<U8>(40)`, say — is silent memory corruption rather than a diagnosed error.
 
 This is unavoidable rather than an omission: the foreign side is compiled by another toolchain and olang
 has no view into it. Every other guarantee in this specification is stated as holding for programs that do
@@ -3733,9 +3738,8 @@ be got wrong, but does not close it.
 
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
-numeric primitive type (T5 — `Byte`, `Int32`, `Int64`, `Float32`, or `Float64` — this is also
-exactly `extern-scalar-type`), or an array type (T7, compile-time-length or runtime-length) whose element type is
-itself one of those five. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
+numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or an array type (T7,
+compile-time-length or runtime-length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
 return type is never valid (see X3 for why). No other type — `Bool`, a struct, an enum type, an
 error type, a function type, or an array of any type outside the numeric-primitive set —
 is valid in an `extern-param` or `extern-ret-type` position.
@@ -3754,7 +3758,7 @@ either fabricating a length (silently unsound) or inventing a real pointer-typed
 the language (exactly what X3's own marshalling exists to avoid).
 
 **X3a (foreign opaque storage).** A foreign type with no olang spelling — a `pthread_mutex_t`, say — is
-held as a `Byte[N]` and handed over by X3's marshalling. Three things make that sound, and only the first
+held as a `U8[N]` and handed over by X3's marshalling. Three things make that sound, and only the first
 is about `N`:
 
 - **`N` is an upper bound, never an exact size.** Nothing embeds the blob by value; the foreign side only
@@ -3764,10 +3768,10 @@ is about `N`:
   sizes for `pthread_mutex_t` depending on the machine.
 - **The element type supplies the alignment.** An array is aligned as its element type is, and an
   aggregate containing one is laid out by the same natural-alignment rule the platform's C compiler uses
-  (§3.2) — so an `Array<Int64>(8)` is 8-aligned wherever it sits, inline in a struct (C2e) or in the
-  arena, while an `Array<Byte>(64)` has alignment **1** and may land at any offset in its container. A foreign type holding
+  (§3.2) — so an `Array<I64>(8)` is 8-aligned wherever it sits, inline in a struct (C2e) or in the
+  arena, while an `Array<U8>(64)` has alignment **1** and may land at any offset in its container. A foreign type holding
   a pointer, or performing an atomic operation on itself, cannot tolerate that. Choose the element type
-  for the alignment the foreign type needs and divide the reservation by its size; `Byte` is the wrong
+  for the alignment the foreign type needs and divide the reservation by its size; `U8` is the wrong
   choice for almost every foreign type, and is right only for one that really is a byte buffer.
   The largest alignment this expresses is a primitive's largest, currently 8. A foreign type needing more
   (a long double, a vector type) has no sound spelling here.
@@ -3859,9 +3863,9 @@ the list, in scope throughout the whole declaration: the constructor's own `para
 list (C1), every field, and the `destruct` block (C7).
 
 ```
-type Vec<T> struct(cap Int64) {
+type Vec<T> struct(cap I64) {
     items mut Array<<T>>& = Array<<T>>(cap)
-    len Int64 = 0
+    len I64 = 0
 }
 ```
 
@@ -3890,14 +3894,14 @@ different types, the call is a compile-time error.
 that matching while any other argument binds the same variable: the variable is determined by the other
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
-literal operands (§5.4). So `Pick(v, 7)` with `v Int64` instantiates `Pick` at `Int64`, and `Pick(1, 2.5)`
-at `Float64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+literal operands (§5.4). So `Pick(v, 7)` with `v I64` instantiates `Pick` at `I64`, and `Pick(1, 2.5)`
+at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
-at `Int64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
+at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 
 Written text (a string literal, a `$` rendering or a join, E11a/E11b) is treated the same way: it binds nothing
 while another argument binds the variable, and is then built as a temporary of the bound type - so
-`m.Put("apple", 1)` on a `Map<String&, Int32>` passes the text where a `String&` is wanted. Reached only by text,
+`m.Put("apple", 1)` on a `Map<String&, I32>` passes the text where a `String&` is wanted. Reached only by text,
 the variable is the text's own type (`String`).
 
 **G9b.** Matching runs left to right, the receiver of a method first. An argument whose parameter is a bare type
@@ -3908,16 +3912,16 @@ value `key` as any `String&` parameter would.
 **G9c.** An argument of a concrete (non-interface) type whose parameter is an application of a generic interface
 (`s mut Source<<T>>&`) is matched through the methods that make it satisfy that interface (T31): each interface
 method's parameter types and result are matched against those of the method the argument's type supplies under
-the same name. So a `ListIter<Int32>` passed to `Iterator<<T>>&` binds `T` to `Int32`. Whether the argument then
+the same name. So a `ListIter<I32>` passed to `Iterator<<T>>&` binds `T` to `I32`. Whether the argument then
 satisfies the interface the bindings give is decided by the ordinary conversion (E12d).
 
-**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<Int32>`
-and `Vec<Int64>` are different types (T27); two instantiations are the same type exactly when the
+**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
+and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the
 named type and every type argument are the same.
 
 **G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
 arguments before the argument list, and a scope argument (E25) after them to build the instance where
-a variable lives: `Vec<Int32>&x(4)`, or `Vec<Int32>(4)` to build it where it lands (§8 O18a). The type
+a variable lives: `Vec<I32>&x(4)`, or `Vec<I32>(4)` to build it where it lands (§8 O18a). The type
 arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.
@@ -3926,7 +3930,7 @@ match the declared `type-params` (G6). Omitting it is G10c.
 
 **G10c.** A generic struct type's constructor called with no type-argument list infers its type arguments from
 the constructor's arguments, exactly as a generic function's are inferred (G9, G9a, G9b): `Pair(1, s)` is
-`Pair<Int32, String&>(1, s)`. A type parameter no constructor parameter mentions, or arguments that bind one
+`Pair<I32, String&>(1, s)`. A type parameter no constructor parameter mentions, or arguments that bind one
 inconsistently, cannot be inferred, and the call is then a compile-time error naming the written form. A type
 named anywhere other than a constructor call always writes its arguments (G6).
 
@@ -3956,10 +3960,10 @@ value and may be used wherever a function value is expected.
 instantiated, not at run time.
 
 ```
-fn writeVal(fd Int32, v<T>) Int64 ? error {
+fn writeVal(fd I32, v<T>) I64 ? error {
     match <T> {
-        case Int32  { return write(fd, i32Bytes(v)) }
-        case Array<Byte> { return write(fd, v) }
+        case I32  { return write(fd, i32Bytes(v)) }
+        case Array<U8> { return write(fd, v) }
     }
 }
 ```

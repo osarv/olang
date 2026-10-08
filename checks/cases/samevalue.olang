@@ -1,7 +1,7 @@
 # check: fail same(a, b) asks whether two references
-# E10: identity needs references - two Int32 values are never "one instance"
+# E10: identity needs references - two I32 values are never "one instance"
 fn main() ? {
-    a Int32 = 1
-    b Int32 = 1
+    a I32 = 1
+    b I32 = 1
     assert same(a, b)
 }

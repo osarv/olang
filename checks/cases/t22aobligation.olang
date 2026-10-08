@@ -1,6 +1,6 @@
 # check: fail cannot be used as a value
 # T22a: hang requires b to outlive a, which a call through a function value would never check
-type Node struct(v Int32) {
+type Node struct(v I32) {
     v
     next mut Node& = null
 }

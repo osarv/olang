@@ -1,6 +1,6 @@
-# check: fail a number flows implicitly only into a wider type
-# T10: an array's length is an Int64, and an Int64 never narrows implicitly (T6b) - Int32(a.Len()) says so
+# check: fail a number flows implicitly only where nothing is lost
+# T10: an array's length is an I64, and an I64 never narrows implicitly (T6b) - I32(a.Len()) says so
 test "never runs" {
-    a := Array<Int32>(3)
-    n Int32 = a.Len()
+    a := Array<I32>(3)
+    n I32 = a.Len()
 }

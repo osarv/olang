@@ -1,6 +1,6 @@
 # check: fail inferred from the constructor
 # G10c: a type argument no constructor parameter mentions cannot be inferred - write the list
-type Tagged<T> struct(n Int32) { n }
+type Tagged<T> struct(n I32) { n }
 fn main() ? {
     t := Tagged(3)
 }

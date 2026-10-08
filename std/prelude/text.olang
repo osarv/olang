@@ -1,10 +1,10 @@
-# text, part of the prelude. A String is an Array<Byte> with an identity of its own (T29a): it indexes,
+# text, part of the prelude. A String is an Array<U8> with an identity of its own (T29a): it indexes,
 # slices and goes to C as the array does, and text written in the program - a literal, a "$x" rendering, a
 # join - is a String wherever one is wanted (T29c). Other bytes become text with "String(bytes)", which
 # copies nothing. "==" on a "String&" stays reference identity (E10); comparing what two texts SAY is
 # "a.Eq(b)". There is no encoding check: a String is bytes.
 
-type String extends Array<Byte>
+type String extends Array<U8>
 
 error ParseError {
     EMPTY
@@ -13,10 +13,10 @@ error ParseError {
 }
 
 # FNV-1a over the bytes: text that SAYS the same thing hashes the same, whatever storage holds it
-fn (t String&) Hash() Int64 {
-    h Int64 = -3750763034362895579
+fn (t String&) Hash() I64 {
+    h I64 = -3750763034362895579
     for c in t {
-        h = (h ^ Int64(c)) * 1099511628211
+        h = (h ^ I64(c)) * 1099511628211
     }
     return h
 }
@@ -35,8 +35,8 @@ fn (a String&) Eq(b String&) Bool {
 }
 
 # bytewise lexicographic order: -1, 0 or 1. A proper prefix sorts first.
-fn (a String&) Compare(b String&) Int32 {
-    n Int64 = a.Len()
+fn (a String&) Compare(b String&) I32 {
+    n I64 = a.Len()
     if b.Len() < n {
         n = b.Len()
     }
@@ -72,7 +72,7 @@ fn (a String&) EndsWith(suffix String&) Bool {
 }
 
 # the index of the first occurrence of c, or -1
-fn (a String&) FindByte(c Byte) Int64 {
+fn (a String&) FindByte(c U8) I64 {
     for i in range a.Len() {
         if a[i] == c {
             return i
@@ -82,8 +82,8 @@ fn (a String&) FindByte(c Byte) Int64 {
 }
 
 # the index of the first occurrence of sub, or -1. An empty sub is found at 0.
-fn (a String&) Find(sub String&) Int64 {
-    last Int64 = a.Len() - sub.Len()
+fn (a String&) Find(sub String&) I64 {
+    last I64 = a.Len() - sub.Len()
     for i in range last + 1 {
         if a[i:i + sub.Len()].Eq(sub) {
             return i
@@ -106,9 +106,9 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         }
         return bytes
     }
-    n Int64 = 1
-    at Int64 = t.Find(sep)
-    from Int64 = 0
+    n I64 = 1
+    at I64 = t.Find(sep)
+    from I64 = 0
     for at >= 0 {
         n++
         from = from + at + sep.Len()
@@ -125,15 +125,15 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
     return pieces
 }
 
-fn isSpace(c Byte) Bool {
+fn isSpace(c U8) Bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r'
 }
 
 # the text without leading and trailing whitespace - a borrow of the receiver's own storage, so it shares
 # the receiver's scope "s" and costs no copy
 fn (t String&) Trim() String&t {
-    lo Int64 = 0
-    hi Int64 = t.Len()
+    lo I64 = 0
+    hi I64 = t.Len()
     for lo < hi and isSpace(t[lo]) {
         lo++
     }
@@ -145,13 +145,13 @@ fn (t String&) Trim() String&t {
 
 # a decimal integer with an optional leading '-' or '+', and nothing else - no surrounding space, no
 # separators. The value is accumulated NEGATIVELY, since the negative range is the larger one: that is what
-# lets the most negative Int64 parse without overflowing on its way in.
-fn (t String&) ParseInt() Int64 ? ParseError {
+# lets the most negative I64 parse without overflowing on its way in.
+fn (t String&) ParseInt() I64 ? ParseError {
     if t.Len() == 0 {
         error ParseError.EMPTY
     }
     neg Bool = false
-    start Int64 = 0
+    start I64 = 0
     if t[0] == '-' or t[0] == '+' {
         neg = t[0] == '-'
         start = 1
@@ -159,14 +159,14 @@ fn (t String&) ParseInt() Int64 ? ParseError {
     if start == t.Len() {
         error ParseError.INVALID
     }
-    limit Int64 = -922337203685477580        # the most negative Int64 divided by ten, truncated toward zero
-    v Int64 = 0
+    limit I64 = -922337203685477580        # the most negative I64 divided by ten, truncated toward zero
+    v I64 = 0
     for i in range start, t.Len() {
-        c Byte = t[i]
+        c U8 = t[i]
         if c < '0' or c > '9' {
             error ParseError.INVALID
         }
-        d Int64 = Int64(c - '0')
+        d I64 = I64(c - '0')
         if v < limit or (v == limit and d > 8) {
             error ParseError.OVERFLOW
         }
@@ -183,7 +183,7 @@ fn (t String&) ParseInt() Int64 ? ParseError {
 
 test "Eq compares contents, and == goes through it; same asks for one instance" {
     a String& = "hello"
-    bytes := Array<Byte>(5, 'x')
+    bytes := Array<U8>(5, 'x')
     bytes[0] = 'h'
     bytes[1] = 'e'
     bytes[2] = 'l'
@@ -239,8 +239,8 @@ test "Trim borrows the receiver's storage" {
 
 # the result of a fallible call can be bound only where there is a signature to propagate through, so the
 # checks live in a helper, as io.olang's do
-fn checkParses(t String&, want Int64) ? ParseError {
-    got Int64 = try t.ParseInt()
+fn checkParses(t String&, want I64) ? ParseError {
+    got I64 = try t.ParseInt()
     assert got == want
 }
 
@@ -258,7 +258,7 @@ fn onlyOverflow(t String&) ? ParseError {
     try t.ParseInt() catch ParseError.EMPTY + ParseError.INVALID { }
 }
 
-test "ParseInt reads decimals across the whole Int64 range" {
+test "ParseInt reads decimals across the whole I64 range" {
     ok Bool = true
     try checkParses("0", 0) catch ParseError { ok = false }
     try checkParses("42", 42) catch ParseError { ok = false }
@@ -297,7 +297,7 @@ test "ParseInt names what was wrong" {
 }
 
 # T29c: text written in the program is a String wherever one is wanted - declared from, called on, passed
-fn takesBytes(b Array<Byte>&) Int64 { return b.Len() }
+fn takesBytes(b Array<U8>&) I64 { return b.Len() }
 
 test "T29c: written text is a String, and a String is still its bytes" {
     s := "  hi  "                        # ":=" from text declares a String
@@ -306,12 +306,12 @@ test "T29c: written text is a String, and a String is still its bytes" {
     assert r.Eq("42!")
     assert s[2:4].Eq("hi")               # a slice of text is text
     assert takesBytes(s) == 6            # and text goes wherever bytes are wanted
-    raw := Array<Byte>(2, 'z')
+    raw := Array<U8>(2, 'z')
     assert String(raw).Eq("zz")          # bytes become text only by saying so
 }
 
 test "equal text hashes equally, whatever storage holds it" {
-    assert "ab".Hash() == String(Byte['a', 'b']).Hash()
+    assert "ab".Hash() == String(U8['a', 'b']).Hash()
     assert "ab".Hash() != "ba".Hash()
 }
 
@@ -328,9 +328,9 @@ test "Split gives the pieces between separators, borrowed from the text" {
     assert w.Len() == 3 and w[1].Eq("two") and w[2].Eq("three")
     b := "abc".Split("")
     assert b.Len() == 3 and b[0].Eq("a") and b[2].Eq("c")
-    n Int32 = 0
+    n I32 = 0
     for piece in "1 2 3".Split(" ") {
-        n = n + Int32(try piece.ParseInt() catch default 0)
+        n = n + I32(try piece.ParseInt() catch default 0)
     }
     assert n == 6
 }

@@ -1,6 +1,6 @@
 # check: fail expected
 error E { X }
-fn f(a Array<Byte>&) { }
+fn f(a Array<U8>&) { }
 fn main() ? E {
     b := "y"
     f("a" b)

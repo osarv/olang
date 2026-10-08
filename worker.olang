@@ -25,7 +25,7 @@ error InputError {
     TOO_BIG
 }
 
-fn Classify(n Int32) Int32 ? sh.RangeError + WorkerError {
+fn Classify(n I32) I32 ? sh.RangeError + WorkerError {
     if n < 0 {
         error WorkerError.BAD_INPUT
     }
@@ -35,7 +35,7 @@ fn Classify(n Int32) Int32 ? sh.RangeError + WorkerError {
 # combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
 # re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
 # ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
-fn classifyInput(n Int32) Int32 ? WorkerError + InputError {
+fn classifyInput(n I32) I32 ? WorkerError + InputError {
     if n < 0 {
         error InputError.NEGATIVE
     }
@@ -48,11 +48,11 @@ fn classifyInput(n Int32) Int32 ? WorkerError + InputError {
     return n
 }
 
-fn reclassifyInput(n Int32) Int32 ? InputError + WorkerError {
+fn reclassifyInput(n I32) I32 ? InputError + WorkerError {
     return try classifyInput(n)
 }
 
-fn checkRangeOk(n Int32) Bool {
+fn checkRangeOk(n I32) Bool {
     ok Bool = true
     try sh.CheckRange(n, 0, 100) catch sh.RangeError {
         ok = false
@@ -64,9 +64,9 @@ fn checkRangeOk(n Int32) Bool {
 # TOK_IDEN primary couldn't gain a namespace at the grammar level without colliding with ordinary struct
 # member access ("localVar.field"), so this needed real semantic-level disambiguation (buildPostfix's own
 # tryBuildCrossModuleVarRead) rather than a grammar tweak - see the report.
-AskCount mut Int32 = 0
+AskCount mut I32 = 0
 
-fn AskRunner(n Int32) Int32 {
+fn AskRunner(n I32) I32 {
     AskCount = AskCount + 1
     return rn.DoubleIt(n)
 }

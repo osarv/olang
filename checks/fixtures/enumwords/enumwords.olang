@@ -1,6 +1,6 @@
 type Shape enum {
-    Sq(s Int64)
-    Rect(w Int64, h Int64)
+    Sq(s I64)
+    Rect(w I64, h I64)
 }
 fn main() ? {
     s := Shape.Rect(2, 3)

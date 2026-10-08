@@ -1,6 +1,6 @@
 # check: fail a method named for an operator takes that operator's operands
 # E31: an operator method's shape
-type V struct(x Int32) {
+type V struct(x I32) {
     x
 }
 fn (a V) Plus(b V, c V) V { return a }

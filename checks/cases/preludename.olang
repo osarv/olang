@@ -1,4 +1,4 @@
 # check: fail built-in type
-type ParseError struct(x Int32) { x mut }
+type ParseError struct(x I32) { x mut }
 error E { X }
 fn main() ? E { }

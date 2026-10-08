@@ -7707,3 +7707,15 @@ from their original form.
   missing initializer) - found by a compile-time assert that proved a global's zero value wrong. One check case of
   mine was wrong: an empty `List` held by value is genuinely zero bits, so `Array<Bag>(3)` over it is fine; the case
   uses a `List&` field.
+
+- **The primitive rename and the new number types (T4), 2026-10-08.** The user proposed `I32 I64 F32 F64` and then
+  the families; asked about `Char` (an 8-bit text unit in the prelude, decided next) and F8 (prelude storage types:
+  LLVM has no f8 and there are two competing formats). Implementation: seven new base types and a primitive table;
+  the compiler's -Wswitch errors enumerated every codegen switch that had to learn them. The rest was found by
+  grepping for `BASETYPE_BYTE` used as "unsigned": index and length extension (which also had to stop assuming a
+  non-I64 is narrower than 64 bits - a U64 index would have emitted `zext i64 to i64`), conversions, checked
+  arithmetic, rendering (`%llu` for U64 in both passes), constant data. The rename of 187 files was a word-boundary
+  substitution; one diagnostic string in the parser and one in the checker still named Int32/Int64. My own slip: an
+  edit to the render check dropped the number cases, which the corpus caught at once. Tests: wrap, unsigned divide/
+  compare/shift, the lattice's flows, F16/BF16 rounding to the exact binary16/bfloat16 values, rendering and `try`,
+  all baked by K2 to the same answers as at run time.

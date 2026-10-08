@@ -3,7 +3,7 @@
 # from runner.olang, two hops away ("wk.Base.Whatever"), to exercise transitive re-export end to end -
 # see the tests in runner.olang.
 
-BaseCount mut Int32 = 0
+BaseCount mut I32 = 0
 
 # constructor-bearing, to exercise a re-exported type constructed via an ordinary CALL (which supports an
 # alias chain of any length the same way any other call target does).
@@ -11,21 +11,21 @@ BaseCount mut Int32 = 0
 # "Id" crosses the module boundary; "secret" is this module's own, and "t.secret" from runner.olang is a
 # compile error - which is why that shape appears there only as a comment. The default on "secret" is what
 # keeps the existing one-argument call sites working (D8a).
-type BaseThing struct(Id Int32, secret Int32 = 7) {
+type BaseThing struct(Id I32, secret I32 = 7) {
     Id
     secret
 }
 
 # M6a rejects "t.secret" from any other module, and reports it EXACTLY ONCE. The member's real type is
 # carried on past the error, so nothing downstream complains a second time about a non-problem: recovering
-# it as an Int32 instead used to make "v.data[0]" report the privacy error and then "operand is not an
+# it as an I32 instead used to make "v.data[0]" report the privacy error and then "operand is not an
 # array". Only nameable here, since a rejected program cannot be a test.
-#   z Int32 = t.secret        # private, one error
-#   z Int32 = t.secret[0]     # private, still ONE error - not also "operand is not an array"
+#   z I32 = t.secret        # private, one error
+#   z I32 = t.secret[0]     # private, still ONE error - not also "operand is not an array"
 
 # proves the private member is perfectly ordinary INSIDE its own module - privacy is about the boundary,
 # not about the field being special
-fn BaseSecretOf(t BaseThing&) Int32 {
+fn BaseSecretOf(t BaseThing&) I32 {
     return t.secret
 }
 
@@ -36,7 +36,7 @@ fn BaseSecretOf(t BaseThing&) Int32 {
 # parse error rather than being treated as a literal at all. Closed by generalizing that same mechanism to
 # walk a chain of any length (TypeNameLookup's own interface changed from one flat alias string to a
 # struct list of them) - see the report.
-type BasePoint struct(X Int32, Y Int32) {
+type BasePoint struct(X I32, Y I32) {
     X mut
     Y mut
 }
@@ -69,7 +69,7 @@ fn BaseSouth() BaseDir {
     return BaseDir.south
 }
 
-fn BumpBase() Int32 {
+fn BumpBase() I32 {
     BaseCount = BaseCount + 1
     return BaseCount
 }
@@ -81,24 +81,24 @@ fn AlwaysBaseBroken() ? BaseError {
 # T30/T31: an exported interface. Satisfaction is structural, so an importing module implements it by
 # declaring the methods on its own type - never by naming this interface anywhere.
 type BaseSized interface {
-    Size() Int32
+    Size() I32
 }
 
-type BaseBox struct(size Int32) {
-    n mut Int32 = size
+type BaseBox struct(size I32) {
+    n mut I32 = size
 }
-fn (b BaseBox&) Size() Int32 { return b.n }
+fn (b BaseBox&) Size() I32 { return b.n }
 
 # M19a: a method declared on the interface itself - a helper over every BaseSized, called exactly as the
 # interface's own methods are
-fn (s BaseSized&) BaseDoubled() Int32 { return s.Size() * 2 }
+fn (s BaseSized&) BaseDoubled() I32 { return s.Size() * 2 }
 
 # M6: a private method name belongs to the module that wrote it, so only a type in THIS module can
 # supply it - which makes this a SEALED interface: no importer can implement it, though anyone may hold
 # and pass a value of it.
 type BaseSealed interface {
-    baseTag() Int32
+    baseTag() I32
 }
-fn (b BaseBox&) baseTag() Int32 { return 7 }
-fn BaseTagOf(s BaseSealed&) Int32 { return s.baseTag() }
+fn (b BaseBox&) baseTag() I32 { return 7 }
+fn BaseTagOf(s BaseSealed&) I32 { return s.baseTag() }
 fn BaseSealedBox(b BaseBox&) BaseSealed&b { return b }

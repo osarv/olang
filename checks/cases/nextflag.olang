@@ -1,9 +1,9 @@
 # check: fail a value, and fails with Exhausted once there are no more
 # S9a: running out is an error, not a flag - a Next giving a value and a Bool is not an iterator
 type It struct() {
-    i mut Int32 = 0
+    i mut I32 = 0
 }
-fn (t mut It&) Next() (Int32, Bool) { return 0, false }
+fn (t mut It&) Next() (I32, Bool) { return 0, false }
 fn main() ? {
     t It& = It()
     for x in t { }

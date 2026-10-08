@@ -1,10 +1,10 @@
 # check: fail Lbl does not satisfy the constraint Hashable on K: it has no method Hash that fits
 # E10b: a type declaring Eq gets no Hash from the compiler - only a Hash it declares can agree with its Eq
 import "std/map"
-type Lbl struct(n Int32) {
+type Lbl struct(n I32) {
     n
 }
 fn (a Lbl&) Eq(b Lbl&) Bool { return a.n % 10 == b.n % 10 }
 fn main() ? {
-    m := map.Map<Lbl, Int32>()
+    m := map.Map<Lbl, I32>()
 }

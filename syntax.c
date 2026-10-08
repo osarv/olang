@@ -2207,8 +2207,9 @@ bool nameIsPrimitiveTypeName(struct syntax* name) {
     if (name->parts.len != 1) return false;
     struct syntaxPart* p0 = ListGetIdx(&name->parts, 0);
     struct str n = p0->tok.str;
-    return StrCmp(n, StrFromCStr("Bool")) || StrCmp(n, StrFromCStr("Int32")) || StrCmp(n, StrFromCStr("Int64"))
-        || StrCmp(n, StrFromCStr("Byte")) || StrCmp(n, StrFromCStr("Float32")) || StrCmp(n, StrFromCStr("Float64"));
+    static const char* names[] = { "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64" };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) if (StrCmp(n, StrFromCStr((char*)names[i]))) return true;
+    return false;
 }
 
 //"NAME [ ARR_LIT_ARGS ]" - array literal tail. `name` is already parsed and confirmed by the caller
@@ -2517,7 +2518,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             int cur = TokenGetCursor(sc->tc);
             TokenFeed(sc->tc);
             //E27/E4: an array literal or a comprehension states its element type before the "["
-            recordFurthestError(sc, t, t.type == TOK_SQUARE_O ? "an element type before the [, as in Int32[...]" : "expression");
+            recordFurthestError(sc, t, t.type == TOK_SQUARE_O ? "an element type before the [, as in I32[...]" : "expression");
             TokenSetCursor(sc->tc, cur);
             return NULL;
         }
@@ -3319,8 +3320,8 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
                 if (u.type == TOK_PAREN_O || u.type == TOK_SQUARE_O) paren++;
                 if (u.type == TOK_PAREN_C || u.type == TOK_SQUARE_C) paren--;
                 if (u.type == TOK_MUT) isMut = true;
-                if (u.type == TOK_IDEN && ((u.str.len == 7 && !strncmp(u.str.ptr, "Float32", 7))
-                        || (u.str.len == 7 && !strncmp(u.str.ptr, "Float64", 7)))) isFloat = true;
+                if (u.type == TOK_IDEN && ((u.str.len == 3 && (!strncmp(u.str.ptr, "F32", 3) || !strncmp(u.str.ptr, "F64", 3)
+                        || !strncmp(u.str.ptr, "F16", 3))) || (u.str.len == 4 && !strncmp(u.str.ptr, "BF16", 4)))) isFloat = true;
                 if (paren == 0 && (u.type == TOK_ASS || u.type == TOK_ASS_INFER)) break;
             }
             if (u.type != TOK_ASS && u.type != TOK_ASS_INFER) continue; //not a declaration of it

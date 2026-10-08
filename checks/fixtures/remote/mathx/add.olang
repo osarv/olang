@@ -1,2 +1,2 @@
 import "../mathx/../mathy/inc"
-fn Add1(n Int32) Int32 { return inc.Inc(n) }
+fn Add1(n I32) I32 { return inc.Inc(n) }

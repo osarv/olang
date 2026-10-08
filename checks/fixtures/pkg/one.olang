@@ -1,3 +1,3 @@
 import "two"
-fn One() Int32 { return two.Two() - 1 }
+fn One() I32 { return two.Two() - 1 }
 test "one" { assert One() == 1 }

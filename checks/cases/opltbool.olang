@@ -1,7 +1,7 @@
 # check: fail Less, which '<' calls, gives a Bool
 # E31: an operator method's shape
-type V struct(x Int32) {
+type V struct(x I32) {
     x
 }
-fn (a V) Less(b V) Int32 { return 1 }
+fn (a V) Less(b V) I32 { return 1 }
 fn main() ? { }

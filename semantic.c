@@ -104,11 +104,6 @@ long long TypeGetAlign(struct type t) {
         case BASETYPE_NULL: ErrorBugFound(); return 1; //T2a: retagged before anything asks its size
         case BASETYPE_VOID: return 1;
         case BASETYPE_BOOL: return 1;
-        case BASETYPE_BYTE: return 1;
-        case BASETYPE_INT32: return 4;
-        case BASETYPE_INT64: return 8;
-        case BASETYPE_FLOAT32: return 4;
-        case BASETYPE_FLOAT64: return 8;
         //T17: a payload-free choice is exactly the i32 ordinal it always was. One that carries a payload
         //is { i64 tag, [N x i8] }, and the i64 tag is what puts the payload at an 8-aligned offset - an
         //i32 tag would leave a pointer or an i64 inside a payload under-aligned.
@@ -130,6 +125,7 @@ long long TypeGetAlign(struct type t) {
             }
             return maxAlign;
         }
+        default: if (PrimInfo(t.bType)) return PrimInfo(t.bType)->bits / 8; //T4
     }
     return 1; //unreachable
 }
@@ -169,11 +165,6 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_NULL: ErrorBugFound(); return 0; //see TypeGetAlign
         case BASETYPE_VOID: return 0;
         case BASETYPE_BOOL: return 1;
-        case BASETYPE_BYTE: return 1;
-        case BASETYPE_INT32: return 4;
-        case BASETYPE_INT64: return 8;
-        case BASETYPE_FLOAT32: return 4;
-        case BASETYPE_FLOAT64: return 8;
         case BASETYPE_ARRAY: return getArraySize(t);
         case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_CHOICE: return ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
@@ -181,17 +172,38 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_INTERFACE: return 2 * PTR_SIZE; //T33: the (concrete type, instance) pair
         case BASETYPE_ERROR: return ERROR_SIZE;
         case BASETYPE_SCOPE: return PTR_SIZE;
+        default: if (PrimInfo(t.bType)) return PrimInfo(t.bType)->bits / 8; //T4
     }
     return 0; //unreachable
 }
 
 static char* typeVanillaNullStr = "null"; //T2a
 static char* typeVanillaBoolStr = "Bool";
-static char* typeVanillaByteStr = "Byte";
-static char* typeVanillaInt32Str = "Int32";
-static char* typeVanillaInt64Str = "Int64";
-static char* typeVanillaFloat32Str = "Float32";
-static char* typeVanillaFloat64Str = "Float64";
+
+//T4: the numeric primitives. Integers widen within signed and unsigned and from unsigned into a wider signed; floats
+//F16 and BF16 into F32 into F64 (T6b) - NumericFlows reads it off this table
+static const struct primInfo prims[] = {
+    { BASETYPE_I8, "I8", 8, 'i', "i8" },       { BASETYPE_I16, "I16", 16, 'i', "i16" },
+    { BASETYPE_INT32, "I32", 32, 'i', "i32" }, { BASETYPE_INT64, "I64", 64, 'i', "i64" },
+    { BASETYPE_BYTE, "U8", 8, 'u', "i8" },     { BASETYPE_U16, "U16", 16, 'u', "i16" },
+    { BASETYPE_U32, "U32", 32, 'u', "i32" },   { BASETYPE_U64, "U64", 64, 'u', "i64" },
+    { BASETYPE_F16, "F16", 16, 'f', "half" },  { BASETYPE_BF16, "BF16", 16, 'f', "bfloat" },
+    { BASETYPE_FLOAT32, "F32", 32, 'f', "float" }, { BASETYPE_FLOAT64, "F64", 64, 'f', "double" },
+};
+
+const struct primInfo* PrimInfo(enum baseType b) {
+    for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++) if (prims[i].b == b) return &prims[i];
+    return NULL;
+}
+
+bool PrimByName(struct str name, enum baseType* out) {
+    for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++) {
+        if (StrCmp(name, StrFromCStr((char*)prims[i].name))) { *out = prims[i].b; return true; }
+    }
+    return false;
+}
+
+bool TypeIsUnsigned(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind == 'u'; }
 
 struct type TypeVanilla(enum baseType bType) {
     struct type t = (struct type){0};
@@ -199,12 +211,9 @@ struct type TypeVanilla(enum baseType bType) {
         case BASETYPE_VOID: t.bType = BASETYPE_VOID; return t;
         case BASETYPE_NULL: t.name.ptr = typeVanillaNullStr; break; //T2a - the "null" literal's own type
         case BASETYPE_BOOL: t.name.ptr = typeVanillaBoolStr; break;
-        case BASETYPE_BYTE: t.name.ptr = typeVanillaByteStr; break;
-        case BASETYPE_INT32: t.name.ptr = typeVanillaInt32Str; break;
-        case BASETYPE_INT64: t.name.ptr = typeVanillaInt64Str; break;
-        case BASETYPE_FLOAT32: t.name.ptr = typeVanillaFloat32Str; break;
-        case BASETYPE_FLOAT64: t.name.ptr = typeVanillaFloat64Str; break;
-        default: ErrorBugFound();
+        default:
+            if (!PrimInfo(bType)) ErrorBugFound();
+            t.name.ptr = (char*)PrimInfo(bType)->name;
     }
     t.name.len = (int)strlen(t.name.ptr);
     t.bType = bType;
@@ -214,12 +223,7 @@ struct type TypeVanilla(enum baseType bType) {
 bool isTypeVanilla(enum baseType bType) {
     switch (bType) {
         case BASETYPE_BOOL: return true;
-        case BASETYPE_BYTE: return true;
-        case BASETYPE_INT32: return true;
-        case BASETYPE_INT64: return true;
-        case BASETYPE_FLOAT32: return true;
-        case BASETYPE_FLOAT64: return true;
-        default: return false;
+        default: return PrimInfo(bType) != NULL;
     }
 }
 
@@ -268,28 +272,9 @@ struct type* typeNamed(struct semaModule* mod, struct str name) {
 }
 
 
-bool TypeIsNumeric(struct type t) {
-    switch (t.bType) {
-        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
-        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64:
-            return true;
-        default: return false;
-    }
-}
-
-bool TypeIsInt(struct type t) {
-    switch (t.bType) {
-        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: return true;
-        default: return false;
-    }
-}
-
-bool TypeIsFloat(struct type t) {
-    switch (t.bType) {
-        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: return true;
-        default: return false;
-    }
-}
+bool TypeIsNumeric(struct type t) { return PrimInfo(t.bType) != NULL; }
+bool TypeIsInt(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind != 'f'; }
+bool TypeIsFloat(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind == 'f'; }
 
 //T29: two types share a REPRESENTATION when they differ only in one of them being declared - which is
 //exactly what makes converting between them free, emitting no instruction at all.
@@ -1654,7 +1639,7 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
         if (missing) snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s: it has no method %.*s that fits (G19)%s",
                               tn, cn, c->name.len, c->name.ptr, missing->name.len, missing->name.ptr,
                               hash ? ". The compiler supplies Hash only for a struct, enum or array value with no Eq of its "
-                                     "own whose parts all have a hash (E10b) - declare 'Hash() Int64', agreeing with '=='" : "");
+                                     "own whose parts all have a hash (E10b) - declare 'Hash() I64', agreeing with '=='" : "");
         else snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s (G19)", tn, cn, c->name.len, c->name.ptr);
         ErrMsgSemantic(tok, msg);
         ok = false;
@@ -1756,13 +1741,9 @@ static struct str modBaseName(struct semaModule* mod) {
 
 struct str typeShortName(struct type t) {
     char buf[512];
+    if (PrimInfo(t.bType) && !t.owner) return StrFromCStr((char*)PrimInfo(t.bType)->name); //T4
     switch (t.bType) {
         case BASETYPE_BOOL: return StrFromCStr("Bool");
-        case BASETYPE_BYTE: return StrFromCStr("Byte");
-        case BASETYPE_INT32: return StrFromCStr("Int32");
-        case BASETYPE_INT64: return StrFromCStr("Int64");
-        case BASETYPE_FLOAT32: return StrFromCStr("Float32");
-        case BASETYPE_FLOAT64: return StrFromCStr("Float64");
         case BASETYPE_ARRAY: {
             struct str e = typeShortName(*t.arrElem);
             //the length matters as much as the element: T[2] and T[4] are different types (T25a)
@@ -2071,19 +2052,9 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
             return builtinArrayType(mod, firstPartOfType(refNode, SNTX_TYPE_ARGS), nameTok, scopeParams);
         }
         if (!found) {
-            switch (name.len) {
-                case 4:
-                    if (!strncmp(name.ptr, "Bool", 4)) { struct type v = TypeVanilla(BASETYPE_BOOL); v.tok = nameTok; return v; }
-                    break;
-                case 5:
-                    if (!strncmp(name.ptr, "Int32", 5)) { struct type v = TypeVanilla(BASETYPE_INT32); v.tok = nameTok; return v; }
-                    if (!strncmp(name.ptr, "Int64", 5)) { struct type v = TypeVanilla(BASETYPE_INT64); v.tok = nameTok; return v; }
-                    break;
-                default: break;
-            }
-            if (StrCmp(name, StrFromCStr("Byte"))) { struct type v = TypeVanilla(BASETYPE_BYTE); v.tok = nameTok; return v; }
-            if (StrCmp(name, StrFromCStr("Float32"))) { struct type v = TypeVanilla(BASETYPE_FLOAT32); v.tok = nameTok; return v; }
-            if (StrCmp(name, StrFromCStr("Float64"))) { struct type v = TypeVanilla(BASETYPE_FLOAT64); v.tok = nameTok; return v; }
+            if (StrCmp(name, StrFromCStr("Bool"))) { struct type v = TypeVanilla(BASETYPE_BOOL); v.tok = nameTok; return v; }
+            enum baseType pb;
+            if (PrimByName(name, &pb)) { struct type v = TypeVanilla(pb); v.tok = nameTok; return v; } //T4
             found = SemanticBuiltinType(name);
             if (!found) {
                 ErrMsgSemantic(nameTok, UNKNOWN_TYPE);
@@ -2348,19 +2319,9 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
         struct str name = strFromTok(nameTok);
         found = typeNamed(mod, name);
         if (!found) {
-            switch (name.len) {
-                case 4:
-                    if (!strncmp(name.ptr, "Bool", 4)) return TypeVanilla(BASETYPE_BOOL);
-                    break;
-                case 5:
-                    if (!strncmp(name.ptr, "Int32", 5)) return TypeVanilla(BASETYPE_INT32);
-                    if (!strncmp(name.ptr, "Int64", 5)) return TypeVanilla(BASETYPE_INT64);
-                    break;
-                default: break;
-            }
-            if (StrCmp(name, StrFromCStr("Byte"))) return TypeVanilla(BASETYPE_BYTE);
-            if (StrCmp(name, StrFromCStr("Float32"))) return TypeVanilla(BASETYPE_FLOAT32);
-            if (StrCmp(name, StrFromCStr("Float64"))) return TypeVanilla(BASETYPE_FLOAT64);
+            if (StrCmp(name, StrFromCStr("Bool"))) return TypeVanilla(BASETYPE_BOOL);
+            enum baseType pb;
+            if (PrimByName(name, &pb)) return TypeVanilla(pb); //T4
             ErrMsgSemantic(nameTok, UNKNOWN_TYPE);
             return TypeVanilla(BASETYPE_INT32);
         }
@@ -3072,10 +3033,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
 }
 
 //true if t is one of the five numeric primitives (T5) - the base case of the §11 X2 restriction
-static bool isNumericPrimitive(struct type t) {
-    return t.bType == BASETYPE_BYTE || t.bType == BASETYPE_INT32 || t.bType == BASETYPE_INT64
-        || t.bType == BASETYPE_FLOAT32 || t.bType == BASETYPE_FLOAT64;
-}
+static bool isNumericPrimitive(struct type t) { return TypeIsNumeric(t); }
 
 //true if t is a valid "extern func" parameter/return type per X2: a numeric primitive itself, or a
 //(compile-time-length or runtime-length) array whose element type is one - deliberately flat, not recursive, since X2 only
@@ -4184,12 +4142,12 @@ enum typeFit {
 //can an integer literal's written value be represented in integer type `to`? byte is unsigned (T4), so
 //its range is 0..255 - a negative literal never fits one, and neither does 256.
 static bool intLiteralFitsIntType(long long v, struct type to) {
-    switch (to.bType) {
-        case BASETYPE_BYTE: return v >= 0 && v <= 255;
-        case BASETYPE_INT32: return v >= -2147483648LL && v <= 2147483647LL;
-        case BASETYPE_INT64: return true;
-        default: return false;
-    }
+    const struct primInfo* p = PrimInfo(to.bType);
+    if (!p || p->kind == 'f') return false;
+    if (p->kind == 'u') return v >= 0 && (p->bits == 64 || v <= (long long)((1ULL << p->bits) - 1));
+    if (p->bits == 64) return true;
+    long long lim = 1LL << (p->bits - 1);
+    return v >= -lim && v < lim;
 }
 
 //true if numeric LITERAL `lit` may implicitly adapt to a `to`-typed target - the one exception T6 carves
@@ -4214,15 +4172,11 @@ bool numericLiteralFits(struct operand* lit, struct type to) {
 
 //T6's ordering for the both-operands-are-literals case below: the narrower of two literal types adapts to
 //the wider, so "'a' + 1" is int32 arithmetic rather than byte arithmetic that could wrap.
+//every integer below every float; within each by width, a signed type above the unsigned one of its width
 static int numericTypeRank(struct type t) {
-    switch (t.bType) {
-        case BASETYPE_BYTE: return 1;
-        case BASETYPE_INT32: return 2;
-        case BASETYPE_INT64: return 3;
-        case BASETYPE_FLOAT32: return 4;
-        case BASETYPE_FLOAT64: return 5;
-        default: return 0;
-    }
+    const struct primInfo* p = PrimInfo(t.bType);
+    if (!p) return 0;
+    return p->kind == 'f' ? 1000 + p->bits : p->bits * 2 + (p->kind == 'i');
 }
 
 //can op flow into a target-typed slot (assignment, initialization, argument passing)? a numeric
@@ -5761,8 +5715,7 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
         return operandNew(tok, OPERATION_NONE, resT);
     }
     struct operand* target = *(struct operand**)ListGetIdx(&args, 0);
-    if (target->type.bType != BASETYPE_BYTE && target->type.bType != BASETYPE_INT32
-        && target->type.bType != BASETYPE_INT64) {
+    if (!TypeIsInt(target->type)) {
         ErrMsgSemantic(target->tok, ATOMIC_NOT_INTEGER);
         return operandNew(tok, OPERATION_NONE, resT);
     }
@@ -5800,12 +5753,7 @@ struct operand* OperandLen(struct operand* arg, struct token tok) {
 //falling through to the ordinary call-target lookup, the same way "len" is intercepted just above.
 //Deliberately excludes "Bool" - not numeric (T5), nothing to convert to/from.
 bool numericPrimitiveBaseType(struct str name, enum baseType* out) {
-    if (StrCmp(name, StrFromCStr("Byte"))) { *out = BASETYPE_BYTE; return true; }
-    if (StrCmp(name, StrFromCStr("Int32"))) { *out = BASETYPE_INT32; return true; }
-    if (StrCmp(name, StrFromCStr("Int64"))) { *out = BASETYPE_INT64; return true; }
-    if (StrCmp(name, StrFromCStr("Float32"))) { *out = BASETYPE_FLOAT32; return true; }
-    if (StrCmp(name, StrFromCStr("Float64"))) { *out = BASETYPE_FLOAT64; return true; }
-    return false;
+    return PrimByName(name, out); //T4
 }
 
 //"TypeName(x)" - the explicit numeric-conversion builtin (see the report): a real runtime instruction,
@@ -6225,10 +6173,9 @@ static struct type textValueType(void) {
 //as "(a, b)" - the one place they are taken whole (D8c). Only a call returning nothing has no rendering.
 struct renderSeen { struct semaModule* owner; struct str name; };
 static bool strOfRenderableIn(struct type t, struct list* seen) {
+    if (TypeIsNumeric(t)) return true; //T4
     switch (t.bType) {
-        case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
-        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: case BASETYPE_TYPEVAR:
-        case BASETYPE_FUNC: case BASETYPE_INTERFACE:
+        case BASETYPE_BOOL: case BASETYPE_TYPEVAR: case BASETYPE_FUNC: case BASETYPE_INTERFACE:
             return true;
         case BASETYPE_ARRAY: return t.arrElem && strOfRenderableIn(*t.arrElem, seen);
         case BASETYPE_STRUCT: case BASETYPE_CHOICE: {
@@ -6329,27 +6276,30 @@ struct binOpRule binOpRules[] = {
     [OPERATION_DIV]       = {REQ_NUMERIC, true,  false},
 };
 
-//T6b: a numeric type's place in its family - integers Byte < Int32 < Int64, floats Float32 < Float64 - or -1
+//T6b: a numeric type's family - 0 integers, 1 floats - and its width, or -1 for anything else
 static int numericFamilyRank(struct type t, int* family) {
-    if (t.structMAlloc) return -1;
-    switch (t.bType) {
-        case BASETYPE_BYTE: *family = 0; return 0;
-        case BASETYPE_INT32: *family = 0; return 1;
-        case BASETYPE_INT64: *family = 0; return 2;
-        case BASETYPE_FLOAT32: *family = 1; return 0;
-        case BASETYPE_FLOAT64: *family = 1; return 1;
-        default: return -1;
-    }
+    const struct primInfo* p = t.structMAlloc ? NULL : PrimInfo(t.bType);
+    if (!p) return -1;
+    *family = p->kind == 'f';
+    return p->bits;
 }
 
-//T6b: whether a value of src flows into dst implicitly - dst is a built-in numeric type of src's family, wider, or
-//src's own base when src is declared over it (T29). Never into a declared type: that is its constructor's (T29d).
+//T6b: whether a value of primitive kind a flows losslessly into b - wider within signed or within unsigned, unsigned
+//into a strictly wider signed, F16 and BF16 into F32 into F64 (F16 and BF16 each keep something the other loses)
+static bool primFlows(enum baseType a, enum baseType b) {
+    const struct primInfo* p = PrimInfo(a);
+    const struct primInfo* q = PrimInfo(b);
+    if (!p || !q || p->bits >= q->bits) return false;
+    if (p->kind == 'f' || q->kind == 'f') return p->kind == 'f' && q->kind == 'f' && q->bits >= 32;
+    return p->kind == q->kind || (p->kind == 'u' && q->kind == 'i');
+}
+
+//T6b: whether a value of src flows into dst implicitly - dst is a built-in numeric type src flows into losslessly,
+//or src's own base when src is declared over it (T29). Never into a declared type: that is its constructor's (T29d).
 bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase) {
-    if (dst.owner) return false;
-    int fs = 0, fd = 0;
-    int rs = numericFamilyRank(src, &fs), rd = numericFamilyRank(dst, &fd);
-    if (rs < 0 || rd < 0 || fs != fd) return false;
-    return rs < rd || (sameWidthToBase && rs == rd && src.owner);
+    if (dst.owner || src.structMAlloc || dst.structMAlloc) return false;
+    if (sameWidthToBase && src.owner && src.bType == dst.bType && PrimInfo(src.bType)) return true;
+    return primFlows(src.bType, dst.bType);
 }
 
 //T6b: op becomes the widening of itself to t, in place, so whatever holds it now holds the conversion
@@ -7988,18 +7938,19 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
             if (isInt) w = ovf; else if (isF) w = ovf | inv;
             break;
         case OPERATION_DIV:
-            if (isInt) w = dbz | (a0->type.bType == BASETYPE_BYTE ? 0 : ovf); else if (isF) w = dbz | ovf | inv;
+            if (isInt) w = dbz | (TypeIsUnsigned(a0->type) ? 0 : ovf); else if (isF) w = dbz | ovf | inv;
             break;
         case OPERATION_MOD:
-            if (isInt) w = dbz | (a0->type.bType == BASETYPE_BYTE ? 0 : ovf);
+            if (isInt) w = dbz | (TypeIsUnsigned(a0->type) ? 0 : ovf);
             break;
         case OPERATION_MINUS: if (isInt) w = ovf; break;
         case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: w = inv; break;
         case OPERATION_NUMERIC_CONVERT:
+            //T4: whatever the target cannot hold of the source - nothing where the source flows into it (T6b); an integer
+            //into a float overflows only into F16, whose range is small
             if (a0 && TypeIsFloat(a0->type) && !TypeIsFloat(t)) w = ovf | inv;
-            else if (a0 && TypeIsFloat(a0->type) && TypeIsFloat(t)) w = t.bType == BASETYPE_FLOAT32 && a0->type.bType == BASETYPE_FLOAT64 ? ovf : 0;
-            else if (a0 && !TypeIsFloat(t) && TypeIsNumeric(a0->type) && a0->type.bType != t.bType
-                     && !(t.bType == BASETYPE_INT64) && !(t.bType == BASETYPE_INT32 && a0->type.bType == BASETYPE_BYTE)) w = ovf;
+            else if (a0 && TypeIsNumeric(a0->type) && a0->type.bType != t.bType && !primFlows(a0->type.bType, t.bType))
+                w = TypeIsFloat(t) && !TypeIsFloat(a0->type) ? (t.bType == BASETYPE_F16 ? ovf : 0) : ovf;
             break;
         case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
         case OPERATION_AS: w = inv; break; //E32: the value is not what "as" names
@@ -10025,10 +9976,9 @@ static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct 
 static bool scalarType(struct type t) {
     if (t.structMAlloc) return false;
     switch (t.bType) {
-        case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
-        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: return true;
+        case BASETYPE_BOOL: return true;
         case BASETYPE_CHOICE: return !ChoiceHasPayload(t);
-        default: return false;
+        default: return TypeIsNumeric(t);
     }
 }
 
@@ -10340,7 +10290,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     for (int i = 0; i < argNodes.len; i++) {
         if (!TypeIsInt(args[i]->type)) { ErrMsgSemantic(args[i]->tok, RANGE_NEEDS_INTEGERS); return (struct statement){0}; }
         if (!args[i]->isLiteral && !fixed) { T = args[i]->type; fixed = true; }
-        if (!fixed && args[i]->type.bType == BASETYPE_INT64) T = args[i]->type;
+        if (!fixed && numericTypeRank(args[i]->type) > numericTypeRank(T)) T = args[i]->type;
     }
     T.scopeParam = NULL;
     T.structMAlloc = false;

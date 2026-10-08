@@ -1,6 +1,6 @@
-# check: fail a number flows implicitly only into a wider type
-# T6b: only the lossless direction is implicit - an Int64 into an Int32 is written Int32(x)
+# check: fail a number flows implicitly only where nothing is lost
+# T6b: only the lossless direction is implicit - an I64 into an I32 is written I32(x)
 fn main() ? {
-    b Int64 = 5
-    a Int32 = b
+    b I64 = 5
+    a I32 = b
 }

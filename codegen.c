@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <stdint.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -56,7 +57,7 @@ struct cgCtx {
     int dbgCu;
     int dbgSubType;
     int dbgPtrType;
-    int dbgBasic[8];     //by baseType, 0 until first used
+    int dbgBasic[32];     //by baseType, 0 until first used
     int dbgPendingSp;    //the subprogram the next cgBodyBegin belongs to
     int dbgCurSp;        //the subprogram whose body is being emitted, for variables
     int dbgCurLine;
@@ -264,11 +265,11 @@ void llvmType(struct type t, char* buf, size_t n) {
         case BASETYPE_NULL: ErrorBugFound(); return;
         case BASETYPE_VOID: snprintf(buf, n, "void"); return;
         case BASETYPE_BOOL: snprintf(buf, n, "i1"); return;
-        case BASETYPE_BYTE: snprintf(buf, n, "i8"); return;
-        case BASETYPE_INT32: snprintf(buf, n, "i32"); return;
-        case BASETYPE_INT64: snprintf(buf, n, "i64"); return;
-        case BASETYPE_FLOAT32: snprintf(buf, n, "float"); return;
-        case BASETYPE_FLOAT64: snprintf(buf, n, "double"); return;
+        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_FLOAT32: case BASETYPE_FLOAT64:
+        case BASETYPE_I8: case BASETYPE_I16: case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64:
+        case BASETYPE_F16: case BASETYPE_BF16:
+            snprintf(buf, n, "%s", PrimInfo(t.bType)->llvm); //T4
+            return;
         //T17: a payload-free choice is the bare i32 ordinal it always was; one carrying a payload is a
         //tag plus a buffer big enough for the largest case, since exactly one case is live at a time
         case BASETYPE_CHOICE:
@@ -506,16 +507,14 @@ static int cgDbgType(struct cgCtx* ctx, struct type t) {
     if (t.structMAlloc || t.bType == BASETYPE_INTERFACE || t.bType == BASETYPE_FUNC
             || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
     const char* nm; int bits; const char* enc;
-    switch (t.bType) {
-        case BASETYPE_BOOL:    nm = "Bool";    bits = 8;  enc = "DW_ATE_boolean"; break;
-        case BASETYPE_BYTE:    nm = "Byte";    bits = 8;  enc = "DW_ATE_unsigned_char"; break;
-        case BASETYPE_INT32:   nm = "Int32";   bits = 32; enc = "DW_ATE_signed"; break;
-        case BASETYPE_INT64:   nm = "Int64";   bits = 64; enc = "DW_ATE_signed"; break;
-        case BASETYPE_FLOAT32: nm = "Float32"; bits = 32; enc = "DW_ATE_float"; break;
-        case BASETYPE_FLOAT64: nm = "Float64"; bits = 64; enc = "DW_ATE_float"; break;
-        default: return 0;
-    }
-    int slot = (int)t.bType % 8;
+    const struct primInfo* p = PrimInfo(t.bType);
+    if (t.bType == BASETYPE_BOOL) { nm = "Bool"; bits = 8; enc = "DW_ATE_boolean"; }
+    else if (p) {
+        nm = p->name;
+        bits = p->bits;
+        enc = p->kind == 'f' ? "DW_ATE_float" : p->kind == 'u' ? "DW_ATE_unsigned" : "DW_ATE_signed";
+    } else return 0;
+    int slot = (int)t.bType % 32;
     if (!ctx->dbgBasic[slot]) {
         ctx->dbgBasic[slot] = ctx->dbgNext++;
         fprintf(ctx->dbgOut, "!%d = !DIBasicType(name: \"%s\", size: %d, encoding: %s)\n",
@@ -999,7 +998,7 @@ bool typeNeedsRuntimeLengthPromotion(struct type dstT, struct type srcT) {
 //unrolled shape cgRegisterDtorIfNeeded already walks generically, regardless of whether srcAddr came from
 //a fresh literal or an existing variable; no new mechanism needed, just one more call site.
 char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op);
-char* cgFloatConst(double v, bool isF32);
+char* cgFloatConst(double v, enum baseType b);
 //T25b: a literal known while compiling that reaches a READ-ONLY array reference is never written through it, so it
 //is the constant itself - static data, no arena allocation, nothing copied. NULL where that does not apply: a
 //writable target, or a literal with anything not constant in it
@@ -1014,8 +1013,7 @@ char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
         data = cgStringLiteralGlobal(ctx, op);
     } else {
         struct type et = *op->type.arrElem;
-        bool scalar = et.bType == BASETYPE_BYTE || et.bType == BASETYPE_INT32 || et.bType == BASETYPE_INT64
-                      || et.bType == BASETYPE_BOOL || et.bType == BASETYPE_FLOAT32 || et.bType == BASETYPE_FLOAT64;
+        bool scalar = (TypeIsNumeric(et) && !et.owner) || et.bType == BASETYPE_BOOL;
         if (!scalar || op->args.len != n) return NULL;
         for (int i = 0; i < op->args.len; i++) { //every element constant, or the literal is built as usual
             struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
@@ -1029,11 +1027,11 @@ char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
         for (int i = 0; i < op->args.len; i++) {
             struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
             char v[64];
-            if (et.bType == BASETYPE_FLOAT32 || et.bType == BASETYPE_FLOAT64) {
-                double d = e->type.bType == BASETYPE_FLOAT32 || e->type.bType == BASETYPE_FLOAT64 ? e->floatLiteralVal : (double)e->intLiteralVal;
-                snprintf(v, sizeof(v), "%s", cgFloatConst(d, et.bType == BASETYPE_FLOAT32));
+            if (TypeIsFloat(et)) {
+                double d = TypeIsFloat(e->type) ? e->floatLiteralVal : (double)e->intLiteralVal;
+                snprintf(v, sizeof(v), "%s", cgFloatConst(d, et.bType));
             } else if (et.bType == BASETYPE_BOOL) snprintf(v, sizeof(v), "%s", e->intLiteralVal ? "true" : "false");
-            else snprintf(v, sizeof(v), "%lld", et.bType == BASETYPE_BYTE ? (long long)(signed char)e->intLiteralVal : e->intLiteralVal);
+            else snprintf(v, sizeof(v), "%lld", e->intLiteralVal);
             fprintf(ctx->out, "%s%s %s", i ? ", " : "", ety, v);
         }
         fputs("]\n", ctx->out);
@@ -1829,9 +1827,9 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
     if (op->isTried || op->checkRoot) {
         //widened for the compare: an Int64 already is, a Byte is unsigned (T4) and zero-extends
         char* idx64 = idxVal;
-        if (idx->type.bType != BASETYPE_INT64) {
+        if (TypeGetSize(idx->type) != 8) {
             idx64 = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", idx64, idx->type.bType == BASETYPE_BYTE ? "zext" : "sext",
+            fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", idx64, TypeIsUnsigned(idx->type) ? "zext" : "sext",
                     idxTy, idxVal);
         }
         char* lenVal;
@@ -1958,11 +1956,18 @@ char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
 //converts a double to LLVM's required 16-hex-digit float-constant form (always the double bit pattern,
 //even when the target type is float32 - LLVM truncates internally, so float32 literals are first rounded
 //to float precision here so the double bit pattern reflects the value that will actually be stored)
-char* cgFloatConst(double v, bool isF32) {
-    double rounded = isF32 ? (double)(float)v : v;
+//a float constant as LLVM writes it: double's bit pattern for F32/F64 (F32 rounded to float first), and the 16-bit
+//forms for F16 ("0xH") and BF16 ("0xR"), rounded to nearest-even as the hardware rounds (T4)
+char* cgFloatConst(double v, enum baseType b) {
+    char* buf = MallocOrCrash(24);
+    if (b == BASETYPE_F16 || b == BASETYPE_BF16) {
+        unsigned h = b == BASETYPE_F16 ? MinifloatFrom(v, 5, 10) : MinifloatFrom(v, 8, 7);
+        snprintf(buf, 24, "0x%c%04X", b == BASETYPE_F16 ? 'H' : 'R', h);
+        return buf;
+    }
+    double rounded = b == BASETYPE_FLOAT32 ? (double)(float)v : v;
     unsigned long long bits;
     memcpy(&bits, &rounded, sizeof(bits));
-    char* buf = MallocOrCrash(24);
     snprintf(buf, 24, "0x%016llX", bits);
     return buf;
 }
@@ -2067,10 +2072,11 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
         case BASETYPE_CHOICE:
             if (ChoiceHasPayload(op->type)) return cgChoiceValue(ctx, op);
             snprintf(buf, 64, "%lld", op->intLiteralVal); return buf;
-        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64:
+        case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_I8: case BASETYPE_I16:
+        case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64:
             snprintf(buf, 64, "%lld", op->intLiteralVal); return buf;
-        case BASETYPE_FLOAT32: return cgFloatConst(op->floatLiteralVal, true);
-        case BASETYPE_FLOAT64: return cgFloatConst(op->floatLiteralVal, false);
+        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: case BASETYPE_F16: case BASETYPE_BF16:
+            return cgFloatConst(op->floatLiteralVal, op->type.bType);
         //a string literal's own token IS the TOK_STR_LIT it was decoded from (see OperandStringLiteral) -
         //an aggregate "T[][...]"/"T[N][...]" literal's tok is TOK_SQUARE_O instead, so this reliably
         //tells the two apart without needing a dedicated flag
@@ -2099,7 +2105,7 @@ static char* cgCheckedIntArith(struct cgCtx* ctx, struct operand* op, char* inst
     char ty[16], wide[16];
     llvmType(t, ty, sizeof(ty));
     snprintf(wide, sizeof(wide), "i%d", (int)TypeGetSize(t) * 16);
-    char* ext = t.bType == BASETYPE_BYTE ? "zext" : "sext";
+    char* ext = TypeIsUnsigned(t) ? "zext" : "sext";
     char* aw = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", aw, ext, ty, av, wide);
     char* bw = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", bw, ext, ty, bv, wide);
     char* rw = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", rw, instr, wide, aw, bw);
@@ -2565,7 +2571,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
     char aty[256];
     llvmType(a->type, aty, sizeof(aty));
     bool isF = TypeIsFloat(a->type);
-    bool isU = a->type.bType == BASETYPE_BYTE; //byte is treated as unsigned; int32/int64 as signed
+    bool isU = TypeIsUnsigned(a->type); //T4: the U types are unsigned, the I types signed
     if (op->checkRoot) { //R20: the checks "try (...)" asked for, ahead of the operation
         int bits = (int)TypeGetSize(a->type) * 8;
         char bty[64];
@@ -2611,7 +2617,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
         long long aw = TypeGetSize(a->type), bw = TypeGetSize(b->type);
         if (aw != bw) {
             char* conv = cgNewTmp(ctx);
-            char* how = aw < bw ? "trunc" : (b->type.bType == BASETYPE_BYTE ? "zext" : "sext");
+            char* how = aw < bw ? "trunc" : (TypeIsUnsigned(b->type) ? "zext" : "sext");
             fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", conv, how, bty, bv, aty);
             bv = conv;
         }
@@ -3057,46 +3063,87 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
 //unsigned integer type (T4); int<->int compares TypeGetSize to decide zext (byte's own unsigned width,
 //never sign-extended) /sext (int32/int64) for widening vs. trunc for narrowing - byte/int32/int64 are
 //the only three integer types, so a size mismatch always means exactly one of those three directions.
+//T4: the instructions converting val from one numeric type to another - none between two of one width and kind (a
+//retag, or I32 and U32 which share a representation), an extension or truncation chosen by the source's signedness,
+//and between F16 and BF16 (one width, neither containing the other) a trip through float
+static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to, char* val) {
+    char fromTy[16], toTy[16];
+    llvmType(from, fromTy, sizeof(fromTy));
+    llvmType(to, toTy, sizeof(toTy));
+    if (!strcmp(fromTy, toTy)) return val;
+    bool fromF = TypeIsFloat(from), toF = TypeIsFloat(to);
+    long long fb = TypeGetSize(from), tb = TypeGetSize(to);
+    const char* instr;
+    if (fromF && toF) {
+        if (fb == tb) { //F16 <-> BF16
+            char* wide = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
+            char* r = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = fptrunc float %s to %s\n", r, wide, toTy);
+            return r;
+        }
+        instr = tb > fb ? "fpext" : "fptrunc";
+    } else if (fromF) instr = TypeIsUnsigned(to) ? "fptoui" : "fptosi";
+    else if (toF) instr = TypeIsUnsigned(from) ? "uitofp" : "sitofp";
+    else if (tb == fb) return val;
+    else instr = tb > fb ? (TypeIsUnsigned(from) ? "zext" : "sext") : "trunc";
+    char* r = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", r, instr, fromTy, val, toTy);
+    return r;
+}
+
 //R20: a conversion the target type cannot represent the value of - a NaN or infinity is INVALID, anything else
-//out of range OVERFLOW. Integer ranges are compared in the wider type; a float against the target's bounds.
+//out of range OVERFLOW. Integers are compared in i128, where every source value and both bounds are exact; a float
+//is compared as a double against the target's exclusive bounds, which are powers of two and so exact too.
 static void cgCheckConvert(struct cgCtx* ctx, struct operand* op, struct type from, struct type to, char* fromTy,
                            char* val) {
     bool fromF = TypeIsFloat(from), toF = TypeIsFloat(to);
-    if (fromF && toF) { //Float64 to Float32: finite becoming infinite
-        if (to.bType != BASETYPE_FLOAT32) return;
-        char* t = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fptrunc double %s to float\n", t, val);
-        char* srcFin = cgIsFinite(ctx, "double", val);
-        char* dstFin = cgIsFinite(ctx, "float", t);
+    if (toF) { //into a float: only a finite value becoming infinite can be lost (a float narrowing, or an integer into F16)
+        if (fromF && TypeGetSize(to) > TypeGetSize(from)) return;
+        char toTy[16];
+        llvmType(to, toTy, sizeof(toTy));
+        char* t = cgConvertValue(ctx, from, to, val);
+        char* dstFin = cgIsFinite(ctx, toTy, t);
         char* lost = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", lost, dstFin);
-        char* ov = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ov, srcFin, lost);
+        char* ov = lost;
+        if (fromF) {
+            char* srcFin = cgIsFinite(ctx, fromTy, val);
+            ov = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ov, srcFin, lost);
+        }
         cgFailIf(ctx, op, ov, "OVERFLOW");
         return;
     }
-    double lo, hi; //the target's range, exclusive of anything that would not fit
-    if (to.bType == BASETYPE_BYTE) { lo = 0; hi = 255; }
-    else if (to.bType == BASETYPE_INT32) { lo = -2147483648.0; hi = 2147483647.0; }
-    else { lo = -9223372036854775808.0; hi = 9223372036854775807.0; }
+    int bits = (int)TypeGetSize(to) * 8;
+    bool u = TypeIsUnsigned(to);
     if (fromF) {
-        char* fin = cgIsFinite(ctx, fromTy, val);
+        char* d = val;
+        if (from.bType != BASETYPE_FLOAT64) {
+            d = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", d, fromTy, val);
+        }
+        char* fin = cgIsFinite(ctx, "double", d);
         char* notFin = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", notFin, fin);
         cgFailIf(ctx, op, notFin, "INVALID");
-        //in range exactly when lo <= v < hi + 1 (hi + 1 is a power of two, exact in either float type)
-        char* ge = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp oge %s %s, %.1f\n", ge, fromTy, val, lo);
-        char* lt = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp olt %s %s, %.1f\n", lt, fromTy, val, hi + 1.0);
+        double lo = u ? 0.0 : -ldexp(1.0, bits - 1), hi = u ? ldexp(1.0, bits) : ldexp(1.0, bits - 1);
+        //in range exactly when lo <= v < hi
+        char* ge = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp oge double %s, %s\n", ge, d, cgFloatConst(lo, BASETYPE_FLOAT64));
+        char* lt = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp olt double %s, %s\n", lt, d, cgFloatConst(hi, BASETYPE_FLOAT64));
         char* in = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", in, ge, lt);
         char* out = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", out, in);
         cgFailIf(ctx, op, out, "OVERFLOW");
         return;
     }
-    if (toF) return;
-    //integer narrowing: the source widened and compared with the target's bounds
-    char* w = val;
-    if (from.bType != BASETYPE_INT64) {
-        w = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", w, from.bType == BASETYPE_BYTE ? "zext" : "sext", fromTy, val);
+    //integer to integer
+    char* w = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = %s %s %s to i128\n", w, TypeIsUnsigned(from) ? "zext" : "sext", fromTy, val);
+    char lo[48], hi[48];
+    if (u) { snprintf(lo, sizeof(lo), "0"); snprintf(hi, sizeof(hi), "%llu", bits == 64 ? ~0ULL : (1ULL << bits) - 1); }
+    else {
+        snprintf(lo, sizeof(lo), "%lld", bits == 64 ? (-9223372036854775807LL - 1) : -(1LL << (bits - 1)));
+        snprintf(hi, sizeof(hi), "%lld", bits == 64 ? 9223372036854775807LL : (1LL << (bits - 1)) - 1);
     }
-    char* below = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp slt i64 %s, %lld\n", below, w, (long long)lo);
-    char* above = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp sgt i64 %s, %lld\n", above, w, (long long)hi);
+    char* below = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp slt i128 %s, %s\n", below, w, lo);
+    char* above = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp sgt i128 %s, %s\n", above, w, hi);
     char* out = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = or i1 %s, %s\n", out, below, above);
     cgFailIf(ctx, op, out, "OVERFLOW");
 }
@@ -3111,22 +3158,10 @@ char* cgNumericConvert(struct cgCtx* ctx, struct operand* op) {
     //conversion between them is a retag with no instruction at all - "Meters(n)" moves nothing. Checked by
     //base type rather than by TypeIsSame, which now (correctly) says they differ.
     if (from.bType == to.bType) return val;
-
-    char fromTy[16], toTy[16];
+    char fromTy[16];
     llvmType(from, fromTy, sizeof(fromTy));
-    llvmType(to, toTy, sizeof(toTy));
-    bool fromFloat = TypeIsFloat(from);
-    bool toFloat = TypeIsFloat(to);
-    char* instr;
-    if (fromFloat && toFloat) instr = from.bType == BASETYPE_FLOAT32 ? "fpext" : "fptrunc";
-    else if (fromFloat) instr = to.bType == BASETYPE_BYTE ? "fptoui" : "fptosi";
-    else if (toFloat) instr = from.bType == BASETYPE_BYTE ? "uitofp" : "sitofp";
-    else instr = TypeGetSize(to) > TypeGetSize(from) ? (from.bType == BASETYPE_BYTE ? "zext" : "sext") : "trunc";
-
     if (op->checkRoot) cgCheckConvert(ctx, op, from, to, fromTy, val); //R20
-    char* result = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = %s %s %s to %s\n", result, instr, fromTy, val, toTy);
-    return result;
+    return cgConvertValue(ctx, from, to, val);
 }
 
 //"T[expr]" with no initializer (expr not a compile-time constant) - see OPERATION_SIZED_ARRAY_ALLOC and
@@ -3139,11 +3174,11 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     struct operand* sizeOp = *(struct operand**)ListGetIdx(&op->args, 0);
     char* rawCount = cgValue(ctx, sizeOp);
     char* count;
-    if (sizeOp->type.bType == BASETYPE_INT64) {
+    if (TypeGetSize(sizeOp->type) == 8) {
         count = rawCount;
     } else {
         count = cgNewTmp(ctx);
-        char* ext = sizeOp->type.bType == BASETYPE_BYTE ? "zext" : "sext";
+        char* ext = TypeIsUnsigned(sizeOp->type) ? "zext" : "sext";
         char sizeTy[64];
         llvmType(sizeOp->type, sizeTy, sizeof(sizeTy));
         fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", count, ext, sizeTy, rawCount);
@@ -3377,9 +3412,9 @@ void cgComprPush(struct cgCtx* ctx, struct operand* op) {
 //and the length word are both i64, so widen whatever came in
 static char* cgToI64(struct cgCtx* ctx, struct operand* v) {
     char* raw = cgValue(ctx, v);
-    if (v->type.bType == BASETYPE_INT64) return raw;
+    if (TypeGetSize(v->type) == 8) return raw;
     char* ext = cgNewTmp(ctx);
-    char* instr = v->type.bType == BASETYPE_BYTE ? "zext" : "sext";
+    char* instr = TypeIsUnsigned(v->type) ? "zext" : "sext";
     char ty[64];
     llvmType(v->type, ty, sizeof(ty));
     fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", ext, instr, ty, raw);
@@ -3436,11 +3471,11 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
 
 //E31: a derived TryAt/TrySlice's check - v itself, once lo <= v < hi (<= hi when inclusive), compared as Int64
 static char* cgAsI64(struct cgCtx* ctx, struct operand* x, char* v) {
-    if (x->type.bType == BASETYPE_INT64) return v;
+    if (TypeGetSize(x->type) == 8) return v;
     char ty[64];
     llvmType(x->type, ty, sizeof(ty));
     char* w = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", w, x->type.bType == BASETYPE_BYTE ? "zext" : "sext", ty, v);
+    fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", w, TypeIsUnsigned(x->type) ? "zext" : "sext", ty, v);
     return w;
 }
 
@@ -3696,7 +3731,7 @@ static void rdKey(struct type t, char* buf, size_t n) {
         default: {
             char ty[64];
             llvmType(t, ty, sizeof(ty));
-            snprintf(buf, n, "%s%s%s", inner, inner[0] ? "." : "", t.bType == BASETYPE_BYTE ? "c" : ty);
+            snprintf(buf, n, "%s%s%s", inner, inner[0] ? "." : "", PrimInfo(t.bType) ? PrimInfo(t.bType)->name : ty); //T4
             return;
         }
     }
@@ -3786,16 +3821,7 @@ static void rdSpellType(struct type t, char* buf, size_t n) {
         return;
     }
     if (t.name.len) { snprintf(buf, n, "%.*s%s", t.name.len, t.name.ptr, mark); return; }
-    const char* prim = "?";
-    switch (t.bType) {
-        case BASETYPE_BOOL: prim = "Bool"; break;
-        case BASETYPE_BYTE: prim = "Byte"; break;
-        case BASETYPE_INT32: prim = "Int32"; break;
-        case BASETYPE_INT64: prim = "Int64"; break;
-        case BASETYPE_FLOAT32: prim = "Float32"; break;
-        case BASETYPE_FLOAT64: prim = "Float64"; break;
-        default: break;
-    }
+    const char* prim = t.bType == BASETYPE_BOOL ? "Bool" : PrimInfo(t.bType) ? PrimInfo(t.bType)->name : "?"; //T4
     snprintf(buf, n, "%s%s", prim, mark);
 }
 
@@ -3871,18 +3897,19 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     char* v = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, ty, addr);
     bool isFloat = TypeIsFloat(t);
+    bool u64 = t.bType == BASETYPE_U64;
     char* wide = cgNewTmp(ctx);
-    if (t.bType == BASETYPE_FLOAT32) fprintf(ctx->fnOut, "  %s = fpext float %s to double\n", wide, v);
-    else if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, 0.0\n", wide, v);
-    else if (t.bType == BASETYPE_INT64) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
-    else fprintf(ctx->fnOut, "  %s = sext i32 %s to i64\n", wide, v);
+    if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, 0.0\n", wide, v);
+    else if (isFloat) fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", wide, ty, v);
+    else if (TypeGetSize(t) == 8) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
+    else fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", wide, TypeIsUnsigned(t) ? "zext" : "sext", ty, v);
     char* at;
     char* p = rdHere(ctx, &at);
     char* cap = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = select i1 %%rd.measure, i64 0, i64 64\n", cap);
     char* k = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s, %s %s)\n",
-            k, isFloat ? "f64" : "i64", p, cap, isFloat ? "double" : "i64", wide);
+            k, isFloat ? "f64" : u64 ? "u64" : "i64", p, cap, isFloat ? "double" : "i64", wide);
     rdAdvance(ctx, at, k);
 }
 
@@ -5462,13 +5489,20 @@ static struct type cgElementsType(struct type arrT, int n) {
 static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, long long size) {
     if (v->kind == CT_NULL) return true; //all-zero bits (T2a), already zero
     switch (t.bType) {
-        case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_ERROR: {
+        case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_ERROR:
+        case BASETYPE_I8: case BASETYPE_I16: case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64: {
             unsigned long long x = (unsigned long long)v->i;
             for (long long i = 0; i < size && i < 8; i++) buf[i] = (unsigned char)(x >> (8 * i));
             return true;
         }
         case BASETYPE_FLOAT32: { float f = (float)v->f; memcpy(buf, &f, 4); return true; }
         case BASETYPE_FLOAT64: { double d = v->f; memcpy(buf, &d, 8); return true; }
+        case BASETYPE_F16: case BASETYPE_BF16: { //T4
+            unsigned h = t.bType == BASETYPE_F16 ? MinifloatFrom(v->f, 5, 10) : MinifloatFrom(v->f, 8, 7);
+            buf[0] = (unsigned char)h;
+            buf[1] = (unsigned char)(h >> 8);
+            return true;
+        }
         case BASETYPE_CHOICE: {
             unsigned long long tag = (unsigned long long)v->i;
             if (!ChoiceHasPayload(t)) { for (int i = 0; i < 4; i++) buf[i] = (unsigned char)(tag >> (8 * i)); return true; }
@@ -5512,14 +5546,12 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
     if (v->kind == CT_NULL) {
         fputs("zeroinitializer", f);
     } else if (v->kind == CT_FLOAT) {
-        double d = v->f;
-        unsigned long long bits;
-        memcpy(&bits, &d, sizeof(bits));
-        fprintf(f, "0x%016llX", bits); //LLVM's exact form: a float32 too is written as the double it widens to
+        //LLVM's exact form: a float32 too is written as the double it widens to, F16/BF16 in their own (T4)
+        fputs(cgFloatConst(v->f, t.bType), f);
     } else if (v->kind == CT_BOOL) {
         fputs(v->i ? "true" : "false", f);
     } else if (v->kind == CT_INT) {
-        fprintf(f, "%lld", t.bType == BASETYPE_BYTE ? (long long)(signed char)v->i : v->i);
+        fprintf(f, "%lld", v->i);
     } else if (t.bType == BASETYPE_ARRAY && t.arrMalloc && (v->kind == CT_AGG || (v->kind == CT_REF && v->target->kind == CT_AGG))) {
         //an array of a run-time length is { length, storage }: its elements go in a global of their own
         struct ctVal* elems = v->kind == CT_REF ? v->target : v;
@@ -5957,10 +5989,17 @@ void emitScopeRuntime(FILE* out) {
         //what fits, return the length the rendering needs - so a caller can allocate an estimate and
         //retry only when it was too small. "%.17g" is what makes a float read back as the same value.
         "@__olang_fmt_d = linkonce_odr unnamed_addr constant [5 x i8] c\"%lld\\00\"\n"
+        "@__olang_fmt_u = linkonce_odr unnamed_addr constant [5 x i8] c\"%llu\\00\"\n"
         "@__olang_fmt_g = linkonce_odr unnamed_addr constant [6 x i8] c\"%.17g\\00\"\n"
         "define linkonce_odr i64 @__olang_fmt_i64(ptr %buf, i64 %cap, i64 %v) {\n"
         "entry:\n"
         "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_d, i64 %v)\n"
+        "  %n64 = sext i32 %n to i64\n"
+        "  ret i64 %n64\n"
+        "}\n\n"
+        "define linkonce_odr i64 @__olang_fmt_u64(ptr %buf, i64 %cap, i64 %v) {\n"
+        "entry:\n"
+        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_u, i64 %v)\n"
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
         "}\n\n"

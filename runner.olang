@@ -9,14 +9,14 @@ error RunnerError {
     STARTUP_FAILED
 }
 
-fn DoubleIt(n Int32) Int32 {
+fn DoubleIt(n I32) I32 {
     return n * 2
 }
 
 # originating a FOREIGN module's error type directly via "error alias.Type.word" - previously you could
 # only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
 # report. wk.WorkerError is declared over in worker.olang, not here.
-fn alwaysWorkerBadInput() Int32 ? wk.WorkerError {
+fn alwaysWorkerBadInput() I32 ? wk.WorkerError {
     error wk.WorkerError.BAD_INPUT
 }
 
@@ -65,7 +65,7 @@ test "originating a foreign module's error type directly with 'error alias.Type.
 }
 
 test "a bare cross-module variable read, no call" {
-    before Int32 = wk.AskCount
+    before I32 = wk.AskCount
     assert wk.AskRunner(5) == 10
     assert wk.AskCount == before + 1
     wk.AskCount = wk.AskCount + 100
@@ -73,12 +73,12 @@ test "a bare cross-module variable read, no call" {
 }
 
 test "a two-hop alias chain reaches a re-exported module's own function" {
-    before Int32 = wk.Base.BumpBase()
+    before I32 = wk.Base.BumpBase()
     assert wk.Base.BumpBase() == before + 1
 }
 
 test "a two-hop alias chain reaches a re-exported module's own variable, read and write" {
-    before Int32 = wk.Base.BaseCount
+    before I32 = wk.Base.BaseCount
     wk.Base.BaseCount = before + 42
     assert wk.Base.BaseCount == before + 42
 }
@@ -102,7 +102,7 @@ test "a lowercase member is private across the module boundary, reachable throug
 # worker's source at the moment this module is checked.
 test "a generic from another module returns its own argument" {
     assert wk.GenericEcho(7) == 7
-    assert wk.GenericEcho(Byte(3)) == 3
+    assert wk.GenericEcho(U8(3)) == 3
 }
 
 # M12: an enum value is alias-qualified like any other cross-module name now. "wk.Base.BaseDir.south" is
@@ -110,7 +110,7 @@ test "a generic from another module returns its own argument" {
 test "a two-hop alias chain names a re-exported enum type's word, and matches on it" {
     d wk.Base.BaseDir = wk.Base.BaseDir.North
     assert d == wk.Base.BaseDir.North
-    hit Int32 = 0
+    hit I32 = 0
     match d {
         case wk.Base.BaseDir.North { hit = 1 }
         nomatch { hit = 2 }
@@ -166,10 +166,10 @@ test "originating a two-hop re-exported error type directly with 'error alias.al
 # T30/T31 across a module boundary: Metre is declared here and satisfies Base's interface purely by
 # having a matching method - no import of the interface into the declaration, no declared intent, no
 # mention of Metre anywhere in wk.Base.
-type Metre struct(len Int32) {
-    n mut Int32 = len
+type Metre struct(len I32) {
+    n mut I32 = len
 }
-fn (m Metre&) Size() Int32 { return m.n * 100 }
+fn (m Metre&) Size() I32 { return m.n * 100 }
 
 test "a local type satisfies an imported interface structurally" {
     m Metre& = Metre(3)
@@ -208,7 +208,7 @@ test "M19: a method on a type from an imported module is reached through its rec
 
 # B5a: imports initialize before importers - this initializer reads a global of shared.olang's that is
 # itself computed at startup. The root used to be initialized first, reading 0.
-runnerFourteen Int32 = sh.InitSeven * 2
+runnerFourteen I32 = sh.InitSeven * 2
 
 test "B5a: an importer's global initializer sees its import's globals already set" {
     assert runnerFourteen == 14
@@ -220,7 +220,7 @@ if TestBuild {
     import "std/map"
 
     test "B9: a conditional import is loaded when its branch is taken" {
-        m := map.Map<Int32, Int32>()
+        m := map.Map<I32, I32>()
         m.Put(3, 4)
         assert m.Len() == 1
     }
