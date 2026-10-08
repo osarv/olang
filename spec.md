@@ -326,8 +326,9 @@ legal but useless, and exists only because the grammar constructing a named type
 `F32` and `F64` are the float types; together they are the numeric types. `Bool` is not numeric. An unsigned type's
 arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right shift and conversions treat its value
 as unsigned. `F16` and `BF16` round every result to their own precision, as the hardware does; where the target has
-no instructions for them the arithmetic is carried out in `F32` and rounded back, with the same result. A literal
-cannot be written above `I64`'s maximum; a larger `U64` is computed (`U64(0) - 1`).
+no instructions for them the arithmetic is carried out in `F32` and rounded back, with the same result. A float's bit
+pattern is read and written as an unsigned integer of its width (E33). A literal cannot be written above `I64`'s
+maximum; a larger `U64` is computed (`U64(0) - 1`).
 
 **T6.** There is no implicit conversion between any two distinct types except the two T6b states - a number
 widening within its family, and a declared type flowing into its base - and the adaptation of a literal. A
@@ -853,7 +854,8 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
-another's: a numeric conversion (E22) produces a value, a `enum` (§4.5) reaches a payload only through
+another's: a numeric conversion (E26) produces a value, a float's bit pattern (E33) is read from a value and is a
+value, never a view of the storage holding the float, an `enum` (§2.5) reaches a payload only through
 the case its tag selects, and `&` (T24) is typed. Two accesses of different types therefore never overlap,
 except where an external function writes storage handed to it (X3b), which this language does not
 describe.
@@ -1645,7 +1647,8 @@ its type: the value written the way it would be in source:
 - an integer type (`I8` ... `I64`, `U8` ... `U64`) — decimal, with a leading `-` for a negative value; an unsigned
   type's value as unsigned.
 - a float type — decimal. The digit count is implementation-defined, but the rendering always
-  reads back as the same value.
+  reads back as the same value. An infinity is `inf` or `-inf`, and every NaN `nan`, whatever its sign and payload
+  (E33a).
 - `Char` (T29h) — at the top level, the **character** it denotes, one byte long. Inside another value, that
   character written as a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
 - an array of `Char` (a `String` included), in any of its shapes — at the top level, its characters unchanged
@@ -1925,7 +1928,8 @@ boundary both the type and the case must be public (M6, M6a).
 
 **E23.** `arr.Len()` — every array type, declared ones like `String` included, has a method `Len()` giving
 its length as an `I64`. It is supplied by the compiler rather than declared, since the length lives in the
-array's representation; in every other respect it is a method (§4.4 M19). An `I64` converts to a narrower
+array's representation; in every other respect it is a method (§4.4 M19). It is every array type's own, with or
+without `extends` (T29f), and a declared array type may not declare a `Len` of its own. An `I64` converts to a narrower
 integer type only by an explicit conversion (`I32(a.Len())`, T6).
 
 ### 5.10 `try` as an expression
@@ -2123,6 +2127,38 @@ received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` 
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `try` (E15a) it fails with
 `BuiltinError.INVALID` instead. `is` never fails. The safe forms are `is` before `as`, and a `match` (S13).
+
+### 5.17 A float's bits
+
+**E33.** `x.Bits()` — every float type has a method `Bits()` giving the IEEE 754 bit pattern of `x`'s value as the
+unsigned integer type of the same width: an `F16` or a `BF16` gives a `U16`, an `F32` a `U32`, an `F64` a `U64`. The
+other way is a method of that unsigned type, named for the float it makes: `u.F16FromBits()` and `u.BF16FromBits()`
+on a `U16`, `u.F32FromBits()` on a `U32`, `u.F64FromBits()` on a `U64` give the float whose bit pattern `u` is.
+
+```
+F64(1).Bits()                 # 0x3FF0000000000000
+U16(0x3C00).F16FromBits()     # 1.0
+```
+
+Both are **total**: every bit pattern is a float of the type — an infinity, a subnormal, a negative zero, a NaN of
+any sign and payload — and every float has one. Each reads one value and produces another of the same width with the
+same bits; nothing is computed, and nothing is checked. It is a reinterpretation of a **value**, never of storage:
+no place is read as a type other than the one it holds (T36).
+
+They are supplied by the compiler rather than declared, since nothing else in the language reaches a value's
+representation; in every other respect they are methods (§4.4 M19). A declared type extending a float or an unsigned
+integer type (T29f) has them as it has its base's other methods, and may not declare a method of the same name
+(T29e); a declared type that does not extend its base has none of them. A `FromBits` method on any other number is a
+compile-time error, which names the unsigned type to convert to first.
+
+**E33a (NaN bits).** A NaN keeps its sign and payload while it is only **moved** — assigned, passed, returned, stored
+and read back, chosen by a conditional expression (E28), or converted to its own type — with one exception: a
+**signalling** NaN (one whose payload's top bit, the quiet bit, is clear) may be **quieted** wherever it is moved,
+its quiet bit set and the rest of its bits kept. Whether that happens is unspecified, and may differ between builds of
+one program. A NaN that an **operation** makes — arithmetic, negation, a conversion between float types — has an
+unspecified sign and payload: it is a NaN, and which one is not specified. So `u.F32FromBits().Bits() == u` holds for
+every `u` except a signalling NaN's pattern, which may come back quiet; and the bits of a NaN computed from other
+values are some NaN's.
 
 ## 6. Statements
 
@@ -3663,7 +3699,7 @@ a global declared with a float type reads as a float, and text (a string literal
 or a global holding one) compares with `==` and `!=` **by content**. A mutable global has no value a build
 could decide on and is rejected, as are globals defined in terms of each other.
 
-**B9c.** Any other condition — one that calls a function, reads a global computed by one, or names
+**B9c.** Any other condition — one that calls a function or a method, reads a global computed by one, or names
 another module's declaration — is decided by **compile-time evaluation** (§13): the program is checked
 without the branches of such conditions, each condition is then checked as an ordinary `Bool` expression
 in its module and evaluated, and the program is checked again with the branches chosen, repeating while a
@@ -3993,6 +4029,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   outside an array - which evaluation refuses rather than giving a value the program never had (each is
   evaluated when written under `try`, E15a, where it is defined);
 - take a slice out of range without `try`, which aborts at run time (E16b);
+- read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
+  from bits that is quiet is read exactly;
 - run longer, or recurse deeper, than an implementation-defined budget.
 
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than

@@ -7892,3 +7892,79 @@ from their original form.
   sentence saying text compares "by E10, not by content" was stale too since E10a (`==` on a `String` calls `Eq`).
   `checks/cases/b10text` pins it - a call deciding a top-level condition, a comparison at run time, a `String&`
   argument - and fails with five errors on the previous compiler.
+
+- **A float's bits (E33/E33a), 2026-10-08.** The third item of the self-hosting prep the user ordered: value-level
+  bit access for the floats, "don't forget F16 and BF16 too". The proposal was `x.Bits()` and `F64.FromBits(u)`.
+  The first half fits the language as it is - a method on a built-in type. The second does not: nothing in olang is
+  reached through a type name (methods need a receiver, prelude functions are not visible by bare name, and `F64(x)`
+  is the numeric conversion), so it would have needed type-level functions, a new mechanism the task said not to
+  invent for this. What was built moves the dot and keeps the words in their order: `u.F64FromBits()`, and
+  `F16FromBits`/`BF16FromBits` on a `U16`, `F32FromBits` on a `U32` - the unsigned type of the float's width, the same
+  type `Bits()` gives. The name has to carry the float, since a `U16` is the pattern of two of them. `u.AsF64()` was
+  considered and not taken: `as` is a keyword with another meaning (E32), and in most languages `as` between numbers
+  is a numeric conversion - Rust's `u as f64` - which is exactly the confusion to avoid. Flagged as my call.
+  **Mechanism.** Compiler-supplied, as `Len()` is (T10/E23), since no olang code could write the body: one operation,
+  `OPERATION_BITCAST`, built in `buildMethodCall` for a float or unsigned receiver and lowered to an LLVM `bitcast` of
+  the value. In every other respect they are methods: a declared type has them by `extends` (T29f), as it has its
+  base's prelude methods, and may not redeclare one - the check for that is the one that found the `Len` bug below.
+  A `FromBits` method on an integer of the wrong width or signedness names the unsigned type to convert to.
+  **T36.** The aliasing rule TBAA rests on said olang has "no reinterpretation of one type's bytes as another's". A
+  value bitcast is no exception: the float is loaded through its own type, its bits move from register to register,
+  and the integer is stored, if at all, through its own type. No storage is ever read as two types, so TBAA's
+  premise is unchanged; T36 now says so explicitly (and its two cross-references, which pointed at the enum-value rule
+  and the re-export section, were corrected).
+  **NaN payloads, measured.** IEEE leaves an operation's NaN payload open and LLVM's LangRef makes it
+  nondeterministic, so the question was what moving a NaN does here, and it was measured rather than assumed - the same
+  program at -O0, at -O3 and under -i, with quiet and signalling NaNs of all four types through locals, globals,
+  calls, struct fields, array elements and a conditional. A **quiet** NaN kept its sign and payload everywhere. A
+  **signalling** one did not, in two places: a struct with three floats returned by value - its third float comes back
+  through the x87 stack (`flds`), and loading a signalling NaN there quiets it, at any optimization level wherever the
+  call is not inlined; and at -O0 a `bfloat` argument, which LLVM 18 passes by converting through `float`
+  (`__truncsfbf2`). Negating an `F16` at -O0 quieted one too, although LLVM's `fneg` is specified as touching the sign
+  alone - promotion to `float` again. And an operation's NaN is not even stable: LLVM folds `0.0 / 0.0` to +NaN, x86
+  computes -NaN. So E33a states what holds: moves keep a NaN's bits except that a signalling NaN may be quieted
+  (quiet bit set, the rest kept), and an operation's NaN - negation and float conversions included - is unspecified.
+  Making signalling NaNs survive would mean a different struct-return ABI and working around LLVM's bfloat lowering;
+  nothing needs it.
+  **The evaluator.** It keeps every float as a `double`; a narrower type's NaN now rides in it the way LLVM writes one
+  in a constant - sign, all-ones exponent, payload at the top of the mantissa - which `MinifloatFrom`/`MinifloatTo`
+  (`F16`, `BF16`, and `F32`'s NaNs) now produce and read back instead of canonicalizing, and which a C `(float)`
+  conversion cannot be trusted with, since it quiets. `FloatBits`/`FloatFromBits` are the one encoding, shared by the
+  evaluator and by codegen's constants. A value made by `FromBits` carries `nanExact`, kept by every move (`ctFit` and
+  an identity conversion no longer remake a float of the same representation, which re-rounded it) and dropped by any
+  operation. `Bits()` of a NaN is then exact when the NaN is quiet and made from bits; an operation's NaN, or a
+  signalling one, is refused with its reason - K1's "never a value the program might not have", which is also what
+  stops an assert from being proven on a value the build may not reproduce. Under -i, where a program is running and
+  any NaN it holds is a value it may have, the bits are read whatever they are. The checks pin both refusals through
+  top-level conditions; the corpus test is baked (`BitsBaked`, K2) and run, with quiet NaNs through every kind of
+  move, and a run-time-only test accepts a signalling NaN either kept or quieted.
+  **Constants.** A baked global holding a NaN made from bits is written with exactly its bits: `0xH7C01` and
+  `0xRFFC1` for the 16-bit types, the payload-on-top double form for `F32` - verified with `llc` that LLVM 18 reads
+  `float 0x7FF0000020000000` back as the signalling `0x7F800001` - and an `F64`'s own bits. `cgFloatConst` and
+  `cgConstBytes` both go through `FloatBits`; before, an `F32` went through `(float)` and a 16-bit NaN was replaced by
+  the canonical one, harmless while no NaN had chosen bits. A fixture greps the IR for all four.
+  **`F8E5M2.F64()`** became `(U16(f.Bits) << 8).F16FromBits()` - the format is the top byte of an `F16`, which is
+  why it exists - replacing a decoder of five lines. `F8E4M3` has no 16-bit twin, and encoding still has to round
+  arithmetically: rounding through `F16` first would round twice.
+  **Found on the way, all pre-existing:**
+  - **`$` of a NaN differed between compile time and run time.** The evaluator printed the host's NaN (-NaN from
+    x86's `0/0`) as `-nan`, the optimized program its folded +NaN as `nan`, and the -d build `-nan` again - so a baked
+    rendering disagreed with the same expression at run time, K1 broken. With the sign now unspecified by E33a, every
+    NaN renders `nan` (E11a), in the runtime's `__olang_fmt_f64` (a `select` before `snprintf`) and in the evaluator.
+  - **`n := a.Len()` was rejected** - `:=` accepts any call (D15), but the compiler-supplied `Len()` is not a call
+    node, so it fell through to "the initializer must have a type". The same would have held for `Bits()`.
+  - **A `Len` declared on a declared array type was accepted and never called**: `buildMethodCall` answers `Len` on
+    any array before looking at declared methods, so the program's own `Len` was silently dead (an assert on it failed
+    at run time). Declaring one is now an error, with `Bits`/`FromBits` on an extending number, through one message
+    for supplied methods.
+  - **A top-level condition was judged on the prefix the token evaluator reached.** B9a's evaluator works on tokens and
+    knows literals, globals and operators; B9c is meant to take everything else. But nothing checked that the token
+    evaluator had reached the branch's `{`, so a method call, member or index after a name was simply ignored:
+    `if Seven.Hash() != 3` failed as "must be true or false" (it had read `Seven`), and `if Seven == Seven.Hash()` was
+    silently decided as `Seven == Seven`, taking the wrong branch. Stopping short of the `{` now defers the condition
+    to compile-time evaluation, as does a global whose initializer does the same. Found writing the check for an
+    operation's NaN, whose first draft was such a condition. The shape message still listed `!`, `&&` and `||`, long
+    gone; it lists the words now.
+  - **-i quieted signalling `F32`s at an extern**, converting through C's `(float)` both ways; it passes the bits.
+  Left alone, and asked: `0x7FF0000000000001 * one` with `one` an `I32` is "these two numbers do not meet" - E6 says a
+  literal the other side cannot represent is an error, while T6b would meet the two at the literal's own `I64`.

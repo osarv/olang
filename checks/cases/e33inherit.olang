@@ -1,0 +1,7 @@
+# check: fail inherits its base's methods only when it is declared with 'extends'
+# E33/T29f: a declared float has Bits() as it has its base's other methods - by extending it
+type Temp F64
+error E { X }
+fn main() ? E {
+    b := Temp(1.5).Bits()
+}

@@ -262,6 +262,15 @@ static struct ctVal* ctFloat(struct type t, double f) {
     return v;
 }
 
+//E33: a float moved to a place of its own representation, as type t - unchanged, a NaN's bits included, where making
+//it afresh (ctFloat) would round it, and so quiet a signalling NaN
+static struct ctVal* ctMoveFloat(struct ctVal* v, struct type t) {
+    struct ctVal* c = ctNew(CT_FLOAT, t);
+    c->f = v->f;
+    c->nanExact = v->nanExact;
+    return c;
+}
+
 static struct ctVal* ctDeref(struct ctVal* v) {
     while (v && v->kind == CT_REF) v = v->target;
     return v;
@@ -588,6 +597,7 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
             if (!ctFits(t, ctExact(v))) return ctCheckFail(st, op, "OVERFLOW");
         }
     }
+    if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type.bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
     if (ctIsFloat(t)) return ctFloat(t, ctAsF(v));
     if (ctIsInt(t)) {
         if (v->kind == CT_FLOAT) {
@@ -659,6 +669,13 @@ static struct ctVal* ctLiteral(struct ctState* st, struct operand* op) {
             v->elems[i] = ctFit(st, *(struct operand**)ListGetIdx(&op->args, i), ((struct var*)ListGetIdx(&c.vars, i))->type);
             if (!v->elems[i]) return NULL;
         }
+        return v;
+    }
+    if (ctIsFloat(t) && isnan(op->floatLiteralVal)) {
+        //E33: a NaN a constructor's result left in a literal (T29d) - the program holds exactly these bits, as written
+        struct ctVal* v = ctNew(CT_FLOAT, t);
+        v->f = op->floatLiteralVal;
+        v->nanExact = true;
         return v;
     }
     if (ctIsFloat(t)) return ctFloat(t, op->floatLiteralVal);
@@ -1168,7 +1185,8 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
     if (TypeIsChar(t)) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
     if (ctIsFloat(t) || ctIsInt(t)) {
         char num[64];
-        if (ctIsFloat(t)) snprintf(num, sizeof(num), "%.17g", ctDeref(v)->f);
+        //E11a: every NaN renders as "nan" - its sign is unspecified when an operation made it (E33a)
+        if (ctIsFloat(t)) snprintf(num, sizeof(num), "%.17g", isnan(ctDeref(v)->f) ? NAN : ctDeref(v)->f);
         else if (t.bType == BASETYPE_U64) snprintf(num, sizeof(num), "%llu", (unsigned long long)ctDeref(v)->i); //T4
         else snprintf(num, sizeof(num), "%lld", ctDeref(v)->i);
         ctTextStr(b, num);
@@ -1263,6 +1281,28 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return ctInt(op->type, a->n);
         }
         case OPERATION_NUMERIC_CONVERT: return ctConvert(st, op);
+        case OPERATION_BITCAST: { //E33: the same bits, read as the other type - exactly the generated code's bitcast
+            struct operand* src = *(struct operand**)ListGetIdx(&op->args, 0);
+            struct ctVal* v = ctDeref(ctEval(st, src));
+            if (!v) return NULL;
+            if (v->kind == CT_FLOAT) {
+                //an operation's NaN is some NaN, which one unspecified, and a signalling one may have been quieted on
+                //its way here (E33a) - refused rather than guessed, as K1 refuses what is undefined; a running program
+                //(-i) reads whichever this one is. A signalling NaN's quiet bit, its payload's top, is the double's
+                //bit 51 whatever its type, the payload being held at the top of the double's
+                if (isnan(v->f) && !ctRun) {
+                    unsigned long long d;
+                    memcpy(&d, &v->f, sizeof(d));
+                    if (!v->nanExact) return ctFail(st, op->tok, "it reads the bits of a NaN an operation made, whose sign and payload are unspecified");
+                    if (!(d & (1ULL << 51))) return ctFail(st, op->tok, "it reads the bits of a signalling NaN, which moving it may have quieted");
+                }
+                return ctInt(op->type, (long long)FloatBits(v->f, src->type.bType));
+            }
+            struct ctVal* r = ctNew(CT_FLOAT, op->type);
+            r->f = FloatFromBits((unsigned long long)v->i, op->type.bType);
+            r->nanExact = isnan(r->f);
+            return r;
+        }
         case OPERATION_NOMINAL_CONVERT: {
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!v) return NULL;
@@ -1448,6 +1488,7 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     v = ctDeref(v);
     //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
+    if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type.bType == dst.bType) return ctMoveFloat(v, dst); //E33
     if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctAsF(v));
     v = ctCopy(v);
     if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = dst;
@@ -1735,7 +1776,7 @@ static ffi_type* ctFfiType(enum baseType b) {
 //a number's bytes at `at`, as a value of primitive b lays them out
 static void ctPutNum(unsigned char* at, enum baseType b, struct ctVal* v) {
     const struct primInfo* p = PrimInfo(b);
-    if (p->kind == 'f' && p->bits == 32) { float f = (float)ctAsF(v); memcpy(at, &f, 4); return; }
+    if (p->kind == 'f' && p->bits == 32) { uint32_t u = (uint32_t)FloatBits(ctAsF(v), b); memcpy(at, &u, 4); return; } //E33
     if (p->kind == 'f') { double d = ctAsF(v); memcpy(at, &d, 8); return; }
     long long i = v->kind == CT_FLOAT ? (long long)v->f : v->i;
     memcpy(at, &i, (size_t)(p->bits / 8)); //little-endian: the low bytes are the narrower value
@@ -1743,7 +1784,7 @@ static void ctPutNum(unsigned char* at, enum baseType b, struct ctVal* v) {
 
 static void ctGetNum(const unsigned char* at, enum baseType b, struct ctVal* into) {
     const struct primInfo* p = PrimInfo(b);
-    if (p->kind == 'f' && p->bits == 32) { float f; memcpy(&f, at, 4); into->f = f; return; }
+    if (p->kind == 'f' && p->bits == 32) { uint32_t u; memcpy(&u, at, 4); into->f = FloatFromBits(u, b); return; } //E33
     if (p->kind == 'f') { double d; memcpy(&d, at, 8); into->f = d; return; }
     long long i = 0;
     memcpy(&i, at, (size_t)(p->bits / 8));
@@ -1810,7 +1851,8 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
             store[i].p = buf;
             arrays[i] = v;
         } else if (PrimInfo(pt.bType)->kind == 'f' && PrimInfo(pt.bType)->bits == 32) {
-            store[i].f = (float)ctAsF(v);
+            uint32_t u = (uint32_t)FloatBits(ctAsF(v), pt.bType); //E33: (float) would quiet a signalling NaN
+            memcpy(&store[i].f, &u, 4);
         } else if (PrimInfo(pt.bType)->kind == 'f') {
             store[i].d = ctAsF(v);
         } else {
@@ -1836,7 +1878,16 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
     if (!func->type.hasRetType) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
     struct type rt = *func->type.retType;
     const struct primInfo* p = PrimInfo(rt.bType);
-    if (p->kind == 'f') return ctFloat(rt, p->bits == 32 ? (double)rv.f : rv.d);
+    if (p->kind == 'f') {
+        struct ctVal* r = ctNew(CT_FLOAT, rt);
+        r->f = rv.d;
+        if (p->bits == 32) { //E33: its bits, a NaN's payload included - (double) would quiet a signalling NaN
+            uint32_t u;
+            memcpy(&u, &rv.f, 4);
+            r->f = FloatFromBits(u, rt.bType);
+        }
+        return r;
+    }
     //libffi widens a result narrower than a register to a whole ffi_arg
     long long i = p->bits == 64 ? rv.i : p->kind == 'u' ? (long long)rv.a : (long long)rv.s;
     return ctInt(rt, i);

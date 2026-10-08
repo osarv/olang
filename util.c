@@ -134,7 +134,12 @@ unsigned MinifloatFrom(double x, int expBits, int mantBits) {
     unsigned sign = signbit(x) ? 1u << (expBits + mantBits) : 0;
     unsigned expMax = (1u << expBits) - 1;
     int bias = (int)(expMax >> 1);
-    if (isnan(x)) return sign | (expMax << mantBits) | (1u << (mantBits - 1));
+    if (isnan(x)) { //E33: its sign, and the top of its payload - quiet when that leaves no payload, as narrowing does
+        unsigned long long d;
+        memcpy(&d, &x, sizeof(d));
+        unsigned pay = (unsigned)((d & 0xFFFFFFFFFFFFFULL) >> (52 - mantBits));
+        return sign | (expMax << mantBits) | (pay ? pay : 1u << (mantBits - 1));
+    }
     double a = fabs(x);
     if (isinf(a)) return sign | (expMax << mantBits);
     int e;
@@ -157,7 +162,12 @@ double MinifloatTo(unsigned bits, int expBits, int mantBits) {
     unsigned ex = (bits >> mantBits) & expMax;
     unsigned m = bits & ((1u << mantBits) - 1);
     double v;
-    if (ex == expMax) v = m ? NAN : INFINITY;
+    if (ex == expMax && m) { //E33: a NaN, its sign and payload kept - the payload at the top of the double's
+        unsigned long long d = (neg ? 1ULL << 63 : 0) | 0x7FF0000000000000ULL | ((unsigned long long)m << (52 - mantBits));
+        memcpy(&v, &d, sizeof(v));
+        return v;
+    }
+    if (ex == expMax) v = INFINITY;
     else if (ex == 0) v = ldexp((double)m, 1 - bias - mantBits);
     else v = ldexp(1.0 + (double)m / (double)(1u << mantBits), (int)ex - bias);
     return neg ? -v : v;

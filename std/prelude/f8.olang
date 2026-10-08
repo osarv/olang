@@ -89,13 +89,8 @@ fn f8E5M2Bits(x F64) U8 {
     return U8(sign | b)
 }
 
-fn (f F8E5M2) F64() F64 {
-    b I32 = I32(f.Bits) & 127
-    if b == 124 { return (-1.0 if f.Bits >= 128 else 1.0) / 0.0 }
-    if b > 124 { return 0.0 / 0.0 }
-    v F64 = f8Decode(b, 2, 15)
-    return -v if f.Bits >= 128 else v
-}
+# the top byte of an F16 is an F8E5M2, so its value is that F16's (E33) - infinities and NaNs included
+fn (f F8E5M2) F64() F64 { return (U16(f.Bits) << 8).F16FromBits() }
 
 fn (f F8E5M2) Str() String { return $f.F64() }
 fn (a F8E5M2) Eq(b F8E5M2) Bool { return a.F64() == b.F64() }

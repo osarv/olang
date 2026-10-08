@@ -58,6 +58,8 @@ void* ListGetCmp(struct list* l, void* cmpVal, bool(*cmpFunc)(void* cmpVal, void
 
 //T4: a small IEEE-style float (1 sign bit, expBits, mantBits) - F16 is (5, 10), BF16 (8, 7). MinifloatFrom rounds to
 //nearest, ties to even, as the hardware does; MinifloatTo is exact. Shared by codegen's constants and the evaluator.
+//E33: a NaN keeps its sign and payload both ways, the payload held at the top of the double's - how LLVM writes a
+//narrower NaN as a double, and where widening puts it - so a NaN made from bits survives the trip exactly
 unsigned MinifloatFrom(double x, int expBits, int mantBits);
 double MinifloatTo(unsigned bits, int expBits, int mantBits);
 

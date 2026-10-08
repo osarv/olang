@@ -230,6 +230,20 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
 }
 
+# E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
+# LLVM reads back exactly, the 16-bit ones in their own
+test "a NaN made from bits is written out with its bits" {
+    dir := fresh("bits")
+    os.Run("cp checks/fixtures/bits/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b bits.olang > out.txt 2>&1 && ./build/bits") == 0 or failed("bits", dir)
+    ll String& = " build/bits.main.ll"
+    assert sh(dir, "grep -q '@bits_GS = global float 0x7FF0000020000000'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GQ = global double 0xFFF8000000000123'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GH = global half 0xH7C01'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GB = global bfloat 0xRFFC1'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_Baked = global i1 true'" $ll) == 0
+}
+
 # a function returning an aggregate returns it through one slot and one exit block, so that inlined, its result's
 # fields reach the caller as separate values LLVM can see into - without it an iterator loop never vectorized
 test "an aggregate is returned through one slot" {

@@ -1664,21 +1664,18 @@ char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
     return result;
 }
 
-//converts a double to LLVM's required 16-hex-digit float-constant form (always the double bit pattern,
-//even when the target type is float32 - LLVM truncates internally, so float32 literals are first rounded
-//to float precision here so the double bit pattern reflects the value that will actually be stored)
 //a float constant as LLVM writes it: double's bit pattern for F32/F64 (F32 rounded to float first), and the 16-bit
-//forms for F16 ("0xH") and BF16 ("0xR"), rounded to nearest-even as the hardware rounds (T4)
+//forms for F16 ("0xH") and BF16 ("0xR"), rounded to nearest-even as the hardware rounds (T4). A NaN keeps its sign
+//and payload (E33) - an F32's in the double as LLVM reads one back, its payload at the top of the double's
 char* cgFloatConst(double v, enum baseType b) {
     char* buf = MallocOrCrash(24);
+    unsigned long long bits = FloatBits(v, b);
     if (b == BASETYPE_F16 || b == BASETYPE_BF16) {
-        unsigned h = b == BASETYPE_F16 ? MinifloatFrom(v, 5, 10) : MinifloatFrom(v, 8, 7);
-        snprintf(buf, 24, "0x%c%04X", b == BASETYPE_F16 ? 'H' : 'R', h);
+        snprintf(buf, 24, "0x%c%04llX", b == BASETYPE_F16 ? 'H' : 'R', bits);
         return buf;
     }
-    double rounded = b == BASETYPE_FLOAT32 ? (double)(float)v : v;
-    unsigned long long bits;
-    memcpy(&bits, &rounded, sizeof(bits));
+    double asDouble = b == BASETYPE_FLOAT32 ? FloatFromBits(bits, b) : v;
+    memcpy(&bits, &asDouble, sizeof(bits));
     snprintf(buf, 24, "0x%016llX", bits);
     return buf;
 }
@@ -4125,6 +4122,16 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_COMPR_PUSH: cgComprPush(ctx, op); return "";
         case OPERATION_COMPR_RESERVE: cgComprReserve(ctx, op); return "";
         case OPERATION_NUMERIC_CONVERT: return cgNumericConvert(ctx, op);
+        case OPERATION_BITCAST: { //E33: the same bits read as the other type - a value, so no load or store is involved
+            struct operand* src = *(struct operand**)ListGetIdx(&op->args, 0);
+            char* v = cgValue(ctx, src);
+            char from[64], to[64];
+            llvmType(src->type, from, sizeof(from));
+            llvmType(op->type, to, sizeof(to));
+            char* r = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = bitcast %s %s to %s\n", r, from, v, to);
+            return r;
+        }
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
             //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a
@@ -5058,12 +5065,9 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
             for (long long i = 0; i < size && i < 8; i++) buf[i] = (unsigned char)(x >> (8 * i));
             return true;
         }
-        case BASETYPE_FLOAT32: { float f = (float)v->f; memcpy(buf, &f, 4); return true; }
-        case BASETYPE_FLOAT64: { double d = v->f; memcpy(buf, &d, 8); return true; }
-        case BASETYPE_F16: case BASETYPE_BF16: { //T4
-            unsigned h = t.bType == BASETYPE_F16 ? MinifloatFrom(v->f, 5, 10) : MinifloatFrom(v->f, 8, 7);
-            buf[0] = (unsigned char)h;
-            buf[1] = (unsigned char)(h >> 8);
+        case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: case BASETYPE_F16: case BASETYPE_BF16: { //T4, E33: a NaN's bits kept
+            unsigned long long x = FloatBits(v->f, t.bType);
+            for (long long i = 0; i < size && i < PrimInfo(t.bType)->bits / 8; i++) buf[i] = (unsigned char)(x >> (8 * i));
             return true;
         }
         case BASETYPE_CHOICE: {
@@ -5566,9 +5570,13 @@ void emitScopeRuntime(FILE* out) {
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
         "}\n\n"
+        //E11a: every NaN renders as "nan" - snprintf would print the sign, which for a NaN an operation made is
+        //unspecified (E33a): LLVM folds 0/0 to +NaN where x86 computes -NaN
         "define linkonce_odr i64 @__olang_fmt_f64(ptr %buf, i64 %cap, double %v) {\n"
         "entry:\n"
-        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %v)\n"
+        "  %isnan = fcmp uno double %v, %v\n"
+        "  %w = select i1 %isnan, double 0x7FF8000000000000, double %v\n"
+        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %w)\n"
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
         "}\n\n"

@@ -435,6 +435,8 @@ enum operation {
     OPERATION_AS, //E32: "x as Enum.Case" - args [x]; castTag the case, op->type its payload
     OPERATION_BOUNDS, //E31: a derived TryAt/TrySlice's bounds check - args [v, lo, hi]: v itself, once lo <= v < hi
                       //(<= hi when isInclusive); only ever built under "try", so it always has a checkRoot
+    OPERATION_BITCAST, //E33: "x.Bits()", "u.F64FromBits()" - args[0]'s bits read as op->type, of the same width: a value
+                       //made from a value, never a view of storage (T36)
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
     OPERATION_NOMINAL_CONVERT, //T29: "Name(x)" between a declared type and its underlying one - same
                                 //representation, so it emits nothing
@@ -635,6 +637,10 @@ bool TypeIsSameRepr(struct type a, struct type b);
 struct primInfo { enum baseType b; const char* name; int bits; char kind; const char* llvm; };
 const struct primInfo* PrimInfo(enum baseType b); //NULL for anything not a numeric primitive
 bool PrimByName(struct str name, enum baseType* out);
+//E33: a float type's bit pattern for the value a double holds, and back. A NaN of a type narrower than F64 is held in
+//the double as LLVM writes one: its sign, and its payload at the top of the double's
+unsigned long long FloatBits(double v, enum baseType b);
+double FloatFromBits(unsigned long long bits, enum baseType b);
 bool TypeIsUnsigned(struct type t);
 bool TypeIsChar(struct type t); //T29h: the prelude's Char
 struct type SemanticCharType(void);

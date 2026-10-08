@@ -1,0 +1,5 @@
+# check: fail wrong number of arguments
+error E { X }
+fn main() ? E {
+    b := F64(1).Bits(2)
+}
