@@ -8,7 +8,7 @@
 - [olang: Vec growth SETTLED](project_olang_vec_growth_question.md) — no growable contiguous Vec; List<T> is chunked+append-only, Buffer rejected on measurements
 - [olang concurrency gaps](project_olang_concurrency_gaps.md) — all done incl. cancellation/timeout (std/cancel); no fixed pool or M:N
 - [Record flagged decisions](feedback_record_flagged_decisions.md) — every decision I ask the user for goes in the ledger at once; silence is not a yes
-- [olang pending decisions](project_olang_pending_decisions.md) — ledger of unanswered questions; OPEN NOW list at the top (-i next stage, old commit trailers, my flagged calls)
+- [olang pending decisions](project_olang_pending_decisions.md) — what is still open: questions to the user, my unconfirmed calls (numbered), on-hold and deferred items; answered history is in git (bc9f9c9)
 - [olang: natural-language direction](user_olang_natural_language.md) — user wants olang syntax to read more like natural language (for x in a); weigh that in syntax proposals
 - [Language-change checklist](feedback_keep_evaluator_current.md) — walk the checklist in the repo CLAUDE.md for every language change; keep comptime.c current
 - [Errors are errors](feedback_errors_are_errors.md) — never (value, Bool) in olang APIs; empty/exhausted/missing is an error
