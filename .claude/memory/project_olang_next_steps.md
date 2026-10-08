@@ -42,6 +42,17 @@ because what it finds about structure feeds the refactor.
   (3) semantic.c operands/statements/scopes half, (4) codegen.c incl. the runtime IR, (5) comptime.c, main.c, util,
   errmsg + std/prelude. Each reports only findings it reproduced with a small olang program on the current compiler
   (CONFIRMED) or could not reproduce but traced (PLAUSIBLE, kept apart). Fixes go in worktrees with regression tests.
+- **First after the reset: a use-after-free in the scope checker (found by the enums work, reproduced on the old
+  compiler).** A callee's obligations are checked at a call only if its body was checked first - never for generic
+  instantiations or functions declared after the caller - so `for i in range n { l.Push(Node(i)) }` builds each node
+  in the loop body's arena and stores it in the outer list (and `m.Put($i, i)` likewise; std/map's own test has the
+  shape). Decided: fix it. The prototype (re-check missed obligations after all bodies, build each temporary where its
+  obligation says) was right but rejected `for w in ws { mine.Push(w) }`, because ListIter's Next tags elements with
+  the iterator's scope, not the list's: a result read through a `&p` field (C2d: keeps the argument's own scope) needs
+  to carry the scope that field was bound to at construction - the per-instance binding the checker already records
+  for constructor arguments (hereVar) - through `:=` locals and the for-in lowering, without new syntax.
+- More review leads: the program scope (globals, O1b) has an allocator with no lock, so two tasks building into a
+  global's scope at once corrupt it (the enums work made `H = f(G)` build there).
 - Review leads (give to the agents): the defer work found that a function returning a local ARRAY VALUE hands back
   a pointer into its own just-closed scope and the caller copies from freed memory - safe only because nothing runs
   between the close and the copy (does a destructor allocating at that close break it?); a fix wants a callee/caller
