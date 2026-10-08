@@ -24,7 +24,7 @@ expression form) and 6 are being built in parallel by agents in worktrees (/home
    (ledger question 3).
 6. `defer`, block-scoped as Zig's.
 7. Float literals default to F64 (T6a).
-Then runtime interfaces back in some form (ledger question 2; the user wants GUI widgets eventually).
+Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 

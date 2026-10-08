@@ -19,19 +19,21 @@ nothing of the user is in [[project-olang-next-steps]], not here.
 file system in std; value-level bits for F16/BF16/F32/F64; List.At/SetAt + a text builder, keeping loops on iterators;
 several values per `case`, `case` guards, nested patterns (the user: "case guards are good", "I think the nested
 patterns are fine" - read as yes); `defer` (block-scoped); float literals default to F64 (T6a).
+**Decided 2026-10-08, next after the current batch:** runtime interfaces back as `any Trait&` (the user: "any widget is
+good"): a trait stays a constraint; `any Trait&` is a run-time value written on purpose, itself satisfying the trait;
+only structs/enums convert, no widening at first, defaults/overrides through the table, `is`/`as` kept; the removed
+code comes back from git (T30). GUI style (retained vs immediate mode) left to me (the user: "I don't know about GUI
+design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** (numbers 6-9 are unused since the 2026-10-08 renumbering; my calls keep 10-46)
+**QUESTIONS for the user** (numbers 2 and 6-9 are unused since the 2026-10-08 renumbering; my calls keep 10-46)
 1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
    scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
-2. Runtime interfaces back (the user 2026-10-08: "we're probably gonna have to", for GUI widgets; asked for ideas).
-   (a) `any Widget&`: a trait stays a constraint, `any Trait&` is a run-time value written on purpose (Swift's
-   `any`), itself satisfying the trait so generic code takes it; only structs/enums convert (no array boxing), no
-   widening at first, defaults/overrides through the table, `is`/`as` kept; the removed code comes back from git.
-   (b) revert T30 wholesale (`Widget&` is a run-time value again). Default: none until chosen. Rec: (a).
 3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
-   a block that provably leaves, and the match must be exhaustive (or have a value-giving `nomatch`). Default: not
-   built. Rec: (a).
+   a block that provably leaves, and the match must be exhaustive (or have a value-giving `nomatch`). Explained again
+   2026-10-08 with braceless one-line statements (the user asked; answer: not for `if`/`for` bodies - with no
+   parentheses around a condition there is no telling where it ends - `=>` works because it is a separator).
+   Default: not built. Rec: (a).
 4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
    rejected. Rec: leave until real code needs it.
 5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
@@ -40,7 +42,7 @@ patterns are fine" - read as yes); `defer` (block-scoped); float literals defaul
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later
 installed - built-then-installed temps, null-initialized cursors).
 
-**MY CALLS - built, flagged, never confirmed** (default = as built; rec = keep unless noted)
+**MY CALLS - built, flagged, never confirmed** (laid out for the user's review 2026-10-08, grouped) (default = as built; rec = keep unless noted)
 10. `-u` updates every repository the build reaches; one alone is deleting its line.
 11. `-u` keeps lock lines for repositories the build does not reach (programs in one directory share the lock).
 12. `-d` (debug) beside `-D` (define), differing only in case.

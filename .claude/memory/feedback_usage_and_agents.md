@@ -23,3 +23,15 @@ plan's usage - `list_events` (claude-code-remote MCP) on the session id from the
 `kinds: ["rate_limit_event"]`, gives `unifiedWindows.five_hour` and `.seven_day` utilization (0-1) and `resetsAt`
 (unix time). Low weekly use close to its reset: spend freely, more agents in parallel. High use early in the week:
 fewer, cheaper agents. On 2026-10-08 20:40 UTC it read five_hour 0.18, seven_day 0.08, weekly reset Sat 04:00 UTC.
+
+**First lesson (2026-10-08):** six implementation agents took the five-hour window from 18% to 39% in fifteen minutes
+(~1.4%/min), so the five-hour window, not the week, is what binds while agents run. Size the batch to what is left of
+the window and the time to its reset; two of the six were paused (TaskStop) and resumed after the reset (SendMessage
+continues a stopped agent with its context). The user asked to be reminded of this rule: "Remember the rule about
+matching usage to agent spawning".
+
+**Waking up after a reset** (the user: "can you start yourself again after a ... five hour window reset ... So I don't
+have to start you manually"): whenever work is left that the window will not cover, arm `send_later` (claude-code-
+remote MCP) for a few minutes after `resetsAt`, with a message saying what to resume. Arm it BEFORE the window runs
+out - a session stopped by the limit cannot arm anything. Uncommitted worktree changes survive only as long as the
+container, so have agents commit as they finish.
