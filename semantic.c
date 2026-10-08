@@ -4383,6 +4383,7 @@ enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
     TYPE_FIT_NUMBER,        //T6b - two numeric types, the value's not flowing into the target's
+    TYPE_FIT_LITERAL_EXPR,  //T6a - as above, for a value built only from literals ("f F32 = 0.5 * 2.0")
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
     TYPE_FIT_SCOPE_OWN,     //O10d: own into a named scope. Rejected like the above, but told apart because
                              //no caller could ever satisfy it - the fix is in this body, not at a call site
@@ -4404,6 +4405,23 @@ static bool intLiteralFitsIntType(long long v, struct type to) {
     return v >= -lim && v < lim;
 }
 
+//T6a: whether op is built only from numeric literals and arithmetic on them - "0.5 * 2.0". Such a value is not itself
+//a literal (E4), so it keeps its literals' own type (F64 for a float) and adapts to nothing; told apart only so the
+//error can say so, since it reads as though it should adapt as a lone literal does
+static bool operandOnlyNumericLiterals(struct operand* op) {
+    if (op->isLiteral) return TypeIsNumeric(op->type);
+    switch (op->opType) {
+        case OPERATION_MINUS: case OPERATION_BTWSE_INV: case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL:
+        case OPERATION_DIV: case OPERATION_MOD: case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR: break;
+        default: return false;
+    }
+    for (int i = 0; i < op->args.len; i++) {
+        if (!operandOnlyNumericLiterals(*(struct operand**)ListGetIdx(&op->args, i))) return false;
+    }
+    return op->args.len > 0;
+}
+
 //true if numeric LITERAL `lit` may implicitly adapt to a `to`-typed target - the one exception T6 carves
 //out of "no implicit conversion between distinct types." A literal has no fixed width/representation of
 //its own yet (unlike an already-evaluated non-literal value, which does, and needs an actual runtime
@@ -4420,7 +4438,7 @@ static bool intLiteralFitsIntType(long long v, struct type to) {
 bool numericLiteralFits(struct operand* lit, struct type to) {
     if (!TypeIsNumeric(lit->type) || !TypeIsNumeric(to)) return false;
     if (TypeIsFloat(lit->type)) return TypeIsFloat(to);
-    if (TypeIsFloat(to)) return true; //any integer literal is representable in either float type
+    if (TypeIsFloat(to)) return true; //any integer literal is representable in any float type
     return intLiteralFitsIntType(lit->intLiteralVal, to);
 }
 
@@ -4866,7 +4884,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         int fs = 0, fd = 0;
         if (!op->isLiteral && !TypeIsSame(target, op->type) && numericFamilyRank(op->type, &fs) >= 0
                 && numericFamilyRank(target, &fd) >= 0 && !(op->type.owner && !target.owner && op->type.bType == target.bType))
-            return TYPE_FIT_NUMBER;
+            return operandOnlyNumericLiterals(op) ? TYPE_FIT_LITERAL_EXPR : TYPE_FIT_NUMBER;
     }
     if (TypeIsSame(target, op->type)) {
         //a struct or compile-time-length array is reference-shaped only when explicitly "&"-marked (structMAlloc) - a
@@ -5031,6 +5049,7 @@ void reportTypeFit(enum typeFit fit, struct token tok) {
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) ErrMsgSemantic(tok, ELEM_REF_SHAPE_MISMATCH);
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
     else if (fit == TYPE_FIT_NUMBER) ErrMsgSemantic(tok, NUMBER_DOES_NOT_FLOW);
+    else if (fit == TYPE_FIT_LITERAL_EXPR) ErrMsgSemantic(tok, LITERAL_EXPR_DOES_NOT_FLOW);
     else if (fit == TYPE_FIT_CTOR) ErrMsgSemantic(tok, PRIM_CTOR_LITERAL);
     else if (fit == TYPE_FIT_READ_ONLY) ErrMsgSemantic(tok, READ_ONLY_TO_WRITABLE);
 }
@@ -6599,8 +6618,10 @@ struct operand* OperandIntLiteral(struct token tok) {
     return op;
 }
 
+//T6a: a float literal's own type is F64, as in C, Go and Rust - so "x := 0.1" and a generic "describe(0.1)" hold the
+//double nearest 0.1, not the float nearest it. A typed target still adapts it (T6): "f F32 = 0.1" stays an F32.
 struct operand* OperandFloatLiteral(struct token tok) {
-    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_FLOAT32));
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_FLOAT64));
     op->isLiteral = true;
     char buf[tok.str.len +1];
     memcpy(buf, tok.str.ptr, (size_t)tok.str.len);

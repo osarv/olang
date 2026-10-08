@@ -7892,3 +7892,56 @@ from their original form.
   sentence saying text compares "by E10, not by content" was stale too since E10a (`==` on a `String` calls `Eq`).
   `checks/cases/b10text` pins it - a call deciding a top-level condition, a comparison at run time, a `String&`
   argument - and fails with five errors on the previous compiler.
+
+- **Float literals are `F64` (T6a, 2026-10-08, the user: "do the float default to F64").** Raised by the records audit
+  the same day as an open question (it had been noted in this history, never asked): a float literal with nothing to
+  adapt it to was an `F32`, so `x := 0.1` held 0.10000000149011612, `describe(0.1)` through a bare `<T>` was
+  instantiated at `F32`, and `y F64 = 0.1 + 0.2` summed in single precision and widened (0.30000001192092896). C, Go
+  and Rust default to 64-bit. Why `F32` was ever chosen is not recorded anywhere - it predates the spec's own history
+  of T6a, which is about the integer half (an integer literal too large for `I32` being typed `I64`).
+
+  **The change is one line**: `OperandFloatLiteral` types the literal `F64`. Everything else reads the literal's
+  type and follows without a change of its own - T6's adaptation (`f F32 = 0.1` still adapts, as does a literal
+  beside an `F32` operand, an `F16` parameter, a `case` value), G9a (a variable only literals reach takes the widest
+  of their types, now `F64`), `-D` float constants (B10 builds them with the same function), `:=`, codegen's
+  constants, the evaluator (`ctFloat` rounds to `op->type`) and `-i`. The full suite passed unchanged before any test
+  was added.
+
+  **What changes meaning, and why it is the existing rule rather than a new one.** E4 makes only a token literal (or
+  one negated) a literal; an expression built from literals is an ordinary value of the type its operands meet at,
+  and never adapted. So `f F32 = 0.5 * 2.0` - legal while the product was an `F32` - is now an `F64` that does not
+  flow into an `F32` (T6b), exactly as `b U8 = 1 + 2` was already rejected (an `I32`). Its message used to be T6b's
+  generic one; it now gets its own (`LITERAL_EXPR_DOES_NOT_FLOW`, chosen by `operandOnlyNumericLiterals` in the fit
+  check), saying the expression is not a literal, what its type is, and to write `F32(0.5 * 2.0)` - which applies to
+  the integer case too. The silent half: `g < 1.0 / 3.0` with `g` an `F32` now widens `g` and compares two `F64`s, as
+  C does (Go's untyped constants and Rust's inference would compare in `F32`). Nothing in the corpus or std wrote
+  either shape (searched: every float-literal-only expression is a conversion's argument or meets an `F64`), so
+  nothing was migrated. Making literal-only expressions adapt (untyped constants, as in Go) was not done - it is a
+  language change, and flagged.
+
+  **A disagreement it removes, found while checking the token evaluator.** B9a's evaluator computes on tokens before
+  any type exists, and always did floats as doubles - correct only if an untyped float is an `F64`. Before this, with
+  `X := 0.1` at the top level, `if X * 3.0 == 0.3` was decided **false** (double arithmetic) while the same
+  expression at run time was **true** (`0.1f * 3.0f` rounds to `0.3f`, and `0.3` adapted to `F32` is that too) -
+  measured on the previous compiler. Now both say false. A global declared with a narrower float type
+  (`X F32 = 0.1`) still disagrees the same way, as an `I32` global that would wrap does: B9a reads globals "as their
+  values", so this is the spec'd simplification, recorded rather than changed.
+
+  **Two stale spec sentences fixed on the way.** G9a's example said `Pick(1, 2.5)` instantiates at `F64`, which was
+  false until now (it was `F32`); and T6/`LITERAL_NOT_REPRESENTABLE` said an integer literal fits "either float type",
+  written when there were two (T4 made it four). T6's both-literals ranking listed `U8` and `F32`, which are no
+  literal's own type any more (a character literal is a `Char`); it now lists the types T6a gives.
+
+  **Tests.** shared.olang's T6a float test checks the default where the evaluator decides it (fixed locals, a generic
+  through `match <T>`, G9a, `$` through a generic, an adapted `F32`) and bakes `FloatLitSum F64 = 0.1 + 0.2`
+  (0x3FD3333333333334, K2), then computes the same sum at run time from a written local and compares the two - the
+  only assert left in the emitted test, the rest decided while compiling. All of it fails on the previous compiler.
+  `checks/cases/b10float` (`-D Tenth=0.1` is the double nearest 0.1, while compiling and at run time) and
+  `checks/cases/t6afloatexpr` (the new message).
+
+  **Left as questions.** `$` renders a float with `%.17g`, so `$0.1` is now `0.10000000000000001` rather than the
+  `0.1` Go, Rust and JavaScript print; the spec already leaves the digit count to the implementation (E11a), so the
+  shortest text that reads back as the same value is an implementation change, not a language one. And a float
+  literal beyond a narrower target's finite range adapts to infinity (`f F32 = 1e39`), where an out-of-range integer
+  literal is an error - T6 defines a float literal as representable in any float type. Both are older than this
+  change; before it, `x := 1e39` was itself an infinity.
