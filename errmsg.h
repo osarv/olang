@@ -5,9 +5,10 @@
 // ---- CLI ----
 
 #define NO_FILE_SPECIFIED "no file specified"
-#define EXPECTED_C_OR_T_FLAG "expected -c or -t"
-#define EXPECTED_ONE_COMPILE_FILE "-c takes exactly one file"
+#define EXPECTED_C_OR_T_FLAG "expected a mode first: -b (build), -c (compile one module) or -t (test) (B1)"
+#define EXPECTED_ONE_COMPILE_FILE "-b and -c take exactly one file"
 #define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
+#define UNKNOWN_FLAG "unknown flag - every flag is one character: the modes -b -c -t, and the modifiers -r (race detector), -d (debug), -u (update olang.lock) and -D Name=value (B1)"
 #define NOT_A_REGULAR_FILE "not a regular file (is this a directory?)"
 
 // ---- tokenizer ----
@@ -73,7 +74,7 @@
 #define IMPORT_HAS_EXTENSION "an import names a file without its '.olang' extension - write 'import \"geom/rect\"', not 'import \"geom/rect.olang\"' (M23)"
 #define IMPORT_LEAVES_ROOT "a relative import inside the standard library or a remote repository stays within it - name a module outside it by its own path ('std/...' or 'host/owner/repo/...') (M23)"
 #define IMPORT_REMOTE_NEEDS_FILE "a remote import names a file within the repository: 'host/owner/repo[@ref]/path' (M23)"
-#define IMPORT_LOCKED_FETCH_FAILED "could not fetch the commit olang.lock names for this repository - it may no longer exist on the remote. Check the connection, or delete its line in olang.lock or build with -update, to build from the ref's current commit instead (M23b, M23c)"
+#define IMPORT_LOCKED_FETCH_FAILED "could not fetch the commit olang.lock names for this repository - it may no longer exist on the remote. Check the connection, or delete its line in olang.lock or build with -u, to build from the ref's current commit instead (M23b, M23c)"
 #define IMPORT_FETCH_FAILED "could not fetch this remote repository with git - check the path and your connection; once fetched it is kept in the cache (OLANG_CACHE) and needs no network again (M23a)"
 #define IMPORT_FILE_NOT_FOUND "no .olang file at this path - a relative path is resolved from the importing module's own directory, 'std/...' from the standard library (M23)"
 #define IMPORT_ALIAS_CONFLICT "this alias is already used by another import in this module - give one of them an explicit alias (M5)"

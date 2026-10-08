@@ -1679,7 +1679,7 @@ test "P1g: the plain form is unchanged" {
 # around a million. O2 records this exact trap for scope headers and hoisted THOSE; ordinary locals were
 # missed, and mem2reg hid it at -O3 wherever it could promote them - which it cannot when the address
 # escapes into a call it cannot inline, i.e. an ordinary cross-module call. So it was a live bug in
-# optimized builds, not only under -debug, and it needs a million iterations to show.
+# optimized builds, not only under -d, and it needs a million iterations to show.
 type Pt struct(a I32, b I32) {
     X mut I32 = a
     Y mut I32 = b

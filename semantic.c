@@ -698,7 +698,7 @@ static void lockLoad(void) {
     fclose(f);
 }
 
-//M23c: "-update" - each repository the compilation reaches is resolved afresh, once, whatever its line says. Updated
+//M23c: "-u" - each repository the compilation reaches is resolved afresh, once, whatever its line says. Updated
 //keys are recorded with the lock file they belong to, so another root's lock in the same run is its own.
 static bool updateLocks;
 static struct list lockUpdated; //char*: lock path, a newline, the key
@@ -743,7 +743,7 @@ static void lockSet(const char* key, const char* commit) {
     FILE* f = fopen(lockPath, "w");
     if (!f) return;
     fputs("# olang.lock - the commit each remote repository is built from (M23b). Delete a line to update that\n"
-          "# repository, or build with -update to update every one the build reaches (M23c).\n", f);
+          "# repository, or build with -u to update every one the build reaches (M23c).\n", f);
     bool* done = MallocOrCrash(sizeof(bool) * (size_t)(lockKeys.len + 1));
     for (int i = 0; i < lockKeys.len; i++) done[i] = false;
     for (int n = 0; n < lockKeys.len; n++) {
@@ -793,7 +793,7 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
     fits = fits && (size_t)snprintf(parent, sizeof(parent), "%s/%s/%s/%s", cache, host, owner, repo) < sizeof(parent);
     if (!fits) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
     const char* locked = lockFind(key);
-    //M23c: under -update a locked line is set aside the first time its repository is reached
+    //M23c: under -u a locked line is set aside the first time its repository is reached
     char was[128] = "";
     if (locked && updateLocks && !lockUpdatedNow(key, false)) {
         snprintf(was, sizeof(was), "%s", locked);

@@ -45,7 +45,7 @@ struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry reco
 
 struct cgCtx {
     struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
-    //B2e: -debug's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
+    //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
     //comes from dbgNext, which starts far above anything the TBAA metadata uses.
     bool debug;
     FILE* dbgOut;
@@ -6178,7 +6178,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
 
     //B3c/B3d: a generic's instantiation is defined by the compilation's root object only, so it must SURVIVE
     //that object: "linkonce_odr" may be discarded by a translation unit that does not call it, which a
-    //non-LTO build (-race) does before the object is written. "weak_odr" is kept, and still merges with
+    //non-LTO build (-r) does before the object is written. "weak_odr" is kept, and still merges with
     //the copy a "-c" object of an imported module may carry.
     fprintf(ctx->fnOut, "define %s%s %s(", shared ? "weak_odr " : func->isLambda ? "internal " : "", retTy, name);
     cgEmitParamList(ctx->fnOut, func, true);
@@ -6623,7 +6623,7 @@ static void cgWriteSanitized(FILE* dst, char* buf, size_t len) {
         size_t lineLen = end - i;
         //"define <...> {" - the attribute group goes immediately before the brace. The last brace on the
         //line is the right one: a struct return type ("define { i32, i32 } @f() {") contains others.
-        //Under -debug the line also carries "!dbg !N", and attributes must come before it.
+        //Under -d the line also carries "!dbg !N", and attributes must come before it.
         if (lineLen > 7 && !strncmp(&buf[i], "define ", 7) && buf[i + lineLen -1] == '{') {
             char* dbg = memmem(&buf[i], lineLen, " !dbg ", 6);
             size_t cut = dbg ? (size_t)(dbg - &buf[i]) : lineLen -1;

@@ -2817,6 +2817,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   signature's scope variable and crashed codegen (now read-only-scoped, as a borrowed field is); a `<T>&` field's
   `&of` was lost on substitution. Corpus: the interface section rewritten as traits + an enum for mixed collections;
   Base/runner's sealed trait; seven interface-value tests removed. Iterator defaults measured at hand-loop speed.
+- **Every flag is one character (B1, 2026-10-08, the user: "I want the flags to be one character -b -c -r -u etc not
+  entire words").** `-race` is `-r`, `-debug` is `-d`, `-update` is `-u`; `-b`, `-c`, `-t` and `-D` were already one.
+  `-d` and `-D` differ only in case - debug, and a define taking `Name=value` - kept so since the user's list follows
+  first letters. An argument beginning with `-` that is no flag is an error naming every flag, so an old long spelling
+  is reported rather than read as a file name (the user removed retired-spelling diagnostics before, and this is not
+  one: it names no old spelling). Entries above that predate this still write the long forms.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

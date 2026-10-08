@@ -1229,7 +1229,7 @@ ref has moved since. A repository without one is resolved to its ref's current c
 and committing the file makes every checkout build the same code. A commit names its exact content, so the lock needs
 no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock.
 
-**M23c (updating).** `-update` is a **modifier**, valid in any position alongside any mode (B2b). Every remote
+**M23c (updating).** `-u` is a **modifier**, valid in any position alongside any mode (B2b). Every remote
 repository the compilation reaches is resolved as though the lock file had no line for it - fetched at its ref's
 current commit (M23b) - and its line is rewritten; one whose ref has not moved keeps the line it had. A repository is
 updated at most once per compilation, however many of its modules are imported. Lines for repositories the
@@ -2619,7 +2619,7 @@ promised a guarantee it did not provide — and since P3a is now explicit that P
 begin with, an exemption from it had nothing left to mean. A type that really does synchronise itself still
 works exactly as before; what is gone is the marker that told the compiler to stop asking.
 
-**P7.** Data races are detected at **run time**, not compile time. Building with `-race` (valid alongside
+**P7.** Data races are detected at **run time**, not compile time. Building with `-r` (valid alongside
 any mode) instruments every emitted function and links LLVM's ThreadSanitizer; a detected race is reported
 against the olang function it occurred in, and the process exits nonzero. This is a build mode, not a
 language feature: it changes no rule in this section, and an uninstrumented build behaves exactly as
@@ -2640,7 +2640,7 @@ atomic operation is understood, and anything establishing ordering by other mean
 making the chunk pool (§8.7) shared rather than per-thread — must annotate itself, or correct code will be
 reported.
 
-`-race` is a whole-build mode rather than a per-file one, because the runtime (§8.7) is emitted
+`-r` is a whole-build mode rather than a per-file one, because the runtime (§8.7) is emitted
 `linkonce_odr` into every object: mixing an instrumented object with an uninstrumented one would leave the
 linker free to keep either copy. An instrumented object is therefore a distinct artifact from a clean one
 (§10 B4) and is named accordingly.
@@ -2681,7 +2681,7 @@ value discarded.
 ordered with respect to each other, so a program built from them alone contains no data race under P8b. A
 plain access and an atomic access to the same location are **not** ordered, and are a race exactly as two
 plain accesses would be — this language has no type that marks a location as atomically-accessed, so
-keeping every access to such a location atomic is the program's own responsibility, and `-race` (P7) is
+keeping every access to such a location atomic is the program's own responsibility, and `-r` (P7) is
 what checks it.
 
 ### 6.8.1 Memory model
@@ -2712,7 +2712,7 @@ define what such a program does, and no guarantee stated anywhere else applies t
 
 There is no exception for any type or size. olang has no atomic operations, so **no** access is atomic —
 not a `U8`, not an `I32`, not a pointer — and a concurrent read of something being written may observe
-a value that was never stored. `-race` (P7) detects races that actually occur on a given run, which is a
+a value that was never stored. `-r` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
 
 **P8c.** A program adds ordering of its own by calling a synchronisation primitive through `extern fn`
@@ -3496,38 +3496,40 @@ type happens to declare a destructor.
 
 **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
 object file and linked with the others. The compiler operates in exactly one of three modes, selected
-by a command-line flag; there is no other entry point.
+by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
+(B3) and `-t` (B3a), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
+beginning with `-` is an error.
 
 **B2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
 linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
 read and analyzed, because that is where their declarations come from (B2a); only code generation is
 confined to `<file>` itself. `main` is neither required nor emitted.
 
-**B2b.** `-race` is a **modifier**, valid in any position alongside any of the modes above, and it applies
+**B2b.** `-r` is a **modifier**, valid in any position alongside any of the modes above, and it applies
 to the whole build: every emitted function is instrumented and ThreadSanitizer is linked in (§6.8 P7).
 Because the instrumented form of a module is a different artifact from its clean one, it is named
-separately (B4) — so a `-race` build never silently reuses a clean object, and the two can be current at
+separately (B4) — so a `-r` build never silently reuses a clean object, and the two can be current at
 the same time.
 
 **O2c.** Storage for a local or a temporary is reserved once per **call**, never once per execution of the
 statement declaring it. A declaration inside a loop therefore costs nothing per iteration, and a loop of
 any length runs in constant stack.
 
-**B2c.** Generated code is **fully optimized by default**, in every mode. `-debug` is the single exception:
+**B2c.** Generated code is **fully optimized by default**, in every mode. `-d` is the single exception:
 it disables optimization so that the emitted code corresponds to the program as written — nothing is
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is a modifier, valid alongside any mode and in
-any position, and composes with `-race`.
+any position, and composes with `-r`.
 
-**B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
+**B2e.** Under `-d` the build also carries **source-level debug information** (DWARF): every function
 of the program has a source location and its own name, every statement a line, and every parameter and local
 of a primitive or reference type its name and value. A debugger can therefore break on a function or a
 `file:line`, step by statement, show arguments and locals, and print a backtrace in source terms. A by-value
 aggregate local is not yet described, and a test build's `test` blocks share one function scope. Outside
-`-debug` no debug information is emitted.
+`-d` no debug information is emitted.
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
-a `-debug` build would silently reuse optimized objects and be exactly what was not asked for.
+a `-d` build would silently reuse optimized objects and be exactly what was not asked for.
 
 **O2d.** Where a call binds one of a callee's scope variables to the caller's own scope, the **block** that
 means is decided by what bound it. A binding an argument determines (O17) refers to the block the
@@ -3541,7 +3543,7 @@ block's scope, and a value the caller holds outside it is reclaimed at the block
 **B2d.** A build is **link-time optimized**. Each module is compiled to an intermediate form and the whole
 program is optimized once, at the link, so a call into another module is subject to inlining — and to
 everything inlining enables — exactly as a call within one module is. This holds wherever optimization
-holds: `-debug` (B2c) disables it along with the rest, and `-race` (§6.8 P7) does not use it, because
+holds: `-d` (B2c) disables it along with the rest, and `-r` (§6.8 P7) does not use it, because
 attributing a report to the right function depends on code not moving between them. Those builds produce
 distinct artifacts already (B4), so an optimized object and one that is not are never mixed.
 
@@ -3666,7 +3668,7 @@ compile-time error, as is defining one name twice.
 **B10a.** Every build defines five build constants of its own, and `-D` may not redefine them:
 `TargetOs` and `TargetArch`, text naming the target's operating system (lowercase, e.g. `"linux"`) and
 architecture (e.g. `"x86_64"`) — the host's, since compilation is not yet cross-target; and `DebugBuild`,
-`RaceBuild` and `TestBuild`, `Bool`s saying whether the build is `-debug`, `-race` and `-t` respectively.
+`RaceBuild` and `TestBuild`, `Bool`s saying whether the build is `-d`, `-r` and `-t` respectively.
 
 **B10b.** The build constants' values are part of what a module compiles to — a top-level condition may
 take a different branch under different ones, and compile-time evaluation (K2) may make one part of a

@@ -354,7 +354,7 @@ struct lambdaCapture {
 
 struct statement {
     enum statementType sType;
-    int line; //B2e: the source line the statement starts on, for -debug's line table; 0 when synthesized
+    int line; //B2e: the source line the statement starts on, for -d's line table; 0 when synthesized
     struct str file; //B2e/M22: the source file that line is in - a package's functions come from several
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
@@ -678,7 +678,7 @@ int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15)
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
-//M23c: "-update" - every remote repository the compilation reaches is resolved to its ref's current commit
+//M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit
 void SemanticSetUpdate(bool on);
 
 #endif //SEMANTIC_H

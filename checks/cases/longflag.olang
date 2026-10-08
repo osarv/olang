@@ -1,0 +1,4 @@
+# check: fail unknown flag
+# flags: -race
+# B1: every flag is one character - a long spelling is an unknown flag, never taken for a file name
+fn main() ? { }

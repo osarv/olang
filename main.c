@@ -11,14 +11,14 @@
 #include "util.h"
 #include "errmsg.h"
 
-//P7: "-race" builds everything under ThreadSanitizer. It is a whole-build mode rather than a per-file
+//P7: "-r" builds everything under ThreadSanitizer. It is a whole-build mode rather than a per-file
 //one: the runtime is emitted linkonce_odr into every object, so mixing an instrumented object with an
 //uninstrumented one would let the linker keep either copy.
 static bool gRace = false;
 //S18b/P1d: only a test binary can longjmp, so only a test build carries the open-scope chain. That makes
-//a module's test-build object a different artifact from its plain one, exactly as -race does.
+//a module's test-build object a different artifact from its plain one, exactly as -r does.
 static bool gTestBuild = false;
-//B2c: "-debug" is the one mode that turns backend optimization OFF. Everything else is built at full
+//B2c: "-d" is the one mode that turns backend optimization OFF. Everything else is built at full
 //optimization deliberately - the language's own line is that you get what the machine can do unless you
 //asked otherwise, so this is the exception rather than one end of a spectrum of levels.
 static bool gDebug = false;
@@ -29,13 +29,13 @@ static bool gDebug = false;
 static const char* modeFlags(void) {
     if (gDebug && gRace) return "-O0 -g -fsanitize=thread";
     if (gDebug) return "-O0 -g";
-    //-O1 under -race: TSan reports name the function a race is in, and -O3 inlines enough of the small
+    //-O1 under -r: TSan reports name the function a race is in, and -O3 inlines enough of the small
     //accessors that the name is regularly the caller's rather than the culprit's
     if (gRace) return "-O1 -fsanitize=thread";
     //B2d: "-flto" puts the optimizer over the whole program at the link, so a cross-module call inlines
     //like a same-module one. Not thin LTO: measured indistinguishable at run time here and slower to
     //build, since its parallel machinery has a fixed cost and a handful of modules has nothing to
-    //parallelize. Left out of -race above for the same reason that path is -O1.
+    //parallelize. Left out of -r above for the same reason that path is -O1.
     return "-O3 -flto";
 }
 
@@ -150,9 +150,9 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
     //would overwrite each other, and a plain object left by "-c" would look current to "-b" while
     //missing main entirely - which is why this used to force the root to rebuild every time.
     //an instrumented object is a different artifact again, for the same reason, so it gets its own name -
-    //otherwise a "-race" build silently reuses a clean object and the detector never sees that code
-    //a debug object is a different artifact from an optimized one, exactly as a -race object is: without
-    //its own name a "-debug" build silently reuses optimized objects and produces no debug info at all,
+    //otherwise a "-r" build silently reuses a clean object and the detector never sees that code
+    //a debug object is a different artifact from an optimized one, exactly as a -r object is: without
+    //its own name a "-d" build silently reuses optimized objects and produces no debug info at all,
     //with no diagnostic - the same staleness trap B4 records for .main.o/.test.o
     //B10b: what the -D constants say is part of what an object IS - a top-level condition may take a
     //different branch, and compile-time evaluation may bake a value into data - so an object is named by
@@ -315,20 +315,25 @@ static void defineBuiltinConsts(bool testBuild) {
 }
 
 int main(int argc, char** argv) {
-    //"-race", "-debug", "-update" and "-D" are modifiers, valid alongside any mode and in any position, so they are
+    //"-r", "-d", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
     //stripped out before the mode dispatch below reads argv positionally
     int outp = 1;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-race")) { gRace = true; continue; }
+        if (!strcmp(argv[i], "-r")) { gRace = true; continue; }
         //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
-        if (!strcmp(argv[i], "-update")) { SemanticSetUpdate(true); continue; }
-        if (!strcmp(argv[i], "-debug")) { gDebug = true; continue; }
+        if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
+        if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
         if (!strcmp(argv[i], "-D")) {
             if (i + 1 >= argc) { fprintf(stderr, "olang: -D takes Name=value\n"); return EXIT_FAILURE; }
             defineFromArg(argv[++i]);
             continue;
         }
         if (!strncmp(argv[i], "-D", 2)) { defineFromArg(argv[i] + 2); continue; }
+        //B1: every flag is one character; anything else beginning with "-" is a mistake, not a file name
+        if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")) {
+            fprintf(stderr, "olang: %s: ", argv[i]);
+            ErrMsgFatal(UNKNOWN_FLAG);
+        }
         argv[outp++] = argv[i];
     }
     argc = outp;

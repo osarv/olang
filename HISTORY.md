@@ -7782,3 +7782,13 @@ from their original form.
   `-update` moves `example.com/me/tools` (remote.olang's compile-time assert then fails, as it does when the line is
   deleted), reports it, and leaves `@v1`, whose tag has not moved, with the line it had. Checked by hand as well that
   a repeated `-update` reports "already at" and fetches each repository once, and that the flag works after the file.
+
+- **One-character flags (B1, 2026-10-08).** The user: "I want the flags to be one character -b -c -r -u etc not
+  entire words". The three word flags became their first letters - `-r` (race detector, P7/B2b), `-d` (debug, B2c),
+  `-u` (update the lock file, M23c) - everywhere they appear: the driver, comments in the compiler, the makefile's
+  `race` target, the checks and the spec. `-d` beside the existing `-D` was weighed (a lowercase and uppercase pair
+  meaning different things) and kept, following the user's first-letter list; `-D` takes an argument and `-d` none, so
+  a slip is reported rather than silently misread. Before this, an unknown flag fell through to the mode dispatch or
+  was taken as a file name; now any argument beginning with `-` that is not a flag is a fatal error listing them all,
+  and `checks/cases/longflag.olang` pins it with the old `-race`. The "expected -c or -t" message, stale since `-b`
+  existed, names all three modes now. HISTORY and older CLAUDE.md entries keep the spellings of their time.

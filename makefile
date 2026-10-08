@@ -75,7 +75,7 @@ verify:
 # that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly
 # one race, in shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
 race: build/out
-	-build/out -t -race $(filter-out checks/checks.olang, $(OLANG_TESTS))
+	-build/out -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
 	@echo "race: expect exactly one report, in shared.Tally.readOut (the intentional one)"
 
 all: clean build run

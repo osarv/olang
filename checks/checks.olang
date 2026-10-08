@@ -104,7 +104,7 @@ test "std/map beside a local map.olang" {
 }
 
 # M23a/M23b/M23c: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
-# branch, olang.lock pins each to a commit, -update moves them on, and a second build reads the cache and never touches
+# branch, olang.lock pins each to a commit, -u moves them on, and a second build reads the cache and never touches
 # git - the remote is removed to prove it
 test "a file in a remote repository, fetched once into the cache" {
     dir := fresh("remote")
@@ -129,9 +129,9 @@ test "a file in a remote repository, fetched once into the cache" {
     # with the cache gone, the locked commit is fetched again - not the branch's new head
     assert sh(dir, "rm -rf cache && touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked refetch", dir)
     assert outOf(dir).Contains("as olang.lock says")
-    # M23c: -update moves every repository the build reaches to its ref's current commit, once each - the branch's
+    # M23c: -u moves every repository the build reaches to its ref's current commit, once each - the branch's
     # new head (so remote.olang's assert fails while compiling) - and leaves v1, which has not moved, as it was
-    assert sh(dir, "cp olang.lock before.lock && touch remote.olang && " $env "\"$OLANG\" -update -b remote.olang > out.txt 2>&1") != 0
+    assert sh(dir, "cp olang.lock before.lock && touch remote.olang && " $env "\"$OLANG\" -u -b remote.olang > out.txt 2>&1") != 0
     assert outOf(dir).Contains("it is false")
     assert outOf(dir).Contains("updated example.com/me/tools to") and outOf(dir).Contains("example.com/me/tools@v1 is already at")
     assert sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0
@@ -187,7 +187,7 @@ test "a proven assert leaves no run-time check" {
 test "a literal reaching a read-only reference is static data" {
     dir := fresh("static")
     os.Run("cp checks/fixtures/static/* " $os.Quote(dir))
-    assert sh(dir, "\"$OLANG\" -b -debug lit.olang > out.txt 2>&1 && ./build/lit.debug") == 0 or failed("static", dir)
+    assert sh(dir, "\"$OLANG\" -b -d lit.olang > out.txt 2>&1 && ./build/lit.debug") == 0 or failed("static", dir)
     ll String& = " build/lit.main.debug.ll"
     assert sh(dir, "grep -q 'constant .3 x i32. .i32 3, i32 4, i32 5.'" $ll) == 0
     assert sh(dir, "grep -q 'lit_total(ptr %[a-z0-9.]*, { i64, ptr } { i64 3, ptr @.arr'" $ll) == 0
