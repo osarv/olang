@@ -100,6 +100,16 @@ std/os (X6/B3f, 8fb6afd):
 56. `Exists`/`IsDir` answer with a Bool (a yes/no question, not a missing value); `Stat` follows symlinks; no lstat.
 57. `MkDirAll` reports a file in the way as `NOT_DIR` (Go's rule); files are created 0666, directories 0777, both
     reduced by the umask.
+List / text builder (42a4135):
+58. The builder is named `StringBuilder` (a prelude name is reserved everywhere, so not `Builder`/`Text`; alternative
+    `TextBuilder`), with `Push(String&)`, `PushChar(Char)`, `Len()`, `ToString()`; no `Str()` (so `$b` does not render
+    its text) and no way to write it out without flattening first (a chunk iterator could add that).
+59. `List.PushAll(a Array<T>&)` appends a whole array (alternatives `Append`, `Extend`).
+60. List finds the chunk for `l[i]` with six comparisons in olang rather than a new leading-zeros builtin.
+61. `l[i]` is a copy, so `l[i].x = v` is an error (a generic `At` cannot return a borrow - T might be a number).
+62. `MapIter` was rewritten too (same per-element walk defect, same cause).
+63. Pushing to a List while a loop walks it: the iterator re-reads the count, so it sees elements added before it
+    reaches the end (as a counted loop would). The spec says nothing - should it? Default: as built.
 
 **ON HOLD (the user: "hold it off"):** passing arrays by value (dropping D9a for parameters). Returning one by value
 already exists (T7b).
