@@ -1,6 +1,6 @@
 # check: fail declared on a mutable receiver
 type C struct(n Int32) { n mut }
-fn (c C&) Next() (Int32, Bool) { return 0, false }
+fn (c C&) Next() Int32 ? Exhausted { error Exhausted.END }
 error E { X }
 fn main() ? E {
     c C& = C(0)

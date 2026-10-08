@@ -1201,7 +1201,11 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         }
         case OPERATION_FUNCCALL: {
             struct ctVal* r = ctCall(st, op);
-            if (!r && op->isTried && st->flow == CF_ERROR) return ctHandleTry(st, op);
+            if (!r && op->isTried && st->flow == CF_ERROR) {
+                r = ctHandleTry(st, op);
+                //S9a: what its own clauses did not take goes to the try it sits under, if any (a comprehension's Next)
+                if (!r && st->flow == CF_ERROR && op->checkRoot) st->errCheckRoot = op->checkRoot;
+            }
             return r;
         }
         case OPERATION_LEN: {

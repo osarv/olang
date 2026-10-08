@@ -810,17 +810,20 @@ Dispatch selects one already-compiled function through a run-time value, and a m
 right names a family of functions not chosen until a call; there is nothing for the dispatch to point at.
 
 **T35a (generic interfaces).** An interface type may declare type parameters, after its name exactly as a
-struct type does (G6): `type Source<T> interface { mut Next() (<T>, Bool) }`. Its method signatures may use
+struct type does (G6): `type Source<T> interface { mut Next() <T> ? Exhausted }`. Its method signatures may use
 them, including in a result alone (G4 does not apply: the interface's own variables are fixed by its
 arguments, not inferred at a call). An **application** such as `Source<Int32>` is an ordinary interface
 type — its methods concrete, so every T30–T34 rule applies to it unchanged — and two applications are the
 same type exactly when their arguments are (G16a). A generic function may take `Source<<T>>&`, binding `T`
-from an interface value's arguments (G9). A method of a generic type (`fn (b mut Box<<T>>&) Next() (<T>,
-bool)`) satisfies an interface through the instantiation the concrete receiver determines, which is one
+from an interface value's arguments (G9). A method of a generic type (`fn (b mut Box<<T>>&) Next() <T> ?
+Exhausted`) satisfies an interface through the instantiation the concrete receiver determines, which is one
 function; a method with type variables its receiver does not determine satisfies nothing.
 
-**T35b (built-in interfaces).** The prelude (M19d) declares `type Iterator<T> interface { mut Next() (<T>,
-Bool) }`, visible in every module. It is what `for ... in` walks besides an array and a range (S9a).
+**T35b (built-in interfaces).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T>
+interface { mut Next() <T> ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
+`Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
+`for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
+`v := try it.Next() catch Exhausted { break }`.
 The prelude declares `type Indexable<T> interface { At(i Int64) <T>  Len() Int64 }` and, as its default (M19e),
 `Iter()` giving an `IndexIter<T>` over positions `0` to `Len() - 1` - so a type with `At` and `Len` and no `Iter` of
 its own reaches the iterator helpers (`g.Iter().Count(f)`).
@@ -2241,7 +2244,8 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
 - an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in interface, or a value of it.
-  Each iteration calls `Next()`; `false` ends the loop and `x` is the `T` otherwise. The loop holds its own
+  Each iteration calls `Next()`; `Exhausted` ends the loop - the loop takes it itself, so it needs no `try` - and
+  `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
 - an **indexable** value (S9d): one whose type has `At(i Int64) T` and `Len() Int64` (E31) and neither a `Next()` nor
@@ -2258,15 +2262,17 @@ Anything else after `in` is a compile-time error. `break` and `continue` (S11) a
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
 a call, `Iter()`, `Next()`, `TryAt()` - and any of them may declare errors. Such a loop is written with `try` after
 `in`, which covers exactly those calls (a call written in the body takes its own `try`); one whose own calls cannot
-fail may not be written with it, and one whose own calls can fail must be. `Next()` may then declare errors - the
-iterator does not satisfy `Iterator<T>`, whose `Next` cannot fail, and needs only its shape and a writable
-receiver. An error from one of these calls **ends the loop**: the first clause naming it runs its block, and control
+fail may not be written with it, and one whose own calls can fail must be. `Exhausted` from `Next()` is not such a
+failure: it ends the loop, as in S9a, and is never a clause's to name. `Next()` may declare other errors beside it -
+the iterator then does not satisfy `Iterator<T>`, whose `Next` fails only with `Exhausted`, and needs only its shape
+and a writable receiver. An error from one of these calls **ends the loop**: the first clause naming it runs its block, and control
 continues after the loop; an error no clause names propagates, as from any `try`. A clause runs once the loop has
 ended, so a `break` or `continue` directly in one is a compile-time error.
 
 A **comprehension** (E27) makes the same calls and has no clauses of its own: one whose own calls can fail is
 written under `try` - `try Int32[f(x) for x in lines] catch default Int32[]` - which checks it as E15a checks any
-expression, those calls included; an error from them abandons the array being built.
+expression, those calls included (`Exhausted` aside, which ends the walk); an error from them abandons the array
+being built.
 
 **S9b (`range`).** After a `for`'s `in` (and nowhere else), `range-expr ::= "range" expr [ "," expr [ "," expr ] ]`
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its

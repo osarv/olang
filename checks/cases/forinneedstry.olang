@@ -6,10 +6,10 @@ error E {
 type It struct() {
     i mut Int32 = 0
 }
-fn (t mut It&) Next() (Int32, Bool) ? E {
-    if t.i > 2 { return 0, false }
+fn (t mut It&) Next() Int32 ? E + Exhausted {
+    if t.i > 2 { error Exhausted.END }
     t.i++
-    return t.i, true
+    return t.i
 }
 fn main() ? E {
     t It& = It()

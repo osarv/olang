@@ -862,6 +862,28 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
 char* cgValue(struct cgCtx* ctx, struct operand* op);
 static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* clauses, char* code,
                             struct type* funcType, char* endLbl);
+
+//whether every error of funcType is named, as a whole type, by a clause in a or b - so an error reaching past both
+//cannot happen (a comprehension's Next, its Exhausted taken by its own clause and the rest by its try's)
+static bool cgClausesCoverAll(struct list* a, struct list* b, struct type* funcType) {
+    for (int i = 0; i < funcType->errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&funcType->errors, i);
+        bool covered = false;
+        for (int pass = 0; pass < 2 && !covered; pass++) {
+            struct list* cs = pass ? b : a;
+            for (int c = 0; c < cs->len && !covered; c++) {
+                struct catchClause* cc = ListGetIdx(cs, c);
+                covered = cc->catchAll;
+                for (int m = 0; m < cc->matches.len && !covered; m++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, m);
+                    covered = !cm->hasWord && TypeIsSame(cm->errType, *e);
+                }
+            }
+        }
+        if (!covered) return false;
+    }
+    return true;
+}
 void cgBlock(struct cgCtx* ctx, struct list* block);
 
 //true for a type that "&"/"&name" can mark as a reference - a struct, or a compile-time-length ("T[N]") array;
@@ -2891,8 +2913,17 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", isErr, errLbl, okLbl);
     ctx->terminated = true;
     cgLabel(ctx, errLbl);
-    if (!root->catchClauses.len || cgCatchDispatch(ctx, root, &root->catchClauses, code, &func->type, root->cgEndLbl)) {
-        cgPropagateError(ctx, func->type, code);
+    //a call with clauses of its own under another try (a comprehension's Next, S9a): its own first, then that try's
+    bool rest = true;
+    if (op != root && op->isTried && op->catchClauses.len)
+        rest = cgCatchDispatch(ctx, op, &op->catchClauses, code, &func->type, op->cgEndLbl);
+    if (rest && (!root->catchClauses.len || cgCatchDispatch(ctx, root, &root->catchClauses, code, &func->type, root->cgEndLbl))) {
+        if (op != root && cgClausesCoverAll(&op->catchClauses, &root->catchClauses, &func->type)) {
+            fputs("  unreachable\n", ctx->fnOut);
+            ctx->terminated = true;
+        } else {
+            cgPropagateError(ctx, func->type, code);
+        }
     }
     cgLabel(ctx, okLbl);
 

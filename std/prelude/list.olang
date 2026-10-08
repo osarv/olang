@@ -54,29 +54,28 @@ type ListIter<T> struct(of List<<T>>&) {
     i mut Int64 = 0
 }
 
-fn (it mut ListIter<<T>>&) Next() (<T>, Bool) {
-    v, chunkNo, i, ok := it.list.elementAt(it.chunkNo, it.i)
+fn (it mut ListIter<<T>>&) Next() <T> ? Exhausted {
+    v, chunkNo, i := try it.list.elementAt(it.chunkNo, it.i)
     it.chunkNo = chunkNo
     it.i = i + 1
-    return v, ok
+    return v
 }
 
 # the element at position (chunkNo, i), moving on to the next chunk when i is past the end of this one: the
-# element, the position it was found at, and whether there was one
-fn (l List<<T>>&) elementAt(chunkNo Int64, i Int64) (<T>, Int64, Int64, Bool) {
+# element and the position it was found at; Exhausted past the last element
+fn (l List<<T>>&) elementAt(chunkNo Int64, i Int64) (<T>, Int64, Int64) ? Exhausted {
     want Int64 = chunkNo
     at Int64 = i
     n Int64 = 0
     for c := l.head, c != null, c = c.next {
         if n == want {
-            if at < c.used { return c.data[at], n, at, true }
+            if at < c.used { return c.data[at], n, at }
             want++        # this chunk is used up: the position moves to the start of the next one
             at = 0
         }
         n++
     }
-    none <T>
-    return none, n, at, false
+    error Exhausted.END
 }
 
 # the elements in the order they were pushed - what "for x in l" walks (S9c)

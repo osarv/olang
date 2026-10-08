@@ -265,13 +265,10 @@ type ArrayIter<T> struct(of Array<<T>>&) {
     i mut Int64 = 0
 }
 
-fn (it mut ArrayIter<<T>>&) Next() (<T>, Bool) {
-    if it.i >= it.arr.Len() {
-        none <T>
-        return none, false
-    }
+fn (it mut ArrayIter<<T>>&) Next() <T> ? Exhausted {
+    if it.i >= it.arr.Len() { error Exhausted.END }
     it.i++
-    return it.arr[it.i - 1], true
+    return it.arr[it.i - 1]
 }
 
 # a fresh position at the array's start - each call its own, so loops never disturb each other

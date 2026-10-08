@@ -2037,7 +2037,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   direction: olang should read more like natural language. `for { }` (forever), `for cond { }` (while),
   the three-clause form, and `for x in e` / `for i, x in e`; `do { } for cond` replaced `do { } while`, and
   `while` is gone (diagnosed, and read as `for` so one mistake is one error). `for ... in` walks an array
-  (borrowed, each element COPIED into `x`), an **iterator** (a `Next()` returning `(T, bool)`), or an
+  (borrowed, each element COPIED into `x`), an **iterator** (a `Next()` returning `(T, bool)` - since 2026-10-08 `T ? Exhausted`), or an
   **iterable** (an `Iter()` returning one) - the "built-in interface with compiler support" the user asked
   for, recognized by method shape since interfaces cannot be generic (T35). It is lowered in the checker to
   code the program could have written (a borrowed array plus a counter, or a hidden iterator and a
@@ -2470,8 +2470,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **"No value" is an error, not a flag (2026-10-07, the user's call).** `Map.Get` fails with the default error on
   a miss instead of returning `(V, Bool)`: `try m.Get(k) catch default 0` is the fallback, a bare call does not
   compile, so a miss can never be read as a zero value. A proposed `m.Get(k) else 0` shorthand was dropped - the
-  user: it swallows one result of two while reading as though it applies to both. Iterators keep `Next() (T, Bool)`,
-  since running out is not a failure and `for ... in` handles it.
+  user: it swallows one result of two while reading as though it applies to both. Iterators kept `Next() (T, Bool)`
+  "since running out is not a failure" - my framing, never the user's, and reversed 2026-10-08 (S9a, below).
 - **Error words are separated like enum cases; a separating comma is an error (T17/T19/C2, 2026-10-07, the user's
   call).** `error E {` then one word per line (or `error E { X }` for one), exactly as enum cases; and a comma between
   entries - an error type's words, an enum's cases, a constructor's fields - is a compile-time error saying entries
@@ -2666,6 +2666,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   `==` compares what it names, since an address is not a value and the evaluator could not reproduce it. **`Hash`
   never sees a null** - a null reference hashes to 0, as `Eq` never sees one (my call, flagged). Supplied `Hash`
   meets constraints and direct calls; an interface value still needs a declared one (a table needs a function).
+- **Errors are errors: `Next()` fails with `Exhausted`, and nothing returns a value beside a `Bool` (S9a/T35b,
+  2026-10-08, the user: "make sure you use errors and don't do the bool, value pattern. Errors are errors").**
+  `Iterator<T>` is `mut Next() <T> ? Exhausted`, with `error Exhausted { END }` in the prelude (name mine, flagged).
+  `for ... in` and comprehensions take `Exhausted` themselves - the loop's own first clause, ending in `break` - so a
+  plain loop needs no `try`, and under `in try` it is never a clause's to name; code calling `Next()` directly writes
+  `v := try it.Next() catch Exhausted { break }`. An iterator that can also fail for real declares both
+  (`? TxErr + Exhausted`). The private helpers that answered "is there one" with a flag went too (`List.elementAt`,
+  `Map.entryAt`), and with them every `none <T>` placeholder value - which also takes the zero-value requirement off
+  iteration (the survey's one generic-code limit). **The one mechanism it needed**: a comprehension under `try`
+  calls `Next` inside the try's expression, so that call takes `Exhausted` with its own clause and hands any other
+  error to the enclosing `try` - codegen and the evaluator both run a call's own clauses first, then its `checkRoot`'s;
+  a path past both that cannot happen is `unreachable`, not a propagation (which in a function declaring no errors was
+  invalid IR). Speed unchanged: an iterator helper, the same through an interface value, and a hand loop all 0.07s
+  on 20M x 20.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

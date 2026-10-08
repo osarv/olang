@@ -67,7 +67,7 @@
 #define METHOD_SHADOWS_INTERFACE_METHOD "the interface this method is declared on already declares a method of this name, so 'x.Name(...)' would mean both a dynamic dispatch and this function (M19a)"
 #define REFERENCE_NARROWED "a reference never narrows: its scope is where its referent was allocated, and this would give it a different one - a write through it would then allocate into the wrong scope. Keep the scopes the same - name where the value lives ('x T&y', 'x T&return'), or declare the local with ':=', which takes its initializer's scope (O25)"
 #define MUT_ON_LOCAL "a local variable is always mutable, so 'mut' on one says nothing - remove it. 'mut' is written on globals, parameters and fields, where it decides whether they can be written (D11a)"
-#define FOR_IN_NOT_ITERABLE "'for ... in' walks an array, a range, an Iterator<T> - a type with 'mut Next() (T, Bool)', declared on a mutable receiver (S9a) - or an iterable, whose 'Iter()' returns one (S9c)"
+#define FOR_IN_NOT_ITERABLE "'for ... in' walks an array, a range, an Iterator<T> - a type with 'mut Next() T ? Exhausted', declared on a mutable receiver: Next gives a value, and fails with Exhausted once there are no more (S9a) - or an iterable, whose 'Iter()' returns one (S9c)"
 #define RANGE_NEEDS_INTEGERS "a range's end, start and step are integers (S9b)"
 #define RANGE_ZERO_STEP "a range's step must be positive - a range only counts upward (S9b)"
 #define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)"

@@ -6059,10 +6059,10 @@ type ForCounter struct(n Int32, max Int32) {
     max mut
 }
 
-fn (c mut ForCounter&) Next() (Int32, Bool) {
-    if c.n >= c.max { return 0, false }
+fn (c mut ForCounter&) Next() Int32 ? Exhausted {
+    if c.n >= c.max { error Exhausted.END }
     c.n++
-    return c.n, true
+    return c.n
 }
 
 type ForBag struct(size Int32) {
@@ -6219,7 +6219,7 @@ test "D15a: a reference declared from a literal can be repointed at an array of 
 # its dispatch table one function per entry. A generic type's method satisfies it through its instantiation.
 # Iterator<T> is the built-in one: nameable everywhere, and what "for ... in" walks.
 type GenSource<T> interface {
-    mut Next() (<T>, Bool)
+    mut Next() <T> ? Exhausted
 }
 
 type GenOnce<T> struct(v <T>, used Bool) {
@@ -6227,25 +6227,23 @@ type GenOnce<T> struct(v <T>, used Bool) {
     used mut
 }
 
-fn (o mut GenOnce<<T>>&) Next() (<T>, Bool) {
-    if o.used { return o.v, false }
+fn (o mut GenOnce<<T>>&) Next() <T> ? Exhausted {
+    if o.used { error Exhausted.END }
     o.used = true
-    return o.v, true
+    return o.v
 }
 
 fn genDrain(s mut GenSource<Int32>&) Int32 {
     t := 0
     for {
-        v, ok := s.Next()
-        if not ok { break }
+        v := try s.Next() catch Exhausted { break }
         t += v
     }
     return t
 }
 
-fn genFirst(s mut GenSource<<T>>&) <T> {
-    v, ok := s.Next()
-    return v
+fn genFirst(s mut GenSource<<T>>&) <T> ? Exhausted {
+    return try s.Next()
 }
 
 fn iterSum(it mut Iterator<Int32>&) Int32 {
@@ -6261,7 +6259,7 @@ test "T35a: a generic interface, satisfied by a plain type and by a generic one"
     assert genDrain(o) == 7
     c2 ForCounter& = ForCounter(0, 4)
     w GenSource<Int32>& = c2
-    assert genFirst(w) == 1
+    assert try genFirst(w) catch default 0 == 1
 }
 
 fn iterTotal(it mut Iterator<<T>>&) <T> {
@@ -6272,9 +6270,9 @@ fn iterTotal(it mut Iterator<<T>>&) <T> {
 
 test "G9c: a concrete type passed to a generic interface binds its variables through its methods" {
     c ForCounter& = ForCounter(0, 4)
-    assert genFirst(c) == 1
+    assert try genFirst(c) catch default 0 == 1
     o GenOnce<Int64>& = GenOnce<Int64>(9000000000, false)
-    x := genFirst(o)
+    x := try genFirst(o) catch { unreachable }
     assert x == 9000000000
     c2 ForCounter& = ForCounter(0, 4)
     assert iterTotal(c2) == 10
@@ -6328,8 +6326,8 @@ test "T35b: every array hands out an Iterator, so code written over Iterator tak
     assert iterTotal(empty.Iter()) == 0
     t String& = "ab"
     st := t.Iter()
-    c, ok := st.Next()
-    assert ok and c == 'a'
+    c := try st.Next() catch { unreachable }
+    assert c == 'a'
 }
 
 # E27: a comprehension - a new array of one expression per value walked, those the filter keeps. The element type
@@ -6562,8 +6560,7 @@ fn cnArea(x <T CnShape>) Int32 { return x.Area() }
 fn cnDrain(it mut <I GenSource<<E>>>) <E> {
     t <E> = 0
     for {
-        v, ok := it.Next()
-        if not ok { break }
+        v := try it.Next() catch Exhausted { break }
         t = t + v
     }
     return t
@@ -6990,11 +6987,11 @@ type TxLines struct(n Int32, failAt Int32) {
     i mut Int32 = 0
 }
 
-fn (l mut TxLines&) Next() (Int32, Bool) ? TxErr {
+fn (l mut TxLines&) Next() Int32 ? TxErr + Exhausted {
     if l.i == l.failAt { error TxErr.MISSING }
-    if l.i >= l.n { return 0, false }
+    if l.i >= l.n { error Exhausted.END }
     l.i++
-    return l.i, true
+    return l.i
 }
 
 # only stores: "x[i] = v" calls SetAt with no At beside it
@@ -7319,10 +7316,10 @@ type S9cIt<T> struct(v <T>, n Int32) {
     v mut
     n mut
 }
-fn (c mut S9cIt<<T>>&) Next() (<T>, Bool) {
-    if c.n == 0 { return c.v, false }
+fn (c mut S9cIt<<T>>&) Next() <T> ? Exhausted {
+    if c.n == 0 { error Exhausted.END }
     c.n--
-    return c.v, true
+    return c.v
 }
 type S9cBag<T> struct(v <T>) { v }
 fn (b S9cBag<<T>>&) Iter() S9cIt<<T>> { return S9cIt<<T>>(b.v, 2) }

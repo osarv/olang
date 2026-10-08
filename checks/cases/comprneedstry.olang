@@ -6,7 +6,7 @@ error E {
 type It struct() {
     i mut Int32 = 0
 }
-fn (t mut It&) Next() (Int32, Bool) ? E { error E.X }
+fn (t mut It&) Next() Int32 ? E + Exhausted { error E.X }
 fn main() ? {
     t It& = It()
     xs := Int32[x for x in t]

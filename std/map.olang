@@ -101,30 +101,28 @@ type MapIter<K, V> struct(of Map<<K>, <V>>&) {
     depth mut Int64 = 0
 }
 
-fn (it mut MapIter<<K>, <V>>&) Next() (MapEntry<<K>, <V>>, Bool) {
+fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
     for it.bucket < it.m.buckets.Len() {
-        e, found := it.m.entryAt(it.bucket, it.depth)
-        if found {
-            it.depth++
-            return e, true
+        e := try it.m.entryAt(it.bucket, it.depth) catch Exhausted {
+            it.bucket++        # this chain is walked: on to the next bucket
+            it.depth = 0
+            continue
         }
-        it.bucket++
-        it.depth = 0
+        it.depth++
+        return e
     }
-    none MapEntry<<K>, <V>>
-    return none, false
+    error Exhausted.END
 }
 
-# the entry "depth" slots along bucket's chain, if the chain is that long - asked of the map, which knows where
-# its own slots live, rather than walked from an iterator that does not
-fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) (MapEntry<<K>, <V>>, Bool) {
+# the entry "depth" slots along bucket's chain, Exhausted when the chain is shorter - asked of the map, which knows
+# where its own slots live, rather than walked from an iterator that does not
+fn (m Map<<K>, <V>>&) entryAt(bucket Int64, depth Int64) MapEntry<<K>, <V>> ? Exhausted {
     k Int64 = 0
     for s mapSlot<<K>, <V>>&m = m.buckets[bucket], s != null, s = s.next {
-        if k == depth { return MapEntry<<K>, <V>>(s.key, s.value), true }
+        if k == depth { return MapEntry<<K>, <V>>(s.key, s.value) }
         k++
     }
-    none MapEntry<<K>, <V>>
-    return none, false
+    error Exhausted.END
 }
 
 fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }

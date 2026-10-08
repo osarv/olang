@@ -7646,3 +7646,15 @@ from their original form.
   builder (`hashNullGuarded` stops it recursing). The G19 message for a missing `Hash` now says when the compiler
   supplies one and what to declare otherwise. Checks: `hasheqnohash`, `hashfloat`; corpus test in `std/map.olang`,
   baked to `true` by K2.
+
+- **`Next()` fails with `Exhausted` (S9a/T35b), 2026-10-08.** The user, on hearing that "running out is not a
+  failure" had been my wording in the record rather than their decision: "make sure you use errors and don't do the
+  bool, value pattern. Errors are errors". Every `(T, Bool)` in the corpus was an iterator or a helper of one, plus one
+  return-slot fixture (now `divmod`). The lowering changed from "hold `(v, ok)`, break on `not ok`" to a tried `Next`
+  whose first clause is `catch Exhausted { break }`, prepended after S9e's clauses are built; `forInTryNote` learned
+  to leave out the error the loop handles, so a plain loop over an infallible iterator still needs no `try`. The
+  try-comprehension case (E29/S9e's `txCollect`) needed a call to have its own clauses and a check root at once:
+  `markChecked` adds the errors its own clauses do not take to the root's set, codegen dispatches own clauses then
+  the root's, the evaluator moves the error to the root when its own clauses pass on it, and the dead propagation
+  past both became `unreachable` (`cgClausesCoverAll`) after the first build emitted `insertvalue i32` in an
+  infallible function. A new check, `nextflag`, rejects a `(T, Bool)` Next with a message saying what Next gives.

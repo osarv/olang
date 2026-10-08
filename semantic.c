@@ -4255,7 +4255,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (concrete.bType == BASETYPE_INTERFACE) return NULL;
     struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
     if (!f || f->type.bType != BASETYPE_FUNC || f->type.isExtern) return NULL;
-    //T35a: a method of a GENERIC type ("fn (b mut Box<<T>>&) Next() (<T>, bool)") is generic over that
+    //T35a: a method of a GENERIC type ("fn (b mut Box<<T>>&) Next() <T> ? Exhausted") is generic over that
     //type's variables, which the concrete receiver fixes - so it names one function after all: the one
     //instantiated for this receiver. A method with type variables the receiver does not determine still
     //names a family and satisfies nothing.
@@ -7748,7 +7748,9 @@ static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struc
 //E31: an operator, index or slice a declared type implements is a call the compiler made, and is reached through as the
 //built-in operation would be; one that is a Try form can fail, so it is checked by root too, its errors added to errs.
 static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs) {
-    if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && (op->isTried || op->checkRoot)))
+    //a call with clauses of its own that is also under root (a comprehension's Next, S9a): root takes what they do not
+    bool ownAndRoot = op && op->isTried && op->isOperatorCall && op->opType == OPERATION_FUNCCALL;
+    if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && !ownAndRoot && (op->isTried || op->checkRoot)))
         return 0;
     unsigned w = 0;
     //held operands, an increment; a comprehension's loop, whose own calls a "try" around it covers (S9e)
@@ -7760,6 +7762,13 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
             for (int i = 0; i < es->len; i++) {
                 struct type* e = *(struct type**)ListGetIdx(es, i);
                 bool seen = false;
+                for (int c = 0; ownAndRoot && c < op->catchClauses.len && !seen; c++) {
+                    struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+                    for (int m = 0; m < cc->matches.len && !seen; m++) {
+                        struct catchMatch* cm = ListGetIdx(&cc->matches, m);
+                        seen = !cm->hasWord && TypeIsSame(cm->errType, *e);
+                    }
+                }
                 for (int k = 0; k < errs->len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(errs, k), *e);
                 if (!seen) ListAdd(errs, &e);
             }
@@ -10203,15 +10212,20 @@ struct forInTry {
     struct token kw;
 };
 
-static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct operand* call) {
-    if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar || !call->readVar->type.errors.len) return;
+//handled: an error the loop takes itself - Next's Exhausted, which ends it (S9a) - and so not one "try" must cover
+static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct operand* call, struct type* handled) {
+    if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) return;
+    struct list* es = &call->readVar->type.errors;
+    int rest = 0;
+    for (int i = 0; i < es->len; i++) rest += !(handled && TypeIsSame(**(struct type**)ListGetIdx(es, i), *handled));
+    if (!rest) return;
     if (!ft->on) { ErrMsgSemantic(ft->kw, ft->isCompr ? COMPR_NEEDS_TRY : FOR_IN_NEEDS_TRY); return; }
     if (ft->inExpr) { call->isOperatorCall = true; return; }
     if (ft->calls.len >= 8) return;
     call->isTried = true;
-    struct list* es = &call->readVar->type.errors;
     for (int i = 0; i < es->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(es, i);
+        if (handled && TypeIsSame(*e, *handled)) continue;
         bool seen = false;
         for (int k = 0; k < ft->errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&ft->errors, k), *e);
         if (!seen) ListAdd(&ft->errors, &e);
@@ -10258,7 +10272,7 @@ static void forInTryFinish(struct forInTry* ft) {
 
 //S9a: "for x in a" / "for i, x in a". Lowered, in a block of its own, to what the program could have written:
 //for an array, a borrow of it and a counted loop whose body starts by copying out element i; for an
-//iterator (a type with "mut Next() (T, bool)"), or a value whose "Iter()" returns one, a hidden iterator
+//iterator (a type with "mut Next() T ? Exhausted"), or a value whose "Iter()" returns one, a hidden iterator
 //and a loop whose body starts by asking it for the next value and leaving when there is none. So every rule -
 //borrowing, scope containment, mutability, unwinding - applies to it with nothing loop-specific added.
 struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
@@ -10282,6 +10296,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         }
     }
     struct syntax* rangeNode = firstPartOfType(s, SNTX_RANGE);
+    struct type* exhaustedT = SemanticBuiltinType(StrFromCStr("Exhausted"));
+    struct operand* nextCall = NULL;
     struct forInTry ft = (struct forInTry){0};
     ft.on = hasTokOfType(s, TOK_TRY);
     ft.inExpr = spec && ctx->checkingTry; //S9e: "try T[e for x in c]"
@@ -10305,7 +10321,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     wctx.allowFallibleCall = true;
     struct operand* src = buildExprFromSyntax(&wctx, firstPartOfType(s, SNTX_EXPR));
     wctx.allowFallibleCall = false;
-    forInTryNote(&ft, &wctx, src);
+    forInTryNote(&ft, &wctx, src, NULL);
     bool isArray = src->type.bType == BASETYPE_ARRAY;
     bool indexable = false; //S9d: walked through At and Len
     const char* atName = NULL;
@@ -10374,7 +10390,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             wctx.allowFallibleCall = true;
             itOp = forInCall(&wctx, src, kw, "Iter");
             wctx.allowFallibleCall = false;
-            forInTryNote(&ft, &wctx, itOp);
+            forInTryNote(&ft, &wctx, itOp, NULL);
             src = itOp;
         }
         nextM = forInMethod(src->type, "Next");
@@ -10383,22 +10399,27 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         //variables; what this receiver's call returns is the instantiated type, so it is read off that call
         if (nextM && nextM->type.typeParams.len > 0) {
             ErrMsgMuteStart();
+            wctx.allowFallibleCall = true;
             struct operand* probe = forInCall(&wctx, src, kw, "Next");
+            wctx.allowFallibleCall = false;
             ErrMsgMuteEnd();
-            rt = probe->type.isTuple ? &probe->type : NULL;
+            rt = &probe->type;
         }
-        bool ok = nextM && rt && rt->isTuple && rt->vars.len == 2
-                  && (*(struct var*)ListGetIdx(&rt->vars, 1)).type.bType == BASETYPE_BOOL;
-        //S9e: a Next that can fail is not Iterator<T>'s (whose Next cannot), so its shape is what is checked - a
+        //S9a: Next gives the following value, and fails with Exhausted once there are none
+        bool ends = false;
+        for (int i = 0; nextM && exhaustedT && i < nextM->type.errors.len; i++)
+            ends = ends || TypeIsSame(**(struct type**)ListGetIdx(&nextM->type.errors, i), *exhaustedT);
+        bool ok = nextM && rt && !rt->isTuple && ends;
+        //S9e: a Next that can fail some other way too is not Iterator<T>'s, so its shape is what is checked - a
         //writable receiver, as Iterator<T> asks
-        if (ok && nextM->type.errors.len > 0) {
+        if (ok && nextM->type.errors.len > 1) {
             struct var* r0 = nextM->type.vars.len ? ListGetIdx(&nextM->type.vars, 0) : NULL;
             ok = r0 && (r0->mut || r0->type.refMut);
         } else if (ok && src->type.bType != BASETYPE_INTERFACE) {
             struct list b = ListInit(sizeof(struct typeBinding));
             struct typeBinding tb = (struct typeBinding){0};
             tb.name = StrFromCStr("T");
-            tb.type = (*(struct var*)ListGetIdx(&rt->vars, 0)).type;
+            tb.type = *rt;
             ListAdd(&b, &tb);
             struct type* iterT = instantiateType(SemanticBuiltinType(StrFromCStr("Iterator")), &b);
             struct type concrete = src->type;
@@ -10454,43 +10475,42 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
                                          : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
         if (!indexable) elem->noCheck = true;
-        if (indexable) forInTryNote(&ft, &lctx, elem);
+        if (indexable) forInTryNote(&ft, &lctx, elem, NULL);
         struct statement d = buildVarDeclFromOperand(&lctx, elemTok, elem);
         ListAdd(&body, &d);
     } else {
         lctx.allowFallibleCall = true;
         struct operand* call = forInCall(&lctx, OperandReadVar(iter, kw), kw, "Next");
         lctx.allowFallibleCall = false;
-        forInTryNote(&ft, &lctx, call);
-        struct token rt = forInHiddenTok(kw, "R");
-        struct type ht = call->type;
-        ht.scopeDepth = lctx.blockDepth;
-        struct var* rv = scopeDeclare(lctx.mod, lctx.scope, rt.str, rt, ht, true);
-        rv->scopeBindings = call->scopeBindings;
-        struct statement hold = (struct statement){0};
-        hold.sType = STATEMENT_VAR_DECL;
-        hold.var = *rv;
-        hold.op = call;
-        ListAdd(&body, &hold);
-        struct var* f0 = ListGetIdx(&rv->type.vars, 0);
-        struct var* f1 = ListGetIdx(&rv->type.vars, 1);
-        struct statement leave = (struct statement){0};
-        leave.sType = STATEMENT_IF;
-        leave.op = OperandUnary(OperandMember(lctx.mod, OperandReadVar(rv, kw), f1->name, kw), OPERATION_NOT, kw);
-        leave.block = ListInit(sizeof(struct statement));
-        struct statement brk = (struct statement){0};
-        brk.sType = STATEMENT_BREAK;
-        ListAdd(&leave.block, &brk);
-        ListAdd(&body, &leave);
-        if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
-        struct statement d = buildVarDeclFromOperand(&lctx, elemTok,
-                                                     OperandMember(lctx.mod, OperandReadVar(rv, kw), f0->name, kw));
+        forInTryNote(&ft, &lctx, call, exhaustedT);
+        call->isTried = true;
+        nextCall = call;
+        struct statement d = buildVarDeclFromOperand(&lctx, elemTok, call);
         ListAdd(&body, &d);
+        if (idxTok) { struct statement di = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &di); }
     }
     struct list user = forInBody(&lctx, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
     forInTryFinish(&ft);
+    if (nextCall && nextCall->opType == OPERATION_FUNCCALL) {
+        //S9a: running out ends the loop - Next's Exhausted taken first, by a clause of the loop's own
+        struct catchClause end = (struct catchClause){0};
+        end.tok = kw;
+        end.matches = ListInit(sizeof(struct catchMatch));
+        struct catchMatch em = (struct catchMatch){0};
+        em.errType = *exhaustedT;
+        ListAdd(&end.matches, &em);
+        end.hasBlock = true;
+        end.block = ListInit(sizeof(struct statement));
+        struct statement brk = (struct statement){0};
+        brk.sType = STATEMENT_BREAK;
+        ListAdd(&end.block, &brk);
+        struct list cs = ListInit(sizeof(struct catchClause));
+        ListAdd(&cs, &end);
+        for (int i = 0; i < nextCall->catchClauses.len; i++) ListAdd(&cs, ListGetIdx(&nextCall->catchClauses, i));
+        nextCall->catchClauses = cs;
+    }
     struct list after = snapshotScopeBindings(lctx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
