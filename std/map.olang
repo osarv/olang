@@ -1,5 +1,5 @@
-# map - values found by key. A key is any type with "Hash() Int64" and "Eq(other) Bool" methods: the prelude
-# gives them to Int32, Int64, Byte and String, and a program's own key type declares them.
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() Int64" method agreeing with
+# "==": the prelude gives it to Int32, Int64, Byte and String, and a program's own key type declares it.
 #
 # Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
 # Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
@@ -34,7 +34,7 @@ fn (m Map<<K>, <V>>&) bucketOf(key <K>) Int64 { return key.Hash() & (m.buckets.L
 fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
     i := m.bucketOf(key)
     for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
-        if s.key.Eq(key) {
+        if s.key == key {
             s.value = value
             return
         }
@@ -64,7 +64,7 @@ fn (m mut Map<<K>, <V>>&) grow() {
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
     for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
-        if s.key.Eq(key) { return s.value }
+        if s.key == key { return s.value }
     }
     error
 }
@@ -72,7 +72,7 @@ fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
 # whether key has a value - what "key in m" asks (E29)
 fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
     for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
-        if s.key.Eq(key) { return true }
+        if s.key == key { return true }
     }
     return false
 }
@@ -82,7 +82,7 @@ fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
     i := m.bucketOf(key)
     prev mapSlot<<K>, <V>>&m = null
     for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
-        if s.key.Eq(key) {
+        if s.key == key {
             if prev == null { m.buckets[i] = s.next } else { prev.next = s.next }
             m.count--
             return true
@@ -198,4 +198,12 @@ LookupBaked := lookupBoth()
 test "a miss is an error, evaluated while compiling as at run time" {
     assert LookupBaked == 41
     assert lookupBoth() == LookupBaked
+}
+
+test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
+    a := Pair(1, Int64(2))
+    assert a == Pair(1, Int64(2)) and a != Pair(2, Int64(2))
+    m := Map<Pair<Int32, Int64>, Int32>()
+    m.Put(a, 7)
+    assert try m.Get(Pair(1, Int64(2))) catch default 0 == 7
 }

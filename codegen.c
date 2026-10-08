@@ -3855,9 +3855,47 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     rdAdvance(ctx, at, k);
 }
 
+//E11c: the text the type's own Str gives for the value at addr. Str has no effect (the checker saw to that), so it
+//is simply called again for the writing pass. What it builds lives in a scope of its own, closed once copied.
+static void rdPutStr(struct cgCtx* ctx, struct var* m, char* addr) {
+    char sym[256];
+    mangleFuncSym(m, sym, sizeof(sym));
+    struct var* recv = ListGetIdx(&m->type.vars, 0);
+    char recvTy[256], retTy[256];
+    llvmType(recv->type, recvTy, sizeof(recvTy));
+    llvmFuncRetType(m->type, retTy, sizeof(retTy));
+    char* scope = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", scope);
+    fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", scope);
+    char args[2048] = "";
+    for (int k = 0; k < m->type.scopeVars.len; k++) {
+        char piece[64];
+        snprintf(piece, sizeof(piece), "%sptr %s", k ? ", " : "", scope);
+        strncat(args, piece, sizeof(args) - strlen(args) - 1);
+    }
+    char piece[320];
+    if (!strcmp(recvTy, "ptr")) {
+        snprintf(piece, sizeof(piece), "%sptr %s", strlen(args) ? ", " : "", addr);
+    } else {
+        char* rv = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", rv, recvTy, addr);
+        snprintf(piece, sizeof(piece), "%s%s %s", strlen(args) ? ", " : "", recvTy, rv);
+    }
+    strncat(args, piece, sizeof(args) - strlen(args) - 1);
+    char* r = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call %s %s(%s)\n", r, retTy, sym, args);
+    char* len = cgNewTmp(ctx);
+    char* src = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", len, r);
+    fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", src, r);
+    rdPut(ctx, src, len);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", scope);
+}
+
 //renders the value of type t at addr into the helper being emitted: a primitive inline, anything else
 //through its own helper
 static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth, bool rowCtx) {
+    if (!t.structMAlloc && SemanticStrOf(t)) { rdPutStr(ctx, SemanticStrOf(t), addr); return; } //E11c
     {
         if (t.bType == BASETYPE_BOOL) {
             char* v = cgNewTmp(ctx);
@@ -3947,6 +3985,7 @@ static void rdPutFields(struct cgCtx* ctx, struct type t, char* addr) {
 
 //the body of t's helper, rendering the value at %rd.val
 static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
+    if (!t.structMAlloc && SemanticStrOf(t)) { rdPutStr(ctx, SemanticStrOf(t), "%rd.val"); return; } //E11c
     int id = ctx->lblCtr++;
     bool markedRuntime = t.bType == BASETYPE_ARRAY && t.arrMalloc && t.structMAlloc;
     bool markedPtr = t.structMAlloc && !markedRuntime
@@ -4152,6 +4191,7 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
         struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
         struct textPiece tp = {0};
         struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
+        bool viaStr = in && SemanticStrOf(in->type); //E11c: rendered by the type's own Str, at the top level too
         if (!in) { //a literal
             tp.desc = cgBorrowValue(ctx, textT, p->type, cgValue(ctx, p));
         } else if (in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar
@@ -4165,13 +4205,13 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", d1, (int)strlen(text));
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, g);
-        } else if (in->type.bType == BASETYPE_BYTE) {
+        } else if (in->type.bType == BASETYPE_BYTE && !viaStr) {
             char* addr = cgValueAddr(ctx, in);
             char* d1 = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 1, 0\n", d1);
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, addr);
-        } else if (in->type.bType == BASETYPE_ARRAY && in->type.arrElem->bType == BASETYPE_BYTE) {
+        } else if (in->type.bType == BASETYPE_ARRAY && in->type.arrElem->bType == BASETYPE_BYTE && !viaStr) {
             tp.desc = cgBorrowValue(ctx, textT, in->type, cgValue(ctx, in));
         } else {
             tp.fn = cgRenderFn(ctx, in->type, false);
@@ -5048,9 +5088,12 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) {
             cmp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %lld\n", cmp, matchedTag, tag);
         } else {
-            char* caseVal = cgValue(ctx, c->op);
-            //structural equality for struct/array case values (see cgBinaryOp's == handling), not raw icmp
-            cmp = cgDeepEq(ctx, s->op->type, matchedVal, caseVal);
+            if (c->caseCmp) cmp = cgValue(ctx, c->caseCmp); //E10a: "==" through the type's Eq
+            else {
+                char* caseVal = cgValue(ctx, c->op);
+                //structural equality for struct/array case values (see cgBinaryOp's == handling), not raw icmp
+                cmp = cgDeepEq(ctx, s->op->type, matchedVal, caseVal);
+            }
         }
         char caseLbl[40], nextLbl[40];
         snprintf(caseLbl, sizeof(caseLbl), "match.case.%d.%d", id, i);

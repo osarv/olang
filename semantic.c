@@ -3430,6 +3430,17 @@ static struct var* varGetMethodIn(struct semaModule* mod, struct str name, struc
 static bool isDeclaredArray(struct type t);
 static struct type underlyingArray(struct type t);
 
+//E10a: whether a method named Eq has the shape "==" can call - one parameter of the receiver's own type in either
+//shape, a Bool result. One that does not is reported where it is declared and never called by "==".
+static bool eqWellShaped(struct var* m) {
+    if (m->type.vars.len != 2 || !m->type.hasRetType || m->type.retType->isTuple
+        || m->type.retType->bType != BASETYPE_BOOL) return false;
+    struct type rb = ((struct var*)ListGetIdx(&m->type.vars, 0))->type, ob = ((struct var*)ListGetIdx(&m->type.vars, 1))->type;
+    rb.structMAlloc = ob.structMAlloc = false;
+    rb.refMut = ob.refMut = false;
+    return TypeIsSame(rb, ob);
+}
+
 //E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
 struct operatorShape { const char* name; int operands; bool result; bool mayFail; bool mustFail; };
@@ -3441,6 +3452,7 @@ static const struct operatorShape operatorShapes[] = {
     {"BitOr", 1, true, false, false}, {"BitXor", 1, true, false, false}, {"ShiftLeft", 1, true, false, false},
     {"ShiftRight", 1, true, false, false}, {"BitNot", 0, true, false, false}, {"Inc", 0, true, false, false},
     {"Dec", 0, true, false, false}, {"Len", 0, true, false, false},
+    {"Eq", 1, true, false, false}, {"Str", 0, true, false, false}, //E10a/E11c: what "==" and "$" consult
     //the checked forms, which "try" calls (TryAt and TrySlice are derived from At/Slice and Len when not declared)
     {"TryPlus", 1, true, true, true}, {"TryMinus", 1, true, true, true}, {"TryMul", 1, true, true, true},
     {"TryDiv", 1, true, true, true}, {"TryRem", 1, true, true, true}, {"TryMatMul", 1, true, true, true},
@@ -3459,6 +3471,7 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         char c = a->name.ptr[0];
         bool pub = c == sh->name[0], priv = c == sh->name[0] - 'A' + 'a';
         if (!pub && !priv) continue;
+        if (priv && !strcmp(sh->name, "Str")) continue; //E11c: only "Str" renders; a "str" is an ordinary method
         if (a->type.vars.len != sh->operands + 1) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
         else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
@@ -3466,6 +3479,19 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         else if (a->type.errors.len == 0 && sh->mustFail) ErrMsgSemantic(a->tok, TRY_OPERATOR_MUST_FAIL);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) ErrMsgSemantic(a->tok, LEN_SHAPE);
+        else if (!strcmp(sh->name, "Eq") || !strcmp(sh->name, "Str")) {
+            //E10a/E11c: a comparison or a rendering reads its operands and writes nothing
+            struct var* recv = ListGetIdx(&a->type.vars, 0);
+            bool writes = recv->mut || recv->type.refMut;
+            if (!strcmp(sh->name, "Eq")) {
+                struct var* o = ListGetIdx(&a->type.vars, 1);
+                writes = writes || o->mut || o->type.refMut;
+                if (!eqWellShaped(a)) ErrMsgSemantic(a->tok, EQ_SHAPE);
+            } else if (!TypeIsByteArray(*a->type.retType)) {
+                ErrMsgSemantic(a->tok, STR_SHAPE);
+            }
+            if (writes) ErrMsgSemantic(a->tok, EQ_STR_WRITES);
+        }
         if (pub) {
             char low[24];
             snprintf(low, sizeof(low), "%s", sh->name);
@@ -5970,6 +5996,82 @@ struct unOpRule unOpRules[] = {
 };
 
 
+//E11c: every type "$" renders through its own Str, with the method that does it - instantiated for that type when
+//the type is generic. Filled as "$" operands are built; codegen and the evaluator read it.
+struct strMethod { struct type t; struct var* m; };
+static struct list strMethods = {0};
+
+//E11c: t's own Str, instantiated for t when t's type is generic
+static struct var* concreteStrMethod(struct type t) {
+    struct var* f = VarGetMethod(t.owner, StrFromCStr("Str"), t);
+    if (!f || f->type.bType != BASETYPE_FUNC || f->type.vars.len != 1) return NULL;
+    if (f->type.typeParams.len > 0) {
+        struct list bindings = ListInit(sizeof(struct typeBinding));
+        struct type p0 = (*(struct var*)ListGetIdx(&f->type.vars, 0)).type;
+        if (!TypeUnify(p0, t, &bindings)) return NULL;
+        f = instantiateFunc(f, &bindings);
+    }
+    return f;
+}
+
+struct var* SemanticStrOf(struct type t) {
+    t.structMAlloc = false;
+    t.refMut = false;
+    if (!t.owner) return NULL;
+    for (int i = 0; i < strMethods.len; i++) {
+        struct strMethod* e = ListGetIdx(&strMethods, i);
+        if (TypeIsSame(e->t, t)) return e->m;
+    }
+    return NULL;
+}
+
+//E11c: records the Str of t and of every type a rendering of t reaches - its fields, elements, payloads, and what
+//its references name - stopping at a type with a Str of its own, whose parts it renders itself
+static void noteStrMethods(struct type t, struct list* seen) {
+    if (seen->len > 256) return;
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    v.scopeParam = NULL;
+    v.scopeDepth = 0;
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return;
+    for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), v)) return;
+    ListAdd(seen, &v);
+    if (v.owner && !SemanticStrOf(v)) {
+        struct var* m = concreteStrMethod(v);
+        if (m) {
+            if (!strMethods.elemSize) strMethods = ListInit(sizeof(struct strMethod));
+            struct strMethod e = { v, m };
+            ListAdd(&strMethods, &e);
+            return;
+        }
+    } else if (v.owner && SemanticStrOf(v)) return;
+    if (v.bType == BASETYPE_ARRAY && v.arrElem) noteStrMethods(*v.arrElem, seen);
+    if (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            if (v.bType == BASETYPE_STRUCT) noteStrMethods(f->type, seen);
+            else for (int k = 0; k < f->type.vars.len; k++) noteStrMethods(((struct var*)ListGetIdx(&f->type.vars, k))->type, seen);
+        }
+    }
+}
+
+//E11c: a Str must have no observable effect - it runs as often as building the text needs. Judged once the program
+//has checked, since that needs every body it reaches.
+static void checkStrPurity(void) {
+    for (int i = 0; i < strMethods.len; i++) {
+        struct strMethod* e = ListGetIdx(&strMethods, i);
+        struct token where = e->m->tok;
+        const char* why = CtWhyNotEvaluable(e->m, &where);
+        if (!why) continue;
+        char* msg = MallocOrCrash(512);
+        snprintf(msg, 512, "Str must have no effect a program could observe - '$' calls it as often as building the "
+                 "text needs (E11c) - but it cannot be evaluated at compile time: %s", why);
+        ErrMsgSemantic(e->m->tok, msg);
+        if (where.lineNr != e->m->tok.lineNr || where.owner != e->m->tok.owner) ErrMsgSemanticNote(where, "here");
+    }
+}
+
 //E11a/E11b: what "$x" and a text join produce - a byte[] VALUE, a temporary built in the scope it lands in
 static struct type textValueType(void) {
     struct type t = (struct type){0};
@@ -6031,6 +6133,8 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
             if (!strOfRenderable(in->type)) {
                 ErrMsgSemantic(tok, STR_OF_UNSUPPORTED_TYPE);
             }
+            struct list seen = ListInit(sizeof(struct type));
+            noteStrMethods(in->type, &seen);
             return op;
         }
         case OPERATION_NOT: case OPERATION_BTWSE_INV: case OPERATION_MINUS: {
@@ -6433,6 +6537,12 @@ static const char* operatorMethodName(struct checkCtx* ctx, struct type t, const
     return m && m->owner == ctx->mod ? low : NULL;
 }
 
+//E10a: the Eq "==" on t calls, if t declares one of the right shape
+static const char* eqMethodName(struct checkCtx* ctx, struct type t) {
+    const char* n = operatorMethodName(ctx, t, "Eq");
+    return n && eqWellShaped(methodNamedOn(t, n)) ? n : NULL;
+}
+
 static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
                                         struct token tok) {
     struct token mTok = tok;
@@ -6475,8 +6585,12 @@ static const char* operatorFor(struct checkCtx* ctx, struct type t, const char* 
 //variable, or the operands are a chain's, which evaluates each once and in order itself (E30).
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct list* out);
+static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token tok);
 static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
                                      bool inChain) {
+    //E10: "==" through Eq where the type declares one; "!=" is "not ==" always
+    if (opTok.type == TOK_EQ) return buildEquality(ctx, a, b, opTok);
+    if (opTok.type == TOK_NEQ) return OperandUnary(buildEquality(ctx, a, b, opTok), OPERATION_NOT, opTok);
     const char* capName = NULL;
     bool swap = false, negate = false;
     switch (opTok.type) {
@@ -6516,6 +6630,159 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
     }
     if (opTok.type == TOK_AT) { ErrMsgSemantic(opTok, OPERATOR_AT_UNDECLARED); return OperandIntLiteral(opTok); }
     return OperandBinary(a, b, opFromTokType(opTok.type), opTok);
+}
+
+static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
+                                     bool inChain);
+//E10/E10a: whether "==" on t calls an Eq somewhere - t's own, or one a part compared by value declares. A
+//reference to a type with no Eq is compared by identity, so nothing behind it is reached.
+static bool eqConsults(struct checkCtx* ctx, struct type t, int depth) {
+    if (depth > 64) return false;
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return false;
+    if (v.owner && eqMethodName(ctx, v)) return true;
+    if (t.structMAlloc) return false;
+    if (v.bType == BASETYPE_ARRAY) return v.arrElem && eqConsults(ctx, *v.arrElem, depth + 1);
+    if (v.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < v.vars.len; i++) {
+            if (eqConsults(ctx, ((struct var*)ListGetIdx(&v.vars, i))->type, depth + 1)) return true;
+        }
+    }
+    if (v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* c = ListGetIdx(&v.vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) {
+                if (eqConsults(ctx, ((struct var*)ListGetIdx(&c->type.vars, k))->type, depth + 1)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+//x held once: itself when evaluating it twice is harmless (a literal, a variable), else a hidden local declared
+//by a statement appended to seq's body
+static struct operand* eqHold(struct checkCtx* ctx, struct operand* x, struct token tok, struct operand* seq) {
+    if (x->isLiteral || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
+    return OperandReadVar(holdInHidden(ctx, x, tok, "eq", &seq->comprBody), tok);
+}
+
+//E32: "x is C" / "x as C" on an enum value, for its case tag
+static struct operand* enumIsAs(struct operand* x, int tag, bool isAs, struct token tok) {
+    struct operand* op = operandNew(tok, isAs ? OPERATION_AS : OPERATION_IS, TypeVanilla(BASETYPE_BOOL));
+    ListAdd(&op->args, &x);
+    op->castEnum = true;
+    op->castTag = tag;
+    if (!isAs) return op;
+    struct var* c = ListGetIdx(&x->type.vars, tag);
+    if (c->type.vars.len == 1) op->type = ((struct var*)ListGetIdx(&c->type.vars, 0))->type;
+    else {
+        struct list ts = ListInit(sizeof(struct type));
+        for (int i = 0; i < c->type.vars.len; i++) ListAdd(&ts, &((struct var*)ListGetIdx(&c->type.vars, i))->type);
+        op->type = TypeTuple(&ts);
+    }
+    return op;
+}
+
+static struct operand* eqAnd(struct operand* acc, struct operand* next, struct token tok) {
+    return acc ? OperandBinary(acc, next, OPERATION_AND, tok) : next;
+}
+
+//E10/E10a: "a == b" as the type says - a declared Eq called, null references kept away from it; a value's parts
+//compared one by one where any of them consults an Eq; otherwise the built-in comparison
+static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token tok) {
+    //T29c: text written here is a String, so two pieces of it - or one beside a String - compare as text
+    struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+    if (textT && (OperandIsWrittenText(a) || OperandIsWrittenText(b))) {
+        struct type tv = *textT;
+        tv.structMAlloc = false;
+        struct type ob = OperandIsWrittenText(a) ? b->type : a->type;
+        ob.structMAlloc = false;
+        ob.refMut = false;
+        bool other = OperandIsWrittenText(a) && OperandIsWrittenText(b) ? true : TypeIsSame(ob, tv);
+        if (other) {
+            if (OperandIsWrittenText(a)) a = OperandNominalConversion(tv, a, a->tok);
+            if (OperandIsWrittenText(b)) b = OperandNominalConversion(tv, b, b->tok);
+        }
+    }
+    struct type t = (a->isLiteral || a->isNullLiteral) && !(b->isLiteral || b->isNullLiteral) ? b->type : a->type;
+    if (a->isNullLiteral || b->isNullLiteral || a->type.isTuple || b->type.isTuple || !eqConsults(ctx, t, 0)) {
+        return OperandBinary(a, b, OPERATION_EQ, tok);
+    }
+    struct operand* seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
+    seq->comprBody = ListInit(sizeof(struct statement));
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    struct operand* r = NULL;
+    const char* eqName = v.owner ? eqMethodName(ctx, v) : NULL;
+    if (eqName) {
+        bool aNull = a->type.structMAlloc && !a->isLiteral, bNull = b->type.structMAlloc && !b->isLiteral;
+        if (!aNull && !bNull) {
+            r = operatorCall(ctx, a, b, eqName, tok);
+        } else {
+            //a null is equal to another null and to nothing else; Eq never sees one
+            struct operand* ha = eqHold(ctx, a, tok, seq);
+            struct operand* hb = eqHold(ctx, b, tok, seq);
+            struct operand* anyNull = NULL;
+            if (aNull) anyNull = OperandBinary(ha, OperandNullLiteral(tok), OPERATION_EQ, tok);
+            if (bNull) {
+                struct operand* bn = OperandBinary(hb, OperandNullLiteral(tok), OPERATION_EQ, tok);
+                anyNull = anyNull ? OperandBinary(anyNull, bn, OPERATION_OR, tok) : bn;
+            }
+            struct operand* call = operatorCall(ctx, ha, hb, eqName, tok);
+            if (aNull && bNull) {
+                r = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_BOOL));
+                struct operand* same = OperandBinary(ha, hb, OPERATION_EQ, tok);
+                ListAdd(&r->args, &anyNull);
+                ListAdd(&r->args, &same);
+                ListAdd(&r->args, &call);
+            } else {
+                r = OperandBinary(OperandUnary(anyNull, OPERATION_NOT, tok), call, OPERATION_AND, tok);
+            }
+        }
+    } else if (v.bType == BASETYPE_STRUCT) {
+        struct operand* ha = eqHold(ctx, a, tok, seq);
+        struct operand* hb = eqHold(ctx, b, tok, seq);
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            r = eqAnd(r, buildEquality(ctx, OperandMember(NULL, ha, f->name, tok), OperandMember(NULL, hb, f->name, tok), tok), tok);
+        }
+        if (!r) { r = OperandBoolLiteral(tok); r->intLiteralVal = 1; }
+    } else if (v.bType == BASETYPE_ARRAY) {
+        //element by element, through the prelude's "Equal" - "==" on each pair, so each consults its Eq
+        struct list args = ListInit(sizeof(struct operand*));
+        ListAdd(&args, &b);
+        r = operatorCallArgs(ctx, a, args, "Equal", tok);
+    } else if (v.bType == BASETYPE_CHOICE) {
+        //the same case, and that case's payload equal - each case asked with "is", its payload read with "as"
+        struct operand* ha = eqHold(ctx, a, tok, seq);
+        struct operand* hb = eqHold(ctx, b, tok, seq);
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* c = ListGetIdx(&v.vars, i);
+            struct operand* arm = OperandBinary(enumIsAs(ha, i, false, tok), enumIsAs(hb, i, false, tok), OPERATION_AND, tok);
+            if (c->type.vars.len == 1) {
+                arm = OperandBinary(arm, buildEquality(ctx, enumIsAs(ha, i, true, tok), enumIsAs(hb, i, true, tok), tok), OPERATION_AND, tok);
+            } else if (c->type.vars.len > 1) {
+                for (int k = 0; k < c->type.vars.len; k++) {
+                    char* fn = MallocOrCrash(16);
+                    snprintf(fn, 16, "%d", k);
+                    struct operand* xa = OperandMember(NULL, enumIsAs(ha, i, true, tok), StrFromCStr(fn), tok);
+                    struct operand* xb = OperandMember(NULL, enumIsAs(hb, i, true, tok), StrFromCStr(fn), tok);
+                    arm = OperandBinary(arm, buildEquality(ctx, xa, xb, tok), OPERATION_AND, tok);
+                }
+            }
+            r = r ? OperandBinary(r, arm, OPERATION_OR, tok) : arm;
+        }
+        if (!r) { r = OperandBoolLiteral(tok); r->intLiteralVal = 1; }
+    } else {
+        return OperandBinary(a, b, OPERATION_EQ, tok);
+    }
+    if (!OperandIsBool(r)) ErrMsgSemantic(tok, EQ_SHAPE);
+    if (!seq->comprBody.len) return r;
+    ListAdd(&seq->args, &r);
+    return seq;
 }
 
 //E30: "a < b <= c" - the comparisons joined by "and", each sharing its middle operand, which is built (and
@@ -7936,6 +8203,18 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             else if (StrCmp(nm, StrFromCStr("atomicAdd"))) atomKind = OPERATION_ATOMIC_ADD;
             else if (StrCmp(nm, StrFromCStr("atomicSwap"))) atomKind = OPERATION_ATOMIC_SWAP;
             else if (StrCmp(nm, StrFromCStr("atomicCas"))) atomKind = OPERATION_ATOMIC_CAS;
+        }
+        //E10: "same(a, b)" - identity, whatever Eq says
+        if (nameIdens.len == 1 && StrCmp(strFromTok(nameTok), StrFromCStr("same"))) {
+            struct list sArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            rejectDefaultArgs(sArgs);
+            if (sArgs.len != 2) { reportArgCount(sArgs, nameTok); return OperandBoolLiteral(nameTok); }
+            struct operand* sa = *(struct operand**)ListGetIdx(&sArgs, 0);
+            struct operand* sb = *(struct operand**)ListGetIdx(&sArgs, 1);
+            bool idA = sa->isNullLiteral || sa->type.structMAlloc || sa->type.bType == BASETYPE_INTERFACE || sa->type.bType == BASETYPE_FUNC;
+            bool idB = sb->isNullLiteral || sb->type.structMAlloc || sb->type.bType == BASETYPE_INTERFACE || sb->type.bType == BASETYPE_FUNC;
+            if (!idA || !idB) { ErrMsgSemantic(nameTok, SAME_NOT_REFERENCE); return OperandBoolLiteral(nameTok); }
+            return OperandBinary(sa, sb, OPERATION_EQ, nameTok);
         }
         if (atomKind != OPERATION_NONE) {
             bool allowedAt = ctx->allowFallibleCall;
@@ -10233,7 +10512,13 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct t
     struct syntax* pat = firstPartOfType(s, SNTX_CASE_PATTERN);
     if (pat) return buildChoiceCaseStmnt(ctx, s, pat, matchedType);
     struct operand* val = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
+    //S13/E10a: where the case is compared through an Eq, it is "==" - text written in place, or the other shape of
+    //the same type, compares as it would there
+    struct type mb = matchedType, vb = val->type;
+    mb.structMAlloc = vb.structMAlloc = mb.refMut = vb.refMut = false;
+    bool viaEq = matchedType.bType != BASETYPE_CHOICE && eqConsults(ctx, matchedType, 0)
+                 && (TypeIsSame(vb, mb) || (OperandIsWrittenText(val) && TypeIsByteArray(mb)));
+    if (!viaEq && !TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_CASE;
     stmt.op = val;
@@ -10405,6 +10690,21 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (varNode) return buildTypeMatchStmnt(ctx, s, varNode);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (matched->type.bType == BASETYPE_INTERFACE) return buildIfaceMatch(ctx, s, matched);
+    //S13/E10a: a type whose "==" consults an Eq is matched through it - the value held once, each case compared to it
+    //as "==" would; the hidden local sits in a block of its own around the match
+    struct scope wrapScope;
+    struct checkCtx wctx;
+    struct list pre = ListInit(sizeof(struct statement));
+    struct var* held = NULL;
+    if (matched->type.bType != BASETYPE_CHOICE && eqConsults(ctx, matched->type, 0)) {
+        wrapScope = scopePush(ctx->scope);
+        wctx = *ctx;
+        wctx.scope = &wrapScope;
+        wctx.blockDepth = ctx->blockDepth + 1;
+        ctx = &wctx;
+        held = holdInHidden(ctx, matched, matched->tok, "match", &pre);
+        matched = OperandReadVar(held, matched->tok);
+    }
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
     stmt.op = matched;
@@ -10421,6 +10721,9 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
         struct statement caseStmt = buildCaseStmnt(ctx, c, matched->type);
+        if (held && !caseStmt.isChoiceCase && caseStmt.op) {
+            caseStmt.caseCmp = buildEquality(ctx, OperandReadVar(held, caseStmt.op->tok), caseStmt.op, caseStmt.op->tok);
+        }
         ListAdd(&stmt.matchCases, &caseStmt);
         struct list afterCase = snapshotScopeBindings(ctx->scope);
         foldScopeBindingsBranch(&merged, &afterCase);
@@ -10456,7 +10759,9 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     //folded in as a live possibility (via merged's own initial "unchanged" value) - conservative, never
     //unsound, matching the same "no else" treatment buildIfStmnt gives a bare "if" with nothing to run.
     applyScopeBindingsSnapshot(&merged);
-    return stmt;
+    if (!held) return stmt;
+    ListAdd(&pre, &stmt);
+    return rangeIf(typeMatchAlwaysTrue(firstTokOfType(s, TOK_MATCH)), pre);
 }
 
 //O13, generalised past a tag written in the return type itself: a returned value whose TYPE declares scope
@@ -12068,6 +12373,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     convTargets = ListInit(sizeof(struct type));
     convListsInit = true;
     allLambdas = ListInit(sizeof(struct var*)); //D16
+    strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
     pendingInstances = ListInit(sizeof(int));
@@ -12115,6 +12421,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         drainTypeInstantiations();
     }
     checkFuncValueUses(); //T22a: every body's obligations are known now
+    if (ErrMsgGetNErrors() == errsAtStart) checkStrPurity();
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation

@@ -740,6 +740,7 @@ static void ctScanStmt(struct ctScan* sc, struct statement* s) {
             for (int i = 0; i < s->matchCases.len && !sc->why; i++) {
                 struct statement* c = ListGetIdx(&s->matchCases, i);
                 ctScanOp(sc, c->op);
+                if (c->caseCmp) ctScanOp(sc, c->caseCmp);
                 ctScanBlock(sc, &c->block);
             }
             ctScanBlock(sc, &s->nomatchBlock);
@@ -1080,8 +1081,43 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
 
 //rdPutValue's rules: a primitive inline - a nested byte quoted, a number as snprintf writes it - anything else
 //through its body
+//E11c: the text a type's own Str gives for v - called as the run time calls it, receiver as its parameter wants it
+static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, struct ctVal* v, struct token tok) {
+    struct token whyTok;
+    const char* why = ctFuncWhy(m, &whyTok);
+    if (why) { ctFail(st, whyTok, why); return false; }
+    if (st->depth >= CT_DEPTH_BUDGET) { ctFail(st, tok, "the computation recurses deeper than compile-time evaluation allows"); return false; }
+    struct var* p = ListGetIdx(&m->type.vars, 0);
+    struct ctVal* node = ctNew(CT_INT, p->type);
+    if (ctIsRef(p->type)) {
+        if (v->kind == CT_REF) *node = *v;
+        else { node->kind = CT_REF; node->target = v; }
+    } else {
+        *node = *ctCopy(ctDeref(v));
+    }
+    struct list locals = ListInit(sizeof(struct ctLocal));
+    struct ctLocal l = { p->name, node };
+    ListAdd(&locals, &l);
+    struct list* saved = st->locals;
+    struct var* savedFunc = st->func;
+    st->locals = &locals;
+    st->func = m;
+    st->depth++;
+    ctExecBlock(st, &m->codeBlock);
+    st->depth--;
+    st->locals = saved;
+    st->func = savedFunc;
+    if (st->flow != CF_RETURN || !st->ret) return false;
+    st->flow = CF_NORMAL;
+    struct ctVal* r = ctDeref(st->ret);
+    st->ret = NULL;
+    for (int k = 0; r && r->kind == CT_AGG && k < r->n; k++) { char c = (char)ctDeref(r->elems[k])->i; ctTextPut(b, &c, 1); }
+    return true;
+}
+
 static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth, bool row,
                           struct token tok) {
+    if (!t.structMAlloc && SemanticStrOf(t)) return ctRenderStr(st, b, SemanticStrOf(t), v, tok);
     if (t.bType == BASETYPE_BOOL) { ctTextStr(b, ctDeref(v)->i ? "true" : "false"); return true; }
     if (t.bType == BASETYPE_BYTE) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
     if (ctIsFloat(t) || ctIsInt(t)) {
@@ -1122,11 +1158,12 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
         struct ctVal* v = ctEval(st, in ? in : p);
         if (!v) return NULL;
         struct type t = in ? in->type : p->type;
-        if (!in || (t.bType == BASETYPE_ARRAY && t.arrElem->bType == BASETYPE_BYTE)) {
+        bool viaStr = in && SemanticStrOf(t); //E11c: the type's own Str, at the top level too
+        if (!in || (t.bType == BASETYPE_ARRAY && t.arrElem->bType == BASETYPE_BYTE && !viaStr)) {
             struct ctVal* a = ctDeref(v);
             if (a->kind == CT_NULL) continue;
             for (int k = 0; k < a->n; k++) { char c = (char)ctDeref(a->elems[k])->i; ctTextPut(&b, &c, 1); }
-        } else if (t.bType == BASETYPE_BYTE) {
+        } else if (t.bType == BASETYPE_BYTE && !viaStr) {
             char c = (char)ctDeref(v)->i;
             ctTextPut(&b, &c, 1);
         } else if (!ctRenderValue(st, &b, v, t, 0, false, p->tok)) {
@@ -1463,7 +1500,11 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 struct statement* c = ListGetIdx(&s->matchCases, i);
                 bool hit;
                 if (c->isChoiceCase) hit = v->i == c->caseTag;
-                else {
+                else if (c->caseCmp) {
+                    struct ctVal* cv = ctEval(st, c->caseCmp); //E10a: "==" through the type's Eq
+                    if (!cv) return;
+                    hit = cv->i != 0;
+                } else {
                     struct ctVal* cv = ctDeref(ctEval(st, c->op));
                     if (!cv) return;
                     hit = ctDeepEqPublic(v, cv);

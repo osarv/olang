@@ -99,10 +99,10 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
 # Any, All, Count, Fold, Map and Filter are every iterator's (Iterator, M19e): "l.Iter().Map(f)" walks the elements
 # in the order they were pushed.
 
-# whether x is one of the elements, by the element type's Eq - what "x in l" asks (E29)
-fn (l List<<T Equatable<<T>>>>&) Has(x <T>) Bool {
+# whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
+fn (l List<<T>>&) Has(x <T>) Bool {
     for y in l {
-        if y.Eq(x) { return true }
+        if y == x { return true }
     }
     return false
 }

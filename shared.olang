@@ -1714,15 +1714,6 @@ type Pt3 struct(x Int32, y Int32) {
     x
     y }
 
-# a method named Str is an ordinary method: "$" does not consult it (E11a - nothing overrides a rendering)
-fn (p Pt3&) Str(buf mut Array<Byte>&) Int32 {
-    if buf.Len() < 3 { return 3 }
-    buf[0] = Byte(p.x) + '0'
-    buf[1] = ','
-    buf[2] = Byte(p.y) + '0'
-    return 3
-}
-
 # E10 compares a reference by IDENTITY, so there is no content comparison for a "Array<Byte>&" anywhere in
 # the language - a gap "$" makes newly visible, since every rendering it produces is one. Until a string
 # library exists, comparing text means writing the loop.
@@ -8188,4 +8179,92 @@ test "T25b: writable and read-only references, by type" {
     words := "b a".Split(" ")          # its own array is writable, its pieces read-only
     words.Sort(fn(x, y) { return x.Compare(y) < 0 })
     assert words[0].Eq("a")
+}
+
+# E10/E10a: "==" goes through a declared Eq, at every depth - a field, an element, an enum's payload, through a
+# reference (a null kept away from Eq), in a match and in "x in c"; same(a, b) is identity whatever Eq says.
+# A mutable global makes every comparison below happen at run time; eqGlobal's are made while compiling (K2).
+type EqLabel struct(s String&) {
+    s
+}
+# two labels are equal when their texts are the same length - deliberately not what the bytes say
+fn (a EqLabel&) Eq(b EqLabel&) Bool { return a.s.Len() == b.s.Len() }
+type EqBox struct(l EqLabel, n Int32) {
+    l
+    n
+}
+type EqShape enum {
+    Named(l EqLabel)
+    Both(x Int32, l EqLabel)
+    Blank
+}
+EqLen mut Int32 = 2
+fn eqText(n Int32) String { return $("abcdefgh"[:n]) }
+fn eqMatch(l EqLabel) Int32 {
+    match l {
+        case EqLabel("x") { return 1 }
+        case EqLabel("yy") { return 2 }
+        nomatch { return 0 }
+    }
+}
+fn eqWords(s String&) Int32 {
+    match s {
+        case "ab" { return 1 }
+        case "cd" { return 2 }
+        nomatch { return 0 }
+    }
+}
+fn eqAll() Bool {
+    t := eqText(EqLen)
+    a := EqLabel(t)
+    own Bool = a == EqLabel("zz") and a != EqLabel("zzz")
+    field Bool = EqBox(a, 1) == EqBox(EqLabel("qq"), 1) and EqBox(a, 1) != EqBox(EqLabel("qq"), 2)
+    elems Bool = EqLabel[a, EqLabel("x")] == EqLabel[EqLabel("12"), EqLabel("y")]
+    payload Bool = EqShape.Named(a) == EqShape.Named(EqLabel("..")) and EqShape.Both(1, a) != EqShape.Both(2, a)
+    cases Bool = EqShape.Blank != EqShape.Named(a) and eqMatch(a) == 2 and EqLabel("..") in EqLabel[EqLabel("1"), a]
+    return own and field and elems and payload and cases
+}
+EqBaked := eqAll()
+
+test "E10a: == consults a declared Eq at every depth, while compiling and at run time" {
+    assert eqAll()
+    assert EqBaked
+    s String& = eqText(EqLen)
+    r String& = "ab"
+    assert s == r and s == "ab" and "ab" == s and s != "abc" and not same(s, r) and same(s, s)
+    assert eqWords(s) == 1 and eqWords(eqText(1)) == 0
+    n String& = null
+    m String& = null
+    assert n == m and n != s and s != n and n == null
+    p EqLabel& = EqLabel(s)
+    q EqLabel& = EqLabel("zz")
+    assert p == q and not same(p, q)
+}
+
+# E11c: "$" renders a type through its own Str - at the top level, inside another value, behind a reference -
+# while compiling (StrBaked, K2) exactly as at run time
+type StrMoney struct(cents Int64) {
+    cents
+}
+fn (m StrMoney&) Str() String { return "$" $(m.cents / 100) "." $(m.cents % 100) }
+type StrCents Int64
+fn (c StrCents) Str() String { return $Int64(c) "c" }
+type StrOrder struct(id Int32, price StrMoney, tip StrMoney&, parts Array<StrMoney>&) {
+    id
+    price
+    tip
+    parts
+}
+StrCount mut Int64 = 250
+StrBaked := $StrOrder(7, StrMoney(199), StrMoney(5), StrMoney[StrMoney(1), StrMoney(100)])
+
+test "E11c: $ renders through a declared Str, wherever the value sits" {
+    m := StrMoney(StrCount)
+    assert $m == "$2.50"
+    o := StrOrder(7, StrMoney(199), StrMoney(5), StrMoney[StrMoney(1), StrMoney(StrCount)])
+    assert $o == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $2.50])"
+    assert StrBaked == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $1.0])"
+    n StrMoney& = null
+    assert $n == "null"
+    assert $StrCents(StrCount) == "250c"
 }

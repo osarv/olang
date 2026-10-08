@@ -7617,3 +7617,19 @@ from their original form.
   targets at `is`/`as`/type cases/widening), as weak_odr functions other objects declare; a `-c` object never defines
   them, since its program view is partial and a weak definition from it could win the link. Found: widening had been
   accepted by the fit check but codegen's store path copied the wider pair unchanged.
+
+- **`==` through `Eq`, `$` through `Str`, `same` (E10a/E11c), 2026-10-08.** Out of the casting/zero-value discussion:
+  the user asked whether `Eq` overrides `==` (it did not - `==` was built in and `Eq` was only what `in`, `Has` and
+  `Map` called, so the two could disagree) and suggested `$` follow if it did. I proposed both, plus a spelling for
+  identity, since a reference to a type with `Eq` no longer compares by identity; the user said "yes do the
+  overrides". Lowering: the checker rewrites `==` on a type that consults an `Eq` anywhere (`eqConsults`) into a
+  sequence - the `Eq` call directly, null checks around it for references (null equals only null), memberwise for
+  structs and enum payloads through the same rewrite, and the prelude's `Array.Equal` for arrays. `match` on such a
+  value compares through it too. `$` records every type whose rendering reaches a `Str` and calls it from the render
+  helpers; `Str` must pass K1a, since the measure-then-write helper calls it twice and a baked global not at all.
+  Prelude: `Equatable` and the primitive `Eq` methods removed, `Has`/`Contains`/`Map` use `==`, `Pair.Eq` went
+  (memberwise `==` is what it said). Finishing it: the first corpus tests wrote `x := a == b and ...`, which D15
+  rejects - mine, not the compiler's; a `Map` test sat in `shared.olang`, which does not import `std/map`, and moved
+  there; and a mis-shaped `Eq` was reported and then still called by `==`, giving a second, misleading error - `==`
+  now ignores one (`eqWellShaped`). Checks: `eqshape`, `eqwrites`, `strshape`, `streffect`, `samevalue`; the old
+  `constrainthas` went with `Equatable`.

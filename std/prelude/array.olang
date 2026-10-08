@@ -2,21 +2,31 @@
 # says which elements count, "less" orders two, "f" makes a new value of one - and none of them copies an
 # element it does not have to.
 
-# whether x is one of the elements - what "x in a" asks (E29). Compared by the element type's Eq, so text is
-# found by what it says, not by where it is stored.
-fn (a Array<<T Equatable<<T>>>>&) Has(x <T>) Bool {
+# whether x is one of the elements - what "x in a" asks (E29). Compared with "==", so by the element type's Eq
+# where it declares one (E10a): text is found by what it says, not by where it is stored.
+fn (a Array<<T>>&) Has(x <T>) Bool {
     for y in a {
-        if y.Eq(x) { return true }
+        if y == x { return true }
     }
     return false
 }
 
+# whether the two hold equal elements in the same order - what "==" on two array values is when an element type
+# declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
+fn (a Array<<T>>&) Equal(b Array<<T>>&) Bool {
+    if a.Len() != b.Len() { return false }
+    for i in range a.Len() {
+        if a[i] != b[i] { return false }
+    }
+    return true
+}
+
 # whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
 # a substring, for text. The empty run occurs in everything.
-fn (a Array<<T Equatable<<T>>>>&) Contains(sub Array<<T>>&) Bool {
+fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {
     for i in range a.Len() - sub.Len() + 1 {
         j Int64 = 0
-        for j < sub.Len() and a[i + j].Eq(sub[j]) { j++ }
+        for j < sub.Len() and a[i + j] == sub[j] { j++ }
         if j == sub.Len() { return true }
     }
     return false

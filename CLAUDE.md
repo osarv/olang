@@ -1508,7 +1508,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   ordinary program rather than by review, which is the argument for writing the stdlib: these are shapes no
   existing test had, because no existing test grows a buffer.
 - **`$x` renders EVERY value as text, and text is joined by adjacency, not `+` (E11a/E11b, E6b withdrawn,
-  2026-09-30).** The user's design: `+` on arrays is gone; `"n is " $n "!"` joins pieces written side by
+  2026-09-30).** The user's design (**its "nothing overrides it" half is reversed by E11c, 2026-10-08**): `+` on arrays is gone; `"n is " $n "!"` joins pieces written side by
   side, and a piece is only ever a string literal or a `$` rendering - so `f("a" b)` is a syntax error, and
   C's missing-comma hazard cannot become a silent join (the user's point: `$` is always needed to make a
   value text). A `concat(...)` builtin was proposed and rejected as unnecessary. Adjacent literals fold into
@@ -1594,7 +1594,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   rendering already *are* `byte[]`, so methods on the built-in reach all of them with nothing converted,
   where a named `String` would need `String(x)` at every boundary and buy only a distinction between text
   and raw bytes that nothing yet needs. `type String byte[]` stays possible for a program that wants it.
-  `==` stays identity (E10); **`a.Eq(b)` is how text compares**, which is the operator-overloading question
+  `==` stays identity (E10); **`a.Eq(b)` is how text compares** (superseded by E10a, 2026-10-08: `==` calls `Eq`), which is the operator-overloading question
   answered without overloading. Importing the module is all it takes - the alias is never written, since a
   method is reached through its receiver - and the module holds no privileges: M19c's import-scoped
   visibility binds it exactly as it binds any module. It lives at `std/string` since M22.
@@ -2152,8 +2152,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   join - is a `String` wherever one is wanted (a `:=`, a receiver, a `String` target), extending T29a's
   "a literal adapts" to the other two temporaries that are text by construction; other bytes become text
   only by `String(bytes)`, which copies nothing. So I/O buffers stay `Array<Byte>` and text APIs say `String`.
-  `==` stays identity on `String&` and content comparison is `.Eq` (my recommendation, unanswered by the user
-  - flagged). No encoding check. Two general fixes it needed: a **slice keeps its base's declared type** (a
+  `==` stays identity on `String&` and content comparison is `.Eq` (superseded by E10a, 2026-10-08: `==` calls
+  `String.Eq`, and identity is `same(a, b)`). No encoding check. Two general fixes it needed: a **slice keeps its base's declared type** (a
   slice of a `String` is text, of a `Nums` a `Nums`), and **a named array flows into its underlying type
   across E12's conversions** - a `String` value reaches an `Array<Byte>&` parameter by the same borrow an
   unnamed one would (it required an identical representation before). `:=` also reads a conversion's type
@@ -2561,7 +2561,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   supposed to be able to use ++ and -- in expressions")** - never an operand, argument or initializer, for any type,
   so prefix and postfix mean the same. Nothing in the corpus or std used one inside an expression (the user: derived, but overridable "if the type doesn't play nice
   with ones"). Not overloadable, confirmed by the user: `==`/`!=`, `$`, `and`/`or`/`not`, `=`, `.`, `try`, `match`.
-  `for ... in` over a type with `At`/`Len`, and a callable struct (`f(x)`), are open for discussion.
+  `for ... in` over a type with `At`/`Len`, and a callable struct (`f(x)`), are open for discussion. (`==`/`!=` and
+  `$` became overridable after all, 2026-10-08 - E10a/E11c below.)
 - **`Call`, and fallible indexing (E31, 2026-10-07, the user's call).** `f(x)` on a value whose type declares `Call`
   calls it - a counter `next()`, a layer `layer(x)` - and such a value is accepted where a function value is
   expected when `Call` matches the function type exactly, through a small adapter object holding the instance (the
@@ -2644,6 +2645,21 @@ Go through this for every change to what olang means - a rule added, revised or 
   checker had accepted was silently stored as the wider interface's pair, so the narrower one dispatched through the
   wrong table slots - the store path (`cgValueForTarget`) had no case for it.
   **Pending (the user)**: a general talk about casting and unifying the conversion syntax.
+- **`==` calls a declared `Eq`, `$` a declared `Str`; identity is `same(a, b)` (E10/E10a/E11c, 2026-10-08, the
+  user's call: "yes do the overrides").** Reverses "`==`/`!=` and `$` are not declarable". The question came from the
+  casting talk: `Eq` was an ordinary method only `in`, `Has` and `Map` called, so a type's `==` and its membership
+  could disagree. Now a type declaring `Eq` (one parameter of its own type, `T` or `T&`, a `Bool`, nothing `mut`) is
+  compared by it **at every depth** - as itself, as a field, an element, an enum payload, behind a reference - and
+  `match`, `x in c` and `Map` keys all go through `==`. A reference to such a type compares its referents (a null equals
+  only a null; `Eq` never sees one); a reference to a type with no `Eq` is still identity. **`same(a, b)`** is identity
+  whatever `Eq` says (my spelling, flagged), a builtin like `atomicLoad`. `String` declares `Eq`, so `s == "cm"`
+  compares text. The prelude's `Equatable` and the primitives' `Eq` methods went; `Hashable` keeps only `Hash`.
+  **`Str`** (no parameters, a `String`, always capitalized - a rendering belongs to the type, not to one module's
+  view of it) takes over `$` for its type wherever the value sits, and **must be K1a-evaluable**: `$` calls it as often
+  as building the text needs (measure, write, or never when the text is computed while compiling), which is only
+  unobservable if it has no effect - the same argument that settled zero values. A mis-shaped `Eq`/`Str` is an error at
+  its declaration and is then ignored by `==`/`$`, so it is one error rather than two. Not built yet from the same
+  stage: an automatic `Hash` for value types (so any plain struct is a `Map` key).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -181,7 +181,7 @@ fn (t String&) ParseInt() Int64 ? ParseError {
     return v
 }
 
-test "Eq compares contents, where == compares identity" {
+test "Eq compares contents, and == goes through it; same asks for one instance" {
     a String& = "hello"
     bytes := Array<Byte>(5, 'x')
     bytes[0] = 'h'
@@ -196,6 +196,12 @@ test "Eq compares contents, where == compares identity" {
     assert not a.Eq("hellO")
     assert "".Eq("")
     assert ("x = " $42).Eq("x = 42")        # a rendering is text like any other
+    c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
+    d String& = "hello"
+    assert a == c and c == "hello" and "hello" == d and a != "hell"
+    assert same(a, a) and not same(a, c)    # E10: identity, whatever Eq says
+    n String& = null
+    assert n == null and n != a and a != n
 }
 
 test "Compare orders bytewise, a prefix first" {

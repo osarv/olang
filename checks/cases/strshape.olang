@@ -1,0 +1,9 @@
+# check: fail none for Neg, BitNot, Inc, Dec, Len and Str
+# E11c: a method named Str claims "$", so it must have that shape
+type Pt struct(n Int32) {
+    n
+}
+fn (p Pt&) Str(n Int32) String { return "pt" }
+fn main() ? {
+    s := $Pt(1)
+}

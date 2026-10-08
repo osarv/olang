@@ -374,6 +374,8 @@ struct statement {
     //from an ordinary value comparison, which a payload-free choice case still is.
     bool isChoiceCase;
     long long caseTag;
+    struct operand* caseCmp;     //S13/E10a: a value case whose type consults Eq - "matched == case", as written
+                                 //(the matched value read from a hidden local), used in place of the built-in test
     struct list caseBindings;    //list of struct var*
     struct list matchCases;      //MATCH only: list of struct statement (STATEMENT_CASE)
     bool hasNomatch;             //MATCH only
@@ -568,6 +570,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
 void SemanticInterfaceDefaults(struct type iface, struct list* out);
 //E31: a type's Call method, and whether it matches a function type exactly
 struct var* SemanticCallOf(struct type t);
+struct var* SemanticStrOf(struct type t); //E11c: the Str "$" renders a value of type t through, or NULL
 bool SemanticCallMatches(struct type t, struct type fnType);
 struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d);
 extern struct semaModule* SemanticMethodScope;

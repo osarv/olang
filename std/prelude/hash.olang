@@ -1,17 +1,11 @@
-# hashing, part of the prelude: what a Map needs of a key - "Hash() Int64" and "Eq(other) Bool" - for the
-# built-in types a key is most often (String's own are in text.olang, beside the type - M19). A program's own key type declares the same two methods (T29, M19).
+# hashing, part of the prelude: what a Map needs of a key - "Hash() Int64", agreeing with "==" - for the built-in
+# types a key is most often (String's own is in text.olang, beside the type - M19). A program's own key type declares
+# it (T29, M19), and an Eq too when "==" is not already what equal keys means (E10a).
 # Integer arithmetic wraps, which every hash here relies on.
 
-# what comparing by content needs (G19): Has, Contains and a Map's keys are constrained by these, so a type
-# without them is rejected where it is used, naming the missing method
-type Equatable<T> interface {
-    Eq(o <T>) Bool
-}
-
-# what a Map key needs: Eq, and a Hash that agrees with it - equal keys hash equally
+# what a Map key needs (G19): a Hash that agrees with "==" - keys equal by "==" hash equally
 type Hashable<T> interface {
     Hash() Int64
-    Eq(o <T>) Bool
 }
 
 # a multiply by the golden-ratio constant, then the high bits folded into the low ones: a Map takes the low
@@ -25,12 +19,8 @@ fn (n Int64) Hash() Int64 { return mixHash(n) }
 fn (n Int32) Hash() Int64 { return mixHash(Int64(n)) }
 fn (b Byte) Hash() Int64 { return mixHash(Int64(b)) }
 
-fn (a Int64) Eq(b Int64) Bool { return a == b }
-fn (a Int32) Eq(b Int32) Bool { return a == b }
-fn (a Byte) Eq(b Byte) Bool { return a == b }
 
 test "equal keys hash equally, and nearby integers spread" {
     assert Int32(7).Hash() == Int32(7).Hash()
     assert Int64(1).Hash() != Int64(2).Hash()
-    assert Int32(3).Eq(3) and not Int32(3).Eq(4)
 }

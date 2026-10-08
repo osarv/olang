@@ -725,8 +725,8 @@ method's receiver (`"  x ".Trim()`), against a `String` parameter or target, and
 `String` value in `==` or `!=` (`unit == "cm"`). Like a literal (T29a) it is
 a temporary with no type worth defending, and it is text by construction. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
-goes wherever an `Array<Byte>` is wanted. A `String` is bytes: no encoding is checked. `==` on two
-`String&` is identity (E10); comparing what two texts say is `a.Eq(b)`.
+goes wherever an `Array<Byte>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
+(E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
 
 **T29b.** An array satisfies an interface (§2.11 T31) on the same terms as any other type, whether it is
 a declared array type or a built-in one, of either length kind. A run-time-length array is a
@@ -1267,8 +1267,8 @@ types get their methods; those methods are visible in every module. A program wa
 (T29) and gives that its methods.
 
 Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, two values of any types held as
-one, its type arguments inferred at construction (G10c). It has `Hash()` and `Eq(other)` - what a map key needs - for
-every instantiation whose two parts have them.
+one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
+every instantiation whose two parts have it.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -1540,17 +1540,32 @@ that shifts out of range has no portable meaning.
 numeric-literal adaptation) and produce `Bool`; there is no ordering on any non-numeric type.
 
 **E10.** `== !=` accept operands of any single type `T27`-matching pair (subject to T6's own
-numeric-literal adaptation) and produce `Bool`, with
-value semantics that depend on whether `T` is reference-shaped (T24–T26):
-- for a primitive or enum value: ordinary value equality;
-- for an embedded struct or compile-time-length array: deep, member-wise/element-wise structural equality
-  (recursively applying this same rule to every field/element);
-- for a runtime-length array with no marker: deep, element-wise structural equality, the same as any other
-  array value — lengths must agree first;
-- for a reference-shaped struct or array (a `&`/`&x`-marked type, of either length kind): pointer
-  identity — two references compare equal only if they refer to the same underlying storage, never
-  by comparing what they point to. For a marked runtime-length array, whose value is a length paired with a
-  pointer, identity is that pointer: two such arrays are equal exactly when they name the same storage.
+numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. What `==` compares is fixed by
+the type, and a type may say it itself:
+- a type that **declares `Eq`** (E10a) is compared by it: `a == b` is `a.Eq(b)`. Through a **reference** to such a
+  type it is the same comparison of the two referents, except that a null reference is equal to another null and to
+  nothing else - `Eq` is never called with a null.
+- otherwise, for a primitive or enum value: ordinary value equality - an enum's case first, then its payload's
+  fields by this same rule;
+- for a struct or array **value**: member-wise/element-wise structural equality, applying this same rule to every
+  field or element - so a part whose type declares `Eq` is compared by it, however deep it sits. Arrays must agree
+  on length first;
+- for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
+  they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
+  is both: the same storage and the same length.
+- an interface value or a function value: identity (T33, T21) - `Eq` is not consulted, since two interface values
+  may hold different types.
+
+Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
+interface or function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
+is (P9), and a compile-time error on anything else.
+
+**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` (or `eq`, private to its module as every
+operator method is, E31): one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
+no errors, and neither the receiver nor the parameter `mut`. Any other method named `Eq` is a compile-time error.
+`Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
+values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
+built-in type declares none; its `==` is the language's.
 
 There is no expression that produces a value of an error type (§2.6): an error word is never a
 first-class comparable value, only a function's own result (§7).
@@ -1567,9 +1582,8 @@ whatever it flows into (E12c) — the current block for a local it initializes, 
 reference it is assigned to or returned as. It binds as the other prefix operators do, tighter than any
 binary operator, so `$a.b` renders `a.b`.
 
-Every value has exactly one rendering, fixed by its type, and **nothing overrides it**: a method a type
-declares — whatever its name — takes no part. The rendering is the value written the way it would be in
-source:
+A type may say how it renders by declaring **`Str`** (E11c); every other value has exactly one rendering, fixed by
+its type: the value written the way it would be in source:
 
 - `Bool` — `true` or `false`.
 - `Int32`, `Int64` — decimal, with a leading `-` for a negative value.
@@ -1589,6 +1603,8 @@ source:
   `Shape.Rect(3, 4)`.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters Int32`
   renders as a number).
+- a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
+  alike, written unchanged (never quoted).
 - a function — its signature, `(params) results ? errors`, preceded by its name when the operand names a
   declared function directly (`add(a Int32, b Int32) Int32`) and by `fn` for a function value, whose name is
   not known where the `$` is written (`fn(a Int32, b Int32) Int32`). A null function value is `null`.
@@ -1615,6 +1631,13 @@ text **value** (T29c) and a temporary, exactly as `$` is (E11a): every piece is 
 total is made in the scope the result flows into, and each piece is written into it once, so the cost is
 linear in the result however many pieces there are. A `:=` declaration takes its type from a join or a
 `$` rendering (D15), since both are text by construction.
+
+**E11c (`Str`).** A type takes over its rendering by declaring the method `Str` - always the capitalized name, since
+a rendering belongs to the type wherever it is shown, never to one module's view of it: no parameters, result `String`, no errors, and a receiver that is not `mut`. Any other method named `Str` is a
+compile-time error. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
+sense of K1a, and a `Str` that is not is a compile-time error naming what stops it. That is what lets a rendering
+call it as often as building the text needs - once to measure, once to write, or not at all when the text is
+computed while compiling - with nothing to tell the difference.
 
 ### 5.3 Assignability ("fits")
 
@@ -1966,8 +1989,8 @@ must exist and give a `Bool`. `not in` is `not (x in c)`. `x` is evaluated befor
 declare errors - a question whose answer can fail, like a set kept elsewhere - and are then reached under `try`, which
 reaches through them as through an operator (E15a): `if try (x in c) catch default false { }`.
 
-The prelude gives every array `Has` and `Contains`, both comparing elements by the element type's `Eq` method, so
-text is found by what it says (E10 would compare a reference's identity); `List` and `Map` have `Has`.
+The prelude gives every array `Has` and `Contains`, both comparing elements with `==` (E10) - so by `Eq` where the
+element type declares it, and text is found by what it says; `List` and `Map` have `Has`.
 
 Where a `for` declares its names (`for x in c`, a comprehension's `for x in c`, S9a), `in` belongs to the loop and
 never means membership: since the names are new (D3/D3a), `for x in c` with `x` already declared is a compile-time
