@@ -3338,7 +3338,11 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
                 c->err = BUILD_COND_GLOBAL_INIT;
                 c->deferrable = inner.deferrable; //a global computed by a call can still be evaluated
             }
-            if (!inner.failed && TokenFeed(tc).type != TOK_STMNT_END) condFail(c, name, BUILD_COND_GLOBAL_INIT);
+            if (!inner.failed && TokenFeed(tc).type != TOK_STMNT_END) {
+                //more than tokens can evaluate - a method call, a member, an index: compile-time evaluation can (B9c)
+                condFail(c, name, BUILD_COND_GLOBAL_INIT);
+                c->deferrable = true;
+            }
             if (isFloat && v.kind == BUILD_INT) { v.kind = BUILD_FLOAT; v.f = (double)v.i; }
             TokenSetCursor(tc, saved);
             return v;
@@ -3359,6 +3363,13 @@ static bool evalTopCond(TokenCtx tc, bool* ok, struct token* errTok, char** err,
     c.tc = tc;
     struct token first = condPeek(&c);
     struct condVal v = condOr(&c);
+    //stopped short of the branch: what follows - a method call, a member, an index, "xor" - is past what tokens can
+    //evaluate, and compile-time evaluation decides it (B9c). Without this the condition was judged on its prefix:
+    //"if Seven.Hash() != 3" was "not true or false", having read only "Seven"
+    if (!c.failed && condPeek(&c).type != TOK_CURLY_O) {
+        condFail(&c, first, BUILD_COND_NAME);
+        c.deferrable = true;
+    }
     if (!c.failed && v.kind != BUILD_BOOL) condFail(&c, first, BUILD_COND_NOT_BOOL);
     *ok = !c.failed;
     if (errTok) *errTok = c.errTok;

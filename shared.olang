@@ -8383,3 +8383,66 @@ test "M19e: an override of a generic trait's default runs from generic code" {
     it OvOnes& = OvOnes(3)
     assert ovCount(it) == 99
 }
+
+# E33: a float's IEEE 754 bit pattern as the unsigned type of its width, and a float from one - every pattern, NaNs of
+# any sign and payload included. A quiet NaN's payload survives being moved (E33a); a "$" of any NaN is "nan" (E11a).
+# Run while compiling (BitsBaked, K2) and at run time.
+type BtTemp extends F64
+type BtMask extends U32
+fn btPass16(x F16) F16 { return x }
+fn btPassB(x BF16) BF16 { return x }
+fn btPass32(x F32) F32 { return x }
+type BtHold struct(h F16, b BF16, f F32, d F64) {
+    h
+    b
+    f
+    d
+}
+fn bitsAll(one I32) Bool {
+    known Bool = F64(1).Bits() == 0x3FF0000000000000 and F32(-2).Bits() == 0xC0000000 and F16(1).Bits() == 0x3C00
+    known2 Bool = BF16(1).Bits() == 0x3F80 and F64(-0.0).Bits() == U64(0x8000000000000000) and F16(65504).Bits() == 0x7BFF
+    back Bool = U64(I64(0x4004000000000000) * one).F64FromBits() == 2.5 and U32(0x3E800000).F32FromBits() == 0.25
+    back2 Bool = U16(0x3E00).F16FromBits() == 1.5 and U16(0xBFC0).BF16FromBits() == -1.5 and U32(1).F32FromBits() > 0
+    edges Bool = U16(1).F16FromBits() == 0.000000059604644775390625 and U16(0x7C00).F16FromBits() == 1.0 / 0.0
+    x F64 = 0.1 * F64(one)
+    trip Bool = x.Bits().F64FromBits() == x and F32(x).Bits().F32FromBits() == F32(x) and F16(x).Bits().F16FromBits() == F16(x)
+    q16 := U16(0xFE01 * one).F16FromBits()
+    qb := U16(0xFFC1).BF16FromBits()
+    q32 := U32(0x7FC00123).F32FromBits()
+    q64 := U64(0xFFF8000000000123 * I64(one)).F64FromBits()      # negative, quiet, payload 0x123
+    h := BtHold(q16, qb, q32, q64)
+    moved Bool = q16 != q16 and q16.Bits() == 0xFE01 and btPass16(q16).Bits() == 0xFE01 and btPassB(qb).Bits() == 0xFFC1
+    held Bool = btPass32(q32).Bits() == 0x7FC00123 and h.h.Bits() == 0xFE01 and h.b.Bits() == 0xFFC1 and h.f.Bits() == 0x7FC00123
+    held2 Bool = h.d.Bits() == U64(0xFFF8000000000123) and (q16 if one == 1 else F16(0)).Bits() == 0xFE01
+    z F64 = F64(one - 1)
+    text Bool = $q64 == "nan" and $(z / z) == "nan" and $(-(z / z)) == "nan" and $U16(0xFC00).F16FromBits() == "-inf"
+    b := F64(2).Bits()
+    n := I32[1, 2, 3].Len()
+    named Bool = b == 0x4000000000000000 and n == 3 and BtTemp(1.5).Bits() == 0x3FF8000000000000
+    named2 Bool = BtMask(0x3F800000).F32FromBits() == 1
+    return known and known2 and back and back2 and edges and trip and moved and held and held2 and text and named and named2
+}
+BitsBaked := bitsAll(1)
+
+test "E33: a float's bits, and a float from bits" {
+    assert bitsAll(WdMutable / 2000000000)
+    assert BitsBaked
+}
+
+# E33a: a signalling NaN may be quieted wherever it is moved - its quiet bit set, its sign and the rest of its payload
+# kept (x86 quiets one loading it into the x87 stack, say, where a struct's third float is returned, and LLVM's bfloat
+# arguments pass through F32 without optimization). Which happens is unspecified, so this is checked at run time only:
+# reading such a NaN's bits is refused while compiling.
+test "E33a: a signalling NaN keeps its payload, quieted or not" {
+    one I32 = WdMutable / 2000000000
+    s16 := U16(0x7C01 * one).F16FromBits()
+    sb := U16(0xFF81 * one).BF16FromBits()
+    s32 := U32(0x7F800001 * one).F32FromBits()
+    s64 := U64(I64(0x7FF0000000000001) * I64(one)).F64FromBits()
+    h := BtHold(s16, sb, s32, s64)
+    for b in U16[s16.Bits(), btPass16(s16).Bits(), h.h.Bits()] { assert b == 0x7C01 or b == 0x7E01 }
+    for b in U16[sb.Bits(), btPassB(sb).Bits(), h.b.Bits()] { assert b == 0xFF81 or b == 0xFFC1 }
+    for b in U32[s32.Bits(), btPass32(s32).Bits(), h.f.Bits()] { assert b == 0x7F800001 or b == 0x7FC00001 }
+    for b in U64[s64.Bits(), h.d.Bits()] { assert b == 0x7FF0000000000001 or b == 0x7FF8000000000001 }
+    assert s16 != s16 and sb != sb and s32 != s32 and s64 != s64
+}

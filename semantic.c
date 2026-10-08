@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include <ctype.h>
+#include <math.h>
+#include <stdint.h>
 #include "util.h"
 #include "token.h"
 #include "syntax.h"
@@ -210,6 +212,47 @@ bool PrimByName(struct str name, enum baseType* out) {
         if (StrCmp(name, StrFromCStr((char*)prims[i].name))) { *out = prims[i].b; return true; }
     }
     return false;
+}
+
+//E33: v's bit pattern as float type b - F64's is v's own, the narrower types' v rounded to them (T4), except that a NaN
+//keeps its sign and the top of its payload, as LLVM writes a narrower NaN in a double (MinifloatFrom)
+unsigned long long FloatBits(double v, enum baseType b) {
+    switch (b) {
+        case BASETYPE_F16: return MinifloatFrom(v, 5, 10);
+        case BASETYPE_BF16: return MinifloatFrom(v, 8, 7);
+        case BASETYPE_FLOAT32: {
+            if (isnan(v)) return MinifloatFrom(v, 8, 23); //(float)v would quiet a signalling NaN
+            float f = (float)v;
+            uint32_t u;
+            memcpy(&u, &f, sizeof(u));
+            return u;
+        }
+        default: {
+            unsigned long long u;
+            memcpy(&u, &v, sizeof(u));
+            return u;
+        }
+    }
+}
+
+//E33: the value float type b's bit pattern denotes, held as FloatBits reads it back - exact, NaNs included
+double FloatFromBits(unsigned long long bits, enum baseType b) {
+    switch (b) {
+        case BASETYPE_F16: return MinifloatTo((unsigned)bits & 0xFFFF, 5, 10);
+        case BASETYPE_BF16: return MinifloatTo((unsigned)bits & 0xFFFF, 8, 7);
+        case BASETYPE_FLOAT32: {
+            uint32_t u = (uint32_t)bits;
+            float f;
+            memcpy(&f, &u, sizeof(f));
+            if (isnan(f)) return MinifloatTo(u, 8, 23); //(double)f would quiet a signalling NaN
+            return (double)f;
+        }
+        default: {
+            double d;
+            memcpy(&d, &bits, sizeof(d));
+            return d;
+        }
+    }
 }
 
 bool TypeIsUnsigned(struct type t) { const struct primInfo* p = PrimInfo(t.bType); return p && p->kind == 'u'; }
@@ -3546,6 +3589,36 @@ bool typeIsSameModuloRefShape(struct type a, struct type b);
 //M19: a built-in receiver is one no module declared - a primitive, or an unnamed array
 static bool receiverIsBuiltin(struct type r) { return !(r.owner && r.name.len > 0); }
 
+//E33: the float type a "<Float>FromBits" method name makes - "F64FromBits" makes an F64 - or NULL for any other name
+static const struct primInfo* fromBitsTarget(struct str name) {
+    for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++) {
+        int n = (int)strlen(prims[i].name);
+        if (prims[i].kind == 'f' && name.len == n + 8 && !strncmp(name.ptr, prims[i].name, (size_t)n)
+            && !strncmp(name.ptr + n, "FromBits", 8)) return &prims[i];
+    }
+    return NULL;
+}
+
+//E33: the bit-pattern methods the compiler supplies - "Bits()" on a float, giving the unsigned type of its width, and
+//"F16FromBits()", "BF16FromBits()", "F32FromBits()", "F64FromBits()" on that unsigned type, giving the float. *out is
+//what one gives; false when name is none of them for t. A declared type has them when it extends its base, as it has
+//its base's other methods (T29f)
+static bool suppliedBitsMethod(struct type t, struct str name, struct type* out) {
+    const struct primInfo* p = PrimInfo(t.bType);
+    if (!p || t.structMAlloc || !(receiverIsBuiltin(t) || t.extendsBase)) return false;
+    if (p->kind == 'f') {
+        if (!StrCmp(name, StrFromCStr("Bits"))) return false;
+        for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++) {
+            if (prims[i].kind == 'u' && prims[i].bits == p->bits) { *out = TypeVanilla(prims[i].b); return true; }
+        }
+        return false;
+    }
+    const struct primInfo* f = fromBitsTarget(name);
+    if (p->kind != 'u' || !f || f->bits != p->bits) return false;
+    *out = TypeVanilla(f->b);
+    return true;
+}
+
 //M19: does a method declared over built-in receiver `r` accept a receiver of type `recv`? An array matches
 //by its ELEMENT - the length kind and the marker are E12's business at the call, which widens a "T[N]" to a
 //"T[]&" exactly as it does for any argument - and a generic element ("<T>[]") matches every array. `exact`
@@ -3748,6 +3821,15 @@ void checkMethodOverloads(struct semaModule* mod) {
             //T29e: an inherited array method is not overridden - a declared array type naming one is an error
             if (isDeclaredArray(*ra) && varGetMethodIn(mod, a->name, underlyingArray(*ra))) {
                 ErrMsgSemantic(a->tok, METHOD_CLASHES_INHERITED);
+                continue;
+            }
+            //E23/E33: nor is a method the compiler supplies - Len() on every array, a declared one included, and the
+            //bit-pattern methods on a type extending a float or an unsigned integer. A declaration of one was
+            //accepted and then never called, the supplied method answering every call
+            struct type suppliedT;
+            if (!receiverIsBuiltin(*ra) && ((ra->bType == BASETYPE_ARRAY && StrCmp(a->name, StrFromCStr("Len")))
+                                            || suppliedBitsMethod(*ra, a->name, &suppliedT))) {
+                ErrMsgSemantic(a->tok, METHOD_CLASHES_SUPPLIED);
                 continue;
             }
             if (receiverIsBuiltin(*ra) && !isPreludeModule(mod)) { ErrMsgSemantic(a->tok, METHOD_ON_BUILTIN_TYPE); continue; }
@@ -5073,9 +5155,10 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
-    //...and the calls the compiler supplies: an array's "Len()" (E23) and the atomic builtins that give a value (P9),
-    //written as calls and typed as plainly - "n := a.Len()" was rejected while "n := l.Len()" on a List compiled
-    if (op->opType == OPERATION_LEN) return true;
+    //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
+    //the atomic builtins that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
+    //while "n := l.Len()" on a List compiled
+    if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST) return true;
     if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
     //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
     if (op->opType == OPERATION_SEQ && op->args.len)
@@ -5871,6 +5954,14 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
 //length lives in the array's representation where no olang code can reach it
 struct operand* OperandLen(struct operand* arg, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_LEN, TypeVanilla(BASETYPE_INT64));
+    ListAdd(&op->args, &arg);
+    return op;
+}
+
+//E33: "x.Bits()" and "u.F64FromBits()" - arg's bits read as type to, of the same width. Supplied by the compiler,
+//since no other operation reaches a value's representation; a value made from a value, never a view of storage
+static struct operand* OperandBitcast(struct operand* arg, struct type to, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_BITCAST, to);
     ListAdd(&op->args, &arg);
     return op;
 }
@@ -8479,6 +8570,13 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
         return OperandLen(recvOp, mTok);
     }
+    //E33: a float's bit pattern, and a float from one - supplied by the compiler too
+    struct type bitsT;
+    if (suppliedBitsMethod(recvType, mName, &bitsT)) {
+        *reported = true;
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        return OperandBitcast(recvOp, bitsT, mTok);
+    }
     //a field always wins, and a method that shadows one is a name clash rather than a silent preference -
     //the whole point of the rule is that "x.f" has exactly one meaning
     if (recvType.bType == BASETYPE_STRUCT && VarGetList(&recvType.vars, mName)) {
@@ -8563,12 +8661,16 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
 //M19/T29f: why no method was found - pointing at "extends" when the base has one by that name
 static char* unknownMethodMsg(struct operand* recv, struct token name) {
     struct type t = recv->type;
+    struct type supplied;
     if (t.owner && t.name.len && !t.extendsBase && (TypeIsNumeric(t) || t.bType == BASETYPE_ARRAY)) {
         struct type base = t;
         base.owner = NULL;
         base.name = (struct str){0};
-        if (VarGetMethod(NULL, strFromTok(name), base)) return METHOD_NOT_INHERITED;
+        if (VarGetMethod(NULL, strFromTok(name), base) || suppliedBitsMethod(base, strFromTok(name), &supplied)) {
+            return METHOD_NOT_INHERITED;
+        }
     }
+    if (TypeIsNumeric(t) && fromBitsTarget(strFromTok(name))) return FROM_BITS_RECEIVER; //E33: not that float's width
     return UNKNOWN_METHOD;
 }
 

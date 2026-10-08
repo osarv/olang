@@ -2945,6 +2945,26 @@ Go through this for every change to what olang means - a rule added, revised or 
   prelude's instantiations (B3d) and kept the old `List` (every module now counts as importing the prelude, B3);
   `++`/`--` emitted untagged loads and stores, so `l.count++` aliased every element store (T36); and `n := a.Len()` was
   refused by D15's "a call" test.
+- **A float's bits (E33/E33a, 2026-10-08, the user's decision: value-level bits for the floats, "don't forget F16 and
+  BF16 too").** `x.Bits()` is a float's IEEE pattern as the unsigned type of its width (`F16`/`BF16` -> `U16`, `F32` ->
+  `U32`, `F64` -> `U64`); `u.F16FromBits()`, `u.BF16FromBits()`, `u.F32FromBits()`, `u.F64FromBits()` on that type make
+  the float. **The proposed `F64.FromBits(u)` was not built**: nothing in olang is reached through a type name, and
+  inventing type-level functions for this was out of scope - so the spelling moves the dot, same words in the same
+  order (my call, flagged). Supplied by the compiler like `Len()` (one `OPERATION_BITCAST`, an LLVM `bitcast` of a
+  value), methods otherwise: inherited through `extends`, never redeclared. Total and free. **T36 holds** and now says
+  so: a value is read and a value made, no storage is ever read as another type. **NaN bits, measured rather than
+  assumed (E33a)**: a quiet NaN's sign and payload survive every move at -O0, -O3 and under -i; a signalling NaN may
+  be quieted by a move - x86 returns a struct's third float through the x87 stack, and LLVM passes a `bfloat` argument
+  through `F32` at -O0 - and an operation's NaN has an unspecified sign and payload (LLVM folds `0/0` to +NaN where x86
+  makes -NaN; at -O0 even `F16` negation quiets). The evaluator gives exactly the run-time answer: a narrower NaN rides
+  in a double with its payload on top (LLVM's own form) plus a flag for "made from bits and only moved", and reading
+  an operation's or a signalling NaN's bits is refused (K1); -i reads whatever it holds. Baked NaN globals are
+  bit-exact. **Found on the way, all pre-existing**: `$` of a NaN printed `-nan` while compiling and `nan` at run time
+  (and `-nan` again under -d) - every NaN renders `nan` now; `n := a.Len()` was rejected by `:=`; a `Len` declared on
+  a declared array type was accepted and never called; a top-level condition holding a method call was judged on the
+  prefix the token evaluator reached - `Seven.Hash() != 3` was "not true or false", and `Seven == Seven.Hash()` was
+  silently decided as `Seven == Seven` - it is now deferred to B9c; -i quieted `F32` signalling NaNs at an extern.
+  `F8E5M2.F64()` is one line now, `(U16(f.Bits) << 8).F16FromBits()`.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
