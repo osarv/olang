@@ -1,0 +1,8 @@
+# B3: an object built against the prelude is stale once a prelude file changes - the root's object holds the
+# instantiations of the prelude's generics it uses (B3d), here Pair<I32, I32>'s Probe
+
+import "std/io"
+
+fn main() ? io.IoError {
+    try io.Write(io.Stdout, $Pair(3, 4).Probe())
+}

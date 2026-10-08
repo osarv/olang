@@ -186,6 +186,7 @@
 #define SLICE_REQUIRES_ARRAY "only an array can be sliced with '[lo:hi]'"
 #define NOT_AN_LVALUE "must be a variable, index, or member"
 #define VAR_IMMUTABLE "variable is immutable"
+#define WRITE_INTO_CALL_VALUE "this writes into a value a call gave back - a copy no one else holds, so the write would be lost. For x[i] on a type whose At gives a value (a List's does), store the whole element: x[i] = v; or give At a writable borrowed result, At(i I64) mut T&x (E31)"
 #define WRONG_ARG_COUNT "wrong number of arguments"
 #define ELEM_REF_SHAPE_MISMATCH "these two array types have the same length and the same element type, but disagree on whether the ELEMENTS are references ('&'). An array of references holds one pointer per element; an array of values holds the elements themselves, laid out inline - different sizes and different layouts. A value is promoted to a reference only at the outermost level, never element by element, so one can never stand in for the other"
 #define INVALID_ARRAY_LITERAL_TYPE "only an array type can be constructed with a [ ] literal"

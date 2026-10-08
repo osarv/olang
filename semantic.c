@@ -65,6 +65,14 @@ struct list* SemanticAllModules(void) {
     return &allModules;
 }
 
+//M19d: the prelude is every file of <std>/prelude, each its own module
+static struct list preludeModules;
+//B3: every module sees the prelude without importing it, so the prelude's files are among the sources every
+//object was compiled against
+struct list* SemanticPreludeModules(void) {
+    return &preludeModules;
+}
+
 //B5a: imports before importers, which is a post-order walk of the import graph. allModules itself is in
 //DISCOVERY order - a module is registered before its imports are loaded, which is what lets a cycle close -
 //so it puts the root first, and initializing in that order ran a root's global initializers before the
@@ -252,8 +260,6 @@ struct type* TypeGetList(struct list* l, struct str name) {
 bool isPublic(struct str name);
 //T35b: a type named in module mod - its own, or else one the prelude exports, which every module sees without
 //an import. The prelude never falls back to itself.
-//M19d: the prelude is every file of <std>/prelude, each its own module
-static struct list preludeModules;
 static struct list preludeTypeNames; //struct str: every prelude file's declared type names, scanned before parsing
 static bool isPreludeModule(struct semaModule* mod) {
     for (int i = 0; i < preludeModules.len; i++) if (*(struct semaModule**)ListGetIdx(&preludeModules, i) == mod) return true;
@@ -5048,6 +5054,9 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
+    //...and "a.Len()" on an array, which is written as a call like any other method's, though the compiler supplies
+    //it (E23): an I64. It was refused, so "n := a.Len()" failed where "n := l.Len()" on a List compiled
+    if (op->opType == OPERATION_LEN) return true;
     //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
     if (op->opType == OPERATION_SEQ && op->args.len)
         return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
@@ -5122,6 +5131,18 @@ static bool writeBlockedByPermission(struct operand* op) {
     while (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE) {
         struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
         if (TypeIsPermRef(b->type) && !OperandGivesWritable(b)) return true;
+        op = b;
+    }
+    return false;
+}
+
+//E31: is this a write into a value a call gave back - "l[i].x = v" where l's At returns a copy - which no one else
+//holds, so the write would be lost; said so rather than "variable is immutable", since no variable is involved
+static bool writeIntoCallValue(struct operand* op) {
+    while (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE) {
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (TypeIsPermRef(b->type)) return false;
+        if (b->opType == OPERATION_FUNCCALL) return true;
         op = b;
     }
     return false;
@@ -6142,7 +6163,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     if (!OperandIsNumeric(in)) ErrMsgSemantic(tok, OPERATION_REQUIRES_NUMBER);
     if (!OperandIsMutableLvalue(in)) {
         struct var* root = lvalueRootVar(in);
-        ErrMsgSemantic(tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(in) ? READ_ONLY_REF_WRITE : VAR_IMMUTABLE);
+        ErrMsgSemantic(tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(in) ? READ_ONLY_REF_WRITE : writeIntoCallValue(in) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
     }
     return op;
 }
@@ -9503,7 +9524,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
     else if (!OperandIsMutableLvalue(target)) {
         struct var* root = lvalueRootVar(target);
-        ErrMsgSemantic(target->tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(target) ? READ_ONLY_REF_WRITE : VAR_IMMUTABLE);
+        ErrMsgSemantic(target->tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(target) ? READ_ONLY_REF_WRITE : writeIntoCallValue(target) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
     }
 
     bool isCompound;
@@ -10586,8 +10607,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
                && (operatorMethodName(&wctx, src->type, "At") || tryOperatorName(&wctx, src->type, "At"))
                && operatorMethodName(&wctx, src->type, "Len")) {
         //S9d: a type with At and Len - and neither a Next nor an Iter of its own, either of which says how it wants
-        //to be walked (a List indexed by position would search its chunks for every element) - is walked as an
-        //array is: a counted loop over
+        //to be walked (a List walked by position would work out each element's chunk again, where its iterator
+        //holds the chunk it is in) - is walked as an array is: a counted loop over
         //positions 0 to Len()-1, each element At(i), Len() read every iteration. The collection is borrowed
         //(E12c), never copied, so writes through it in the body are seen.
         indexable = true;

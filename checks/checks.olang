@@ -255,3 +255,29 @@ test "an enum's payload is held as words" {
     assert sh(dir, "\"$OLANG\" -b enumwords.olang > out.txt 2>&1 && ./build/enumwords") == 0 or failed("enumwords", dir)
     assert sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0
 }
+
+# S9d: a type's own Iter wins over At and Len - a List, which has all three, is still walked by its iterator: by
+# "for ... in", by a comprehension, by an iterator helper and in generic code constrained by Indexable, none of which
+# calls At
+test "a List is walked by its iterator, not by At" {
+    dir := fresh("listloop")
+    os.Run("cp checks/fixtures/listloop/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop") == 0 or failed("listloop", dir)
+    assert sh(dir, "grep -q 'call .*@std_prelude_list.ListIter.I16.Next.I16' build/loop.main.ll") == 0
+    assert sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.At.I16' build/loop.main.ll") != 0
+}
+
+# B3: every module sees the prelude, so a prelude file edited since an object was built makes that object stale -
+# the root's above all, which holds the instantiations of the prelude's generics (B3d). It used to be reused, so a
+# program kept running the prelude it was first built with. A copy of std, so the real one is never touched.
+test "editing the prelude rebuilds what uses it" {
+    dir := fresh("preludestale")
+    os.Run("cp checks/fixtures/preludestale/* " $os.Quote(dir) " && cp -r std " $os.Quote($dir "/std"))
+    probe String& = "fn (p Pair<<A>, <B>>) Probe() <A> { return p.First }"
+    assert sh(dir, "echo " $os.Quote(probe) " >> std/prelude/pair.olang") == 0
+    assert sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0 or failed("first build", dir)
+    assert sh(dir, "grep -qx 3 got.txt") == 0
+    assert sh(dir, "sed -i 's/return p.First }/return p.Second }/' std/prelude/pair.olang") == 0
+    assert sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0 or failed("second build", dir)
+    assert sh(dir, "grep -qx 4 got.txt") == 0 or failed("the edited prelude was not used", dir)
+}

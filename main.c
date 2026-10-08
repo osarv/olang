@@ -120,11 +120,19 @@ bool compilerNewerThan(char* objPath) {
     return o.st_mtim.tv_nsec < c.st_mtim.tv_nsec;
 }
 
+//the prelude counts as imported by every module (M19d): an object holds the instantiations of the prelude's
+//generics it uses (B3d) and calls its methods by their signatures, so a prelude file edited since the object was
+//built makes it stale - without this a program kept running the List it was first built with
 bool moduleIsStale(struct semaModule* mod, char* objPath) {
     if (mod->files.len == 0) return true; //the build constants' module (B10) has no source to compare against
     if (compilerNewerThan(objPath)) return true;
     struct list seen = ListInit(sizeof(struct semaModule*));
-    return anyImportNewer(mod, objPath, &seen);
+    if (anyImportNewer(mod, objPath, &seen)) return true;
+    struct list* prelude = SemanticPreludeModules();
+    for (int i = 0; i < prelude->len; i++) {
+        if (anyImportNewer(*(struct semaModule**)ListGetIdx(prelude, i), objPath, &seen)) return true;
+    }
+    return false;
 }
 
 //B10b: the -D names mentioned anywhere in mod's import closure

@@ -1150,7 +1150,7 @@ unsigned comparison would read as an enormous free capacity.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
-returns a value (E13, including a constructor call, `Array<T>(n)` and a `try` call), a **field read**
+returns a value (E13, including a constructor call, `Array<T>(n)`, an array's `Len()` (E23) and a `try` call), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
 (`t := a[i]` — the array's element type), a **slice** (E16a), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
@@ -1318,6 +1318,21 @@ types get their methods; those methods are visible in every module. A program wa
 Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, two values of any types held as
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
 every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
+
+The prelude declares `type List<T>`, a growable sequence that is **append-only** and **never moves** what it
+stores: `Push(x)` and `PushAll(a)` (every element of an array, in order) add at the end, `Len()` counts,
+`ToArray()` copies the elements into one new array in the caller's scope, and `Has(x)` asks by `==` (E29). It
+indexes (E31): `l[i]` is `At(i)`, a copy of the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one -
+both unchecked, as an array index is (E16), with `try l[i]` and `try l[i] = x` checking `i` against `Len()` (E31a,
+derived). Every one of these costs the same whatever the length: storage is a run of chunks, each twice the size
+of the last, so a position's chunk is found by arithmetic rather than by a search, and nothing stored is moved by
+a later `Push`. `Iter()` hands out a fresh position (S9c), so `for x in l` walks a `List` through its iterator, not
+through `At` (S9d).
+
+The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
+`String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
+new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
+`b.Push($n)`.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
@@ -2102,7 +2117,9 @@ built-in operation, which for `@` does not exist (an error), and for indexing an
 that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
 
 `x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. An `At`
-returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element. In `x[lo:hi]`
+returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element; with an `At`
+returning a value, `x[i].f = v` is a compile-time error, since it would write only a copy - as is any write into a
+value a call returned. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
@@ -2265,7 +2282,8 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
 - an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()` nor
-  an `Iter()` of its own - either of which says how the type wants to be walked. It is walked as an array is: a
+  an `Iter()` of its own - either of which says how the type wants to be walked (a `List` has all three, and is
+  walked by its iterator). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
   borrowed (E12c), never copied. A type with `TryAt` and `Len` but no `At` is walked through `TryAt`, under S9e.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
@@ -3563,7 +3581,8 @@ for.
 `<file>` must declare a `main` function (§10.2). A module's object is rebuilt when it is older than
 that module's own source **or than any source it transitively imports** — an object depends on the
 signatures it was compiled against, so a change to an import invalidates it even though its own source
-did not change.
+did not change. Every module counts as importing the prelude (§4 M19d), so an edit to a prelude file
+invalidates every object.
 
 **B3a.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
 root module (transitively pulling in its own imports, exactly as `-b` would) and runs every
@@ -3602,8 +3621,8 @@ name, and the duplicates are discarded at link time.
 of the compilation's **root** module only — `-b`'s and `-t`'s root, or `-c`'s one module — each under one
 shared name per B3b; every other object refers to them. An ordinary module's object therefore depends on
 nothing but its own module and its imports, and is correctly reused by any program that imports it. The
-root transitively imports every module of the program, so its own staleness (B3) already covers every change
-to the instantiation set. Copies a `-c` object of another module carries are discarded at link time.
+root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
+covers every change to the instantiation set. Copies a `-c` object of another module carries are discarded at link time.
 
 ### 10.2 Program entry
 

@@ -193,6 +193,27 @@ fn (t String&) ParseInt() I64 ? ParseError {
     return v
 }
 
+# text built up piece by piece - what a program writing a lot of it (a compiler's output, a report) accumulates
+# before it has it all. Held as a List of Chars, so adding never moves what is already there and costs no more
+# than writing into a preallocated array would, and copied into one String, once, by ToString. Numbers and other
+# values go in as their renderings: "b.Push($n)".
+type StringBuilder struct() {
+    chars mut List<Char> = List<Char>()
+}
+
+# adds t at the end
+fn (b mut StringBuilder&) Push(t String&) { b.chars.PushAll(t) }
+
+# adds one character at the end
+fn (b mut StringBuilder&) PushChar(c Char) { b.chars.Push(c) }
+
+# how many characters it holds
+fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
+
+# everything added so far, as one String in the CALLER's scope - a copy, so the builder may be discarded, or keep
+# growing, without affecting it
+fn (b StringBuilder&) ToString() mut String& { return String(b.chars.ToArray()) }
+
 test "Eq compares contents, and == goes through it; same asks for one instance" {
     a String& = "hello"
     bytes := Array<U8>(5, 'x')
@@ -345,4 +366,44 @@ test "Split gives the pieces between separators, borrowed from the text" {
         n = n + I32(try piece.ParseInt() catch default 0)
     }
     assert n == 6
+}
+
+test "a StringBuilder gathers text and hands it back as one String" {
+    b := StringBuilder()
+    assert b.Len() == 0 and b.ToString() == ""
+    b.Push("define i32 @f")
+    b.PushChar('(')
+    b.Push($42)                          # a value goes in as its rendering
+    b.PushChar(')')
+    assert b.Len() == 17
+    s := b.ToString()
+    assert s == "define i32 @f(42)"
+    b.Push(" {")                         # the String handed back is a copy: the builder keeps growing apart from it
+    assert s == "define i32 @f(42)" and b.ToString() == "define i32 @f(42) {"
+    long := StringBuilder()
+    for i in range 1000 {
+        long.Push("ab")
+        long.PushChar('c')
+    }
+    t := long.ToString()
+    assert t.Len() == 3000 and t[0] == 'a' and t[2] == 'c' and t[2997] == 'a' and t[2999] == 'c'
+    assert t.EndsWith("abcabc") and t.Split("c").Len() == 1001
+}
+
+# the same, built while compiling (K2): the evaluator runs the builder as the run time does
+fn builtText() String& {
+    b := StringBuilder()
+    for i in range 3 {
+        b.Push($i)
+        b.PushChar(',')
+    }
+    b.Push("end")
+    return b.ToString()
+}
+
+BuiltBaked := builtText()
+
+test "a StringBuilder, evaluated while compiling as at run time" {
+    assert BuiltBaked == "0,1,2,end"
+    assert builtText() == BuiltBaked
 }

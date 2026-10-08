@@ -1746,7 +1746,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   once into a contiguous array in the **caller's** scope (`fn (l List<T>&) ToArray() <T>[]&out`), independent
   of the list thereafter. Everything the list allocates lives in the scope it was constructed in, so it
   needs no destructor. `l.Push(7)` on a `List<int64>` works because of G9a. Deliberately no indexing and no
-  iteration yet: append-then-flatten is the use it exists for, and both are additive.
+  iteration yet: append-then-flatten is the use it exists for, and both are additive (both since added: iteration
+  S9c, indexing 2026-10-08, below).
   It first needed `fn (l List< <T> >&) Len()`, which G8b replaced with `List<<T>>`.
   **What writing it found - every one a pre-existing defect, none List-specific:**
   (1) **A `for` loop could not walk a linked structure**: the post clause was an `expr`, so `c = c.next`
@@ -2882,6 +2883,26 @@ Go through this for every change to what olang means - a rule added, revised or 
   expected Y" where the intent is clear: `name T(args)` shows both spellings with `=` and `:=`, built from the line
   itself; `?error` says `?` alone is the default error. A missing `main` is not reported when a syntax error may
   have hidden it. Not a language change - no rule moved.
+- **`List` indexes and holds its place; `StringBuilder` (E31/S9d/B3/T36, 2026-10-08, self-hosting prep item 4, the
+  user's decision).** `l[i]` (`At`, a copy) and `l[i] = v` (`SetAt`), unchecked as an array index is, with `try l[i]`
+  checked through the derived `TryAt`; and `PushAll(a)`. The chunks still double (8, 16, 32 ...) but are kept in an
+  array of their own, so a position's chunk is arithmetic - `highBit(i + 8) - 3`, six compares in olang, since there is
+  no leading-zeros operation - and `l[i]` costs the same whatever the length (4.6ns per element walking in order, a
+  random gather 2.3-2.7x an array's). **The user's caution, "so we don't end up not using iterators for loops", holds by
+  S9d's order**: `List` keeps its own `Iter`, which wins over `At`/`Len` - for `for ... in`, comprehensions, the
+  iterator helpers and generic code that knows it only as `Indexable`, pinned by a corpus test and by a check that the
+  generated IR calls `ListIter.Next` and never `At`. **`ListIter` holds the chunk it is in** instead of asking for
+  (chunk, index) and walking from the head each step - O(n log n) a walk; 10M elements x10 went 1.62s to 0.124s,
+  against 0.087s over an array. Its stated reason (an interface call had no receiver scope) went with T30 and
+  O4b; `MapIter` had the same shape and now holds its next slot. `l[i].x = v` is an error (a copy), now worded as such
+  (`WRITE_INTO_CALL_VALUE`). **`StringBuilder`** (name mine, flagged): `Push(t String&)`, `PushChar(c Char)`, `Len()`,
+  `ToString()` - a `List<Char>` by value, flattened by one copy; values go in as `b.Push($n)`. 10M characters in
+  5-character pieces: 18ms to append and 15ms to flatten, against 9ms copying them into a preallocated, already-touched
+  `Array<Char>` - most of the gap is fresh pages (the chunks and the flattened copy).
+  **Found on the way, pre-existing**: editing a prelude file rebuilt nothing that used it - the root's object holds the
+  prelude's instantiations (B3d) and kept the old `List` (every module now counts as importing the prelude, B3);
+  `++`/`--` emitted untagged loads and stores, so `l.count++` aliased every element store (T36); and `n := a.Len()` was
+  refused by D15's "a call" test.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
