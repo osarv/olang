@@ -1,0 +1,9 @@
+# check: fail a case's guard, after 'if', is a Bool
+# S13e
+fn f(n I32) I32 {
+    match n {
+        case 1 if n { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? { }

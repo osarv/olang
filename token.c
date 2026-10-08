@@ -91,6 +91,7 @@ struct tokRule tokRules[] = {
     {TOK_INC, "++", NULL},
     {TOK_DEC, "--", NULL},
     {TOK_EQ, "==", NULL},
+    {TOK_ARROW, "=>", NULL},
     {TOK_NOT, "not", NULL},
     {TOK_NEQ, "!=", NULL},
     {TOK_AND, "and", NULL},

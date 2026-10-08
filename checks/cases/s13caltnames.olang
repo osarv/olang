@@ -1,0 +1,12 @@
+# check: fail every alternative of a case binds the same names
+# S13c: the block reads one set of locals whichever alternative matched, so each binds the same names
+type S enum {
+    A(x I32)
+    B(x I32, y I32)
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(x), S.B(x, y) { return x }
+    }
+}
+fn main() ? { }

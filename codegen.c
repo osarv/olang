@@ -1297,6 +1297,11 @@ static bool cgIsFreshTemp(struct operand* op) {
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         return cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 1)) || cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 2));
     }
+    if (op->opType == OPERATION_MATCH) { //S12b: the same, for any of a match's values
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (cgIsFreshTemp(*(struct operand**)ListGetIdx(&vs, i))) return true;
+        return false;
+    }
     return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
@@ -3184,13 +3189,15 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
     char* hit = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", hit, ChoiceHasPayload(x->type) ? "i64" : xty, tag, op->castTag);
     if (!isAs) return hit;
-    int id = ctx->lblCtr++;
-    char okLbl[32], badLbl[32];
-    snprintf(okLbl, sizeof(okLbl), "as.ok.%d", id);
-    snprintf(badLbl, sizeof(badLbl), "as.bad.%d", id);
-    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
-    ctx->terminated = true;
-    cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID", "@__olang_msg_as");
+    if (!op->noCheck) { //S13b: a pattern reads a payload only once its own test has selected the case
+        int id = ctx->lblCtr++;
+        char okLbl[32], badLbl[32];
+        snprintf(okLbl, sizeof(okLbl), "as.ok.%d", id);
+        snprintf(badLbl, sizeof(badLbl), "as.bad.%d", id);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
+        ctx->terminated = true;
+        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID", "@__olang_msg_as");
+    }
     //the payload: spilled, then its one field, or all of them as several results (a tuple of the same layout)
     {
         struct var* c = ListGetIdx(&x->type.vars, (int)op->castTag);
@@ -4075,6 +4082,7 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
 
 void cgStatement(struct cgCtx* ctx, struct statement* s);
 char* cgCond(struct cgCtx* ctx, struct operand* op);
+char* cgMatchValue(struct cgCtx* ctx, struct operand* op);
 char* cgCmpChain(struct cgCtx* ctx, struct operand* op);
 char* cgValue(struct cgCtx* ctx, struct operand* op) {
     if (op->cgCached) return op->cgCached; //E30: a chain's shared operand, computed once
@@ -4086,6 +4094,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
     if (op->tryNeedsSlot && ctx->tdOp != op) return cgTryDefaultValue(ctx, op);
     switch (op->opType) {
         case OPERATION_COND: return cgCond(ctx, op);
+        case OPERATION_MATCH: return cgMatchValue(ctx, op);
         case OPERATION_CMP_CHAIN: return cgCmpChain(ctx, op);
         case OPERATION_SEQ:
             if (op->isTryStmt) { //E31: "try x[i] = v" - a clause that takes an error continues after it
@@ -4711,85 +4720,97 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
     cgLabel(ctx, endLbl);
 }
 
-void cgMatch(struct cgCtx* ctx, struct statement* s) {
-    char* matchedVal = cgValue(ctx, s->op);
-    //T17: a payload-carrying choice is compared by its TAG, and the payload is reached only inside an arm
-    //whose tag test already passed - which is what makes reading it sound. Spilled to a slot once here,
-    //since every binding arm GEPs its fields out of the same buffer.
-    bool payloadChoice = s->op->type.bType == BASETYPE_CHOICE && ChoiceHasPayload(s->op->type);
-    char* matchedSlot = NULL;
-    char* matchedTag = NULL;
-    char matchedTy[256] = "";
-    if (payloadChoice) {
-        llvmType(s->op->type, matchedTy, sizeof(matchedTy));
-        matchedSlot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", matchedSlot, matchedTy);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", matchedTy, matchedVal, matchedSlot);
-        matchedTag = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", matchedTag, matchedTy, matchedVal);
-    }
+//S12-S14: the checker has built each alternative's test and its bindings' reads over the held value, so this lays out
+//only the order: the value held, then per case each alternative's test - the first to hold fills the clause's
+//bindings its own way - then the guard, then the block. An alternative or guard that fails falls to the next case.
+void cgAbortLike(struct cgCtx* ctx, bool isUnreachable);
+static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT);
+void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL, (struct type){0}); }
 
+//S12b: a match used as a value - each value case stores its value, converted to the match's type on its own path,
+//into one slot, as a conditional's do (E28); a case whose block leaves stores nothing
+char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
+    char ty[256];
+    llvmType(op->type, ty, sizeof(ty));
+    char* slot = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(op->type));
+    cgMatchInto(ctx, ListGetIdx(&op->comprBody, 0), slot, op->type);
+    return cgLoadOrAddr(ctx, op->type, slot, false);
+}
+
+//one value case's value into the slot
+static void cgMatchStore(struct cgCtx* ctx, struct operand* v, char* slot, struct type resultT) {
+    char* val = cgValueForTarget(ctx, v, resultT, ctx->targetScopeOverride);
+    cgStoreInto(ctx, resultT, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+}
+
+static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT) {
+    cgPushScope(ctx); //the held value's local, if any
+    for (int i = 0; i < s->matchHold.len; i++) cgStatement(ctx, ListGetIdx(&s->matchHold, i));
     int id = ctx->lblCtr++;
     char endLbl[32];
     snprintf(endLbl, sizeof(endLbl), "match.end.%d", id);
-
     for (int i = 0; i < s->matchCases.len; i++) {
         struct statement* c = ListGetIdx(&s->matchCases, i);
-        char* cmp;
-        if (payloadChoice) {
-            //a binding arm carries the case's ordinal directly; a bare "case Shape.Empty" arm over the
-            //same type still built an ordinary choice-value operand, whose ordinal is the same number
-            long long tag = c->isChoiceCase ? c->caseTag : c->op->intLiteralVal;
-            cmp = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %lld\n", cmp, matchedTag, tag);
-        } else {
-            if (c->caseCmp) cmp = cgValue(ctx, c->caseCmp); //E10a: "==" through the type's Eq
-            else {
-                char* caseVal = cgValue(ctx, c->op);
-                //structural equality for struct/array case values (see cgBinaryOp's == handling), not raw icmp
-                cmp = cgDeepEq(ctx, s->op->type, matchedVal, caseVal);
-            }
-        }
-        char caseLbl[40], nextLbl[40];
-        snprintf(caseLbl, sizeof(caseLbl), "match.case.%d.%d", id, i);
+        char takenLbl[48], bodyLbl[48], nextLbl[48];
+        snprintf(takenLbl, sizeof(takenLbl), "match.taken.%d.%d", id, i);
+        snprintf(bodyLbl, sizeof(bodyLbl), "match.case.%d.%d", id, i);
         snprintf(nextLbl, sizeof(nextLbl), "match.next.%d.%d", id, i);
-        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", cmp, caseLbl, nextLbl);
-        ctx->terminated = true;
-        cgLabel(ctx, caseLbl);
-        //the arm's own codegen scope, so two arms binding the SAME name are two different locals - the
-        //semantic side already scopes them that way, and without the matching push here both landed in
-        //the enclosing scope and the second arm silently read the first arm's slot
+        //the clause's own codegen scope, so two clauses binding the SAME name are two different locals - the
+        //semantic side scopes them that way, and without the matching push here both landed in the enclosing scope
+        //and the second clause silently read the first one's slot
         cgPushScope(ctx);
-        //T17b: the payload's fields become real locals of this arm, copied out of the buffer now that the
-        //tag test has proved which case is live
-        if (c->isChoiceCase && c->caseBindings.len > 0) {
-            struct var* caseVar = ListGetIdx(&s->op->type.vars, (int)c->caseTag);
-            char payTy[2048];
-            structAggSpelling(caseVar->type, payTy, sizeof(payTy));
-            char* payAddr = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 1\n", payAddr, matchedTy, matchedSlot);
-            for (int b = 0; b < c->caseBindings.len; b++) {
-                struct var* bindVar = *(struct var**)ListGetIdx(&c->caseBindings, b);
-                if (!bindVar) continue;
-                struct type fieldT = (*(struct var*)ListGetIdx(&caseVar->type.vars, b)).type;
-                char fty[256];
-                llvmType(fieldT, fty, sizeof(fty));
-                char* fieldAddr = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, payTy, payAddr, b);
-                char* slot = cgDeclareLocal(ctx, bindVar->name, fieldT);
-                fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, fty);
-                char* loaded = cgLoadOrAddr(ctx, fieldT, fieldAddr, false);
-                cgStoreInto(ctx, fieldT, fieldT, loaded, slot, NULL, false, true, false);
-            }
+        char** slots = MallocOrCrash(sizeof(char*) * (size_t)(c->caseBindings.len ? c->caseBindings.len : 1));
+        for (int b = 0; b < c->caseBindings.len; b++) {
+            struct var* bv = *(struct var**)ListGetIdx(&c->caseBindings, b);
+            char ty[256];
+            llvmType(bv->type, ty, sizeof(ty));
+            slots[b] = cgDeclareLocal(ctx, bv->name, bv->type);
+            fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slots[b], ty);
         }
-        cgBlock(ctx, &c->block);
+        for (int a = 0; a < c->caseAlts.len; a++) {
+            struct caseAlt* alt = ListGetIdx(&c->caseAlts, a);
+            char hitLbl[48], missLbl[48];
+            snprintf(hitLbl, sizeof(hitLbl), "match.alt.%d.%d.%d", id, i, a);
+            snprintf(missLbl, sizeof(missLbl), "match.miss.%d.%d.%d", id, i, a);
+            char* t = cgValue(ctx, alt->test);
+            fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", t, hitLbl, missLbl);
+            ctx->terminated = true;
+            cgLabel(ctx, hitLbl);
+            //T17b: the payload's fields become the clause's locals, read now that the test has proved which case
+            //each one is in
+            for (int b = 0; b < alt->binds.len; b++) {
+                struct caseBind* cb = ListGetIdx(&alt->binds, b);
+                int k = 0;
+                while (k < c->caseBindings.len && *(struct var**)ListGetIdx(&c->caseBindings, k) != cb->v) k++;
+                if (k == c->caseBindings.len) continue;
+                char* v = cgValue(ctx, cb->from);
+                cgStoreInto(ctx, cb->v->type, cb->from->type, v, slots[k], NULL, false, true, false);
+            }
+            cgBr(ctx, takenLbl);
+            cgLabel(ctx, missLbl);
+        }
+        cgBr(ctx, nextLbl);
+        cgLabel(ctx, takenLbl);
+        if (c->caseGuard) { //S13e: read after the bindings it may name
+            char* g = cgValue(ctx, c->caseGuard);
+            fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", g, bodyLbl, nextLbl);
+            ctx->terminated = true;
+        } else cgBr(ctx, bodyLbl);
+        cgLabel(ctx, bodyLbl);
+        if (slot && c->op) cgMatchStore(ctx, c->op, slot, resultT);
+        else cgBlock(ctx, &c->block);
         cgPopScope(ctx);
         cgBr(ctx, endLbl);
         cgLabel(ctx, nextLbl);
     }
-    if (s->hasNomatch) cgBlock(ctx, &s->nomatchBlock);
+    if (s->hasNomatch) {
+        if (slot && s->nomatchValue) cgMatchStore(ctx, s->nomatchValue, slot, resultT);
+        else cgBlock(ctx, &s->nomatchBlock);
+    } else if (slot) cgAbortLike(ctx, true); //S12b: every case is covered, so this is not reached - checked, not assumed
     cgBr(ctx, endLbl);
     cgLabel(ctx, endLbl);
+    cgPopScope(ctx);
 }
 
 //a fallible function's success return wraps the value as { i32 0, T val } (or, with no success type at

@@ -26,8 +26,13 @@ enum syntaxType {
     SNTX_CHOICE_CASE,  //"IDEN [ \"(\" param-list \")\" ]" - one case of a choice type. The optional
                         //parameter list is the case's PAYLOAD; a case without one is a bare tag, which is
                         //every case a choice had before payloads existed
-    SNTX_CASE_PATTERN, //"[alias-chain] Type . Case ( IDEN {, IDEN} )" - a match case that BINDS a
-                        //payload-carrying choice case's fields to new names for that arm
+    SNTX_CASE_PATTERN, //S13b/S13d: "[alias-chain] Type . Case [ ( sub-pattern {, sub-pattern} ) ]" - a case of
+                        //an enum, its payload's positions each a SNTX_PAT_BIND, a nested SNTX_CASE_PATTERN or
+                        //a SNTX_PAT_VALUE
+    SNTX_PAT_BIND,     //S13b: one IDEN in a payload pattern - a fresh name bound to that field, "_" binding nothing
+    SNTX_PAT_VALUE,    //S13d: a literal in a payload pattern (an SNTX_EXPR) - that field compared with it by "=="
+    SNTX_CASE_GUARD,   //S13e: "if expr" after a case's patterns - parts: "if", the SNTX_EXPR
+    SNTX_CASE_VALUE,   //S12b: "=> expr" in place of a case's (or nomatch's) block - parts: "=>", the SNTX_EXPR
     SNTX_INTERFACE_BODY, //"interface { method-sig STMNT_END ... }" - parts are SNTX_METHOD_SIG (T30)
     SNTX_METHOD_SIG,      //"[mut] IDEN func-sig" - one entry of an interface body. The optional leading
                            //TOK_MUT says the method needs a MUTABLE receiver; the name is the sole IDEN
@@ -134,7 +139,7 @@ enum syntaxType {
     SNTX_EXPR_UNARY_OP,
     SNTX_EXPR_IS,   //E32: [operand, "is", TYPE_EXPR]
     SNTX_EXPR_AS,   //E32: [operand, "as", TYPE_EXPR]
-    SNTX_CASE_TYPE, //E32: a type case of a match on an interface value - [IDEN binding]? TYPE_EXPR
+    SNTX_EXPR_MATCH, //S12b: a match used as a value - laid out as SNTX_STMNT_MATCH is
     SNTX_EXPR_UNARY,
     SNTX_EXPR_TEXT, //E11b: adjacent text pieces - string literals and "$x" renderings - joined into one
     SNTX_EXPR_COND,   //E28: "a if c else b" - parts: the value (a binary-level node), "if", the condition, "else", an EXPR

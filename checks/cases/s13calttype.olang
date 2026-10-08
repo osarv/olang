@@ -1,0 +1,12 @@
+# check: fail is bound with another type by an earlier alternative
+# S13c: a name bound by several alternatives has one type
+type S enum {
+    A(x I32)
+    B(x I64)
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(x), S.B(x) { return 1 }
+    }
+}
+fn main() ? { }

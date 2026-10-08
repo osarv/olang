@@ -86,6 +86,7 @@ enum tokenType {
     TOK_INC,
     TOK_DEC,
     TOK_EQ,
+    TOK_ARROW, //S12b: "=>" - a match case's value
     TOK_NOT,
     TOK_NEQ,
     TOK_AND,
