@@ -2888,6 +2888,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   loops, spelled by the loop's variable (`break line`); declined - the user does not like them, and some loops have
   no variable to name. `break`/`continue` act on the innermost loop only (S11); leaving an outer loop is a flag or a
   function with `return`.
+- **A float literal's own type is `F64` (T6a, 2026-10-08, the user: "do the float default to F64").** It was `F32`,
+  so `x := 0.1` held the float nearest 0.1 (0.10000000149011612 once widened), a generic reached only by `0.1` was
+  instantiated at `F32`, and `0.1 + 0.2` summed in single precision; C, Go and Rust all default to 64-bit. A literal
+  written against a typed float still adapts (T6) - `f F32 = 0.1`, an `F16` parameter - so the change is one line in
+  the checker; G9a, `-D` float constants (B10), `:=`, the evaluator and `$` all read the literal's type and follow.
+  **What changes meaning**: an expression built from literals is not a literal (E4) and never adapted, so
+  `f F32 = 0.5 * 2.0` is now an error (an `F64` does not flow into an `F32`, T6b) - as `b U8 = 1 + 2` already was -
+  with a new message saying to write `F32(...)`; and `g < 1.0 / 3.0` with `g` an `F32` now compares two `F64`s, as C
+  does. Nothing in the corpus or std relied on either. **Found on the way**: the token evaluator (B9a) always computed
+  floats as doubles, so a condition on `X := 0.1` (`X * 3.0 == 0.3`) was decided false where the run time said true -
+  untyped float globals now agree; a narrow-typed one (`X F32 = 0.1`) still reads as its value (B9a), as an `I32`
+  that would wrap does. The spec's G9a example (`Pick(1, 2.5)` at `F64`) had been wrong until now. Flagged, not
+  changed: `$` renders an `F64` with 17 digits (`0.10000000000000001`); a float literal beyond a narrower target's
+  range becomes infinity (`f F32 = 1e39`).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

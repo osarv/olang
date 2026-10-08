@@ -1,0 +1,17 @@
+# check: run
+# flags: -D Tenth=0.1
+# B10/T6a: a float build constant is typed as the literal would be - an F64, so it holds the double nearest 0.1 -
+# while compiling (the first assert, decided by the evaluator) and at run time (the second, on a mutable global)
+error E { X }
+fn width(v <T>) I32 {
+    match <T> {
+        case F32 { return 32 }
+        case F64 { return 64 }
+    }
+}
+Seen mut F64 = 0
+fn main() ? E {
+    assert Tenth == F64(0.1) and width(Tenth) == 64
+    Seen = Tenth
+    assert Seen == F64(0.1) and Seen != F64(F32(0.1))    # Seen is mutable, so this is decided at run time
+}

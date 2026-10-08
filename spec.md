@@ -149,8 +149,8 @@ the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
 recognized only when the whole of it is present: `1e` is an `INT_LIT` followed by an identifier, exactly
-as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT` denotes a value of type `F32` unless context requires `F64` (see
-§5.2 on numeric literal typing).
+as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT`'s own type is `F64` (T6a); written
+against another float type, it adapts to that type (T6).
 
 **L13.** `CHAR_LIT ::= "'" char-content "'"`, where `char-content` is exactly one of:
 - any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
@@ -338,13 +338,13 @@ numeric type it is used against, wherever that type would otherwise have to matc
 assignability context (§5.3 E12: a var-decl initializer, an assignment, an argument, a returned
 value) or a binary operator requiring both operands to be the same type (§5.2 E6, E8, E9, E10) - **provided
 the value written is representable in that type**. An integer literal is representable in any integer type
-whose range contains its value (`U8` is unsigned, 0-255; T4) and in either float type; a float literal is
+whose range contains its value (`U8` is unsigned, 0-255; T4) and in any float type; a float literal is
 representable only in a float type. Adaptation is therefore never a silent truncation, and never turns a
 float literal into an integer - but it is not restricted to widening either: `x U8 = 65` and
 `b == 'a'` are as valid as `n I64 = 1`, because the literal has no representation of its own yet and
 the value written fits. Where both operands of a same-type-requiring binary operator are literals of
-differing numeric types, the narrower adapts to the wider (`U8` < `I32` < `I64` < `F32` <
-`F64`), subject to the same representability rule. A non-literal value of a different numeric type
+differing numeric types, the narrower adapts to the wider (`Char` < `I32` < `I64` < `F64`, the types T6a gives
+them), subject to the same representability rule. A non-literal value of a different numeric type
 requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
 
 **T6b (numbers flow toward their base).** A number flows implicitly into a type that holds every value of its own,
@@ -363,11 +363,15 @@ other's type, and the operation is then the other's: `I32 + I64` is an `I64`, `U
 base, an integer and a float - do not meet, and that is a compile-time error.
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
-not representable in `I32` and `I32` for every other integer literal, `F32` for a float literal,
+not representable in `I32` and `I32` for every other integer literal, `F64` for a float literal,
 `Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
-the type such a literal carries into a context that requires no particular type of it. It follows that an
+the type such a literal carries into a context that requires no particular type of it - a type variable only
+literals reach (G9a), a `-D` build constant (B10). It follows that an
 integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
-already `I64`, so T6 must adapt it, and the value does not fit.
+already `I64`, so T6 must adapt it, and the value does not fit. An expression built from literals is not itself
+a literal (E4), so it does not adapt: `0.5 * 2.0` is an `F64`, which flows into no narrower float (T6b), so
+`f F32 = 0.5 * 2.0` is a compile-time error - the conversion is written, `F32(0.5 * 2.0)` - and `g < 1.0 / 3.0`
+with `g` an `F32` compares two `F64`s.
 
 ### 2.3 Array types
 
@@ -3676,7 +3680,7 @@ compares here as it does everywhere else: a `String` by content, through its `Eq
 **B10.** `-D Name=value` (or `-DName=value`), given any number of times alongside any mode, defines a
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
-shaped as an integer literal is an integer (typed by T6a), text shaped as a float literal a float, each
+shaped as an integer literal is an integer and text shaped as a float literal an `F64` (each typed by T6a), each
 optionally preceded by `-`; anything else — or anything in double quotes — is text, a `String` (T29c), so it
 compares, renders and passes as any other text does.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and

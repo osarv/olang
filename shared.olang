@@ -703,6 +703,35 @@ test "an integer literal too large for I32 is typed I64, so it is never silently
     assert m == 5000000000
 }
 
+# T6a: a float literal's own type is F64, as in C, Go and Rust. It was F32, so "x := 0.1" held the float nearest 0.1
+# (0.10000000149011612 once widened) and a generic reached only by "0.1" was instantiated at F32. Each check compares
+# against an F64(...), which an F32 would widen into and miss. The fixed locals are decided while compiling (S18c)
+# and the sum is baked (K2); the written local is computed at run time, and the two agree.
+fn floatWidth(v <T>) I32 {
+    match <T> {
+        case F32 { return 32 }
+        case F64 { return 64 }
+    }
+}
+
+fn renderOf(v <T>) String { return $v }
+
+FloatLitSum F64 = 0.1 + 0.2
+
+test "T6a: a float literal is an F64 where nothing adapts it, and still adapts where something does" {
+    x := 0.1
+    assert x == F64(0.1) and floatWidth(x) == 64
+    assert floatWidth(0.1) == 64 and floatWidth(F32(0.1)) == 32
+    assert PickSecond(1, 0.1) == F64(0.1)                  # G9a: a variable only literals reach is F64
+    assert renderOf(0.1) == $F64(0.1) and renderOf(0.1) != $F32(0.1)
+    assert FloatLitSum == 0.30000000000000004 and FloatLitSum != F64(F32(0.1) + F32(0.2))
+    f F32 = 0.1                                             # a typed target still adapts the literal
+    assert floatWidth(f) == 32 and f == F32(0.1) and F64(f) != F64(0.1)
+    y := 0.1
+    y = y + 0.2                                             # written, so not fixed (S8c): this runs
+    assert y == FloatLitSum and floatWidth(y) == 64
+}
+
 # addLong was declared but never callable at all before this - there was no way to construct an I64
 # value to pass it (see the report).
 test "addLong, previously unreachable for lack of any way to construct an I64, now works" {
