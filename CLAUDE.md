@@ -2766,6 +2766,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   OCP bit patterns. Both formats **saturate** (the user: "do what the industry does" - the hardware's satfinite
   conversion, which FP8 training uses; framework casts default to NaN/inf instead); `==` compares values as IEEE does (the user:
   "compare by value, follow the standard") - NaN equals nothing, -0 equals 0.
+- **Lock file (M23b, 2026-10-08, the user: "do lock files"; my design from the earlier proposal).** `olang.lock` beside
+  the root module, `HOST/OWNER/REPO[@REF] COMMIT` per line, sorted. Locked: that commit, fetched by hash (a shallow
+  fetch, else a full clone and checkout) when not cached, verified with `rev-parse`. Unlocked: the ref's head is
+  cloned, its commit read and written in. The cache is now keyed by commit, so two projects locking different commits
+  of one repository share nothing that could conflict. Updating is deleting the line; no `-update` flag yet. The
+  remote check now moves the branch under a locked build, clears the cache and refetches the locked commit, and
+  updates by deleting a line - shown by remote.olang's assert, which compile-time evaluation then proves false.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

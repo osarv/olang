@@ -103,8 +103,9 @@ test "std/map beside a local map.olang" {
     assert outOf(dir).Contains("alias")
 }
 
-# M23a: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
-# branch, and a second build reads the cache and never touches git - the remote is removed to prove it
+# M23a/M23b: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
+# branch, olang.lock pins each to a commit, and a second build reads the cache and never touches git - the remote is
+# removed to prove it
 test "a file in a remote repository, fetched once into the cache" {
     dir := fresh("remote")
     repo String& = $dir "/remote/example.com/me/tools"
@@ -118,8 +119,22 @@ test "a file in a remote repository, fetched once into the cache" {
     assert sh(dir, $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("remote build", dir)
     assert outOf(dir).Contains("fetching example.com/me/tools into")
     assert outOf(dir).Contains("fetching example.com/me/tools@v1 into")
-    assert sh(dir, "test -d cache/example.com/me/tools/mathx") == 0
-    assert sh(dir, "rm -rf remote && touch remote.olang") == 0
+    assert sh(dir, "ls -d cache/example.com/me/tools/*/mathx > /dev/null") == 0
+    # M23b: both repositories are locked to the commits fetched, and the cache is keyed by commit
+    assert sh(dir, "grep -q '^example.com/me/tools [0-9a-f]\\{40\\}$' olang.lock && grep -q '^example.com/me/tools@v1 ' olang.lock") == 0
+    # the branch moves on, and a locked build neither fetches nor follows it
+    assert sh(repo, "sed -i 's/n + 100/n + 1000/' mathy/inc.olang && " $git " commit -qam v3") == 0
+    assert sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked rebuild", dir)
+    assert not outOf(dir).Contains("fetching")
+    # with the cache gone, the locked commit is fetched again - not the branch's new head
+    assert sh(dir, "rm -rf cache && touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked refetch", dir)
+    assert outOf(dir).Contains("as olang.lock says")
+    # deleting a line updates that repository to its ref's current commit
+    assert sh(dir, "cp olang.lock before.lock && sed -i '/^example.com\\/me\\/tools /d' olang.lock") == 0
+    assert sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("it is false")                           # it now adds 1000: remote.olang's assert says so
+    assert sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "cp before.lock olang.lock && rm -rf remote && touch remote.olang") == 0
     assert sh(dir, $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") == 0 or failed("cached remote build", dir)
     assert not outOf(dir).Contains("fetching")
     assert sh(dir, $env "\"$OLANG\" -b missing.olang > out.txt 2>&1") != 0

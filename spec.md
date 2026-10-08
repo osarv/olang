@@ -1246,11 +1246,19 @@ standard library are compile-time errors. The first element of a relative path i
 and never contains a `.`.
 
 **M23a.** A remote repository is **fetched once** and kept in a local cache (in this implementation, a git
-clone under `OLANG_CACHE`, default `~/.cache/olang`, one directory per `HOST/OWNER/REPO[@REF]`). Every later
-compilation reads the cached copy and needs no network; nothing is ever re-fetched implicitly, so a build
+checkout under `OLANG_CACHE`, default `~/.cache/olang`, one directory per commit: `HOST/OWNER/REPO/COMMIT`). Every
+later compilation reads the cached copy and needs no network; nothing is ever re-fetched implicitly, so a build
 does not change because the remote did. Two different `@REF`s of one repository are two separate
 fetches and two separate sets of modules. A fetch that fails is a compile-time error, reported against the
 import.
+
+**M23b (the lock file).** `olang.lock`, in the root module's directory, names the commit each remote repository is
+built from: one line per repository, its `HOST/OWNER/REPO[@REF]` and the commit, sorted, `#` beginning a comment. A
+repository with a line is built from that commit and no other - fetched by it when it is not cached, however the
+ref has moved since. A repository without one is resolved to its ref's current commit (the default branch's, with no
+`@REF`), fetched, and its line written. So deleting a line, or the file, updates that repository on the next build,
+and committing the file makes every checkout build the same code. A commit names its exact content, so the lock needs
+no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock.
 
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
 path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/map"`
