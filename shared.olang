@@ -2763,6 +2763,17 @@ test "':=' infers from an array's Len() and from an atomic builtin" {
     assert now == 7
 }
 
+# E23/D15: "a.Len()" is written as a method call like any other, though the compiler supplies it, so ":=" takes
+# its I64 - it used to be refused, while "n := l.Len()" on a List compiled
+test "':=' infers an I64 from an array's Len()" {
+    a := I32[1, 2, 3]
+    n := a.Len()
+    assert n == 3
+    n = 5000000000          # an I64: this does not fit an I32
+    t := "four".Len()
+    assert t + n == 5000000004
+}
+
 test "slicing a runtime-length array, and slicing a slice" {
     n I32 = 5
     b := Array<I32>(n)

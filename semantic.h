@@ -654,6 +654,7 @@ bool StatementCatchCoversType(struct list* matches, struct type errType);
 //neither of which has or wants one
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain);
 struct list* SemanticAllModules(void);
+struct list* SemanticPreludeModules(void); //list of struct semaModule*: every file of <std>/prelude (M19d)
 struct list* SemanticAllLambdas(void);
 bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permission
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function

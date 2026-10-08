@@ -1880,13 +1880,16 @@ char* cgIncDec(struct cgCtx* ctx, struct operand* op, bool prefix, bool inc) {
     char* addr = cgAddr(ctx, target);
     char ty[256];
     llvmType(target->type, ty, sizeof(ty));
+    //T36: tagged as every other access to the same storage is - left untagged, "l.count++" aliased every element
+    //store, so a count kept beside a buffer went back to memory on each append
+    const char* tbaa = cgTbaa(target->type, target->opType == OPERATION_INDEX);
     char* oldVal = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", oldVal, ty, addr);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s%s\n", oldVal, ty, addr, tbaa);
     bool isF = TypeIsFloat(target->type);
     char* newVal = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", newVal, isF ? (inc ? "fadd" : "fsub") : (inc ? "add" : "sub"),
         ty, oldVal, isF ? "1.0" : "1");
-    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, newVal, addr);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", ty, newVal, addr, tbaa);
     return prefix ? newVal : oldVal;
 }
 

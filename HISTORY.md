@@ -8038,3 +8038,78 @@ from their original form.
 - Checked in checks/checks.olang with a fixture that writes a line and exits 42: built and run, and under `-i` (where
   the interpreter's libffi call reaches the real `exit` in the compiler's own process), both end with 42 after the
   line, and the line after the call is never written.
+
+- **`List` indexes and holds its place; `StringBuilder` (2026-10-08, item 4 of the self-hosting prep, the user's
+  decision).** The user's caution came with it: "Be careful with the At and SetAt so we don't end up not using
+  iterators for loops."
+  - **Iterators keep the loops.** S9d already ordered it: a type with `At` and `Len` is walked by position only when it
+    has neither a `Next` nor an `Iter` of its own, and `List` keeps its `Iter`. Checked rather than assumed, in every
+    place a loop is made for the program: `for x in l`, a comprehension, an iterator helper (`l.Iter().Count(f)`), and
+    a loop in generic code that knows the `List` only as `Indexable<T>` - each calls `ListIter.Next` and none calls
+    `At`. The `checks/` scenario "a List is walked by its iterator, not by At" greps the generated IR for exactly that
+    (an `I16` list, so nothing in the prelude instantiates it too). `Indexable`'s default `Iter` is not the type's own
+    (S9d's order, ledger item 35), so `l.Iter()` stays `ListIter` - a corpus test declares the result as a
+    `ListIter<I32>`, which would not compile if it were `IndexIter`.
+  - **Indexing is arithmetic, not a search.** The chunks double (8, 16, 32 ...), so chunk k starts at 8(2^k - 1) and
+    position i is in chunk `highBit(i + 8) - 3`, at offset `i + 8 - (8 << k)`. The chain of chunks became an array of
+    them (doubled when full, which happens only as a chunk is added - starting at 4, so a list under 120 elements
+    never grows it), with the tail, its fill and its length kept beside it so `Push` stays one compare. olang has no
+    leading-zeros operation, so `highBit` is six halving compares in olang; LLVM turns them into a chain of
+    conditional moves. So `l[i]` is six compares and two loads whatever the length - an O(chunks) walk would have been
+    twenty steps at ten million elements. `l[i] = v` is `SetAt`, the same arithmetic; both unchecked as an array index
+    is (E16), and `try l[i]` / `try l[i] = v` check against `Len()` through the derived `TryAt`/`TrySetAt` (E31a).
+    Measured over a
+    10M-element `List<I64>` (minimum of five runs): a sequential `l[i]` walk 4.6ns per element against 1.2ns through
+    the iterator; a random gather 2.3-2.7x an array's (10.6s against 3.9s for 100M accesses - the array's is
+    memory-latency-bound, and the extra dependent instructions shrink how many misses overlap). An empty `List` is
+    still all zero bits and allocates nothing; the first `Push` allocates the 8-element chunk and the 4-entry chunk
+    array.
+  - **`l[i]` is a copy.** `At` returns `<T>`, and a type variable cannot be returned as a borrowed reference when it
+    may be a primitive (G11a), so `l[i].x = v` on a `List` of structs is an error; the element is stored whole,
+    `l[i] = v`. The error used to be "variable is immutable", naming nothing that is involved; a write into a value a
+    call gave back now says so and says what to write (`WRITE_INTO_CALL_VALUE`, `checks/cases/listfieldwrite`), and
+    E31 states it.
+  - **`ListIter` holds the chunk it is in.** It used to hold two numbers and ask the list for (chunk number, index),
+    which walked the chunk chain from the head for every element - O(n log n) a walk. Its comment's reason, that `Next`
+    could not write a reference through a receiver whose scope it could not name and still satisfy an interface,
+    went when interfaces were removed (T30) and every reference parameter got a scope (O4b): the iterator now has a
+    `chunk mut Array<<T>>&of` field, repointed through the receiver as C2d allows. 10M elements walked ten times,
+    minimum of five runs: 1.62s before, 0.124s after (13x), against 0.087s for the same walk over an array. `MapIter`
+    had the same shape for the same stated reason - a bucket and a depth, walking the chain from its start for every
+    entry - and now holds the next slot; the private `elementAt`/`entryAt` helpers are gone.
+  - **`PushAll(a)`** appends an array with one full-chunk check per chunk rather than per element, and a short path
+    when the whole array fits the tail - the commonest case for text.
+  - **`StringBuilder`** (name mine, flagged - prelude type names are reserved everywhere, so a bare `Builder` or `Text`
+    would have taken a name from every program): `Push(t String&)`, `PushChar(c Char)`, `Len()`, `ToString()`. A struct
+    holding a `List<Char>` by value, so it has the list's properties - nothing moves as it grows, everything lives
+    where the builder does - and `ToString` is `String(chars.ToArray())`, one copy into the caller's scope. A value goes
+    in as its rendering, `b.Push($n)`, which keeps the cost of rendering visible. Measured against a hand loop
+    copying the same pieces into a preallocated `Array<Char>` whose pages were already touched (minimum of 28 runs on
+    a shared, noisy machine - single runs varied 10x): 10M characters in 5-character pieces, 18ms to append and 15ms
+    to flatten against 9ms; pieces of 4 and 14 characters with two `PushChar`s between, 33ms with the flatten against
+    6ms; 10M single `PushChar`s, 40ms with the flatten against 2ms (the hand loop becomes a memset). At a quieter moment
+    the 5-character case measured 9ms + 6ms against 12ms for a hand loop allocating its own array. Most of the gap is
+    fresh memory: the builder's chunks (zero-filled, as every `Array<T>(n)` is) and the flattened copy are new pages,
+    and a fresh zero-filled 16M-character array alone measured 24-35ms here. `PushAll` gained the fits-in-the-tail
+    path for this: 15ms to 9ms on the 5-character case.
+  - **Found on the way, all pre-existing:**
+    - **Editing the prelude did not rebuild anything that used it (B3).** Staleness walks a module's imports, and the
+      prelude is imported by no one - it is simply there. The root's object holds every instantiation of the
+      prelude's generics (B3d), so a program built before the new `List` kept the old `List`'s code: the first
+      benchmark after the rewrite measured the old iterator, and the binary still contained `listChunk`. Hidden in
+      the repository because changing the compiler binary already rebuilds everything (B7), and a prelude change
+      usually comes with one. Every module now counts as importing every prelude module; spec B3/B3d say so. The
+      check "editing the prelude rebuilds what uses it" builds against a copy of std (`OLANG_STD`), adds a generic
+      method to the copy's `Pair`, edits its body, and expects the new answer.
+    - **`++` and `--` emitted untagged loads and stores (T36).** Every other access to a primitive carries its TBAA
+      tag; `cgIncDec` wrote none, and an untagged access may alias anything - so `l.count++` beside an element store
+      sent `used` and `count` back to memory on every `Push`. Correct, only slow; now tagged as the same storage is
+      everywhere else (element or field family by the last step of the path). Small here (10M `PushChar`s with the
+      flatten, 56ms to 49ms), since the loop is bound by fresh pages, but it is every counter beside a buffer.
+    - **`n := a.Len()` was refused (D15)** while `n := l.Len()` on a `List` compiled: an array's `Len()` is written as
+      a method call but is not a call node, so the "the type is written here" test did not see a call. A corpus test
+      in shared.olang pins it.
+  - Evaluator: nothing new to model - `List`, `Map` and `StringBuilder` are ordinary olang - but proven: globals baked
+    from indexing, `PushAll`, a `List` walk (`ListIndexedBaked = 4153`), a `StringBuilder` (`BuiltBaked`, written out
+    as a constant `[9 x i8]`) and a `Map` walk with text keys (`WalkedBaked`), each compared with the same computation
+    at run time.
