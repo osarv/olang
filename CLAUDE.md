@@ -2693,8 +2693,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   (zext for `Byte`). **Generic inference followed (my extension, flagged)**: a variable a number bound through a
   bare `<T>` widens to a later, wider argument of its family (`max(i32, i64)` is `max` at `Int64`, either order),
   never one a receiver fixed (G9b). New messages name T6b and say to write `T(x)`. Not done here: removing the
-  now-redundant `Int64(x)` conversions in the corpus (harmless), and narrowing (`Int32(i64)`) is unchanged - it
-  still wraps, pending the user's answer on whether it should check.
+  now-redundant `Int64(x)` conversions in the corpus (harmless), and **narrowing stays unchecked** (the user: "1 for sure.
+  It's not even a question"): `Int32(i64)` wraps, a float out of range stays undefined (E26a), and `try Int32(x)` is
+  the opt-in check (R20) - the standing rule that a per-operation run-time check never belongs in the language.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

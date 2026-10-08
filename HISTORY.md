@@ -7673,3 +7673,5 @@ from their original form.
   of range - the ledger had recorded it as the user's decision, but the transcript shows it was my proposal, and
   it conflicts with the user's earlier "a runtime check that costs per operation should never be done", which
   removed the float-to-int check after it measured 3.3x on a loop.
+  Answered the same day: narrowing stays unchecked - "1 for sure. It's not even a question." The ledger entry that
+  had recorded a checked narrowing constructor as decided was my error.
