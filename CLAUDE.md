@@ -2756,15 +2756,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   included) still copies nothing. Corpus: seven tests that held text in `U8`/`Array<U8>` became `Char`/`String`.
   Unicode stays a library (Utf8/Utf32 types later, the user's plan).
 - **Complex numbers in the prelude (2026-10-08, the user's call: "Do complex in the prelude", "C32 is two F32, C16 is
-  two F16").** `Complex16/32/64` named by part width, plain structs with E31 operator methods, generated from one
+  two F16", then "maybe do just C16 C32 C64").** `C16/C32/C64` named by part width, as the F types are, plain structs with E31 operator methods, generated from one
   template since there are no type aliases; `==` and `$` are the struct defaults. Spelled out per the user's earlier
   "spelled out completely" - my reading of the two messages, flagged.
 - **8-bit floats in the prelude: `F8E4M3`, `F8E5M2` (2026-10-08, the user: "do F8s in the prelude as you proposed").**
   Not primitives: LLVM has no 8-bit float and two formats compete, so both are structs holding `Bits` (a mutable
   `U8`, so raw bits can be set), built from an `F64` (`F8E4M3(x)`, nearest-even) and read with `F64()`, rendering
   as their value through `Str`. Encoding is arithmetic in olang (no bit reinterpretation exists), checked against the
-  OCP bit patterns. **My calls, flagged**: E4M3 saturates to +-448 beyond its range (the "satfinite" ML conversion;
-  the alternative is NaN), E5M2 goes to infinity; `==` compares bits (so a NaN equals itself).
+  OCP bit patterns. Both formats **saturate** (the user: "do what the industry does" - the hardware's satfinite
+  conversion, which FP8 training uses; framework casts default to NaN/inf instead); `==` compares bits (a NaN equals
+  itself, flagged).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

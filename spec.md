@@ -1335,13 +1335,14 @@ Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, tw
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
 every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
 
-The prelude declares the complex numbers `Complex16`, `Complex32` and `Complex64`, named by the width of each part (two
+The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
 (E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type.
 
 The prelude declares two 8-bit float formats as storage types: `F8E4M3` (4 exponent bits, bias 7, 3 mantissa bits;
-no infinity, one NaN, largest value 448, and a value beyond it saturating to +-448) and `F8E5M2` (5 exponent bits,
-bias 15, 2 mantissa bits; IEEE-style, with infinities and NaNs). Each is a struct holding its `Bits` (a `U8`), built
+no infinity, one NaN, largest value 448) and `F8E5M2` (5 exponent bits, bias 15, 2 mantissa bits; IEEE-style, with
+infinities and NaNs, largest finite value 57344). Conversion into either **saturates**: a value beyond the largest
+finite one, an infinity included, becomes that value with its sign, and NaN stays NaN. Each is a struct holding its `Bits` (a `U8`), built
 from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
 it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
 

@@ -2,10 +2,13 @@
 # compute in - each holds its bits, converts from a number and back to F64, and renders as the value it holds.
 # Two formats exist and both are used, so both are here (the OCP 8-bit float formats):
 #   F8E4M3 - 4 exponent bits (bias 7), 3 mantissa bits: more precision. No infinity; the one NaN is all ones, and the
-#            largest value 448. A value beyond it saturates to +-448 (my call: the "satfinite" conversion ML uses).
+#            largest value 448.
 #   F8E5M2 - 5 exponent bits (bias 15), 2 mantissa bits: more range. IEEE-style, with infinities and NaNs - the top
-#            byte of an F16. A value beyond 57344 rounds to infinity.
-# Conversion in rounds to nearest, ties to even, as the hardware does.
+#            byte of an F16 - and largest finite value 57344.
+# Conversion in rounds to nearest, ties to even, and SATURATES, as the hardware's conversion does (NVIDIA's "satfinite"):
+# a value beyond the largest finite one, an infinity included, becomes that largest value with its sign, in both formats;
+# NaN stays NaN. FP8 training and inference convert this way, since a scaled tensor's outliers must not become NaN or
+# infinity. (Framework casts - PyTorch, JAX - default instead to NaN for E4M3 and infinity for E5M2.)
 
 # 2 to the power e, exactly
 fn f8Pow2(e I32) F64 {
@@ -78,9 +81,9 @@ fn f8E5M2Bits(x F64) U8 {
     if x != x { return 127 }                             # NaN: exponent all ones, a nonzero mantissa
     sign I32 = 128 if x < 0 else 0
     a F64 = -x if x < 0 else x
-    if a > 114688.0 { return U8(sign | 124) }           # beyond any rounding back down: infinity
+    if a > 57344 { return U8(sign | 123) }               # saturates, infinity included
     b I32 = f8Encode(a, 2, 15, 30)
-    if b < 0 { return U8(sign | 124) }                   # rounded past the largest finite value: infinity
+    if b < 0 { return U8(sign | 123) }
     return U8(sign | b)
 }
 
@@ -99,8 +102,9 @@ test "8-bit floats encode to their bit patterns and decode back" {
     assert F8E4M3(0.001953125).Bits == 1 and F8E4M3(1000).Bits == 126 and F8E4M3(0).Bits == 0
     assert F8E4M3(1.0625).F64() == 1 and F8E4M3(1.1875).F64() == 1.25     # ties to even, either way
     assert F8E4M3(0.3).F64() == 0.3125 and $F8E4M3(1.5) == "1.5"
-    assert F8E5M2(1).Bits == 60 and F8E5M2(57344).Bits == 123 and F8E5M2(1.5).Bits == 62 and F8E5M2(1e9).Bits == 124
+    assert F8E5M2(1).Bits == 60 and F8E5M2(57344).Bits == 123 and F8E5M2(1.5).Bits == 62 and F8E5M2(1e9).Bits == 123
     assert F8E5M2(-0.25).F64() == -0.25 and F8E5M2(0.0000152587890625).Bits == 1
+    assert F8E5M2(-1.0 / 0.0).F64() == -57344 and F8E4M3(1.0 / 0.0).F64() == 448
     n := F8E4M3(0.0 / 0.0).F64()
     assert n != n
 }
