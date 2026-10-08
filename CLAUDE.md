@@ -2755,6 +2755,10 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Array<U8>` I/O untouched, and `String(bytes)` (any same-representation array, a fixed `U8[...]` literal
   included) still copies nothing. Corpus: seven tests that held text in `U8`/`Array<U8>` became `Char`/`String`.
   Unicode stays a library (Utf8/Utf32 types later, the user's plan).
+- **Complex numbers in the prelude (2026-10-08, the user's call: "Do complex in the prelude", "C32 is two F32, C16 is
+  two F16").** `Complex16/32/64` named by part width, plain structs with E31 operator methods, generated from one
+  template since there are no type aliases; `==` and `$` are the struct defaults. Spelled out per the user's earlier
+  "spelled out completely" - my reading of the two messages, flagged.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1335,6 +1335,10 @@ Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, tw
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
 every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
 
+The prelude declares the complex numbers `Complex16`, `Complex32` and `Complex64`, named by the width of each part (two
+`F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
+(E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type.
+
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
 

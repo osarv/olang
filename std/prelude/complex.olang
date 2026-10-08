@@ -1,0 +1,75 @@
+# complex numbers, part of the prelude (the user's call): named by the width of each part - Complex16 is two F16s,
+# Complex32 two F32s, Complex64 two F64s. Ordinary structs with operator methods (E31): "a + b", "a * b", "-a"; "=="
+# compares both parts and "$" renders "Complex32(1, 2)". Every operation is done in the part's own type.
+
+type Complex16 struct(Re F16, Im F16 = 0) {
+    Re
+    Im
+}
+
+fn (a Complex16) Plus(b Complex16) Complex16 { return Complex16(a.Re + b.Re, a.Im + b.Im) }
+fn (a Complex16) Minus(b Complex16) Complex16 { return Complex16(a.Re - b.Re, a.Im - b.Im) }
+fn (a Complex16) Mul(b Complex16) Complex16 { return Complex16(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
+fn (a Complex16) Div(b Complex16) Complex16 {
+    d := b.Norm()
+    return Complex16((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+}
+fn (a Complex16) Neg() Complex16 { return Complex16(-a.Re, -a.Im) }
+# the conjugate: the same real part, the imaginary part negated
+fn (a Complex16) Conj() Complex16 { return Complex16(a.Re, -a.Im) }
+# the squared magnitude, Re * Re + Im * Im
+fn (a Complex16) Norm() F16 { return a.Re * a.Re + a.Im * a.Im }
+# every part multiplied by k
+fn (a Complex16) Scale(k F16) Complex16 { return Complex16(a.Re * k, a.Im * k) }
+
+type Complex32 struct(Re F32, Im F32 = 0) {
+    Re
+    Im
+}
+
+fn (a Complex32) Plus(b Complex32) Complex32 { return Complex32(a.Re + b.Re, a.Im + b.Im) }
+fn (a Complex32) Minus(b Complex32) Complex32 { return Complex32(a.Re - b.Re, a.Im - b.Im) }
+fn (a Complex32) Mul(b Complex32) Complex32 { return Complex32(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
+fn (a Complex32) Div(b Complex32) Complex32 {
+    d := b.Norm()
+    return Complex32((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+}
+fn (a Complex32) Neg() Complex32 { return Complex32(-a.Re, -a.Im) }
+# the conjugate: the same real part, the imaginary part negated
+fn (a Complex32) Conj() Complex32 { return Complex32(a.Re, -a.Im) }
+# the squared magnitude, Re * Re + Im * Im
+fn (a Complex32) Norm() F32 { return a.Re * a.Re + a.Im * a.Im }
+# every part multiplied by k
+fn (a Complex32) Scale(k F32) Complex32 { return Complex32(a.Re * k, a.Im * k) }
+
+type Complex64 struct(Re F64, Im F64 = 0) {
+    Re
+    Im
+}
+
+fn (a Complex64) Plus(b Complex64) Complex64 { return Complex64(a.Re + b.Re, a.Im + b.Im) }
+fn (a Complex64) Minus(b Complex64) Complex64 { return Complex64(a.Re - b.Re, a.Im - b.Im) }
+fn (a Complex64) Mul(b Complex64) Complex64 { return Complex64(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
+fn (a Complex64) Div(b Complex64) Complex64 {
+    d := b.Norm()
+    return Complex64((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+}
+fn (a Complex64) Neg() Complex64 { return Complex64(-a.Re, -a.Im) }
+# the conjugate: the same real part, the imaginary part negated
+fn (a Complex64) Conj() Complex64 { return Complex64(a.Re, -a.Im) }
+# the squared magnitude, Re * Re + Im * Im
+fn (a Complex64) Norm() F64 { return a.Re * a.Re + a.Im * a.Im }
+# every part multiplied by k
+fn (a Complex64) Scale(k F64) Complex64 { return Complex64(a.Re * k, a.Im * k) }
+
+test "complex arithmetic, in each width" {
+    a := Complex32(1, 2)
+    b := Complex32(3, -1)
+    assert a + b == Complex32(4, 1) and a - b == Complex32(-2, 3) and a * b == Complex32(5, 5)
+    assert (a * b) / b == a and -a == Complex32(-1, -2) and a.Conj() == Complex32(1, -2) and a.Norm() == 5
+    assert $a == "Complex32(1, 2)" and Complex32(7) == Complex32(7, 0)
+    h := Complex16(F16(0.5), F16(1))
+    assert h * h == Complex16(F16(-0.75), F16(1)) and h.Scale(F16(2)) == Complex16(F16(1), F16(2))
+    d := Complex64(1, 1)
+    assert d * d.Conj() == Complex64(2, 0)
+}
