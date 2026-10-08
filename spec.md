@@ -101,7 +101,7 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-interface spawn   join
+trait     spawn   join
 import    test    destruct
 abort     unreachable
 extern    default
@@ -259,8 +259,8 @@ followed by a parenthesized expression.
 ### 2.1 Kinds of types
 
 **T1.** Every olang type is exactly one of: a primitive type (§2.2), an array type (§2.3), a struct
-type (§2.4), an enum type (§2.5), an error type (§2.6), a function type (§2.7), or an interface type
-(§2.11). A scope
+type (§2.4), an enum type (§2.5), an error type (§2.6), or a function type (§2.7). A trait (§2.11) is
+declared like a type but is only ever a constraint. A scope
 (§2.8) is not among them — it is not a type at all. There is no `void`/unit type available to user
 code; a function either declares a success type or declares none (see §3.4).
 
@@ -268,35 +268,35 @@ code; a function either declares a success type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= [ "mut" ] ( enum-body | struct-body | interface-body | func-type | type-ref | type-var )
+type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | type-var )
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type, on a type
 variable (which then stands for a writable reference when bound to one), and at the top of a declaration.
 
-`enum-body`, `struct-body`, `interface-body`, and `func-type` are anonymous type *shapes*,
+`enum-body`, `struct-body`, `trait-body`, and `func-type` are anonymous type *shapes*,
 constructible inline anywhere a type expression is expected (§2.4, §2.5, §2.7, §2.11). `type-ref`
-(§2.9) names an existing primitive, or a previously declared struct, enum, error, or interface type,
+(§2.9) names an existing primitive, or a previously declared struct, enum, error, or (in a constraint) trait,
 with an optional array suffix and reference marker. `type-var` (§12.1 G1) names a type parameter and is valid only inside a generic
 declaration.
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
 exactly the **nullable** ones — a `&`/`&x`-marked struct or compile-time-length array, a runtime-length
-array (`Array<T>`, always pointer-backed per T11), an interface (T32), and a function type (T21, D16d). Used
+array (`Array<T>`, always pointer-backed per T11), and a function type (T21, D16d). Used
 against any other type it is a compile-time error. Calling through a null function value is a null dereference
 (T2b).
 
 Its representation is **all-zero bits**, at every nullable type. For a single-pointer type that is the null
 pointer; for the two-word shapes it is each word zeroed, so a null `Array<T>` is `{ 0, null }` — `Len()` (E23) of
-it is `0` and it reads as genuinely empty — and a null interface is `{ null, null }`.
+it is `0` and it reads as genuinely empty.
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
 scope without a containment check. `==`/`!=` against it are the ordinary reference comparisons (E10,
 pointer identity), so `p == null` needs no operator of its own.
 
 **T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
-Reading a field or element through a null reference, or dispatching through a null interface, is
+Reading a field or element through a null reference, or calling through a null function value, is
 **undefined behaviour** — in practice a deterministic trap, address zero being unmapped, which is why null
 is the all-zero representation rather than merely a convention. This is the cost of `null`: §8 continues to
 guarantee that a reference never outlives what it points at, and no longer guarantees that it points at
@@ -511,28 +511,29 @@ instantiating one generic over one type is ordinary and costs nothing beyond the
 
 **G18.** Every rule about what a type **contains** is re-checked against each instantiation's substituted
 types, not only against the generic's own declaration. A generic cannot answer such a question about
-itself: a type variable contains no reference, no destructor-bearing struct and no interface, so a rule
+itself: a type variable contains no reference and no destructor-bearing struct, so a rule
 asking what a field of type `<T>` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
 
-**G19 (constraints).** A type variable may carry a **constraint**, an interface its type must satisfy:
+**G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy:
 `type-var ::= "<" IDEN [ type-expr ] ">"` (`<T Shape>`, `<I Iterator<<E>>>`), and a generic type's declared
-parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name an interface; it is a requirement,
-not a value, so it carries no reference marker (T32 does not apply). A constraint may be written on any occurrence
+parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name a trait; it is a requirement, not a
+value, so it carries no reference marker. A constraint may be written on any occurrence
 of the variable in a declaration; two occurrences constraining one variable differently are an error.
 
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), or by a constructor's
-inferred ones (G10c) - its type must satisfy the constraint's interface, with every variable in the constraint
+inferred ones (G10c) - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
-missing. Satisfaction is T31's, except that a method's parameter may differ from the interface's in reference-shape
-alone, since a constrained call is a direct call where E12 borrows a value for a reference parameter.
+missing. Satisfaction is T31's.
+
+A type variable may carry a reference marker (`x <T>&`, `it mut <I Iterator<<E>>>&`): a reference to whatever the
+variable is bound to, which must then be a struct or an array - a number, an enum or another type that cannot be a
+reference is a compile-time error where the variable is bound (G11a).
 
 A variable named only in a constraint (`E` in `<I Iterator<<E>>>`) counts as appearing in the signature (G4): it is
 bound through the methods of the type its constrained variable is bound to (G9c).
 
-A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls; an
-interface used as a constraint is the same interface that, written as a reference type, gives a value dispatched at
-run time (T30) - one for code compiled per type, the other for values of different types mixed at run time.
+A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
 
 **T18.** An enum type must declare at least one case; case names must be unique within the type. A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
@@ -587,7 +588,7 @@ whose scope is fixed by its position. The full semantics are specified in §8.
 **T24.** `type-ref ::= alias-chain IDEN [ type-args ] [ reference-marker ]`, where
 `reference-marker ::= "&" [ IDEN | "return" ]`, `type-args` is defined in §12.3 G8 (required when, and only when, the
 named type is generic, and always for `Array`, T7), and `alias-chain IDEN` (§4.4 M8) names a primitive
-type, `Array`, or a struct/enum/error/interface type declared in the referencing module or reached through
+type, `Array`, or a struct/enum/error type (or, in a constraint, a trait) declared in the referencing module or reached through
 an import alias chain. This is the `type-ref` alternative of `type-expr` (T2). A struct or array type may
 carry a reference marker, making that type **reference-shaped** instead of embedded. A primitive type may
 never carry a reference marker; doing so is a compile-time error.
@@ -674,7 +675,7 @@ pointer identity rather than structural content (see
 - both are the same primitive (T4), or
 - both are array types and satisfy T12 (length-kind, lengths, and element type all agree), or
 - both are function types and satisfy T22, or
-- both are struct, enum, error, or interface types declared with the same name in the same module,
+- both are struct, enum, error types or traits declared with the same name in the same module,
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
   aggregate and the other a pointer to one, and converting between them is an assignability rule
   (§5.3 E12), not an identity one.
@@ -747,7 +748,7 @@ declaring a method whose name an inherited one already has is a compile-time err
 that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends
 I64` has `Hash`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
 `Meters extends I32` is a `Meters`). There is no dynamic dispatch and nothing is overridden. `extends` on a struct,
-enum, interface or function type is a compile-time error: none has a base.
+enum, trait or function type is a compile-time error: none has a base.
 
 A declared type **without** `extends` inherits nothing it does not declare. It still reads as its base: it flows into
 it (T6b), so it compares with `<` and `==`, and beside a base value or a literal it is its base (`p + 1` on a
@@ -777,110 +778,78 @@ only by `String(bytes)`, which copies nothing. A slice of a `String` is a `Strin
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
 
-**T29b.** An array satisfies an interface (§2.11 T31) on the same terms as any other type, whether it is
-a declared array type or a built-in one, of either length kind. A run-time-length array is a
-`{ length, storage }` pair held by value rather than something at an address, so the interface value's
-instance is that pair, and T33's identity for it is the storage and the length it names.
+**T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
+array type or a built-in one, of either length kind.
 
 **T28.** Nothing in this specification defines implicit conversion between types beyond T6. Where a
 context (assignment, argument passing, return, comparison) requires two operand types to match, it
 requires the same type under T27 unless a specific rule elsewhere states an exception.
 
-### 2.11 Interface types
+### 2.11 Traits
 
-**T30.** An interface type declares a set of named method signatures and nothing else — no fields, no
-constructor, no destructor, no storage of its own:
+**T30.** A trait declares a set of named method signatures and nothing else — no fields, no constructor, no
+destructor, no storage:
 
 ```
-interface-body ::= "interface" "{" [ STMNT_END ] { method-sig STMNT_END } "}"
-method-sig     ::= [ "mut" ] IDEN func-sig
+trait-body ::= "trait" "{" [ STMNT_END ] { method-sig STMNT_END } "}"
+method-sig ::= [ "mut" ] IDEN func-sig
 ```
 
-`func-sig` is the parameter list, optional return type and optional error list of §3.4, written without a
-leading `fn`. Method names must be unique within the interface. An interface may declare no methods at
-all; such a type is satisfied by every type, built-in types included.
+`func-sig` is the parameter list, optional return type and optional error list of §3.4, written without a leading
+`fn`. Method names must be unique within the trait. A trait may declare no methods at all; such a trait is
+satisfied by every type, built-in types included. The leading `mut` marks a method that needs a **mutable
+receiver**, one that writes through to the value it is called on - the receiver half of D9's two axes.
 
-The leading `mut` marks a method that needs a **mutable receiver** — one that writes through to the
-instance the interface value names. It is the receiver half of D9's two axes, and it is declared here
-because the concrete receiver is not visible at a dispatch site: without it, whether `w.M()` may write to
-whatever `w` names would depend on a type the call cannot see.
+A trait is **only a constraint** (G19): it is written where a type variable is constrained - `fn area(s <S Shape>)`,
+`<I Iterator<<E>>>`, `type Map<K Hashable<<K>>, V>` - and nowhere else. It is never the type of a value, a
+reference, a parameter, a field, a local, an element or a result, and writing it as one is a compile-time error.
+Code over a trait is generic (§12): compiled for each type it is used with, every call a direct one. A value of one
+of several types is an enum of them (T17); one thing that can be called is a function value (T21).
 
-**T31.** A type `T` **satisfies** an interface `I` when, for every method signature in `I`, `T` has a
-method (§4.4 M19) of that name whose
+**T31.** A type `T` **satisfies** a trait `R` when, for every method signature in `R`, `T` has a method (§4.4 M19)
+of that name whose
 
-- receiver's type is `T` up to reference-shape (`T`, `mut T`, `T&`, or `mut T&` — the same latitude E12
-  gives any argument) — or, for a compile-time-length array `T` = `E[N]`, is `Array<E>&`, the widening E12
-  performs at any call — carrying no scope *name* (a named tag would be a second claim about the same
-  instance, and one no dispatch could bind — the interface value's own tag is where that instance's
-  lifetime is recorded),
-- receiver is a `mut` reference if and only if the signature is declared `mut`,
-- remaining parameters agree in count, order, and type (T27),
+- receiver's type is `T` up to reference-shape (`T`, `mut T`, `T&` or `mut T&` — the latitude E12 gives any
+  argument),
+- receiver is `mut` if and only if the signature is declared `mut`,
+- remaining parameters agree in count, order and type (T27), a parameter differing only in reference-shape
+  included, since the call is a direct one and E12 borrows,
 - return type agrees — both absent, or both present and the same type,
 - declared error list (§7.1) agrees exactly, in the same order.
 
-A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module
-can supply it. An interface with a private method is therefore **sealed**: no other module can implement
-it, though any module may hold, pass and call a value of it. This is a property of the two declarations,
-not of where the conversion is written.
+A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
+supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
 
-Satisfaction is **structural and implicit**: a type declares no intent to satisfy an interface, an
-interface names no implementing types, and satisfaction is decided from the two declarations alone at each
-point where a value flows into an interface-typed target (§5.3 E12d).
+Satisfaction is **structural and implicit**: a type declares no intent to satisfy a trait, a trait names no
+satisfying types, and satisfaction is decided from the two declarations alone, where a type variable is bound
+(G19). Implicit satisfaction is what lets a module fit a type it did not declare to a trait of its own: under M19
+only a type's declaring module can write its methods, so a declaration of intent would have to be made there too,
+and could name only traits that module already knows; a built-in type has no declaring module at all.
 
-Implicit satisfaction is what lets a module fit a type it did not declare to an interface of its own:
-under M19 only a type's declaring module can write its methods, so a declaration of intent would have to
-be made there too, and could name only interfaces that module already knows. A built-in type has no
-declaring module at all.
+**T35.** A method signature in a trait may not introduce type parameters of its own (§12): a type satisfies a trait
+with one method per name, and a generic signature names a family of them.
 
-This is §4.4 M19's method lookup, unchanged: an interface is satisfied by the methods a type actually has,
-under the same coherence rules that decide which methods those can be.
-Requiring the error lists to agree *in order* is an implementation restriction rather than a semantic one —
-the error-union ABI (§7.4) numbers a function's error words by their position in its own declared list, so
-identical lists are what let a dispatch reach the real function directly.
+**T35a (generic traits).** A trait may declare type parameters, after its name exactly as a struct type does
+(G6): `type Source<T> trait { mut Next() <T> ? Exhausted }`. Its method signatures may use them, including in a
+result alone. An **application** such as `Source<I32>` is an ordinary trait — its methods concrete — and two
+applications are the same trait exactly when their arguments are (G16a). A constraint may name the application's
+arguments as type variables, bound through the constrained type's methods (`<I Iterator<<E>>>` binds `E`, G9c). A
+method of a generic type (`fn (b mut Box<<T>>&) Next() <T> ? Exhausted`) satisfies a trait through the
+instantiation the receiver determines.
 
-**T32.** An interface type is **reference-only**: every `type-ref` naming one must carry a reference
-marker (T24), exactly as a destructor-declaring struct must (§3.3 C11). An interface value names an
-instance belonging to some other type, and has no storage of its own for a by-value form to denote. The
-marker is still written at every use, and carries the scope tag (§8) that makes the reference the lifetime
-claim it is.
-
-**T33.** An interface value is the pair *(the concrete type it holds, the instance it names)*. `==`/`!=`
-compare both halves: two interface values are equal exactly when they name the same instance of the same
-concrete type, which is E10's pointer identity applied to a value that has two pointers. For a
-run-time-length array (T29b) the instance is its `{ length, storage }` pair, so two interface values over
-one array are equal exactly when they name the same storage with the same length — `a[:2]` and `a[:3]` are
-different instances of one buffer.
-
-**T34.** An interface type is never constructed: it is not the target of a constructor call, it declares no constructor or destructor of its own, and it has no members. The only
-name that may follow a `.` on an interface value is a method (§5.5 E27a).
-
-**T35.** A method signature in an interface may not introduce type parameters of its own (§12).
-Dispatch selects one already-compiled function through a run-time value, and a method generic in its own
-right names a family of functions not chosen until a call; there is nothing for the dispatch to point at.
-
-**T35a (generic interfaces).** An interface type may declare type parameters, after its name exactly as a
-struct type does (G6): `type Source<T> interface { mut Next() <T> ? Exhausted }`. Its method signatures may use
-them, including in a result alone (G4 does not apply: the interface's own variables are fixed by its
-arguments, not inferred at a call). An **application** such as `Source<I32>` is an ordinary interface
-type — its methods concrete, so every T30–T34 rule applies to it unchanged — and two applications are the
-same type exactly when their arguments are (G16a). A generic function may take `Source<<T>>&`, binding `T`
-from an interface value's arguments (G9). A method of a generic type (`fn (b mut Box<<T>>&) Next() <T> ?
-Exhausted`) satisfies an interface through the instantiation the concrete receiver determines, which is one
-function; a method with type variables its receiver does not determine satisfies nothing.
-
-**T35b (built-in interfaces).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T>
-interface { mut Next() <T> ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
+**T35b (built-in traits).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T> trait {
+mut Next() <T> ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
 `Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
 `v := try it.Next() catch Exhausted { break }`.
-The prelude declares `type Indexable<T> interface { At(i I64) <T>  Len() I64 }` and, as its default (M19e),
-`Iter()` giving an `IndexIter<T>` over positions `0` to `Len() - 1` - so a type with `At` and `Len` and no `Iter` of
-its own reaches the iterator helpers (`g.Iter().Count(f)`).
+The prelude declares `type Indexable<T> trait { At(i I64) <T>  Len() I64 }` and, as its default (M19e), `Iter()`
+giving an `IndexIter<T, C>` over positions `0` to `Len() - 1` of the collection `C` - so a type with `At` and `Len`
+and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
-(`total(a.Iter())`). There is no `Iterable` interface: a function wanting "anything that can be walked" takes
-an `Iterator<<T>>&` and its caller writes `.Iter()` (G9c infers `T`).
+(`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
+`it mut <I Iterator<<T>>>&` and its caller writes `.Iter()` (G9c infers `T`).
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -1306,7 +1275,7 @@ The receiver type may be:
 
 - a **declared** type (T29) — a struct, an enum, an error type, a named primitive or a named array — in
   which case the method must be declared **in that type's own module**;
-- an **interface** (T30), under the same own-module rule — see M19a;
+- a type variable constrained by a **trait**, declared in the trait's module - a default (M19e);
 - a **built-in** type: a numeric primitive, `Bool`, or an unnamed array. Its methods are declared by the
   **prelude** (M19d) and by no other module, and are visible everywhere. An array receiver
   is identified by its **element type** alone — `Array<I32>&` and `I32[4]` are receivers of the same method,
@@ -1358,44 +1327,28 @@ it holds. They are for storing values compactly, not for computing in: arithmeti
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
 
-**M19a.** When the receiver's type is an **interface** (§2.11), `w . IDEN ( args )` is a **dynamic
-dispatch** rather than an M19 lookup: `IDEN` is resolved against the interface's own declared methods
-(T30), and the function actually called is the one supplied by the concrete type the value holds (T31).
-The call is checked entirely against the interface's declared signature — the concrete type is not known at
-the call — and a `mut` method requires the receiver to be a mutable lvalue, exactly as a `mut T&` parameter
-does at a plain call.
+**M19e (defaults).** A method whose receiver is a type variable constrained by a trait - `fn (s <S Shape>) Describe()
+I32`, `fn (it mut <I Iterator<<T>>>&) Count(keep fn(x <T>) Bool) I64` - is a **default** of that trait: a method of
+every type that satisfies it, written once. It is declared in the trait's own module, and may not reuse the name of a
+method the trait requires. `l.Iter().Count(f)` calls the `Count` declared for `Iterator<T>`, since a `List`'s
+iterator satisfies it: the call is an ordinary generic one (§12), its receiver's variable bound to the value's type
+and its other variables through the trait (G9c), compiled for that type with direct calls throughout. A default
+applies only where the value's type has **no method of its own** by that name - a type's own method always wins,
+from a direct call and from generic code alike - and is looked for among the traits declared in the calling module,
+in the modules it imports, and in the prelude. When two such traits each declare a default of that name and the type
+satisfies both, the call is a compile-time error: it cannot choose.
 
-A name that is *not* one of the interface's methods falls through to M19's ordinary lookup, which finds a
-method declared with the interface itself as its receiver (`fn (w Writer&) WriteAll(data Array<U8>&)`) — a
-helper over every value of the interface, called statically. Such a method may not reuse the name of one
-of the interface's own methods, which would make `w.f` both a dispatch and a static call.
-
-**M19e.** A method declared with an interface as its receiver is also callable on a value of **any type that
-satisfies the interface** (T31), implicitly: `l.Iter().Count(f)` calls the `Count` declared on `Iterator<T>`, since a
-`List`'s iterator satisfies it. The receiver is converted to the interface's value (E12d), with the interface's type
-arguments inferred from the value's type (G9c). It applies only where the value's type has **no method of its own**
-by that name - a type's own method always wins - and it looks at the interfaces declared in the calling module, in
-the modules it imports, and in the prelude. When two such interfaces each declare a method of that name and the
-type satisfies both, the call is a compile-time error: it cannot choose.
-
-Such a method is the interface's **default**: a type with its own method of that name and signature (receiver
-mutability included) **overrides** it, and the override runs whichever way the method is called - directly on the
-value, or through an interface value holding it, whose dispatch (T31) reaches the type's own method. Every default may be overridden
-this way. Two shapes are compile-time errors, reported at the type's method, for every interface the type satisfies
-among those M19e looks in: a method with a default's **name but another signature** (it could not answer both), and
-a method overriding a default that is **generic in a type of its own** beyond the interface's (`Fold`'s `U`) - such
-a default is a family of functions, with no dispatch-table slot to put an override in, so the override would hold on
-a direct call and not through an interface value.
+A type's own method of a default's name **overrides** it, and must have the default's signature (with the trait's
+variables bound for the type, and receiver mutability included); one with the same name and another signature is a
+compile-time error at the type's method, for every trait the type satisfies among those M19e looks in, since it
+could not answer both. A default generic in a type of its own (`Fold`'s `U`) is compared by its parameter count.
 
 **M19b.** A method call's receiver need not be a name at all. Wherever a postfix `.` member access (§5.5)
 is followed by an argument list, everything to its left is the receiver: `items[i].Area()`, `f(x).Size()`.
 This is the only spelling that reaches a method on an indexed or returned value, since the
-`alias-chain IDEN ( args )` call form (E13) reaches only identifiers. Resolution is M19's and M19a's,
-unchanged; a name that is neither a method of the receiver's type nor, for an interface receiver, one of
-its declared methods is a compile-time error here rather than a member access. So a module may declare a
-method on its own interface (`fn (w Writer&) WriteAll(data Array<U8>&) ? IoError`) and callers reach it as
-`w.WriteAll(data)` — one spelling for the methods a type must supply and the helpers built on top of them,
-with only the former dispatched.
+`alias-chain IDEN ( args )` call form (E13) reaches only identifiers. Resolution is M19's and M19e's,
+unchanged; a name that is neither a method of the receiver's type nor a default of a trait it satisfies is a
+compile-time error here rather than a member access.
 
 **M7.** A private name is a compile-time error to reference from outside its declaring module, even
 if the referencing code otherwise has a valid path to it (e.g. through a correctly-resolved import
@@ -1489,7 +1442,7 @@ receiver type — where a receiver's reference marker does not count (`(p Point)
 declare a method of `Point`), and an array receiver is identified as M19 says. A method may also share its
 name with at most one ordinary function. Any other reuse of a name is a compile-time error.
 
-This is what lets two types declared in one module both satisfy one interface (T31): without it a given
+This is what lets two types declared in one module both satisfy one trait (T31): without it a given
 method name could be written only once per module, and two shapes in one file would not compile. It
 involves no overload resolution: a method is reached only through its receiver (M19), which names the type
 and therefore the method.
@@ -1641,11 +1594,10 @@ the type, and a type may say it itself:
 - for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
   they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
   is both: the same storage and the same length.
-- an interface value or a function value: identity (T33, T21) - `Eq` is not consulted, since two interface values
-  may hold different types.
+- a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
-interface or function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
+function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
 is (P9), and a compile-time error on anything else.
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` (or `eq`, private to its module as every
@@ -1662,8 +1614,7 @@ combined in order (an enum's case first, then the payload of the case it holds; 
 prelude's `HashElements`). The prelude declares `Hash` for `U8`, `I32`, `I64` and `String`; a float has none,
 so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
 where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
-reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key, but an
-interface value's table (T31) needs a declared one.
+reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key.
 
 There is no expression that produces a value of an error type (§2.6): an error word is never a
 first-class comparable value, only a function's own result (§7).
@@ -1706,8 +1657,6 @@ its type: the value written the way it would be in source:
 - a function — its signature, `(params) results ? errors`, preceded by its name when the operand names a
   declared function directly (`add(a I32, b I32) I32`) and by `fn` for a function value, whose name is
   not known where the `$` is written (`fn(a I32, b I32) I32`). A null function value is `null`.
-- an interface — its name and its methods' signatures: `Writer{Write(d Array<U8>&) I32, mut Reset()}`. A null
-  interface value is `null`.
 - a reference — `null` when it is null, otherwise its referent. References are followed at most **8**
   deep along any one path from the operand; the next one is rendered as `...`, which is what makes a cyclic
   structure's rendering finite.
@@ -1798,17 +1747,6 @@ needs no check.
 The three directions therefore read the same for every type: **value into value** copies (that is what a
 value type means), **reference into value** copies out (D9a's way for a callee to take its own copy), and
 **value into reference** borrows. A fourth, reference into reference, is neither — it repoints (S4a).
-
-**E12d.** A value whose type **satisfies** an interface `I` (T31) fits a target of type `I&`. The
-conversion pairs the value's concrete type with the instance itself: the instance half is an ordinary E12c
-**borrow**, subject to the same lifetime check (the borrowed storage's scope must outlive the interface
-value's own tag), and only a non-lvalue is allocated instead. Nothing is copied into the interface, and the
-interface never owns what it names.
-
-An interface value flowing into a target of the *same* interface type is ordinary — it repoints (S4a),
-carrying both halves. Converting between two *different* interface types is not currently defined, even
-where the target's methods are a subset of the source's: the concrete type is not known until run time, so
-the target's dispatch table cannot be selected at the point of conversion.
 
 ### 5.4 Function calls
 
@@ -2150,8 +2088,8 @@ methods are ordinary methods otherwise, callable by name (`a.Plus(b)`), and M19'
 built-in types' operators stay the language's. A result may be any value; a built one follows the ordinary rules for
 a built result (§8).
 
-Where the left operand's type declares the operator, the operator is that call - in generic code (G16), through an
-interface value whose interface requires the method, and in `a op= b`, which is `a = a op b`; otherwise it is the
+Where the left operand's type declares the operator, the operator is that call - in generic code (G16) too, and in
+`a op= b`, which is `a = a op b`; otherwise it is the
 built-in operation, which for `@` does not exist (an error), and for indexing and slicing exists only on arrays.
 `a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` - `Less` looked up on the type of the operand
 that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
@@ -2170,27 +2108,14 @@ error, as for any other non-numeric type.
 ### 5.16 `is` and `as`
 
 **E32.** `is-expr ::= operand "is" type-ref` (at the comparisons' precedence) and `as-expr ::= postfix "as" type-ref`
-(binding as tightly as a postfix, so `(s as Circle&).r` reads a field and `-x as T` is `-(x as T)`) ask what a value is
-and give it as that:
-
-- On an **interface value** (T30), `type-ref` names a concrete type or an interface. `x is T` is whether the
-  instance's own type is `T` (the marker does not matter), or for an interface whether that type satisfies it; a
-  null value is nothing. `x as T&` is **the very instance** as that type, living where `x`'s instance does and
-  writable exactly when `x` is; `x as T` (no marker) is a copy of it; `x as I&` for an interface `I` is the
-  instance seen through `I`. A concrete `T` that does not satisfy `x`'s interface can never be the answer, and is
-  a compile-time error.
-- On an **enum value** (T17), `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that
-  case is live, whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many
-  results as it has, received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with
-  no payload is an error (`is` is the question it asks).
+(binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) is, and give
+its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
+whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
+received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
+(`is` is the question it asks). On anything else `is` and `as` are a compile-time error.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `try` (E15a) it fails with
-`BuiltinError.INVALID` instead: `q := try (s as Square) catch default Square(0)`. `is` never fails. The safe forms
-are `is` before `as`, and a `match` (S13c).
-
-**E32a (widening).** An interface value goes, with nothing written, wherever an interface is wanted whose every
-method its own interface declares with the same signature - it can always be seen through that one. Only narrowing
-needs `as`.
+`BuiltinError.INVALID` instead. `is` never fails. The safe forms are `is` before `as`, and a `match` (S13).
 
 ## 6. Statements
 
@@ -2327,7 +2252,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   order, **copied** — assigning to `x` does not change the array; `a[i] = ...` through the index form does.
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
-- an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in interface, or a value of it.
+- an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in trait.
   Each iteration calls `Next()`; `Exhausted` ends the loop - the loop takes it itself, so it needs no `try` - and
   `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
@@ -2411,17 +2336,11 @@ case-clause    ::= "case" expr block
 nomatch-clause ::= "nomatch" block
 ```
 
-**S13c (type cases).** A `match` on an **interface value** asks which type it holds. Its cases are
-`case-type ::= "case" [ IDEN ] type-ref block`: `case c Circle& { }` runs when the value is a `Circle` (E32's
-`is`), with `c` declared as `x as Circle&` for the block; `case Square { }` binds nothing; a bare type name is a
-type case too. The value is evaluated once, the cases are tried in order, and `nomatch` runs when none holds - an
-interface is open, so no exhaustiveness is asked.
-
 **S13a.** A `match` whose matched value is a **enum type** must cover every one of that type's cases, or
 carry a `nomatch` clause. This is the only type for which exhaustiveness is checked, and the reason is that
 it is the only one whose set of alternatives is both closed and written down: an enum type's cases come
-from one declaration the compiler reads. An interface (§2.11) is open by construction and an integer's
-"cases" are not usefully enumerable, so neither admits the question. Making `match` exhaustive here is most
+from one declaration the compiler reads. An integer's "cases" are not usefully enumerable, so it does not admit the
+question. Making `match` exhaustive here is most
 of the point of declaring an enum — adding a case tells you every place that now has to handle it — and
 `nomatch` is the opt-out.
 
@@ -2430,7 +2349,9 @@ Type.Case(a, b)` matches the tag **and binds** the payload's fields to fresh loc
 visible only inside that clause's block. The identifiers inside the parentheses are always *binding*
 occurrences, never expressions, so the form never means "compare against a constructed value"; the list
 must name every field of that case's payload, in declaration order. Binding is what makes reading a payload
-sound: a field is reachable only inside a clause whose tag test has already selected its case.
+sound: a field is reachable only inside a clause whose tag test has already selected its case. A binding of a
+reference reads, walks and passes on what the payload names, and nothing is built into it: where it lives is the
+matched value's business, which the clause cannot name (as through a borrowed field, C2d).
 
 **S13.** `match`'s own `expr` is evaluated once. Each `case`'s own `expr`, in source order, is
 compared against it using the same equality rule as `==` (E10) and must be the same type (T27) as
@@ -3088,8 +3009,7 @@ argument is built where the call's other rules put it (O18a); the function may a
 references through the parameter; and any relation the body needs between it and another scope is an
 obligation its callers discharge (O10b, O10c). A method's receiver is such a parameter. A parameter written
 `&x` has no scope variable of its own: it shares `x`'s, so the two arguments must agree (O17). The hidden
-scopes are passed in the parameters' order, the receiver's first — which is what lets a call through an
-interface reach its method (T31): the interface value's own tag is the instance's scope.
+scopes are passed in the parameters' order, the receiver's first.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations (field access,
 indexing, calls) are valid; it only constrains where the value may be allocated (§8.3) and where a reference
@@ -3942,11 +3862,11 @@ variable already bound by an earlier argument takes no part in it: the argument 
 bound type as in any call, with E12's conversions - so `m.Get(key)` with `K` bound to `String&` borrows a `String`
 value `key` as any `String&` parameter would.
 
-**G9c.** An argument of a concrete (non-interface) type whose parameter is an application of a generic interface
-(`s mut Source<<T>>&`) is matched through the methods that make it satisfy that interface (T31): each interface
-method's parameter types and result are matched against those of the method the argument's type supplies under
-the same name. So a `ListIter<I32>` passed to `Iterator<<T>>&` binds `T` to `I32`. Whether the argument then
-satisfies the interface the bindings give is decided by the ordinary conversion (E12d).
+**G9c.** A type bound to a variable constrained by an application of a generic trait (`<I Iterator<<T>>>`) binds
+that application's variables through the methods that make it satisfy the trait (T31): each trait method's
+parameter types and result are matched against those of the method the type supplies under the same name. So a
+`ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
+constraint's check (G19).
 
 **G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
 and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the
@@ -4028,16 +3948,16 @@ reported is implementation-defined.
 **K1.** An expression can be **evaluated at compile time** when everything evaluating it does can be done
 without a running program. No declaration marks a function as evaluable: any function is, on a given
 call, when what that call actually does is evaluable. Evaluation follows this specification's own
-meaning for every operation - integer widths wrap exactly as generated code does, a reference (and an
-interface value) names the very value it was taken from, a function value names the function, a slice shares its base's elements, text renders exactly as the generated code
+meaning for every operation - integer widths wrap exactly as generated code does, a reference names the very
+value it was taken from, a function value names the function, a slice shares its base's elements, text renders exactly as the generated code
 writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
 - read a mutable global, whose value is the running program's, or write any global;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
-- call an `extern` function - a call through a function value or an interface is evaluated when the function
-  it reaches is, which is known only when the call is reached;
+- call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
+  is known only when the call is reached;
 - spawn or join, use an atomic operation, or end the test or the process (`done`, `fail`, `abort`,
   `unreachable`);
 - fail an `assert`, or let an error escape that no clause handles;

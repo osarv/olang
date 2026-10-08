@@ -389,7 +389,7 @@ char* TypeDescribe(struct type t) {
         case BASETYPE_ARRAY: return "array type";
         case BASETYPE_STRUCT: return "struct type";
         case BASETYPE_CHOICE: return "enum type";
-        case BASETYPE_INTERFACE: return "interface type";
+        case BASETYPE_INTERFACE: return "trait";
         case BASETYPE_FUNC: return "func type";
         case BASETYPE_ERROR: return "error type";
         case BASETYPE_SCOPE: return "scope";
@@ -1515,7 +1515,13 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
         //the variable's own array suffixes and markers were applied to the VARIABLE, not to what it is
         //bound to, so they have already been folded into t by applyArraySuffixes/applyRefMarker; carry
         //the reference marker across so "<T>&" stays a reference once T is known
-        if (t.structMAlloc) { out.structMAlloc = true; out.scopeParam = t.scopeParam; }
+        if (t.structMAlloc) { //"<T>&": the marker, and with it the permission, are the variable's own (T25b)
+            out.structMAlloc = true;
+            out.scopeParam = t.scopeParam;
+            out.scopeWritten = t.scopeWritten;
+            out.scopeDepth = t.scopeDepth;
+            out.refMut = t.refMut;
+        }
         if (t.refMut) out.refMut = true; //T25b: "mut <T>" makes what T is bound to writable
         return out;
     }
@@ -1778,16 +1784,6 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
 //mangled name is stable regardless of which module first triggered it.
 //struct instantiation itself is declared in semantic.h, so codegen can walk the list
 static struct list instantiations;
-static int instantiationsCount(void) { return instantiations.len; }
-static struct instantiation* instantiationAt(int i) { return ListGetIdx(&instantiations, i); }
-//the generic function v was instantiated from, or v itself when it is no instantiation
-static struct var* genericOfInstance(struct var* v) {
-    for (int i = 0; i < instantiations.len; i++) {
-        struct instantiation* inst = ListGetIdx(&instantiations, i);
-        if (inst->specialized == v) return inst->generic;
-    }
-    return v;
-}
 //monomorphized copies of generic STRUCT types (G10/G16), kept as struct type* so their addresses are
 //stable: mod->types stores struct type BY VALUE, so adding to it during resolution would realloc and
 //invalidate every pointer already handed out, exactly as for mod->vars.
@@ -1941,18 +1937,6 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     spec->type.scopeVars = ListInit(sizeof(struct var*));
     for (int i = 0; i < generic->type.scopeVars.len; i++) ListAdd(&spec->type.scopeVars, ListGetIdx(&generic->type.scopeVars, i));
     assignImplicitParamScopes(&spec->type);
-    //M19e: an interface's method called on a concrete type is compiled for that type - its receiver is the
-    //concrete type itself, so every call through it inside the body is a direct one, as in hand-written code
-    struct type* self = bindingGet(bindings, StrFromCStr("$Self"));
-    if (self && spec->type.vars.len > 0) {
-        struct var* recv = ListGetIdx(&spec->type.vars, 0);
-        struct type rt = *self;
-        rt.structMAlloc = recv->type.structMAlloc;
-        rt.refMut = recv->type.refMut;
-        rt.scopeParam = recv->type.scopeParam;
-        rt.scopeDepth = recv->type.scopeDepth;
-        recv->type = rt;
-    }
     spec->origin = spec;
     spec->codeBlock = ListInit(sizeof(struct statement));
 
@@ -2285,10 +2269,11 @@ static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, s
 
 struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list* scopeParams) {
     if (!markerNode) return t;
-    //T32: an interface is reference-only, so the marker is not merely permitted there but mandatory -
-    //it is what carries the scope tag on the instance the value names
-    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_INTERFACE
-            && t.bType != BASETYPE_VOID) {
+    //G11a: "<T>&" is a reference to whatever T is bound to - which must then be a struct or an array, checked where
+    //the variable is bound
+    //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
+    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
+            && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE) {
         ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND), INVALID_REFERENCE_TARGET);
         return t;
     }
@@ -2406,20 +2391,6 @@ bool typeHasBareDestructStruct(struct type t) {
     return false;
 }
 
-//T32: an interface type is reference-only, for the same shape of reason C11's destructor-bearing struct
-//is, though from the other direction. A destructor-bearing struct must be a reference because it needs a
-//well-defined instance count; an interface must be one because it has no instance of its own at all - it
-//names something belonging to another type, so there is nothing a by-value form could denote. Recurses
-//through plain array elements exactly as the C11 check does, and stops at a reference for the same reason.
-bool typeHasBareInterface(struct type t) {
-    if (t.bType == BASETYPE_INTERFACE) return !t.structMAlloc;
-    struct list kids = TypeValueChildren(t);
-    for (int i = 0; i < kids.len; i++) {
-        if (typeHasBareInterface(*(struct type*)ListGetIdx(&kids, i))) return true;
-    }
-    return false;
-}
-
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
     //T24: a type carries at most one marker, so a second one is that position written twice - "Point&s&a" -
@@ -2431,8 +2402,8 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     if (typeHasBareDestructStruct(t)) {
         ErrMsgSemantic(firstTokAnywhere(refNode), DESTRUCT_TYPE_MUST_BE_REFERENCE);
     }
-    //T32 - except as a constraint (G19), where the interface is a requirement, never a value
-    if (typeHasBareInterface(t) && !resolvingConstraint) ErrMsgSemantic(firstTokAnywhere(refNode), INTERFACE_NEEDS_REF_MARKER);
+    //T30: a trait is a constraint (G19) and nothing else - never the type of a value, a reference, a field, an element
+    if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) ErrMsgSemantic(firstTokAnywhere(refNode), TRAIT_NOT_A_TYPE);
     return t;
 }
 
@@ -2539,12 +2510,9 @@ long long ChoicePayloadSize(struct type t) {
 }
 
 
-//T30: an interface body is a list of method signatures and nothing else. Each becomes one entry in `vars`:
-//the method's name, a BASETYPE_FUNC type holding its signature, and `mut` meaning "needs a mutable
-//receiver". Note what is NOT here - the receiver itself. An interface says which calls a value admits, not
-//how any particular type takes them; T31's satisfaction check is what pairs the two, and `mut` is the only
-//thing about the receiver a dispatch site needs to know, because it is the only thing that decides whether
-//the call may write to what the interface value names.
+//T30: a trait body is a list of method signatures and nothing else. Each becomes one entry in `vars`: the method's
+//name, a BASETYPE_FUNC type holding its signature, and `mut` meaning "needs a mutable receiver". The receiver itself
+//is not here - a trait says which calls a type admits, not how it takes them; T31's satisfaction check pairs the two.
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode);
 
 struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, struct syntax* bodyNode) {
@@ -2564,23 +2532,8 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
         v.tok = mTok;
         v.mut = hasTokOfType(m, TOK_MUT); //"needs a mutable receiver", not "this entry is writable"
         v.type = resolveFuncSig(mod, firstPartOfType(m, SNTX_FUNC_SIG));
-        //O4b: the receiver is passed with its scope like any reference parameter, ahead of the others -
-        //the dispatch binds it from the interface value it is called on, whose tag is the instance's scope
-        struct var* rs = VarAllocSetOrigin();
-        rs->name = StrFromCStr("&receiver");
-        rs->tok = mTok;
-        rs->type = TypeScope();
-        rs->mayBeInitialized = true;
-        rs->isImplicitScope = true;
-        struct list withRecvScope = ListInit(sizeof(struct var*));
-        ListAdd(&withRecvScope, &rs);
-        for (int k = 0; k < v.type.scopeVars.len; k++) ListAdd(&withRecvScope, ListGetIdx(&v.type.scopeVars, k));
-        v.type.scopeVars = withRecvScope;
-        //T35: a method signature may not be generic. Dispatch selects one already-compiled function
-        //through a run-time value; a generic names a family not chosen until instantiation, so there is
-        //nothing for an entry of the dispatch table to point at.
-        //T35a: a variable the INTERFACE declares ("type Iterator<T> interface") is the interface's own and
-        //is fixed per instantiation, so every entry of an instantiation's table is one function again
+        //T35: a method signature may not be generic in a type of its own - a type satisfies a trait with one method
+        //per name. T35a: a variable the TRAIT declares ("type Iterator<T> trait") is fixed per application.
         int own = 0;
         for (int k = 0; k < v.type.typeParams.len; k++) {
             struct str tp = *(struct str*)ListGetIdx(&v.type.typeParams, k);
@@ -2992,8 +2945,8 @@ void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, s
 static void giveImplicitScope(struct var* p, struct list* scopeVars) {
     bool bareRef = p->type.structMAlloc && !p->type.scopeParam
                    && (p->type.bType == BASETYPE_STRUCT || p->type.bType == BASETYPE_ARRAY
-                       || p->type.bType == BASETYPE_INTERFACE || p->type.bType == BASETYPE_CHOICE
-                       || p->type.bType == BASETYPE_FUNC);
+                       || p->type.bType == BASETYPE_CHOICE
+                       || p->type.bType == BASETYPE_FUNC || p->type.bType == BASETYPE_TYPEVAR); //G11a: "<T>&"
     if (!bareRef) return;
     struct var* sv = VarAllocSetOrigin();
     char* nm = MallocOrCrash((size_t)p->name.len + 2);
@@ -3226,7 +3179,7 @@ static struct type resolveTypeExprShape(struct semaModule* mod, struct syntax* t
 //T25b: a reference whose permission a type can carry - every reference-shaped type but a function value, through
 //which nothing is ever written
 bool TypeIsPermRef(struct type t) {
-    return t.bType != BASETYPE_FUNC && (t.structMAlloc || t.bType == BASETYPE_INTERFACE);
+    return t.bType != BASETYPE_FUNC && (t.structMAlloc);
 }
 
 static bool typeExprHasMut(struct syntax* typeExprNode) {
@@ -3599,37 +3552,41 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
     }
 }
 
-//M19e: a type's own method meeting a default of an interface it satisfies - an override, which must have the
-//default's signature (a same-named method with another one could not answer both), and only of a default that is one
-//function: one generic in a type of its own has no dispatch-table slot, so an override would hold on a direct call and
-//not through an interface value. Looked for in the interfaces the type's module sees: its own, its imports', the prelude's.
-static bool unifyIfaceReceiver(struct var* d, struct type iface, struct list* b);
+//M19e: a type's own method meeting a default of a trait it satisfies is an override, which must have the default's
+//signature - a same-named method with another one could not answer both. Looked for in the traits the type's module
+//sees: its own, its imports', the prelude's. A default generic in a type of its own (Fold's U) is compared by arity.
+static struct type* traitOfDefault(struct var* v);
+struct var* VarGetMethod(struct semaModule* mod, struct str name, struct type recv);
 static void checkDefaultClashesIn(struct semaModule* mod, struct var* a, struct type concrete, struct semaModule* im) {
     for (int i = 0; i < im->vars.len; i++) {
         struct var* d = ListGetIdx(&im->vars, i);
         if (!d->isMethod || !StrCmp(d->name, a->name) || d->type.bType != BASETYPE_FUNC) continue;
-        struct type* r = SemanticMethodReceiver(d);
-        if (!r || r->bType != BASETYPE_INTERFACE) continue;
+        struct type* tr = traitOfDefault(d);
+        if (!tr) continue;
         if (im != mod && !isPublic(d->name)) continue;
-        struct type pattern = *r;
-        pattern.structMAlloc = false;
         struct list b = ListInit(sizeof(struct typeBinding));
-        if (TypeIsGeneric(pattern) && !TypeUnify(pattern, concrete, &b)) continue;
-        struct type iface = TypeIsGeneric(pattern) ? TypeSubstitute(pattern, &b) : pattern;
-        if (TypeIsGeneric(iface) || !TypeSatisfiesInterface(concrete, iface, NULL)) continue;
-        struct list db = ListInit(sizeof(struct typeBinding));
-        if (!unifyIfaceReceiver(d, iface, &db)) continue;
-        bool closed = true;
-        for (int k = 0; k < d->type.typeParams.len && closed; k++)
-            closed = bindingGet(&db, *(struct str*)ListGetIdx(&d->type.typeParams, k)) != NULL;
-        if (!closed) { ErrMsgSemantic(a->tok, OVERRIDE_GENERIC_DEFAULT); return; }
-        struct type full = TypeSubstitute(d->type, &db);
-        struct var asMethod = *d; //the default's signature without its receiver, as an interface method reads
+        if (TypeIsGeneric(*tr) && !unifyThroughMethods(*tr, concrete, &b)) continue;
+        struct type trait = TypeIsGeneric(*tr) ? TypeSubstitute(*tr, &b) : *tr;
+        if (TypeIsGeneric(trait) || !TypeSatisfiesConstraint(concrete, trait, NULL)) continue;
+        //the default's signature with its receiver's variable and the trait's bound
+        struct type* recvT = SemanticMethodReceiver(d);
+        struct typeBinding self = (struct typeBinding){0};
+        self.name = recvT->name;
+        self.type = concrete;
+        ListAdd(&b, &self);
+        struct type full = TypeSubstitute(d->type, &b);
+        if (TypeIsGeneric(full)) { //a family (Fold's U): the parameter count is what can be compared
+            struct var* own = VarGetMethod(concrete.owner, a->name, concrete);
+            if (own && own->type.vars.len != d->type.vars.len) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
+            continue;
+        }
+        struct var asMethod = *d; //the default's signature without its receiver, as a trait method reads
         asMethod.type = full;
         asMethod.type.vars = ListInit(sizeof(struct var));
         for (int k = 1; k < full.vars.len; k++) ListAdd(&asMethod.type.vars, ListGetIdx(&full.vars, k));
-        asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type.refMut;
-        if (!InterfaceMethodImpl(concrete, &asMethod)) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
+        asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).mut;
+        bool fits = InterfaceMethodImpl(concrete, &asMethod) != NULL;
+        if (!fits) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
     }
 }
 
@@ -3658,11 +3615,12 @@ void checkMethodOverloads(struct semaModule* mod) {
         struct var* a = ListGetIdx(&mod->vars, i);
         struct type* ra = SemanticMethodReceiver(a);
         if (a->isMethod && ra) {
-            //M19a: a method on an interface is a helper over every value of it, dispatched to nothing -
-            //which is why it may not reuse a name the interface itself declares: "x.f" would then name a
-            //dynamic dispatch and a static call at once
-            if (ra->bType == BASETYPE_INTERFACE && VarGetList(&ra->vars, a->name)) {
-                ErrMsgSemantic(a->tok, METHOD_SHADOWS_INTERFACE_METHOD);
+            //M19e: a default is declared in its trait's own module, and may not reuse a name the trait requires
+            struct type* tr = traitOfDefault(a);
+            if (tr) {
+                struct type* origin = tr->genericOrigin ? tr->genericOrigin : tr;
+                if (origin->owner != mod) { ErrMsgSemantic(a->tok, METHOD_ON_FOREIGN_TYPE); continue; }
+                if (VarGetList(&tr->vars, a->name)) { ErrMsgSemantic(a->tok, METHOD_SHADOWS_INTERFACE_METHOD); continue; }
                 continue;
             }
             //coherence: only the module declaring a type may give it methods, so no two modules disagree
@@ -4312,7 +4270,6 @@ enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
     TYPE_FIT_NUMBER,        //T6b - two numeric types, the value's not flowing into the target's
-    TYPE_FIT_INTERFACE,     //E12d - the value's type does not supply every method the interface declares
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
     TYPE_FIT_SCOPE_OWN,     //O10d: own into a named scope. Rejected like the above, but told apart because
                              //no caller could ever satisfy it - the fix is in this body, not at a call site
@@ -4394,11 +4351,9 @@ bool typeIsSameModuloRefShape(struct type a, struct type b) {
 }
 
 
-//T31: the function the concrete type `concrete` supplies for interface method `m`, or NULL if it supplies
-//none. This is M19's own lookup - the type's declaring module, by the method's name - so an interface is
-//satisfied by exactly the methods the type already has, and the coherence rule that only a type's own
-//module may give it methods carries over untouched.
-static bool interfaceImplLoose = false; //G19: judging a constraint, not an interface value - see TypeSatisfiesConstraint
+//T31: the function the concrete type `concrete` supplies for trait method `m`, or NULL if it supplies none. This is
+//M19's own lookup - the type's declaring module, by the method's name - so a trait is satisfied by exactly the methods
+//the type already has, and the coherence rule that only a type's own module may give it methods carries over untouched.
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (concrete.bType == BASETYPE_INTERFACE) return NULL;
     struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
@@ -4420,44 +4375,31 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (f->type.vars.len != m->type.vars.len +1) return NULL; //the receiver is the extra one
     struct var* recv = ListGetIdx(&f->type.vars, 0);
     //the receiver is this type, with E12's usual latitude about reference-shape: an interface value holds
-    //a pointer to the instance, and a by-value receiver reads its own copy out of that pointer (E12's
-    //copy-out direction), which codegen adapts with a thunk.
-    //T29b: a method over "T[]&" serves a compile-time-length "T[N]" too, exactly as E12 widens one at an
-    //ordinary call - the thunk materialises the length the table already knows statically
+    //T29b: a method over "T[]&" serves a compile-time-length "T[N]" too, exactly as E12 widens one at an ordinary call
     bool widens = recv->type.bType == BASETYPE_ARRAY && recv->type.arrMalloc && concrete.bType == BASETYPE_ARRAY
                   && !concrete.arrMalloc && concrete.arrElem && recv->type.arrElem
                   && TypeIsSame(*recv->type.arrElem, *concrete.arrElem);
     if (!widens && !typeIsSameModuloRefShape(recv->type, concrete)) return NULL;
-    //D9's two axes, read at the dispatch site: the interface declares "mut" when the method writes
-    //through to the instance, so the concrete receiver must be a mutable reference exactly then.
+    //D9's two axes: the trait declares "mut" when the method writes through to the value it is called on, so the
+    //concrete receiver must be a mutable reference exactly then.
     bool recvWrites = recv->mut && recv->type.structMAlloc;
     if (recvWrites != m->mut) return NULL;
     for (int i = 0; i < m->type.vars.len; i++) {
         struct type want = (*(struct var*)ListGetIdx(&m->type.vars, i)).type;
         struct type got = (*(struct var*)ListGetIdx(&f->type.vars, i +1)).type;
-        //G19: under a constraint the method is called directly, so an argument of the wanted type reaching a
-        //reference parameter is borrowed as at any call (E12) - only the reference-shape may differ
-        if (!TypeIsSame(want, got) && !(interfaceImplLoose && typeIsSameModuloRefShape(want, got))) return NULL;
+        //the method is called directly, so an argument of the wanted type reaching a reference parameter is borrowed
+        //as at any call (E12) - only the reference-shape may differ
+        if (!TypeIsSame(want, got) && !typeIsSameModuloRefShape(want, got)) return NULL;
     }
     if (f->type.hasRetType != m->type.hasRetType) return NULL;
     if (m->type.hasRetType && !TypeIsSame(*f->type.retType, *m->type.retType)) return NULL;
-    //the error lists must agree IN ORDER, not merely as sets: the error-union ABI numbers a function's
-    //words by their position in its own declared list, so identical lists are what let the dispatch reach
-    //the real function with no re-encoding in between (see the report - relaxing this is a thunk's job).
+    //the error lists must agree in order, as T31 states
     if (f->type.errors.len != m->type.errors.len) return NULL;
     for (int i = 0; i < m->type.errors.len; i++) {
         if (*(struct type**)ListGetIdx(&f->type.errors, i) != *(struct type**)ListGetIdx(&m->type.errors, i)) return NULL;
     }
-    //scope variables are passed as leading hidden parameters, so the two signatures must agree on how many
-    //there are for the dispatch to line up at all. The interface's first is the receiver's (O4b), bound
-    //from the interface value; a by-value receiver has none, and its thunk takes and drops that argument.
-    //Checked rather than assumed because a mismatch would be a silently wrong call, not a type error.
-    int fScopes = f->type.scopeVars.len + (recv->type.scopeParam ? 0 : 1);
-    if (fScopes != m->type.scopeVars.len && !interfaceImplLoose) return NULL; //no dispatch table under a constraint
-    //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can
-    //supply it - which makes an interface with a private method a sealed one: no outside module can
-    //implement it, though anyone may hold and pass a value of it. The test is on the two declarations,
-    //not on who is writing the conversion, so a sealed interface still travels normally.
+    //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can supply it - which
+    //makes a trait with a private method a sealed one: no outside module's type can satisfy it
     if (!isPublic(m->name) && m->owner != f->owner) return NULL;
     return f;
 }
@@ -4495,58 +4437,7 @@ static bool unifyThroughMethods(struct type iface, struct type concrete, struct 
 //T31: structural, implicit satisfaction - every method the interface declares, supplied by the concrete
 //type's own module. On failure, *failed (when non-NULL) names the first method that is missing, which is
 //what the diagnostic needs to say something more useful than "does not satisfy".
-//E32: the program's run-time conversions. Every concrete type an interface value is made from (a source), and
-//every interface something is converted to at run time (a target) - "as", "is", a type case, a widening. The root
-//object emits, per target, a lookup from a source's type identity to its table; the pairs' defaults (M19e) are
-//compiled here, as each source or target is first seen, since codegen cannot instantiate.
-static struct list convSources, convTargets;
-static bool convListsInit;
-struct list* SemanticConvSources(void) { return &convSources; }
-struct list* SemanticConvTargets(void) { return &convTargets; }
-static bool convListHas(struct list* l, struct type t) {
-    for (int i = 0; i < l->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(l, i), t)) return true;
-    return false;
-}
-static void convPrepare(struct type concrete, struct type iface) {
-    if (!TypeSatisfiesInterface(concrete, iface, NULL)) return;
-    struct list ds = ListInit(sizeof(struct var*));
-    SemanticInterfaceDefaults(iface, &ds);
-    for (int i = 0; i < ds.len; i++) SemanticDefaultEntry(concrete, iface, *(struct var**)ListGetIdx(&ds, i));
-}
-bool TypeIsGeneric(struct type t);
-static void noteConvSource(struct type t) {
-    if (!convListsInit) { convSources = ListInit(sizeof(struct type)); convTargets = ListInit(sizeof(struct type)); convListsInit = true; }
-    t.structMAlloc = false;
-    t.refMut = false;
-    t.scopeParam = NULL;
-    t.scopeDepth = 0;
-    if (TypeIsGeneric(t) || convListHas(&convSources, t)) return;
-    ListAdd(&convSources, &t);
-    for (int i = 0; i < convTargets.len; i++) convPrepare(t, *(struct type*)ListGetIdx(&convTargets, i));
-}
-static void noteConvTarget(struct type t) {
-    if (!convListsInit) { convSources = ListInit(sizeof(struct type)); convTargets = ListInit(sizeof(struct type)); convListsInit = true; }
-    t.structMAlloc = false;
-    t.refMut = false;
-    t.scopeParam = NULL;
-    t.scopeDepth = 0;
-    if (TypeIsGeneric(t) || convListHas(&convTargets, t)) return;
-    ListAdd(&convTargets, &t);
-    for (int i = 0; i < convSources.len; i++) convPrepare(*(struct type*)ListGetIdx(&convSources, i), t);
-}
 
-//E32: whether interface `have` declares every method `want` does, with the same signature - so any value of it is
-//a value of `want`
-static bool ifaceCovers(struct type have, struct type want) {
-    if (have.bType != BASETYPE_INTERFACE || want.bType != BASETYPE_INTERFACE) return false;
-    if (have.owner == want.owner && StrCmp(have.name, want.name) && TypeIsSame(have, want)) return false;
-    for (int i = 0; i < want.vars.len; i++) {
-        struct var* m = ListGetIdx(&want.vars, i);
-        struct var* h = VarGetList(&have.vars, m->name);
-        if (!h || !TypeIsSame(h->type, m->type)) return false;
-    }
-    return true;
-}
 
 static bool typeAutoHashable(struct type t, int depth);
 static bool autoHashMeets(struct type concrete, struct var* m) {
@@ -4554,12 +4445,14 @@ static bool autoHashMeets(struct type concrete, struct var* m) {
            && m->type.hasRetType && m->type.retType->bType == BASETYPE_INT64 && typeAutoHashable(concrete, 0);
 }
 
+//T31/G19: does concrete satisfy trait iface - every method present, called directly. On failure, *failed (when
+//non-NULL) names the first method missing, which is what the diagnostic needs to say.
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed) {
     if (iface.bType != BASETYPE_INTERFACE || concrete.bType == BASETYPE_INTERFACE) return false;
     for (int i = 0; i < iface.vars.len; i++) {
         struct var* m = ListGetIdx(&iface.vars, i);
-        //E10b: a constraint is met by a Hash the compiler supplies; an interface value's table needs a real one
-        if (!InterfaceMethodImpl(concrete, m) && !(interfaceImplLoose && autoHashMeets(concrete, m))) {
+        //E10b: a Hash the compiler supplies meets a trait's Hash
+        if (!InterfaceMethodImpl(concrete, m) && !autoHashMeets(concrete, m)) {
             if (failed) *failed = m;
             return false;
         }
@@ -4567,82 +4460,9 @@ bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var*
     return true;
 }
 
-//the default methods of an interface (M19e): the methods its own module declares with it as the receiver, in
-//declaration order, that a dispatch table can hold - one compiled function each, so none generic in a type of
-//its own beyond the interface's (Fold's U names a family). Each is returned instantiated for this interface
-//(its variables bound from iface's arguments).
-struct var* instantiateFunc(struct var* generic, struct list* bindings);
-static bool unifyIfaceReceiver(struct var* d, struct type iface, struct list* b) {
-    struct type r = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type;
-    r.structMAlloc = false;
-    return TypeUnify(r, iface, b);
-}
-void SemanticInterfaceDefaults(struct type iface, struct list* out) {
-    struct type* origin = iface.genericOrigin ? iface.genericOrigin : NULL;
-    struct semaModule* mod = origin ? origin->owner : iface.owner;
-    if (!mod) return;
-    for (int i = 0; i < mod->vars.len; i++) {
-        struct var* d = ListGetIdx(&mod->vars, i);
-        if (!d->isMethod || d->type.bType != BASETYPE_FUNC || d->type.vars.len == 0) continue;
-        struct type* r = SemanticMethodReceiver(d);
-        if (!r || r->bType != BASETYPE_INTERFACE) continue;
-        bool same = origin ? (r->genericOrigin == origin || (r->owner == origin->owner && StrCmp(r->name, origin->name)))
-                           : (r->owner == iface.owner && StrCmp(r->name, iface.name));
-        if (!same) continue;
-        struct list b = ListInit(sizeof(struct typeBinding));
-        if (!unifyIfaceReceiver(d, iface, &b)) continue;
-        bool closed = true;
-        for (int k = 0; k < d->type.typeParams.len && closed; k++) {
-            closed = bindingGet(&b, *(struct str*)ListGetIdx(&d->type.typeParams, k)) != NULL;
-        }
-        if (!closed) continue;
-        struct var* spec = d->type.typeParams.len ? instantiateFunc(d, &b) : d;
-        ListAdd(out, &spec);
-    }
-}
 
-//the entry a dispatch table for (concrete, iface) holds for default d: concrete's own method of that name and
-//signature, which overrides it, else d compiled for concrete. Called while checking (a conversion), so the
-//instantiation exists by the time codegen asks again.
-struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
-struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d) {
-    struct var asMethod = *d; //the default's signature without its receiver, as an interface method would read
-    asMethod.type.vars = ListInit(sizeof(struct var));
-    for (int i = 1; i < d->type.vars.len; i++) ListAdd(&asMethod.type.vars, ListGetIdx(&d->type.vars, i));
-    asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).type.refMut;
-    //an instantiated default (a generic interface's) carries a decorated name - the type's own method has the plain one
-    asMethod.name = genericOfInstance(d)->name;
-    struct var* own = VarGetMethod(concrete.owner, asMethod.name, concrete);
-    if (own && own->owner && InterfaceMethodImpl(concrete, &asMethod) == own) return own;
-    if (own && own->type.typeParams.len && InterfaceMethodImpl(concrete, &asMethod)) return InterfaceMethodImpl(concrete, &asMethod);
-    struct var* generic = d->origin && d->origin != d ? d : d;
-    struct list b = ListInit(sizeof(struct typeBinding));
-    struct var* src = generic;
-    for (int i = 0; i < instantiationsCount(); i++) {
-        struct instantiation* inst = instantiationAt(i);
-        if (inst->specialized == d) { src = inst->generic; b = inst->bindings; break; }
-    }
-    struct list b2 = ListInit(sizeof(struct typeBinding));
-    for (int i = 0; i < b.len; i++) ListAdd(&b2, ListGetIdx(&b, i));
-    struct typeBinding sb = (struct typeBinding){0};
-    sb.name = StrFromCStr("$Self");
-    sb.type = concrete;
-    sb.type.structMAlloc = false;
-    sb.type.scopeParam = NULL;
-    sb.type.scopeDepth = 0;
-    ListAdd(&b2, &sb);
-    (void)iface;
-    return instantiateFunc(src, &b2);
-}
-
-//G19: does concrete meet iface as a constraint - every method present, called directly (so with E12's latitude
-//between a value and a reference parameter), where an interface value needs exact signatures for its table
 bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed) {
-    bool prev = interfaceImplLoose;
-    interfaceImplLoose = true;
-    bool ok = TypeSatisfiesInterface(concrete, iface, failed);
-    interfaceImplLoose = prev;
-    return ok;
+    return TypeSatisfiesInterface(concrete, iface, failed);
 }
 
 bool OperandIsLvalue(struct operand* op);
@@ -4724,29 +4544,6 @@ enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct typ
     return TYPE_FIT_SCOPE_MISMATCH;
 }
 
-//"does not satisfy" is useless on its own - the only thing worth saying is WHICH method is missing, since
-//that is what the reader has to go and write. Stashed here rather than threaded through enum typeFit,
-//which every other fit failure returns through: one buffer, filled immediately before the enum is returned
-//and read immediately after, on the single-threaded path from OperandFitsType to reportTypeFit.
-static char interfaceFitBuf[512];
-
-static void recordInterfaceFitFailure(struct type iface, struct type concrete, struct var* missing) {
-    if (missing) {
-        snprintf(interfaceFitBuf, sizeof(interfaceFitBuf),
-                 "'%.*s' does not satisfy the interface '%.*s': it has no method '%.*s' with "
-                 "the signature the interface asks for (matching parameters, return type, error list, and "
-                 "a %smutable receiver)",
-                 concrete.name.len ? concrete.name.len : 5, concrete.name.len ? concrete.name.ptr : "value",
-                 iface.name.len, iface.name.ptr, missing->name.len, missing->name.ptr,
-                 missing->mut ? "" : "non-");
-    } else {
-        snprintf(interfaceFitBuf, sizeof(interfaceFitBuf),
-                 "this value's type cannot satisfy the interface '%.*s' - only a type declared in some "
-                 "module can have methods at all", iface.name.len, iface.name.ptr);
-    }
-}
-
-static char* interfaceFitMsg(void) { return interfaceFitBuf; }
 
 static bool bindingIsLanding(struct operand* op, struct var* sv);
 bool callIsLanding(struct operand* op);
@@ -4843,6 +4640,7 @@ static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct 
 struct litCtorRec { struct operand* lit; struct operand* call; };
 static struct list litCtorRecs;
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    if (target.bType == BASETYPE_INTERFACE) return TYPE_FIT_OK; //T30: reported where the trait was written as a type
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
@@ -5026,31 +4824,6 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         asRef.refMut = op->type.refMut;
         return op->type.structMAlloc ? TYPE_FIT_OK : borrowLifetimeFits(func, op, asRef);
     }
-    //E12d: a value whose type satisfies an interface fits that interface. The instance half of the pair is
-    //an ordinary E12c borrow and gets the same lifetime check - an interface value names an instance, it
-    //never owns or copies one, so handing it storage that dies first is the same defect it always was.
-    if (target.bType == BASETYPE_INTERFACE) {
-        struct var* missing = NULL;
-        if (TypeSatisfiesInterface(op->type, target, &missing)) {
-            //M19e: the table this conversion builds holds the interface's defaults too - the type's own where
-            //it overrides one, else the default compiled for it, which has to exist before codegen asks
-            struct list ds = ListInit(sizeof(struct var*));
-            SemanticInterfaceDefaults(target, &ds);
-            struct type concrete = op->type;
-            concrete.structMAlloc = false;
-            for (int i = 0; i < ds.len; i++) SemanticDefaultEntry(concrete, target, *(struct var**)ListGetIdx(&ds, i));
-            noteConvSource(concrete); //E32: a type an interface value may hold
-            return borrowLifetimeFits(func, op, target);
-        }
-        //E32: an interface value fits an interface every method of which its own interface declares - the
-        //instance's table for the target is found at run time (it depends on the concrete type), and always exists
-        if (op->type.bType == BASETYPE_INTERFACE && ifaceCovers(op->type, target)) {
-            noteConvTarget(target);
-            return TYPE_FIT_OK;
-        }
-        recordInterfaceFitFailure(target, op->type, missing);
-        return TYPE_FIT_INTERFACE;
-    }
     if (op->isLiteral && numericLiteralFits(op, target)) {
         //every int-to-int adaptation and float32 -> float64 is pure reinterpretation: intLiteralVal is already
         //a 64-bit long long and floatLiteralVal is already a double, regardless of the literal's own
@@ -5142,7 +4915,6 @@ void reportTypeFit(enum typeFit fit, struct token tok) {
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, ARRAY_SIZE_MISMATCH);
     else if (fit == TYPE_FIT_LITERAL_RANGE) ErrMsgSemantic(tok, LITERAL_NOT_REPRESENTABLE);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) ErrMsgSemantic(tok, ELEM_REF_SHAPE_MISMATCH);
-    else if (fit == TYPE_FIT_INTERFACE) ErrMsgSemantic(tok, interfaceFitMsg());
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
     else if (fit == TYPE_FIT_NUMBER) ErrMsgSemantic(tok, NUMBER_DOES_NOT_FLOW);
     else if (fit == TYPE_FIT_CTOR) ErrMsgSemantic(tok, PRIM_CTOR_LITERAL);
@@ -5664,23 +5436,9 @@ void flushPendingDischarges(void) {
 
 static struct operand* spreadSourceOf(struct operand* arg);
 void reportArgCount(struct list args, struct token tok);
-static struct type* selfForInterfaceCall = NULL; //M19e: set by buildMethodCall for the one call it is about to make
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
     struct var* callerFunc = ctx ? ctx->func : NULL;
-    //M19e: taken at once, so no call made while this one is being checked (a lambda argument's body) sees it
-    struct type* selfType = selfForInterfaceCall;
-    selfForInterfaceCall = NULL;
-    //a method of a non-generic interface, called on a concrete value, is instantiated for that value's type here,
-    //a generic one where its own type arguments are bound below
-    if (selfType && func->type.typeParams.len == 0) {
-        struct list sb = ListInit(sizeof(struct typeBinding));
-        struct typeBinding b = (struct typeBinding){0};
-        b.name = StrFromCStr("$Self");
-        b.type = *selfType;
-        ListAdd(&sb, &b);
-        func = instantiateFunc(func, &sb);
-    }
     //G9: a call to a generic never writes its type arguments - each is inferred by matching the actual
     //argument types against the declared parameter types, which G4 guarantees reaches every variable.
     //Done before anything else here, so everything below (arity, fit checking, scope bindings, the return
@@ -5744,6 +5502,13 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             }
             TypeUnify(paramT, widest, &bindings);
         }
+        //G19/G9c: a variable named only in a constraint is bound through it as soon as the variable it constrains is -
+        //before the lambdas, which take their parameters' types from what is bound ("it.Count(fn(x) { ... })")
+        for (int i = 0; ok && i < func->type.typeConstraints.len; i++) {
+            struct type* c = ListGetIdx(&func->type.typeConstraints, i);
+            struct type* bound = bindingGet(&bindings, c->name);
+            if (bound && c->varConstraint && TypeIsGeneric(*c->varConstraint)) unifyThroughMethods(*c->varConstraint, *bound, &bindings);
+        }
         //D16a: a lambda takes what the other arguments fixed - its parameters' types - and its result then binds
         //what only it reaches
         for (int i = 0; ok && i < args.len; i++) {
@@ -5752,6 +5517,16 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type paramT = TypeSubstitute((*(struct var*)ListGetIdx(&func->type.vars, i)).type, &bindings);
             FinalizeLambda(arg, &paramT);
             if (!TypeUnify((*(struct var*)ListGetIdx(&func->type.vars, i)).type, arg->type, &bindings)) ok = false;
+        }
+        //G11a: a "<T>&" parameter takes a reference, so T must be bound to what can be one
+        for (int i = 0; ok && i < func->type.vars.len; i++) {
+            struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            if (pt.bType != BASETYPE_TYPEVAR || !pt.structMAlloc) continue;
+            struct type* bt = bindingGet(&bindings, pt.name);
+            if (bt && bt->bType != BASETYPE_STRUCT && bt->bType != BASETYPE_ARRAY && bt->bType != BASETYPE_TYPEVAR) {
+                ErrMsgSemantic(tok, REF_TYPEVAR_NOT_AGGREGATE);
+                ok = false;
+            }
         }
         //G19: what the constraints bind, and whether each holds - reported here, at the call
         if (ok && !checkTypeConstraints(&func->type.typeConstraints, &bindings, tok)) {
@@ -5772,12 +5547,6 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             bad->readVar = func;
             bad->args = args;
             return bad;
-        }
-        if (selfType) { //M19e: and compiled for the receiver's concrete type
-            struct typeBinding sb = (struct typeBinding){0};
-            sb.name = StrFromCStr("$Self");
-            sb.type = *selfType;
-            ListAdd(&bindings, &sb);
         }
         //G10c: a generic type's constructor called with no written type arguments infers them as a generic
         //function's are inferred, and the call targets that instantiation's own constructor (G10a)
@@ -6391,7 +6160,7 @@ struct renderSeen { struct semaModule* owner; struct str name; };
 static bool strOfRenderableIn(struct type t, struct list* seen) {
     if (TypeIsNumeric(t)) return true; //T4
     switch (t.bType) {
-        case BASETYPE_BOOL: case BASETYPE_TYPEVAR: case BASETYPE_FUNC: case BASETYPE_INTERFACE:
+        case BASETYPE_BOOL: case BASETYPE_TYPEVAR: case BASETYPE_FUNC:
             return true;
         case BASETYPE_ARRAY: return t.arrElem && strOfRenderableIn(*t.arrElem, seen);
         case BASETYPE_STRUCT: case BASETYPE_CHOICE: {
@@ -6620,7 +6389,6 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
 //ptr data }, T32 reference-only). Null is all-zero bits in every one of them, which is what makes a
 //zero-filled global containing references all-null for free and gives "len(null)" the answer 0.
 bool TypeIsNullable(struct type t) {
-    if (t.bType == BASETYPE_INTERFACE) return true;
     if (t.bType == BASETYPE_FUNC && t.structMAlloc) return true; //D16: a function value is a reference
     if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return true;
     if ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY) && t.structMAlloc) return true;
@@ -7619,10 +7387,9 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     return seq;
 }
 
-//E32: "x is T" / "x as T". On an interface value, T is a concrete type (the instance's own, "as T&" the very
-//instance, "as T" a copy of it) or an interface (the instance seen through it); on an enum value, T is one of its
-//cases, "as" giving the payload - its one field, or several as several results. "as" that does not hold aborts, as an
-//out-of-range slice does, or under "try" fails with BuiltinError.INVALID.
+//E32: "x is Enum.Case" / "x as Enum.Case" - on an enum value, "as" giving the case's payload: its one field, or
+//several as several results. "as" that does not hold aborts, as an out-of-range slice does, or under "try" fails
+//with BuiltinError.INVALID.
 static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t) {
     struct list out = ListInit(sizeof(struct token));
     for (int i = 0; i < s->parts.len; i++) {
@@ -7665,26 +7432,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         }
         return op;
     }
-    if (xt.bType != BASETYPE_INTERFACE) { ErrMsgSemantic(kw, IS_AS_OPERAND); return op; }
-    struct type t = resolveTypeExpr(ctx->mod, tNode, NULL);
-    op->castType = MallocOrCrash(sizeof(struct type));
-    *op->castType = t;
-    struct type bare = t;
-    bare.structMAlloc = false;
-    if (t.bType == BASETYPE_INTERFACE) noteConvTarget(bare);
-    else if (!TypeSatisfiesInterface(bare, xt, NULL)) { ErrMsgSemantic(firstTokAnywhere(tNode), IS_AS_NEVER); return op; }
-    if (!isAs) return op;
-    //the result lives where the instance does and may be written as far as x may: it IS the instance
-    struct type r = t;
-    if (t.structMAlloc || t.bType == BASETYPE_INTERFACE) {
-        r.structMAlloc = true;
-        r.scopeParam = xt.scopeParam;
-        r.scopeDepth = xt.scopeDepth;
-        r.scopeWritten = xt.scopeWritten;
-        r.refMut = xt.refMut;
-        op->scopeBindings = x->scopeBindings;
-    }
-    op->type = r;
+    ErrMsgSemantic(kw, IS_AS_OPERAND);
     return op;
 }
 
@@ -7866,7 +7614,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             result = buildValueCall(ctx, result, p->sntx, i == s->parts.len - 1 && allowLast);
         } else { //SNTX_EXPR_MEMBR
             struct token memberTok = firstTokOfType(p->sntx, TOK_IDEN);
-            //M19/M19a: an argument list here makes this a METHOD call on whatever the chain has built so
+            //M19/M19b: an argument list here makes this a METHOD call on whatever the chain has built so
             //far - "arr[i].Area()", "f(x).Size()". The call form built around an alias-chain name reaches
             //only plain identifiers, so this is the only way a method on an indexed or returned value is
             //written at all.
@@ -7992,7 +7740,7 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
         struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
         struct type* et = rt.isTuple ? &((struct var*)ListGetIdx(&view.vars, i))->type : &view;
         if (d->type.isTuple) { ErrMsgSemantic(d->tok, TUPLE_NOT_A_VALUE); continue; }
-        bool isRef = et->structMAlloc || et->bType == BASETYPE_INTERFACE;
+        bool isRef = et->structMAlloc;
         if (!isRef && TypeHoldsReferences(*et)) {
             ErrMsgSemantic(d->tok, TRY_DEFAULT_HOLDS_REFERENCES);
             continue;
@@ -8011,7 +7759,7 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
                 struct var* dv;
                 int dd;
                 bool du;
-                bool asRef = d->type.structMAlloc || d->type.bType == BASETYPE_INTERFACE;
+                bool asRef = d->type.structMAlloc;
                 bool stored = (asRef || OperandIsLvalue(d)) && RefExactScope(ctx, d, asRef, &dv, &dd, &du);
                 if (stored ? (cu || du || !sameExactScope(cv, cd, dv, dd)) : cu) {
                     //a temporary needs a scope it can be built in, which an unnamed one is not (O24)
@@ -8480,27 +8228,33 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
                               allPartsOfType(s, SNTX_SCOPE_ARG));
 }
 
-//M19/M19a: builds "recvOp . name ( args )" as a method call, or returns NULL when `name` is not a method
+//M19/M19e: builds "recvOp . name ( args )" as a method call, or returns NULL when `name` is not a method
 //of the receiver's type - in which case the caller falls back to whatever else that syntax could be (a
 //cross-module call, a plain member access). Shared by the two spellings that can reach a method: a name
 //chain ("a.b.f()"), and a postfix member on any other expression ("arr[i].f()", "f(x).g()").
 //*reported says this already emitted a diagnostic (or a real call), so the caller must not try again.
-//M19e: the method named name declared on an interface recv's type satisfies, searched in mod, the modules mod
-//imports and the prelude; *found counts the interfaces offering one (more than one is the caller's error)
+//M19e: a default - a method whose receiver is a type variable constrained by a trait - named name, of a trait recv's
+//type satisfies, searched in mod, the modules mod imports and the prelude; *found counts the traits offering one (more
+//than one is the caller's error)
+static struct type* traitOfDefault(struct var* v) {
+    struct type* r = SemanticMethodReceiver(v);
+    if (!r || r->bType != BASETYPE_TYPEVAR || !r->varConstraint || r->varConstraint->bType != BASETYPE_INTERFACE) return NULL;
+    return r->varConstraint;
+}
 static struct var* interfaceMethodIn(struct semaModule* m, struct type recv, struct str name, int* found, struct var* got) {
     for (int i = 0; i < m->vars.len; i++) {
         struct var* v = ListGetIdx(&m->vars, i);
         if (!v->isMethod || !StrCmp(v->name, name) || v == got) continue;
-        struct type* r = SemanticMethodReceiver(v);
-        if (!r || r->bType != BASETYPE_INTERFACE) continue;
-        struct type iface = *r;
+        struct type* tr = traitOfDefault(v);
+        if (!tr) continue;
+        struct type iface = *tr;
         if (TypeIsGeneric(iface)) {
             struct list b = ListInit(sizeof(struct typeBinding));
             if (!unifyThroughMethods(iface, recv, &b)) continue;
             iface = TypeSubstitute(iface, &b);
             if (TypeIsGeneric(iface)) continue;
         }
-        if (!TypeSatisfiesInterface(recv, iface, NULL)) continue;
+        if (!TypeSatisfiesConstraint(recv, iface, NULL)) continue;
         (*found)++;
         if (!got) got = v;
     }
@@ -8526,56 +8280,9 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     *reported = false;
     struct type recvType = recvOp->type;
     struct str mName = strFromTok(mTok);
+    //T30: a value of a trait's type was already reported where the type was written - nothing more to say here
+    if (recvType.bType == BASETYPE_INTERFACE) { *reported = true; if (argsNode) buildArgs(ctx, argsNode); return OperandIntLiteral(mTok); }
 
-    //M19a: an interface receiver dispatches DYNAMICALLY - the name is resolved against the interface's own
-    //declared methods, and which function runs is decided by the concrete type the value holds. Checked
-    //entirely against the interface's signature, because the concrete type is not known here; a name that
-    //is not one of its methods falls through to M19's ordinary lookup below, which finds a method declared
-    //with the interface itself as its receiver - a helper over every value of it.
-    if (recvType.bType == BASETYPE_INTERFACE) {
-        int mIdx = -1;
-        for (int i = 0; i < recvType.vars.len; i++) {
-            if (StrCmp((*(struct var*)ListGetIdx(&recvType.vars, i)).name, mName)) { mIdx = i; break; }
-        }
-        if (mIdx >= 0) {
-            struct var* m = ListGetIdx(&recvType.vars, mIdx);
-            *reported = true;
-            if (recvType.owner != ctx->mod && !isPublic(mName)) {
-                ErrMsgSemantic(mTok, VAR_IS_PRIVATE);
-                return OperandIntLiteral(mTok);
-            }
-            bool allowedD = ctx->allowFallibleCall;
-            ctx->allowFallibleCall = false;
-            struct list dArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
-            ctx->allowFallibleCall = allowedD;
-            //the receiver becomes parameter 0 of a synthetic signature, so arity, argument fits, scope
-            //binding and the mut/& immutability check all come from the ordinary call path with nothing
-            //dispatch-specific in them. "mut" on the method makes that parameter a mutable reference,
-            //which is what makes passing an immutable receiver the same error it is at any other call.
-            struct var* dispatch = MallocOrCrash(sizeof(struct var));
-            *dispatch = *m;
-            dispatch->type.vars = ListInit(sizeof(struct var));
-            struct var recvParam = (struct var){0};
-            recvParam.name = mName;
-            recvParam.tok = mTok;
-            recvParam.mut = m->mut;
-            recvParam.type = recvType;
-            recvParam.type.refMut = m->mut; //T25b: a "mut" method needs a writable receiver
-            //O4b: the method's receiver scope is the interface value's own - the instance's scope
-            if (m->type.scopeVars.len > 0) recvParam.type.scopeParam = *(struct var**)ListGetIdx(&m->type.scopeVars, 0);
-            ListAdd(&dispatch->type.vars, &recvParam);
-            for (int i = 0; i < m->type.vars.len; i++) ListAdd(&dispatch->type.vars, ListGetIdx(&m->type.vars, i));
-            struct list withRecv = ListInit(sizeof(struct operand*));
-            ListAdd(&withRecv, &recvOp);
-            for (int i = 0; i < dArgs.len; i++) ListAdd(&withRecv, ListGetIdx(&dArgs, i));
-            if (m->type.errors.len > 0 && !allowedD) ErrMsgSemantic(mTok, UNHANDLED_FALLIBLE_CALL);
-            struct operand* call = OperandFuncCall(ctx, dispatch, withRecv, mTok, scopeArgNodes);
-            call->isIfaceDispatch = true;
-            call->ifaceMethodIdx = mIdx;
-            call->ifaceType = recvType;
-            return call;
-        }
-    }
     //T10: every array has "Len()", supplied by the compiler
     if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("Len"))) {
         *reported = true;
@@ -8598,10 +8305,11 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         *reported = true;
         return OperandIntLiteral(mTok);
     }
-    //M19e: with no method of its own by this name, a method declared on an interface the type satisfies - one
-    //declared in this module, a module it imports, or the prelude. The receiver becomes that interface's value.
+    //M19e: with no method of its own by this name, a default of a trait the type satisfies - one declared in this
+    //module, a module it imports, or the prelude. It is a generic method: the call binds its receiver's variable to
+    //this type and compiles it for it, as any generic call.
     bool viaInterface = false;
-    if (!m && recvType.bType != BASETYPE_INTERFACE) {
+    if (!m) {
         int found = 0;
         m = interfaceMethodFor(ctx->mod, recvType, mName, &found);
         if (found > 1) {
@@ -8622,7 +8330,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     //E10b: Hash on a reference never sees a null - a null hashes to 0
     if (!hashNullGuarded && recvType.structMAlloc && noArgs && StrCmp(mName, StrFromCStr("Hash")) && m->type.hasRetType
         && m->type.retType->bType == BASETYPE_INT64
-        && recvType.bType != BASETYPE_INTERFACE && !viaInterface) {
+        && !viaInterface) {
         *reported = true;
         struct operand* seq = operandNew(mTok, OPERATION_SEQ, TypeVanilla(BASETYPE_INT64));
         seq->comprBody = ListInit(sizeof(struct statement));
@@ -8643,30 +8351,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     ListAdd(&withRecv, &recvOp);
     for (int i = 0; i < mArgs.len; i++) ListAdd(&withRecv, ListGetIdx(&mArgs, i));
     if (m->type.errors.len > 0 && !allowedM) ErrMsgSemantic(mTok, UNHANDLED_FALLIBLE_CALL);
-    if (viaInterface) {
-        struct type* self = MallocOrCrash(sizeof(struct type));
-        *self = recvType;
-        self->structMAlloc = false;
-        self->scopeParam = NULL;
-        self->scopeDepth = 0;
-        selfForInterfaceCall = self;
-    }
     struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
-    selfForInterfaceCall = NULL;
-    //M19e: a default called through an interface value goes through the table, so a type overriding it runs its
-    //own - the default's entries follow the interface's methods and its identity entry
-    if (recvType.bType == BASETYPE_INTERFACE && call->readVar && !call->isIfaceDispatch) {
-        struct list ds = ListInit(sizeof(struct var*));
-        SemanticInterfaceDefaults(recvType, &ds);
-        for (int k = 0; k < ds.len; k++) {
-            //one default instantiated twice for one generic interface is two vars - matched by the default they copy
-            if (genericOfInstance(*(struct var**)ListGetIdx(&ds, k)) != genericOfInstance(call->readVar)) continue;
-            call->isIfaceDispatch = true;
-            call->ifaceMethodIdx = recvType.vars.len + 1 + k;
-            call->ifaceType = recvType;
-            break;
-        }
-    }
     //T29f: an array method a declared type inherits gives the declared type where it gives its receiver's own type -
     //a String's Filter is a String. Same representation, so only the type changes.
     if (recvType.bType == BASETYPE_ARRAY && isDeclaredArray(recvType) && receiverIsBuiltin(p0) && m->type.hasRetType
@@ -8766,8 +8451,8 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             if (sArgs.len != 2) { reportArgCount(sArgs, nameTok); return OperandBoolLiteral(nameTok); }
             struct operand* sa = *(struct operand**)ListGetIdx(&sArgs, 0);
             struct operand* sb = *(struct operand**)ListGetIdx(&sArgs, 1);
-            bool idA = sa->isNullLiteral || sa->type.structMAlloc || sa->type.bType == BASETYPE_INTERFACE || sa->type.bType == BASETYPE_FUNC;
-            bool idB = sb->isNullLiteral || sb->type.structMAlloc || sb->type.bType == BASETYPE_INTERFACE || sb->type.bType == BASETYPE_FUNC;
+            bool idA = sa->isNullLiteral || sa->type.structMAlloc || sa->type.bType == BASETYPE_FUNC;
+            bool idB = sb->isNullLiteral || sb->type.structMAlloc || sb->type.bType == BASETYPE_FUNC;
             if (!idA || !idB) { ErrMsgSemantic(nameTok, SAME_NOT_REFERENCE); return OperandBoolLiteral(nameTok); }
             return OperandBinary(sa, sb, OPERATION_EQ, nameTok);
         }
@@ -9193,7 +8878,7 @@ bool TypeHoldsReferences(struct type t) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc || k.bType == BASETYPE_INTERFACE) return true;
+        if (k.structMAlloc) return true;
         if (TypeHoldsReferences(k)) return true;
     }
     return false;
@@ -11067,8 +10752,19 @@ struct statement buildChoiceCaseStmnt(struct checkCtx* ctx, struct syntax* s, st
     for (int i = 0; i < nBinds; i++) {
         struct token bTok = *(struct token*)ListGetIdx(&binds, i);
         struct var* f = ListGetIdx(&c->type.vars, i);
-        struct var* local = scopeDeclare(ctx->mod, ctx->scope, strFromTok(bTok), bTok, f->type, false);
+        //a reference in the payload carries the scope variable of the case's own signature (O4b), which means nothing
+        //here: where it lives is the matched value's business, which this arm cannot name - so the binding reads,
+        //walks and passes it on, and nothing is built into it (as through a borrowed field, C2d)
+        struct type bt = f->type;
+        bool refLike = bt.structMAlloc || (bt.bType == BASETYPE_ARRAY && bt.arrMalloc);
+        if (refLike) {
+            bt.scopeParam = NULL;
+            bt.scopeWritten = false;
+            bt.scopeDepth = 0;
+        }
+        struct var* local = scopeDeclare(ctx->mod, ctx->scope, strFromTok(bTok), bTok, bt, false);
         if (local) local->mayBeInitialized = true;
+        if (local && refLike) local->scopeUnnamed = true;
         ListAdd(&stmt.caseBindings, &local);
     }
     stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
@@ -11161,103 +10857,11 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
 
 static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t);
 struct operand* typeMatchAlwaysTrue(struct token tok);
-//E32: a match on an interface value asks which type it holds - "case c Circle& { }" binds the instance as that type,
-//"case Square& { }" only asks. Lowered to what the program could write: the value held once, then
-//"if v is T1 { c := v as T1& ... } else if v is T2 { ... } else { nomatch }"
-static struct operand* buildIsOp(struct operand* x, struct type t, bool isAs, struct token tok) {
-    struct operand* op = operandNew(tok, isAs ? OPERATION_AS : OPERATION_IS, TypeVanilla(BASETYPE_BOOL));
-    ListAdd(&op->args, &x);
-    op->castType = MallocOrCrash(sizeof(struct type));
-    *op->castType = t;
-    if (isAs) {
-        struct type r = t;
-        if (t.structMAlloc || t.bType == BASETYPE_INTERFACE) {
-            r.structMAlloc = true;
-            r.scopeParam = x->type.scopeParam;
-            r.scopeDepth = x->type.scopeDepth;
-            r.scopeWritten = x->type.scopeWritten;
-            r.refMut = x->type.refMut;
-            op->scopeBindings = x->scopeBindings;
-        }
-        op->type = r;
-    }
-    return op;
-}
-
-static struct statement buildIfaceMatch(struct checkCtx* ctx, struct syntax* s, struct operand* matched) {
-    struct scope wrapScope = scopePush(ctx->scope);
-    struct checkCtx wctx = *ctx;
-    wctx.scope = &wrapScope;
-    wctx.blockDepth = ctx->blockDepth + 1;
-    struct token mtok = firstTokOfType(s, TOK_MATCH);
-    struct list body = ListInit(sizeof(struct statement));
-    struct operand* m = matched;
-    if (matched->opType != OPERATION_READ_VAR) m = OperandReadVar(holdInHidden(&wctx, matched, mtok, "match", &body), mtok);
-    struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
-    struct statement head = (struct statement){0};
-    struct statement* tail = NULL; //the last if built, whose else the next case becomes
-    for (int i = 0; i < cases.len; i++) {
-        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
-        struct syntax* ct = firstPartOfType(c, SNTX_CASE_TYPE);
-        struct syntax* tNode = ct ? firstPartOfType(ct, SNTX_TYPE_EXPR) : NULL;
-        struct token kw = firstTokOfType(c, TOK_CASE);
-        struct type t;
-        if (tNode) t = resolveTypeExpr(ctx->mod, tNode, NULL);
-        else {
-            //a bare name parsed as an expression - "case Circle { }"
-            struct list idens = allTokOfTypeDeep(c, TOK_IDEN);
-            struct type* nt = idens.len == 1 ? typeNamed(ctx->mod, strFromTok(*(struct token*)ListGetIdx(&idens, 0))) : NULL;
-            if (!nt) { ErrMsgSemantic(kw, MATCH_CASE_TYPE_MISMATCH); continue; }
-            t = *nt;
-        }
-        struct type bare = t;
-        bare.structMAlloc = false;
-        if (t.bType == BASETYPE_INTERFACE) noteConvTarget(bare);
-        else if (!TypeSatisfiesInterface(bare, matched->type, NULL)) {
-            ErrMsgSemantic(tNode ? firstTokAnywhere(tNode) : kw, IS_AS_NEVER);
-            continue;
-        }
-        //the arm: the binding, then the program's own block one level in
-        struct scope armScope = scopePush(wctx.scope);
-        struct checkCtx actx = wctx;
-        actx.scope = &armScope;
-        actx.blockDepth = wctx.blockDepth + 1;
-        struct list arm = ListInit(sizeof(struct statement));
-        struct token nameTok = ct ? firstTokOfType(ct, TOK_IDEN) : (struct token){0};
-        if (nameTok.type == TOK_IDEN) {
-            struct statement d = buildVarDeclFromOperand(&actx, nameTok, buildIsOp(m, t, true, kw));
-            ListAdd(&arm, &d);
-        }
-        struct list user = buildBlock(&actx, firstPartOfType(c, SNTX_BLOCK));
-        ListAdd(&arm, &(struct statement){ .sType = STATEMENT_IF, .op = typeMatchAlwaysTrue(kw), .block = user });
-        struct statement st = rangeIf(buildIsOp(m, t, false, kw), arm);
-        if (!tail) { head = st; tail = &head; }
-        else {
-            tail->elseStmnt = MallocOrCrash(sizeof(struct statement));
-            *tail->elseStmnt = st;
-            tail = tail->elseStmnt;
-        }
-    }
-    struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
-    if (nomatchNode) {
-        struct list nb = buildBlock(&wctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
-        struct statement wrap = rangeIf(typeMatchAlwaysTrue(mtok), nb);
-        if (!tail) { head = wrap; tail = &head; }
-        else {
-            tail->elseStmnt = MallocOrCrash(sizeof(struct statement));
-            *tail->elseStmnt = (struct statement){ .sType = STATEMENT_IF, .block = nb };
-            tail->elseIsBlock = true;
-        }
-    }
-    if (tail) ListAdd(&body, &head);
-    return rangeIf(typeMatchAlwaysTrue(mtok), body);
-}
 
 struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
     if (varNode) return buildTypeMatchStmnt(ctx, s, varNode);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (matched->type.bType == BASETYPE_INTERFACE) return buildIfaceMatch(ctx, s, matched);
     //S13/E10a: a type whose "==" consults an Eq is matched through it - the value held once, each case compared to it
     //as "==" would; the hidden local sits in a block of its own around the match
     struct scope wrapScope;
@@ -11841,7 +11445,7 @@ static struct var* lambdaCapture(struct var* L, struct var* outer, struct token 
     inner->type = outer->type;
     inner->mayBeInitialized = true;
     inner->isCapture = true;
-    bool isRef = inner->type.structMAlloc || inner->type.bType == BASETYPE_INTERFACE;
+    bool isRef = inner->type.structMAlloc;
     //D16c: an array is never copied implicitly (D9a), so a value array - text included - is BORROWED, as passing
     //it to a "&" parameter would borrow it (E12c): the lambda's copy is a read-only reference to the variable's
     //own storage, and the lambda lives no longer than that storage (D16d)
@@ -12096,8 +11700,8 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         for (int i = 0; i < caps.len; i++) {
             struct operand* r = *(struct operand**)ListGetIdx(&caps, i);
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
-            if (!(in->type.structMAlloc || in->type.bType == BASETYPE_INTERFACE)) continue;
-            bool asRef = r->type.structMAlloc || r->type.bType == BASETYPE_INTERFACE; //else a borrowed array
+            if (!in->type.structMAlloc) continue;
+            bool asRef = r->type.structMAlloc; //else a borrowed array
             struct var* sv;
             int sd;
             bool su;
@@ -12942,9 +12546,6 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     ListAdd(&bareErrorType.words, &bareErrorWord);
 
     instantiations = ListInit(sizeof(struct instantiation));
-    convSources = ListInit(sizeof(struct type)); //E32: this program's own, not an earlier build's in this process
-    convTargets = ListInit(sizeof(struct type));
-    convListsInit = true;
     allLambdas = ListInit(sizeof(struct var*)); //D16
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a

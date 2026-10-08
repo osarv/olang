@@ -1,6 +1,6 @@
 # check: fail I32 does not satisfy the constraint CtShape on T: it has no method Area that fits
 # G19: a constraint is checked at the call that infers the variable
-type CtShape interface {
+type CtShape trait {
     Area() I32
 }
 fn ctArea(x <T CtShape>) I32 { return x.Area() }

@@ -56,7 +56,7 @@ struct tokRule tokRules[] = {
     {TOK_TYPE, "type", NULL},
     {TOK_STRUCT, "struct", NULL},
     {TOK_CHOICE, "enum", NULL},
-    {TOK_INTERFACE, "interface", NULL},
+    {TOK_INTERFACE, "trait", NULL},
     {TOK_FUNC, "fn", NULL},
     {TOK_ERROR, "error", NULL},
     {TOK_MUT, "mut", NULL},

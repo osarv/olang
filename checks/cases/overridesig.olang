@@ -1,9 +1,9 @@
 # check: fail does not have the default's signature
-# M19e: a same-named method with another signature than a default of an interface the type satisfies is an error
-type Shape interface {
+# M19e: a same-named method with another signature than a default of a trait the type satisfies is an error
+type Shape trait {
     Area() I32
 }
-fn (s Shape&) Twice() I32 { return s.Area() * 2 }
+fn (s <S Shape>&) Twice() I32 { return s.Area() * 2 }
 type Sq struct(n I32) {
     n
 }

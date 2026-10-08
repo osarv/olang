@@ -1,6 +1,6 @@
 # check: fail I64 does not satisfy the constraint CtShape on T
 # G19: and where a generic type's arguments are written
-type CtShape interface {
+type CtShape trait {
     Area() I32
 }
 type CtHolder<T CtShape> struct(v <T>) {

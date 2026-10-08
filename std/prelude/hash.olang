@@ -4,7 +4,7 @@
 # Integer arithmetic wraps, which every hash here relies on.
 
 # what a Map key needs (G19): a Hash that agrees with "==" - keys equal by "==" hash equally
-type Hashable<T> interface {
+type Hashable<T> trait {
     Hash() I64
 }
 

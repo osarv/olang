@@ -28,7 +28,6 @@ bool OperandIsLvalue(struct operand* op);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
 bool ChoiceHasPayload(struct type t);
 void RdSpellType(struct type t, char* buf, size_t n);
-void RdSpellInterface(struct type t, char* buf, size_t n);
 void RdSpellSig(struct type f, char* buf, size_t n);
 
 #define CT_STEP_BUDGET 20000000
@@ -134,7 +133,7 @@ static struct ctVal* ctCheckFloat(struct ctState* st, struct operand* op, struct
     return ctFloat(t, r);
 }
 
-static bool ctIsRef(struct type t) { return t.structMAlloc || t.bType == BASETYPE_INTERFACE; }
+static bool ctIsRef(struct type t) { return t.structMAlloc; }
 
 //a value of this type runs a destructor when its scope closes - an effect evaluation does not model, and
 //which skipping the construction at run time would skip too
@@ -699,10 +698,10 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_FUNCCALL: {
             struct var* f = op->readVar;
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
-            if (!f || (f->type.isExtern && !op->isIfaceDispatch)) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
-            //a call through a function value or an interface is evaluable exactly when the function it reaches
-            //is - which only the evaluation knows, so it is decided there (ctCall), not here
-            bool throughValue = (!f->owner && !op->isCtorCall) || op->isIfaceDispatch;
+            if (!f || f->type.isExtern) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
+            //a call through a function value is evaluable exactly when the function it reaches is - which only
+            //the evaluation knows, so it is decided there (ctCall), not here
+            bool throughValue = !f->owner && !op->isCtorCall;
             for (int i = 0; i < op->args.len && !sc->why; i++) {
                 struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
                 //a global bound to a "mut &" parameter may be written through it
@@ -839,24 +838,9 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
         return ctFail(st, op->tok, CT_WHY_DESTRUCTOR);
     }
-    if (!func || (func->type.isExtern && !op->isIfaceDispatch)) return ctFail(st, op->tok, "it calls an external function");
+    if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
     struct ctVal* through = NULL;
-    struct ctVal* recv = NULL; //T31: a dispatch's receiver - the interface value - evaluated before the method is known
-    if (op->isIfaceDispatch) {
-        //the method the instance's own concrete type supplies, decided now (K1a), as for a function value
-        struct operand* a0 = *(struct operand**)ListGetIdx(&op->args, 0);
-        recv = ctFit(st, a0, ((struct var*)ListGetIdx(&func->type.vars, 0))->type);
-        if (!recv) {
-            if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
-            return NULL;
-        }
-        if (recv->kind == CT_NULL) return ctFail(st, op->tok, "it calls a method through a null interface value");
-        if (recv->kind != CT_REF || !recv->target) return ctFail(st, op->tok, "it calls through an interface value compile-time evaluation does not model");
-        struct var* m = ListGetIdx(&op->ifaceType.vars, op->ifaceMethodIdx);
-        struct var* impl = InterfaceMethodImpl(recv->target->type, m);
-        if (!impl) return ctFail(st, op->tok, "it calls through an interface value compile-time evaluation does not model");
-        func = canonicalVar(impl);
-    } else if (!func->owner && !op->isCtorCall) {
+    if (!func->owner && !op->isCtorCall) {
         //a call through a function value: the function it names, decided now (K1a)
         struct ctVal* fv = op->callee ? ctEval(st, op->callee) : ctFindLocal(st, func->name); //E13b: computed
         if (!fv && op->callee) return NULL;
@@ -881,8 +865,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     for (int i = 0; i < func->type.vars.len && i < op->args.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-        //a dispatched method's receiver: the instance the interface names, or a copy for a by-value receiver
-        struct ctVal* v = recv && i == 0 ? (ctIsRef(p->type) ? recv : recv->target) : ctFit(st, a, p->type);
+        struct ctVal* v = ctFit(st, a, p->type);
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
             if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
@@ -1087,12 +1070,11 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             }
             return true;
         }
-        case BASETYPE_FUNC: case BASETYPE_INTERFACE: {
-            //what it is, not what it holds: a function value its signature, an interface its name and methods
+        case BASETYPE_FUNC: {
+            //what it is, not what it holds: a function value its signature
             if (v->kind == CT_NULL) { ctTextStr(b, "null"); return true; }
             char spelled[2400];
-            if (t.bType == BASETYPE_FUNC) RdSpellType(t, spelled, sizeof(spelled));
-            else RdSpellInterface(t, spelled, sizeof(spelled));
+            RdSpellType(t, spelled, sizeof(spelled));
             ctTextStr(b, spelled);
             return true;
         }
@@ -1370,25 +1352,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 for (int i = 0; i < v->n; i++) t->elems[i] = ctCopy(v->elems[i]);
                 return t;
             }
-            //an interface value: the instance it names, whose own type is the dynamic one
-            struct ctVal* inst = x->kind == CT_REF ? x->target : NULL;
-            bool hit = false;
-            if (inst) {
-                struct type have = inst->type;
-                have.structMAlloc = false;
-                struct type want = *op->castType;
-                want.structMAlloc = false;
-                hit = want.bType == BASETYPE_INTERFACE ? TypeSatisfiesInterface(have, want, NULL) : TypeIsSame(have, want);
-            }
-            if (!isAs) return ctBool(hit);
-            if (!hit) {
-                if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
-                return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
-            }
-            if (!ctIsRef(op->type)) return ctCopy(inst); //"as T": a copy of the instance
-            struct ctVal* r = ctNew(CT_REF, op->type);
-            r->target = inst;
-            return r;
+            return ctFail(st, op->tok, "it uses an operation compile-time evaluation does not model");
         }
         case OPERATION_BOUNDS: { //E31: a derived TryAt/TrySlice's check
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
@@ -1411,11 +1375,7 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     if (ctIsRef(dst)) {
         if (op->isNullLiteral) return ctNew(CT_NULL, dst);
         if (ctIsRef(op->type)) { //already a reference: the same node (repoint, S4a)
-            struct ctVal* v = ctEval(st, op);
-            if (!v || dst.bType != BASETYPE_INTERFACE || v->kind != CT_REF) return v;
-            v = ctCopy(v); //E12d: an interface value names the very instance the reference does
-            v->type = dst;
-            return v;
+            return ctEval(st, op);
         }
         struct ctVal* node = OperandIsLvalue(op) ? ctLvalue(st, op, false) : ctEval(st, op);
         if (!node) return NULL;

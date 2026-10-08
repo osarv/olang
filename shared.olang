@@ -1835,19 +1835,7 @@ test "E11a: a reference inside a struct renders its referent" {
     assert bytesEq($h, "RenderHolder(Pt3(7, 9), \"x\")")
 }
 
-# E11a: a function is its signature, named when it is named directly; an interface is its name and its
-# methods' signatures - what they are, not what they hold
-type RenderShower interface {
-    Show(x I32) I32
-    mut Reset() ?
-}
-
-type RenderSp struct(v I32) {
-    v mut
-}
-
-fn (s RenderSp&) Show(x I32) I32 { return x + s.v }
-fn (s mut RenderSp&) Reset() ? { s.v = 0 }
+# E11a: a function is its signature, named when it is named directly - what it is, not what it holds
 fn renderAdd(a I32, b I32) I32 { return a + b }
 
 type RenderFnHolder struct(f fn(a I32, b I32) I32) { f mut }
@@ -1859,15 +1847,10 @@ test "E11a: a call's several results render together" {
     assert bytesEq("r=" $renderTwo(), "r=(1, \"x\")")
 }
 
-test "E11a: functions and interfaces render as signatures" {
+test "E11a: functions render as signatures" {
     assert bytesEq($renderAdd, "renderAdd(a I32, b I32) I32")
     h := RenderFnHolder(renderAdd)
     assert bytesEq($h, "RenderFnHolder(fn(a I32, b I32) I32)")
-    sp RenderSp& = RenderSp(1)
-    w RenderShower& = sp
-    assert bytesEq($w, "RenderShower{Show(x I32) I32, mut Reset() ?}")
-    none RenderShower& = null
-    assert bytesEq($none, "null")
     rs := Point&[Point(1, 2)]
     assert bytesEq($rs, "Point&[Point(1, 2)]")
 }
@@ -1986,54 +1969,31 @@ test "a one-element array holding a variable" {
     assert lit.Len() == 1 and lit[0] == 3
 }
 
-# T29b: a run-time-length array satisfies an interface like anything else. It is a { length, storage } pair
-# held by value, so it has no address of its own: a marked one is boxed into the interface's scope, an
-# unmarked lvalue is borrowed through its slot, and the dispatch reaches the method through the by-value
-# thunk. A type of one's own over an array qualifies (a built-in's methods are the prelude's, M19d).
-type Measured interface {
+# T29b: an array satisfies a trait like anything else - a type of one's own over an array qualifies (a built-in's
+# methods are the prelude's, M19d)
+type Measured trait {
     Size() I32
 }
 fn (a Nums&) Size() I32 { return I32(a.Len()) * 10 }
 fn (a mut Nums&) Zero() { a[0] = 0 }
-type Zeroer interface {
+type Zeroer trait {
     mut Zero()
 }
 
-fn measureOf(m Measured&) I32 { return m.Size() }
-fn wrapMeasured(a Nums&) Measured&a { return a }
+fn measureOf(m <M Measured>&) I32 { return m.Size() }
+fn zeroOf(z mut <Z Zeroer>&) { z.Zero() }
 
-test "T29b: arrays satisfy interfaces" {
+test "T29b: arrays satisfy traits" {
     t Txt& = "hello"
     assert measureOf(t) == 5        # Txt's own Size
     k I32 = 3
     buf := Array<I32>(k, 1)
     r Nums& = Nums(buf[:])
-    assert measureOf(r) == 30        # a marked pair, boxed
+    assert measureOf(r) == 30
     v Nums = Nums(buf[:])
-    assert measureOf(v) == 30        # an unmarked lvalue, borrowed through its slot
-    w Measured& = wrapMeasured(r)        # a PARAMETER's pair, boxed into the returned scope
-    assert w.Size() == 30
-    z Zeroer& = r
-    z.Zero()        # writes through to the very storage r names
+    assert measureOf(v) == 30        # an unmarked value, borrowed
+    zeroOf(r)        # writes through to the very storage r names
     assert r[0] == 0
-}
-
-test "T33: interface values over one array's storage are equal, over different storage are not" {
-    k I32 = 3
-    buf := Array<I32>(k, 0)
-    r Nums& = Nums(buf[:])
-    a Measured& = r
-    b Measured& = r        # a second box of the same pair
-    assert a == b
-    assert a == wrapMeasured(r)
-    other := Array<I32>(k, 0)
-    c Measured& = Nums(other[:])
-    assert a != c
-    short Measured& = r[:2]        # the same storage, a different length
-    assert a != short
-    n Measured& = null
-    assert n != a
-    assert n == null
 }
 
 # C9/C11: registration is per CONSTRUCTOR CALL, never per storage location - so exactly-once holds however
@@ -4387,20 +4347,19 @@ test "'extern fn' marshals a Array<U8> argument to a raw pointer at the call bou
     assert n < 0
 }
 
-# ---- interfaces (T30-T35, E12d, M19a, M21) ----
+# ---- traits (T30-T35, G19, M19e, M21) ----
 
-# T30: an interface declares a set of method signatures and nothing else. T31: a type satisfies it
-# STRUCTURALLY and implicitly - no declaration of intent on either side - when its own module declares a
-# matching method per method. That is M19's own lookup, so an interface is satisfied by the methods a
-# type already has, and only the module declaring a type may give it any.
-type Shape interface {
+# T30: a trait declares a set of method signatures and nothing else, and is only ever a CONSTRAINT on a type
+# variable (G19) - never the type of a value. T31: a type satisfies it structurally and implicitly - no declaration of
+# intent on either side - when its own module declares a matching method per method. Code over a trait is generic,
+# compiled per type with direct calls.
+type Shape trait {
     Area() I32
     Sides() I32
 }
 
-# M21: two types in ONE module can both implement an interface, which needs several methods to share a
-# name - one per receiver type. Without it "Area" could be written once per module and the first
-# thing anyone writes (two shapes, one file) would not compile.
+# M21: two types in ONE module can both satisfy a trait, which needs several methods to share a name - one per
+# receiver type
 type Square struct(s I32) {
     side mut I32 = s
 }
@@ -4414,77 +4373,36 @@ type Tri struct(b I32, h I32) {
 fn (t Tri&) Area() I32 { return t.base * t.high / 2 }
 fn (t Tri&) Sides() I32 { return 3 }
 
-# a BY-VALUE receiver satisfies too (T31 gives the receiver the same latitude E12 gives any argument).
-# The dispatch always hands over a pointer, so this one reaches the table through an adapter that loads
-# the aggregate first - the one thing admitting both receiver shapes costs.
+# a BY-VALUE receiver satisfies too (T31 gives the receiver the same latitude E12 gives any argument)
 type Dot struct(v I32) {
     x mut I32 = v
 }
 fn (d Dot) Area() I32 { return 0 }
 fn (d Dot) Sides() I32 { return 1 }
 
-# a named primitive is a type like any other (T29), so it can carry methods and satisfy an interface
+# a named primitive is a type like any other (T29), so it can carry methods and satisfy a trait
 type Ring I32
 fn (r Ring) Area() I32 { return I32(r) }
 fn (r Ring) Sides() I32 { return 0 }
 
-# M19a: a plain function over the interface, declared in the interface's own module, is reached through
-# the same "x.f()" spelling as a method - one spelling for the methods a type must supply and the helpers
-# built on top of them, with only the former dispatched
-fn (s Shape&) Describe() I32 { return s.Area() + s.Sides() }
+# M19e: a default - a method of every type satisfying the trait, declared once in the trait's module on a type
+# variable the trait constrains
+fn (s <S Shape>) Describe() I32 { return s.Area() + s.Sides() }
 
-test "an interface dispatches to the concrete type's own method" {
+fn areaOf(s <S Shape>) I32 { return s.Area() }
+
+test "a trait constrains generic code, compiled per type with direct calls" {
     q Square& = Square(4)
     t Tri& = Tri(6, 4)
-    s Shape& = q
-    assert s.Area() == 16
-    assert s.Sides() == 4
-    s = t        # S4a: assigning a reference repoints it
-    assert s.Area() == 12
-    assert s.Sides() == 3
+    assert areaOf(q) == 16 and areaOf(t) == 12
+    assert areaOf(Dot(9)) == 0 and areaOf(Ring(7)) == 7
+    assert q.Describe() == 20        # M19e: the default, on every Shape
+    assert Ring(7).Describe() == 7
 }
 
-test "a by-value receiver and a named primitive satisfy an interface too" {
-    d Dot = Dot(9)
-    s Shape& = d
-    assert s.Area() == 0
-    assert s.Sides() == 1
-
-    r Ring = 7
-    s = r
-    assert s.Area() == 7
-    assert s.Sides() == 0
-}
-
-test "an interface is an ordinary parameter, field and return value" {
-    q Square& = Square(3)
-    s Shape& = q
-    assert s.Describe() == 13        # M19a: a method declared on the interface itself - a helper over every Shape
-        # "Area(q)" is a compile error: a method is called on its receiver, which is also what lets four
-        # types' methods share the one name with no overload resolution anywhere
-    assert q.Area() == 9
-}
-
-# T33: an interface value is the (concrete type, instance) pair, and "==" compares both halves - E10's
-# pointer identity applied to a value that has two pointers. Same instance through two interface values
-# is equal; two different instances, or the same instance held as a different concrete type, is not.
-test "interface equality compares both the concrete type and the instance" {
-    q Square& = Square(2)
-    q2 Square& = Square(2)
-    t Tri& = Tri(2, 2)
-    a Shape& = q
-    b Shape& = q
-    c Shape& = q2
-    d Shape& = t
-    assert a == b
-    assert a != c        # same type, different instance
-    assert a != d        # different type
-}
-
-# T30's "mut" is the receiver half of D9's two axes, declared on the interface because the concrete
-# receiver is invisible at a dispatch site: without it, whether "w.M()" may write to what w names would
-# depend on a type the call cannot see.
-type Ticker interface {
+# T30's "mut" is the receiver half of D9's two axes: a method that writes declares it, and a type satisfies it only
+# with a "mut" receiver
+type Ticker trait {
     Reading() I32
     mut Nudge(n I32)
 }
@@ -4495,30 +4413,22 @@ type Ledger struct(v I32) {
 fn (t Ledger&) Reading() I32 { return t.n }
 fn (t mut Ledger&) Nudge(n I32) { t.n = t.n + n }
 
-# D11 makes every local mutable, so the rule is only observable where "mut" means something - a
-# parameter. A non-"mut" receiver reaching a "mut" method is the same laundering an immutable argument
-# bound to a "mut &" parameter always was.
-fn bumpTwice(c mut Ticker&, n I32) {
+fn bumpTwice(c mut <C Ticker>&, n I32) {
     c.Nudge(n)
     c.Nudge(n)
 }
 
-test "a mut interface method writes through to the very instance" {
+test "a mut trait method writes through to the very instance" {
     t Ledger& = Ledger(1)
-    c Ticker& = t
-    c.Nudge(4)
-    assert c.Reading() == 5
-    assert t.n == 5        # E12d borrows: the interface names the instance, never a copy
-    bumpTwice(c, 10)
-    assert t.n == 25
+    bumpTwice(t, 10)
+    assert t.n == 21 and t.Reading() == 21
 }
 
-# a fallible method is an ordinary one: the interface declares the error list, T31 requires the concrete
-# method's to match it exactly and in order (the error-union ABI numbers words by position), and try/catch
-# works through the dispatch with no special case.
+# a fallible method is an ordinary one: the trait declares the error list, and T31 requires the concrete method's to
+# match it exactly and in order
 error SinkError { Full }
 
-type Sink interface {
+type Sink trait {
     mut Put(n I32) ? SinkError
     Total() I32
 }
@@ -4533,65 +4443,56 @@ fn (c mut Cap&) Put(n I32) ? SinkError {
 }
 fn (c Cap&) Total() I32 { return c.sum }
 
-test "a fallible method propagates through the dispatch" {
-    c Cap& = Cap(10)
-    s Sink& = c
-    try s.Put(4) catch SinkError { unreachable }
-    try s.Put(4) catch SinkError { unreachable }
-    assert s.Total() == 8
-    caught Bool = false
-    try s.Put(9) catch SinkError { caught = true }
-    assert caught
-    assert s.Total() == 8
+fn sinkFill(s mut <K Sink>&, n I32) I32 {
+    caught I32 = 0
+    for i in range 3 {
+        try s.Put(n) catch SinkError { caught++ }
+    }
+    return caught
 }
 
-# P1/P4 need no interface-specific rule at all: the receiver is parameter 0 of an ordinary call, so it is
-# checked exactly as any other argument is. The task
-# env already carries a function POINTER, so a table entry slots straight in.
-test "a dispatched call runs as a spawned task" {
+test "a fallible trait method propagates through generic code" {
+    c Cap& = Cap(10)
+    assert sinkFill(c, 4) == 1 and c.Total() == 8
+}
+
+test "a generic call runs as a spawned task" {
     a Ledger& = Ledger(0)
     b Ledger& = Ledger(0)
-    x Ticker& = a
-    y Ticker& = b
     join {
-        spawn x.Nudge(3)
-        spawn y.Nudge(4)
+        spawn bumpTwice(a, 3)
+        spawn bumpTwice(b, 4)
     }
-    assert a.n == 3
-    assert b.n == 4
+    assert a.n == 6 and b.n == 8
 }
 
-# the canonical reason interfaces exist: several concrete types held in ONE collection, each dispatched
-# to its own method. "items[i].Area()" needs a method call whose receiver is not a plain name - the
-# call-with-an-alias-chain-name form reaches only identifiers, so a postfix "." followed by an argument
-# list is what makes a method on an indexed (or returned) value expressible at all.
-fn areaSum(items Array<Shape&>&) I32 {
+# several concrete types in ONE collection: an enum of them (T17), whose match is checked for every case - the static
+# counterpart of what a trait object would be elsewhere
+type AnyShape enum {
+    Sq(q Square&)
+    Tr(t Tri&)
+    Rg(r Ring)
+}
+
+fn (a AnyShape) Area() I32 {
+    match a {
+        case AnyShape.Sq(q) { return q.Area() }
+        case AnyShape.Tr(t) { return t.Area() }
+        case AnyShape.Rg(r) { return r.Area() }
+    }
+}
+
+test "a collection of mixed types is an enum of them" {
+    items := AnyShape[AnyShape.Sq(Square(3)), AnyShape.Tr(Tri(4, 5)), AnyShape.Rg(Ring(6))]
     sum I32 = 0
-    for i in range items.Len() { sum = sum + items[i].Area() }
-    return sum
+    for x in items { sum += x.Area() }
+    assert sum == 25
 }
 
-test "a collection of mixed concrete types, each dispatched to its own method" {
-    q Square& = Square(3)
-    t Tri& = Tri(4, 5)
-    r Ring = 6
-    a Shape& = q
-    b Shape& = t
-    c Shape& = r
-    items Array<Shape&> = Shape&[a, b, c]
-    assert items.Len() == 3
-    assert items[0].Area() == 9
-    assert items[1].Area() == 10
-    assert items[2].Area() == 6
-    assert areaSum(items) == 25
-    assert items[1].Describe() == 13        # M19a through an indexed receiver
-}
-
-# these are compile errors, so they can only be named here: a type missing a method (or supplying one
-# with the wrong receiver mutability) does not satisfy the interface; an interface type written without a
-# reference marker is rejected (T32 - it names another type's instance and has no by-value form);
-# a method signature may not be generic (T35); two methods of the SAME type may not share a name (M21);
-# and no method may be called plainly - "Area(q)" is rejected, only "q.Area()" calls it (M19).
+# these are compile errors, so they can only be named here: a trait written as a type ("s Shape&") - it is a
+# constraint (T30); a type missing a method (or with the wrong receiver mutability) does not satisfy it; a method
+# signature may not be generic (T35); two methods of the SAME type may not share a name (M21); and no method may be
+# called plainly - "Area(q)" is rejected, only "q.Area()" calls it (M19).
 
 # ---- enum payloads (T17, T17a, T17b, S13a) ----
 
@@ -5352,8 +5253,8 @@ type RangeD struct(l I32, h I32) {
     hi mut I32 = h
 }
 fn (r RangeD&) Bounds() (I32, I32) { return r.lo, r.hi }
-type BoundedD interface { Bounds() (I32, I32) }
-fn widthD(b BoundedD&) I32 {
+type BoundedD trait { Bounds() (I32, I32) }
+fn widthD(b <B BoundedD>&) I32 {
     lo, hi := b.Bounds()
     return hi - lo
 }
@@ -6223,7 +6124,7 @@ test "D15a: a reference declared from a literal can be repointed at an array of 
 # T35a: an interface may be generic, and each instantiation is an ordinary interface - its methods concrete,
 # its dispatch table one function per entry. A generic type's method satisfies it through its instantiation.
 # Iterator<T> is the built-in one: nameable everywhere, and what "for ... in" walks.
-type GenSource<T> interface {
+type GenSource<T> trait {
     mut Next() <T> ? Exhausted
 }
 
@@ -6238,7 +6139,7 @@ fn (o mut GenOnce<<T>>&) Next() <T> ? Exhausted {
     return o.v
 }
 
-fn genDrain(s mut GenSource<I32>&) I32 {
+fn genDrain(s mut <G GenSource<I32>>&) I32 {
     t := 0
     for {
         v := try s.Next() catch Exhausted { break }
@@ -6247,11 +6148,11 @@ fn genDrain(s mut GenSource<I32>&) I32 {
     return t
 }
 
-fn genFirst(s mut GenSource<<T>>&) <T> ? Exhausted {
+fn genFirst(s mut <G GenSource<<T>>>&) <T> ? Exhausted {
     return try s.Next()
 }
 
-fn iterSum(it mut Iterator<I32>&) I32 {
+fn iterSum(it mut <I Iterator<I32>>&) I32 {
     t := 0
     for v in it { t += v }
     return t
@@ -6263,11 +6164,10 @@ test "T35a: a generic interface, satisfied by a plain type and by a generic one"
     o GenOnce<I32>& = GenOnce<I32>(7, false)
     assert genDrain(o) == 7
     c2 ForCounter& = ForCounter(0, 4)
-    w GenSource<I32>& = c2
-    assert try genFirst(w) catch default 0 == 1
+    assert try genFirst(c2) catch default 0 == 1
 }
 
-fn iterTotal(it mut Iterator<<T>>&) <T> {
+fn iterTotal(it mut <I Iterator<<T>>>&) <T> {
     t <T> = 0
     for v in it { t += v }
     return t
@@ -6283,8 +6183,7 @@ test "G9c: a concrete type passed to a generic interface binds its variables thr
     assert iterTotal(c2) == 10
 }
 
-# K1: compile-time evaluation calls through an interface - the method the instance's concrete type supplies,
-# found when the call is reached, as a call through a function value is
+# K1: compile-time evaluation runs generic code over a trait, each instantiation with its concrete type's methods
 fn iterTotalOf(n I32) I32 {
     c ForCounter& = ForCounter(0, n)
     return iterTotal(c)
@@ -6293,9 +6192,7 @@ fn iterTotalOf(n I32) I32 {
 fn drainBoth() I32 {
     c ForCounter& = ForCounter(0, 3)
     o GenOnce<I32>& = GenOnce<I32>(10, false)
-    a GenSource<I32>& = c
-    b GenSource<I32>& = o
-    return genDrain(a) + genDrain(b)
+    return genDrain(c) + genDrain(o)
 }
 
 fn arrayIterTotal() I64 {
@@ -6550,7 +6447,7 @@ test "L4a: a block comment is whitespace, and a line break where it spans one" {
 
 # G19: an interface as a constraint on a type variable - checked where the variable is inferred or written, the
 # code compiled per type with direct calls. A variable named only in a constraint is inferred through it.
-type CnShape interface {
+type CnShape trait {
     Area() I32
 }
 
@@ -6608,7 +6505,7 @@ type OpMoney I64
 
 fn (a OpMoney) plus(b OpMoney) OpMoney { return OpMoney(I64(a) + I64(b) + 1) }
 
-type OpAddable<T> interface {
+type OpAddable<T> trait {
     Plus(b <T>) <T>
 }
 
@@ -6812,26 +6709,25 @@ test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {
 
 fn opChurn() Array<I32>& { return Array<I32>(1000, 7) }
 
-test "E31: operators in generic code, in a constraint, through an interface value, and while compiling" {
+test "E31: operators in generic code, in a constraint, and while compiling" {
     a := OpVec(1, 2)
     s := opSum(OpVec[a, OpVec(3, 4)], OpVec(0, 0))
     assert s.y == 6
     t := opTwice(a)
     assert t.x == 2
-    w OpAddable<OpVec>& = a
-    r := w + OpVec(10, 10)
-    assert r.x == 11
     assert OpDotBaked == 10
 }
 
-# M19e: a method declared on an interface is callable on any value whose type satisfies it - a default - and a type's
-# own method of the same name overrides it, called directly or through an interface value
-type IfmNamed interface {
+# M19e: a default - a method on a type variable a trait constrains - is callable on any value whose type satisfies the
+# trait, and a type's own method of the same name and signature overrides it, wherever it is called from
+type IfmNamed trait {
     IfmName() I32
 }
 
-fn (n IfmNamed&) Shout() I32 { return n.IfmName() * 2 }
-fn (n IfmNamed&) Whisper() I32 { return n.IfmName() - 1 }
+fn (n <N IfmNamed>) Shout() I32 { return n.IfmName() * 2 }
+fn (n <N IfmNamed>) Whisper() I32 { return n.IfmName() - 1 }
+
+fn ifmWhisper(n <N IfmNamed>) I32 { return n.Whisper() }
 
 type IfmP struct(v I32) {
     v
@@ -6848,14 +6744,13 @@ fn (p IfmP) Whisper() I32 { return 100 }
 
 IfmCountBaked := I32[1, 2, 3, 4].Iter().Count(fn(x) { return x > 2 })
 
-test "M19e: interface methods reach satisfying types; a type's own method wins" {
+test "M19e: defaults reach satisfying types; a type's own method wins" {
     p := IfmP(5)
     assert p.Shout() == 10
     assert p.Whisper() == 100
-    n IfmNamed& = p
-    assert n.Whisper() == 100 # through an interface value the type's own version runs too
-    m IfmNamed& = IfmQ(5)
-    assert m.Whisper() == 4 and m.Shout() == 10
+    assert ifmWhisper(p) == 100 # from generic code the type's own version runs too
+    m := IfmQ(5)
+    assert m.Whisper() == 4 and m.Shout() == 10 and ifmWhisper(m) == 4
     assert I32[1, 2, 3].Iter().Any(fn(x) { return x == 3 })
     assert IfmCountBaked == 2
 }
@@ -6902,15 +6797,12 @@ type IxOwn struct() {
 
 fn (o IxOwn&) At(i I64) I32 { return o.v }
 fn (o IxOwn&) Len() I64 { return 3 }
-# an override of Indexable's default Iter - the same signature (M19e), walking something else
-fn (o IxOwn&) Iter() IndexIter<I32> { return IndexIter<I32>(IxHundreds()) }
-
-type IxHundreds struct() {
-    v I32 = 100
+# an override of Indexable's default Iter - the same signature (M19e), starting one position in
+fn (o IxOwn&) Iter() IndexIter<I32, IxOwn> {
+    it := IndexIter<I32, IxOwn>(o)
+    try it.Next() catch Exhausted { }
+    return it
 }
-
-fn (h IxHundreds&) At(i I64) I32 { return h.v }
-fn (h IxHundreds&) Len() I64 { return 2 }
 
 fn ixSum(c <C Indexable<<T>>>) <T> {
     t <T> = 0
@@ -6943,7 +6835,7 @@ test "S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexabl
     o IxOwn& = IxOwn()
     u := 0
     for x in o { u += x }
-    assert u == 200
+    assert u == 2        # the own Iter's two values, not the counted loop's three
 }
 
 # E31/S9e: the checked forms. "try" calls TryAt, TrySlice, TrySetAt, TryDiv, TryInc ... when a type declares them, and
@@ -7127,15 +7019,15 @@ test "E29/S9e: try reaches a fallible Has, and a comprehension's own calls" {
 
 # E32: "is" and "as" - what an interface value holds (a concrete type, or another interface), which case an enum value
 # is; "match" with type cases on an interface value; a wider interface widening to a narrower one implicitly
-type IcShape interface {
+type IcShape trait {
     Area() I32
 }
 
-type IcNamed interface {
+type IcNamed trait {
     Name() String&
 }
 
-type IcBoth interface {
+type IcBoth trait {
     Area() I32
     Name() String&
 }
@@ -7159,35 +7051,6 @@ type IcTok enum {
     End
 }
 
-fn icDescribe(s IcShape&) I32 {
-    t := 0
-    if s is IcCircle& { t += 1 }
-    if s is IcSquare { t += 10 }
-    if s is IcNamed& { t += 100 }
-    match s {
-        case c IcCircle& { t += c.r * 1000 }
-        case q IcSquare { t += q.s * 10000 }
-        nomatch { t = -1 }
-    }
-    return t
-}
-
-fn icGrow(s mut IcShape&) I32 {
-    c := s as IcCircle&
-    c.r = c.r + 1
-    return s.Area()
-}
-
-fn icNamed(b IcBoth&) I64 {
-    n IcNamed&b = b
-    return n.Name().Len()
-}
-
-fn icChecked(s IcShape&) I32 {
-    q := try (s as IcSquare) catch default IcSquare(-7)
-    return q.s
-}
-
 fn icToks() I64 {
     t := 0
     x := IcTok.Num(5)
@@ -7202,25 +7065,11 @@ fn icToks() I64 {
     return I64(t + v + a + w) + b
 }
 
-fn icSum() I32 {
-    c IcCircle& = IcCircle(2)
-    q IcSquare = IcSquare(3)
-    return icDescribe(c) + icDescribe(q) + icGrow(c) + icChecked(c) + icChecked(q) + I32(icNamed(c))
-}
-
-IcSumBaked := icSum()
 IcToksBaked := icToks()
 
-test "E32: is and as on interface values and enum values; type cases; widening" {
-    c IcCircle& = IcCircle(2)
-    q IcSquare = IcSquare(3)
-    assert icDescribe(c) == 1 + 100 + 2000
-    assert icDescribe(q) == 10 + 30000
-    assert icGrow(c) == 27 and c.r == 3
-    assert icChecked(c) == -7 and icChecked(q) == 3
-    assert icNamed(c) == 6
+test "E32: is and as on enum values" {
     assert icToks() == I64(1 + 1000 + 5 + 2 - 1 + 40)
-    assert IcSumBaked == icSum() and IcToksBaked == icToks()
+    assert IcToksBaked == icToks()
 }
 
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
@@ -7228,13 +7077,12 @@ test "M19d: a prelude generic type is named bare with its arguments written, as 
     assert p.Second == 2
 }
 
-test "T35a: Iterator<T> is built in, and an Iterator value is walked by for-in" {
+test "T35a: Iterator<T> is built in, and a type satisfying it is walked by for-in" {
     c ForCounter& = ForCounter(0, 3)
     assert iterSum(c) == 6
     o GenOnce<I32>& = GenOnce<I32>(5, false)
-    it Iterator<I32>& = o
     t := 0
-    for v in it { t += v }
+    for v in o { t += v }
     assert t == 5
 }
 
@@ -7895,10 +7743,7 @@ test "the evaluator models slices, text and enum payloads as the run time does" 
     assert CtSum == ctSliceSum(k + 10)
 }
 
-# K1: a function value and an interface value are modelled too - "$" renders them, "==" compares them by identity
-type CtArea interface { Area() I32 }
-type CtSq struct(s I32) { s }
-fn (q CtSq&) Area() I32 { return q.s * q.s }
+# K1: a function value is modelled too - "$" renders it, "==" compares it by identity
 fn ctTwice(n I32) I32 { return n * 2 }
 fn ctThrice(n I32) I32 { return n * 3 }
 fn ctPick(k I32) fn(n I32) I32 {
@@ -7906,12 +7751,7 @@ fn ctPick(k I32) fn(n I32) I32 {
     return ctThrice
 }
 fn ctFaces(k I32) String {
-    q := CtSq(3 + k)
-    a CtArea& = q
-    b CtArea& = q
-    n CtArea& = null
-    assert a == b and a != n and n == null
-    return $ctTwice " " $ctPick(k) " " $a " " $n
+    return $ctTwice " " $ctPick(k)
 }
 CtFaces := ctFaces(0)
 CtSameFn Bool = ctPick(0) == ctPick(0) and ctPick(0) != ctPick(1)
@@ -7983,7 +7823,7 @@ test "written text compares with a String value" {
 test "the evaluator models function values and interfaces, and bakes enums carrying payloads" {
     k I32 = ctRuntimeZero
     assert CtFaces.Eq(ctFaces(k))
-    assert CtFaces.Eq("ctTwice(n I32) I32 fn(n I32) I32 CtArea{Area() I32} null")
+    assert CtFaces.Eq("ctTwice(n I32) I32 fn(n I32) I32")
     assert CtSameFn
     assert CtMixed0 == ctMixed(k) and CtMixed1 == ctMixed(k + 1) and CtMixed2 == ctMixed(k + 2)
     assert CtMixed3 == ctMixed(k + 3) and CtMixedIn.m == ctMixed(k + 3) and CtMixedIn.x == 7
@@ -8438,12 +8278,13 @@ test "T29h: Char is text's unit and String holds Chars" {
     assert CharBaked
 }
 
-# M19e: a type's own method overrides a default of a GENERIC interface through an interface value too (the default
-# was found by its decorated name, so the override was missed and the default ran)
-type OvSrc<T> interface {
+# M19e: a type's own method overrides a default of a GENERIC trait, from generic code too
+type OvSrc<T> trait {
     Get() <T>
 }
-fn (s OvSrc<<T>>&) OvPlain(k I32) I32 { return 1 }
+fn (s <S OvSrc<<T>>>&) OvPlain(k I32) I32 { return 1 }
+fn ovPlainOf(s <S OvSrc<<T>>>&) I32 { return s.OvPlain(1) }
+fn ovCount(it mut <I Iterator<I32>>&) I64 { return it.Count(fn(x) { return true }) }
 type OvOne struct(v I32) {
     v
 }
@@ -8459,9 +8300,9 @@ fn (o mut OvOnes&) Next() I32 ? Exhausted {
 }
 fn (o mut OvOnes&) Count(keep fn(x I32) Bool) I64 { return 99 }
 
-test "M19e: an override of a generic interface's default runs through an interface value" {
-    s OvSrc<I32>& = OvOne(WdMutable)
-    assert s.OvPlain(1) == 2
-    it Iterator<I32>& = OvOnes(3)
-    assert it.Count(fn(x) { return true }) == 99
+test "M19e: an override of a generic trait's default runs from generic code" {
+    s OvOne& = OvOne(WdMutable)
+    assert s.OvPlain(1) == 2 and ovPlainOf(s) == 2
+    it OvOnes& = OvOnes(3)
+    assert ovCount(it) == 99
 }

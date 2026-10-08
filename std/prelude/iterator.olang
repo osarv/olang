@@ -8,16 +8,16 @@ error Exhausted {
 
 # what "for ... in" walks besides an array and a range (S9a): each Next() gives the following value, and fails
 # with Exhausted once there are no more
-type Iterator<T> interface {
+type Iterator<T> trait {
     mut Next() <T> ? Exhausted
 }
 
-# what every iterator can do, declared once here (M19e): callable on any value whose type satisfies Iterator -
+# what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
 # "l.Iter().Count(f)", "m.Iter().Any(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
 # Each walks the iterator onward from where it stands.
 
 # true when keep holds for at least one value
-fn (it mut Iterator<<T>>&) Any(keep fn(x <T>) Bool) Bool {
+fn (it mut <I Iterator<<T>>>&) Any(keep fn(x <T>) Bool) Bool {
     for x in it {
         if keep(x) { return true }
     }
@@ -25,7 +25,7 @@ fn (it mut Iterator<<T>>&) Any(keep fn(x <T>) Bool) Bool {
 }
 
 # true when keep holds for every value - so for none, when there are none
-fn (it mut Iterator<<T>>&) All(keep fn(x <T>) Bool) Bool {
+fn (it mut <I Iterator<<T>>>&) All(keep fn(x <T>) Bool) Bool {
     for x in it {
         if not keep(x) { return false }
     }
@@ -33,7 +33,7 @@ fn (it mut Iterator<<T>>&) All(keep fn(x <T>) Bool) Bool {
 }
 
 # how many values keep holds for
-fn (it mut Iterator<<T>>&) Count(keep fn(x <T>) Bool) I64 {
+fn (it mut <I Iterator<<T>>>&) Count(keep fn(x <T>) Bool) I64 {
     n I64 = 0
     for x in it {
         if keep(x) { n++ }
@@ -42,7 +42,7 @@ fn (it mut Iterator<<T>>&) Count(keep fn(x <T>) Bool) I64 {
 }
 
 # every value folded into one, starting from init
-fn (it mut Iterator<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
+fn (it mut <I Iterator<<T>>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     acc <U> = init
     for x in it {
         acc = f(acc, x)
@@ -51,7 +51,7 @@ fn (it mut Iterator<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
 }
 
 # a new List - in the caller's scope - of f applied to every element
-fn (it mut Iterator<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
+fn (it mut <I Iterator<<T>>>&) Map(f fn(x <T>) <U>) List<<U>>& {
     out List<<U>>&return = List<<U>>()
     for x in it {
         out.Push(f(x))
@@ -60,7 +60,7 @@ fn (it mut Iterator<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
 }
 
 # a new List - in the caller's scope - of the elements keep holds for
-fn (it mut Iterator<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
+fn (it mut <I Iterator<<T>>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
     out List<<T>>&return = List<<T>>()
     for x in it {
         if keep(x) { out.Push(x) }
@@ -70,22 +70,22 @@ fn (it mut Iterator<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
 
 # a collection with positions (S9d): "for x in c" walks one directly, as a counted loop over At(0) .. At(Len()-1);
 # Iter() is derived here for one that has no Iter of its own, so the helpers above reach it too
-type Indexable<T> interface {
+type Indexable<T> trait {
     At(i I64) <T>
     Len() I64
 }
 
 # a position in an Indexable - the collection by reference, and the next index
-type IndexIter<T> struct(of Indexable<<T>>&) {
-    c Indexable<<T>>&of = of
+type IndexIter<T, C Indexable<<T>>> struct(of <C>&) {
+    c <C>&of = of
     i mut I64 = 0
 }
 
-fn (it mut IndexIter<<T>>&) Next() <T> ? Exhausted {
+fn (it mut IndexIter<<T>, <C>>&) Next() <T> ? Exhausted {
     if it.i >= it.c.Len() { error Exhausted.END }
     it.i++
     return it.c.At(it.i - 1)
 }
 
 # a fresh position at the start, for any type with At and Len and no Iter of its own (M19e)
-fn (c Indexable<<T>>&) Iter() IndexIter<<T>> { return IndexIter<<T>>(c) }
+fn (c <C Indexable<<T>>>&) Iter() IndexIter<<T>, <C>> { return IndexIter<<T>, <C>>(c) }

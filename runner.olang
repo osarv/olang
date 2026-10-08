@@ -171,19 +171,17 @@ type Metre struct(len I32) {
 }
 fn (m Metre&) Size() I32 { return m.n * 100 }
 
-test "a local type satisfies an imported interface structurally" {
+test "a local type satisfies an imported trait structurally" {
     m Metre& = Metre(3)
-    s wk.Base.BaseSized& = m
-    assert s.Size() == 300
-    assert s.BaseDoubled() == 600        # M19a: a method on the interface itself, reached across the boundary
+    assert m.Size() == 300
+    assert wk.Base.BaseDoubledOf(m) == 600        # M19e: the trait's default, reached across the boundary
 }
 
-test "a sealed interface still travels, it just cannot be implemented from outside" {
+test "a sealed trait is satisfied only by its own module's types" {
     b wk.Base.BaseBox& = wk.Base.BaseBox(5)
-    sealed wk.Base.BaseSealed& = wk.Base.BaseSealedBox(b)
-    assert wk.Base.BaseTagOf(sealed) == 7
-        # "sealed = someLocalType" is a compile error here: baseTag is private to Base, so no type declared
-        # in this module can supply it - which is the whole point of a sealed interface
+    assert wk.Base.BaseTagOf(b) == 7
+        # "wk.Base.BaseTagOf(someLocalType)" is a compile error here: baseTag is private to Base, so no type
+        # declared in this module can supply it - which is the whole point of a sealed trait
 }
 
 # M19d: a built-in type's methods are the prelude's and visible everywhere, so nothing is imported for

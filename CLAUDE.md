@@ -2784,6 +2784,26 @@ Go through this for every change to what olang means - a rule added, revised or 
   an interface value was pointed at in the converting function's stack frame - `IndexIter<I32>(IxHundreds())`
   returned from a method read freed stack (the S9d test, once its Iter had the right signature). Fixed: copied into the
   target's scope, as a scalar temporary already was.
+- **Interfaces removed; traits are constraints only (T30-T35, G19, M19e, 2026-10-08, the user: "rename interfaces traits
+  and make them only work as constraints. remove interfaces completely. make it clean").** Supersedes every interface
+  entry above (T30-T35 as written there, E12d, T33, M19a, E32/E32a and S13c on interfaces, interface `$`/`==`/`same`).
+  The user's reason: run-time interface values were where the bugs clustered (tables, default slots, boxing, scopes,
+  type ids); generics with constraints cover algorithms, enums cover a closed set of types (and checked faster than
+  tables), function values cover single-method callbacks. What is lost, stated to the user: an open set of types
+  mixed at run time (a struct of function values is the replacement; a generated `Trait.From(x)` could come later).
+  `trait` replaces `interface`; a trait written anywhere but a constraint is an error (`TRAIT_NOT_A_TYPE`).
+  **Defaults** are declared on a constrained type variable - `fn (it mut <I Iterator<<T>>>&) Count(...)` - in the
+  trait's module, and a call on a satisfying value is an ordinary generic call; the type's own method wins, from
+  generic code too, and a same-named method with another signature is an error. The "generic default cannot be
+  overridden" error of earlier today went with the tables it existed for. Needed on the way: `<T>&` on a type variable
+  (G11a, an aggregate required where bound) with its implicit parameter scope (O4b) and its own permission (T25b);
+  constraint-bound variables bound before lambdas are typed. **Removed**: dispatch tables, thunks, type ids,
+  conversion lookups, interface boxing/widening/identity/rendering, interface `is`/`as` and type cases (enum ones
+  kept), the evaluator's dispatch, the strict-vs-loose satisfaction split, trait methods' receiver scope.
+  **Found on the way, pre-existing**: a `match` binding of a reference out of an enum payload carried the case
+  signature's scope variable and crashed codegen (now read-only-scoped, as a borrowed field is); a `<T>&` field's
+  `&of` was lost on substitution. Corpus: the interface section rewritten as traits + an enum for mixed collections;
+  Base/runner's sealed trait; seven interface-value tests removed. Iterator defaults measured at hand-loop speed.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

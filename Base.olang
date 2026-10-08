@@ -78,9 +78,9 @@ fn AlwaysBaseBroken() ? BaseError {
     error BaseError.BROKEN
 }
 
-# T30/T31: an exported interface. Satisfaction is structural, so an importing module implements it by
-# declaring the methods on its own type - never by naming this interface anywhere.
-type BaseSized interface {
+# T30/T31: an exported trait. Satisfaction is structural, so an importing module satisfies it by declaring the
+# methods on its own type - never by naming this trait anywhere.
+type BaseSized trait {
     Size() I32
 }
 
@@ -89,16 +89,15 @@ type BaseBox struct(size I32) {
 }
 fn (b BaseBox&) Size() I32 { return b.n }
 
-# M19a: a method declared on the interface itself - a helper over every BaseSized, called exactly as the
-# interface's own methods are
-fn (s BaseSized&) BaseDoubled() I32 { return s.Size() * 2 }
+# M19e: a default - a method of every type satisfying BaseSized, called as its own methods are
+fn (s <S BaseSized>&) BaseDoubled() I32 { return s.Size() * 2 }
+fn BaseDoubledOf(s <S BaseSized>&) I32 { return s.BaseDoubled() }
 
 # M6: a private method name belongs to the module that wrote it, so only a type in THIS module can
-# supply it - which makes this a SEALED interface: no importer can implement it, though anyone may hold
-# and pass a value of it.
-type BaseSealed interface {
+# supply it - which makes this a SEALED trait: no importer's type can satisfy it, though anyone may pass
+# this module's own types where it is asked for.
+type BaseSealed trait {
     baseTag() I32
 }
 fn (b BaseBox&) baseTag() I32 { return 7 }
-fn BaseTagOf(s BaseSealed&) I32 { return s.baseTag() }
-fn BaseSealedBox(b BaseBox&) BaseSealed&b { return b }
+fn BaseTagOf(s <S BaseSealed>&) I32 { return s.baseTag() }

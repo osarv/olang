@@ -41,7 +41,6 @@ struct cgDbgLoc { int sp; int line; int id; int file; };
 //defines the program's generic instantiations
 static struct semaModule* cgCompilationRoot;
 void CodegenSetRoot(struct semaModule* root) { cgCompilationRoot = root; }
-static bool cgDefinesConversions; //E32: this object is a program's root (main or tests), which defines the lookups
 struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry recording a subprogram's own file
 
 struct cgCtx {
@@ -137,7 +136,7 @@ struct cgCtx {
     int tmpCtr;
     int lblCtr;
     int strCtr;
-    struct list emittedSyms; //list of char*: dispatch tables and receiver thunks already written into this
+    struct list emittedSyms; //list of char*: shared helpers (equality, rendering, call adapters) already written into this
                               //object. They are linkonce_odr so the LINKER keeps one across objects, but a
                               //second definition within one object is a redefinition error, and the same
                               //(interface, type) pair is reached once per conversion site.
@@ -276,10 +275,7 @@ void llvmType(struct type t, char* buf, size_t n) {
             if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
             else snprintf(buf, n, "i32");
             return;
-        //T33: the (concrete type, instance) pair - a dispatch-table pointer and the instance it names.
-        //Two words, exactly like a runtime-length array's { len, ptr }, and for the same reason: the value
-        //genuinely is two things and there is nowhere else to keep the second.
-        case BASETYPE_INTERFACE: snprintf(buf, n, "{ ptr, ptr }"); return;
+        case BASETYPE_INTERFACE: ErrorBugFound(); return; //T30: a trait is a constraint, never a value
         case BASETYPE_ERROR: snprintf(buf, n, "i32"); return;
         case BASETYPE_FUNC: snprintf(buf, n, "ptr"); return;
         //no real arena/runtime backing exists yet (see the report) - opaque pointer for now, same as any
@@ -504,7 +500,7 @@ static char* cgDbgSubprogram(struct cgCtx* ctx, struct str name, char* linkage, 
 
 //the debug type of a variable, or 0 where none is described yet (a by-value aggregate)
 static int cgDbgType(struct cgCtx* ctx, struct type t) {
-    if (t.structMAlloc || t.bType == BASETYPE_INTERFACE || t.bType == BASETYPE_FUNC
+    if (t.structMAlloc || t.bType == BASETYPE_FUNC
             || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
     const char* nm; int bits; const char* enc;
     const struct primInfo* p = PrimInfo(t.bType);
@@ -936,7 +932,6 @@ char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct op
     //on a temporary passed to a "T[]&s" parameter, mangling a global with a NULL owner.
     bool refLike = (paramT.bType == BASETYPE_ARRAY && paramT.arrMalloc)
                     || (typeIsRefShaped(paramT) && paramT.structMAlloc)
-                    || (paramT.bType == BASETYPE_INTERFACE && paramT.structMAlloc) //O4b: it names a callee scope too
                     || (paramT.bType == BASETYPE_FUNC && paramT.structMAlloc); //D16: so does a function value's
     if (!paramT.scopeParam || !refLike) return NULL;
     return cgResolveScope(ctx, SemanticBoundScope(callOp, paramT.scopeParam), ctx->blockDepth);
@@ -1192,12 +1187,6 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
     //(a type pair cannot); the semantic side has already checked that the borrowed storage outlives the
     //target's scope. A runtime-length array stores its { i64, ptr } descriptor, everything else the address
     //cgValue already handed us for a by-ref type.
-    //E12d/T33: an interface slot holds the two-word pair, whether it was just built from a concrete value
-    //(cgValueForTarget) or copied from another interface value
-    if (dstT.bType == BASETYPE_INTERFACE) {
-        fprintf(ctx->fnOut, "  store { ptr, ptr } %s, ptr %s\n", src, dstAddr);
-        return;
-    }
     //C2e: an array of a length known only at run time copied into fixed storage (an inline field) - its
     //length is checked once, here, per copy, and a mismatch aborts as a bad slice bound does
     if (dstT.bType == BASETYPE_ARRAY && !dstT.arrMalloc && !dstT.structMAlloc && dstT.arrLen
@@ -1291,7 +1280,6 @@ char* cgAddr(struct cgCtx* ctx, struct operand* op);
 //instead of each independently defaulting to ctx->ownScopeSlot. This is the general, type-level version of
 //what cgAssign's own scopeOverride computation already did for one narrow case - see the report. A no-op
 //(plain cgValue) when no promotion is needed here at all.
-static char* cgInterfaceValue(struct cgCtx* ctx, struct type ifaceT, struct operand* op, char* scopeOverride);
 
 //D16c: a lambda capturing only values - a temporary, built where it lands, as text is
 static bool cgIsFreshClosure(struct operand* op) {
@@ -1395,21 +1383,9 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
     return obj;
 }
 
-static char* cgIfaceWiden(struct cgCtx* ctx, struct type dstT, char* v);
 char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     if (dstT.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, dstT)) {
         return cgCallAdapterValue(ctx, op, dstT, scopeOverride);
-    }
-    //E12d: an interface target takes the (dispatch table, instance) pair, built from the operand itself -
-    //the instance half is a borrow, so it needs the lvalue's address, which a produced value has already
-    //discarded. Every cgStoreInto site funnels through here, so this is the one place it has to happen.
-    if (dstT.bType == BASETYPE_INTERFACE && op->type.bType != BASETYPE_INTERFACE) {
-        return cgInterfaceValue(ctx, dstT, op, scopeOverride);
-    }
-    //E32: one interface value reaching a different interface - its table for the target, looked up
-    if (dstT.bType == BASETYPE_INTERFACE && op->type.bType == BASETYPE_INTERFACE
-        && !(dstT.owner == op->type.owner && StrCmp(dstT.name, op->type.name))) {
-        return cgIfaceWiden(ctx, dstT, cgValue(ctx, op));
     }
     //E11a/E11b: "$x" and a text join produce fresh storage with nothing to borrow, which makes them
     //temporaries in E12c's sense - so they are built in the TARGET's scope, exactly as a struct literal
@@ -1426,16 +1402,6 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     return v;
 }
 
-//converts op's cgValue() (a ptr for by-ref types) into the real value to use at a call-argument/return
-//boundary, where aggregates cross by value rather than by our internal storage-pointer convention.
-//dstT is the declared type of the slot being crossed into (a parameter's type, or the function's declared
-//return type) - needed for the same malloc-promotion case cgStoreInto handles (a plain struct value, e.g.
-//a literal, crossing into a "&"-heap-indirect parameter/return type): without it, op's own by-ref
-//address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
-//whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
-//Resolves dstT's scope and sets it as the ambient override (see cgValueForTarget) *before* building op's
-//own value, not after - same reordering, same reason: a literal argument/return value's own nested
-//bare-"&" fields need to see the target scope while they're being built, not once it's too late.
 //true once this object has already written `sym`; records it otherwise. See cgCtx.emittedSyms.
 static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym) {
     for (int i = 0; i < ctx->emittedSyms.len; i++) {
@@ -1447,281 +1413,21 @@ static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym) {
     return false;
 }
 
-//a concrete type's name in a dispatch-table or thunk symbol. A declared type is owner-qualified as always;
-//a built-in (M19 lets one carry methods, so it can satisfy an interface) has no owner and is spelled by
-//its shape, which T25a makes its identity - length and marker included.
-static void cgConcreteName(struct type t, char* buf, size_t n) {
-    if (t.owner && t.name.len) { mangleTypeName(t.owner, t.name, buf, n); return; }
-    struct str sn = typeShortName(t);
-    snprintf(buf, n, "builtin.%.*s", sn.len, sn.ptr);
-}
-
-//T29b/T33: whether a concrete type's interface instance is a boxed run-time-length array descriptor rather
-//than the instance's own address - see cgInterfaceValue
-static bool cgIfaceBoxesDescriptor(struct type t) {
-    return t.bType == BASETYPE_ARRAY && t.arrMalloc;
-}
-
-//the function an interface's dispatch table points at for one method. Usually the real function - but a
-//method declared with a BY-VALUE receiver has a different calling convention from the dispatch (which
-//always hands over a pointer to the instance), so it gets a one-line adapter that loads the aggregate and
-//forwards. T31 deliberately admits both receiver shapes, on the grounds that the latitude E12 gives every
-//other argument should not stop at this one; the thunk is what that costs, and it is confined to here.
-static void cgItabEntryFor(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
-                           struct str mName, char* out, size_t n);
-static void cgItabEntry(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* m,
-                        char* out, size_t n) {
-    cgItabEntryFor(ctx, concrete, iface, InterfaceMethodImpl(concrete, m), m->name, out, n);
-}
-
-//M19e: a default's entry - a by-value override needs the same thunk an interface method's would
-static void cgDefaultEntry(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
-                           char* out, size_t n) {
-    cgItabEntryFor(ctx, concrete, iface, impl, impl->name, out, n);
-}
-
-static void cgItabEntryFor(struct cgCtx* ctx, struct type concrete, struct type iface, struct var* impl,
-                           struct str mName, char* out, size_t n) {
-    char real[256];
-    mangleFuncSym(impl, real, sizeof(real));
-    struct var* recv = ListGetIdx(&impl->type.vars, 0);
-    char recvTy[256];
-    llvmType(recv->type, recvTy, sizeof(recvTy));
-    if (strcmp(recvTy, "ptr") == 0) { snprintf(out, n, "%s", real); return; }
-    //T29b: a "T[N]" instance reaching a "T[]&" receiver - the instance pointer IS the storage, and the
-    //length is the concrete type's own, so the thunk builds the pair rather than loading one
-    bool widens = recv->type.bType == BASETYPE_ARRAY && recv->type.arrMalloc && !concrete.arrMalloc;
-
-    char ifaceName[200], concreteName[200];
-    mangleTypeName(iface.owner, iface.name, ifaceName, sizeof(ifaceName));
-    cgConcreteName(concrete, concreteName, sizeof(concreteName));
-    snprintf(out, n, "@olang.thunk.%s.%s.%.*s", ifaceName, concreteName, mName.len, mName.ptr);
-    if (cgSymAlreadyEmitted(ctx, out)) return;
-
-    char retTy[256];
-    llvmFuncRetType(impl->type, retTy, sizeof(retTy));
-    char params[4096] = "", args[4096] = "";
-    int nScope = impl->type.scopeVars.len;
-    for (int i = 0; i < nScope; i++) {
-        char p[64], a[64];
-        snprintf(p, sizeof(p), "%sptr %%s%d", i > 0 ? ", " : "", i);
-        snprintf(a, sizeof(a), "%sptr %%s%d", i > 0 ? ", " : "", i);
-        strncat(params, p, sizeof(params) - strlen(params) -1);
-        strncat(args, a, sizeof(args) - strlen(args) -1);
-    }
-    //O4b: a by-value receiver has no scope of its own, but the dispatch passes the instance's anyway, first
-    if (!recv->type.scopeParam) {
-        char rest[4200];
-        snprintf(rest, sizeof(rest), "ptr %%rscope%s%.4000s", nScope > 0 ? ", " : "", params);
-        snprintf(params, sizeof(params), "%.4000s", rest);
-    }
-    strncat(params, nScope > 0 || !recv->type.scopeParam ? ", ptr %recv" : "ptr %recv", sizeof(params) - strlen(params) -1);
-    char a0[400];
-    snprintf(a0, sizeof(a0), "%s%.256s %%r0", nScope > 0 ? ", " : "", recvTy);
-    strncat(args, a0, sizeof(args) - strlen(args) -1);
-    for (int i = 1; i < impl->type.vars.len; i++) {
-        struct var* p = ListGetIdx(&impl->type.vars, i);
-        char pty[256], piece[400];
-        llvmType(p->type, pty, sizeof(pty));
-        snprintf(piece, sizeof(piece), ", %.256s %%a%d", pty, i);
-        strncat(params, piece, sizeof(params) - strlen(params) -1);
-        strncat(args, piece, sizeof(args) - strlen(args) -1);
-    }
-    fprintf(ctx->out, "define linkonce_odr %s %s(%s) {\nentry:\n", retTy, out, params);
-    if (widens) {
-        fprintf(ctx->out, "  %%r0.0 = insertvalue { i64, ptr } undef, i64 %lld, 0\n"
-                "  %%r0 = insertvalue { i64, ptr } %%r0.0, ptr %%recv, 1\n",
-                concrete.arrLen ? concrete.arrLen->intLiteralVal : 0);
-    } else {
-        fprintf(ctx->out, "  %%r0 = load %s, ptr %%recv\n", recvTy);
-    }
-    if (strcmp(retTy, "void") == 0) {
-        fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", real, args);
-    } else {
-        fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, real, args, retTy);
-    }
-}
-
-//T31/T33: the dispatch table for one (interface, concrete type) pair - the method pointers, in the
-//interface's own declaration order, which is the order a dispatch indexes by. Emitted "linkonce_odr" for
-//exactly the reason a generic's instantiation is: the pair is created by whichever module writes the
-//conversion, no module owns it, and the linker keeps one. That also makes the table's ADDRESS a stable
-//identity for the concrete type, which is what lets "==" on two interface values compare types (T33)
-//without a separate type descriptor.
-//
-//One entry follows the methods: how "==" compares two instances of this type once their tables agree (T33).
-//Null means the instance pointers themselves are the identity, which holds for everything except a boxed
-//array descriptor - two conversions of one array reference box it twice, so the boxes' addresses differ
-//while the storage they name is the same. The trailing slot never shifts a method's index.
-//E32: a concrete type's run-time identity - the address of a byte no other type has. "linkonce_odr" by name, so every
-//object that names the type agrees on one address
-static char* cgTypeId(struct cgCtx* ctx, struct type concrete) {
-    concrete.structMAlloc = false;
-    char name[300];
-    cgConcreteName(concrete, name, sizeof(name));
-    char* sym = MallocOrCrash(340);
-    snprintf(sym, 340, "@olang.typeid.%s", name);
-    if (!cgSymAlreadyEmitted(ctx, sym)) fprintf(ctx->out, "%s = linkonce_odr constant i8 0\n", sym);
-    return sym;
-}
-
-//E32: the root's lookup from a type identity to the table for interface `iface`, or null when the type does not
-//satisfy it. Any other object only declares it; the root alone sees every type the program makes interface values of
-static char* cgConvLookup(struct cgCtx* ctx, struct type iface) {
-    iface.structMAlloc = false;
-    char name[300];
-    mangleTypeName(iface.owner, iface.name, name, sizeof(name));
-    char* sym = MallocOrCrash(340);
-    snprintf(sym, 340, "@olang.conv.%s", name);
-    if (!cgDefinesConversions && !cgSymAlreadyEmitted(ctx, sym)) fprintf(ctx->out, "declare ptr %s(ptr)\n", sym);
-    return sym;
-}
-static char* cgItable(struct cgCtx* ctx, struct type concrete, struct type iface);
-static void cgEmitConvLookups(struct cgCtx* ctx) {
-    struct list* targets = SemanticConvTargets();
-    struct list* sources = SemanticConvSources();
-    for (int t = 0; targets && t < targets->len; t++) {
-        struct type iface = *(struct type*)ListGetIdx(targets, t);
-        char name[300];
-        mangleTypeName(iface.owner, iface.name, name, sizeof(name));
-        char* fsym = MallocOrCrash(340);
-        snprintf(fsym, 340, "@olang.conv.%s.define", name);
-        if (cgSymAlreadyEmitted(ctx, fsym)) continue; //the root's functions are emitted in more than one pass
-        char body[65536] = "";
-        int n = 0;
-        for (int k = 0; sources && k < sources->len; k++) {
-            struct type src = *(struct type*)ListGetIdx(sources, k);
-            if (!TypeSatisfiesInterface(src, iface, NULL)) continue;
-            char* tab = cgItable(ctx, src, iface);
-            char* tid = cgTypeId(ctx, src);
-            char piece[1600];
-            snprintf(piece, sizeof(piece), "  %%c%d = icmp eq ptr %%tid, %s\n  br i1 %%c%d, label %%hit%d, label %%next%d\n"
-                     "hit%d:\n  ret ptr %s\nnext%d:\n", n, tid, n, n, n, n, tab, n);
-            strncat(body, piece, sizeof(body) - strlen(body) - 1);
-            n++;
-        }
-        fprintf(ctx->out, "define weak_odr ptr @olang.conv.%s(ptr %%tid) {\nentry:\n%s  ret ptr null\n}\n\n", name, body);
-    }
-}
-
-static char* cgItable(struct cgCtx* ctx, struct type concrete, struct type iface) {
-    char ifaceName[200], concreteName[200];
-    mangleTypeName(iface.owner, iface.name, ifaceName, sizeof(ifaceName));
-    cgConcreteName(concrete, concreteName, sizeof(concreteName));
-    char* sym = MallocOrCrash(512);
-    snprintf(sym, 512, "@olang.itab.%s.%s", ifaceName, concreteName);
-    //E32: the table proper follows a word naming the concrete type, which "is"/"as" read one slot before it
-    int nEntries = iface.vars.len + 1;
-    {
-        struct list ds0 = ListInit(sizeof(struct var*));
-        SemanticInterfaceDefaults(iface, &ds0);
-        nEntries += ds0.len;
-    }
-    char* ref = MallocOrCrash(700);
-    snprintf(ref, 700, "getelementptr inbounds ({ ptr, [%d x ptr] }, ptr %s, i32 0, i32 1)", nEntries, sym);
-    if (cgSymAlreadyEmitted(ctx, sym)) return ref;
-    char* tid = cgTypeId(ctx, concrete);
-    //every thunk this table needs is written first: a define cannot be nested inside the constant below
-    char entries[8192] = "";
-    for (int i = 0; i < iface.vars.len; i++) {
-        struct var* m = ListGetIdx(&iface.vars, i);
-        char fn[512], piece[600];
-        cgItabEntry(ctx, concrete, iface, m, fn, sizeof(fn));
-        snprintf(piece, sizeof(piece), "%sptr %s", i > 0 ? ", " : "", fn);
-        strncat(entries, piece, sizeof(entries) - strlen(entries) -1);
-    }
-    char* eqFn = "null";
-    if (cgIfaceBoxesDescriptor(concrete)) {
-        eqFn = "@olang.ieq.arr";
-        if (!cgSymAlreadyEmitted(ctx, eqFn)) {
-            //the same storage and the same length: what "the same instance" means for an array (T33)
-            fprintf(ctx->out, "define linkonce_odr i1 @olang.ieq.arr(ptr %%a, ptr %%b) {\nentry:\n"
-                    "  %%da = load { i64, ptr }, ptr %%a\n  %%db = load { i64, ptr }, ptr %%b\n"
-                    "  %%la = extractvalue { i64, ptr } %%da, 0\n  %%lb = extractvalue { i64, ptr } %%db, 0\n"
-                    "  %%pa = extractvalue { i64, ptr } %%da, 1\n  %%pb = extractvalue { i64, ptr } %%db, 1\n"
-                    "  %%el = icmp eq i64 %%la, %%lb\n  %%ep = icmp eq ptr %%pa, %%pb\n"
-                    "  %%r = and i1 %%el, %%ep\n  ret i1 %%r\n}\n\n");
-        }
-    }
-    char piece[300];
-    snprintf(piece, sizeof(piece), "%sptr %s", iface.vars.len > 0 ? ", " : "", eqFn);
-    strncat(entries, piece, sizeof(entries) - strlen(entries) -1);
-    //M19e: then the interface's defaults - the type's own method where it overrides one, else the default compiled for it
-    struct list ds = ListInit(sizeof(struct var*));
-    SemanticInterfaceDefaults(iface, &ds);
-    for (int k = 0; k < ds.len; k++) {
-        struct var* entry = SemanticDefaultEntry(concrete, iface, *(struct var**)ListGetIdx(&ds, k));
-        char fn[512], dp[600];
-        cgDefaultEntry(ctx, concrete, iface, entry, fn, sizeof(fn));
-        snprintf(dp, sizeof(dp), ", ptr %s", fn);
-        strncat(entries, dp, sizeof(entries) - strlen(entries) -1);
-    }
-    fprintf(ctx->out, "%s = linkonce_odr constant { ptr, [%d x ptr] } { ptr %s, [%d x ptr] [%s] }\n", sym,
-            iface.vars.len +1 + ds.len, tid, iface.vars.len +1 + ds.len, entries);
-    return ref;
-}
-
-//E12d: pair a concrete value with the dispatch table for its type. The instance half is an ordinary E12c
-//borrow - the interface names the very instance, never a copy of it - so an lvalue contributes its own
-//storage and only a temporary, having none, is constructed in the target's scope.
-static char* cgInterfaceValue(struct cgCtx* ctx, struct type ifaceT, struct operand* op, char* scopeOverride) {
-    char* itab = cgItable(ctx, op->type, ifaceT);
-    char* data;
-    //T29b: a run-time-length array is a { length, storage } pair held BY VALUE, so it has no address of its
-    //own to point at. An unmarked one is a value type and an lvalue of it is borrowed like any other value
-    //(its slot, which holds the pair). A marked one is a reference, and its slot is not where the instance
-    //lives - a parameter's slot dies with the call - so the pair is boxed into the interface's own scope;
-    //the storage it names is what the lifetime check already judged. Either way the dispatch reaches the
-    //method through the by-value thunk, which loads the pair back out.
-    if (cgIfaceBoxesDescriptor(op->type) && !(OperandIsLvalue(op) && !op->type.structMAlloc)) {
-        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, ifaceT.scopeParam, ifaceT.scopeDepth);
-        char* v = cgValue(ctx, op);
-        data = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 16)\n", data, scopeVal);
-        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", v, data);
-    } else if (cgIfaceBoxesDescriptor(op->type)) {
-        data = cgAddr(ctx, op);
-    } else if (op->type.structMAlloc || (typeIsByRef(op->type) && OperandIsLvalue(op))) {
-        data = cgValue(ctx, op); //already an address: an lvalue aggregate's own storage, or the pointer a "&" holds
-    } else if (OperandIsLvalue(op)) {
-        data = cgAddr(ctx, op); //a scalar-shaped lvalue (a named primitive, a choice value) - borrow its slot
-    } else {
-        //a temporary has no storage of its own: it is built in the target's scope. An aggregate temporary's value
-        //is a slot in this frame, which dies with it - so it is copied out, never pointed at (E12c)
-        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, ifaceT.scopeParam, ifaceT.scopeDepth);
-        char storTy[256];
-        llvmType(op->type, storTy, sizeof(storTy));
-        char* v = cgValue(ctx, op);
-        data = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n",
-                data, scopeVal, TypeGetSize(op->type));
-        if (typeIsByRef(op->type))
-            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n",
-                    data, v, TypeGetSize(op->type));
-        else fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, v, data);
-        cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, data);
-    }
-    char* w1 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } undef, ptr %s, 0\n", w1, itab);
-    char* w2 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } %s, ptr %s, 1\n", w2, w1, data);
-    return w2;
-}
-
-static char* cgIfaceWiden(struct cgCtx* ctx, struct type dstT, char* v);
+//converts op's cgValue() (a ptr for by-ref types) into the real value to use at a call-argument/return
+//boundary, where aggregates cross by value rather than by our internal storage-pointer convention.
+//dstT is the declared type of the slot being crossed into (a parameter's type, or the function's declared
+//return type) - needed for the same malloc-promotion case cgStoreInto handles (a plain struct value, e.g.
+//a literal, crossing into a "&"-heap-indirect parameter/return type): without it, op's own by-ref
+//address would get loaded as a raw aggregate and handed to a boundary that expects a "ptr", corrupting
+//whatever bytes happen to be read back as a pointer - a real, silent memory-safety bug this fixes.
+//Resolves dstT's scope and sets it as the ambient override (see cgValueForTarget) *before* building op's
+//own value, not after - same reordering, same reason: a literal argument/return value's own nested
+//bare-"&" fields need to see the target scope while they're being built, not once it's too late.
 char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     if (dstT.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, dstT)) {
         return cgCallAdapterValue(ctx, op, dstT, scopeOverride); //E31: an argument or result converted from Call
     }
-    //E12d: a concrete value reaching an interface target becomes the (dispatch table, instance) pair
-    if (dstT.bType == BASETYPE_INTERFACE && op->type.bType != BASETYPE_INTERFACE) {
-        return cgInterfaceValue(ctx, dstT, op, scopeOverride);
-    }
-    //E32: one interface value reaching a different interface - its table for the target, looked up
-    if (dstT.bType == BASETYPE_INTERFACE && op->type.bType == BASETYPE_INTERFACE
-        && !(dstT.owner == op->type.owner && StrCmp(dstT.name, op->type.name))) {
-        return cgIfaceWiden(ctx, dstT, cgValue(ctx, op));
-    }
+
     //E12c: an lvalue crossing into a "&" parameter or return slot is borrowed - the callee gets the very
     //instance the caller named. This is what E12a used to forbid outright, back when the only thing that
     //could happen here was a silent copy.
@@ -2492,7 +2198,7 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     //comparison BRANCHES, since which values get compared depends on a run-time tag. That is emitted as
     //its own function rather than inline: a branch in the middle of an expression would need phi nodes
     //threaded back out through every level of cgDeepEq's recursion, where a function simply returns from
-    //each arm and leaves every call site straight-line. "linkonce_odr" for the reason a dispatch table is:
+    //each arm and leaves every call site straight-line. "linkonce_odr" because
     //the comparison belongs to the type, every object that needs it emits it, and the linker keeps one.
     if (t.bType == BASETYPE_CHOICE && ChoiceHasPayload(t)) {
         char* fn = cgChoiceEqFn(ctx, t);
@@ -2506,33 +2212,6 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, bVal, sb);
         char* r = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call i1 %s(ptr %s, ptr %s)\n", r, fn, sa, sb);
-        return r;
-    }
-    //T33: an interface value is the (concrete type, instance) pair, and "==" compares both halves. The
-    //dispatch table's ADDRESS is the concrete type's identity here - one table per (interface, type) pair,
-    //kept single by the linker. Equal tables and equal instance pointers are equal; equal tables and
-    //different pointers are equal only where the table's trailing entry says the pointers are boxes (a
-    //run-time-length array, T29b) and the boxed pairs name the same storage. That needs a branch - a null
-    //table has no trailing entry to read - so it lives in one helper rather than inline, as T17a's does.
-    if (t.bType == BASETYPE_INTERFACE) {
-        if (!cgSymAlreadyEmitted(ctx, "@olang.iface.eq")) {
-            fprintf(ctx->out, "define linkonce_odr i1 @olang.iface.eq(ptr %%ia, ptr %%da, ptr %%ib, ptr %%db, i64 %%n) {\n"
-                    "entry:\n  %%t = icmp eq ptr %%ia, %%ib\n  br i1 %%t, label %%same, label %%no\n"
-                    "same:\n  %%d = icmp eq ptr %%da, %%db\n  br i1 %%d, label %%yes, label %%deep\n"
-                    "deep:\n  %%nul = icmp eq ptr %%ia, null\n  br i1 %%nul, label %%no, label %%slot\n"
-                    "slot:\n  %%sa = getelementptr ptr, ptr %%ia, i64 %%n\n  %%f = load ptr, ptr %%sa\n"
-                    "  %%hasF = icmp ne ptr %%f, null\n  br i1 %%hasF, label %%call, label %%no\n"
-                    "call:\n  %%r = call i1 %%f(ptr %%da, ptr %%db)\n  ret i1 %%r\n"
-                    "yes:\n  ret i1 true\nno:\n  ret i1 false\n}\n\n");
-        }
-        char* w[4];
-        for (int i = 0; i < 4; i++) {
-            w[i] = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, %d\n", w[i], i < 2 ? aVal : bVal, i % 2);
-        }
-        char* r = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call i1 @olang.iface.eq(ptr %s, ptr %s, ptr %s, ptr %s, i64 %d)\n",
-                r, w[0], w[1], w[2], w[3], t.vars.len);
         return r;
     }
 
@@ -2671,25 +2350,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 
 //resolves a call operand's target symbol (or loaded function pointer) and builds its full argument list.
-//Shared by cgFuncCall and cgTryCatch, which have to agree exactly about both and used to say it twice -
-//the second copy knew nothing about an M19a dispatch, so "try w.M()" mangled a synthetic var that has no
-//owning module and crashed the compiler.
-//M19a: the two run-time halves of a dispatch - the table entry to call, and the instance to hand it as
-//its first argument. Shared by every path that lowers a call (a direct call, a try/catch, a spawn), which
-//marshal their arguments quite differently but must agree exactly on what a dispatch resolves to.
-static char* cgDispatchTarget(struct cgCtx* ctx, struct operand* op, char** dataOut) {
-    struct operand* recvOp = *(struct operand**)ListGetIdx(&op->args, 0);
-    char* pair = cgValue(ctx, recvOp);
-    char* itab = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 0\n", itab, pair);
-    *dataOut = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", *dataOut, pair);
-    char* slotAddr = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = getelementptr ptr, ptr %s, i64 %d\n", slotAddr, itab, op->ifaceMethodIdx);
-    char* target = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, slotAddr);
-    return target;
-}
+//Shared by cgFuncCall and cgTryCatch, which have to agree exactly about both.
 
 //the target of a call written by name: the function's own symbol, or - for a local of function type - the code
 //its value's closure object starts with (D16), with *closureOut set to that object, passed as the hidden first
@@ -2808,20 +2469,19 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
 
 static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* argsBuf, size_t argsBufN) {
     struct var* func = op->readVar;
-    char* ifaceData = NULL;
     char* closure = NULL;
     char* target;
     if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
         closure = cgValue(ctx, op->callee);
         target = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, closure);
-    } else target = op->isIfaceDispatch ? cgDispatchTarget(ctx, op, &ifaceData) : cgNamedTarget(ctx, func, &closure);
+    } else target = cgNamedTarget(ctx, func, &closure);
     if (closure) {
         strncat(argsBuf, "ptr ", argsBufN - strlen(argsBuf) -1);
         strncat(argsBuf, closure, argsBufN - strlen(argsBuf) -1);
     }
 
-    bool ctor = !op->isIfaceDispatch && cgIsCtor(func);
+    bool ctor = cgIsCtor(func);
     char* here = ctor ? cgCtorHereArg(ctx, op) : NULL;
     if (ctor) {
         strncat(argsBuf, "ptr ", argsBufN - strlen(argsBuf) -1);
@@ -2852,10 +2512,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* ar
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
         char aty[256];
         char* av;
-        if (op->isIfaceDispatch && i == 0) {
-            av = ifaceData; //already extracted above; every table entry takes the instance as a bare ptr
-            snprintf(aty, sizeof(aty), "ptr");
-        } else {
+        {
             char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
             //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
             //an argument with no storage of its own is built where the instance lands
@@ -3508,65 +3165,21 @@ static char* cgBoundsValue(struct cgCtx* ctx, struct operand* op) {
     return v;
 }
 
-//E32: an interface value's concrete type identity - the word before its table - or null for a null value
-static char* cgIfaceTypeId(struct cgCtx* ctx, char* pair) {
-    char* tab = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 0\n", tab, pair);
-    char* nn = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = icmp ne ptr %s, null\n", nn, tab);
-    int id = ctx->lblCtr++;
-    char has[32], none[32], join[32];
-    snprintf(has, sizeof(has), "tid.has.%d", id);
-    snprintf(none, sizeof(none), "tid.none.%d", id);
-    snprintf(join, sizeof(join), "tid.join.%d", id);
-    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", nn, has, none);
-    ctx->terminated = true;
-    cgLabel(ctx, has);
-    char* slot = cgNewTmp(ctx);
-    char* tid = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = getelementptr ptr, ptr %s, i64 -1\n  %s = load ptr, ptr %s\n", slot, tab, tid, slot);
-    cgBr(ctx, join);
-    cgLabel(ctx, none);
-    cgBr(ctx, join);
-    cgLabel(ctx, join);
-    char* r = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = phi ptr [ %s, %%%s ], [ null, %%%s ]\n", r, tid, has, none);
-    return r;
-}
 
-//E32: "x is T" and "x as T"
+//E32: "x is Enum.Case" and "x as Enum.Case" - the tag tested, and for "as" the payload read
 static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
     struct operand* x = *(struct operand**)ListGetIdx(&op->args, 0);
     bool isAs = op->opType == OPERATION_AS;
-    char* hit;
     char* v = cgValue(ctx, x);
-    char* data = NULL;
-    char* newTab = NULL;
     char xty[256];
     llvmType(x->type, xty, sizeof(xty));
-    if (op->castEnum) {
-        char* tag = v;
-        if (ChoiceHasPayload(x->type)) {
-            tag = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", tag, xty, v);
-        }
-        hit = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", hit, ChoiceHasPayload(x->type) ? "i64" : xty, tag, op->castTag);
-    } else {
-        char* tid = cgIfaceTypeId(ctx, v);
-        hit = cgNewTmp(ctx);
-        struct type want = *op->castType;
-        want.structMAlloc = false;
-        if (want.bType == BASETYPE_INTERFACE) {
-            newTab = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = call ptr %s(ptr %s)\n", newTab, cgConvLookup(ctx, want), tid);
-            fprintf(ctx->fnOut, "  %s = icmp ne ptr %s, null\n", hit, newTab);
-        } else {
-            fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", hit, tid, cgTypeId(ctx, want));
-        }
-        data = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", data, v);
+    char* tag = v;
+    if (ChoiceHasPayload(x->type)) {
+        tag = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", tag, xty, v);
     }
+    char* hit = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %lld\n", hit, ChoiceHasPayload(x->type) ? "i64" : xty, tag, op->castTag);
     if (!isAs) return hit;
     int id = ctx->lblCtr++;
     char okLbl[32], badLbl[32];
@@ -3575,10 +3188,8 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
     ctx->terminated = true;
     cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID", "@__olang_msg_as");
-    char rty[2048];
-    llvmType(op->type, rty, sizeof(rty));
-    if (op->castEnum) {
-        //the payload: spilled, then its one field, or all of them as several results (a tuple of the same layout)
+    //the payload: spilled, then its one field, or all of them as several results (a tuple of the same layout)
+    {
         struct var* c = ListGetIdx(&x->type.vars, (int)op->castTag);
         char payTy[2048];
         structAggSpelling(c->type, payTy, sizeof(payTy));
@@ -3594,32 +3205,6 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
         }
         return cgLoadOrAddr(ctx, op->type, at, false);
     }
-    if (newTab) { //the instance seen through another interface
-        char* w1 = cgNewTmp(ctx);
-        char* w2 = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } undef, ptr %s, 0\n", w1, newTab);
-        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } %s, ptr %s, 1\n", w2, w1, data);
-        return w2;
-    }
-    if (strcmp(rty, "ptr") == 0) return data; //"as T&": the very instance
-    return cgLoadOrAddr(ctx, op->type, data, false); //"as T", or an array reference's { length, storage }
-}
-
-//E32: an interface value reaching another interface its own covers - the instance's table for the target, found
-//at run time since it depends on the concrete type; a null value stays null
-static char* cgIfaceWiden(struct cgCtx* ctx, struct type dstT, char* v) {
-    char* tid = cgIfaceTypeId(ctx, v);
-    struct type want = dstT;
-    want.structMAlloc = false;
-    char* tab = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr %s(ptr %s)\n", tab, cgConvLookup(ctx, want), tid);
-    char* data = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", data, v);
-    char* w1 = cgNewTmp(ctx);
-    char* w2 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } undef, ptr %s, 0\n", w1, tab);
-    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } %s, ptr %s, 1\n", w2, w1, data);
-    return w2;
 }
 
 char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
@@ -3715,9 +3300,6 @@ static void rdKey(struct type t, char* buf, size_t n) {
         case BASETYPE_STRUCT: case BASETYPE_CHOICE:
             if (!inner[0]) snprintf(inner, sizeof(inner), "anon%p", t.vars.ptr);
             snprintf(buf, n, "%s%s", t.structMAlloc ? "m" : "", inner);
-            return;
-        case BASETYPE_INTERFACE:
-            snprintf(buf, n, "%s", inner);
             return;
         case BASETYPE_FUNC: { //structural, so its spelling is its identity - made symbol-safe
             char sp[1200];
@@ -3834,19 +3416,6 @@ static void rdSpellType(struct type t, char* buf, size_t n) {
 void RdSpellType(struct type t, char* buf, size_t n) { rdSpellType(t, buf, n); }
 void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
 
-//E11a: an interface is its name and its methods' signatures
-static void rdSpellInterface(struct type t, char* buf, size_t n) {
-    snprintf(buf, n, "%.*s{", t.name.len, t.name.ptr);
-    for (int i = 0; i < t.vars.len; i++) {
-        struct var* m = ListGetIdx(&t.vars, i);
-        char sig[1200], one[1400];
-        rdSpellSig(m->type, sig, sizeof(sig));
-        snprintf(one, sizeof(one), "%s%s%.*s%s", i ? ", " : "", m->mut ? "mut " : "", m->name.len, m->name.ptr, sig);
-        rdSpellAppend(buf, n, one);
-    }
-    rdSpellAppend(buf, n, "}");
-}
-void RdSpellInterface(struct type t, char* buf, size_t n) { rdSpellInterface(t, buf, n); }
 
 //appends src[0..len) at the cursor (%rd.n) of the helper being emitted
 static void rdPut(struct cgCtx* ctx, char* src, char* len) {
@@ -4154,19 +3723,17 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
             fprintf(ctx->fnOut, "rd.end.%d:\n", id);
             return;
         }
-        case BASETYPE_FUNC: case BASETYPE_INTERFACE: {
-            //E11a: a function value is its signature and an interface its name and methods' signatures -
-            //what they are, not what they hold. A null one is "null".
+        case BASETYPE_FUNC: {
+            //E11a: a function value is its signature - what it is, not what it holds. A null one is "null".
             char* w = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load ptr, ptr %%rd.val\n", w); //a function pointer, or an interface's table
+            fprintf(ctx->fnOut, "  %s = load ptr, ptr %%rd.val\n", w);
             char* isNull = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", isNull, w);
             fprintf(ctx->fnOut, "  br i1 %s, label %%rd.null.%d, label %%rd.live.%d\nrd.null.%d:\n", isNull, id, id, id);
             rdPutText(ctx, "null");
             fprintf(ctx->fnOut, "  br label %%rd.end.%d\nrd.live.%d:\n", id, id);
             char spelled[2400];
-            if (t.bType == BASETYPE_FUNC) rdSpellType(t, spelled, sizeof(spelled));
-            else rdSpellInterface(t, spelled, sizeof(spelled));
+            rdSpellType(t, spelled, sizeof(spelled));
             rdPutText(ctx, spelled);
             fprintf(ctx->fnOut, "  br label %%rd.end.%d\nrd.end.%d:\n", id, id);
             return;
@@ -4615,11 +4182,8 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     int id = ctx->lblCtr++;
     char* joinScope = cgScopeSlotAt(ctx, ctx->joinDepth);
 
-    //M19a: a spawned dispatch needs no special machinery - the task env already carries a function
-    //POINTER and the trampoline already calls it indirectly, so a table entry slots straight in
-    char* ifaceData = NULL;
     char* closure = NULL;
-    char* target = op->isIfaceDispatch ? cgDispatchTarget(ctx, op, &ifaceData) : cgNamedTarget(ctx, func, &closure);
+    char* target = cgNamedTarget(ctx, func, &closure);
 
     //the same marshalling cgFuncCall performs, captured rather than passed
     char envTy[4096] = "{ ptr";
@@ -4651,12 +4215,6 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     for (int i = 0; i < op->args.len && n < 63; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        if (op->isIfaceDispatch && i == 0) {
-            snprintf(tys[n], sizeof(tys[n]), "ptr"); //every table entry takes the instance as a bare ptr
-            snprintf(vals[n], sizeof(vals[n]), "%s", ifaceData);
-            n++;
-            continue;
-        }
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         llvmType(paramT, tys[n], sizeof(tys[n]));
@@ -6760,7 +6318,6 @@ void cgEmitAllFunctions(struct cgCtx* ctx, struct semaModule* emitMod) {
     //calling a module a second program does not link. The root transitively imports every module, so its
     //own staleness already covers the whole set; the others declare what they call.
     if (emitMod != cgCompilationRoot) return;
-    if (cgDefinesConversions) cgEmitConvLookups(ctx); //E32
     struct list* insts = SemanticAllInstantiations();
     for (int i = 0; i < insts->len; i++) {
         struct instantiation* inst = ListGetIdx(insts, i);
@@ -7096,7 +6653,6 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.out = out;
     ctx.fnOut = fnOut;
     ctx.emittedSyms = ListInit(sizeof(char*));
-    cgDefinesConversions = mod == cgCompilationRoot && entry != CG_ENTRY_NONE;
     ctx.blockSlots = ListInit(sizeof(char*));
     ctx.blockJoins = ListInit(sizeof(char*));
     ctx.unwindPool = ListInit(sizeof(char*));

@@ -7727,3 +7727,21 @@ from their original form.
   the array-element view rule in the fit check, and `String(bytes)` accepting same-representation arrays (a fixed
   `U8[...]` literal had relied on fitting the underlying `Array<Byte>`). Seven corpus tests had text in `U8` arrays
   and expected it to render as text; they now say `String`/`Char`, and one also pins `U8[104, 105]`.
+
+- **Interfaces removed, traits as constraints only (2026-10-08).** The user asked whether generics could do what
+  interfaces did, since run-time interfaces "cause a lot of problems"; the answer laid out three uses (algorithms ->
+  constraints, closed sets -> enums, callbacks -> function values) and one loss (an open set mixed at run time), and
+  the user chose "rename interfaces traits and make them only work as constraints. remove interfaces completely. make
+  it clean". Order of work: the keyword; one resolution rule (a type ref resolving to a trait outside a constraint is
+  an error - nested uses resolve through the same function, so each is reported once); defaults re-keyed from an
+  interface receiver to a trait-constrained type-variable receiver, found by satisfaction and called as ordinary
+  generics (the old `$Self` instantiation path went); then deletion guided by compile errors - fit, widening,
+  conversion lists, dispatch, tables, thunks, type ids, equality/rendering helpers, evaluator dispatch. Things that
+  had to be made to work: `<T>&` (it had been rejected outright; it now gets an implicit scope like any reference
+  parameter, keeps its written permission over the binding's, and requires a struct or array where bound - a
+  `t25biface` check caught the permission leak); variables bound only through a constraint are bound before lambda
+  arguments are typed. Two older bugs surfaced in the rewrite: an enum payload reference bound in `match` crashed
+  codegen with a scope variable from the case's signature (reproduced on the committed compiler), and a struct
+  temporary boxed into an interface pointed into a dead stack frame (fixed earlier the same day, then removed with
+  the boxing). Benchmark: an iterator default from a direct call, from a generic function, and a hand loop - all
+  0.07s on 20M x 20.

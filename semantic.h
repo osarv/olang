@@ -429,8 +429,8 @@ enum operation {
                       //point (an omitted bound is materialised as 0 or len(base) when the operand is built).
                       //op->type is a runtime-length reference to base's element type, tagged to the scope
                       //base's own storage belongs to: a slice is a borrow, not an allocation.
-    OPERATION_IS, //E32: "x is T" - args [x]; castType the type asked about, or castEnum with castTag a case
-    OPERATION_AS, //E32: "x as T" - args [x]; op->type the result (castType the type named), or castEnum's payload
+    OPERATION_IS, //E32: "x is Enum.Case" - args [x]; castTag the case
+    OPERATION_AS, //E32: "x as Enum.Case" - args [x]; castTag the case, op->type its payload
     OPERATION_BOUNDS, //E31: a derived TryAt/TrySlice's bounds check - args [v, lo, hi]: v itself, once lo <= v < hi
                       //(<= hi when isInclusive); only ever built under "try", so it always has a checkRoot
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
@@ -520,7 +520,6 @@ struct operand {
                                 //a "try" around the loop does not check it
     int cgSlots, cgDepth;       //codegen: the open block scopes where a tried operand with clauses is emitted - a
     bool cgDepthSet;            //failure deeper inside it (a comprehension's loop) unwinds to there before a clause
-    struct type* castType;      //E32: OPERATION_IS/AS on an interface value - the concrete type or interface named
     bool castEnum;              //E32: OPERATION_IS/AS on an enum value - castTag is the case
     long long castTag;
     bool isInclusive;           //E31: OPERATION_BOUNDS only - the upper bound itself is allowed (a slice's)
@@ -550,14 +549,6 @@ struct operand {
     bool isDefaultArg; //this operand is the "default" keyword standing in an argument slot (E14a). Never
                         //survives past OperandFuncCall, which replaces it with the parameter's own
                         //declared default; every other consumer of an argument list rejects it.
-    //M19a: OPERATION_FUNCCALL only - this call is a DYNAMIC dispatch through an interface value rather
-    //than a call to a known function. args[0] is the receiver (an interface value); readVar points at a
-    //synthetic var carrying the interface method's signature with that receiver prepended, so every
-    //ordinary call check applies unchanged. ifaceMethodIdx is the method's index in the interface's own
-    //`vars`, which is its slot in the dispatch table codegen emits.
-    bool isIfaceDispatch;
-    int ifaceMethodIdx;
-    struct type ifaceType; //the interface the dispatch goes through, for codegen's table lookup
 
     bool isCtorCall; //OPERATION_FUNCCALL only: this call's target is a struct type's own constructor.
                       //":=" accepts one as an initializer (D15) even though it is not a literal: the type
@@ -575,18 +566,13 @@ struct operand {
 //T17: does any case of this choice type carry a payload, and how big is the largest? A choice where none
 //does keeps the bare-i32 representation it has always had; one that does is { i64 tag, [N x i8] payload }.
 bool ChoiceHasPayload(struct type t);
-struct list* SemanticConvSources(void); //E32: struct type - every type an interface value is made from
-struct list* SemanticConvTargets(void); //E32: struct type - every interface converted to at run time
 long long ChoicePayloadSize(struct type t);
 
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
-//M19e: an interface's default methods (instantiated for it), and the entry a table for (concrete, iface) holds for one
-void SemanticInterfaceDefaults(struct type iface, struct list* out);
 //E31: a type's Call method, and whether it matches a function type exactly
 struct var* SemanticCallOf(struct type t);
 struct var* SemanticStrOf(struct type t); //E11c: the Str "$" renders a value of type t through, or NULL
 bool SemanticCallMatches(struct type t, struct type fnType);
-struct var* SemanticDefaultEntry(struct type concrete, struct type iface, struct var* d);
 extern struct semaModule* SemanticMethodScope;
 struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whose imports decide which built-in methods are visible
 //M21: the type f is a method OF - its first parameter's type, when that type is declared in f's own module

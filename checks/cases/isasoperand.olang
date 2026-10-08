@@ -1,4 +1,4 @@
-# check: fail what an interface value holds, or which case an enum value is - this is neither
+# check: fail ask which case an enum value is - this is not an enum value
 # E32: is on a plain value
 fn main() ? {
     x := 5
