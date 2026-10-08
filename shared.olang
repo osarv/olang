@@ -8331,3 +8331,38 @@ test "T29f: extends inherits the base's methods and operators; without it a type
     assert exAll(WdMutable)
     assert ExBaked
 }
+
+# D13c: a declaration with no value is its type's zero value, and a type with a constructor makes its own - the
+# constructor run on zeros, taking parameters' defaults. Pure, so how often it runs cannot show: zero bits stay a
+# memset, any other plain value is that value, one holding references gets a constructor call per declaration.
+type ZOne Int32(v mut Int32) {
+    if v == 0 { v = 1 }
+}
+type ZSized struct(cap Int32 = 16, fill Int32 = 7) {
+    cap
+    fill
+}
+type ZHolds struct(o ZOne) {
+    o
+}
+type ZBag struct() {
+    items mut List<Int32>& = List<Int32>()
+}
+ZGlobal ZOne
+fn zeroAll() Bool {
+    o ZOne
+    z ZSized
+    h ZHolds
+    ones := Array<ZOne>(3)
+    b ZBag
+    c ZBag
+    b.items.Push(1)
+    values Bool = Int32(o) == 1 and Int32(ZGlobal) == 1 and z.cap == 16 and z.fill == 7 and Int32(h.o) == 1
+    return values and Int32(ones[2]) == 1 and b.items.Len() == 1 and c.items.Len() == 0
+}
+ZeroBaked := zeroAll()
+
+test "D13c: a type with a constructor makes its own zero value" {
+    assert zeroAll()
+    assert ZeroBaked
+}

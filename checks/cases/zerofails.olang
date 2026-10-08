@@ -1,0 +1,11 @@
+# check: fail this type has no zero value
+# D13c: the zero value is the constructor run on zeros - one that rejects zero leaves the type with none
+error RangeError {
+    ZERO
+}
+type NonZero Int32(v Int32) ? RangeError {
+    if v == 0 { error RangeError.ZERO }
+}
+fn main() ? {
+    n NonZero
+}

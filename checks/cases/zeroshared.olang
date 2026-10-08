@@ -1,0 +1,8 @@
+# check: fail each element of this array would need storage of its own
+# D13c: a zero value holding references cannot be copied into every element - they would share it
+type Bag struct() {
+    items mut List<Int32>& = List<Int32>()
+}
+fn main() ? {
+    bags := Array<Bag>(3)
+}

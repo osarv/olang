@@ -2718,6 +2718,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   (`PctLit Pct = 180` is `global i32 100`), so nothing runs at run time. A constructor that fails on the literal, or
   cannot be evaluated (an effect), is a compile error at the literal - my wording of "failure = compile error, no
   try". Arithmetic's literals still adapt without running it (`p + 1` on an extending `Percent`).
+- **A constructor makes its type's zero value (D13c, 2026-10-08, stage 4 of the casting plan; the user: "I like the
+  zeroes constructor idea", then on effects "that resolves it", "use declared parameters yes", "not having a zero
+  value means you have to initialize manually, no uninitialized values should exist").** A declaration with no
+  initializer, a constructor field with none, and `Array<T>(n)` with no fill take the constructor called on each
+  parameter's default, else that parameter's zero (nested constructors recursively; `OPERATION_ZERO` - zero bits -
+  for the rest). Evaluated while compiling once the program has checked: fails or cannot be evaluated (an effect -
+  the user's counter/global/file-handle worry) -> no zero value, and the declaration is an error naming why;
+  evaluates -> pure, so the run count is unobservable: all zero bits (`CtIsZero`) leaves today's memset/BSS with
+  nothing run (the corpus's every case), otherwise the call stays (constant-folded, or one call per declaration
+  with its own storage where the value holds references). **My call, flagged**: `Array<T>(n)` of a type whose zero
+  value holds references is an error rather than a per-element constructor loop - the fill copies one value, so the
+  elements would share it. Also flagged: a generic placeholder (`x <T>` with no value) of such a type errors inside
+  the generic, not at the instantiation. Nothing in the language leaves storage uninitialized any more (D15b's
+  `noZeroFill` was already never set).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

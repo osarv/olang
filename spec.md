@@ -389,7 +389,7 @@ a new one is declared with a value written into it (`b Array<T> = a`), which is 
 storage; and a destructured result (S4b) is not copied at all - each declared local takes the array the call
 built for it.
 
-**T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value — or `Array<T>(n, v)`,
+**T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative
 `n` aborts the program (D14b).
 
@@ -1131,11 +1131,23 @@ of that kind is - a local, a global (`X, Y mut Int32 = 0, 0`) - and as construct
 also be puns (`x, y mut`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
-`0`/`0.0` for numeric types, `null` (T2a) for anything nullable, all-zero fields for a struct, an empty
-array for `Array<T>`, and the first-declared case for an enum — an enum and an error type have no other
-meaningful "zero", so this is the type's first case by representation, not by any declared meaning. The
-zero value is defined at every type, and a reference's is `null`, so no type is excluded. For a **global**
-this is the loader's zeroed storage — real BSS, costing nothing at run time.
+`0`/`0.0` for numeric types, `null` (T2a) for anything nullable, an empty array for `Array<T>`, and the
+first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
+first case by representation, not by any declared meaning. A type with a **constructor** - every struct (T13), and a
+declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
+whose zero value is zero bits this is the loader's zeroed storage — real BSS, costing nothing at run time.
+
+**D13c (a constructor's zero value).** The zero value of a type with a constructor is that constructor called with
+each parameter's declared default (D8a), or that parameter's own zero value where it declares none - evaluated
+**while compiling** (K1), once the program has checked. It must evaluate: a constructor that fails on those
+arguments, or that cannot be evaluated at compile time at all (it writes a global, calls an `extern`, ...), leaves
+the type with **no zero value**, and a declaration of it with no initializer - or `Array<T>(n)` of it with no fill,
+or a constructor field of it with none - is a compile-time error naming why. So a constructor with an effect runs
+exactly as often as `T(...)` is written. One that evaluates is pure, so how often it runs cannot be observed: a zero
+value that is all zero bits is the zero fill (nothing runs), and any other is the constructor's value - a
+constant, or, where it holds references, a constructor call for each declaration, each with storage of its own.
+`Array<T>(n)` copies one value into every element, so a `T` whose zero value holds references is an error there:
+the elements would share it; such an array takes a fill or is built element by element.
 
 **D14.** Storage for an array is set aside by building one: `Array<T>(n)` or `Array<T>(n, v)` (T8, E13a),
 written anywhere an expression may be. Like any value with no storage of its own it is built in the scope of

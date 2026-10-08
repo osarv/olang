@@ -1199,6 +1199,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (!node) return NULL; //a checked index's own failure is taken by ctEval
             return node;
         }
+        case OPERATION_ZERO: return ctZero(op->type); //D13c
         case OPERATION_FUNCCALL: {
             struct ctVal* r = ctCall(st, op);
             if (!r && op->isTried && st->flow == CF_ERROR) {
@@ -1619,6 +1620,21 @@ void CtReset(void) {
     ctGlobalsReady = true;
     ctFactList = ListInit(sizeof(struct ctFacts));
     ctFactsReady = true;
+}
+
+bool CtIsZero(struct ctVal* v) {
+    switch (v->kind) {
+        case CT_NULL: return true;
+        case CT_INT: case CT_BOOL: return v->i == 0;
+        case CT_FLOAT: return v->f == 0 && !signbit(v->f);
+        case CT_AGG:
+            if (ctIsRef(v->type)) return false;
+            if (v->type.bType == BASETYPE_CHOICE && v->i != 0) return false;
+            if (v->type.bType == BASETYPE_ARRAY && v->type.arrMalloc) return v->n == 0; //an empty array is { 0, null }
+            for (int i = 0; i < v->n; i++) if (!CtIsZero(v->elems[i])) return false;
+            return true;
+        default: return false;
+    }
 }
 
 bool CtIsPlainData(struct ctVal* v) {

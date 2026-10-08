@@ -7693,3 +7693,17 @@ from their original form.
   is written back into the literal; a failure or an unevaluable constructor is reported at the literal with the
   evaluator's reason. The old t29dliteral check asserted the reversed rule; its program became a corpus test and the
   file now checks a constructor rejecting its literal; litctoreffect checks an effectful one.
+
+- **Zero values from constructors (D13c), 2026-10-08.** Stage 4, the end of the casting plan. Rejected on the way
+  (in the design talk): zero bits that skip the constructor (the one bypass of "a type is entered through its
+  constructor"), and "no zero value for a non-empty constructor" (tedious); the user's objection to running a
+  constructor implicitly - effects whose run count must be controlled - was answered by requiring K1a evaluability,
+  so an effectful constructor runs exactly as often as it is written. The survey had found 7 zero values of
+  constructor-bearing types in the whole corpus, all zero bits, so the design was built to make that case free:
+  the zero-value call is built at the declaration (`zeroValueFor`), evaluated after checking, and when its result is
+  all zero bits it is flagged `zeroBits` and codegen treats the declaration as having no initializer. A fallible
+  constructor's zero call carries a catch-all `unreachable` clause for codegen, held back while evaluating so a
+  failure is reported as the constructor's error. Globals needed their own site (`semaBuildGlobalInits` skipped a
+  missing initializer) - found by a compile-time assert that proved a global's zero value wrong. One check case of
+  mine was wrong: an empty `List` held by value is genuinely zero bits, so `Array<Bag>(3)` over it is fine; the case
+  uses a `List&` field.

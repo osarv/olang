@@ -48,4 +48,7 @@ void CtReset(void);
 //true when v holds no reference anywhere, so it can be written out as plain constant data
 bool CtIsPlainData(struct ctVal* v);
 
+//D13c: true when v is all zero bits - what an uninitialized declaration of its type already holds
+bool CtIsZero(struct ctVal* v);
+
 #endif

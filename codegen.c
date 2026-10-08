@@ -3184,7 +3184,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     //D15b: a local "T[expr]" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
     //only at the local var-decl), since a field has no "= v" form to ask for a fill with.
-    if (op->args.len > 1) {
+    if (op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) { //D13c: a zero-bits fill is the memset
         //T7: "Array<T>(n, v)" - every element is v
         struct operand* fillOp = *(struct operand**)ListGetIdx(&op->args, 1);
         char* fillVal = cgValueForTarget(ctx, fillOp, elemT, NULL);
@@ -4513,6 +4513,15 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_BOUNDS: return cgBoundsValue(ctx, op);
         case OPERATION_IS: case OPERATION_AS: return cgIsAs(ctx, op);
         case OPERATION_SIZED_ARRAY_ALLOC: return cgSizedArrayAlloc(ctx, op);
+        case OPERATION_ZERO: { //D13c: zero bits of the type, as a value or (for one passed by reference) a slot holding it
+            char ty[256];
+            llvmType(op->type, ty, sizeof(ty));
+            if (!typeIsByRef(op->type)) return "zeroinitializer";
+            char* slot = cgNewTmp(ctx);
+            fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
+            fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+            return slot;
+        }
         case OPERATION_COMPREHENSION: return cgComprehension(ctx, op);
         case OPERATION_COMPR_PUSH: cgComprPush(ctx, op); return "";
         case OPERATION_COMPR_RESERVE: cgComprReserve(ctx, op); return "";
@@ -4884,6 +4893,13 @@ static void cgFillLoop(struct cgCtx* ctx, struct type elemT, char* basePtr, char
 }
 
 void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
+    //D13c: a zero value its constructor was found to give as zero bits is the declaration with no initializer
+    struct statement plain;
+    if (s->op && s->op->zeroBits) {
+        plain = *s;
+        plain.op = NULL;
+        s = &plain;
+    }
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
@@ -6416,7 +6432,7 @@ void cgInitGlobalsFunc(struct cgCtx* ctx, struct semaModule* emitMod) {
     ctx->targetScopeOverride = NULL;
     for (int i = 0; i < emitMod->vars.len; i++) {
         struct var* v = ListGetIdx(&emitMod->vars, i);
-        if (v->type.bType == BASETYPE_FUNC || !v->initExpr) continue;
+        if (v->type.bType == BASETYPE_FUNC || !v->initExpr || v->initExpr->zeroBits) continue; //D13c: zero bits is BSS
         char gname[256];
         mangleGlobal(emitMod, v->name, gname, sizeof(gname));
         if (cgGlobalConstInit(v, gname, NULL)) continue; //K2: already the global's data

@@ -410,6 +410,7 @@ enum operation {
                              //where it lands, as "Array<T>(n)" is (op->type is the same run-time-length type)
     OPERATION_COMPR_PUSH,    //E27: appends args[0] to the innermost comprehension being built
     OPERATION_COMPR_RESERVE, //E27: args[0] (an Int64) is how many elements the innermost one will hold at most
+    OPERATION_ZERO, //D13c: the all-zero-bits value of op->type - an argument of a zero-value constructor call
     OPERATION_SIZED_ARRAY_ALLOC, //an uninitialized "T[expr]" var-decl (expr not a compile-time constant) -
                                    //a runtime-length array of expr zero-valued elements, arena-allocated (own by
                                    //default, or the declared type's own "&name" tag) - see the report.
@@ -493,6 +494,7 @@ struct operand {
     bool noZeroFill; //D15b: OPERATION_SIZED_ARRAY_ALLOC only - allocate the storage and leave it as it
                       //comes. Set for a local "T[expr]" declaration, which is uninitialized like any
                       //other declared-size array; a D14a constructor field still zero-fills.
+    bool zeroBits; //D13c: a zero-value constructor call found, while compiling, to give all zero bits - so nothing runs
     bool litCtorPending; //T29d: a literal entering a type with a constructor - recorded to be run while compiling
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the

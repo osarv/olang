@@ -4638,6 +4638,67 @@ bool SemanticCallMatches(struct type t, struct type fnType) {
 static int numericFamilyRank(struct type t, int* family);
 bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
 static void operandWidenInPlace(struct operand* op, struct type t);
+//D13c: a zero value a constructor gives - the call, where it is needed, and what needs it (an array's fill, or not)
+struct zeroRec { struct operand* call; struct token tok; bool forArray; };
+static struct list zeroRecs;
+
+//D13c: a value type with a constructor - its zero value is that constructor's, not zero bits
+static bool typeHasZeroCtor(struct type t) {
+    if (t.structMAlloc || t.isTuple || !t.ctorFunc || TypeIsGeneric(t)) return false;
+    return t.bType == BASETYPE_STRUCT || (t.hasCtor && TypeIsNumeric(t));
+}
+
+struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
+                                struct list scopeArgNodes);
+struct operand* OperandNullLiteral(struct token tok);
+//D13c: the call giving t's zero value - its constructor on each parameter's default where declared, else that
+//parameter's own zero (a nested constructor's, recursively). A fallible constructor is called as tried with a clause
+//that cannot run: the call is evaluated while compiling, and one that fails makes the declaration an error.
+static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct token tok, int depth) {
+    struct var* ctor = t.ctorFunc;
+    struct list args = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < ctor->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&ctor->type.vars, i);
+        struct operand* a;
+        if (p->defaultVal) a = p->defaultVal;
+        else if (typeHasZeroCtor(p->type) && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
+        else if (TypeIsNullable(p->type)) a = OperandNullLiteral(tok);
+        else {
+            a = operandNew(tok, OPERATION_ZERO, p->type);
+            a->type.scopeDepth = ctx ? ctx->blockDepth : 0;
+        }
+        ListAdd(&args, &a);
+    }
+    ErrMsgMuteStart(); //what the zero arguments are is the compiler's choice, not something the program wrote
+    struct operand* call = OperandFuncCall(ctx, ctor, args, tok, ListInit(sizeof(struct syntax*)));
+    ErrMsgMuteEnd();
+    if (ctor->type.errors.len > 0) {
+        call->isTried = true;
+        call->catchClauses = ListInit(sizeof(struct catchClause));
+        struct catchClause cc = (struct catchClause){0};
+        cc.tok = tok;
+        cc.catchAll = true;
+        cc.matches = ListInit(sizeof(struct catchMatch));
+        cc.hasBlock = true;
+        cc.block = ListInit(sizeof(struct statement));
+        struct statement u = (struct statement){0};
+        u.sType = STATEMENT_UNREACHABLE;
+        ListAdd(&cc.block, &u);
+        ListAdd(&call->catchClauses, &cc);
+    }
+    return call;
+}
+
+//D13c: where t's zero value is needed - the call giving it, recorded to be decided once the program has checked;
+//NULL for a type whose zero value is zero bits by definition
+static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct token tok, bool forArray) {
+    if (!typeHasZeroCtor(t)) return NULL;
+    struct operand* call = zeroCtorCall(ctx, t, tok, 0);
+    struct zeroRec r = { call, tok, forArray };
+    ListAdd(&zeroRecs, &r);
+    return call;
+}
+
 //T29d: a literal whose constructor runs while compiling, and the call that runs it
 struct litCtorRec { struct operand* lit; struct operand* call; };
 static struct list litCtorRecs;
@@ -8670,6 +8731,9 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 struct operand* fill = *(struct operand**)ListGetIdx(&aArgs, 1);
                 reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok);
                 ListAdd(&alloc->args, &fill);
+            } else {
+                struct operand* zero = zeroValueFor(ctx, *at.arrElem, nameTok, true); //D13c: each element its zero
+                if (zero) ListAdd(&alloc->args, &zero);
             }
             return alloc;
         }
@@ -9250,7 +9314,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         scopeTagBody = NULL;
         bareLocalLivesInBlock(ctx, &declType);
         if (TypeIsPermRef(declType)) declType.refMut = true; //T25b: a local's own reference is writable
-        rhs = NULL;
+        rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
     } else {
         rhs = buildExprFromSyntax(ctx, exprNode);
         if (typeExprNode) {
@@ -12399,7 +12463,7 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
                 }
             }
         } else if (typeExprNode) {
-            fieldOp = NULL; //D13/D13a - see cgVarDecl
+            fieldOp = zeroValueFor(&cctx, field->type, field->tok, false); //D13/D13a/D13c - see cgVarDecl
         } else {
             //bare pun - already resolved against a same-named parameter's type in pass 2
             struct var* param = scopeFindLocal(&ctorScope, field->name);
@@ -12497,7 +12561,10 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         //cost to remove. Anything reference-shaped within it is null (T2a), which is what makes this
         //legal at all - D13 used to reject it, on the grounds that a zero-filled reference was an
         //invisible dangling pointer with no way to test it.
-        if (!exprNode) continue;
+        if (!exprNode) {
+            v->initExpr = zeroValueFor(&ctx, v->type, nameTok, false); //D13c: a constructor's zero value, if not zero bits
+            continue;
+        }
         struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
         if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
             if (v->type.bType == BASETYPE_ARRAY && !v->type.arrMalloc && rhs->isLiteral) {
@@ -12695,6 +12762,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
+    zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
     inlinePendings = ListInit(sizeof(struct inlinePending)); //C2e
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     bareErrorType = (struct type){0};
@@ -12783,6 +12851,33 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             char* msg = MallocOrCrash(strlen(buf) + 1);
             strcpy(msg, buf);
             ErrMsgSemantic(r->lit->tok, msg);
+        }
+        //D13c: each zero value a constructor gives - all zero bits (nothing then runs), something else (the
+        //constructor runs, being pure), or none: a declaration of a type without one needs a value
+        for (int i = 0; i < zeroRecs.len; i++) {
+            struct zeroRec* r = ListGetIdx(&zeroRecs, i);
+            struct ctVal* val = NULL;
+            struct token whyTok = (struct token){0};
+            const char* why = NULL;
+            //judged without the clause that stands in for a failure at run time, so a failing constructor is reported
+            //as itself rather than as that clause's "unreachable"
+            bool tried = r->call->isTried;
+            struct list clauses = r->call->catchClauses;
+            r->call->isTried = false;
+            r->call->catchClauses = ListInit(sizeof(struct catchClause));
+            bool ok = CtEvaluate(r->call, r->call->type, &val, &whyTok, &why, NULL);
+            r->call->isTried = tried;
+            r->call->catchClauses = clauses;
+            if (ok) {
+                if (CtIsZero(val)) r->call->zeroBits = true;
+                else if (r->forArray && !CtIsPlainData(val)) ErrMsgSemantic(r->tok, ZERO_VALUE_SHARED);
+                continue;
+            }
+            char buf[1024];
+            snprintf(buf, sizeof(buf), ZERO_VALUE_NONE ": %s", why ? why : "it cannot be evaluated");
+            char* msg = MallocOrCrash(strlen(buf) + 1);
+            strcpy(msg, buf);
+            ErrMsgSemantic(r->tok, msg);
         }
         CtReset();
         struct list order = SemanticInitOrder();
