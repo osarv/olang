@@ -3572,9 +3572,62 @@ static void skipTopItem(SyntaxCtx sc, int start) {
 
 //the token a failed top-level item is reported at; where nothing got past the item's first token, every
 //alternative failed there and the last one tried says nothing useful - "a declaration" is what was wanted
+//a syntax error the bare "unexpected X, expected Y" would leave a reader puzzling over, said in terms of what was
+//probably meant - written into msg, or false where the plain report says it best
+static bool syntaxHint(struct token found, char* expected, char* msg, size_t size) {
+    struct token prev = TokenBefore(found);
+    //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
+    if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
+        snprintf(msg, size, "'?' alone already says this can fail, without saying how - 'error' is not an error type. "
+                 "Write '?' by itself, or name the declared error types it fails with ('? IoError + ParseError') (R15)");
+        return true;
+    }
+    //"state Array<F32>(n)" - a declaration's value comes after '='
+    if (found.type == TOK_PAREN_O && expected && !strcmp(expected, TokenStrFromType(TOK_STMNT_END))
+        && (prev.type == TOK_GRT || prev.type == TOK_BTSFT_R || prev.type == TOK_IDEN) && prev.lineNr == found.lineNr) {
+        TokenCtx tc = found.owner;
+        int paren = TokenGetStrStart(found);
+        int lineStart = TokenGetLineStart(tc, paren) +1;
+        int lineEnd = TokenGetLineEnd(tc, paren);
+        char line[256];
+        int n = 0;
+        for (int i = lineStart; i < lineEnd && n < (int)sizeof(line) -1; i++) line[n++] = TokenGetChar(tc, i);
+        line[n] = '\0';
+        int at = paren - lineStart;
+        if (at <= 0 || at >= n) return false;
+        int i = 0;
+        while (i < at && (line[i] == ' ' || line[i] == '\t')) i++;
+        int nameStart = i;
+        while (i < at && line[i] != ' ' && line[i] != '\t') i++;
+        int nameEnd = i;
+        while (i < at && (line[i] == ' ' || line[i] == '\t')) i++;
+        if (!strncmp(line + i, "mut ", 4)) { i += 4; while (i < at && line[i] == ' ') i++; }
+        int typeStart = i;
+        int typeEnd = at;
+        while (typeEnd > typeStart && line[typeEnd -1] == ' ') typeEnd--;
+        if (nameEnd == nameStart || typeEnd == typeStart) return false;
+        for (int k = nameStart; k < at; k++) if (line[k] == '=' || line[k] == ':' || line[k] == '(') return false;
+        int depth = 0, close = at;
+        for (; close < n; close++) {
+            if (line[close] == '(') depth++;
+            else if (line[close] == ')' && --depth == 0) break;
+        }
+        if (close >= n) return false;
+        snprintf(msg, size, "a declaration's value comes after '=' - write '%.*s = %.*s%.*s', or let the value give the type: "
+                 "'%.*s := %.*s%.*s' (D12)",
+                 at - nameStart - (at - typeEnd), line + nameStart, typeEnd - typeStart, line + typeStart, close - at +1, line + at,
+                 nameEnd - nameStart, line + nameStart, typeEnd - typeStart, line + typeStart, close - at +1, line + at);
+        return true;
+    }
+    return false;
+}
+
 static void reportTopItemFailure(SyntaxCtx sc, int start) {
     bool atFirst = sc->furthestPos <= start +1;
-    ErrMsgUnexpectedToken(sc->furthestTok, !atFirst && sc->furthestExpected ? sc->furthestExpected : "declaration");
+    char* expected = !atFirst && sc->furthestExpected ? sc->furthestExpected : "declaration";
+    char hint[768];
+    if (syntaxHint(sc->furthestTok, expected, hint, sizeof(hint))) ErrMsgSyntax(sc->furthestTok, hint);
+    else ErrMsgUnexpectedToken(sc->furthestTok, expected);
 }
 
 static void parseTopItem(SyntaxCtx sc, struct list* out) {

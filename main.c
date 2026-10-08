@@ -245,6 +245,7 @@ int runTestFile(char* file, char* clang) {
     CodegenCheckModuleNames();
     CodegenSetRoot(root);
     if (ErrMsgGetNErrors() > before) {
+        ErrMsgFlush();
         printf(COLOR_FG_RED "%s: semantic errors, skipping\n" COLOR_RESET, file);
         return 1;
     }

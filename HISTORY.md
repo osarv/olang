@@ -7745,3 +7745,31 @@ from their original form.
   temporary boxed into an interface pointed into a dead stack frame (fixed earlier the same day, then removed with
   the boxing). Benchmark: an iterator default from a direct call, from a generic function, and a hand loop - all
   0.07s on 20M x 20.
+
+
+## Diagnostics that say what to write (2026-10-08)
+
+The user's untracked program (`stateSize Int32 = 64`, `state Array<Float32>(stateSize)`, `fn main() ?error {}`)
+produced four errors, none of which said what was wrong: "unexpected token '(' expected 'end of statement'", "unexpected
+token 'error' expected '{'", a bare "unknown type" (not naming which), and "could not find the main function" - a cascade,
+since main simply had not parsed. They also printed out of order (lines 3, 5, then 1), because syntax errors are found in
+one pass and semantic ones in a later one.
+
+What changed:
+- **Order.** errmsg.c keeps each error (with any notes after it) as a record and writes them sorted by file (first-reported
+  order) and line when the compilation finishes, the process exits (atexit), a test file is skipped, or the compiler
+  crashes (SIGSEGV/SIGABRT handlers flush first). B9c's held-back attempts now mark and drop records instead of a separate
+  memstream.
+- **Unknown names.** `unknown type 'X'`, `unknown name 'x'`, `unknown function or type 'X'`, each with a suggestion: a name
+  ending in digits is tried as its first letter plus width (`Int32`/`int32` -> `I32`, `Float64` -> `F64`, `Uint8` -> `U8`),
+  `Byte` -> `U8`, otherwise the nearest type (case-insensitive edit distance, at most 2-3) among primitives, `Bool`,
+  `Array`, the module's types, the prelude's and - for a value or call - the module's globals. The recovered type carries
+  `unknown`, and `OperandFitsType` accepts anything against it, removing the "type doesn't match" that used to follow.
+- **Parser hints** (`syntaxHint`, consulted before the generic report): `name [mut] T(args)` where the line should have
+  ended gives `name T = T(args)` and `name := T(args)` built from the source line; `? error` explains the default error.
+  These count as syntax errors (`ErrMsgSyntax`).
+- **Missing main** is reported only when no syntax error occurred; its message and INVALID_MAIN_SIGNATURE's (which still
+  said `func` and "at least one error") were reworded.
+
+Checks: l20aline updated to the hint; new unknowntypehint, unknownfunchint, qerror, nomainhidden. The untracked program itself
+was left untouched.

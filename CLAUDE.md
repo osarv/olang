@@ -2804,6 +2804,14 @@ Go through this for every change to what olang means - a rule added, revised or 
   signature's scope variable and crashed codegen (now read-only-scoped, as a borrowed field is); a `<T>&` field's
   `&of` was lost on substitution. Corpus: the interface section rewritten as traits + an enum for mixed collections;
   Base/runner's sealed trait; seven interface-value tests removed. Iterator defaults measured at hand-loop speed.
+- **Diagnostics read as what to write (2026-10-08, the user: "make the errors on the untracked program make sense to
+  me").** Errors print in source order (by file, then line - each error and its notes one record, written at the end,
+  at exit or on a crash), not in the order passes find them. An unknown type or name is named and gets the nearest
+  real one (`Int32` -> `I32` by letter and width, else edit distance over types, the prelude and globals), and the
+  stand-in type it recovers with fits anything, so one misspelling is one error. Parser hints replace "unexpected X
+  expected Y" where the intent is clear: `name T(args)` shows both spellings with `=` and `:=`, built from the line
+  itself; `?error` says `?` alone is the default error. A missing `main` is not reported when a syntax error may
+  have hidden it. Not a language change - no rule moved.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

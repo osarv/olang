@@ -702,3 +702,13 @@ void TokenSetCursor(TokenCtx tc, int cursor) {
 char* TokenStrFromType(enum tokenType type) {
     return tokRules[type].description ? tokRules[type].description : tokRules[type].pattern;
 }
+
+//the token just before t in its own file's stream, or a TOK_NONE token - only for diagnostics, so a scan is fine
+struct token TokenBefore(struct token t) {
+    TokenCtx tc = t.owner;
+    if (!tc) return (struct token){0};
+    for (int i = 1; i < tc->tokens.len; i++) {
+        if (((struct token*)ListGetIdx(&tc->tokens, i))->tokId == t.tokId) return *(struct token*)ListGetIdx(&tc->tokens, i -1);
+    }
+    return (struct token){0};
+}
