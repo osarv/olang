@@ -3495,9 +3495,9 @@ type happens to declare a destructor.
 ### 10.1 Compilation modes
 
 **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
-object file and linked with the others. The compiler operates in exactly one of three modes, selected
+object file and linked with the others. The compiler operates in exactly one of four modes, selected
 by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
-(B3) and `-t` (B3a), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
+(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
 beginning with `-` is an error.
 
 **B2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
@@ -3572,6 +3572,23 @@ merely imports. `main` is not required in this mode, and is not run even if pres
 file's compilation and test run is independent: a compile-time error in one listed file does not
 prevent the others from being checked and run.
 
+**B3e.** `-i <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
+program is analyzed exactly as under `-b` - `main` is required (B4), and every compile-time error is reported the
+same way - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
+nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
+globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
+the interpreting process, `done` and `fail` end it with status 0 and 1, an error escaping `main` is reported as B5
+says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
+`unreachable`, a slice out of range (E16b), a negative array length (D14b), an `as` that does not hold (E32) -
+aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
+out of range, reading through a null reference, dividing by zero, a shift or conversion out of range - the
+interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
+tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
+initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
+same way. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+`-D` apply as to any build. Interpreting is much slower than running the built program, and in this
+implementation memory is not reclaimed while the program runs, so `-i` suits short runs.
+
 **B3b.** A symbol a module defines is named from that module's **identity** (§4 M22a) — its path — never from
 anything about the compilation it happens to be part of: an object compiled on its own has to agree with one
 compiled as part of a whole program. Two modules whose identities coincide therefore collide, and that is a
@@ -3590,7 +3607,7 @@ to the instantiation set. Copies a `-c` object of another module carries are dis
 
 ### 10.2 Program entry
 
-**B4.** In `-b` mode, the root module must declare a function named `main` with exactly this shape:
+**B4.** In `-b` and `-i` modes, the root module must declare a function named `main` with exactly this shape:
 no parameters, no success type, and at least one declared error
 (§3 D8) — `fn main() ? SomeError [+ ...] { ... }`. Any other
 shape (parameters, a `ret-type`, or no declared error at all) is a compile-time error. There is no
@@ -3598,7 +3615,7 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 
 ### 10.3 Process exit
 
-**B5.** Running the compiled program (`-b` mode) invokes `main`. If it returns normally (falls off
+**B5.** Running the compiled program (`-b` mode), or interpreting it (`-i`, B3e), invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
 declared error type and word that escaped) and exits with status `1`.
@@ -3976,6 +3993,9 @@ error as they would at run time. It is **not** possible when evaluation would:
   evaluated when written under `try`, E15a, where it is defined);
 - take a slice out of range without `try`, which aborts at run time (E16b);
 - run longer, or recurse deeper, than an implementation-defined budget.
+
+Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
+refused.
 
 **K1a.** Whether a call of a function can ever be evaluated is a property of the **function**, not of the
 arguments one call passes: a function whose body — or anything it calls, or the initializer of an

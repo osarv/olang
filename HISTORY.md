@@ -7792,3 +7792,29 @@ from their original form.
   was taken as a file name; now any argument beginning with `-` that is not a flag is a fatal error listing them all,
   and `checks/cases/longflag.olang` pins it with the old `-race`. The "expected -c or -t" message, stale since `-b`
   existed, names all three modes now. HISTORY and older CLAUDE.md entries keep the spellings of their time.
+
+- **`-i`, the interpreter, stage 1 (B3e, 2026-10-08).** The user: "Do -i for the interpreter" - with one-character
+  flags. There was no interpreter mode, but `comptime.c` is a tree-walking interpreter over the checked program, so
+  `-i` became: analyze as `-b` does (including the module-name collision check), then run `main` there. The
+  evaluator gained a run mode that performs what K1 refuses only because a running program must do it: a mutable
+  global is a node created zero and set by its initializer in B5a's order (an immutable one is computed as before,
+  now marked as a global's own initializer so K2c's destructor exception holds); a global write returns that node;
+  an `extern` call goes through libffi - symbol by `dlsym(RTLD_DEFAULT)`, libm `dlopen`ed if a name is missing (the
+  compiler links it only as needed), numbers passed as their width and signedness say, an array as a buffer built
+  from its elements and copied back after the call, results widened by libffi read back narrow; `done`/`fail` exit;
+  `assert`, `abort`, `unreachable`, a slice out of range, a negative length and a failed `as` print the runtime's
+  own message and `abort()`, so status and stderr match the built program (134 and the same line); atomics act on
+  the node directly; the K1a static scan and the step budget are skipped; the depth budget is 100,000 on a thread
+  with a 1GB stack reservation. Anything still refused - an undefined operation, a task, a destructor - ends with
+  `olang -i: FILE:LINE: why` and status 1. Three things were found by running real programs: `os.ReadFile` read
+  spaces, because the array argument was fitted to the extern's by-value parameter type, which copies; `runner.olang`
+  stopped at its first global, `KtFromDropped`, until the global initializers were marked as such - and then stopped
+  at its callee's destructor, which really does run at that callee's return, so destructors are the real blocker for
+  the corpus program; and a `join` had no location to report, since the statement carries no operand (now the first
+  statement inside). **Measured cost**: 1M iterations of `t += i % 7` took 71s and 8.3GB; callgrind showed ~20,000
+  instructions and ~100 allocations per iteration, each value a 496-byte heap object (it embeds `struct type`), none
+  freed. Three copies that duplicate a struct copy were removed (`ctAssign`, `ctFit` and `ctVarDecl` on non-aggregates
+  - no change in meaning, and `make verify` agrees), giving 100k iterations in 1.45s and 630MB. The user chose to
+  commit this as stage 1 over reclaiming memory first or redesigning; the retaining sites a temporary arena would have
+  to cover were enumerated (local and parameter nodes, global values, returned values, aggregate elements, reference
+  targets including a slice's view, captures) and are the starting point if that is chosen.

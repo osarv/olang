@@ -23,7 +23,7 @@ build/%.o: %.c
 # target "build" instead would let the already-existing build/ directory satisfy it, silently skipping
 # relinking after a .o changes.
 build/out: $(OBJ)
-	$(CC) $(CFLAGS) $^ -o build/out -lm
+	$(CC) $(CFLAGS) $^ -o build/out -lm -lffi -ldl -lpthread
 
 build: build/out
 

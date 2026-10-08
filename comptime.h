@@ -51,4 +51,9 @@ bool CtIsPlainData(struct ctVal* v);
 //D13c: true when v is all zero bits - what an uninitialized declaration of its type already holds
 bool CtIsZero(struct ctVal* v);
 
+//B3e: "-i" - runs mainFunc (and every global's initializer before it, imports first) as the built program would,
+//performing what compile-time evaluation refuses; returns the process's exit status. done/fail and a failed check
+//end the process from inside, as they would there
+int CtRunProgram(struct var* mainFunc);
+
 #endif

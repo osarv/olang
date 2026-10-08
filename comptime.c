@@ -15,8 +15,19 @@
 //Memory is unbounded and never reclaimed during an evaluation: scopes do not exist here, and none is
 //needed, because a value that still holds a reference when evaluation ends is not plain data and is not
 //used (CtIsPlainData).
+//
+//B3e: under "-i" the same evaluation runs a whole program (CtRunProgram), and what it refuses above because
+//only a running program may do it is done instead: globals are read and written, an extern is called in this
+//process through libffi, done/fail exit, a guaranteed check aborts with the runtime's message, and there is no
+//step budget. What the built program leaves undefined still stops it, now naming the operation and its place.
+//Tasks and destructors are not interpreted yet. Memory is still never reclaimed, which a long run will notice.
 
+#define _GNU_SOURCE
 #include <stdlib.h>
+#include <stdio.h>
+#include <dlfcn.h>
+#include <pthread.h>
+#include <ffi.h>
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
@@ -32,6 +43,12 @@ void RdSpellSig(struct type f, char* buf, size_t n);
 
 #define CT_STEP_BUDGET 20000000
 #define CT_DEPTH_BUDGET 2000
+//B3e: how deep an interpreted program may recurse - its stack (CtRunProgram's thread) is sized for it
+#define CT_RUN_DEPTH_BUDGET 100000
+#define CT_RUN_STACK ((size_t)1 << 30)
+
+//B3e: a whole program is running ("-i"), so the effects K1 refuses are performed
+static bool ctRun;
 
 enum ctFlow { CF_NORMAL, CF_RETURN, CF_BREAK, CF_CONTINUE, CF_ERROR, CF_FAIL };
 
@@ -82,6 +99,13 @@ static struct ctVal* ctFail(struct ctState* st, struct token tok, const char* wh
         st->whyTok = tok;
     }
     return NULL;
+}
+
+//B3e: a check the language guarantees failed while a program runs - the built program's message, and its abort
+static void ctRunAbort(const char* msg) {
+    fflush(NULL);
+    fputs(msg, stderr);
+    abort();
 }
 
 //R20: exact integer results for the overflow checks - twice Int64's width, as the generated code computes them
@@ -182,6 +206,7 @@ static struct ctVal* ctCopy(struct ctVal* v) {
 
 //writes a value into an existing node, so every reference to that node sees it
 static void ctAssign(struct ctVal* node, struct ctVal* v) {
+    if (v->kind != CT_AGG) { *node = *v; return; } //ctCopy of anything else is this same struct copy
     struct ctVal* c = ctCopy(v);
     *node = *c;
 }
@@ -250,6 +275,7 @@ static void ctExec(struct ctState* st, struct statement* s);
 static void ctExecBlock(struct ctState* st, struct list* block);
 
 static bool ctStep(struct ctState* st, struct token tok) {
+    if (ctRun) return true; //B3e: a program runs as long as it runs
     if (++st->steps > CT_STEP_BUDGET) { ctFail(st, tok, "the computation runs longer than compile-time evaluation allows"); return false; }
     return true;
 }
@@ -282,7 +308,15 @@ static struct ctGlobal* ctGlobalEntry(struct var* v) {
     return ListGetIdx(&ctGlobals, ctGlobals.len - 1);
 }
 
+//B3e: a mutable global's storage while a program runs - zero until its initializer runs (B5a), as at run time
+static struct ctVal* ctRunGlobal(struct var* v) {
+    struct ctGlobal* g = ctGlobalEntry(v);
+    if (!g->val) g->val = ctZero(v->type);
+    return g->val;
+}
+
 static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct var* v) {
+    if (v->mut && ctRun && !v->isFuncDecl) return ctRunGlobal(v);
     if (v->mut) return ctFail(st, op->tok, "it reads a mutable global, whose value is the running program's");
     if (v->isFuncDecl) { //a function as a value - a lambda's carrying the captures it made (D16c)
         struct ctVal* f = ctNew(CT_FUNC, op->type);
@@ -309,6 +343,7 @@ static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct
     struct list locals = ListInit(sizeof(struct ctLocal));
     inner.locals = &locals;
     inner.steps = st->steps;
+    inner.globalInit = ctRun; //B3e/K2c: a running program builds it in its own scope, which never closes
     struct ctVal* val = ctFit(&inner, v->initExpr, v->type);
     st->steps = inner.steps;
     g = ctGlobalEntry(v); //the list may have grown
@@ -340,6 +375,7 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
                 ctDeclare(st, op->readVar->name, node);
                 return node;
             }
+            if (forWrite && ctRun) return ctRunGlobal(canonicalVar(op->readVar)); //B3e
             if (forWrite) return ctFail(st, op->tok, "it writes a global, which the running program would then not see written");
             return ctReadGlobal(st, op, canonicalVar(op->readVar));
         }
@@ -831,13 +867,17 @@ const char* CtWhyNotEvaluable(struct var* func, struct token* where) {
 
 // ---- calls ----
 
+static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func);
+
 //the call itself: parameters bound, body run. A reference parameter is bound to the argument's own node, so
 //writing through a "mut &" parameter writes the caller's value - exactly E12c's borrow.
 static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     struct var* func = op->readVar;
     if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
+        if (ctRun) return ctFail(st, op->tok, "it builds a value whose type declares a destructor, which -i does not run yet");
         return ctFail(st, op->tok, CT_WHY_DESTRUCTOR);
     }
+    if (func && func->type.isExtern && ctRun) return ctExtern(st, op, func); //B3e
     if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
     struct ctVal* through = NULL;
     if (!func->owner && !op->isCtorCall) {
@@ -851,7 +891,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         through = fv;
     }
     if (func->type.typeParams.len) return ctFail(st, op->tok, "it calls a generic that has no instantiation here");
-    {
+    if (!ctRun) {
         //K3: a function that can never be evaluated is rejected before running any of it, with the
         //operation that stops it as the reason - the same answer whatever arguments reached it
         struct token whyTok;
@@ -859,7 +899,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         if (why) return ctFail(st, whyTok, why);
     }
     if (func->codeBlock.len == 0 && func->type.hasRetType) return ctFail(st, op->tok, "it calls a function whose body is not available");
-    if (st->depth >= CT_DEPTH_BUDGET) return ctFail(st, op->tok, "the computation recurses deeper than compile-time evaluation allows");
+    if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET))
+        return ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
 
     struct list locals = ListInit(sizeof(struct ctLocal));
     for (int i = 0; i < func->type.vars.len && i < op->args.len; i++) {
@@ -960,6 +1001,7 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     long long l = ctDeref(lo)->i, h = ctDeref(hi)->i;
     if (!(l >= 0 && l <= h && h <= base->n)) {
         if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
+        if (ctRun) ctRunAbort("slice bounds out of range\n");
         return ctFail(st, op->tok, "it slices out of range, which aborts at run time");
     }
     struct type vt = op->type;
@@ -1290,6 +1332,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!n) return NULL;
             if (n->i < 0 && op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //R20
+            if (n->i < 0 && ctRun) ctRunAbort("negative array length\n");
             if (n->i < 0) return ctFail(st, op->tok, "it makes an array of negative length");
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
@@ -1330,8 +1373,24 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR:
             return ctBinary(st, op);
         case OPERATION_ATOMIC_LOAD: case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
-        case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-            return ctFail(st, op->tok, "it uses an atomic operation");
+        case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS: {
+            if (!ctRun) return ctFail(st, op->tok, "it uses an atomic operation");
+            //B3e/P9: no task runs beside it, so an atomic operation is the plain one
+            struct ctVal* node = ctDeref(ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), op->opType != OPERATION_ATOMIC_LOAD));
+            if (!node) return NULL;
+            struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), node->type) : NULL;
+            if (op->args.len > 1 && !a) return NULL;
+            struct ctVal* b = op->args.len > 2 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 2), node->type) : NULL;
+            if (op->args.len > 2 && !b) return NULL;
+            struct ctVal* old = ctInt(node->type, node->i);
+            switch (op->opType) {
+                case OPERATION_ATOMIC_LOAD: return old;
+                case OPERATION_ATOMIC_STORE: node->i = ctWrap(node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+                case OPERATION_ATOMIC_ADD: node->i = ctWrap(node->type, node->i + ctDeref(a)->i); return old;
+                case OPERATION_ATOMIC_SWAP: node->i = ctWrap(node->type, ctDeref(a)->i); return old;
+                default: if (node->i == ctDeref(a)->i) node->i = ctWrap(node->type, ctDeref(b)->i); return old;
+            }
+        }
         case OPERATION_SLICE: return ctSlice(st, op);
         case OPERATION_IS: case OPERATION_AS: { //E32
             struct ctVal* x = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
@@ -1343,6 +1402,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
                     if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                    if (ctRun) ctRunAbort("'as' named what the value is not\n");
                     return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
                 }
                 if (!op->type.isTuple) return ctCopy(v->elems[0]);
@@ -1385,9 +1445,11 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     }
     struct ctVal* v = ctEval(st, op);
     if (!v) return NULL;
-    v = ctCopy(ctDeref(v));
+    v = ctDeref(v);
+    //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
     if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctAsF(v));
+    v = ctCopy(v);
     if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = dst;
     return v;
 }
@@ -1419,7 +1481,7 @@ static void ctVarDecl(struct ctState* st, struct statement* s) {
     } else if (s->op) {
         v = ctFit(st, s->op, s->var.type);
         if (!v) return;
-        if (!ctIsRef(s->var.type)) v = ctCopy(v);
+        if (!ctIsRef(s->var.type) && v->kind == CT_AGG) v = ctCopy(v); //anything else is copied into the node below
     } else {
         v = ctZero(s->var.type); //D13; a D13a uninitialized array has no value anyone may read first
     }
@@ -1428,8 +1490,15 @@ static void ctVarDecl(struct ctState* st, struct statement* s) {
     ctDeclare(st, s->var.name, node);
 }
 
+//where a statement is, for a report - a statement with no operand of its own (a join) is where its first one is
+static struct token ctStmtTok(struct statement* s) {
+    if (s->op) return s->op->tok;
+    if (s->var.tok.owner || !s->block.len) return s->var.tok;
+    return ctStmtTok(ListGetIdx(&s->block, 0));
+}
+
 static void ctExec(struct ctState* st, struct statement* s) {
-    struct token tok = s->op ? s->op->tok : s->var.tok;
+    struct token tok = ctStmtTok(s);
     if (!ctStep(st, tok)) return;
     switch (s->sType) {
         case STATEMENT_VAR_DECL: ctVarDecl(st, s); return;
@@ -1525,7 +1594,10 @@ static void ctExec(struct ctState* st, struct statement* s) {
         case STATEMENT_BREAK: st->flow = CF_BREAK; return;
         case STATEMENT_CONTINUE: st->flow = CF_CONTINUE; return;
         case STATEMENT_ASSERT:
-            if (!ctTruth(st, s->op) && st->flow == CF_NORMAL) ctFail(st, tok, "an assertion in it fails");
+            if (!ctTruth(st, s->op) && st->flow == CF_NORMAL) {
+                if (ctRun) ctRunAbort("assertion failed\n");
+                ctFail(st, tok, "an assertion in it fails");
+            }
             return;
         case STATEMENT_ERROR:
             st->flow = CF_ERROR;
@@ -1550,10 +1622,16 @@ static void ctExec(struct ctState* st, struct statement* s) {
             return; //no clause named it: it propagates
         }
         case STATEMENT_DONE: case STATEMENT_FAIL: case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
+            if (ctRun) { //B3e/S16: the process ends, as the built program's does outside a test
+                fflush(NULL);
+                if (s->sType == STATEMENT_DONE) exit(0);
+                if (s->sType == STATEMENT_FAIL) exit(1);
+                ctRunAbort(s->sType == STATEMENT_ABORT ? "aborted\n" : "reached unreachable code\n");
+            }
             ctFail(st, tok, "it ends the test or the process");
             return;
         case STATEMENT_JOIN: case STATEMENT_SPAWN:
-            ctFail(st, tok, "it starts tasks");
+            ctFail(st, tok, ctRun ? "it starts tasks, which -i does not run yet" : "it starts tasks");
             return;
         case STATEMENT_CASE:
             return;
@@ -1628,4 +1706,220 @@ bool CtIsPlainData(struct ctVal* v) {
         for (int i = 0; i < v->n; i++) if (!CtIsPlainData(v->elems[i])) return false;
     }
     return true;
+}
+
+// ---- B3e: "-i", a whole program run by this evaluation ----
+
+//X3: an extern called in this process, found among what the process has loaded - the C library the built
+//program links against too, and libm on first need. A number is passed as itself; an array as a pointer to its
+//first element, which here is a buffer filled from the array's elements and read back into them after the
+//call, so a callee writing through it (read, say) is seen as it is at run time. Each prepared call is kept.
+struct ctExternCall { struct var* f; void* sym; ffi_cif cif; ffi_type** argTypes; };
+static struct list ctExternCalls;
+static bool ctExternReady;
+
+static ffi_type* ctFfiType(enum baseType b) {
+    const struct primInfo* p = PrimInfo(b);
+    if (!p) return NULL;
+    if (p->kind == 'f') return p->bits == 32 ? &ffi_type_float : p->bits == 64 ? &ffi_type_double : NULL;
+    bool u = p->kind == 'u';
+    switch (p->bits) {
+        case 8: return u ? &ffi_type_uint8 : &ffi_type_sint8;
+        case 16: return u ? &ffi_type_uint16 : &ffi_type_sint16;
+        case 32: return u ? &ffi_type_uint32 : &ffi_type_sint32;
+        case 64: return u ? &ffi_type_uint64 : &ffi_type_sint64;
+        default: return NULL;
+    }
+}
+
+//a number's bytes at `at`, as a value of primitive b lays them out
+static void ctPutNum(unsigned char* at, enum baseType b, struct ctVal* v) {
+    const struct primInfo* p = PrimInfo(b);
+    if (p->kind == 'f' && p->bits == 32) { float f = (float)ctAsF(v); memcpy(at, &f, 4); return; }
+    if (p->kind == 'f') { double d = ctAsF(v); memcpy(at, &d, 8); return; }
+    long long i = v->kind == CT_FLOAT ? (long long)v->f : v->i;
+    memcpy(at, &i, (size_t)(p->bits / 8)); //little-endian: the low bytes are the narrower value
+}
+
+static void ctGetNum(const unsigned char* at, enum baseType b, struct ctVal* into) {
+    const struct primInfo* p = PrimInfo(b);
+    if (p->kind == 'f' && p->bits == 32) { float f; memcpy(&f, at, 4); into->f = f; return; }
+    if (p->kind == 'f') { double d; memcpy(&d, at, 8); into->f = d; return; }
+    long long i = 0;
+    memcpy(&i, at, (size_t)(p->bits / 8));
+    into->i = ctWrap(into->type, i);
+}
+
+static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* op, struct var* func) {
+    if (!ctExternReady) { ctExternCalls = ListInit(sizeof(struct ctExternCall)); ctExternReady = true; }
+    for (int i = 0; i < ctExternCalls.len; i++) {
+        struct ctExternCall* c = ListGetIdx(&ctExternCalls, i);
+        if (c->f == func) return c;
+    }
+    char name[256];
+    snprintf(name, sizeof(name), "%.*s", func->name.len, func->name.ptr);
+    void* sym = dlsym(RTLD_DEFAULT, name);
+    if (!sym) {
+        static void* libm;
+        if (!libm) libm = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
+        if (libm) sym = dlsym(libm, name);
+    }
+    if (!sym) { ctFail(st, op->tok, "it calls an external function -i cannot find in this process"); return NULL; }
+    int n = func->type.vars.len;
+    ffi_type** at = MallocOrCrash(sizeof(ffi_type*) * (size_t)(n ? n : 1));
+    for (int i = 0; i < n; i++) {
+        struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
+        at[i] = pt.bType == BASETYPE_ARRAY ? &ffi_type_pointer : ctFfiType(pt.bType);
+        if (pt.bType == BASETYPE_ARRAY && !ctFfiType(pt.arrElem->bType)) at[i] = NULL;
+        if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type -i cannot pass"); return NULL; }
+    }
+    ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
+    if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type -i cannot receive"); return NULL; }
+    struct ctExternCall c = { func, sym, {0}, at };
+    if (ffi_prep_cif(&c.cif, FFI_DEFAULT_ABI, (unsigned)n, rt, at) != FFI_OK) {
+        ctFail(st, op->tok, "it calls an external function -i cannot call");
+        return NULL;
+    }
+    ListAdd(&ctExternCalls, &c);
+    return ListGetIdx(&ctExternCalls, ctExternCalls.len - 1);
+}
+
+static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func) {
+    struct ctExternCall* c = ctExternPrepare(st, op, func);
+    if (!c) return NULL;
+    int n = func->type.vars.len;
+    union ctArg { long long i; float f; double d; void* p; };
+    union ctArg* store = MallocOrCrash(sizeof(union ctArg) * (size_t)(n ? n : 1));
+    void** values = MallocOrCrash(sizeof(void*) * (size_t)(n ? n : 1));
+    struct ctVal** arrays = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(n ? n : 1));
+    for (int i = 0; i < n; i++) {
+        struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        //X3: an array argument is the caller's own storage, not a copy of it - fitting it to the by-value
+        //parameter type would copy, and what the callee writes would be lost
+        struct ctVal* v = pt.bType == BASETYPE_ARRAY ? ctEval(st, a) : ctFit(st, a, pt);
+        if (!v) return NULL;
+        v = ctDeref(v);
+        arrays[i] = NULL;
+        if (pt.bType == BASETYPE_ARRAY) {
+            if (v->kind == CT_NULL) { store[i].p = NULL; values[i] = &store[i]; continue; }
+            enum baseType eb = pt.arrElem->bType;
+            size_t w = (size_t)(PrimInfo(eb)->bits / 8);
+            unsigned char* buf = MallocOrCrash(w * (size_t)(v->n ? v->n : 1));
+            for (int k = 0; k < v->n; k++) ctPutNum(buf + w * (size_t)k, eb, ctDeref(v->elems[k]));
+            store[i].p = buf;
+            arrays[i] = v;
+        } else if (PrimInfo(pt.bType)->kind == 'f' && PrimInfo(pt.bType)->bits == 32) {
+            store[i].f = (float)ctAsF(v);
+        } else if (PrimInfo(pt.bType)->kind == 'f') {
+            store[i].d = ctAsF(v);
+        } else {
+            store[i].i = v->i;
+        }
+        values[i] = &store[i];
+    }
+    union { ffi_arg a; ffi_sarg s; long long i; float f; double d; } rv;
+    memset(&rv, 0, sizeof(rv));
+    ffi_call(&c->cif, FFI_FN(c->sym), &rv, values);
+    for (int i = 0; i < n; i++) {
+        if (!arrays[i]) continue;
+        struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
+        enum baseType eb = pt.arrElem->bType;
+        size_t w = (size_t)(PrimInfo(eb)->bits / 8);
+        unsigned char* buf = store[i].p;
+        for (int k = 0; k < arrays[i]->n; k++) ctGetNum(buf + w * (size_t)k, eb, ctDeref(arrays[i]->elems[k]));
+        free(buf);
+    }
+    free(store);
+    free(values);
+    free(arrays);
+    if (!func->type.hasRetType) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+    struct type rt = *func->type.retType;
+    const struct primInfo* p = PrimInfo(rt.bType);
+    if (p->kind == 'f') return ctFloat(rt, p->bits == 32 ? (double)rv.f : rv.d);
+    //libffi widens a result narrower than a register to a whole ffi_arg
+    long long i = p->bits == 64 ? rv.i : p->kind == 'u' ? (long long)rv.a : (long long)rv.s;
+    return ctInt(rt, i);
+}
+
+//where an interpreted program stopped on something the built program leaves undefined, or -i does not run yet
+static int ctRunStopped(struct ctState* st) {
+    fflush(NULL);
+    struct str f = st->whyTok.owner ? TokenGetFileName(st->whyTok.owner) : StrFromCStr("?");
+    fprintf(stderr, "olang -i: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
+    return 1;
+}
+
+//B5: an error escaping main is named, as the built program names it
+static int ctRunUnhandled(struct ctState* st) {
+    fflush(NULL);
+    struct type* generic = SemanticGenericErrorType();
+    if (generic && TypeIsSame(st->errType, *generic)) fputs("unhandled error\n", stderr);
+    else if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
+        struct token w = *(struct token*)ListGetIdx(&st->errType.words, (int)st->errWord);
+        fprintf(stderr, "unhandled error: %.*s.%.*s\n", st->errType.name.len, st->errType.name.ptr, w.str.len, w.str.ptr);
+    } else fputs("unhandled error\n", stderr);
+    return 1;
+}
+
+static int ctRunMain(struct var* mainFunc) {
+    struct ctState st = (struct ctState){0};
+    struct list locals = ListInit(sizeof(struct ctLocal));
+    st.locals = &locals;
+    //B5a: every global, imports first - a mutable one set in place, an immutable one computed now, as at startup
+    struct list order = SemanticInitOrder();
+    for (int m = 0; m < order.len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(&order, m);
+        for (int i = 0; i < mod->vars.len; i++) {
+            struct var* v = ListGetIdx(&mod->vars, i);
+            if (v->type.bType == BASETYPE_FUNC || v->isFuncDecl || !v->initExpr) continue;
+            if (v->mut) {
+                struct ctVal* node = ctRunGlobal(v);
+                st.globalInit = true; //K2c: what its own frame builds lands in the program's scope, never closed
+                struct ctVal* val = ctFit(&st, v->initExpr, v->type);
+                st.globalInit = false;
+                if (!val) return st.flow == CF_FAIL ? ctRunStopped(&st) : ctRunUnhandled(&st);
+                ctAssign(node, val);
+            } else {
+                struct operand at = (struct operand){0};
+                at.tok = v->tok;
+                if (!ctReadGlobal(&st, &at, v)) return ctRunStopped(&st);
+            }
+        }
+    }
+    struct operand call = (struct operand){0};
+    call.opType = OPERATION_FUNCCALL;
+    call.readVar = mainFunc;
+    call.tok = mainFunc->tok;
+    call.args = ListInit(sizeof(struct operand*));
+    call.type = TypeVanilla(BASETYPE_VOID);
+    ctCall(&st, &call);
+    if (st.flow == CF_ERROR) return ctRunUnhandled(&st);
+    if (st.flow == CF_FAIL) return ctRunStopped(&st);
+    fflush(NULL);
+    return 0;
+}
+
+struct ctRunJob { struct var* mainFunc; int status; };
+static void* ctRunThread(void* p) {
+    struct ctRunJob* j = p;
+    j->status = ctRunMain(j->mainFunc);
+    return NULL;
+}
+
+int CtRunProgram(struct var* mainFunc) {
+    ctRun = true;
+    CtReset(); //globals start over: what analysis computed is not the running program's storage
+    //the evaluation recurses on the C stack, a few frames per call written in the program, so it runs on a
+    //thread whose stack is sized for CT_RUN_DEPTH_BUDGET calls - reserved, and touched only as it is used
+    struct ctRunJob job = { mainFunc, 1 };
+    pthread_attr_t attr;
+    pthread_t t;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, CT_RUN_STACK);
+    if (pthread_create(&t, &attr, ctRunThread, &job) != 0) ctRunThread(&job);
+    else pthread_join(t, NULL);
+    pthread_attr_destroy(&attr);
+    ctRun = false;
+    return job.status;
 }

@@ -174,6 +174,25 @@ test "a -D value rebuilds only the modules that mention it" {
     assert sh(dir, "test $(ls build/uses.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
 }
 
+# B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping
+# main; it stops, saying where, at what the built program leaves undefined, and at what it does not run yet (tasks)
+test "-i interprets a program as the built program runs" {
+    dir := fresh("interp")
+    os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b prog.olang > out.txt 2>&1") == 0 or failed("interp build", dir)
+    assert sh(dir, "./build/prog > want.txt 2>&1") == 1                  # main ends in Oops.BAD
+    assert sh(dir, "\"$OLANG\" -i prog.olang > out.txt 2>&1") == 1
+    assert sh(dir, "cmp -s want.txt out.txt") == 0 or failed("-i printed what the built program did not", dir)
+    assert outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1")
+    assert sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1
+    assert outOf(dir).Contains("ub.olang:6: it indexes outside the array")
+    assert sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 1
+    assert outOf(dir).Contains("tasks.olang:5: it starts tasks, which -i does not run yet")
+    assert sh(dir, "\"$OLANG\" -b ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134
+    assert sh(dir, "\"$OLANG\" -i ends.olang > out.txt 2>&1") == 134
+    assert sh(dir, "cmp -s want.txt out.txt") == 0 or failed("-i ended unlike the built program", dir)
+}
+
 # S18c: an assert the compiler proves emits no run-time check at all
 test "a proven assert leaves no run-time check" {
     dir := fresh("s18c")

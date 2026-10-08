@@ -8,6 +8,7 @@
 #include "syntax.h"
 #include "semantic.h"
 #include "codegen.h"
+#include "comptime.h"
 #include "util.h"
 #include "errmsg.h"
 
@@ -237,6 +238,22 @@ void buildProgram(char* file) {
     printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, binPath);
 }
 
+//"-i": the program analyzed as -b analyzes it, then run by compile-time evaluation instead of built (B3e) -
+//nothing generated, linked or written. Returns the program's exit status.
+int interpretProgram(char* file) {
+    struct semaModule* root = SemanticAnalyzeFile(file, true);
+    CodegenCheckModuleNames();
+    if (ErrMsgGetNErrors() > 0) ErrMsgFinishCompilation();
+    struct var* mainFunc = NULL;
+    for (int i = 0; i < root->vars.len && !mainFunc; i++) {
+        struct var* v = ListGetIdx(&root->vars, i);
+        if (v->isFuncDecl && StrCmp(v->name, StrFromCStr("main"))) mainFunc = v;
+    }
+    if (!mainFunc) ErrMsgFatal(MAIN_FUNC_NOT_FOUND);
+    fflush(NULL);
+    return CtRunProgram(mainFunc);
+}
+
 //returns 0 if this file's tests all passed, nonzero otherwise - never exits the process, so the rest of
 //an -t file list still runs even if this one has semantic errors, fails to build, or fails a test
 int runTestFile(char* file, char* clang) {
@@ -330,7 +347,8 @@ int main(int argc, char** argv) {
         }
         if (!strncmp(argv[i], "-D", 2)) { defineFromArg(argv[i] + 2); continue; }
         //B1: every flag is one character; anything else beginning with "-" is a mistake, not a file name
-        if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")) {
+        if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")
+            && strcmp(argv[i], "-i")) {
             fprintf(stderr, "olang: %s: ", argv[i]);
             ErrMsgFatal(UNKNOWN_FLAG);
         }
@@ -356,6 +374,11 @@ int main(int argc, char** argv) {
         if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
         buildProgram(argv[2]);
         return 0;
+    }
+
+    if (!strcmp(argv[1], "-i")) {
+        if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        return interpretProgram(argv[2]);
     }
 
     if (!strcmp(argv[1], "-t")) {

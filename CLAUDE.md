@@ -2823,6 +2823,24 @@ Go through this for every change to what olang means - a rule added, revised or 
   first letters. An argument beginning with `-` that is no flag is an error naming every flag, so an old long spelling
   is reported rather than read as a file name (the user removed retired-spelling diagnostics before, and this is not
   one: it names no old spelling). Entries above that predate this still write the long forms.
+- **`-i` interprets a program (B3e, 2026-10-08, the user: "Do -i for the interpreter"; stage 1, the user's choice of
+  "commit as stage 1").** No interpreter existed; the compile-time evaluator is one, so `-i` analyzes the program as
+  `-b` does and runs `main` through it with K1's refused effects performed (`ctRun`): globals initialized imports
+  first and written in place, an `extern` called in the compiler's own process through **libffi** (found with
+  `dlsym`, libm opened on first need; an array argument is a buffer filled from the caller's own elements and read
+  back after, so `read` works - fitting it to the by-value parameter copied it and lost the bytes, found by
+  `os.ReadFile`), `done`/`fail` exit 0/1, guaranteed checks abort with the runtime's own messages, atomics are plain,
+  no step budget, recursion to 100,000 on a 1GB-reserved thread. What the built program leaves undefined stops with
+  `olang -i: FILE:LINE: why`, status 1 - a bounds and null checker for free. The compiler now links `-lffi -ldl`.
+  **Not yet, flagged and measured**: tasks and destructors stop with a message (a destructor's instance has to be
+  closed with the scope it lands in, which is codegen's whole landing logic again - so `runner.olang` stops at
+  `shared.olang`'s `KtFromDropped`, whose initializer's callee destructs at its return); and the evaluator never
+  frees - a value is a 496-byte heap object embedding its `struct type`, about 15 per simple loop iteration, so 100k
+  iterations take 1.5s and 630MB (1M took 71s and 8.3GB before three redundant copies were removed). Reclaiming is
+  either a per-statement temporary arena with every retaining site copying out (sites enumerated) or a redesign with
+  compact values and scope-mirroring freeing, which would also give destructors - left for the user to choose.
+  Checked by a fixture program built and interpreted with identical output, status and unhandled-error report, plus
+  an undefined index, a task and `unreachable`.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
