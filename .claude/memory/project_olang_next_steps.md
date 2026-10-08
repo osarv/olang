@@ -23,7 +23,9 @@ expression form) and 6 are being built in parallel by agents in worktrees (/home
 5. Several values per `case`, `case` guards, nested patterns; `match` as an expression once its syntax is chosen
    (ledger question 3).
 6. `defer`, block-scoped as Zig's.
-7. Float literals default to F64 (T6a).
+7. Float literals default to F64 (T6a) - DONE b7c8986. Debt found there: the B9a token evaluator reads a narrow-typed
+   global (`X F32 = 0.1`, an `I32` that would wrap) as its exact value, so a top-level condition can disagree with the
+   run time - fix by deferring such conditions to B9c's compile-time evaluation.
 Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
