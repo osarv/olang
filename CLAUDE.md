@@ -3,7 +3,11 @@
 olang is a custom programming language. C-like structure, with quality-of-life improvements over C.
 Its direction (the user, 2026-10-08): no manual memory management, C-like performance, natural language as much as
 possible, minimal syntax, multi-purpose (AI/data science, scripting, GUI) - the base of larger projects, so the design
-has to be solid and smooth.
+has to be solid and smooth. The full statement - the principles, what they mean in practice, what is deliberately not done,
+and how to judge a new feature - is `PRINCIPLES.md`, imported here:
+
+@PRINCIPLES.md
+
 Error handling is modeled on Zig (explicit error sets/unions, no exceptions). Longer-term direction:
 Rust-like compile-time memory/security guarantees (underway - see the ownership-scopes entry in
 Settled decisions below; scope-containment is checked at compile time, a general borrow checker is

@@ -16,3 +16,6 @@ management (scopes/arenas, never free or a GC pause), C-like performance (no hid
 [[feedback-no-runtime-checks]]), natural language ([[user-olang-natural-language]]), minimal syntax (reuse a construct
 before adding one), multi-purpose (a choice that serves only one domain needs a reason). "Solid and smooth": prefer one
 rule that composes over special cases, and fix rough edges found while building rather than recording them.
+
+Written out as `PRINCIPLES.md` in the repo root (the user: "Record the general language-vibe specs"), imported by
+CLAUDE.md so every session loads it; keep it current when the direction moves.
