@@ -1268,7 +1268,7 @@ types get their methods; those methods are visible in every module. A program wa
 
 Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, two values of any types held as
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
-every instantiation whose two parts have it.
+every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -1566,6 +1566,16 @@ no errors, and neither the receiver nor the parameter `mut`. Any other method na
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
 values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
 built-in type declares none; its `==` is the language's.
+
+**E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
+`Hash() Int64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
+array value** whose type declares neither `Hash` nor `Eq` and every part of which has a hash: the parts' hashes
+combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
+prelude's `HashElements`). The prelude declares `Hash` for `Byte`, `Int32`, `Int64` and `String`; a float has none,
+so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
+where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
+reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key, but an
+interface value's table (T31) needs a declared one.
 
 There is no expression that produces a value of an error type (§2.6): an error word is never a
 first-class comparable value, only a function's own result (§7).

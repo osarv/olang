@@ -21,6 +21,14 @@ fn (a Array<<T>>&) Equal(b Array<<T>>&) Bool {
     return true
 }
 
+# the elements' hashes combined in order - the Hash the compiler supplies for an array value whose elements have one
+# (E10b), agreeing with "==" element by element
+fn (a Array<<T Hashable<<T>>>>&) HashElements() Int64 {
+    h Int64 = 0
+    for y in a { h = h * 1099511628211 + y.Hash() }
+    return h
+}
+
 # whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
 # a substring, for text. The empty run occurs in everything.
 fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {

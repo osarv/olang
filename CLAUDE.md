@@ -2658,8 +2658,14 @@ Go through this for every change to what olang means - a rule added, revised or 
   view of it) takes over `$` for its type wherever the value sits, and **must be K1a-evaluable**: `$` calls it as often
   as building the text needs (measure, write, or never when the text is computed while compiling), which is only
   unobservable if it has no effect - the same argument that settled zero values. A mis-shaped `Eq`/`Str` is an error at
-  its declaration and is then ignored by `==`/`$`, so it is one error rather than two. Not built yet from the same
-  stage: an automatic `Hash` for value types (so any plain struct is a `Map` key).
+  its declaration and is then ignored by `==`/`$`, so it is one error rather than two.
+  **E10b - the compiler supplies `Hash`** for a struct, enum or array value whose type declares neither `Hash` nor
+  `Eq` and whose parts all hash (combined in order, an enum's case first; arrays through the prelude's
+  `HashElements`), so any plain struct or enum is a `Map` key with nothing written. A type declaring `Eq` must declare
+  `Hash` (only it can know what agrees); a float has none (`-0.0 == 0.0`, NaN); a reference part hashes only where
+  `==` compares what it names, since an address is not a value and the evaluator could not reproduce it. **`Hash`
+  never sees a null** - a null reference hashes to 0, as `Eq` never sees one (my call, flagged). Supplied `Hash`
+  meets constraints and direct calls; an interface value still needs a declared one (a table needs a function).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

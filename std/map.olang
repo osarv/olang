@@ -1,5 +1,6 @@
-# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() Int64" method agreeing with
-# "==": the prelude gives it to Int32, Int64, Byte and String, and a program's own key type declares it.
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() Int64" agreeing with "==": the
+# prelude gives it to Int32, Int64, Byte and String, the compiler supplies one for a struct, enum or array value whose
+# parts all have one (E10b), and a key type declaring Eq declares its Hash too.
 #
 # Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
 # Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
@@ -206,4 +207,42 @@ test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes an
     m := Map<Pair<Int32, Int64>, Int32>()
     m.Put(a, 7)
     assert try m.Get(Pair(1, Int64(2))) catch default 0 == 7
+}
+
+# E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
+type hPt struct(x Int32, y Int32) {
+    x
+    y
+}
+type hTagged struct(name String&, at hPt) {
+    name
+    at
+}
+type hShape enum {
+    Circle(r Int32)
+    Rect(w Int32, h Int32)
+    Blank
+}
+fn hashKeys() Bool {
+    m := Map<hPt, Int32>()
+    m.Put(hPt(1, 2), 5)
+    m.Put(hPt(2, 1), 6)
+    t := Map<hTagged, Int32>()
+    s String& = "ab"
+    t.Put(hTagged(s, hPt(0, 0)), 1)
+    e := Map<hShape, Int32>()
+    e.Put(hShape.Rect(1, 2), 4)
+    e.Put(hShape.Circle(1), 7)
+    n String& = null
+    pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
+    tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
+    shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
+    arrays Bool = Int32[1, 2].Hash() == Int32[1, 2].Hash() and Int32[1, 2].Hash() != Int32[2, 1].Hash()
+    return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
+}
+HashKeysBaked := hashKeys()
+
+test "E10b: a struct, an enum or an array is a key with no Hash written" {
+    assert hashKeys()
+    assert HashKeysBaked
 }

@@ -7633,3 +7633,16 @@ from their original form.
   there; and a mis-shaped `Eq` was reported and then still called by `==`, giving a second, misleading error - `==`
   now ignores one (`eqWellShaped`). Checks: `eqshape`, `eqwrites`, `strshape`, `streffect`, `samevalue`; the old
   `constrainthas` went with `Equatable`.
+
+- **The supplied `Hash` (E10b), 2026-10-08.** The last piece of stage 1 of the cast/zero-value plan: with `==`
+  memberwise by default, a plain struct should be a `Map` key without writing anything. Built like the `Eq` rewrite:
+  `x.Hash()` on a value with no `Hash` whose parts all hash is lowered in the checker into its parts' hashes combined
+  in order (an FNV-prime multiply-add), an enum by a chain of `is` tests over its cases, an array through a prelude
+  `HashElements` (a declared name, because `String` declares its own `Hash` and T29e forbids a declared array type
+  redeclaring an inherited method). Constraints accept it in loose (G19) mode only; an interface value's table would
+  need a real function and is left requiring a declared one. Declared `Eq` disables it, floats have no hash, and a
+  reference part hashes only where its type declares `Eq` and `Hash` - identity cannot be hashed by the evaluator.
+  Null references hash to 0 everywhere, including inside the prelude's generic code, via a guard in the method-call
+  builder (`hashNullGuarded` stops it recursing). The G19 message for a missing `Hash` now says when the compiler
+  supplies one and what to declare otherwise. Checks: `hasheqnohash`, `hashfloat`; corpus test in `std/map.olang`,
+  baked to `true` by K2.

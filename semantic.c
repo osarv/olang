@@ -1649,10 +1649,13 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
         RdSpellType(*bound, tn, sizeof(tn));
         struct type wantNamed = want.genericOrigin ? *want.genericOrigin : want;
         snprintf(cn, sizeof(cn), "%.*s", wantNamed.name.len, wantNamed.name.ptr);
-        char* msg = MallocOrCrash(600);
-        if (missing) snprintf(msg, 600, "%s does not satisfy the constraint %s on %.*s: it has no method %.*s that fits (G19)",
-                              tn, cn, c->name.len, c->name.ptr, missing->name.len, missing->name.ptr);
-        else snprintf(msg, 600, "%s does not satisfy the constraint %s on %.*s (G19)", tn, cn, c->name.len, c->name.ptr);
+        char* msg = MallocOrCrash(900);
+        bool hash = missing && StrCmp(missing->name, StrFromCStr("Hash"));
+        if (missing) snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s: it has no method %.*s that fits (G19)%s",
+                              tn, cn, c->name.len, c->name.ptr, missing->name.len, missing->name.ptr,
+                              hash ? ". The compiler supplies Hash only for a struct, enum or array value with no Eq of its "
+                                     "own whose parts all have a hash (E10b) - declare 'Hash() Int64', agreeing with '=='" : "");
+        else snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s (G19)", tn, cn, c->name.len, c->name.ptr);
         ErrMsgSemantic(tok, msg);
         ok = false;
     }
@@ -4397,11 +4400,21 @@ static bool ifaceCovers(struct type have, struct type want) {
     return true;
 }
 
+static bool typeAutoHashable(struct type t, int depth);
+static bool autoHashMeets(struct type concrete, struct var* m) {
+    return StrCmp(m->name, StrFromCStr("Hash")) && m->type.vars.len == 0 && m->type.errors.len == 0
+           && m->type.hasRetType && m->type.retType->bType == BASETYPE_INT64 && typeAutoHashable(concrete, 0);
+}
+
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed) {
     if (iface.bType != BASETYPE_INTERFACE || concrete.bType == BASETYPE_INTERFACE) return false;
     for (int i = 0; i < iface.vars.len; i++) {
         struct var* m = ListGetIdx(&iface.vars, i);
-        if (!InterfaceMethodImpl(concrete, m)) { if (failed) *failed = m; return false; }
+        //E10b: a constraint is met by a Hash the compiler supplies; an interface value's table needs a real one
+        if (!InterfaceMethodImpl(concrete, m) && !(interfaceImplLoose && autoHashMeets(concrete, m))) {
+            if (failed) *failed = m;
+            return false;
+        }
     }
     return true;
 }
@@ -6785,6 +6798,128 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
     return seq;
 }
 
+//E10b: whether a type's == comes from an Eq it declares - then only a Hash it declares can agree with it
+static bool typeDeclaresEq(struct type v) { return methodNamedOn(v, "Eq") || methodNamedOn(v, "eq"); }
+
+static struct type typeBare(struct type t) {
+    t.structMAlloc = false;
+    t.refMut = false;
+    t.scopeParam = NULL;
+    t.scopeDepth = 0;
+    return t;
+}
+
+//E10b: whether a value of type t can be hashed in agreement with its "==": by a Hash its type declares, or one the
+//compiler supplies from its parts. A reference hashes what it names only where "==" compares what it names - its
+//type declares Eq; one compared by identity has no hash, since an address is not a value.
+static bool typeHasHash(struct type t, int depth) {
+    struct type v = typeBare(t);
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return false;
+    bool declared = methodNamedOn(v, "Hash") != NULL;
+    if (t.structMAlloc) return declared && typeDeclaresEq(v);
+    return declared || typeAutoHashable(v, depth + 1);
+}
+
+//E10b: a struct, enum or array value with no Hash and no Eq of its own, every part of which has a hash
+static bool typeAutoHashable(struct type t, int depth) {
+    if (depth > 64 || t.structMAlloc) return false;
+    struct type v = typeBare(t);
+    if (methodNamedOn(v, "Hash") || typeDeclaresEq(v)) return false;
+    if (v.bType == BASETYPE_ARRAY) return v.arrElem && typeHasHash(*v.arrElem, depth);
+    if (v.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < v.vars.len; i++) {
+            if (!typeHasHash(((struct var*)ListGetIdx(&v.vars, i))->type, depth)) return false;
+        }
+        return true;
+    }
+    if (v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* c = ListGetIdx(&v.vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) {
+                if (!typeHasHash(((struct var*)ListGetIdx(&c->type.vars, k))->type, depth)) return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+static struct operand* int64Literal(long long v, struct token tok) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT64));
+    op->isLiteral = true;
+    op->intLiteralVal = v;
+    return op;
+}
+
+//acc * P + part, P the 64-bit FNV prime, so parts in another order hash differently (arithmetic wraps, E6c)
+static struct operand* hashCombine(struct operand* acc, struct operand* part, struct token tok) {
+    if (!acc) return part;
+    return OperandBinary(OperandBinary(acc, int64Literal(1099511628211LL, tok), OPERATION_MUL, tok), part, OPERATION_ADD, tok);
+}
+
+//E10b: x.Hash() - a reference held once and kept away from Hash when null (a null hashes to 0, as Eq never sees one)
+static bool hashNullGuarded = false;
+static struct operand* hashOf(struct checkCtx* ctx, struct operand* x, struct token tok, struct operand* seq) {
+    if (!x->type.structMAlloc) return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), "Hash", tok);
+    struct operand* h = eqHold(ctx, x, tok, seq);
+    hashNullGuarded = true;
+    struct operand* call = operatorCallArgs(ctx, h, ListInit(sizeof(struct operand*)), "Hash", tok);
+    hashNullGuarded = false;
+    struct operand* r = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_INT64));
+    struct operand* isNull = OperandBinary(h, OperandNullLiteral(tok), OPERATION_EQ, tok);
+    struct operand* zero = int64Literal(0, tok);
+    ListAdd(&r->args, &isNull);
+    ListAdd(&r->args, &zero);
+    ListAdd(&r->args, &call);
+    return r;
+}
+
+static struct operand* seqResult(struct operand* seq, struct operand* r) {
+    if (!seq->comprBody.len) return r;
+    seq->type = r->type;
+    ListAdd(&seq->args, &r);
+    return seq;
+}
+
+//E10b: the Hash the compiler supplies for a value of an auto-hashable type - its parts' hashes combined in order;
+//an enum's case number first, then the payload of the case it holds; an array's elements through the prelude
+static struct operand* buildAutoHash(struct checkCtx* ctx, struct operand* x, struct token tok) {
+    struct type v = typeBare(x->type);
+    if (v.bType == BASETYPE_ARRAY) return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), "HashElements", tok);
+    struct operand* seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_INT64));
+    seq->comprBody = ListInit(sizeof(struct statement));
+    struct operand* hx = eqHold(ctx, x, tok, seq);
+    struct operand* r = NULL;
+    if (v.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            r = hashCombine(r, hashOf(ctx, OperandMember(NULL, hx, f->name, tok), tok, seq), tok);
+        }
+        if (!r) r = int64Literal(0, tok);
+        return seqResult(seq, r);
+    }
+    //an enum: the last case needs no test - if no earlier one holds, it does
+    for (int i = v.vars.len - 1; i >= 0; i--) {
+        struct var* c = ListGetIdx(&v.vars, i);
+        struct operand* arm = int64Literal(i + 1, tok);
+        if (c->type.vars.len == 1) arm = hashCombine(arm, hashOf(ctx, enumIsAs(hx, i, true, tok), tok, seq), tok);
+        for (int k = 0; c->type.vars.len > 1 && k < c->type.vars.len; k++) {
+            char* fn = MallocOrCrash(16);
+            snprintf(fn, 16, "%d", k);
+            arm = hashCombine(arm, hashOf(ctx, OperandMember(NULL, enumIsAs(hx, i, true, tok), StrFromCStr(fn), tok), tok, seq), tok);
+        }
+        if (!r) { r = arm; continue; }
+        struct operand* cond = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_INT64));
+        struct operand* is = enumIsAs(hx, i, false, tok);
+        ListAdd(&cond->args, &is);
+        ListAdd(&cond->args, &arm);
+        ListAdd(&cond->args, &r);
+        r = cond;
+    }
+    if (!r) r = int64Literal(0, tok);
+    return seqResult(seq, r);
+}
+
 //E30: "a < b <= c" - the comparisons joined by "and", each sharing its middle operand, which is built (and
 //evaluated) once. Only the four ordering comparisons chain: "a == b == c" keeps meaning "(a == b) == c".
 static struct operand* buildCmpChain(struct checkCtx* ctx, struct syntax* s) {
@@ -8099,7 +8234,23 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         }
         viaInterface = m != NULL;
     }
+    bool noArgs = prebuiltMethodArgs ? prebuiltMethodArgs->len == 0 : allPartsOfType(argsNode, SNTX_EXPR).len == 0;
+    //E10b: a Hash the compiler supplies, for a value whose type has none and whose parts all hash
+    if (!m && StrCmp(mName, StrFromCStr("Hash")) && typeAutoHashable(recvType, 0)) {
+        *reported = true;
+        if (!noArgs) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        return buildAutoHash(ctx, recvOp, mTok);
+    }
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.vars.len == 0) return NULL;
+    //E10b: Hash on a reference never sees a null - a null hashes to 0
+    if (!hashNullGuarded && recvType.structMAlloc && noArgs && StrCmp(mName, StrFromCStr("Hash")) && m->type.hasRetType
+        && m->type.retType->bType == BASETYPE_INT64
+        && recvType.bType != BASETYPE_INTERFACE && !viaInterface) {
+        *reported = true;
+        struct operand* seq = operandNew(mTok, OPERATION_SEQ, TypeVanilla(BASETYPE_INT64));
+        seq->comprBody = ListInit(sizeof(struct statement));
+        return seqResult(seq, hashOf(ctx, recvOp, mTok, seq));
+    }
     struct type p0 = (*(struct var*)ListGetIdx(&m->type.vars, 0)).type;
     if (!viaInterface && !MethodReceiverAccepts(p0, recvType)) return NULL;
     *reported = true;
