@@ -18,7 +18,9 @@ nothing of the user is in [[project-olang-next-steps]], not here.
 **Decided 2026-10-08, being built** (by parallel agents in worktrees; order in next-steps): os.Args/os.Env; files and
 file system in std; value-level bits for F16/BF16/F32/F64; List.At/SetAt + a text builder, keeping loops on iterators;
 several values per `case`, `case` guards, nested patterns (the user: "case guards are good", "I think the nested
-patterns are fine" - read as yes); `defer` (block-scoped). Float literals default to F64: DONE (b7c8986).
+patterns are fine" - read as yes); `defer` (block-scoped). Float literals default to F64: DONE (b7c8986). Its follow-ups (the user 2026-10-08: "6) sure.
+7) yes make it an error 8) yes do that"): `$` prints a float's shortest round-trip text; a float literal beyond a
+narrower target's range is an error; a literal-only expression adapts to its target like one literal.
 **Decided 2026-10-08, next after the current batch:** runtime interfaces back as `any Trait&` (the user: "any widget is
 good"): a trait stays a constraint; `any Trait&` is a run-time value written on purpose, itself satisfying the trait;
 only structs/enums convert, no widening at first, defaults/overrides through the table, `is`/`as` kept; the removed
@@ -26,7 +28,7 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** (number 2 is unused since the 2026-10-08 renumbering; my calls keep 10 onward)
+**QUESTIONS for the user** (numbers 2 and 6-8 are unused since the 2026-10-08 answers; my calls keep 10 onward)
 1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
    scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
 3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
@@ -37,13 +39,6 @@ design. Do what you want") - nothing to decide until a GUI is written.
 4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
    rejected. Rec: leave until real code needs it.
 5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
-6. `$` on a float prints 17 significant digits, so `x := 0.1` prints `0.10000000000000001` (Go, Rust, JS print `0.1`).
-   Default: 17 digits. Rec: the shortest text that reads back as the same value, per type.
-7. A float literal beyond a narrower type's range silently becomes infinity (`f F32 = 1e39`) where an out-of-range
-   integer literal is an error. Default: infinity. Rec: an error, as for integers.
-8. Expressions built only from literals do not adapt (`f F32 = 0.5 * 2.0` and `b U8 = 1 + 2` are errors; `f32 < 1.0/3.0`
-   compares in F64). Go and Rust adapt such constants. Default: no adapting. Rec: adapt - a literal-only expression is
-   computed while compiling and then fits like one literal (an error only if its value does not fit).
 9. `os.Exit(code)`: B5 says a process ends with exactly two statuses, but a self-hosted `-i` must pass on a program's
    status (134 after an abort), and `extern fn exit` already works in any program (X7). Default: none in std.
    Rec: add `os.Exit(code I32)` to std, documented as the one way past B5; `main` keeps its two outcomes.
