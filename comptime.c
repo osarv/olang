@@ -186,6 +186,7 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
         //a capturing lambda is a new closure each time it is made, as it is at run time (D16c)
         return x->kind == y->kind && canonicalVar(x->fn) == canonicalVar(y->fn) && x->elems == y->elems;
     }
+    if (x->kind == CT_NULL || y->kind == CT_NULL) return x->kind == y->kind; //a null is the same only as a null
     struct ctVal* a = x->kind == CT_REF ? x->target : NULL;
     struct ctVal* b = y->kind == CT_REF ? y->target : NULL;
     if (a && b && a != b && a->kind == CT_AGG && b->kind == CT_AGG && a->type.bType == BASETYPE_ARRAY
@@ -272,6 +273,7 @@ static double ctAsF(struct ctVal* v) { return v->kind == CT_FLOAT ? v->f : (doub
 static struct ctVal* ctEval(struct ctState* st, struct operand* op);
 static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type dst);
 static void ctExec(struct ctState* st, struct statement* s);
+static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** out, struct type want);
 static void ctExecBlock(struct ctState* st, struct list* block);
 
 static bool ctStep(struct ctState* st, struct token tok) {
@@ -794,13 +796,20 @@ static void ctScanStmt(struct ctScan* sc, struct statement* s) {
             ctScanOp(sc, s->target);
             break;
         case STATEMENT_MATCH:
+            ctScanBlock(sc, &s->matchHold);
             for (int i = 0; i < s->matchCases.len && !sc->why; i++) {
                 struct statement* c = ListGetIdx(&s->matchCases, i);
+                for (int a = 0; a < c->caseAlts.len; a++) {
+                    struct caseAlt* alt = ListGetIdx(&c->caseAlts, a);
+                    ctScanOp(sc, alt->test);
+                    for (int b = 0; b < alt->binds.len; b++) ctScanOp(sc, ((struct caseBind*)ListGetIdx(&alt->binds, b))->from);
+                }
+                ctScanOp(sc, c->caseGuard);
                 ctScanOp(sc, c->op);
-                if (c->caseCmp) ctScanOp(sc, c->caseCmp);
                 ctScanBlock(sc, &c->block);
             }
             ctScanBlock(sc, &s->nomatchBlock);
+            ctScanOp(sc, s->nomatchValue);
             break;
         case STATEMENT_TRY_CATCH:
             for (int c = 0; c < s->catchClauses.len && !sc->why; c++) {
@@ -1270,6 +1279,11 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             v->type = op->type;
             return v;
         }
+        case OPERATION_MATCH: { //S12b
+            struct ctVal* r = NULL;
+            ctRunMatch(st, ListGetIdx(&op->comprBody, 0), &r, op->type);
+            return st->flow == CF_NORMAL ? r : NULL;
+        }
         case OPERATION_COND: { //E28: only the chosen value is evaluated
             struct ctVal* c = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!c) return NULL;
@@ -1497,6 +1511,49 @@ static struct token ctStmtTok(struct statement* s) {
     return ctStmtTok(ListGetIdx(&s->block, 0));
 }
 
+//S12-S14, S12b: as cgMatch lays it out - held value, alternatives, bindings, guard, then the chosen case's block, or
+//in a match used as a value (out set) its value, fitted to want
+static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** out, struct type want) {
+    int outer = st->locals->len;
+    for (int i = 0; i < s->matchHold.len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(&s->matchHold, i));
+    for (int i = 0; i < s->matchCases.len && st->flow == CF_NORMAL; i++) {
+        struct statement* c = ListGetIdx(&s->matchCases, i);
+        int mark = st->locals->len;
+        bool hit = false;
+        for (int a = 0; a < c->caseAlts.len && !hit; a++) {
+            struct caseAlt* alt = ListGetIdx(&c->caseAlts, a);
+            struct ctVal* t = ctEval(st, alt->test);
+            if (!t) { st->locals->len = outer; return; }
+            if (!ctDeref(t)->i) continue;
+            for (int b = 0; b < alt->binds.len; b++) {
+                struct caseBind* cb = ListGetIdx(&alt->binds, b);
+                struct ctVal* v = ctEval(st, cb->from);
+                if (!v) { st->locals->len = outer; return; }
+                ctDeclare(st, cb->v->name, ctCopy(v));
+            }
+            hit = true;
+        }
+        if (hit && c->caseGuard) {
+            struct ctVal* g = ctEval(st, c->caseGuard);
+            if (!g) { st->locals->len = outer; return; }
+            hit = ctDeref(g)->i != 0;
+        }
+        if (!hit) { st->locals->len = mark; continue; }
+        if (c->op && out) *out = ctFit(st, c->op, want);
+        else ctExecBlock(st, &c->block);
+        st->locals->len = outer;
+        return;
+    }
+    if (st->flow == CF_NORMAL && s->hasNomatch) {
+        if (s->nomatchValue && out) *out = ctFit(st, s->nomatchValue, want);
+        else ctExecBlock(st, &s->nomatchBlock);
+    } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
+        if (ctRun) ctRunAbort("reached unreachable code\n");
+        ctFail(st, s->op ? s->op->tok : (struct token){0}, "it reaches unreachable code");
+    }
+    st->locals->len = outer;
+}
+
 static void ctExec(struct ctState* st, struct statement* s) {
     struct token tok = ctStmtTok(s);
     if (!ctStep(st, tok)) return;
@@ -1550,44 +1607,21 @@ static void ctExec(struct ctState* st, struct statement* s) {
             }
             return;
         }
-        case STATEMENT_MATCH: {
-            struct ctVal* v = ctDeref(ctEval(st, s->op));
-            if (!v) return;
-            for (int i = 0; i < s->matchCases.len; i++) {
-                struct statement* c = ListGetIdx(&s->matchCases, i);
-                bool hit;
-                if (c->isChoiceCase) hit = v->i == c->caseTag;
-                else if (c->caseCmp) {
-                    struct ctVal* cv = ctEval(st, c->caseCmp); //E10a: "==" through the type's Eq
-                    if (!cv) return;
-                    hit = cv->i != 0;
-                } else {
-                    struct ctVal* cv = ctDeref(ctEval(st, c->op));
-                    if (!cv) return;
-                    hit = ctDeepEqPublic(v, cv);
-                }
-                if (hit) {
-                    //T17b: the payload's fields become locals of the arm
-                    size_t mark = (size_t)st->locals->len;
-                    for (int b = 0; c->isChoiceCase && b < c->caseBindings.len && v->kind == CT_AGG && b < v->n; b++) {
-                        struct var* bv = *(struct var**)ListGetIdx(&c->caseBindings, b);
-                        if (!bv) continue;
-                        struct ctLocal l = { bv->name, ctCopy(v->elems[b]) };
-                        ListAdd(st->locals, &l);
-                    }
-                    ctExecBlock(st, &c->block);
-                    st->locals->len = (int)mark;
-                    return;
-                }
-            }
-            if (s->hasNomatch) ctExecBlock(st, &s->nomatchBlock);
-            return;
-        }
+        case STATEMENT_MATCH: ctRunMatch(st, s, NULL, (struct type){0}); return;
         case STATEMENT_RET:
             if (s->op) {
                 struct ctVal* v = ctEval(st, s->op);
                 if (!v) return;
                 st->ret = ctIsRef(s->op->type) ? v : ctCopy(v);
+                //a value built in the return itself - a join, a constructor call - returned through a reference result
+                //is that reference to it, as the run time builds it where the result lands: left bare, a caller's
+                //"== null" (inside every comparison through Eq) read the value as no reference at all
+                struct type* rt = st->func && st->func->type.hasRetType ? st->func->type.retType : NULL;
+                if (rt && ctIsRef(*rt) && !ctIsRef(s->op->type) && v->kind != CT_REF && v->kind != CT_NULL) {
+                    struct ctVal* r = ctNew(CT_REF, *rt);
+                    r->target = st->ret;
+                    st->ret = r;
+                }
             }
             st->flow = CF_RETURN;
             return;

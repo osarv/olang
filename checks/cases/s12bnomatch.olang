@@ -1,0 +1,6 @@
+# check: fail a match used as a value must give one whatever the matched value is
+# S12b: only an enum's cases can be known to be covered
+fn f(n I32) I32 {
+    return match n { case 1 => 2 }
+}
+fn main() ? { }

@@ -180,7 +180,7 @@ valid token starting at the current position):
 +  -  *  /  %  ,  .  ?  =  :=
 +=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --
-==  !=
+==  !=  =>
 <  <=  >  >=
 &  |  ^  ~  <<  >>
 (  )  [  ]  {  }
@@ -427,9 +427,9 @@ take their zero values (D13) — `type P struct() { x mut I32 }`, built as `P()`
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
 (§2.9).
 
-**T16.** A struct type can only embed itself, directly or through any chain of plain (non-array,
-non-reference) member types, if that chain passes through a reference marker (§2.9) at least once;
-an unmarked, unbroken self-embedding cycle is a compile-time error.
+**T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-array,
+non-reference) member or payload types, if that chain passes through a reference marker (§2.9) at least once;
+an unmarked, unbroken self-embedding cycle is a compile-time error, reported at the member that closes it.
 
 ### 2.5 Enum types
 
@@ -534,6 +534,10 @@ A variable named only in a constraint (`E` in `<I Iterator<<E>>>`) counts as app
 bound through the methods of the type its constrained variable is bound to (G9c).
 
 A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
+
+**T17d.** An enum is a value and is never a reference: a reference marker on an enum type is a compile-time error,
+in a payload as anywhere. An enum that holds itself does so through a struct holding it, reached by reference -
+`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)` - in either declaration order.
 
 **T18.** An enum type must declare at least one case; case names must be unique within the type. A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
@@ -1469,10 +1473,10 @@ text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
 postfix  ::= primary { index | member | call-on | "++" | "--" }
 primary  ::= literal | try-expr | call-expr | struct-literal
-           | array-literal | comprehension | enum-value | lambda | IDEN | "(" expr ")"
+           | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
 
-`index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } ] ")" ]`. A `member` carrying an
+`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } ] ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" [ arg { "," arg } ] ")"` calls the function value everything to its left gives (E13b).
 Postfix `++`/`--` and unary `++`/`--` are the same
@@ -1799,7 +1803,8 @@ compile-time error.
 
 **E15a (checked operations).** `try` applied to anything other than a call - an index, a slice, or a
 parenthesized expression, `try (a * b / c)` - **checks every operation inside it that can fail**, other than
-inside a call (which has its own signature) or a nested `try`. An operation a type declares (E31) is checked by
+inside a call (which has its own signature), a nested `try`, or a `match` used as a value (S12b), whose clauses are
+statements' bodies. An operation a type declares (E31) is checked by
 calling its checked form (E31a), whose own errors the tried expression then can produce too. Each check fails with a word of `BuiltinError`
 (§7.7) instead of doing what the unchecked operation does:
 
@@ -2339,35 +2344,88 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 **S12.** `match-stmnt ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"`, where:
 
 ```
-case-clause    ::= "case" expr block
-nomatch-clause ::= "nomatch" block
+case-clause    ::= "case" case-alt { "," case-alt } [ "if" expr ] case-body
+case-alt       ::= pattern | binary
+nomatch-clause ::= "nomatch" case-body
+case-body      ::= block | "=>" expr [ STMNT_END ]
+pattern        ::= alias-chain IDEN "." IDEN [ "(" [ sub-pattern { "," sub-pattern } ] ")" ]
+sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 ```
 
-**S13a.** A `match` whose matched value is a **enum type** must cover every one of that type's cases, or
+A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
+one, followed by `,`, `if`, `{` or `=>`; anything else is a value, a `binary` expression (E1) - so the `if` of a guard
+is never read as a conditional (E28). In a match statement every `case-body` is a block; `=>` is an error there.
+
+**S12b (a match used as a value).** `match-expr ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"` in
+expression position (E1) evaluates to the value of the clause that is selected. Each clause either gives its value,
+`case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
+`return`, `error`, `break`, `continue`, `done`, `fail`, `abort` or `unreachable`, as D10a decides it with `break`
+and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
+error. The match must give a value whatever the matched value is: over an enum it is exhaustive by S13a or has a
+`nomatch`; over any other type it has a `nomatch`. Every value has one type: the first value that is not a literal,
+written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
+the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
+its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
+value is "written here" for `:=` (D15) only when each of its values is, as a conditional is. Over a type variable
+(G13) the selected arm's value is the match's.
+
+```
+area F64 = match s {
+    case Shape.Circle(r) => 3.14 * r * r
+    case Shape.Rect(w, h) => w * h
+}
+```
+
+**S13.** `match`'s own `expr` is evaluated **once**, before any clause. The clauses are tried in source order: a
+clause is selected when one of its alternatives matches (S13c) and its guard, if any, is true (S13e); its body runs,
+and no other clause or `nomatch` does. If none is selected the `nomatch` body runs, if there is one; otherwise a
+match statement does nothing - a match over an enum must be exhaustive (S13a), and over any other type no
+exhaustiveness is asked. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
+decides it (E10a); it must have the matched value's type (T27), a literal adapting to it (T6) as it would beside it in
+`==`, written text adapting to text (T29c) and `null` to a reference (T2a).
+
+**S13a.** A `match` whose matched value is an **enum type** must cover every one of that type's cases, or
 carry a `nomatch` clause. This is the only type for which exhaustiveness is checked, and the reason is that
 it is the only one whose set of alternatives is both closed and written down: an enum type's cases come
 from one declaration the compiler reads. An integer's "cases" are not usefully enumerable, so it does not admit the
 question. Making `match` exhaustive here is most
 of the point of declaring an enum — adding a case tells you every place that now has to handle it — and
-`nomatch` is the opt-out.
+`nomatch` is the opt-out. A case **covers** an enum case only when it matches that case whatever its payload holds -
+a pattern `Type.Case` with no payload list, or one whose every position is a name or `_` - and has no guard: a
+guard, a literal or a nested case in the payload may let a value through to the next clause.
 
-**S13b.** A `case` clause over an enum type has two forms. `case Type.Case` matches the tag. `case
-Type.Case(a, b)` matches the tag **and binds** the payload's fields to fresh locals named `a` and `b`,
-visible only inside that clause's block. The identifiers inside the parentheses are always *binding*
-occurrences, never expressions, so the form never means "compare against a constructed value"; the list
-must name every field of that case's payload, in declaration order. Binding is what makes reading a payload
-sound: a field is reachable only inside a clause whose tag test has already selected its case. A binding of a
-reference reads, walks and passes on what the payload names, and nothing is built into it: where it lives is the
-matched value's business, which the clause cannot name (as through a borrowed field, C2d).
+**S13b (patterns).** A pattern names a case of the enum at its position: `Type.Case` matches that case whatever its
+payload holds, and `Type.Case(p, ...)` matches it when each position of its payload matches, in declaration order,
+naming every field. A position is one of:
+- a **name**: a fresh local bound to that field, visible to the clause's guard and body only - an identifier there
+  is always a binding, never a value read, so the form never means "compare against a variable";
+- `_`: the field, ignored;
+- a nested **pattern**, naming a case of the enum that field holds (S13d);
+- a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
 
-**S13.** `match`'s own `expr` is evaluated once. Each `case`'s own `expr`, in source order, is
-compared against it using the same equality rule as `==` (E10) and must be the same type (T27) as
-the matched value. The block belonging to the first matching `case` runs, and no other `case` or
-the `nomatch` block runs. If no `case` matches and a `nomatch` clause is present, its block runs. If
-no `case` matches and there is no `nomatch` clause, no block runs at all — this is not a
-compile-time error; `match` over a *value* performs no exhaustiveness checking over any type,
-including an enum
-type's own closed word set.
+A case that matched has the case it names, so its payload is read only where its tag has been tested - which is what
+makes reading it sound. A binding of a reference reads, walks and passes on what the payload names, and nothing is
+built into it: where it lives is the matched value's business, which the clause cannot name (as through a borrowed
+field, C2d). A `case-alt` that does not parse as a pattern is a value: `case Shape.Circle(r + 1)` compares with
+the value that call builds.
+
+**S13c (several alternatives).** `case A, B, ...` is selected when any one alternative matches, tried in order;
+`case 1, 2, 3`, `case Shape.Circle, Shape.Square`. Alternatives that bind names all bind **the same names, each
+with the same type**, so the guard and the body read one set of locals whichever alternative matched -
+`case Shape.Circle(n), Shape.Square(n) { use(n) }`; a name one alternative binds and another does not is a
+compile-time error. Each alternative counts for S13a on its own.
+
+**S13d (nested patterns and literals).** A position of a payload holding an enum may hold a pattern of that enum,
+to any depth: `case Wrap.Two(Shape.Rect(w, h), Shape.Dot)`. A position may hold a literal, compared with the field by
+`==`: `case Msg.Text("quit")` compares text through `String`'s `Eq`; `case Slot.Held(null)` matches a null reference,
+which `==` holds equal only to `null`. An enum is never a reference (T17d), so a nested pattern never reads through
+one; a reference field is matched by a name, `_`, `null` or a literal its type's `==` compares. Nested patterns and
+literals are refutable, so a clause holding one covers nothing for S13a.
+
+**S13e (guards).** `case P if cond` - once an alternative has matched and its names are bound, `cond` (a `Bool`
+expression, which may read them) is evaluated; when it is false the match goes on to the next clause, as though the
+pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
+guarded clause covers nothing for S13a. A type match (G13) takes no guard: its arm is chosen while compiling.
 
 **S14.** A `match` may be used on a value of any type that supports `==` (E10) — numeric, `Bool`,
 enum, or any struct/array type (compared structurally or by reference identity per E10's own
@@ -3935,9 +3993,9 @@ value and may be used wherever a function value is expected.
 
 ### 12.5 Dispatching on a type parameter
 
-**G13.** `match` (S12) accepts a `type-var` as its own operand, with each `case` naming a
-`type-expr` instead of a value expression. This form is resolved when the enclosing generic is
-instantiated, not at run time.
+**G13.** `match` (S12) accepts a `type-var` as its own operand, with each `case` naming one or more
+`type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
+when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 
 ```
 fn writeVal(fd I32, v<T>) I64 ? error {

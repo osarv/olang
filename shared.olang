@@ -4737,6 +4737,357 @@ test "an enum carries a reference out of the function that built it" {
 # to produce null references that matched the case and dereferenced cleanly to nothing - a real segfault,
 # found by writing exactly that.
 
+# ---- match: several values per case, guards, nested patterns (S13a-S13e) ----
+
+type MtShape enum {
+    Circle(r I32)
+    Rect(w I32, h I32)
+    Square(s I32)
+    Dot
+}
+
+# S13c: "case A, B" - any one alternative selects the clause. Alternatives that bind bind the same names with the
+# same types, so the block reads one set of locals whichever matched; "_" binds nothing; a case written without its
+# parentheses matches whatever its payload holds
+fn mtSide(s MtShape) I32 {
+    match s {
+        case MtShape.Circle(n), MtShape.Square(n) { return n }
+        case MtShape.Rect(w, _) { return w }
+        case MtShape.Dot { return 0 }
+    }
+}
+
+fn mtRound(s MtShape) Bool {
+    match s {
+        case MtShape.Circle, MtShape.Dot { return true }
+        case MtShape.Rect, MtShape.Square { return false }
+    }
+}
+
+fn mtSmall(n I64) I32 {
+    match n {
+        case 1, 2, 3 { return 1 }
+        case 4, 5 { return 2 }
+        nomatch { return 0 }
+    }
+}
+
+test "several values per case: any one selects it, and alternatives bind the same names" {
+    assert mtSide(MtShape.Circle(4)) == 4
+    assert mtSide(MtShape.Square(6)) == 6
+    assert mtSide(MtShape.Rect(2, 9)) == 2
+    assert mtSide(MtShape.Dot) == 0
+    assert mtRound(MtShape.Circle(1)) and mtRound(MtShape.Dot)
+    assert not mtRound(MtShape.Rect(1, 1)) and not mtRound(MtShape.Square(1))
+    assert mtSmall(2) == 1 and mtSmall(5) == 2 and mtSmall(9) == 0
+}
+
+# S13e: "case P if cond" - the pattern matches, its bindings are made, then the guard decides; when it is false the
+# match goes on to the next case. A guarded case covers nothing for S13a, so the unguarded ones below still have to
+fn mtSize(s MtShape) I32 {
+    match s {
+        case MtShape.Circle(r) if r > 10 { return 3 }
+        case MtShape.Circle(r) if r > 5 { return 2 }
+        case MtShape.Rect(w, _), MtShape.Square(w) if w * w > 50 { return 3 }
+        case MtShape.Circle, MtShape.Rect, MtShape.Square { return 1 }
+        case MtShape.Dot { return 0 }
+    }
+}
+
+mtGuardCalls mut I32 = 0
+fn mtCounted(v Bool) Bool {
+    mtGuardCalls++
+    return v
+}
+
+fn mtPick(n I32, limit I32) I32 {
+    match n {
+        case 1 if mtCounted(n < limit) { return 10 }
+        case 1, 2 if mtCounted(true) { return 20 }
+        nomatch { return 30 }
+    }
+}
+
+test "a guard is read after the pattern matched, and a false one goes on to the next case" {
+    assert mtSize(MtShape.Circle(20)) == 3
+    assert mtSize(MtShape.Circle(7)) == 2
+    assert mtSize(MtShape.Circle(1)) == 1
+    assert mtSize(MtShape.Square(8)) == 3
+    assert mtSize(MtShape.Square(7)) == 1
+    assert mtSize(MtShape.Rect(9, 1)) == 3
+    assert mtSize(MtShape.Dot) == 0
+    mtGuardCalls = 0
+    assert mtPick(1, 5) == 10
+    assert mtGuardCalls == 1
+    assert mtPick(1, 0) == 20        # the first guard was false - the second case was tried
+    assert mtGuardCalls == 3
+    assert mtPick(7, 5) == 30        # no pattern matched, so no guard was read
+    assert mtGuardCalls == 3
+}
+
+# S13d: a payload position may hold a nested case pattern or a literal compared by "==" (through Eq, so text compares
+# as text); a name there is always a binding, never a value read
+type MtWrap enum {
+    One(f MtShape)
+    Two(a MtShape, b MtShape)
+    Named(s String&, n I64)
+    Held(c Crate&)
+    Empty
+}
+
+fn mtWk(w MtWrap) I32 {
+    match w {
+        case MtWrap.One(MtShape.Circle(r)) { return r }
+        case MtWrap.One(MtShape.Rect(1, h)) { return 100 + h }
+        case MtWrap.Two(MtShape.Rect(a, b), MtShape.Dot) { return a * b }
+        case MtWrap.Two(MtShape.Circle, _) { return 7 }
+        case MtWrap.Named("quit", _) { return -1 }
+        case MtWrap.Named(s, -1) { return -2 }
+        case MtWrap.Named(s, n) if s.Len() == n { return 1 }
+        case MtWrap.Held(null) { return -3 }
+        case MtWrap.Held(c) { return c.v }
+        case MtWrap.One, MtWrap.Two, MtWrap.Named { return 0 }
+        case MtWrap.Empty { return -4 }
+    }
+}
+
+test "a payload position may hold a nested case or a literal" {
+    assert mtWk(MtWrap.One(MtShape.Circle(5))) == 5
+    assert mtWk(MtWrap.One(MtShape.Rect(1, 8))) == 108
+    assert mtWk(MtWrap.One(MtShape.Rect(2, 8))) == 0
+    assert mtWk(MtWrap.Two(MtShape.Rect(2, 3), MtShape.Dot)) == 6
+    assert mtWk(MtWrap.Two(MtShape.Rect(2, 3), MtShape.Circle(1))) == 0
+    assert mtWk(MtWrap.Two(MtShape.Circle(9), MtShape.Rect(1, 1))) == 7
+    assert mtWk(MtWrap.Named("quit", 4)) == -1
+    assert mtWk(MtWrap.Named("abc", -1)) == -2
+    assert mtWk(MtWrap.Named("abc", 3)) == 1
+    assert mtWk(MtWrap.Named("abc", 2)) == 0
+    assert mtWk(MtWrap.Held(null)) == -3
+    assert mtWk(MtWrap.Held(Crate(12))) == 12
+    assert mtWk(MtWrap.Empty) == -4
+}
+
+# S13: a case literal adapts to the matched value's type as it would beside it in "==" (T6) - "case 3" against an
+# I64 was "case value must have the same type" before
+fn mtWidths(a I64, b U8, f F64) I32 {
+    r I32 = 0
+    match a { case 3 { r += 1 } nomatch { } }
+    match b { case 200 { r += 10 } nomatch { } }
+    match f { case 1.5 { r += 100 } nomatch { } }
+    return r
+}
+
+test "a case literal adapts to the matched value's type" {
+    assert mtWidths(3, 200, 1.5) == 111
+    assert mtWidths(4, 1, 0.5) == 0
+}
+
+# S13: the matched value is evaluated once, however many cases and guards read it
+mtNextCalls mut I32 = 0
+fn mtNext() I32 {
+    mtNextCalls++
+    return mtNextCalls
+}
+
+test "the matched value is evaluated once" {
+    mtNextCalls = 0
+    r I32 = 0
+    match mtNext() {
+        case 5 { r = 5 }
+        case 2 if r == 0 { r = 2 }
+        case 1 if r > 0 { r = 9 }
+        case 1, 3 { r = 1 }
+        nomatch { r = -1 }
+    }
+    assert r == 1 and mtNextCalls == 1
+}
+
+# S13c/G13: a type match takes several types per case too
+fn mtWidth(v <T>) I32 {
+    match <T> {
+        case I32, U32 { return 32 }
+        case I64, U64 { return 64 }
+        nomatch { return 0 }
+    }
+}
+
+test "a type match takes several types per case" {
+    assert mtWidth(1) == 32 and mtWidth(U32(1)) == 32
+    assert mtWidth(I64(1)) == 64 and mtWidth(U64(1)) == 64
+    assert mtWidth(true) == 0
+}
+
+# D10a: guarded cases do not count, so a match leaves on every path when the unguarded ones cover the enum - no
+# trailing return, no "unreachable"
+fn mtSign(s MtShape) I32 {
+    match s {
+        case MtShape.Circle(r) if r < 0 { return -1 }
+        case MtShape.Circle(_), MtShape.Square(_) { return 1 }
+        case MtShape.Rect(_, _), MtShape.Dot { return 0 }
+    }
+}
+
+test "a match whose unguarded cases cover the enum leaves on every path" {
+    assert mtSign(MtShape.Circle(-3)) == -1
+    assert mtSign(MtShape.Square(2)) == 1
+    assert mtSign(MtShape.Dot) == 0
+}
+
+# K1: the evaluator runs the same tests in the same order - globals baked through every form above, compared with the
+# same calls made at run time
+MtBaked I32 = mtSize(MtShape.Circle(20)) + mtSize(MtShape.Square(7)) * 10 + mtWk(MtWrap.Named("abc", 3)) * 100 +
+              mtWk(MtWrap.Two(MtShape.Rect(2, 3), MtShape.Dot)) * 1000 + mtSide(MtShape.Square(6)) * 10000
+mtRuntimeZero mut I32 = 0
+
+test "the evaluator matches cases, guards and nested patterns as the run time does" {
+    assert MtBaked == 3 + 10 + 100 + 6000 + 60000
+    assert mtSize(MtShape.Circle(20)) == 3        # decided while compiling (S18c)
+    z I32 = mtRuntimeZero
+    assert MtBaked == mtSize(MtShape.Circle(20 + z)) + mtSize(MtShape.Square(7 + z)) * 10 +
+        mtWk(MtWrap.Named("abc", 3 + z)) * 100 + mtWk(MtWrap.Two(MtShape.Rect(2 + z, 3), MtShape.Dot)) * 1000 +
+        mtSide(MtShape.Square(6 + z)) * 10000
+}
+
+# T17: an enum is never a reference, so one holding itself does it through a struct - in either declaration order.
+# Its payload's struct was left the empty snapshot taken while the enum was still being resolved, so "a.e" was an
+# unknown member; and with the enum declared first, the struct's field held the enum's unfinished snapshot
+type MtNode struct(e MtExpr) { e }
+type MtExpr enum {
+    Lit(v I64)
+    Add(a MtNode&, b MtNode&)
+}
+type MtExpr2 enum {
+    Lit(v I64)
+    Neg(n MtNode2&)
+}
+type MtNode2 struct(e MtExpr2) { e }
+
+fn mtEval(e MtExpr) I64 {
+    match e {
+        case MtExpr.Lit(v) { return v }
+        case MtExpr.Add(a, b) if a.e is MtExpr.Lit and b.e is MtExpr.Lit { return (a.e as MtExpr.Lit) + (b.e as MtExpr.Lit) }
+        case MtExpr.Add(a, b) { return mtEval(a.e) + mtEval(b.e) }
+    }
+}
+
+fn mtEval2(e MtExpr2) I64 {
+    match e {
+        case MtExpr2.Lit(v) { return v }
+        case MtExpr2.Neg(n) { return -mtEval2(n.e) }
+    }
+}
+
+MtEvaluated I64 = mtEval(MtExpr.Add(MtNode(MtExpr.Lit(3)), MtNode(MtExpr.Add(MtNode(MtExpr.Lit(4)), MtNode(MtExpr.Lit(5))))))
+
+test "an enum holds itself through a struct, declared in either order" {
+    assert MtEvaluated == 12
+    z I64 = I64(mtRuntimeZero)
+    assert mtEval(MtExpr.Add(MtNode(MtExpr.Lit(3 + z)), MtNode(MtExpr.Lit(4)))) == 7
+    assert mtEval2(MtExpr2.Neg(MtNode2(MtExpr2.Neg(MtNode2(MtExpr2.Lit(6 + z)))))) == 6
+}
+
+# S12b: a match used as a value - "case P => v" gives the value; the clause forms are the statement's (several values,
+# guards, nested patterns). It covers every enum case its unguarded clauses do, or ends with "nomatch => v"
+fn mtArea(s MtShape) I32 {
+    return match s {
+        case MtShape.Circle(r) => 3 * r * r
+        case MtShape.Rect(w, h) => w * h
+        case MtShape.Square(n) => n * n
+        case MtShape.Dot => 0
+    }
+}
+
+fn mtWord(n I64) String {
+    return match n {
+        case 0 => "none"
+        case 1, 2, 3 if n < 3 => "few"
+        case 3 => $n
+        nomatch => "many"
+    }
+}
+
+# a case may instead run a block that leaves - return, break, continue, an error, done, fail, abort, unreachable - as a
+# catch clause in value position does (R9b)
+fn mtFirstBig(xs Array<I32>&) I32 {
+    for x in xs {
+        v I32 = match x {
+            case 0 { continue }
+            case -1 { return -1 }
+            nomatch => x * 10
+        }
+        if v > 20 { return v }
+    }
+    return 0
+}
+
+# a type match gives a value the same way, its arm chosen while compiling
+fn mtBytes(v <T>) I64 {
+    return match <T> {
+        case I32, U32 => 4
+        case I64, U64 => 8
+        nomatch => 0
+    }
+}
+
+test "a match used as a value" {
+    assert mtArea(MtShape.Circle(2)) == 12 and mtArea(MtShape.Rect(2, 5)) == 10
+    assert mtArea(MtShape.Square(3)) == 9 and mtArea(MtShape.Dot) == 0
+    assert mtWord(0) == "none" and mtWord(2) == "few" and mtWord(3) == "3" and mtWord(9) == "many"
+    assert mtFirstBig(I32[0, 1, 0, 5]) == 50
+    assert mtFirstBig(I32[0, -1, 5]) == -1
+    assert mtFirstBig(I32[1, 2]) == 0
+    assert mtBytes(1) == 4 and mtBytes(U64(1)) == 8 and mtBytes(true) == 0
+    k I32 = match MtShape.Square(4) { case MtShape.Square(n) if n > 3 => n nomatch => 0 }
+    assert k == 4
+    w := match mtRuntimeZero { case 0 => "zero" nomatch => "other" }        # every value text: a String
+    assert w == "zero"
+}
+
+# a value built in a case - text, a constructor call - is built where the match's value lands, as a conditional's is
+fn mtLabel(k I32) String& {
+    return match k {
+        case 1 => "one"
+        case 2 => $k " two"
+        nomatch => $k "+" $(k * 2)
+    }
+}
+fn mtCrate(k I32) Crate& {
+    return match k { case 1 => Crate(10) nomatch => Crate(k) }
+}
+
+test "a match's value is built where it lands" {
+    a := mtLabel(2)
+    b := mtLabel(5)
+    c := mtCrate(1)
+    d := mtCrate(7)
+    t I32 = 0
+    for i in range 100 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += I32(s.Len())
+    }
+    assert t > 0
+    assert a == "2 two" and b == "5+10" and c.v == 10 and d.v == 7
+}
+
+# K1: the evaluator runs a match used as a value too - globals baked through every form above beside the same calls at
+# run time. Found writing it: a value built in a "return" through a reference result came back from the evaluator
+# as a bare value rather than a reference to one, so "mtLabel(2) == "2 two"" - whose Eq first asks "== null" - was
+# false while compiling and true at run time
+MtValBaked I32 = mtArea(MtShape.Rect(2, 5)) + mtFirstBig(I32[0, 1, 0, 5]) * 100 + I32(mtBytes(I64(1))) * 10000
+MtWordBaked := mtWord(3)
+MtLabelBaked Bool = mtLabel(5) == "5+10" and mtLabel(1) == "one"
+
+test "the evaluator gives a match's value as the run time does" {
+    assert MtValBaked == 10 + 5000 + 80000
+    assert MtWordBaked == "3"
+    assert MtLabelBaked
+    assert mtLabel(2) == "2 two"        # decided while compiling (S18c)
+    z I32 = mtRuntimeZero
+    assert MtValBaked == mtArea(MtShape.Rect(2 + z, 5)) + mtFirstBig(I32[0, 1 + z, 0, 5]) * 100 + I32(mtBytes(I64(1 + z))) * 10000
+    assert MtWordBaked == mtWord(3 + I64(z))
+    assert mtLabel(5 + z) == "5+10"
+}
+
 # ---- array indexing (E16) ----
 
 # E16: an index is NOT checked at run time - the same reading C gives it, and one of exactly two places

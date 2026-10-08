@@ -1,0 +1,9 @@
+# check: fail an enum is a value and is never a reference
+# T17: an enum naming itself with "&" was read as a struct no value could fit, and reported at every use
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+fn main() ? {
+    x := E.Lit(1)
+}

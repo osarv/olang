@@ -7892,3 +7892,57 @@ from their original form.
   sentence saying text compares "by E10, not by content" was stale too since E10a (`==` on a `String` calls `Eq`).
   `checks/cases/b10text` pins it - a call deciding a top-level condition, a comparison at run time, a `String&`
   argument - and fails with five errors on the previous compiler.
+
+- **`match` grows several values per case, guards, nested patterns, and a value form (S12b, S13a-S13e, 2026-10-08).**
+  The user decided the three statement additions; the coordinator added, mid-way, `match` as an expression spelled
+  `case PATTERN => value` (`=>` a new token), with a leaving block allowed in place of a value as in a catch clause
+  in value position (R9b), and labeled `break`/`continue` declined.
+  **Several values per case.** `case 1, 2, 3`, `case Shape.Circle, Shape.Square`. The open question was what binding
+  alternatives mean. Two sound rules: reject binding in alternatives, or require every alternative to bind the same
+  names with the same types. I took the second (Rust's, OCaml's, Swift's): it is what makes `case Shape.Circle(n),
+  Shape.Square(n) { use(n) }` - the shape people reach for - writable, and it costs one check per name; the clause's
+  locals are declared once and each alternative fills them its own way. A case named without its payload list now
+  matches it whatever the payload holds (`case Figure.Circle` on a payload case was "wrong number of arguments"), which
+  alternatives over payload cases need.
+  **Guards.** `case P if cond { }`. The grammar collision with E28 (`a if c else b`) was settled the way comprehension
+  filters settle it: a value alternative is a `binary`, not an `expr`, so the `if` is the guard's. A guard is read once
+  its pattern matched and its names are bound, and a false one goes on to the next clause; a guarded clause covers
+  nothing for S13a; a type match takes none (its arm is chosen while compiling).
+  **Nested patterns.** A payload position is a name, `_`, a nested pattern, or a literal compared by `==`. S13b's
+  promise that an identifier in the parentheses is always a binding stays - a constant is compared in a guard. Literals
+  were cheap because a value position is just `field == literal`, which E10a already routes through `Eq`, so
+  `Msg.Text("quit")` compares text. The question of a null reference matching a nested case pattern turned out not to
+  arise: **an enum is never a reference**, so a nested pattern never reads through one, and a reference position is
+  matched by a name, `_`, `null` or a literal its `==` compares (a null equals only `null`). No exhaustiveness over
+  nested patterns: a clause holding one covers nothing.
+  **How it is built.** The checker lowers each alternative to a `Bool` operand over the matched value - `x is E.C` per
+  enum position, `x == v` per value, and each payload field read with `x as E.C` (E32, its abort check switched off
+  since the tag was just tested) - plus the bindings those reads fill. The matched value is held once in a hidden local
+  (S13 has always said it is evaluated once) unless it is a local already: guards and case values are expressions, and
+  an expression can change a local only by lending it to a `mut &` parameter, which only a struct or array can be. The
+  local needs no block, so no arena header. Codegen and the evaluator are left only the order - alternatives, that
+  alternative's bindings, the guard, the body - so they agree by construction; the old per-case special handling
+  (`isChoiceCase`, `caseTag`, `caseCmp`) went. The machine code of an existing enum match in a hot loop is identical
+  at `-O3` (checked by diffing `objdump` of the old and new binaries). The value form is an operand holding the same
+  statement (`OPERATION_MATCH`), each value stored into one slot as E28's conditional does, with a checked `unreachable`
+  where no clause is selected - the checker has proved it cannot happen, and the language does not assume what it
+  proves. Its type follows E28 generalised to N values, with all-text values a `String`; `:=` takes one only when every
+  value names its type, as with E28, so `area := match s { ... => 3.14 * r * r }` needs a written type (flagged).
+  **Found on the way, all fixed:**
+  (1) A case literal did not adapt: `match n { case 3 }` with `n` an `I64` was "case value must have the same type".
+  (2) The interface type cases removed with T30 (`case c Circle& { }`) still parsed, and the checker then crashed on
+  the node nothing built any more.
+  (3) An enum naming itself by reference, `Add(a Expr&, b Expr&)`, was accepted at the declaration - a placeholder's
+  kind read as a struct - and failed at every use with "doesn't match the target's declared type". It is now T17d's
+  error at the declaration: an enum is a value, never a reference.
+  (4) The route that error recommends - a struct holding the enum, reached by reference - did not work either: the
+  payload's struct stayed the empty snapshot taken mid-resolution (`a.e` "unknown struct member"), and with the enum
+  declared first the struct's field and constructor parameter held the enum's unfinished snapshot (invalid IR).
+  `refreshStructSnapshots` now refreshes enum payloads and constructor parameters, and enum snapshots.
+  (5) T16 said a type embedding itself by value is a compile-time error; nothing checked it, and such a struct reached
+  LLVM as an unsized type. It is reported at the closing member now, for enums too.
+  (6) The evaluator returned a value built in a `return` - a join, a constructor call - through a reference result as
+  the bare value rather than a reference to it, so a caller's `== null` (which every comparison through `Eq` makes
+  first) took it for null: `label(5) == "5+10"` with `label` returning `String&` was false while compiling - an S18c
+  assert failed to compile, a global baked `false` - and true at run time. A null now also equals only a null in the
+  evaluator's identity test, so a bare value can never pass for one again.

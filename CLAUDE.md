@@ -2882,6 +2882,30 @@ Go through this for every change to what olang means - a rule added, revised or 
   expected Y" where the intent is clear: `name T(args)` shows both spellings with `=` and `:=`, built from the line
   itself; `?error` says `?` alone is the default error. A missing `main` is not reported when a syntax error may
   have hidden it. Not a language change - no rule moved.
+- **`match`: several values per case, guards, nested patterns, and `match` as a value (S12b, S13a-S13e, 2026-10-08,
+  the user's decisions; the value form's spelling `case P => v` the coordinator's).** `case 1, 2, 3`,
+  `case Shape.Circle, Shape.Square` (a case named without its payload list matches it whatever the payload holds); any
+  alternative selects the clause, and **alternatives that bind bind the same names with the same types** (my call - the
+  rule Rust, OCaml and Swift use; the block reads one set of locals whichever matched; rejecting binding alternatives
+  outright was the other option). `case P if cond`: tried after the pattern and its bindings, false going on to the
+  next clause; a type match takes none. A payload position is a name (always a binding - S13b's promise kept), `_`, a
+  nested pattern, or a literal compared by `==` (so through `Eq`: `Msg.Text("quit")`, `Held(null)`) - **literals
+  included, constants not** (a name there binds; compare a constant in a guard). Only unguarded cases whose every
+  position is a name or `_` count for S13a. **As a value**: `area F64 = match s { case Shape.Circle(r) => 3.14 * r * r
+  ... }`; a clause gives `=> v` or runs a block that leaves (R9b's rule); exhaustive by S13a or a `nomatch`, which a
+  non-enum always needs; one type for all values as in E28; `:=` from one only when every value names its type, as
+  E28's conditional (D15 - so `area := match ...` with arithmetic values needs a type, flagged); `=>` in a statement
+  match is an error. **Lowering**: the checker builds each alternative's test from operands - `x is E.C` per enum
+  position, `x == v` per value, fields read through `x as E.C` (E32) with its check off - over the matched value held
+  once (a local is read again: nothing between tests can change one); codegen and the evaluator only order tests,
+  bindings, guard and body, so they agree by construction. Machine code for an existing enum match is identical at
+  `-O3`. **Found on the way**: S13's "case value must have the same type" refused `case 3` against an `I64` (a literal
+  adapts now); the removed interface type cases still parsed (`case c Circle& {`) and crashed the checker; an enum
+  naming itself with `&` (`Add(a Expr&, ...)`) was taken for a struct no value fit (T17d: an enum is never a reference -
+  it holds itself through a struct), and that struct route itself failed (`a.e` an unknown member, or invalid IR with
+  the enum declared first) since enum payload snapshots were never refreshed; T16's "a type cannot embed itself by
+  value" was never enforced (invalid IR) - now an error; and the evaluator returned a value built in a `return` through
+  a reference result bare, so `label(5) == "5+10"` was false while compiling and true at run time.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

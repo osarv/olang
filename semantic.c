@@ -1345,8 +1345,26 @@ bool TypeIsChar(struct type t) {
 //T29c: text written in the program - a string literal, a "$" rendering or a join - is a String wherever one
 //is wanted. It is a temporary with no type worth defending, as a literal is (T29a), and it is text by
 //construction, so it adapts to the prelude's String the way a numeric literal adapts to a width
+//S12b: the values a match used as one can give - each case's "=> v" and nomatch's, in order (a block gives none)
+struct list SemanticMatchValues(struct operand* op) {
+    struct list out = ListInit(sizeof(struct operand*));
+    if (op->opType != OPERATION_MATCH || !op->comprBody.len) return out;
+    struct statement* m = ListGetIdx(&op->comprBody, 0);
+    for (int i = 0; i < m->matchCases.len; i++) {
+        struct statement* c = ListGetIdx(&m->matchCases, i);
+        if (c->op) ListAdd(&out, &c->op);
+    }
+    if (m->nomatchValue) ListAdd(&out, &m->nomatchValue);
+    return out;
+}
+
 bool OperandIsWrittenText(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
+    if (op->opType == OPERATION_MATCH) { //S12b: as a conditional's - written text when every value is
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!OperandIsWrittenText(*(struct operand**)ListGetIdx(&vs, i))) return false;
+        return vs.len > 0;
+    }
     //E28: a conditional choosing between two pieces of written text is written text
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         return OperandIsWrittenText(*(struct operand**)ListGetIdx(&op->args, 1))
@@ -2072,10 +2090,11 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
 //struct identity is owner+name (TypeIsSame), so two instantiations are the same type exactly when their
 //arguments are - no separate comparison needed. Codegen mangles that name like any other, so each copy
 //gets its own LLVM aggregate.
-//the finished declaration a struct-typed snapshot stands for: a declared type by owner+name, or an
+//the finished declaration a struct- or enum-typed snapshot stands for: a declared type by owner+name, or an
 //instantiation. NULL for an anonymous struct (a choice payload), which has no identity to look up.
 static struct type* canonicalStructOf(struct type t) {
-    if (t.bType != BASETYPE_STRUCT || !t.owner || !t.name.len) return NULL;
+    //VOID: a snapshot of a declaration that had not yet learned what it was - read by value while being resolved
+    if ((t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE && t.bType != BASETYPE_VOID) || !t.owner || !t.name.len) return NULL;
     struct type* c = TypeGetList(&t.owner->types, t.name);
     if (c) return c;
     for (int i = 0; i < typeInstantiations.len; i++) {
@@ -2093,6 +2112,7 @@ static void refreshTypeSnapshot(struct type* ft) {
         ft->arrElem = elem;
         return;
     }
+    if (ft->unknown) return; //reported where it was written
     struct type* c = canonicalStructOf(*ft);
     if (!c || c->resolving || c->placeholder) return;
     //the marker and scope belong to this USE of the type, not to the declaration
@@ -2112,9 +2132,59 @@ static void refreshTypeSnapshot(struct type* ft) {
 //"a.next.v" worked where "a.next.next" was an unknown member. Run once a type is finished, this points
 //every such field at the finished declaration; the finished one's own fields are refreshed in turn, so a
 //chain of any length reads correctly.
+//An enum's payloads are refreshed the same way: "type Node struct(e Expr) { e }" beside "Add(a Node&, b Node&)" is
+//how an enum holds itself (T17), and the payload's Node used to stay the empty snapshot, so "a.e" was unknown. The
+//cases' storage is shared by every copy of the enum's type, so refreshing the declaration's reaches them all.
 void refreshStructSnapshots(struct type* t) {
+    if (t->bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < t->vars.len; i++) {
+            struct var* c = ListGetIdx(&t->vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) refreshTypeSnapshot(&((struct var*)ListGetIdx(&c->type.vars, k))->type);
+        }
+        return;
+    }
     if (t->bType != BASETYPE_STRUCT) return;
     for (int i = 0; i < t->vars.len; i++) refreshTypeSnapshot(&((struct var*)ListGetIdx(&t->vars, i))->type);
+    //a constructor's parameters were resolved beside the fields, so they hold the same snapshots
+    if (t->hasCtor && t->ctorFunc) {
+        for (int i = 0; i < t->ctorFunc->type.vars.len; i++) {
+            refreshTypeSnapshot(&((struct var*)ListGetIdx(&t->ctorFunc->type.vars, i))->type);
+        }
+    }
+}
+
+//T17/T13: whether a value of type t holds a value of the declaration `target` - by value, never through a reference
+//(or an array, whose elements are held through a pointer)
+static bool typeHoldsByValue(struct type t, struct type* target, int depth) {
+    if (depth > 64 || t.structMAlloc || t.unknown) return false;
+    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return false;
+    if (t.owner && t.name.len && canonicalStructOf(t) == target) return true;
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        if (t.bType == BASETYPE_CHOICE) {
+            for (int k = 0; k < f->type.vars.len; k++) {
+                if (typeHoldsByValue(((struct var*)ListGetIdx(&f->type.vars, k))->type, target, depth + 1)) return true;
+            }
+        } else if (typeHoldsByValue(f->type, target, depth + 1)) return true;
+    }
+    return false;
+}
+
+//a struct or enum holding itself by value would be infinitely large. Reported at the field, which is then given a
+//stand-in type so nothing after walks the cycle - it used to reach codegen as an unsized type (a struct) or, once an
+//enum's snapshots were refreshed, recurse forever (an enum)
+static void checkHoldsItself(struct type* t) {
+    if (t->bType != BASETYPE_STRUCT && t->bType != BASETYPE_CHOICE) return;
+    for (int i = 0; i < t->vars.len; i++) {
+        struct var* f = ListGetIdx(&t->vars, i);
+        int n = t->bType == BASETYPE_CHOICE ? f->type.vars.len : 1;
+        for (int k = 0; k < n; k++) {
+            struct var* fld = t->bType == BASETYPE_CHOICE ? ListGetIdx(&f->type.vars, k) : f;
+            if (!typeHoldsByValue(fld->type, t, 0)) continue;
+            ErrMsgSemantic(fld->tok, TYPE_HOLDS_ITSELF);
+            fld->type = unknownTypeStandIn();
+        }
+    }
 }
 
 struct type* instantiateType(struct type* generic, struct list* bindings) {
@@ -2386,7 +2456,10 @@ struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list
     //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
             && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE) {
-        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND), INVALID_REFERENCE_TARGET);
+        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND),
+                       t.bType == BASETYPE_CHOICE ? ENUM_NOT_REFERENCE : INVALID_REFERENCE_TARGET);
+        //an enum naming itself is still being resolved, so what it would be is not known yet - nothing more to report
+        if (t.bType == BASETYPE_CHOICE && t.placeholder) t.unknown = true;
         return t;
     }
     t.structMAlloc = true;
@@ -3497,6 +3570,10 @@ void resolveTypeDecl(struct type* t) {
         }
 
         struct syntax* typeExprNode = firstPartOfType(actual, SNTX_TYPE_EXPR);
+        //T17: an enum is known to be one before its payloads resolve, so one naming itself with "&" is reported as what
+        //it is - a placeholder's kind used to read as a struct there, and "Add(a Expr&, b Expr&)" became a struct no
+        //value could fit, reported at every use instead of at the declaration
+        if (typeExprNode && partSntx(typeExprNode, 0)->type == SNTX_CHOICE_BODY) t->bType = BASETYPE_CHOICE;
         struct type resolved = resolveTypeExpr(owner, typeExprNode, NULL); //module-level, no function context
         struct str name = t->name;
         struct token tok = t->tok;
@@ -4760,6 +4837,15 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
         return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
     }
+    if (op->opType == OPERATION_MATCH) { //S12b: the same, for each of a match's values
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) {
+            enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&vs, i), target);
+            if (r != TYPE_FIT_OK) return r;
+        }
+        if (TypeIsNumeric(target) && TypeIsNumeric(op->type)) op->type = target; //its values adapted, or widened (T6b)
+        return TYPE_FIT_OK;
+    }
     FinalizeLambda(op, &target); //D16a: a lambda is checked against what it is written for
     //T25c: a read-only reference never becomes writable by being put somewhere
     if (TypeIsPermRef(target) && target.refMut && !OperandGivesWritable(op)) return TYPE_FIT_READ_ONLY;
@@ -5056,6 +5142,11 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
     if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
     if (op->opType == OPERATION_AS) return true; //E32: "x as T" names its type
+    if (op->opType == OPERATION_MATCH) { //S12b: when each value would, as a conditional's (E28)
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&vs, i))) return false;
+        return vs.len > 0;
+    }
     //E28: "x := a if c else b" - when each value would name its type for ":=" on its own
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 1))
@@ -8529,6 +8620,7 @@ static char* unknownMethodMsg(struct operand* recv, struct token name) {
     return UNKNOWN_METHOD;
 }
 
+struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s);
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
@@ -8564,6 +8656,9 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     }
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_LAMBDA) {
         return OperandPendingLambda(ctx, partSntx(s, 0)); //D16: checked once its expected type is known
+    }
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_MATCH) {
+        return buildMatchExpr(ctx, partSntx(s, 0));
     }
     if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_EXPR_LITERAL) {
         return buildArrayLiteralExpr(ctx, partSntx(s, 0));
@@ -8933,6 +9028,7 @@ static void finalizeOpLambdas(struct operand* op) {
     //E27: a comprehension's own element and filter were finalized as its loop was built
     for (int i = 0; i < op->args.len; i++) finalizeOpLambdas(*(struct operand**)ListGetIdx(&op->args, i));
     for (int i = 0; i < op->catchClauses.len; i++) finalizeOpLambdas(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt);
+    if (op->opType == OPERATION_MATCH) for (int i = 0; i < op->comprBody.len; i++) finalizeStmtLambdas(ListGetIdx(&op->comprBody, i));
 }
 static void finalizeStmtLambdas(struct statement* st) {
     finalizeOpLambdas(st->op);
@@ -8940,6 +9036,14 @@ static void finalizeStmtLambdas(struct statement* st) {
     finalizeOpLambdas(st->fillValue);
     finalizeOpLambdas(st->forInit);
     for (int i = 0; i < st->spawnTargets.len; i++) finalizeOpLambdas(*(struct operand**)ListGetIdx(&st->spawnTargets, i));
+    //S12-S13e: what a match evaluates outside its blocks - each case's tests, guard and value
+    for (int i = 0; i < st->matchCases.len; i++) {
+        struct statement* c = ListGetIdx(&st->matchCases, i);
+        for (int a = 0; a < c->caseAlts.len; a++) finalizeOpLambdas(((struct caseAlt*)ListGetIdx(&c->caseAlts, a))->test);
+        finalizeOpLambdas(c->caseGuard);
+        finalizeOpLambdas(c->op);
+    }
+    finalizeOpLambdas(st->nomatchValue);
 }
 
 void buildStatementsInto(struct checkCtx* ctx, struct syntax* s, struct list* out) {
@@ -10069,6 +10173,8 @@ static bool stmtWrites(struct statement* s, struct var* v) {
     if (stmtsWrite(&s->block, v) || stmtsWrite(&s->nomatchBlock, v)) return true;
     if (s->elseStmnt && stmtWrites(s->elseStmnt, v)) return true;
     for (int i = 0; i < s->matchCases.len; i++) if (stmtWrites(ListGetIdx(&s->matchCases, i), v)) return true;
+    if (stmtsWrite(&s->matchHold, v) || opWrites(s->caseGuard, v) || opWrites(s->nomatchValue, v)) return true;
+    for (int i = 0; i < s->caseAlts.len; i++) if (opWrites(((struct caseAlt*)ListGetIdx(&s->caseAlts, i))->test, v)) return true;
     for (int c = 0; c < s->catchClauses.len; c++) {
         struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
         if (stmtsWrite(&cc->block, v)) return true;
@@ -10087,6 +10193,7 @@ static struct statement* stmtFindDecl(struct statement* s, struct var* v) {
     if ((r = stmtsFindDecl(&s->block, v)) || (r = stmtsFindDecl(&s->nomatchBlock, v))) return r;
     if (s->elseStmnt && (r = stmtFindDecl(s->elseStmnt, v))) return r;
     for (int i = 0; i < s->matchCases.len; i++) if ((r = stmtFindDecl(ListGetIdx(&s->matchCases, i), v))) return r;
+    if ((r = stmtsFindDecl(&s->matchHold, v))) return r;
     for (int c = 0; c < s->catchClauses.len; c++) {
         struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
         if ((r = stmtsFindDecl(&cc->block, v))) return r;
@@ -10844,97 +10951,207 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
-//T17b: "case Shape.Circle(r) { ... }" - matches the tag and binds the payload's fields to fresh locals
-//that exist only inside this arm. The names are binding occurrences, so they shadow nothing and read
-//nothing: the case's own declared field types give them their types, and the tag test is what makes
-//reading them sound at all.
-struct statement buildChoiceCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* pat,
-                                      struct type matchedType) {
+// ---- S12-S14: match ----
+//
+//A value match is lowered to tests the checker builds from operands the program could nearly have written: each
+//case alternative is a Bool over the matched value - held once (S13) - asking "x is E.C" of each enum position and
+//"x == v" of each value position, with every payload field read through "x as E.C" (E32) once its case is known.
+//Codegen and the evaluator run those operands, so a pattern means the same thing in both with no pattern logic of
+//their own; what is left to them is the order: alternatives, then that alternative's bindings, then the guard.
+
+//S13: a case value fits the value it is compared with as "==" would compare them - the same type, a literal adapting
+//to it (T6), written text against text (T29c), null against a reference (T2a)
+static bool caseValueFits(struct checkCtx* ctx, struct operand* val, struct type t) {
+    if (val->type.unknown || t.unknown) return true;
+    if (val->isNullLiteral) return TypeIsNullable(t);
+    if (val->isLiteral && !val->type.owner && TypeIsNumeric(val->type) && TypeIsNumeric(t)) {
+        return OperandFitsType(ctx->func, val, typeBare(t)) == TYPE_FIT_OK;
+    }
+    struct type mb = t, vb = val->type;
+    mb.structMAlloc = vb.structMAlloc = mb.refMut = vb.refMut = false;
+    bool viaEq = t.bType != BASETYPE_CHOICE && eqConsults(ctx, t, 0)
+                 && (TypeIsSame(vb, mb) || (OperandIsWrittenText(val) && TypeIsByteArray(mb)));
+    return viaEq || TypeIsSame(val->type, t);
+}
+
+//a fresh copy of a pattern path - a read of the held value, "as" and member reads over it - so no operand is shared
+//between the places that evaluate it
+static struct operand* patPath(struct operand* at) {
+    struct operand* c = MallocOrCrash(sizeof(struct operand));
+    *c = *at;
+    if (at->opType == OPERATION_AS || at->opType == OPERATION_MEMBER) {
+        c->args = ListInit(sizeof(struct operand*));
+        struct operand* base = patPath(*(struct operand**)ListGetIdx(&at->args, 0));
+        ListAdd(&c->args, &base);
+    }
+    return c;
+}
+
+static struct operand* patAnd(struct operand* acc, struct operand* t, struct token tok) {
+    return acc ? OperandBinary(acc, t, OPERATION_AND, tok) : t;
+}
+
+static struct var* caseBindingNamed(struct statement* clause, struct str name) {
+    for (int i = 0; i < clause->caseBindings.len; i++) {
+        struct var* v = *(struct var**)ListGetIdx(&clause->caseBindings, i);
+        if (v && StrCmp(v->name, name)) return v;
+    }
+    return NULL;
+}
+
+//S13b: one name in a payload pattern. The first alternative declares the clause's local; every later one must bind
+//the same names, each with the same type (S13c), and fills those. A reference keeps no scope variable of the case's
+//signature (O4b), which means nothing here: where it lives is the matched value's business, which the clause cannot
+//name - so the binding reads, walks and passes it on, and nothing is built into it (as through a borrowed field, C2d)
+static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, struct type t, struct statement* clause,
+                    struct caseAlt* alt, int altIdx, struct list* bound) {
+    struct str name = strFromTok(tok);
+    if (StrCmp(name, StrFromCStr("_"))) return;
+    bool refLike = t.structMAlloc || (t.bType == BASETYPE_ARRAY && t.arrMalloc);
+    if (refLike) {
+        t.scopeParam = NULL;
+        t.scopeWritten = false;
+        t.scopeDepth = 0;
+    }
+    struct var* v = NULL;
+    if (altIdx == 0) {
+        v = scopeDeclare(ctx->mod, ctx->scope, name, tok, t, false);
+        if (!v) return;
+        v->mayBeInitialized = true;
+        if (refLike) v->scopeUnnamed = true;
+        ListAdd(&clause->caseBindings, &v);
+    } else {
+        v = caseBindingNamed(clause, name);
+        //a name reported here still counts as bound, so the one mistake is one error and not a second at the alternative
+        if (!v) { ErrMsgSemantic(tok, CASE_ALT_BINDINGS); ListAdd(bound, &v); return; }
+        for (int i = 0; i < bound->len; i++) {
+            if (*(struct var**)ListGetIdx(bound, i) == v) { ErrMsgSemantic(tok, VAR_NAME_IN_USE); return; }
+        }
+        if (!t.unknown && !v->type.unknown && !TypeIsSame(v->type, t)) { ErrMsgSemantic(tok, CASE_ALT_BINDING_TYPE); ListAdd(bound, &v); return; }
+    }
+    ListAdd(bound, &v);
+    if (!at) return;
+    struct caseBind b = { v, at };
+    ListAdd(&alt->binds, &b);
+}
+
+//S13b/S13d: a pattern at one position - "at" reads the value there (NULL once an error above made it unreadable, so
+//the names below are still declared and the clause's block still checks), t its type. Its tests are added to *test.
+//Returns whether the position matches whatever is there - nothing below it but names and "_".
+static bool buildPatternAt(struct checkCtx* ctx, struct syntax* p, struct operand* at, struct type t,
+                           struct statement* clause, struct caseAlt* alt, int altIdx, struct list* bound,
+                           struct operand** test) {
+    if (p->type == SNTX_PAT_BIND) {
+        patBind(ctx, firstTokOfType(p, TOK_IDEN), at, t, clause, alt, altIdx, bound);
+        return true;
+    }
+    if (p->type == SNTX_PAT_VALUE) {
+        struct operand* val = buildExprFromSyntax(ctx, firstPartOfType(p, SNTX_EXPR));
+        if (!caseValueFits(ctx, val, t)) { ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH); return false; }
+        if (at) *test = patAnd(*test, buildEquality(ctx, at, val, val->tok), val->tok);
+        return false;
+    }
+    //SNTX_CASE_PATTERN: "[alias.]Type.Case [(sub, ...)]"
+    struct list idens = allTokOfType(firstPartOfType(p, SNTX_NAME), TOK_IDEN);
+    struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+    struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
+    struct list subs = ListInit(sizeof(struct syntax*));
+    for (int i = 0; i < p->parts.len; i++) {
+        struct syntaxPart* part = partAt(p, i);
+        if (!part->isToken && part->sntx->type != SNTX_NAME) ListAdd(&subs, &part->sntx);
+    }
+    bool hasList = hasTokOfType(p, TOK_PAREN_O);
+    struct var* c = NULL;
+    int tag = -1;
+    if (at && !t.unknown) {
+        if (t.bType != BASETYPE_CHOICE || !StrCmp(strFromTok(typeTok), t.name)) ErrMsgSemantic(typeTok, PATTERN_TYPE_MISMATCH);
+        else {
+            for (int i = 0; i < t.vars.len && !c; i++) {
+                struct var* v = ListGetIdx(&t.vars, i);
+                if (StrCmp(v->name, strFromTok(caseTok))) { c = v; tag = i; }
+            }
+            if (!c) ErrMsgSemantic(caseTok, UNKNOWN_CHOICE_CASE);
+            else if (hasList && subs.len != c->type.vars.len) { ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY); c = NULL; }
+        }
+    }
+    if (c) *test = patAnd(*test, enumIsAs(at, tag, false, caseTok), caseTok);
+    bool irrefutable = true;
+    for (int k = 0; k < subs.len; k++) {
+        struct syntax* sub = *(struct syntax**)ListGetIdx(&subs, k);
+        struct operand* subAt = NULL;
+        struct type ft = unknownTypeStandIn();
+        if (c) {
+            ft = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+            subAt = enumIsAs(patPath(at), tag, true, caseTok);
+            subAt->noCheck = true; //its case was just tested
+            if (c->type.vars.len > 1) {
+                char* fn = MallocOrCrash(16);
+                snprintf(fn, 16, "%d", k);
+                subAt = OperandMember(NULL, subAt, StrFromCStr(fn), caseTok);
+            }
+        }
+        if (!buildPatternAt(ctx, sub, subAt, ft, clause, alt, altIdx, bound, test)) irrefutable = false;
+    }
+    if (alt && at && c && at->opType == OPERATION_READ_VAR && irrefutable) alt->coversTag = tag;
+    return false; //a case is one of several
+}
+
+//S12b: a case's or nomatch's body - its block, or in a match used as a value its "=> v" (a block there must leave,
+//as a catch clause's in value position does, R9b)
+static bool blockLeavesValue(struct list* block);
+static void buildCaseBody(struct checkCtx* ctx, struct syntax* s, bool asValue, struct list* block, struct operand** value) {
+    struct syntax* valueNode = firstPartOfType(s, SNTX_CASE_VALUE);
+    if (valueNode) {
+        if (!asValue) ErrMsgSemantic(firstTokOfType(valueNode, TOK_ARROW), MATCH_ARROW_IN_STATEMENT);
+        *value = buildExprFromSyntax(ctx, firstPartOfType(valueNode, SNTX_EXPR));
+        *block = ListInit(sizeof(struct statement));
+        return;
+    }
+    struct syntax* b = firstPartOfType(s, SNTX_BLOCK);
+    *block = buildBlock(ctx, b);
+    if (asValue && !blockLeavesValue(block)) ErrMsgSemantic(firstTokAnywhere(b), MATCH_VALUE_BLOCK_STAYS);
+}
+
+//S13-S13e: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
+//guard and the body and nowhere else
+struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct operand* subject, bool asValue) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_CASE;
-    stmt.isChoiceCase = true;
+    stmt.caseAlts = ListInit(sizeof(struct caseAlt));
     stmt.caseBindings = ListInit(sizeof(struct var*));
-    struct syntax* nameNode = firstPartOfType(pat, SNTX_NAME);
-    struct list idens = allTokOfType(nameNode, TOK_IDEN);
-    struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
-    struct list binds = allTokOfType(pat, TOK_IDEN);
-
-    stmt.op = OperandIntLiteral(caseTok);
-    if (matchedType.bType != BASETYPE_CHOICE) {
-        ErrMsgSemantic(caseTok, MATCH_CASE_TYPE_MISMATCH);
-        stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
-        return stmt;
-    }
-    //the pattern's own type name must be the matched type - the same check an ordinary case gets from
-    //TypeIsSame, made here against the name rather than a built value
-    struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len -2);
-    if (!StrCmp(strFromTok(typeTok), matchedType.name)) {
-        ErrMsgSemantic(typeTok, MATCH_CASE_TYPE_MISMATCH);
-        stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
-        return stmt;
-    }
-    struct var* c = NULL;
-    for (int i = 0; i < matchedType.vars.len; i++) {
-        struct var* v = ListGetIdx(&matchedType.vars, i);
-        if (StrCmp(v->name, strFromTok(caseTok))) { stmt.caseTag = i; c = v; break; }
-    }
-    if (!c) {
-        ErrMsgSemantic(caseTok, UNKNOWN_CHOICE_CASE);
-        stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
-        return stmt;
-    }
-    //the binding list is positional and must name every field: a partial pattern would leave it ambiguous
-    //which field each name refers to, and olang has no "_" to stand for the ones you do not want
-    //allTokOfType walks this node's own direct tokens only - the name chain's identifiers live in the
-    //nested SNTX_NAME child, so `binds` is exactly the binding list
-    int nBinds = binds.len;
-    if (nBinds != c->type.vars.len) {
-        ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY);
-        stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
-        return stmt;
-    }
     struct scope armScope = scopePush(ctx->scope);
     struct scope* saved = ctx->scope;
     ctx->scope = &armScope;
-    for (int i = 0; i < nBinds; i++) {
-        struct token bTok = *(struct token*)ListGetIdx(&binds, i);
-        struct var* f = ListGetIdx(&c->type.vars, i);
-        //a reference in the payload carries the scope variable of the case's own signature (O4b), which means nothing
-        //here: where it lives is the matched value's business, which this arm cannot name - so the binding reads,
-        //walks and passes it on, and nothing is built into it (as through a borrowed field, C2d)
-        struct type bt = f->type;
-        bool refLike = bt.structMAlloc || (bt.bType == BASETYPE_ARRAY && bt.arrMalloc);
-        if (refLike) {
-            bt.scopeParam = NULL;
-            bt.scopeWritten = false;
-            bt.scopeDepth = 0;
+    int altIdx = 0;
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* part = partAt(s, i);
+        if (part->isToken || (part->sntx->type != SNTX_CASE_PATTERN && part->sntx->type != SNTX_EXPR)) continue;
+        struct caseAlt alt = (struct caseAlt){0};
+        alt.binds = ListInit(sizeof(struct caseBind));
+        alt.coversTag = -1;
+        struct list bound = ListInit(sizeof(struct var*));
+        struct token altTok = firstTokAnywhere(part->sntx);
+        if (part->sntx->type == SNTX_CASE_PATTERN) {
+            buildPatternAt(ctx, part->sntx, subject ? patPath(subject) : NULL,
+                           subject ? subject->type : unknownTypeStandIn(), &stmt, &alt, altIdx, &bound, &alt.test);
+        } else {
+            struct operand* val = buildExprFromSyntax(ctx, part->sntx);
+            if (subject && !caseValueFits(ctx, val, subject->type)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
+            else if (subject) alt.test = buildEquality(ctx, patPath(subject), val, val->tok);
         }
-        struct var* local = scopeDeclare(ctx->mod, ctx->scope, strFromTok(bTok), bTok, bt, false);
-        if (local) local->mayBeInitialized = true;
-        if (local && refLike) local->scopeUnnamed = true;
-        ListAdd(&stmt.caseBindings, &local);
+        //S13c: a later alternative binds every name the first one did
+        if (altIdx > 0 && bound.len != stmt.caseBindings.len) ErrMsgSemantic(altTok, CASE_ALT_BINDINGS);
+        if (!alt.test) { alt.test = OperandBoolLiteral(altTok); alt.test->intLiteralVal = 0; alt.coversTag = -1; }
+        ListAdd(&stmt.caseAlts, &alt);
+        altIdx++;
     }
-    stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
+    struct syntax* guard = firstPartOfType(s, SNTX_CASE_GUARD);
+    if (guard) {
+        stmt.caseGuard = buildExprFromSyntax(ctx, firstPartOfType(guard, SNTX_EXPR));
+        if (!OperandIsBool(stmt.caseGuard)) ErrMsgSemantic(stmt.caseGuard->tok, CASE_GUARD_NOT_BOOL);
+    }
+    buildCaseBody(ctx, s, asValue, &stmt.block, &stmt.op);
     ctx->scope = saved;
-    return stmt;
-}
-
-struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct type matchedType) {
-    struct syntax* pat = firstPartOfType(s, SNTX_CASE_PATTERN);
-    if (pat) return buildChoiceCaseStmnt(ctx, s, pat, matchedType);
-    struct operand* val = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    //S13/E10a: where the case is compared through an Eq, it is "==" - text written in place, or the other shape of
-    //the same type, compares as it would there
-    struct type mb = matchedType, vb = val->type;
-    mb.structMAlloc = vb.structMAlloc = mb.refMut = vb.refMut = false;
-    bool viaEq = matchedType.bType != BASETYPE_CHOICE && eqConsults(ctx, matchedType, 0)
-                 && (TypeIsSame(vb, mb) || (OperandIsWrittenText(val) && TypeIsByteArray(mb)));
-    if (!viaEq && !TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_CASE;
-    stmt.op = val;
-    //a payload-free choice case is still an ordinary value comparison, exactly as it always was
-    stmt.block = buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
 }
 
@@ -10967,7 +11184,28 @@ struct statement buildEmptyIfStmnt(struct checkCtx* ctx, struct token tok) {
 //is what lets each of them be valid for only its own type.
 //Unlike a value match (S13) this is exhaustiveness-checked (G15): falling through silently would compile
 //a generic that does nothing for some of its instantiations.
-struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode) {
+//S12b: a type match used as a value is a match of one case that always holds - the selected arm's
+static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* arm, struct token tok) {
+    struct statement m = (struct statement){0};
+    m.sType = STATEMENT_MATCH;
+    m.matchHold = ListInit(sizeof(struct statement));
+    m.matchCases = ListInit(sizeof(struct statement));
+    if (!arm) return m;
+    struct statement c = (struct statement){0};
+    c.sType = STATEMENT_CASE;
+    c.caseAlts = ListInit(sizeof(struct caseAlt));
+    c.caseBindings = ListInit(sizeof(struct var*));
+    struct caseAlt a = (struct caseAlt){0};
+    a.binds = ListInit(sizeof(struct caseBind));
+    a.coversTag = -1;
+    a.test = typeMatchAlwaysTrue(tok);
+    ListAdd(&c.caseAlts, &a);
+    buildCaseBody(ctx, arm, true, &c.block, &c.op);
+    ListAdd(&m.matchCases, &c);
+    return m;
+}
+
+struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode, bool asValue) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
     struct token opTok = firstTokAnywhere(varNode);
@@ -10981,51 +11219,124 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
-        struct syntax* caseTypeNode = firstPartOfType(c, SNTX_TYPE_EXPR);
-        if (!caseTypeNode) continue;
-        struct type caseT = resolveTypeExpr(ctx->mod, caseTypeNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
-        if (!TypeIsSame(operandT, caseT)) continue;
+        //S13e: the arm is chosen while compiling, so there is nothing at run time for a guard to decide
+        struct syntax* guard = firstPartOfType(c, SNTX_CASE_GUARD);
+        if (guard) ErrMsgSemantic(firstTokOfType(guard, TOK_IF), TYPE_MATCH_GUARD);
+        //S13c: "case I32, I64 { }" - any one of the types selects the arm
+        struct list caseTypeNodes = allPartsOfType(c, SNTX_TYPE_EXPR);
+        bool hit = false;
+        for (int k = 0; k < caseTypeNodes.len && !hit; k++) {
+            struct type caseT = resolveTypeExpr(ctx->mod, *(struct syntax**)ListGetIdx(&caseTypeNodes, k),
+                                                ctx->func ? &ctx->func->type.scopeVars : NULL);
+            hit = TypeIsSame(operandT, caseT);
+        }
+        if (!hit) continue;
+        if (asValue) return typeMatchValueArm(ctx, c, opTok);
         //selected: this arm's block IS the statement, spliced in place of the match itself
         stmt.sType = STATEMENT_IF;
         stmt.op = typeMatchAlwaysTrue(opTok);
-        stmt.block = buildBlock(ctx, firstPartOfType(c, SNTX_BLOCK));
+        struct operand* none = NULL;
+        buildCaseBody(ctx, c, false, &stmt.block, &none);
         return stmt;
     }
     struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
     if (nomatchNode) {
+        if (asValue) return typeMatchValueArm(ctx, nomatchNode, opTok);
         stmt.sType = STATEMENT_IF;
         stmt.op = typeMatchAlwaysTrue(opTok);
-        stmt.block = buildBlock(ctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
+        struct operand* none = NULL;
+        buildCaseBody(ctx, nomatchNode, false, &stmt.block, &none);
         return stmt;
     }
     ErrMsgSemantic(opTok, TYPE_MATCH_NOT_EXHAUSTIVE);
+    if (asValue) return typeMatchValueArm(ctx, NULL, opTok);
     return buildEmptyIfStmnt(ctx, opTok);
 }
 
 static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t);
 struct operand* typeMatchAlwaysTrue(struct token tok);
 
-struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
-    if (varNode) return buildTypeMatchStmnt(ctx, s, varNode);
-    struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    //S13/E10a: a type whose "==" consults an Eq is matched through it - the value held once, each case compared to it
-    //as "==" would; the hidden local sits in a block of its own around the match
-    struct scope wrapScope;
-    struct checkCtx wctx;
-    struct list pre = ListInit(sizeof(struct statement));
-    struct var* held = NULL;
-    if (matched->type.bType != BASETYPE_CHOICE && eqConsults(ctx, matched->type, 0)) {
-        wrapScope = scopePush(ctx->scope);
-        wctx = *ctx;
-        wctx.scope = &wrapScope;
-        wctx.blockDepth = ctx->blockDepth + 1;
-        ctx = &wctx;
-        held = holdInHidden(ctx, matched, matched->tok, "match", &pre);
-        matched = OperandReadVar(held, matched->tok);
+//S12-S14, and S12b when asValue: a match used as a value builds the same statement, its cases giving values
+static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue);
+struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) { return buildMatchCore(ctx, s, false); }
+
+//S12b: one type for every value a match gives - a literal, written text or null adapting to the others' (E28)
+static bool condAdapts(struct operand* op);
+static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
+    if (!vals->len) return unknownTypeStandIn();
+    struct operand* anchor = NULL;
+    for (int pass = 0; pass < 3 && !anchor; pass++) {
+        for (int i = 0; i < vals->len && !anchor; i++) {
+            struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+            if (v->pendingLambda) continue;
+            if (pass == 0 && condAdapts(v)) continue;
+            if (pass == 1 && v->isLiteral) continue; //of adaptable ones, a literal gives way to text built here
+            anchor = v;
+        }
     }
+    if (!anchor) {
+        anchor = *(struct operand**)ListGetIdx(vals, 0);
+        FinalizeLambda(anchor, NULL);
+    }
+    struct type t = anchor->type;
+    //text written in each case is a String (T29c), whatever its length - two literals of two lengths are two array types
+    struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+    bool allText = textT != NULL;
+    for (int i = 0; allText && i < vals->len; i++) allText = OperandIsWrittenText(*(struct operand**)ListGetIdx(vals, i));
+    if (allText) t = *textT;
+    bool numLits = true;
+    for (int i = 0; i < vals->len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+        if (!(v->isLiteral && TypeIsNumeric(v->type))) numLits = false;
+    }
+    for (int i = 0; numLits && i < vals->len; i++) { //only literals: the widest, as two literals in "a if c else b"
+        struct type vt = (*(struct operand**)ListGetIdx(vals, i))->type;
+        if (numericTypeRank(vt) > numericTypeRank(t)) t = vt;
+    }
+    bool bad = false;
+    for (int i = 0; i < vals->len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+        FinalizeLambda(v, &t);
+        if (v->type.unknown || t.unknown || TypeIsSame(v->type, t)) continue;
+        if ((condAdapts(v) || numLits || allText) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
+        ErrMsgSemantic(v->tok, MATCH_VALUE_TYPES);
+        bad = true;
+    }
+    return bad ? unknownTypeStandIn() : t; //reported - what it lands in is not asked again
+}
+
+//S12b: "match x { case P => v ... }" - a match used as a value
+struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct statement m = buildMatchCore(ctx, s, true);
+    struct operand* op = operandNew(firstTokOfType(s, TOK_MATCH), OPERATION_MATCH, TypeVanilla(BASETYPE_VOID));
+    op->comprBody = ListInit(sizeof(struct statement));
+    ListAdd(&op->comprBody, &m);
+    struct list vals = SemanticMatchValues(op);
+    op->type = matchValueType(ctx, &vals);
+    return op;
+}
+
+static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
+    struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
+    if (varNode) return buildTypeMatchStmnt(ctx, s, varNode, asValue);
+    struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
+    stmt.matchHold = ListInit(sizeof(struct statement));
+    //S13: the matched value is evaluated once - held in a hidden local the tests then read, unless it is a local
+    //already, which nothing between two tests can change: a guard or a case value is an expression, so it writes a
+    //local only by lending it to a "mut &" parameter, which only a struct or an array can be (E12c). The local is in
+    //a scope of the match's own and needs no block - no arena, no cost when nothing is held.
+    struct scope holdScope = scopePush(ctx->scope);
+    struct checkCtx hctx = *ctx;
+    hctx.scope = &holdScope;
+    ctx = &hctx;
+    bool local = matched->opType == OPERATION_READ_VAR && matched->readVar && !matched->readVar->owner;
+    bool lendable = !matched->type.structMAlloc
+                    && (matched->type.bType == BASETYPE_STRUCT || matched->type.bType == BASETYPE_ARRAY);
+    if (!(local && !lendable) && !matched->type.unknown && matched->type.bType != BASETYPE_VOID) {
+        matched = OperandReadVar(holdInHidden(ctx, matched, matched->tok, "match", &stmt.matchHold), matched->tok);
+    }
     stmt.op = matched;
 
     //N-way version of the same fold buildIfStmnt does for two branches - see the flow-sensitive scope-
@@ -11039,10 +11350,7 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
-        struct statement caseStmt = buildCaseStmnt(ctx, c, matched->type);
-        if (held && !caseStmt.isChoiceCase && caseStmt.op) {
-            caseStmt.caseCmp = buildEquality(ctx, OperandReadVar(held, caseStmt.op->tok), caseStmt.op, caseStmt.op->tok);
-        }
+        struct statement caseStmt = buildCaseStmnt(ctx, c, matched->type.bType == BASETYPE_VOID ? NULL : matched, asValue);
         ListAdd(&stmt.matchCases, &caseStmt);
         struct list afterCase = snapshotScopeBindings(ctx->scope);
         foldScopeBindingsBranch(&merged, &afterCase);
@@ -11052,35 +11360,38 @@ struct statement buildMatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
     if (nomatchNode) {
         stmt.hasNomatch = true;
-        stmt.nomatchBlock = buildBlock(ctx, firstPartOfType(nomatchNode, SNTX_BLOCK));
+        buildCaseBody(ctx, nomatchNode, asValue, &stmt.nomatchBlock, &stmt.nomatchValue);
         struct list afterNomatch = snapshotScopeBindings(ctx->scope);
         foldScopeBindingsBranch(&merged, &afterNomatch);
         applyScopeBindingsSnapshot(&baseline);
     }
-    //S13a: a match over a CHOICE type must cover every case, or say it does not with "nomatch". This is
-    //the one type where exhaustiveness is decidable and worth deciding: the set of cases is closed and
-    //written in one declaration, so the compiler can read it - unlike an interface, which is open by
-    //construction, and unlike an integer, whose "cases" are not enumerable in any useful sense. It is what
-    //makes adding a case to a choice tell you every place that now has to handle it, which is most of the
-    //reason to declare one. "nomatch" is the opt-out and already existed.
+    //S13a: a match over an enum type must cover every case, or say it does not with "nomatch". This is the one type
+    //where exhaustiveness is decidable and worth deciding: the set of cases is closed and written in one declaration,
+    //so the compiler can read it - unlike an integer, whose "cases" are not enumerable in any useful sense. It is what
+    //makes adding a case to an enum tell you every place that now has to handle it, which is most of the reason to
+    //declare one. A case covers what it matches whatever the payload holds, and only when it has no guard (S13e):
+    //a nested pattern, a value in the payload or a guard may let the value through to the next case.
     if (matched->type.bType == BASETYPE_CHOICE && !stmt.hasNomatch) {
         for (int i = 0; i < matched->type.vars.len; i++) {
             bool covered = false;
             for (int j = 0; j < stmt.matchCases.len && !covered; j++) {
                 struct statement* cs = ListGetIdx(&stmt.matchCases, j);
-                if (cs->isChoiceCase) covered = (cs->caseTag == i);
-                else if (cs->op && cs->op->type.bType == BASETYPE_CHOICE) covered = (cs->op->intLiteralVal == i);
+                for (int k = 0; !cs->caseGuard && k < cs->caseAlts.len && !covered; k++) {
+                    covered = ((struct caseAlt*)ListGetIdx(&cs->caseAlts, k))->coversTag == i;
+                }
             }
             if (!covered) { ErrMsgSemantic(matched->tok, MATCH_NOT_EXHAUSTIVE); break; }
         }
+    }
+    //S12b: a match used as a value gives one on every path - only an enum's cases can be known to be covered
+    if (asValue && !stmt.hasNomatch && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
+        ErrMsgSemantic(firstTokOfType(s, TOK_MATCH), MATCH_VALUE_NEEDS_NOMATCH);
     }
     //beyond that, this checker doesn't attempt exhaustiveness analysis, so "no case matched" is always
     //folded in as a live possibility (via merged's own initial "unchanged" value) - conservative, never
     //unsound, matching the same "no else" treatment buildIfStmnt gives a bare "if" with nothing to run.
     applyScopeBindingsSnapshot(&merged);
-    if (!held) return stmt;
-    ListAdd(&pre, &stmt);
-    return rangeIf(typeMatchAlwaysTrue(firstTokOfType(s, TOK_MATCH)), pre);
+    return stmt;
 }
 
 //O13, generalised past a tag written in the return type itself: a returned value whose TYPE declares scope
@@ -12735,6 +13046,10 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     for (int i = 0; i < allModules.len; i++) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) refreshStructSnapshots(ListGetIdx(&m->types, j));
+    }
+    for (int i = 0; i < allModules.len; i++) {
+        struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
+        for (int j = 0; j < m->types.len; j++) checkHoldsItself(ListGetIdx(&m->types, j));
     }
     //M21: "is a method" is a fact about a resolved first parameter, so a name shared by several
     //declarations can only be judged once every signature in every module exists

@@ -354,6 +354,18 @@ struct lambdaCapture {
     struct var* inner;
 };
 
+//S13b/S13c: one way a case clause matches - test (a Bool over the match's held value) and, once it holds, the
+//clause's bindings filled from the payload fields this alternative reads them from
+struct caseBind {
+    struct var* v;               //one of the clause's caseBindings
+    struct operand* from;        //the field it takes, read from the match's held value through "as" (E32)
+};
+struct caseAlt {
+    struct operand* test;
+    struct list binds;           //struct caseBind
+    long long coversTag;         //S13a: the enum case this alternative matches whatever its payload holds, else -1
+};
+
 struct statement {
     enum statementType sType;
     int line; //B2e: the source line the statement starts on, for -d's line table; 0 when synthesized
@@ -381,18 +393,19 @@ struct statement {
     struct list block;           //list of struct statement: the primary body; TRY_CATCH: the catch body
     struct statement* elseStmnt; //IF only: heap-allocated, NULL if no else clause
     bool elseIsBlock;            //IF only: true if elseStmnt is a bare block wrapper rather than a chained "else if"
-    //T17b: a CASE that binds a payload-carrying choice case's fields. caseTag is the case's own ordinal
-    //(what the tag is compared against at run time) and caseBindings holds one local per payload field, in
-    //the case's declared order, each visible only inside this arm. isChoiceCase distinguishes a tag test
-    //from an ordinary value comparison, which a payload-free choice case still is.
-    bool isChoiceCase;
-    long long caseTag;
-    struct operand* caseCmp;     //S13/E10a: a value case whose type consults Eq - "matched == case", as written
-                                 //(the matched value read from a hidden local), used in place of the built-in test
-    struct list caseBindings;    //list of struct var*
+    //S13-S13e: a CASE is its alternatives, any one of which selects it, and an optional guard. caseBindings holds
+    //the clause's own locals (struct var*), one per name its patterns bind - every alternative binds the same ones
+    //(S13c), so they are declared once and each alternative fills them its own way
+    struct list caseAlts;        //CASE only: struct caseAlt, in source order
+                                 //(a CASE's `op` is its value in a match used as one, S12b - NULL for a block)
+    struct operand* caseGuard;   //CASE only: "if cond" after the patterns, NULL when none - read after the bindings
+    struct list caseBindings;    //CASE only: list of struct var*
     struct list matchCases;      //MATCH only: list of struct statement (STATEMENT_CASE)
+    struct list matchHold;       //MATCH only: statements run first - the matched value held in a hidden local, whose
+                                 //read is `op`; empty when `op` is the matched expression itself (a local, read again)
     bool hasNomatch;             //MATCH only
     struct list nomatchBlock;    //MATCH only
+    struct operand* nomatchValue; //MATCH used as a value only (S12b): "nomatch => v", NULL for a block
     struct list catchClauses;    //TRY_CATCH only: struct catchClause, in order (R9b)
 };
 
@@ -431,6 +444,7 @@ enum operation {
                       //point (an omitted bound is materialised as 0 or len(base) when the operand is built).
                       //op->type is a runtime-length reference to base's element type, tagged to the scope
                       //base's own storage belongs to: a slice is a borrow, not an allocation.
+    OPERATION_MATCH, //S12b: a match used as a value - comprBody holds its one STATEMENT_MATCH, whose cases give values
     OPERATION_IS, //E32: "x is Enum.Case" - args [x]; castTag the case
     OPERATION_AS, //E32: "x as Enum.Case" - args [x]; castTag the case, op->type its payload
     OPERATION_BOUNDS, //E31: a derived TryAt/TrySlice's bounds check - args [v, lo, hi]: v itself, once lo <= v < hi
@@ -519,7 +533,8 @@ struct operand {
                                 //falling through to after it; cgEndLbl is where (codegen)
     char* cgEndLbl;
     bool noCheck;               //S9e: an array element read a loop's lowering makes - in range by construction, so
-                                //a "try" around the loop does not check it
+                                //a "try" around the loop does not check it; S13b: an "as" a case pattern reads a
+                                //payload with, once its own test has selected the case - nothing left to check
     int cgSlots, cgDepth;       //codegen: the open block scopes where a tried operand with clauses is emitted - a
     bool cgDepthSet;            //failure deeper inside it (a comprehension's loop) unwinds to there before a clause
     bool castEnum;              //E32: OPERATION_IS/AS on an enum value - castTag is the case
@@ -575,6 +590,8 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
 struct var* SemanticCallOf(struct type t);
 struct var* SemanticStrOf(struct type t); //E11c: the Str "$" renders a value of type t through, or NULL
 bool SemanticCallMatches(struct type t, struct type fnType);
+//S12b: the values a match used as one can give, in order
+struct list SemanticMatchValues(struct operand* op);
 extern struct semaModule* SemanticMethodScope;
 struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whose imports decide which built-in methods are visible
 //M21: the type f is a method OF - its first parameter's type, when that type is declared in f's own module

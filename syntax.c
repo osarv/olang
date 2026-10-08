@@ -1481,33 +1481,29 @@ struct syntax* parseStmntDo(SyntaxCtx sc) {
     return s;
 }
 
-//"case <expr|type-expr> block". A type match (G13) writes types where a value match writes values, so
-//when the enclosing match's operand was a type variable the case items are parsed as type expressions -
-//the flag is passed down rather than guessed here, since "case int32" is a perfectly good expression
-//shape too (a bare name) and only the operand can settle which reading is meant.
-//T17b: "case Shape.Circle(r)" - a case that BINDS a payload-carrying choice case's fields to fresh names
-//for that arm, rather than comparing against a value. The identifiers inside the parens are always binding
-//occurrences, never expressions, which is what makes the form unambiguous against a construction written
-//with the same characters; it is also what every language with sum types does. Committed to only when the
-//exact shape "<chain>.Case( IDEN {, IDEN} )" parses, so anything else still parses as an ordinary
-//expression case.
+//S13b/S13d: "[alias.]Type.Case [ ( sub-pattern {, sub-pattern} ) ]" - a case of an enum, and what its payload must
+//hold. Committed to only when everything before the last name is a known type (the test a choice value's own
+//syntax makes), so "Point(1, 2)", "lib.f(x)" and "v.m(1)" stay calls, and only when every position parses as a
+//sub-pattern: anything else is read as an ordinary expression case, compared by "==" (S13).
+static struct syntax* parseSubPattern(SyntaxCtx sc);
+bool trailingWordFollowsKnownType(SyntaxCtx sc, struct syntax* name);
+struct syntax* parseExprUnary(SyntaxCtx sc);
 struct syntax* parseCasePattern(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct syntax* name = parseName(sc);
-    if (!name) return NULL;
-    struct token open = acceptTok(sc, TOK_PAREN_O);
-    if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
+    if (!name || !trailingWordFollowsKnownType(sc, name)) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_CASE_PATTERN);
     addSntx(s, name);
+    struct token open = acceptTok(sc, TOK_PAREN_O);
+    if (open.type == TOK_NONE) return s; //the case whatever its payload holds
     addTok(s, open);
-    while (true) {
-        struct token iden = acceptTok(sc, TOK_IDEN);
-        if (iden.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-        addTok(s, iden);
-        ListAdd(&sc->localNames, &iden.str); //S8b: a payload binding is a local
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+    while (peekTok(sc).type != TOK_PAREN_C) {
+        struct syntax* sub = parseSubPattern(sc);
+        if (!sub) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, sub);
+        struct token comma = acceptTok(sc, TOK_COMMA);
+        if (comma.type == TOK_NONE) break;
+        addTok(s, comma);
     }
     struct token close = acceptTok(sc, TOK_PAREN_C);
     if (close.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
@@ -1515,36 +1511,113 @@ struct syntax* parseCasePattern(SyntaxCtx sc) {
     return s;
 }
 
+//S13d: a literal, possibly negated - nothing else is a value in a payload pattern, so no name ever is
+static bool isLiteralUnary(struct syntax* u) {
+    if (u->type != SNTX_EXPR_UNARY || u->parts.len < 1 || u->parts.len > 2) return false;
+    struct syntaxPart* p = ListGetIdx(&u->parts, u->parts.len - 1);
+    if (p->isToken || p->sntx->type != SNTX_EXPR_POSTFIX || p->sntx->parts.len != 1) return false;
+    p = ListGetIdx(&p->sntx->parts, 0);
+    if (p->isToken || p->sntx->type != SNTX_EXPR_PRIMARY || p->sntx->parts.len != 1) return false;
+    p = ListGetIdx(&p->sntx->parts, 0);
+    if (!p->isToken) return false;
+    enum tokenType lit = p->tok.type;
+    if (u->parts.len == 1) {
+        return lit == TOK_BOOL_LIT || lit == TOK_NULL_LIT || lit == TOK_INT_LIT || lit == TOK_FLOAT_LIT
+               || lit == TOK_CHAR_LIT || lit == TOK_STR_LIT;
+    }
+    struct syntaxPart* op = ListGetIdx(&u->parts, 0);
+    if (op->isToken || op->sntx->type != SNTX_EXPR_UNARY_OP) return false;
+    return ((struct syntaxPart*)ListGetIdx(&op->sntx->parts, 0))->tok.type == TOK_SUB
+           && (lit == TOK_INT_LIT || lit == TOK_FLOAT_LIT);
+}
+
+//S13b/S13d: one position of a payload pattern, which must be followed by "," or ")": a name binding the field ("_"
+//binding nothing), a nested enum case, or a literal
+static struct syntax* parseSubPattern(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* s = NULL;
+    if (peekTok(sc).type == TOK_IDEN) {
+        s = parseCasePattern(sc);
+        if (!s) {
+            struct token iden = acceptTok(sc, TOK_IDEN);
+            s = newNode(SNTX_PAT_BIND);
+            addTok(s, iden);
+            ListAdd(&sc->localNames, &iden.str); //S8b: a payload binding is a local
+        }
+    } else {
+        struct syntax* u = parseExprUnary(sc);
+        if (u && isLiteralUnary(u)) {
+            struct syntax* e = newNode(SNTX_EXPR);
+            addSntx(e, u);
+            s = newNode(SNTX_PAT_VALUE);
+            addSntx(s, e);
+        }
+    }
+    enum tokenType next = peekTok(sc).type;
+    if (!s || (next != TOK_COMMA && next != TOK_PAREN_C)) { TokenSetCursor(sc->tc, cur); return NULL; }
+    return s;
+}
+
+//S12b: what a case or nomatch does - a block, or "=> expr" giving a match used as a value its value. The value runs
+//to the end of its line (a statement end after it is taken here) or to the next clause; which of the two a match
+//accepts is the checker's to say, so a stray "=>" in a statement is reported as what it is
+static struct syntax* parseCaseBody(SyntaxCtx sc) {
+    struct token arrow = acceptTok(sc, TOK_ARROW);
+    if (arrow.type == TOK_NONE) return parseBlock(sc);
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* e = parseExpr(sc);
+    if (!e) { TokenSetCursor(sc->tc, cur); return NULL; }
+    acceptTok(sc, TOK_STMNT_END);
+    struct syntax* v = newNode(SNTX_CASE_VALUE);
+    addTok(v, arrow);
+    addSntx(v, e);
+    return v;
+}
+
+//"case alt {, alt} [if guard] block". A type match (G13) writes types where a value match writes values, so
+//when the enclosing match's operand was a type variable the alternatives are parsed as type expressions - the
+//flag is passed down rather than guessed here, since "case I32" is a perfectly good expression shape too (a bare
+//name) and only the operand can settle which reading is meant.
+//S13c: each alternative is a pattern (S13b) or a value; a value is an expression with no top-level conditional
+//(E28), so the "if" of a guard (S13e) is never read as one - the comprehension filter's rule. A pattern must be
+//followed by what can follow an alternative, or it is read as an expression after all.
 struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_CASE);
     if (kw.type == TOK_NONE) return NULL;
-    int afterKw = TokenGetCursor(sc->tc);
-    struct syntax* val = typeMatch ? parseTypeExpr(sc) : parseCasePattern(sc);
-    if (!val) val = typeMatch ? NULL : parseExpr(sc);
-    struct syntax* block = val ? parseBlock(sc) : NULL;
-    if (!block && !typeMatch) {
-        //E32: a type case of a match on an interface value - "case c Circle& { }", "case Square& { }"
-        TokenSetCursor(sc->tc, afterKw);
-        val = newNode(SNTX_CASE_TYPE);
-        int at = TokenGetCursor(sc->tc);
-        struct token name = acceptTok(sc, TOK_IDEN);
-        struct syntax* t = name.type != TOK_NONE ? parseTypeExpr(sc) : NULL;
-        if (t && peekTok(sc).type == TOK_CURLY_O) addTok(val, name);
-        else {
-            TokenSetCursor(sc->tc, at);
-            t = parseTypeExpr(sc);
-        }
-        if (t) {
-            addSntx(val, t);
-            block = parseBlock(sc);
-        }
-    }
-    if (!val || !block) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_STMNT_CASE);
     addTok(s, kw);
-    addSntx(s, val);
-    addSntx(s, block);
+    while (true) {
+        struct syntax* alt = NULL;
+        if (typeMatch) alt = parseTypeExpr(sc);
+        else {
+            int at = TokenGetCursor(sc->tc);
+            alt = parseCasePattern(sc);
+            enum tokenType next = peekTok(sc).type;
+            if (alt && next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW) {
+                TokenSetCursor(sc->tc, at);
+                alt = NULL;
+            }
+            if (!alt) alt = parseExprNoCond(sc);
+        }
+        if (!alt) { TokenSetCursor(sc->tc, cur); return NULL; }
+        addSntx(s, alt);
+        struct token comma = acceptTok(sc, TOK_COMMA);
+        if (comma.type == TOK_NONE) break;
+        addTok(s, comma);
+    }
+    struct token ifKw = acceptTok(sc, TOK_IF);
+    if (ifKw.type != TOK_NONE) {
+        struct syntax* cond = parseExpr(sc);
+        if (!cond) { TokenSetCursor(sc->tc, cur); return NULL; }
+        struct syntax* g = newNode(SNTX_CASE_GUARD);
+        addTok(g, ifKw);
+        addSntx(g, cond);
+        addSntx(s, g);
+    }
+    struct syntax* body = parseCaseBody(sc);
+    if (!body) { TokenSetCursor(sc->tc, cur); return NULL; }
+    addSntx(s, body);
     return s;
 }
 
@@ -1552,7 +1625,7 @@ struct syntax* parseStmntNomatch(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_NOMATCH);
     if (kw.type == TOK_NONE) return NULL;
-    struct syntax* block = parseBlock(sc);
+    struct syntax* block = parseCaseBody(sc);
     if (!block) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct syntax* s = newNode(SNTX_STMNT_NOMATCH);
     addTok(s, kw);
@@ -1560,7 +1633,10 @@ struct syntax* parseStmntNomatch(SyntaxCtx sc) {
     return s;
 }
 
-struct syntax* parseStmntMatch(SyntaxCtx sc) {
+//S12/S12b: one parser for both uses - a statement, or (asValue) an expression whose node is SNTX_EXPR_MATCH
+static struct syntax* parseMatch(SyntaxCtx sc, bool asValue);
+struct syntax* parseStmntMatch(SyntaxCtx sc) { return parseMatch(sc, false); }
+static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_MATCH);
     if (kw.type == TOK_NONE) return NULL;
@@ -1571,7 +1647,7 @@ struct syntax* parseStmntMatch(SyntaxCtx sc) {
     if (!val) { TokenSetCursor(sc->tc, cur); return NULL; }
     struct token open = acceptTok(sc, TOK_CURLY_O);
     if (open.type == TOK_NONE) { TokenSetCursor(sc->tc, cur); return NULL; }
-    struct syntax* s = newNode(SNTX_STMNT_MATCH);
+    struct syntax* s = newNode(asValue ? SNTX_EXPR_MATCH : SNTX_STMNT_MATCH);
     addTok(s, kw);
     addSntx(s, val);
     addTok(s, open);
@@ -2315,6 +2391,13 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
         case TOK_STR_LIT: {
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
             addTok(s, advanceTok(sc));
+            return s;
+        }
+        case TOK_MATCH: { //S12b: a match used as a value
+            struct syntax* m = parseMatch(sc, true);
+            if (!m) return NULL;
+            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
+            addSntx(s, m);
             return s;
         }
         case TOK_TRY: {
