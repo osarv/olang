@@ -42,6 +42,10 @@ because what it finds about structure feeds the refactor.
   (3) semantic.c operands/statements/scopes half, (4) codegen.c incl. the runtime IR, (5) comptime.c, main.c, util,
   errmsg + std/prelude. Each reports only findings it reproduced with a small olang program on the current compiler
   (CONFIRMED) or could not reproduce but traced (PLAUSIBLE, kept apart). Fixes go in worktrees with regression tests.
+- Review leads (give to the agents): the defer work found that a function returning a local ARRAY VALUE hands back
+  a pointer into its own just-closed scope and the caller copies from freed memory - safe only because nothing runs
+  between the close and the copy (does a destructor allocating at that close break it?); a fix wants a callee/caller
+  protocol change (the callee copies into the caller's storage).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
