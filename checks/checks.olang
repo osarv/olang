@@ -211,6 +211,16 @@ test "a program reads its arguments and environment, and uses the file system" {
     assert outOf(dir).Contains("0 arguments, 0 seen by a global\nvalue: unset\n")
 }
 
+# B5b: os.Exit ends the process with the status it is given, built and interpreted alike, after what was written
+test "os.Exit ends the process with its status" {
+    dir := fresh("osexit")
+    os.Run("cp checks/fixtures/osexit/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b osexit.olang > out.txt 2>&1 && ./build/osexit > out.txt 2>&1") == 42 or failed("osexit", dir)
+    assert outOf(dir) == "before\n" or failed("osexit output", dir)
+    assert sh(dir, "\"$OLANG\" -i osexit.olang > out.txt 2>&1") == 42 or failed("osexit -i", dir)
+    assert outOf(dir) == "before\n" or failed("osexit -i output", dir)
+}
+
 # S18c: an assert the compiler proves emits no run-time check at all
 test "a proven assert leaves no run-time check" {
     dir := fresh("s18c")

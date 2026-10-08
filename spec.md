@@ -3636,6 +3636,12 @@ the end, or a bare `return`), the process exits with status `0`. If an error (§
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
 declared error type and word that escaped) and exits with status `1`.
 
+**B5b.** A program ends with any other status only by calling `os.Exit(code)` (the `std/os` module), which ends the
+process with `code` as its status — of which the platform passes on the low 8 bits — by the same exit path `done` and
+`fail` take (S16b). It ends the **process** whatever is running, a test included, where `done` and `fail` end the
+innermost thing that can end (S16a); a test that calls it ends the whole test run. It is an ordinary call, not a
+statement D10a counts as leaving: where a result is owed, `unreachable` follows it.
+
 **B5a.** Every module's global variables (§3 D12) are initialized before `main` runs, each module's own
 in declaration order. Across modules the order is **imports first**: a module is initialized after every
 module it imports has been. Where imports form a cycle (§4.6 allows one), the relative order of the

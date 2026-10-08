@@ -28,7 +28,7 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** (numbers 2 and 6-8 are unused since the 2026-10-08 answers; my calls keep 10 onward)
+**QUESTIONS for the user** (numbers 2 and 6-9 are unused since the 2026-10-08 answers; my calls keep 10 onward)
 1. `-i` next stage: (a) per-statement temporary arena + freeing locals, -i only; or (b) redesign with compact values and
    scope-mirroring freeing, which also gives destructors. Default: stage 1 as is. Rec: (b) when -i matters to you.
 3. `match` as an expression - its syntax: (a) `case X => value`, (b) `case X: value`; either way a case may instead be
@@ -39,9 +39,6 @@ design. Do what you want") - nothing to decide until a GUI is written.
 4. A `try` default for a by-value result that holds references (rejected, TRY_DEFAULT_HOLDS_REFERENCES). Default:
    rejected. Rec: leave until real code needs it.
 5. Split on an empty separator gives single bytes (Go) rather than an error (Python). Default: Go's. Rec: keep.
-9. `os.Exit(code)`: B5 says a process ends with exactly two statuses, but a self-hosted `-i` must pass on a program's
-   status (134 after an abort), and `extern fn exit` already works in any program (X7). Default: none in std.
-   Rec: add `os.Exit(code I32)` to std, documented as the one way past B5; `main` keeps its two outcomes.
 
 **OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
 overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later

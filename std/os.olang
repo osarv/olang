@@ -6,6 +6,7 @@
 import "io"
 
 extern fn system(cmd Array<U8>) I32
+extern fn exit(status I32)
 extern fn open(path Array<U8>, flags I32) I32
 extern fn creat(path Array<U8>, mode U32) I32
 extern fn close(fd I32) I32
@@ -90,6 +91,14 @@ fn Args() Array<String&>& {
 fn Env(name String&) String& ? {
     key := $name "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) }) catch OsError { error }
+}
+
+# B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the same exit path
+# `done` and `fail` take. It ends the PROCESS whatever is running - a test included, so a test calling it ends the
+# whole run - where `done`/`fail` end the innermost thing that can end (S16a). An ordinary call to D10a: a function
+# owing a result writes `unreachable` after it.
+fn Exit(code I32) {
+    exit(code)
 }
 
 # runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at

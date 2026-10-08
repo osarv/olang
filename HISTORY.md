@@ -8022,3 +8022,19 @@ from their original form.
   Env, ReadDir, ReadLink and RealPath return read back after churning the arena), and a checks scenario building a
   fixture that prints its arguments, an environment variable and the results of file calls - run with arguments and a
   variable, interpreted with `-i` and the same arguments (identical output but for its own name), and run without.
+
+## `os.Exit(code)` (B5b, 2026-10-08)
+
+- Raised by the std/os work (X6): B5 gave a process exactly two outcomes, 0 and 1, but a self-hosted `olang -i` has to
+  end with whatever status the program it ran would have - 134 after an abort, or whatever a shell command it runs on
+  a program's behalf returns. And the rule was no longer a wall: since X7 any module may declare `extern fn exit` and
+  call it. So the question was only whether std should say so out loud; the user: "do the os.Exit thing".
+- `fn Exit(code I32)` in std/os is the C library's `exit`, the same exit path `done` and `fail` take outside a test
+  (`__olang_end` calls `exit` there). It ends the process whatever is running - a test included - and that is the
+  answer to the user's follow-up, "should we still have done/fail then?": yes. `done`/`fail` end the innermost thing
+  that can end (S16a), the current test while one runs, so a helper that gives up with `fail` stays testable; a helper
+  calling `os.Exit` would end the whole test run, as Go's does. They are also statements D10a counts as leaving, and
+  `os.Exit` is an ordinary call (a function owing a result writes `unreachable` after it).
+- Checked in checks/checks.olang with a fixture that writes a line and exits 42: built and run, and under `-i` (where
+  the interpreter's libffi call reaches the real `exit` in the compiler's own process), both end with 42 after the
+  line, and the line after the call is never written.

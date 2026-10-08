@@ -223,7 +223,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **`main`'s signature is fixed:** no parameters, no success type, at least one declared error -
   `fn main() ? SomeError [+ ...] { ... }`, no other shape valid. Process exit is exactly two values:
   a normal return is OS exit 0; an error escaping `main` uncaught prints
-  `unhandled error: TypeName.Word` to stderr and exits 1. There is no "return a status" convention.
+  `unhandled error: TypeName.Word` to stderr and exits 1. There is no "return a status" convention. The one way
+  to another status is `os.Exit(code)` in std (B5b, 2026-10-08), for a self-hosted `-i` passing on a program's status.
 - **Every path must return (D10a), and `abort`/`unreachable` (S16c/S16d).** A function declaring a result
   type that falls off the end used to return a **silently zero value** - `0`, an all-zero struct, or a
   **null reference** - with no diagnostic. Found by asking what `unreachable` would be *for*, which turned
@@ -2917,6 +2918,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   **Found on the way, pre-existing**: `extern fn exit` failed to compile (the runtime's hand-kept owned-symbol list
   lacked `exit`/`abort`/`setjmp`/`longjmp`; it now reads the runtime's own text - X7), and `n := a.Len()` was rejected
   by D15 (the built-in `Len()` and value-giving atomics are calls too now).
+- **`os.Exit(code)` (B5b, 2026-10-08, the user: "do the os.Exit thing").** Ends the process with any status, through
+  the exit path `done`/`fail` take - asked for because a self-hosted `-i` must pass on a program's status (134 after
+  an abort), and `extern fn exit` already reached it in any program since X7. **`done`/`fail` stay** (the user asked
+  whether they should): they end the innermost thing that can end, so code calling them stays testable, where
+  `os.Exit` always ends the process and a test calling it ends the whole run (Go's `os.Exit` in a test does the same).
+  An ordinary call, so D10a does not count it as leaving.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
