@@ -10,7 +10,7 @@ metadata:
 
 The open question was how a growable `Vec<T>` reallocates when a scope is a bump allocator that frees
 nothing. **Answered by dropping Vec.** olang's workload (LLM inference, big data) allocates once at a
-size known at load time and never resizes — which `T[expr]` already is. Growth only matters for
+size known at load time and never resizes — which `T[expr]` already was (now `Array<T>(n)`). Growth only matters for
 incremental construction, where contiguity buys nothing until the end.
 
 So: **`List<T>` is chunked and append-only**, with `ToArray()` copying to contiguous. Chunked indexing

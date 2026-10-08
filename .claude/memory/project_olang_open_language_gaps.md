@@ -52,6 +52,8 @@ The generic-inference literal gap (2026-09-21) is **RESOLVED** as G9a (2026-09-2
    must write `List< <T> >` (G8a: bare names in type-args resolve, never introduce). Go's answer is that a
    receiver's type args always introduce.
 
+**Status 2026-10-08:** historical - every item here is resolved, item 1 as D8c (multiple returns). O10e (the scope order) was itself removed
+later by O4b. Nothing in this file is open.
 **Status 2026-09-29:** item 1 RESOLVED as D8c (multiple returns, `be0f44d`); scope order RESOLVED as O10e;
 the "grow builtin" question resolved (no such builtin; user satisfied). Everything still awaiting the user is
 in [[project-olang-pending-decisions]]. Older status line follows.

@@ -3671,13 +3671,14 @@ chosen branch holds further such conditions (to an implementation-defined depth)
 attempt but the last are not reported. A condition that cannot be evaluated (K1) is a compile-time error
 naming the operation that prevents it and where it is written; so is one using a declaration that exists
 only inside a branch still being decided, since its value would depend on the choice it is making. Text
-compares here as it does everywhere else (E10), not by content.
+compares here as it does everywhere else: a `String` by content, through its `Eq` (E10a).
 
 **B10.** `-D Name=value` (or `-DName=value`), given any number of times alongside any mode, defines a
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
 shaped as an integer literal is an integer (typed by T6a), text shaped as a float literal a float, each
-optionally preceded by `-`; anything else — or anything in double quotes — is text, a `U8[N]` holding it.
+optionally preceded by `-`; anything else — or anything in double quotes — is text, a `String` (T29c), so it
+compares, renders and passes as any other text does.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, as is defining one name twice.

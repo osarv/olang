@@ -17,7 +17,7 @@ chan.olang's mutex) and NOT M:N. 100k spawns went 5.4s/843MB -> 1.15s/6MB. The t
 worker must be returned when its task RETURNS, not when the join observes it — returning at
 the join reuses nothing during a fan-out and measured 225s, a 44x regression;
 (4) DONE — spec P1g, `spawn TARGET = CALL`, which also gives parallel map; (5) DONE — memory model written as spec P8/P8a/P8b/P8c; (6) DONE — spec X3a: reserve an upper bound, keep the `&` for arena alignment, drop `mut` for opacity; clang-probe rejected. Was: chan.olang's hardcoded
-glibc struct sizes; (7) atomics DONE (spec P9/P9a: five builtins, seq_cst, TSan-visible — verified); cancellation and timeout still open — atomics must be genuine LLVM atomic
+glibc struct sizes; (7) atomics DONE (spec P9/P9a: five builtins, seq_cst, TSan-visible — verified); cancellation and timeout DONE 2026-10-07 (std/cancel) — atomics must be genuine LLVM atomic
 instructions so ThreadSanitizer follows them, or they owe __tsan_acquire/__tsan_release;
 same if the thread_local chunk pool is ever made global.
 

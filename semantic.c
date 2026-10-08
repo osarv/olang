@@ -12740,6 +12740,15 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     //declarations can only be judged once every signature in every module exists
     for (int i = 0; i < allModules.len; i++) checkMethodOverloads(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) checkDefaultClashes(*(struct semaModule**)ListGetIdx(&allModules, i)); //M19e
+    //B10/T29c: a text build constant is a String, as written text is wherever its type is read off it. The build
+    //module is made before the prelude, so its literal was built with U8 elements and no String to be: it is built
+    //again from its token now that Char and String exist (an array is only ever a text constant here)
+    for (int i = 0; i < buildModule->vars.len; i++) {
+        struct var* bv = ListGetIdx(&buildModule->vars, i);
+        if (!bv->initExpr || bv->type.bType != BASETYPE_ARRAY) continue;
+        bv->initExpr = OperandStringLiteral(bv->initExpr->tok);
+        bv->type = inferredDeclType(NULL, bv->initExpr);
+    }
     struct list inits = SemanticInitOrder();
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));

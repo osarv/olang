@@ -7819,29 +7819,76 @@ from their original form.
   to cover were enumerated (local and parameter nodes, global values, returned values, aggregate elements, reference
   targets including a slice's view, captures) and are the starting point if that is chosen.
 
-## Diagnostics that say what to write (2026-10-08)
+- **Diagnostics that say what to write (2026-10-08).** The user's untracked program (`stateSize Int32 = 64`, `state Array<Float32>(stateSize)`, `fn main() ?error {}`)
+  produced four errors, none of which said what was wrong: "unexpected token '(' expected 'end of statement'", "unexpected
+  token 'error' expected '{'", a bare "unknown type" (not naming which), and "could not find the main function" - a cascade,
+  since main simply had not parsed. They also printed out of order (lines 3, 5, then 1), because syntax errors are found in
+  one pass and semantic ones in a later one.
 
-The user's untracked program (`stateSize Int32 = 64`, `state Array<Float32>(stateSize)`, `fn main() ?error {}`)
-produced four errors, none of which said what was wrong: "unexpected token '(' expected 'end of statement'", "unexpected
-token 'error' expected '{'", a bare "unknown type" (not naming which), and "could not find the main function" - a cascade,
-since main simply had not parsed. They also printed out of order (lines 3, 5, then 1), because syntax errors are found in
-one pass and semantic ones in a later one.
-
-What changed:
-- **Order.** errmsg.c keeps each error (with any notes after it) as a record and writes them sorted by file (first-reported
+  What changed:
+  - **Order.** errmsg.c keeps each error (with any notes after it) as a record and writes them sorted by file (first-reported
   order) and line when the compilation finishes, the process exits (atexit), a test file is skipped, or the compiler
   crashes (SIGSEGV/SIGABRT handlers flush first). B9c's held-back attempts now mark and drop records instead of a separate
   memstream.
-- **Unknown names.** `unknown type 'X'`, `unknown name 'x'`, `unknown function or type 'X'`, each with a suggestion: a name
+  - **Unknown names.** `unknown type 'X'`, `unknown name 'x'`, `unknown function or type 'X'`, each with a suggestion: a name
   ending in digits is tried as its first letter plus width (`Int32`/`int32` -> `I32`, `Float64` -> `F64`, `Uint8` -> `U8`),
   `Byte` -> `U8`, otherwise the nearest type (case-insensitive edit distance, at most 2-3) among primitives, `Bool`,
   `Array`, the module's types, the prelude's and - for a value or call - the module's globals. The recovered type carries
   `unknown`, and `OperandFitsType` accepts anything against it, removing the "type doesn't match" that used to follow.
-- **Parser hints** (`syntaxHint`, consulted before the generic report): `name [mut] T(args)` where the line should have
+  - **Parser hints** (`syntaxHint`, consulted before the generic report): `name [mut] T(args)` where the line should have
   ended gives `name T = T(args)` and `name := T(args)` built from the source line; `? error` explains the default error.
   These count as syntax errors (`ErrMsgSyntax`).
-- **Missing main** is reported only when no syntax error occurred; its message and INVALID_MAIN_SIGNATURE's (which still
+  - **Missing main** is reported only when no syntax error occurred; its message and INVALID_MAIN_SIGNATURE's (which still
   said `func` and "at least one error") were reworded.
 
-Checks: l20aline updated to the hint; new unknowntypehint, unknownfunchint, qerror, nomainhidden. The untracked program itself
-was left untouched.
+  Checks: l20aline updated to the hint; new unknowntypehint, unknownfunchint, qerror, nomainhidden. The untracked program itself
+  was left untouched.
+
+- **Backfilled 2026-10-08: entries the sessions that built these never wrote.** An audit of the records found six
+  changes with a CLAUDE.md entry and no story here, against the rule that both are written in the same session. What
+  follows is reconstructed from those CLAUDE.md entries and the commits, not remembered; where the commit is outside
+  this repository's history it says so.
+  - **The arena aligns by size (O8a).** A returned pointer used to be 8-aligned at best (only the size was rounded),
+    so `F64` arrays could never meet a vector load. Now 8 below 32 bytes, 32 from 32, 64 from 64; chunks come from
+    `aligned_alloc(64, ...)` with a header padded to 64 bytes, because aligning each allocation against an 8-aligned
+    base is no alignment at all. Measured at no cost (20M allocations, 0.020s either way); verified by driving the
+    allocator from C, since olang cannot observe an address. Stack arrays keep their element's alignment - the
+    remaining half if stack SIMD matters. Two IR collisions fixed on the way: a program's own `extern fn snprintf`
+    beside E11a's renderings, and two modules declaring one extern. The commit predates this repository's history.
+  - **`List` joins the prelude (2026-10-07, `5e94b86`, the user's call).** `std/list` moved to
+    `std/prelude/list.olang`, so `List<T>` is a bare name everywhere, and `Iterator<T>` gained `Map` and `Filter`,
+    which build a `List` the prelude can now name. Prelude files name each other's types, so all their type names are
+    scanned before any is parsed. The `twolists` check moved to `std/map`.
+  - **Complex numbers (2026-10-08, `82b4bbc`, `f1cadec`).** The user: "Do complex in the prelude", "C32 is two F32, C16
+    is two F16", then "maybe do just C16 C32 C64". First built spelled out (Complex16/32/64) on my reading of an
+    earlier "spelled out completely", then renamed to the user's short names. Plain structs with E31 operator methods,
+    written once and stamped out per width, since there are no type aliases; `==` and `$` are the struct defaults.
+  - **8-bit floats `F8E4M3`, `F8E5M2` (2026-10-08, `0d0769d`, `f1cadec`).** Not primitives: LLVM has no 8-bit float
+    and two formats compete. Structs holding `Bits` (a mutable `U8`), built from an `F64` with nearest-even rounding
+    and read back with `F64()`, encoded arithmetically (no bit reinterpretation exists) and checked against the OCP
+    bit patterns. Both saturate - the user: "do what the industry does", the hardware's satfinite conversion; framework
+    casts default to NaN/inf instead, which the user was told. `==` compares values as IEEE does (the user: "compare by
+    value, follow the standard"), replacing a first bitwise version.
+  - **The lock file (M23b, 2026-10-08, `74df96b`, the user: "do lock files").** `olang.lock` beside the root module,
+    `HOST/OWNER/REPO[@REF] COMMIT` per line, sorted. A locked repository is fetched by that commit (shallow where the
+    server allows, else a clone and checkout) and verified with `rev-parse`; an unlocked one is cloned at its ref's
+    head and its commit written in. The cache became keyed by commit, so two projects locking different commits share
+    nothing that could conflict. Updating was deleting the line; `-update` (now `-u`) followed the same day (M23c).
+  - **Default methods settled (M19e, 2026-10-08, `fcb7917`, the user: "do a)", "outside", "make it an error").** One
+    kind: every method declared with an interface receiver is a default a satisfying type may override; bodies stay
+    outside the interface. A same-named method with another signature, and overriding a default generic in its own
+    types, became errors at the type's method - the first had crashed LLVM with a duplicate symbol. Two older bugs
+    fixed: a generic interface's default was never overridden through an interface value (looked up by its decorated
+    instantiated name, matched by var pointer), and a struct temporary converted to an interface value pointed into the
+    converting function's dead stack frame. All of it was reworked onto traits hours later (T30).
+
+- **A text build constant was never text (B10, 2026-10-08).** Found by auditing the records for forgotten items: the
+  spec still said a text `-D` value is "a `U8[N]` holding it", a type spelling that no longer exists. It had kept the
+  raw literal's type - and since the build module is made before the prelude loads, that literal had `U8` elements, not
+  `Char` - so it was not text at all: `Mode == "fast"` and passing `Mode` to a `String&` failed with "both operands
+  must have the same type". Every existing check passed only because top-level conditions on build constants are
+  decided by the token evaluator, which compares text itself. Fixed by building the literal again from its token once
+  the prelude exists and typing it as `:=` would (T29c), just before global initializers are built. The spec's B9c
+  sentence saying text compares "by E10, not by content" was stale too since E10a (`==` on a `String` calls `Eq`).
+  `checks/cases/b10text` pins it - a call deciding a top-level condition, a comparison at run time, a `String&`
+  argument - and fails with five errors on the previous compiler.

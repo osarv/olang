@@ -337,7 +337,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   **Defaults became compile-time expressions (D8a/K2a)** - the literal-only rule would otherwise have left
   no way to write `p Point = Point(0, 0)`. Any default the evaluator can compute is accepted, checked after
   the program has checked (a constructor's body may be checked later than the signature naming it), and
-  the error names what stops it. `$` renders a struct as `Point(1, -2)` now (my choice, flagged).
+  the error names what stops it. `$` renders a struct as `Point(1, -2)` now (my choice; the user approved it 2026-10-01).
   **C2d - the use-after-free this exposed, fixed as the user chose (option B).** A constructor field
   holding a reference with no scope name (`inner P& = P(v, v)`, or a pun of a bare-`&` parameter) was
   built in the constructor's own scope - closed as the constructor returned - or the caller's, while the
@@ -1951,6 +1951,10 @@ Go through this for every change to what olang means - a rule added, revised or 
   **Three bugs found on the way**, two pre-existing: B5a's init order (a root's initializers ran before
   its imports'), a file ending in a statement with no newline after it not parsing, and a crash when a
   module redeclared a `-D` name (the error path returned before registering the var later passes need).
+  **Found 2026-10-08 auditing the records: a text build constant was never text.** It kept the raw literal's type -
+  built before the prelude loads, so a fixed array of `U8`, not `Char` - and so `Mode == "fast"` or passing `Mode`
+  to a `String&` failed with "both operands must have the same type" everywhere but the token evaluator, which is
+  why the existing checks passed. It is now a `String` (T29c), retyped once the prelude exists (B10).
 
 - **Compile-time evaluation (K1/K2) - no function colouring, guaranteed only where a value is needed.**
   The user's request: "anything that can be computed at compile time is". The design agreed: no
@@ -1988,7 +1992,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   repeating while a chosen branch holds further such conditions. A condition using a name that exists only
   inside a branch being decided is rejected, since it would be deciding on its own outcome. Cost measured:
   0.45s on a 5.1s test build of the largest corpus file with a two-deep chain, nothing without one. One
-  wrinkle recorded: text compares by content on the token path but by E10 on this one.
+  wrinkle recorded: text compared by content on the token path but by E10 on this one - gone since E10a (`==` on a
+  `String` calls its `Eq`) and B10's text constants being `String`s (2026-10-08).
   **Next**: constant contexts inside bodies (a local `T[expr]` becoming compile-time-length) need callee
   bodies on demand, since bodies are checked module by module.
 - **No shadowing (D3a).** The user's call: "I don't want any shadowing, modules/directories take care of the
@@ -2144,7 +2149,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   **compile-time reflection** facility (iterate a type's fields, in the spirit of `match <T>`); both are
   recorded as future work, not next. **An `is` test for enum cases** (`shape is Shape.Circle`, true for any
   payload) was proposed 2026-10-07 and deferred by the user to the same facility - its only gain over `==` is
-  asking which case a payload enum holds without writing the payload. **Exact layout** (drivers, wire headers, C structs) wants a
+  asking which case a payload enum holds without writing the payload. (Built the same day after all, as E32, at the
+  user's request, and kept for enums when interfaces were removed.) **Exact layout** (drivers, wire headers, C structs) wants a
   declared-layout type whose size is a compile-time constant, not a measurement of arbitrary values;
   deferred until something needs it (MMIO itself is still inexpressible, X3b).
 
@@ -2375,7 +2381,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   `List` gets `Any`/`All`/`Count`/`Fold`/`Map`/`Filter`. `spawn fn() { ... }` (D16e) runs a lambda's body as a task,
   its closure held in the join block's scope, each spawn copying its captures - and P2 now covers the function
   value a task calls through, which a closure made inside the join's loop failed (it lived in the iteration's
-  arena). `:=` accepts an element read (`t := a[i]`, D15 - my extension, flagged), which generic code needs to
+  arena). `:=` accepts an element read (`t := a[i]`, D15 - my extension; the user: fine), which generic code needs to
   hold an element whatever it is. **Found on the way, pre-existing**: a generic callback whose parameters became
   references on instantiation (`f fn(x <T>)` with `T = String&`) was called without the hidden scope arguments
   the function it reached expected - garbage arguments, reproduced on the pre-lambda compiler with a named
@@ -2511,7 +2517,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   by a script that skips string and character literals, and the `# check:` / `# flags:` headers with them. The user
   chose `##` over the unused `###`, which would have needed no migration.
 - **Pending, deferred by the user (2026-10-07): default methods** (constraints and operators since built - G19, E31). Recorded,
-  not decided. *Default methods*: chosen to be reachable only through the interface (an interface value or a
+  not decided - all since settled: default methods as M19e (2026-10-08), then reworked onto traits (T30). *Default methods*: chosen to be reachable only through the interface (an interface value or a
   constrained `<T>`), never as a concrete type's own methods - which M19a's interface-receiver methods already are.
   On top of that the user wants `default` to mark an *optional* interface member a type may supply itself (an
   override, e.g. an O(1) `List.Count`) or leave to the default body; open are the rule for a same-named method with
@@ -2696,7 +2702,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   meets constraints and direct calls; an interface value still needs a declared one (a table needs a function).
 - **Errors are errors: `Next()` fails with `Exhausted`, and nothing returns a value beside a `Bool` (S9a/T35b,
   2026-10-08, the user: "make sure you use errors and don't do the bool, value pattern. Errors are errors").**
-  `Iterator<T>` is `mut Next() <T> ? Exhausted`, with `error Exhausted { END }` in the prelude (name mine, flagged).
+  `Iterator<T>` is `mut Next() <T> ? Exhausted`, with `error Exhausted { END }` in the prelude (name mine; kept by the user).
   `for ... in` and comprehensions take `Exhausted` themselves - the loop's own first clause, ending in `break` - so a
   plain loop needs no `try`, and under `in try` it is never a clause's to name; code calling `Next()` directly writes
   `v := try it.Next() catch Exhausted { break }`. An iterator that can also fail for real declares both
@@ -2718,7 +2724,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   are errors. Implemented as one rule in the fit check (`NumericFlows`) that rewrites the operand **in place** into
   the widening conversion, so every fit site - initializer, assignment, argument, return, compound assignment - gets
   it with no site of its own, plus the same in `OperandBinary`; codegen already lowered the conversions
-  (zext for `Byte`). **Generic inference followed (my extension, flagged)**: a variable a number bound through a
+  (zext for `Byte`). **Generic inference followed (my extension; confirmed by the user)**: a variable a number bound through a
   bare `<T>` widens to a later, wider argument of its family (`max(i32, i64)` is `max` at `Int64`, either order),
   never one a receiver fixed (G9b). New messages name T6b and say to write `T(x)`. **The corpus's now-redundant
   widening conversions are gone** (the user: "fix the corpus widening") - 32 in `shared.olang` and std, found by a
@@ -2773,7 +2779,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   prelude by component width - `Complex32` is two F32s; no Unicode `Char` - an 8-bit `Char` is next, and Utf8/Utf32
   types later). **T6b became a lattice**: wider within a signedness, unsigned into a strictly wider signed (`U8 + I32`
   is still `I32`), F16 and BF16 into F32 into F64 but not into each other; `U8 + I8` is an error, not `I16` (my call,
-  flagged - the meeting rule unchanged). **One table** (`PrimInfo`: name, bits, kind, LLVM type) now answers every
+  then the user's: "OK" - the meeting rule unchanged). **One table** (`PrimInfo`: name, bits, kind, LLVM type) now answers every
   question about a primitive, replacing the scattered `Byte`-means-unsigned special cases in all three passes;
   unsigned semantics (udiv/urem/ult/lshr/zext/uitofp/fptoui) follow the kind. F16/BF16 are LLVM `half`/`bfloat`;
   their constants (`0xH`/`0xR`) and the evaluator's rounding share one nearest-even routine (`MinifloatFrom`), and
@@ -2784,15 +2790,15 @@ Go through this for every change to what olang means - a rule added, revised or 
   other Char stuff. I think we put Char in the prelude too and String holds Chars not U8s", 8-bit, option 1).**
   `type Char extends U8` in the prelude, with ASCII `IsDigit/IsLower/IsUpper/IsLetter/IsSpace/ToUpper/ToLower`;
   `'a'` is a `Char`; `String extends Array<Char>`; `$` renders a `Char` as a character and a `U8` as a number (an
-  `Array<U8>` as `U8[104, 105]`). The bridge to bytes is one rule (my design, flagged): an array of a declared number
+  `Array<U8>` as `U8[104, 105]`). The bridge to bytes is one rule (my design; the user: OK): an array of a declared number
   with no constructor flows into an array of its base - view or copy, same bits, nothing to bypass - so text reaches
   `Array<U8>` I/O untouched, and `String(bytes)` (any same-representation array, a fixed `U8[...]` literal
   included) still copies nothing. Corpus: seven tests that held text in `U8`/`Array<U8>` became `Char`/`String`.
   Unicode stays a library (Utf8/Utf32 types later, the user's plan).
 - **Complex numbers in the prelude (2026-10-08, the user's call: "Do complex in the prelude", "C32 is two F32, C16 is
   two F16", then "maybe do just C16 C32 C64").** `C16/C32/C64` named by part width, as the F types are, plain structs with E31 operator methods, generated from one
-  template since there are no type aliases; `==` and `$` are the struct defaults. Spelled out per the user's earlier
-  "spelled out completely" - my reading of the two messages, flagged.
+  template since there are no type aliases; `==` and `$` are the struct defaults. First built
+  spelled out (Complex16/32/64), my reading of an earlier message; the short names are the user's.
 - **8-bit floats in the prelude: `F8E4M3`, `F8E5M2` (2026-10-08, the user: "do F8s in the prelude as you proposed").**
   Not primitives: LLVM has no 8-bit float and two formats compete, so both are structs holding `Bits` (a mutable
   `U8`, so raw bits can be set), built from an `F64` (`F8E4M3(x)`, nearest-even) and read with `F64()`, rendering
