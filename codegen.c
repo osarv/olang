@@ -3967,7 +3967,7 @@ static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth
             rdPut(ctx, sp, sl);
             return;
         }
-        if (t.bType == BASETYPE_BYTE) { rdPutQuoted(ctx, addr, "1", '\''); return; } //nested: 'c'
+        if (TypeIsChar(t)) { rdPutQuoted(ctx, addr, "1", '\''); return; } //nested: 'c' (T29h)
 
         if (TypeIsNumeric(t)) { rdPutNumber(ctx, t, addr); return; }
     }
@@ -3984,7 +3984,7 @@ static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth
 //the element type once, then the items, a nested unmarked array being a bare "[...]" row of the outer one.
 //A byte array is text instead, in quotes.
 static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* count, bool row) {
-    if (elem.bType == BASETYPE_BYTE) { rdPutQuoted(ctx, base, count, '"'); return; }
+    if (TypeIsChar(elem)) { rdPutQuoted(ctx, base, count, '"'); return; } //T29h: Chars are text
     char ety[256];
     llvmType(elem, ety, sizeof(ety));
     int id = ctx->lblCtr++;
@@ -3994,7 +3994,7 @@ static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* co
     if (!row) {
         struct type base0 = elem;
         while (base0.bType == BASETYPE_ARRAY && !base0.structMAlloc && !(base0.owner && base0.name.len)
-               && base0.arrElem->bType != BASETYPE_BYTE) base0 = *base0.arrElem;
+               && !TypeIsChar(*base0.arrElem)) base0 = *base0.arrElem;
         char spelled[600];
         rdSpellType(base0, spelled, sizeof(spelled));
         rdPutText(ctx, spelled);
@@ -4263,13 +4263,13 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", d1, (int)strlen(text));
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, g);
-        } else if (in->type.bType == BASETYPE_BYTE && !viaStr) {
+        } else if (TypeIsChar(in->type) && !viaStr) {
             char* addr = cgValueAddr(ctx, in);
             char* d1 = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 1, 0\n", d1);
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, addr);
-        } else if (in->type.bType == BASETYPE_ARRAY && in->type.arrElem->bType == BASETYPE_BYTE && !viaStr) {
+        } else if (in->type.bType == BASETYPE_ARRAY && TypeIsChar(*in->type.arrElem) && !viaStr) {
             tp.desc = cgBorrowValue(ctx, textT, in->type, cgValue(ctx, in));
         } else {
             tp.fn = cgRenderFn(ctx, in->type, false);

@@ -1731,8 +1731,10 @@ test "E11a: every built-in rendering" {
     big I64 = -9000000000
     b Bool = true
     f Bool = false
-    c U8 = 'A'
+    c Char = 'A'
+    u U8 = 65
     assert bytesEq($n, "42")
+    assert bytesEq($u, "65")              # T29h: a U8 is a number; a Char is text
     assert bytesEq($big, "-9000000000")
     assert bytesEq($b, "true")
     assert bytesEq($f, "false")
@@ -1740,12 +1742,14 @@ test "E11a: every built-in rendering" {
     assert ($c).Len() == 1
 }
 
-test "E11a: a U8 array renders as itself, in every shape" {
-    fixed := Array<U8>(2, 'z')
+test "E11a: a Char array renders as text, in every shape; a U8 array as numbers (T29h)" {
+    fixed := Array<Char>(2, 'z')
     assert bytesEq($fixed, "zz")
     assert bytesEq($(fixed[0:1]), "z")
-    run Array<U8> = "hi"
+    run Array<Char> = "hi"
     assert bytesEq($run, "hi")
+    nums := U8[104, 105]
+    assert bytesEq($nums, "U8[104, 105]")
 }
 
 test "E11a: a declared type renders from its fields, whatever methods it has" {
@@ -1764,7 +1768,7 @@ test "E11b: text pieces side by side are joined" {
 # E11a: every value renders, from what it holds and the way it would be written: a struct as Name(fields),
 # an array as Type[items], an enum case as Type.Case(payload). Text inside a composite is quoted, so its
 # boundaries show; at the top level a byte array is simply its bytes. Nothing overrides a rendering.
-type RenderPair struct(label mut Array<U8>&, n I32, c U8, on Bool) {
+type RenderPair struct(label mut String&, n I32, c Char, on Bool) {
     label mut
     n mut
     c mut
@@ -1778,7 +1782,7 @@ type RenderLink struct(v I32, n mut RenderLink&) {
 
 type RenderMeters I32
 
-type RenderHolder struct(at mut Pt3&, tag mut Array<U8>&) {
+type RenderHolder struct(at mut Pt3&, tag mut String&) {
     at mut
     tag mut
 }
@@ -1796,7 +1800,7 @@ test "E11a: a struct, an array and an enum render from their parts" {
     assert bytesEq($m, "5")
 }
 
-type RenderQuoted struct(t mut Array<U8>&, q U8, b U8) {
+type RenderQuoted struct(t mut String&, q Char, b Char) {
     t mut
     q mut
     b mut
@@ -1805,7 +1809,7 @@ type RenderQuoted struct(t mut Array<U8>&, q U8, b U8) {
 test "E11a: nested text is escaped the way a literal would write it" {
     r := RenderQuoted("a\"b\\\n\0", '\'', '"')
     assert bytesEq($r, "RenderQuoted(\"a\\\"b\\\\\\n\\0\", '\\'', '\"')")
-    tab := U8['\t', 'x']
+    tab := Char['\t', 'x']
     assert bytesEq($tab, "\tx")
 }
 
@@ -1848,7 +1852,7 @@ fn renderAdd(a I32, b I32) I32 { return a + b }
 
 type RenderFnHolder struct(f fn(a I32, b I32) I32) { f mut }
 
-fn renderTwo() (I32, Array<U8>&) { return 1, "x" }
+fn renderTwo() (I32, String&) { return 1, "x" }
 
 test "E11a: a call's several results render together" {
     assert bytesEq($renderTwo(), "(1, \"x\")")
@@ -1869,7 +1873,7 @@ test "E11a: functions and interfaces render as signatures" {
 }
 
 test "E11a: '$' on text is a copy - it is a value, not a second name for the storage" {
-    buf := Array<U8>(2, 'a')
+    buf := Array<Char>(2, 'a')
     t := $buf
     t[0] = 'b'
     assert buf[0] == 'a'
@@ -1879,8 +1883,8 @@ test "E11a: '$' on text is a copy - it is a value, not a second name for the sto
 # E11a/E11b: a rendering and a join are TEMPORARIES - they have no storage of their own, so they
 # are built in the TARGET's scope exactly as a struct literal is (E12c). Building them in the block the
 # expression sits in instead made every string-building function impossible.
-fn greet3(name Array<U8>&) Array<U8>& { return "Hello, " $name "!" }
-fn label3(n I32, tag Array<U8>&) Array<U8>& { return $tag "=" $n }
+fn greet3(name String&) String& { return "Hello, " $name "!" }
+fn label3(n I32, tag String&) String& { return $tag "=" $n }
 
 test "E11a/E11b: a function can build text and return it into its caller's scope" {
     assert bytesEq(greet3("world"), "Hello, world!")
@@ -1910,10 +1914,10 @@ test "E11b: a join is a value in the block's own scope, usable like any other ar
 # keeping the same representation - it still indexes, still slices, still marshals to C. That is the bridge
 # between the built-in types and the object model; without it a named array was a transparent alias with a
 # name and nothing attached to it.
-type Txt Array<U8>
+type Txt Array<Char>
 
 fn (t Txt&) Size() I32 { return I32(t.Len()) }
-fn (t Txt&) Head() U8 { return t[0] }
+fn (t Txt&) Head() Char { return t[0] }
 fn (a Txt&) Same(b Txt&) Bool { return bytesEq(a, b) }
 
 test "T29: a declared type over an array has methods" {
@@ -6150,8 +6154,8 @@ fn rangeSum(n I32) I32 {
 
 RangeSumTen := rangeSum(10)
 
-fn rangeText(end I32, start I32, step I32) Array<U8>& {
-    t Array<U8>&return = ""
+fn rangeText(end I32, start I32, step I32) String& {
+    t String&return = ""
     for v in range start, end, step { t = $t $v "," }
     return t
 }
@@ -6205,7 +6209,7 @@ test "E7: and/or skip their right side once the left decides" {
 # replaces both - so a declaration from a literal stays run-time-length instead of adopting the literal's
 # length, and text can be grown from a literal start. A VALUE declaration still adopts it (D15).
 test "D15a: a reference declared from a literal can be repointed at an array of another length" {
-    x Array<U8>& = "q"
+    x String& = "q"
     assert x.Len() == 1        # it has the literal's length - held beside the pointer, not in the type
     x = "longer" $x
     assert x.Len() == 7
@@ -7229,23 +7233,23 @@ test "T35a: Iterator<T> is built in, and an Iterator value is walked by for-in" 
 # E11b: a join RETURNED is built in the result's scope. It used to be built in the function's own block
 # scope and returned dangling - read back correctly only until something reused the freed chunk, which is
 # what the allocation between the call and the read does here.
-fn joinWrap(t Array<U8>&) Array<U8>& {
-    out Array<U8>& = "<"
+fn joinWrap(t String&) String& {
+    out String& = "<"
     return $out $t ">"
 }
 
-fn joinChurn() Array<U8>& {
+fn joinChurn() String& {
     return "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" $"yyyyyyyyyyyyyyyyyyyy"
 }
 
-fn joinBare(dir Array<U8>&) Bool {
+fn joinBare(dir String&) Bool {
     q := joinWrap(dir)
     churn := joinChurn()
     return bytesEq(q, "</some/dir>") and churn.Len() == 68
 }
 
 test "E11b: a returned join survives later allocations" {
-    d Array<U8>& = "/some/dir"
+    d String& = "/some/dir"
     assert joinBare(d)
 }
 
@@ -8401,4 +8405,27 @@ PrimsBaked := primAll(1)
 test "T4: signed, unsigned and half-width float types" {
     assert primAll(WdMutable / 2000000000)
     assert PrimsBaked
+}
+
+# T29h: a Char is one byte of text - the type of 'a', rendering as a character where a U8 renders as a number, with
+# U8's arithmetic ('a' + 1 is 'b'). A String is Chars; it goes wherever an Array<U8> is wanted, and String(bytes) is
+# text again, neither copying anything.
+fn charBytes(b Array<U8>&) I64 { return I64(b[0]) + b.Len() }
+fn charAll(n I32) Bool {
+    c Char = 'a'
+    next Char = c + 1
+    k I32 = 'A'
+    u U8 = c
+    s := "Hi 9"
+    methods Bool = next == 'b' and c.IsLower() and s[0].IsUpper() and s[2].IsSpace() and s[3].IsDigit() and c.ToUpper() == 'A'
+    text Bool = $c == "a" and $u == "97" and $Char['x', 'y'] == "xy" and $s[0] == "H" and k == 65
+    raw := Array<U8>(2, U8(104 + n))
+    bytes Bool = charBytes(s) == 72 + 4 and String(raw) == "ii" and $raw == "U8[105, 105]"
+    return methods and text and bytes
+}
+CharBaked := charAll(1)
+
+test "T29h: Char is text's unit and String holds Chars" {
+    assert charAll(WdMutable / 2000000000)
+    assert CharBaked
 }

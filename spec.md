@@ -156,7 +156,7 @@ as it was before exponents existed, so no program changes meaning. A `FLOAT_LIT`
 - any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\'`.
 
-A `CHAR_LIT` is of type `U8`. An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
+A `CHAR_LIT` is of type `Char` (T29h). An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
 a compile-time error.
 
 **L14.** `STR_LIT ::= '"' { str-content } '"'`, where each `str-content` element is:
@@ -364,7 +364,7 @@ base, an integer and a float - do not meet, and that is a compile-time error.
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
 not representable in `I32` and `I32` for every other integer literal, `F32` for a float literal,
-`U8` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
+`Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it. It follows that an
 integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
 already `I64`, so T6 must adapt it, and the value does not fit.
@@ -719,9 +719,9 @@ type Checked I32(v I32) ? RangeError {
 A declared primitive type takes no destructor and there are no references to primitives (T24): the value is
 always copied, so there is no single instance for a destructor to release or a reference to name.
 
-**T29a (a declared type over an array).** Nominality reaches an **array** too: `type String Array<U8>` is a
+**T29a (a declared type over an array).** Nominality reaches an **array** too: `type String extends Array<Char>` is a
 distinct type from `Array<U8>`, with its own identity and therefore its own methods. Its *representation* is
-unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) when its elements are `U8`, renders under `$`
+unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) when its elements are `Char`, renders under `$`
 (E11a) and marshals across the `extern` boundary (X3) exactly as the array it is declared over. This is how
 a built-in array type is given methods at all.
 
@@ -756,7 +756,17 @@ it (T6b), so it compares with `<` and `==`, and beside a base value or a literal
 operator's method (E31). An array type's own operations - indexing, slicing, `Len()`, `for ... in`, `$` - are what
 its value is, and belong to it with or without `extends`.
 
-**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<U8>`, the text type, and
+**T29h (`Char`).** The prelude declares `type Char extends U8`: one byte of text - a UTF-8 code unit, not a Unicode
+character - and the type of a character literal. It renders as the character it is (E11a) where a `U8` renders as
+a number, has `U8`'s arithmetic (`'a' + 1` is `'b'`, T29f) and flows into `U8` and on (T6b), and has `IsDigit`,
+`IsLower`, `IsUpper`, `IsLetter`, `IsSpace`, `ToUpper` and `ToLower` (ASCII). Unicode is a library's.
+
+An array whose element type is a declared number with **no constructor** flows into an array of that number (E12) -
+the same bits, and no constructor a write could bypass - so an `Array<Char>`, and a `String`, go wherever an
+`Array<U8>` is wanted, as a reference (a view of the same storage) or a value; and `Name(x)` converts the other way
+between two such arrays as it does between a declared type and its base (`String(bytes)`), copying nothing.
+
+**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Char>`, the text type, and
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
 literal's is `I32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
@@ -1651,14 +1661,14 @@ A type may say how it renders by declaring **`Str`** (E11c); every other value h
 its type: the value written the way it would be in source:
 
 - `Bool` — `true` or `false`.
-- `I32`, `I64` — decimal, with a leading `-` for a negative value.
-- `F32`, `F64` — decimal. The digit count is implementation-defined, but the rendering always
+- an integer type (`I8` ... `I64`, `U8` ... `U64`) — decimal, with a leading `-` for a negative value; an unsigned
+  type's value as unsigned.
+- a float type — decimal. The digit count is implementation-defined, but the rendering always
   reads back as the same value.
-- `U8` — at the top level, the **character** it denotes, one byte long (`U8` is this language's
-  character type, L11); its numeric rendering is `$I32(b)`. Inside another value, that character written as
-  a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
-- an array of `U8`, in any of its four shapes — at the top level, its bytes unchanged (copied: the result
-  is a new value, never a second name for the operand's storage). Inside another value, its bytes written as
+- `Char` (T29h) — at the top level, the **character** it denotes, one byte long. Inside another value, that
+  character written as a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
+- an array of `Char` (a `String` included), in any of its shapes — at the top level, its characters unchanged
+  (copied: the result is a new value, never a second name for the operand's storage). Inside another value, its bytes written as
   a string literal: `"text"`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\"` escaped. Any other byte is
   written as itself.
 - any other array — its element type as written, then its items: `I32[1, 2, 3]`, `Point&[Point(1, 2)]`,

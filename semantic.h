@@ -648,6 +648,8 @@ struct primInfo { enum baseType b; const char* name; int bits; char kind; const 
 const struct primInfo* PrimInfo(enum baseType b); //NULL for anything not a numeric primitive
 bool PrimByName(struct str name, enum baseType* out);
 bool TypeIsUnsigned(struct type t);
+bool TypeIsChar(struct type t); //T29h: the prelude's Char
+struct type SemanticCharType(void);
 bool TypeIsNumeric(struct type t);
 bool TypeIsInt(struct type t);
 bool TypeIsFloat(struct type t);

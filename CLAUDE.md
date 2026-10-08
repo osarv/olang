@@ -2746,6 +2746,15 @@ Go through this for every change to what olang means - a rule added, revised or 
   `try` conversion checks compare integers in i128 so every signedness/width pair is exact. A literal above `I64`'s
   maximum cannot be written (`U64(0) - 1`). Max (`max(i32, i64)` at `I64`) was confirmed by the user, and `Exhausted`
   kept. The user's untracked work was not migrated.
+- **`Char` and text as `Char`s (T29h, 2026-10-08, the user: "the case for a char type is proper printing amongst
+  other Char stuff. I think we put Char in the prelude too and String holds Chars not U8s", 8-bit, option 1).**
+  `type Char extends U8` in the prelude, with ASCII `IsDigit/IsLower/IsUpper/IsLetter/IsSpace/ToUpper/ToLower`;
+  `'a'` is a `Char`; `String extends Array<Char>`; `$` renders a `Char` as a character and a `U8` as a number (an
+  `Array<U8>` as `U8[104, 105]`). The bridge to bytes is one rule (my design, flagged): an array of a declared number
+  with no constructor flows into an array of its base - view or copy, same bits, nothing to bypass - so text reaches
+  `Array<U8>` I/O untouched, and `String(bytes)` (any same-representation array, a fixed `U8[...]` literal
+  included) still copies nothing. Corpus: seven tests that held text in `U8`/`Array<U8>` became `Char`/`String`.
+  Unicode stays a library (Utf8/Utf32 types later, the user's plan).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -7719,3 +7719,11 @@ from their original form.
   edit to the render check dropped the number cases, which the corpus caught at once. Tests: wrap, unsigned divide/
   compare/shift, the lattice's flows, F16/BF16 rounding to the exact binary16/bfloat16 values, rendering and `try`,
   all baked by K2 to the same answers as at run time.
+
+- **`Char` (T29h), 2026-10-08.** Asked by the user once `U8` was a number: "how does a U8 print?". `Char` became the
+  prelude's `type Char extends U8`, the character literal's type, and `String`'s element. Mechanism: a helper resolving
+  the prelude's Char for literal types; `TypeIsChar` replacing every "U8 renders as text" check in codegen and the
+  evaluator; `OperandIsWrittenText` keyed on Char elements. Two conversions were needed so text and bytes still meet:
+  the array-element view rule in the fit check, and `String(bytes)` accepting same-representation arrays (a fixed
+  `U8[...]` literal had relied on fitting the underlying `Array<Byte>`). Seven corpus tests had text in `U8` arrays
+  and expected it to render as text; they now say `String`/`Char`, and one also pins `U8[104, 105]`.

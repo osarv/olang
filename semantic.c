@@ -1106,6 +1106,20 @@ struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNod
     return errType;
 }
 struct type* SemanticBuiltinType(struct str name);
+void resolveTypeDecl(struct type* t);
+static bool isPreludeModule(struct semaModule* mod);
+
+//T29h: the prelude's Char - text's unit, "type Char extends U8" - resolved; plain U8 where there is no prelude
+struct type SemanticCharType(void) {
+    struct type* c = SemanticBuiltinType(StrFromCStr("Char"));
+    if (!c) return TypeVanilla(BASETYPE_BYTE);
+    resolveTypeDecl(c);
+    return *c;
+}
+
+bool TypeIsChar(struct type t) {
+    return t.bType == BASETYPE_BYTE && t.owner && StrCmp(t.name, StrFromCStr("Char")) && isPreludeModule(t.owner);
+}
 
 //T29c: text written in the program - a string literal, a "$" rendering or a join - is a String wherever one
 //is wanted. It is a temporary with no type worth defending, as a literal is (T29a), and it is text by
@@ -1118,8 +1132,7 @@ bool OperandIsWrittenText(struct operand* op) {
             && OperandIsWrittenText(*(struct operand**)ListGetIdx(&op->args, 2));
     }
     return op->isLiteral && op->type.bType == BASETYPE_ARRAY && !op->type.owner && op->type.arrElem
-           && op->type.arrElem->bType == BASETYPE_BYTE && !op->type.arrElem->owner && op->opType == OPERATION_NONE
-           && op->args.len == 0;
+           && TypeIsChar(*op->type.arrElem) && op->opType == OPERATION_NONE && op->args.len == 0;
 }
 
 // ---- pass 1: collect top-level names ----
@@ -4729,6 +4742,24 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //one. It is what lets a "Text" be handed to any ordinary "byte[]&" function.
     //for an array the underlying type is its element type: E12's own conversions (a value borrowed as a
     //reference, a known length widened) then apply to the unnamed array exactly as they would anywhere
+    //T29h: an array of a declared number with no constructor flows into an array of that number - the same bits, and
+    //nothing to bypass - so text (Array<Char>, a String) reaches byte I/O (Array<U8>) as it is, a view or a copy
+    if (target.bType == BASETYPE_ARRAY && !target.owner && op->type.bType == BASETYPE_ARRAY && target.arrElem
+            && op->type.arrElem && op->type.arrElem->owner && !op->type.arrElem->hasCtor && !target.arrElem->owner
+            && TypeIsNumeric(*op->type.arrElem) && op->type.arrElem->bType == target.arrElem->bType) {
+        struct type saved = op->type;
+        struct type v = op->type;
+        v.owner = NULL;
+        v.name = (struct str){0};
+        v.extendsBase = false;
+        v.arrElem = MallocOrCrash(sizeof(struct type));
+        *v.arrElem = *target.arrElem;
+        v.arrElem->refMut = op->type.arrElem->refMut;
+        op->type = v;
+        enum typeFit r = OperandFitsType(func, op, target);
+        if (r != TYPE_FIT_OK) op->type = saved;
+        return r;
+    }
     bool sameUnderlyingArray = target.bType == BASETYPE_ARRAY && op->type.bType == BASETYPE_ARRAY
                                && target.arrElem && op->type.arrElem && TypeIsSame(*target.arrElem, *op->type.arrElem);
     if (!target.owner && op->type.owner && (TypeIsSameRepr(target, op->type) || sameUnderlyingArray)) {
@@ -5774,8 +5805,20 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
     struct type underlying = target;
     underlying.owner = NULL;
     underlying.name = (struct str){0};
-    if (!TypeIsSameRepr(target, arg->type)
-            && OperandFitsType(NULL, arg, underlying) != TYPE_FIT_OK) {
+    //T29h: an array of a declared number and an array of its base share a representation too - "String(bytes)"
+    bool sameElems = target.bType == BASETYPE_ARRAY && arg->type.bType == BASETYPE_ARRAY && target.arrElem
+                     && arg->type.arrElem && target.arrMalloc == arg->type.arrMalloc
+                     && target.structMAlloc == arg->type.structMAlloc && TypeIsSameRepr(*target.arrElem, *arg->type.arrElem);
+    //...and what fits an array of the element's base fits too: "String(U8['a', 'b'])"
+    struct type baseElems = underlying;
+    if (underlying.bType == BASETYPE_ARRAY && underlying.arrElem && underlying.arrElem->owner && !underlying.arrElem->hasCtor
+            && TypeIsNumeric(*underlying.arrElem)) {
+        baseElems.arrElem = MallocOrCrash(sizeof(struct type));
+        *baseElems.arrElem = TypeVanilla(underlying.arrElem->bType);
+    }
+    if (!TypeIsSameRepr(target, arg->type) && !sameElems
+            && OperandFitsType(NULL, arg, underlying) != TYPE_FIT_OK
+            && (baseElems.arrElem == underlying.arrElem || OperandFitsType(NULL, arg, baseElems) != TYPE_FIT_OK)) {
         ErrMsgSemantic(arg->tok, NOMINAL_CONVERT_MISMATCH);
     }
     struct operand* op = operandNew(tok, OPERATION_NOMINAL_CONVERT, target);
@@ -6163,7 +6206,7 @@ static struct type textValueType(void) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_ARRAY;
     t.arrElem = MallocOrCrash(sizeof(struct type));
-    *t.arrElem = TypeVanilla(BASETYPE_BYTE);
+    *t.arrElem = SemanticCharType(); //T29h: text is Chars
     t.arrMalloc = true; //run-time length; no reference marker (structMAlloc) - it is a value
     return t;
 }
@@ -6445,7 +6488,7 @@ long long decodeCharBody(char* ptr, int len) {
 }
 
 struct operand* OperandCharLiteral(struct token tok) {
-    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_BYTE));
+    struct operand* op = operandNew(tok, OPERATION_NONE, SemanticCharType()); //T29h: 'a' is a Char
     op->isLiteral = true;
     op->intLiteralVal = decodeCharBody(tok.str.ptr +1, tok.str.len -2);
     return op;
@@ -6493,7 +6536,7 @@ struct operand* OperandStringLiteral(struct token tok) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_ARRAY;
     t.arrElem = MallocOrCrash(sizeof(struct type));
-    *t.arrElem = TypeVanilla(BASETYPE_BYTE);
+    *t.arrElem = SemanticCharType(); //T29h: text is Chars
     t.arrMalloc = false;
 
     struct operand* lenOp = MallocOrCrash(sizeof(struct operand));

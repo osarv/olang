@@ -1052,11 +1052,11 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
     switch (t.bType) {
         case BASETYPE_ARRAY: {
             struct type elem = *t.arrElem;
-            if (elem.bType == BASETYPE_BYTE) { ctTextQuoted(b, v->elems, v->n, '"'); return true; }
+            if (TypeIsChar(elem)) { ctTextQuoted(b, v->elems, v->n, '"'); return true; } //T29h
             if (!row) {
                 struct type base0 = elem;
                 while (base0.bType == BASETYPE_ARRAY && !base0.structMAlloc && !(base0.owner && base0.name.len)
-                       && base0.arrElem->bType != BASETYPE_BYTE) base0 = *base0.arrElem;
+                       && !TypeIsChar(*base0.arrElem)) base0 = *base0.arrElem;
                 char spelled[600];
                 RdSpellType(base0, spelled, sizeof(spelled));
                 ctTextStr(b, spelled);
@@ -1141,7 +1141,7 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
                           struct token tok) {
     if (!t.structMAlloc && SemanticStrOf(t)) return ctRenderStr(st, b, SemanticStrOf(t), v, tok);
     if (t.bType == BASETYPE_BOOL) { ctTextStr(b, ctDeref(v)->i ? "true" : "false"); return true; }
-    if (t.bType == BASETYPE_BYTE) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
+    if (TypeIsChar(t)) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
     if (ctIsFloat(t) || ctIsInt(t)) {
         char num[64];
         if (ctIsFloat(t)) snprintf(num, sizeof(num), "%.17g", ctDeref(v)->f);
@@ -1182,11 +1182,11 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
         if (!v) return NULL;
         struct type t = in ? in->type : p->type;
         bool viaStr = in && SemanticStrOf(t); //E11c: the type's own Str, at the top level too
-        if (!in || (t.bType == BASETYPE_ARRAY && t.arrElem->bType == BASETYPE_BYTE && !viaStr)) {
+        if (!in || (t.bType == BASETYPE_ARRAY && TypeIsChar(*t.arrElem) && !viaStr)) {
             struct ctVal* a = ctDeref(v);
             if (a->kind == CT_NULL) continue;
             for (int k = 0; k < a->n; k++) { char c = (char)ctDeref(a->elems[k])->i; ctTextPut(&b, &c, 1); }
-        } else if (t.bType == BASETYPE_BYTE && !viaStr) {
+        } else if (TypeIsChar(t) && !viaStr) {
             char c = (char)ctDeref(v)->i;
             ctTextPut(&b, &c, 1);
         } else if (!ctRenderValue(st, &b, v, t, 0, false, p->tok)) {
