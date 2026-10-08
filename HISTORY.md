@@ -8022,3 +8022,102 @@ from their original form.
   Env, ReadDir, ReadLink and RealPath return read back after churning the arena), and a checks scenario building a
   fixture that prints its arguments, an environment variable and the results of file calls - run with arguments and a
   variable, interpreted with `-i` and the same arguments (identical output but for its own name), and run without.
+
+- **Literal-only expressions adapt, a literal another operand cannot hold meets it at its own type, and floats render
+  shortest (E4a/E6d/T6/L12b/E11a, 2026-10-08).** Three follow-ups the user decided after T6a made a float literal an
+  `F64` - (6) `$` on a float gives the shortest text that reads back, (7) a float literal overflowing a narrower float
+  is an error, as an out-of-range integer literal is, (8) an expression built only from literals adapts as one literal
+  does - and a fourth the coordinator added while (8) was being built, E6d below.
+
+  **E4a, how it is built.** T6a's "what changes meaning" had made `f F32 = 0.5 * 2.0` an error and `f32 < 1.0 / 3.0`
+  an `F64` comparison, because only a token literal adapted. Go's untyped constants are the model: the expression is
+  computed while compiling, exactly, and then fits as the one literal holding that value would. The checker does it at
+  one point: `literalExprFold` evaluates the tree (`literalExprValue` - integers in 128-bit arithmetic with overflow
+  detection, floats in `F64`) and rewrites it **in place** into a literal typed by its value as T6a would type it
+  (`I32`, else `I64`, else `U64` for 2^63..2^64-1, which no token can write; `F64` for a float). `OperandFitsType`
+  tries that fold first for a numeric target and re-fits the literal through the ordinary path - so a declared type's
+  constructor (T29d), `Char`, ranges, every rule a literal meets applies unchanged - restoring the tree when it does
+  not fit, so a speculative fit has no side effect. `operandAdaptLiteral` does the same for the places a literal is
+  retagged rather than fitted (beside an operand, an atomic's value). The sites that decided "is this a literal?" before
+  adapting - generic inference (G9a: binds nothing), `a if c else b`, the `==`-through-`Eq` rewrite, `in`, the hidden
+  locals E29/E30 hold an operand in, `range`'s type and step, a derived `At`'s index - ask `operandIsLiteralLike`. The
+  evaluator never sees a literal-only expression that adapted - it sees the literal - so it agrees by construction;
+  the tests prove it anyway (baked globals `LitExprU8 U8 = 200 + 55` = 255, `LitExprExact I64 = 2147483647 + 1` =
+  2147483648, `LitExprThird F32 = 1.0 / 3.0`, and a mutable global computing the same at run time).
+  **With no target nothing changes**: `x := 1 + 2` stays an error (D15), and `$(2147483647 + 1)` still computes in
+  `I32` and wraps (E6c) - the expression is folded only where something adapts it.
+
+  **Decisions I made, flagged.** (a) A float result is computed in `F64` - its literals' own type - each operator
+  rounding as `F64` arithmetic does, then rounded **once** to the target; computing in the target type would round at
+  every step, and `F64` then once is what C does for `float f = 1.0 / 3.0` and closer to Go's exact constants. (b)
+  Mixed literals follow T6's ranking per operator, so `7 / 2 * 1.0` is `3.0` (integer division first, as in C and Go)
+  and `(1 + 2) * 0.5` is `1.5` - which needed the both-literals rule to take a literal-only expression too (it was an
+  error: an `I32` tree beside an `F64` literal). (c) **A float division by a literal zero is not an error**, against the
+  letter of the request: IEEE defines it as an infinity or a NaN (E6a), no literal can write either, and
+  `std/prelude/f8.olang` writes infinity and NaN exactly as `1.0 / 0.0` and `0.0 / 0.0`. Integer `/` and `%` by a
+  literal-only zero is an error wherever it is written, target or not (`1 / (2 - 2)`), extending E6a's literal check;
+  a NaN result is the canonical one LLVM folds `0.0 / 0.0` to (C's own division would give the sign-bit NaN, and `$`
+  would then say `-nan` where the run time said `nan`). (d) A float computation whose finite operands give an
+  infinity (`1e308 * 10.0`) has no value and is an error even into an `F64`. (e) An expression under `try` is not
+  literal-only: `try (1 + 2)` is a checked computation in its own types, and folding it would discard its clauses.
+  (f) Names do not take part - an immutable global or a build constant is a name, not a literal - though both could
+  join later (the token evaluator already folds such globals for conditions). (g) E8a's shift-amount check stays
+  against the shifted literal's own width, so `x I64 = 1 << 40` is still an error (write `I64(1) << 40`): the check is
+  made where the shift is built, before any target is known, and without a target the shift really is `I32`'s. (h) A
+  character literal counts as a numeric one, so `c Char = 'a' + 1` works.
+  **What changes meaning**: `x I64 = 2147483647 + 1` was `-2147483648` (an `I32` sum, wrapped, then widened) and is now
+  2147483648; `x I32 = 1 << 31` was `INT_MIN` and is now an error; a generic reached only by `2147483647 + 1` is an
+  error where it wrapped. Nothing in the corpus or std wrote any of them.
+
+  **E6d (the coordinator's addition, made while E4a was being built).** A literal beside an operand whose type cannot
+  hold it used to be an error ("these two numbers do not meet"). Now the two meet at the **literal's own type**, as two
+  numbers meet (T6b), losing nothing: `b + 300` with `b` a `U8` is an `I32` (b widened), `0x7FF0000000000001 * one`
+  with `one` an `I32` an `I64`, `f32 + 1e300` an `F64`; where the literal fits it still adapts (`b + 3` stays a `U8`).
+  A literal-only expression is taken as the literal holding its value, so `i32 + (2147483647 + 1)` is an `I64`. The
+  smallest coherent rule for the rest, flagged: where the other operand does not flow into the literal's own type they
+  do not meet - `u - (-1)` with `u` a `U32` (a `U32` flows only into `I64`, and `-1` is an `I32`), `i32 + 1.5`,
+  `f16 + 70000` - with a new message (`LITERAL_DOES_NOT_MEET`) naming the conversion. Choosing the smallest type both
+  could reach (`I64` for `u32 - (-1)`) was the alternative; it would make an operator's type depend on a search rather
+  than on the literal as written, and T6a already says what a literal is when nothing adapts it.
+
+  **T6/L12b, overflow.** A value adapts to a float type only when, rounded to it as a conversion rounds, it stays finite
+  - `floatValueFitsType`, through the same `FloatRoundTo` the evaluator rounds with. The boundaries are the rounding
+  ones, checked exactly: `F16` takes `65519.99` (it rounds to 65504) and rejects `65520.0` (the tie goes to infinity),
+  `BF16` takes `3.39e38` and rejects `3.4e38` (its largest is about 3.3895e38, so 3.4e38 is past the half-way point).
+  The rule covers integer literals too, which only `F16` can be too small for (`70000`) - my extension of (7), flagged;
+  T6 had said an integer literal fits "any float type". Underflow to zero or a subnormal still fits (`1e-50` into an
+  `F32` is zero), as asked, flagged. And a float literal beyond `F64` itself (`1e400`) is now an error (L12b) - strtod
+  made it an infinity, which no other literal can be.
+
+  **E11a, shortest text.** The digits are the fewest `p` (1 to 17) for which `%.{p-1}e` - the correctly rounded
+  `p`-digit decimal - read back by `strtod` and rounded to the value's own type is the value again; then they are laid
+  out exactly as `%.17g` lays a number out, so the old conventions stand (positional for a decimal exponent in
+  [-4, 17), `d.ddde+XX` otherwise, `inf`/`nan` as before): `0.1` in all four float types renders `0.1`, `F32(1.0 / 3.0)`
+  `0.33333334`, `1e16` `10000000000000000`, `1e17` `1e+17`, `0.00001` `1e-05`. Positional text is assembled from the
+  `%e` digits with `%.*s` pieces rather than printed with `%f`, because between 2^53 and 1e17 `%.0f` prints the double's
+  exact integer where the shortest digits padded with zeros are different text (2^54 + 8 is `18014398509481992` exactly,
+  `18014398509481990` shortest). Two things worth knowing: "shortest" here is the shortest *correctly rounded* decimal,
+  which at a power of two can be a digit longer than the absolute shortest a Ryu-style algorithm finds; and an `F16`
+  65504 renders `65500`, the shortest text that reads back as that `F16` (`h F16 = 65500` is 65504).
+  The runtime's `@__olang_fmt_float` (IR, with a kind argument: `F64`, `F32`, `F16`, `BF16`, rounding back with
+  `fptrunc`) and util.c's `FloatShortest` (the evaluator's, rounding with `FloatRoundTo`) are one algorithm over the
+  same libc calls, so `$` gives identical text while compiling and at run time - checked on 1.2 million values across
+  the four types (random bit patterns and short decimals), every one identical and every one reading back. LLVM's
+  `fptrunc` to `half` and `bfloat` was checked to round once from `double` (no trip through `float`), as
+  `MinifloatFrom` does.
+
+  **Found on the way, pre-existing, both fixed.**
+  - **`MinifloatFrom(0)` gave -infinity's bits.** `frexp` has no exponent for zero, so it was read as a normal number
+    with a negative mantissa: `h F16 = 0.0` was emitted as `half 0xHFFFFFC00` (read by LLVM as -inf), and the evaluator,
+    which rounds every `F16`/`BF16` result through it, baked `F16(0.5) - F16(0.5)` as -inf. Found by the rendering
+    comparison, whose `F16` zero would not read back. A shared.olang test (`halfZero`, run and baked) fails on the
+    previous compiler.
+  - **A numeric `case` value never adapted**: `match u8 { case 5 { } }` was "case value must have the same type as the
+    matched expression", though S13 compares as `==` does and `u8 == 5` adapts. A literal or literal-only case value now
+    fits the matched type (T6).
+  **Diagnostics**: `LITERAL_EXPR_DOES_NOT_FLOW` became `LITERAL_EXPR_NOT_REPRESENTABLE` (the value does not fit, or has
+  none), `LITERAL_NOT_REPRESENTABLE` names the float ranges, and `FLOAT_LITERAL_OUT_OF_RANGE`/`LITERAL_DOES_NOT_MEET`
+  are new. **Tests**: shared.olang (E4a, E6d and E11a, each with baked globals and asserts the evaluator decides beside
+  run-time ones; the half-zero fix), the T6a test's rendering assert rewritten (`$F64(0.1)` and `$F32(0.1)` are both
+  `0.1` now), and checks/cases `e4arange`, `e4aexact`, `e4afloatoverflow`, `e4azerodiv`, `t6f32range`, `t6f16range`,
+  `t6f16intrange`, `t6bf16range`, `l12bfloatbig`, `e6dnomeet`; `t6afloatexpr` went with the rule it pinned.

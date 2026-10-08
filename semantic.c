@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <ctype.h>
+#include <math.h>
 #include "util.h"
 #include "token.h"
 #include "syntax.h"
@@ -4383,7 +4384,7 @@ enum typeFit {
     TYPE_FIT_OK,
     TYPE_FIT_MISMATCH,      //VALUE_TYPE_MISMATCH - structurally different types
     TYPE_FIT_NUMBER,        //T6b - two numeric types, the value's not flowing into the target's
-    TYPE_FIT_LITERAL_EXPR,  //T6a - as above, for a value built only from literals ("f F32 = 0.5 * 2.0")
+    TYPE_FIT_LITERAL_EXPR,  //E4a: a literal-only expression whose value the target cannot hold ("b U8 = 200 + 100")
     TYPE_FIT_SCOPE_MISMATCH,//SCOPE_MAY_NOT_OUTLIVE_TARGET - structurally fine, scope-unsafe - see scopeCanFlowInto
     TYPE_FIT_SCOPE_OWN,     //O10d: own into a named scope. Rejected like the above, but told apart because
                              //no caller could ever satisfy it - the fix is in this body, not at a call site
@@ -4394,22 +4395,43 @@ enum typeFit {
     TYPE_FIT_READ_ONLY      //T25c: a read-only reference where a writable one is wanted
 };
 
-//can an integer literal's written value be represented in integer type `to`? byte is unsigned (T4), so
-//its range is 0..255 - a negative literal never fits one, and neither does 256.
-static bool intLiteralFitsIntType(long long v, struct type to) {
-    const struct primInfo* p = PrimInfo(to.bType);
-    if (!p || p->kind == 'f') return false;
-    if (p->kind == 'u') return v >= 0 && (p->bits == 64 || v <= (long long)((1ULL << p->bits) - 1));
-    if (p->bits == 64) return true;
-    long long lim = 1LL << (p->bits - 1);
-    return v >= -lim && v < lim;
+__extension__ typedef __int128 litWide;
+
+//T6: an integer literal's exact value - a U64's bit pattern read unsigned (only a literal-only expression, E4a, folds
+//to one above I64's maximum), every other's as it is held
+static litWide intLiteralExact(struct operand* lit) {
+    return lit->type.bType == BASETYPE_U64 ? (litWide)(unsigned long long)lit->intLiteralVal : (litWide)lit->intLiteralVal;
 }
 
-//T6a: whether op is built only from numeric literals and arithmetic on them - "0.5 * 2.0". Such a value is not itself
-//a literal (E4), so it keeps its literals' own type (F64 for a float) and adapts to nothing; told apart only so the
-//error can say so, since it reads as though it should adapt as a lone literal does
+//a numeric literal's value as a float - what it holds once it adapts to a float type
+static double literalAsFloat(struct operand* lit) {
+    return TypeIsFloat(lit->type) ? lit->floatLiteralVal : (double)intLiteralExact(lit);
+}
+
+//can an integer literal's value be represented in integer type `to`? an unsigned type's range starts at 0 (T4), so
+//a negative literal never fits one, and 256 does not fit a U8
+static bool intLiteralFitsIntType(litWide v, struct type to) {
+    const struct primInfo* p = PrimInfo(to.bType);
+    if (!p || p->kind == 'f') return false;
+    if (p->kind == 'u') return v >= 0 && v < ((litWide)1 << p->bits);
+    return v >= -((litWide)1 << (p->bits - 1)) && v < ((litWide)1 << (p->bits - 1));
+}
+
+//T6: a float value fits a float type unless, rounded to it as a conversion rounds, a finite value becomes an infinity -
+//"f F32 = 1e39", "70000" into an F16. Rounding the other way, to zero or a subnormal, still fits. An infinity or a NaN
+//already (a float division by zero, E6a) is a value of every float type.
+static bool floatValueFitsType(double v, struct type to) {
+    enum floatKind k = to.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : to.bType == BASETYPE_F16 ? FLOAT_KIND_F16
+                     : to.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
+    return !isfinite(v) || isfinite(FloatRoundTo(v, k));
+}
+
+//E4a: whether op is a literal-only expression - built only from numeric literals and the arithmetic, bitwise and shift
+//operators (unary "-" and "~" included) - which adapts to a target as one literal does (T6). A tried one ("try (1 + 2)")
+//is a checked computation in its literals' own types, not a literal (E15a), so it is not one.
 static bool operandOnlyNumericLiterals(struct operand* op) {
-    if (op->isLiteral) return TypeIsNumeric(op->type);
+    if (op->isLiteral) return TypeIsNumeric(op->type) && !op->isNullLiteral;
+    if (op->isTried || op->checkRoot || op->catchClauses.len) return false;
     switch (op->opType) {
         case OPERATION_MINUS: case OPERATION_BTWSE_INV: case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL:
         case OPERATION_DIV: case OPERATION_MOD: case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
@@ -4422,6 +4444,102 @@ static bool operandOnlyNumericLiterals(struct operand* op) {
     return op->args.len > 0;
 }
 
+//T6/E4a: may op be adapted as a literal - any literal, or a literal-only expression
+static bool operandIsLiteralLike(struct operand* op) { return op->isLiteral || operandOnlyNumericLiterals(op); }
+
+//E4a: what a literal-only expression is worth, computed while compiling - an integer exactly, never wrapped (E6c is
+//the run time's arithmetic, not this), a float in F64 as its literals are (T6a)
+struct litValue { bool isFloat; litWide i; double f; };
+enum litValueFail { LIT_VALUE_OK, LIT_VALUE_NONE, LIT_VALUE_ZERO_DIV };
+
+//LIT_VALUE_NONE where it has no value any type could hold - an integer beyond 128 bits, a finite float computation
+//reaching an infinity - and LIT_VALUE_ZERO_DIV for an integer divided by zero, which OperandBinary already reported.
+//A float divided by zero is an infinity or a NaN (E6a), which are values; a NaN is the one LLVM folds 0.0 / 0.0 to.
+static enum litValueFail literalExprValue(struct operand* op, struct litValue* out) {
+    if (op->isLiteral) {
+        out->isFloat = TypeIsFloat(op->type);
+        if (out->isFloat) out->f = op->floatLiteralVal;
+        else out->i = intLiteralExact(op);
+        return LIT_VALUE_OK;
+    }
+    struct litValue a = {0}, b = {0};
+    enum litValueFail r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 0), &a);
+    if (r == LIT_VALUE_OK && op->args.len > 1) r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 1), &b);
+    if (r != LIT_VALUE_OK) return r;
+    enum operation o = op->opType;
+    if (TypeIsFloat(op->type)) {
+        double x = a.isFloat ? a.f : (double)a.i, y = b.isFloat ? b.f : (double)b.i, v;
+        switch (o) {
+            case OPERATION_MINUS: v = -x; break;
+            case OPERATION_ADD: v = x + y; break;
+            case OPERATION_SUB: v = x - y; break;
+            case OPERATION_MUL: v = x * y; break;
+            case OPERATION_DIV: v = x / y; break;
+            default: return LIT_VALUE_NONE;
+        }
+        if (isinf(v) && isfinite(x) && (o == OPERATION_MINUS || isfinite(y)) && !(o == OPERATION_DIV && y == 0))
+            return LIT_VALUE_NONE;
+        out->isFloat = true;
+        out->f = isnan(v) ? NAN : v;
+        return LIT_VALUE_OK;
+    }
+    litWide x = a.i, y = b.i, v = 0;
+    bool ovf = false;
+    switch (o) {
+        case OPERATION_MINUS: ovf = __builtin_sub_overflow((litWide)0, x, &v); break;
+        case OPERATION_BTWSE_INV: v = ~x; break;
+        case OPERATION_ADD: ovf = __builtin_add_overflow(x, y, &v); break;
+        case OPERATION_SUB: ovf = __builtin_sub_overflow(x, y, &v); break;
+        case OPERATION_MUL: ovf = __builtin_mul_overflow(x, y, &v); break;
+        case OPERATION_DIV: case OPERATION_MOD:
+            if (y == 0) return LIT_VALUE_ZERO_DIV;
+            if (y == -1) { ovf = __builtin_sub_overflow((litWide)0, x, &v); if (o == OPERATION_MOD) { v = 0; ovf = false; } }
+            else v = o == OPERATION_DIV ? x / y : x % y; //both truncate, as sdiv and srem do
+            break;
+        case OPERATION_BTSFT_L:
+            if (y < 0) return LIT_VALUE_NONE; //E8a reported it
+            if (x != 0 && y > 126) ovf = true;
+            else if (x != 0) ovf = __builtin_mul_overflow(x, (litWide)1 << y, &v);
+            break;
+        case OPERATION_BTSFT_R:
+            if (y < 0) return LIT_VALUE_NONE;
+            v = y > 126 ? (x < 0 ? -1 : 0) : x >> y; //an exact value's shift: floor division by 2^y
+            break;
+        case OPERATION_BTWSE_AND: v = x & y; break;
+        case OPERATION_BTWSE_OR: v = x | y; break;
+        case OPERATION_BTWSE_XOR: v = x ^ y; break;
+        default: return LIT_VALUE_NONE;
+    }
+    if (ovf) return LIT_VALUE_NONE;
+    out->isFloat = false;
+    out->i = v;
+    return LIT_VALUE_OK;
+}
+
+//E4a: op, a literal-only expression, becomes - in place - the one literal holding its value, typed as that literal
+//would be written (T6a: I32, else I64, else U64 for a value only it holds; F64 for a float). A value no literal can
+//hold leaves op as it was.
+static enum litValueFail literalExprFold(struct operand* op) {
+    struct litValue v;
+    enum litValueFail r = literalExprValue(op, &v);
+    if (r != LIT_VALUE_OK) return r;
+    struct operand* lit;
+    if (v.isFloat) {
+        lit = operandNew(op->tok, OPERATION_NONE, TypeVanilla(BASETYPE_FLOAT64));
+        lit->floatLiteralVal = v.f;
+    } else {
+        struct type t = TypeVanilla(BASETYPE_INT32);
+        if (!intLiteralFitsIntType(v.i, t)) t = TypeVanilla(BASETYPE_INT64);
+        if (!intLiteralFitsIntType(v.i, t)) t = TypeVanilla(BASETYPE_U64);
+        if (!intLiteralFitsIntType(v.i, t)) return LIT_VALUE_NONE;
+        lit = operandNew(op->tok, OPERATION_NONE, t);
+        lit->intLiteralVal = (long long)(unsigned long long)v.i;
+    }
+    lit->isLiteral = true;
+    *op = *lit;
+    return LIT_VALUE_OK;
+}
+
 //true if numeric LITERAL `lit` may implicitly adapt to a `to`-typed target - the one exception T6 carves
 //out of "no implicit conversion between distinct types." A literal has no fixed width/representation of
 //its own yet (unlike an already-evaluated non-literal value, which does, and needs an actual runtime
@@ -4432,14 +4550,25 @@ static bool operandOnlyNumericLiterals(struct operand* op) {
 //"buf[i] = 2" and "b == 1" were all type errors, and byte was writable only through an explicit byte(1)
 //or a character literal (which is already typed byte, OperandCharLiteral). Representability is the real
 //safety condition; direction never was. A float literal still never adapts to an integer type - that
-//discards a fractional part rather than merely choosing a width, which is exactly what E26 is for.
-//`lit`'s own type and `to` are assumed already known to differ (OperandFitsType's own equal-type check
-//runs first).
+//discards a fractional part rather than merely choosing a width, which is exactly what E26 is for. Nor does a
+//value adapt to a float type it overflows: "f F32 = 1e39" would be an infinity nobody wrote.
 bool numericLiteralFits(struct operand* lit, struct type to) {
     if (!TypeIsNumeric(lit->type) || !TypeIsNumeric(to)) return false;
-    if (TypeIsFloat(lit->type)) return TypeIsFloat(to);
-    if (TypeIsFloat(to)) return true; //any integer literal is representable in any float type
-    return intLiteralFitsIntType(lit->intLiteralVal, to);
+    if (TypeIsFloat(lit->type)) return TypeIsFloat(to) && floatValueFitsType(lit->floatLiteralVal, to);
+    if (TypeIsFloat(to)) return floatValueFitsType(literalAsFloat(lit), to);
+    return intLiteralFitsIntType(intLiteralExact(lit), to);
+}
+
+//T6/E4a: op - a numeric literal, or a literal-only expression - adapts to numeric type `to` as one literal does: in
+//place, when the value it has fits. Anything else, and a value that does not fit, leaves op as it was.
+static bool operandAdaptLiteral(struct operand* op, struct type to) {
+    if (!TypeIsNumeric(to) || !operandOnlyNumericLiterals(op)) return false;
+    struct operand saved = *op;
+    if (!op->isLiteral && literalExprFold(op) != LIT_VALUE_OK) return false;
+    if (!numericLiteralFits(op, to)) { *op = saved; return false; }
+    if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op);
+    op->type = to;
+    return true;
 }
 
 //T6's ordering for the both-operands-are-literals case below: the narrower of two literal types adapts to
@@ -4779,6 +4908,17 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
     }
     FinalizeLambda(op, &target); //D16a: a lambda is checked against what it is written for
+    //E4a: a literal-only expression is computed here, exactly, and then fits as the one literal holding its value
+    //would - "b U8 = 1 + 2", "f F32 = 0.5 * 2.0"; it is an error only where that value does not fit (or has none)
+    if (!op->isLiteral && TypeIsNumeric(target) && operandOnlyNumericLiterals(op)) {
+        struct operand saved = *op;
+        enum litValueFail why = literalExprFold(op);
+        if (why == LIT_VALUE_ZERO_DIV) return TYPE_FIT_OK; //reported where the division was built (E6a)
+        enum typeFit r = why == LIT_VALUE_OK ? OperandFitsType(func, op, target) : TYPE_FIT_LITERAL_EXPR;
+        if (r == TYPE_FIT_OK) return r;
+        *op = saved;
+        return r == TYPE_FIT_LITERAL_RANGE ? TYPE_FIT_LITERAL_EXPR : r;
+    }
     //T25c: a read-only reference never becomes writable by being put somewhere
     if (TypeIsPermRef(target) && target.refMut && !OperandGivesWritable(op)) return TYPE_FIT_READ_ONLY;
     //...and an array LITERAL's elements adapt to the target's permission, as a numeric literal adapts to its type,
@@ -4801,7 +4941,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             && !op->type.owner && TypeIsNumeric(op->type) && TypeIsNumeric(target) && target.ctorFunc) {
         struct type base = TypeVanilla(target.bType);
         if (!TypeIsSame(op->type, base) && !numericLiteralFits(op, base)) return TYPE_FIT_LITERAL_RANGE;
-        if (TypeIsInt(op->type) && TypeIsFloat(base)) op->floatLiteralVal = (double)op->intLiteralVal;
+        if (TypeIsFloat(base)) op->floatLiteralVal = literalAsFloat(op);
         if (!op->litCtorPending) {
             struct operand* arg = MallocOrCrash(sizeof(struct operand));
             *arg = *op;
@@ -4884,7 +5024,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         int fs = 0, fd = 0;
         if (!op->isLiteral && !TypeIsSame(target, op->type) && numericFamilyRank(op->type, &fs) >= 0
                 && numericFamilyRank(target, &fd) >= 0 && !(op->type.owner && !target.owner && op->type.bType == target.bType))
-            return operandOnlyNumericLiterals(op) ? TYPE_FIT_LITERAL_EXPR : TYPE_FIT_NUMBER;
+            return TYPE_FIT_NUMBER;
     }
     if (TypeIsSame(target, op->type)) {
         //a struct or compile-time-length array is reference-shaped only when explicitly "&"-marked (structMAlloc) - a
@@ -4967,7 +5107,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         //nothing in the existing test suite passed a bare int literal where a float was expected;
         //surfaced immediately by a mixed int/float array literal built while testing the array-literal
         //rework.
-        if (TypeIsInt(op->type) && TypeIsFloat(target)) op->floatLiteralVal = (double)op->intLiteralVal;
+        if (TypeIsFloat(target)) op->floatLiteralVal = literalAsFloat(op);
         op->type = target;
         return TYPE_FIT_OK;
     }
@@ -5049,7 +5189,7 @@ void reportTypeFit(enum typeFit fit, struct token tok) {
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) ErrMsgSemantic(tok, ELEM_REF_SHAPE_MISMATCH);
     else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
     else if (fit == TYPE_FIT_NUMBER) ErrMsgSemantic(tok, NUMBER_DOES_NOT_FLOW);
-    else if (fit == TYPE_FIT_LITERAL_EXPR) ErrMsgSemantic(tok, LITERAL_EXPR_DOES_NOT_FLOW);
+    else if (fit == TYPE_FIT_LITERAL_EXPR) ErrMsgSemantic(tok, LITERAL_EXPR_NOT_REPRESENTABLE);
     else if (fit == TYPE_FIT_CTOR) ErrMsgSemantic(tok, PRIM_CTOR_LITERAL);
     else if (fit == TYPE_FIT_READ_ONLY) ErrMsgSemantic(tok, READ_ONLY_TO_WRITABLE);
 }
@@ -5592,7 +5732,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         for (int i = 0; ok && i < args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
             struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-            if (arg->isLiteral && TypeIsNumeric(arg->type) && paramT.bType == BASETYPE_TYPEVAR) continue;
+            if (operandOnlyNumericLiterals(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //E4a: one too
             if (arg->pendingLambda) continue; //D16a: once the others have fixed what it can take
             if (OperandIsWrittenText(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //G9a, below
             //G9b: a variable an earlier argument - a method's receiver, say - already bound is no longer
@@ -5604,10 +5744,10 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 bool byNumber = false;
                 for (int k = 0; k < numBound.len && !byNumber; k++) byNumber = StrCmp(*(struct str*)ListGetIdx(&numBound, k), paramT.name);
                 struct type* bt = bindingGet(&bindings, paramT.name);
-                if (byNumber && !arg->isLiteral && NumericFlows(*bt, arg->type, true)) *bt = TypeVanilla(arg->type.bType);
+                if (byNumber && !operandIsLiteralLike(arg) && NumericFlows(*bt, arg->type, true)) *bt = TypeVanilla(arg->type.bType);
                 continue;
             }
-            if (paramT.bType == BASETYPE_TYPEVAR && !arg->isLiteral && TypeIsNumeric(arg->type)) ListAdd(&numBound, &paramT.name);
+            if (paramT.bType == BASETYPE_TYPEVAR && !operandIsLiteralLike(arg) && TypeIsNumeric(arg->type)) ListAdd(&numBound, &paramT.name);
             if (!TypeUnify(paramT, arg->type, &bindings)) ok = false;
         }
         //G9a: written text adapts as a numeric literal does - "m.Put("apple", 1)" on a Map<String&, Int32> is the
@@ -5626,13 +5766,13 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         for (int i = 0; ok && i < args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
             struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-            if (!(arg->isLiteral && TypeIsNumeric(arg->type) && paramT.bType == BASETYPE_TYPEVAR)) continue;
+            if (!(operandOnlyNumericLiterals(arg) && paramT.bType == BASETYPE_TYPEVAR)) continue;
             if (bindingGet(&bindings, paramT.name)) continue;
             struct type widest = arg->type;
             for (int j = i +1; j < args.len; j++) {
                 struct operand* other = *(struct operand**)ListGetIdx(&args, j);
                 struct type otherT = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
-                if (other->isLiteral && TypeIsNumeric(other->type) && otherT.bType == BASETYPE_TYPEVAR
+                if (operandOnlyNumericLiterals(other) && otherT.bType == BASETYPE_TYPEVAR
                     && StrCmp(otherT.name, paramT.name) && numericTypeRank(other->type) > numericTypeRank(widest)) {
                     widest = other->type;
                 }
@@ -5842,8 +5982,7 @@ struct operand* OperandAtomic(struct list args, enum operation kind, struct toke
         struct operand* v = *(struct operand**)ListGetIdx(&args, i);
         //a literal still adapts by representability, exactly as against any other same-type-requiring
         //position (T6); anything else must already be the target's type
-        if (v->isLiteral && numericLiteralFits(v, target->type)) v->type = target->type;
-        else if (!TypeIsSame(v->type, target->type)) ErrMsgSemantic(v->tok, ATOMIC_VALUE_TYPE);
+        if (!operandAdaptLiteral(v, target->type) && !TypeIsSame(v->type, target->type)) ErrMsgSemantic(v->tok, ATOMIC_VALUE_TYPE);
         ListAdd(&op->args, &v);
     }
     return op;
@@ -6494,50 +6633,60 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         if (OperandIsWrittenText(a) && !OperandIsWrittenText(b) && TypeIsSame(b->type, tv)) a = OperandNominalConversion(tv, a, a->tok);
         else if (OperandIsWrittenText(b) && !OperandIsWrittenText(a) && TypeIsSame(a->type, tv)) b = OperandNominalConversion(tv, b, b->tok);
     }
-    if (rule.sameType && a->isLiteral != b->isLiteral) {
-        struct operand* lit = a->isLiteral ? a : b;
-        struct operand* other = a->isLiteral ? b : a;
+    //E4a: a literal-only expression ("1.0 / 3.0") adapts here as a literal does - "f32 < 1.0 / 3.0" compares F32s
+    bool aLit = operandIsLiteralLike(a), bLit = operandIsLiteralLike(b), unfit = false;
+    if (rule.sameType && aLit != bLit) {
+        struct operand* lit = aLit ? a : b;
+        struct operand* other = aLit ? b : a;
         //T2a: "p == null" - null adapts to its sibling exactly as a numeric literal does. Reference
         //equality is pointer identity (E10), so this compares against a null pointer and needs no
         //operator of its own.
         if (lit->isNullLiteral && TypeIsNullable(other->type)) lit->type = other->type;
-        else if (TypeIsNumeric(other->type) && numericLiteralFits(lit, other->type)) {
-            if (TypeIsFloat(other->type) && TypeIsInt(lit->type)) lit->floatLiteralVal = (double)lit->intLiteralVal;
-            lit->type = other->type;
+        else if (TypeIsNumeric(other->type) && TypeIsNumeric(lit->type) && !operandAdaptLiteral(lit, other->type)) {
+            //E6d: a value the other's type cannot hold meets it at the literal's own type (T6a), as two numbers meet
+            //(T6b) - "b + 300" with b a U8 is an I32, b widened; a literal-only expression is the literal holding its
+            //value. Where the other's type does not flow there, they do not meet.
+            enum litValueFail why = lit->isLiteral ? LIT_VALUE_OK : literalExprFold(lit);
+            unfit = true;
+            if (why == LIT_VALUE_NONE) ErrMsgSemantic(lit->tok, LITERAL_EXPR_NOT_REPRESENTABLE);
+            else if (why == LIT_VALUE_OK && NumericFlows(other->type, lit->type, true)) {
+                operandWidenInPlace(other, lit->type);
+                unfit = false;
+            } else if (why == LIT_VALUE_OK) ErrMsgSemantic(tok, LITERAL_DOES_NOT_MEET);
         }
     }
     //both sides literals of differing numeric types ("'a' + 1", "1 + 2.5"): neither has a representation to
     //preserve, so the narrower adapts to the wider (numericTypeRank) rather than the pair being rejected for
     //not matching. Adapting the WIDER one down instead would silently reintroduce the wrap this avoids -
-    //byte arithmetic on "200 + 100" - so the direction here is not arbitrary.
-    else if (rule.sameType && a->isLiteral && b->isLiteral && !TypeIsSame(a->type, b->type)
+    //byte arithmetic on "200 + 100" - so the direction here is not arbitrary. A literal-only expression is one of the
+    //two as a literal is: "(1 + 2) * 0.5" is F64 arithmetic
+    else if (rule.sameType && aLit && bLit && !TypeIsSame(a->type, b->type)
             && TypeIsNumeric(a->type) && TypeIsNumeric(b->type)) {
         struct operand* lit = numericTypeRank(a->type) < numericTypeRank(b->type) ? a : b;
         struct operand* other = lit == a ? b : a;
-        if (numericLiteralFits(lit, other->type)) {
-            if (TypeIsFloat(other->type) && TypeIsInt(lit->type)) lit->floatLiteralVal = (double)lit->intLiteralVal;
-            lit->type = other->type;
-        }
+        operandAdaptLiteral(lit, other->type);
     }
     //T6b: two numeric values of one family meet at the wider - the narrower widened, losing nothing, so an Int32 and
     //an Int64 add as Int64s; a declared type meets its base as the base. Two that neither flows into stay an error.
-    if (rule.sameType && !a->isLiteral && !b->isLiteral && !TypeIsSame(a->type, b->type)) {
+    if (rule.sameType && !aLit && !bLit && !TypeIsSame(a->type, b->type)) {
         if (NumericFlows(a->type, b->type, true)) operandWidenInPlace(a, b->type);
         else if (NumericFlows(b->type, a->type, true)) operandWidenInPlace(b, a->type);
     }
-    //E8a: a constant shift amount out of range is settled here too, same split
-    if ((opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R) && b->isLiteral && TypeIsInt(b->type)
-            && TypeIsInt(a->type)) {
+    //E8a: a constant shift amount out of range is settled here too, same split - a literal-only one (E4a) as a literal
+    struct litValue bv = {0};
+    bool bConst = (opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R || opType == OPERATION_DIV
+                   || opType == OPERATION_MOD) && TypeIsInt(b->type) && operandOnlyNumericLiterals(b)
+                  && literalExprValue(b, &bv) == LIT_VALUE_OK;
+    if ((opType == OPERATION_BTSFT_L || opType == OPERATION_BTSFT_R) && bConst && TypeIsInt(a->type)) {
         long long width = TypeGetSize(a->type) * 8;
-        if (b->intLiteralVal < 0 || b->intLiteralVal >= width) {
+        if (bv.i < 0 || bv.i >= width) {
             ErrMsgSemantic(b->tok, SHIFT_OUT_OF_RANGE_LITERAL);
         }
     }
     //E6a: a constant zero divisor is settled here rather than left to abort at run time - the same split
-    //E16 makes for a constant index and D14b for a constant array length. Only the literal case: a
-    //non-literal divisor is checked where it is evaluated.
-    if ((opType == OPERATION_DIV || opType == OPERATION_MOD) && b->isLiteral
-            && TypeIsInt(b->type) && b->intLiteralVal == 0) {
+    //E16 makes for a constant index and D14b for a constant array length. Only a literal, or a literal-only
+    //expression (E4a): a divisor with a name in it is checked where it is evaluated.
+    if ((opType == OPERATION_DIV || opType == OPERATION_MOD) && bConst && bv.i == 0) {
         ErrMsgSemantic(b->tok, DIVIDE_BY_ZERO_LITERAL);
     }
     struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : a->type);
@@ -6548,7 +6697,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     bool bOk = operandMeetsReq(b, rule.require);
     if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
     if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
-    if (rule.sameType && aOk && bOk && !TypeIsSame(a->type, b->type))
+    if (rule.sameType && aOk && bOk && !unfit && !TypeIsSame(a->type, b->type))
         ErrMsgSemantic(tok, TypeIsNumeric(a->type) && TypeIsNumeric(b->type) ? NUMBERS_DO_NOT_MEET : OPERANDS_NOT_SAME_TYPE);
     return op;
 }
@@ -6632,6 +6781,8 @@ struct operand* OperandFloatLiteral(struct token tok) {
     buf[tok.str.len] = '\0';
     stripDigitSeparators(buf); //L10b
     op->floatLiteralVal = strtod(buf, NULL);
+    //L12b: beyond F64's range a literal would be an infinity nobody wrote; below it, it rounds to zero or a subnormal
+    if (isinf(op->floatLiteralVal)) ErrMsgSemantic(tok, FLOAT_LITERAL_OUT_OF_RANGE);
     return op;
 }
 
@@ -6904,7 +7055,7 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
     if (name) {
         struct operand* seq = NULL;
         struct operand* other = swap ? a : b;
-        bool plain = a->isLiteral || a->isNullLiteral || a->opType == OPERATION_READ_VAR;
+        bool plain = operandIsLiteralLike(a) || a->isNullLiteral || a->opType == OPERATION_READ_VAR;
         if (swap && !inChain && !plain) {
             seq = operandNew(opTok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
             seq->comprBody = ListInit(sizeof(struct statement));
@@ -6963,7 +7114,7 @@ static bool eqConsults(struct checkCtx* ctx, struct type t, int depth) {
 //x held once: itself when evaluating it twice is harmless (a literal, a variable), else a hidden local declared
 //by a statement appended to seq's body
 static struct operand* eqHold(struct checkCtx* ctx, struct operand* x, struct token tok, struct operand* seq) {
-    if (x->isLiteral || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
+    if (operandIsLiteralLike(x) || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
     return OperandReadVar(holdInHidden(ctx, x, tok, "eq", &seq->comprBody), tok);
 }
 
@@ -7005,7 +7156,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
             if (OperandIsWrittenText(b)) b = OperandNominalConversion(tv, b, b->tok);
         }
     }
-    struct type t = (a->isLiteral || a->isNullLiteral) && !(b->isLiteral || b->isNullLiteral) ? b->type : a->type;
+    struct type t = (operandIsLiteralLike(a) || a->isNullLiteral) && !(operandIsLiteralLike(b) || b->isNullLiteral) ? b->type : a->type;
     if (a->isNullLiteral || b->isNullLiteral || a->type.isTuple || b->type.isTuple || !eqConsults(ctx, t, 0)) {
         return OperandBinary(a, b, OPERATION_EQ, tok);
     }
@@ -7232,7 +7383,7 @@ static struct operand* buildCmpChain(struct checkCtx* ctx, struct syntax* s) {
 }
 
 //can this operand's type give way to the other value's in "a if c else b" - a literal, text written here, null
-static bool condAdapts(struct operand* op) { return op->isLiteral || op->isNullLiteral || OperandIsWrittenText(op); }
+static bool condAdapts(struct operand* op) { return operandIsLiteralLike(op) || op->isNullLiteral || OperandIsWrittenText(op); }
 
 //E28: "a if c else b" - c decides which one is evaluated; both must have one type, a literal adapting to the other
 static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
@@ -7245,11 +7396,11 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     FinalizeLambda(b, &a->type);
     struct type t = a->type;
     if (!TypeIsSame(a->type, b->type)) {
-        if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && a->isLiteral && b->isLiteral) {
+        if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && operandIsLiteralLike(a) && operandIsLiteralLike(b)) {
             t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
             OperandFitsType(ctx->func, a, t);
             OperandFitsType(ctx->func, b, t);
-        } else if (condAdapts(b) && !(condAdapts(a) && a->isLiteral && !b->isLiteral)
+        } else if (condAdapts(b) && !(condAdapts(a) && operandIsLiteralLike(a) && !operandIsLiteralLike(b))
                    && OperandFitsType(ctx->func, b, a->type) == TYPE_FIT_OK) {
             t = a->type; //the adaptable value gives way - of two, a literal gives way to text built here
         } else if (condAdapts(a) && OperandFitsType(ctx->func, a, b->type) == TYPE_FIT_OK) {
@@ -7328,7 +7479,7 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     }
     struct operand* seq = NULL;
     struct operand* arg = x;
-    bool plain = x->isLiteral || x->isNullLiteral || OperandIsWrittenText(x) || x->opType == OPERATION_READ_VAR;
+    bool plain = operandIsLiteralLike(x) || x->isNullLiteral || OperandIsWrittenText(x) || x->opType == OPERATION_READ_VAR;
     if (!plain) {
         seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_BOOL));
         seq->comprBody = ListInit(sizeof(struct statement));
@@ -7623,7 +7774,7 @@ static struct operand* operandBounds(struct operand* v, struct operand* lo, stru
 //creates *seq on first use, whose statements run ahead of the expression
 static struct operand* heldOnce(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct operand** seq) {
-    if (x->isLiteral || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
+    if (operandIsLiteralLike(x) || x->isNullLiteral || x->opType == OPERATION_READ_VAR) return x;
     if (!*seq) {
         *seq = operandNew(tok, OPERATION_SEQ, x->type);
         (*seq)->comprBody = ListInit(sizeof(struct statement));
@@ -7643,7 +7794,7 @@ static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* 
     struct var* m = methodNamedOn(t, method);
     if (!m || m->type.vars.len <= k) return x;
     struct type pt = ((struct var*)ListGetIdx(&m->type.vars, k))->type;
-    if (x->isLiteral && TypeIsNumeric(pt)) reportTypeFit(OperandFitsType(ctx->func, x, pt), x->tok);
+    if (operandIsLiteralLike(x) && TypeIsNumeric(pt)) reportTypeFit(OperandFitsType(ctx->func, x, pt), x->tok);
     return x;
 }
 
@@ -10363,12 +10514,14 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     bool fixed = false;
     for (int i = 0; i < argNodes.len; i++) {
         if (!TypeIsInt(args[i]->type)) { ErrMsgSemantic(args[i]->tok, RANGE_NEEDS_INTEGERS); return (struct statement){0}; }
-        if (!args[i]->isLiteral && !fixed) { T = args[i]->type; fixed = true; }
+        if (!operandIsLiteralLike(args[i]) && !fixed) { T = args[i]->type; fixed = true; }
         if (!fixed && numericTypeRank(args[i]->type) > numericTypeRank(T)) T = args[i]->type;
     }
     T.scopeParam = NULL;
     T.structMAlloc = false;
-    if (args[2] && args[2]->isLiteral && args[2]->intLiteralVal <= 0) ErrMsgSemantic(args[2]->tok, RANGE_ZERO_STEP);
+    struct litValue step = {0};
+    if (args[2] && operandOnlyNumericLiterals(args[2]) && literalExprValue(args[2], &step) == LIT_VALUE_OK && step.i <= 0)
+        ErrMsgSemantic(args[2]->tok, RANGE_ZERO_STEP);
 
     //evaluated once, in the order written
     //one argument is the end; two or three are start, end [, step]
@@ -10954,7 +11107,11 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct t
     mb.structMAlloc = vb.structMAlloc = mb.refMut = vb.refMut = false;
     bool viaEq = matchedType.bType != BASETYPE_CHOICE && eqConsults(ctx, matchedType, 0)
                  && (TypeIsSame(vb, mb) || (OperandIsWrittenText(val) && TypeIsByteArray(mb)));
-    if (!viaEq && !TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
+    //S13: a literal - or a literal-only expression (E4a) - adapts to the matched type, as it would beside it in "=="
+    if (!viaEq && !TypeIsSame(val->type, matchedType) && TypeIsNumeric(matchedType) && operandIsLiteralLike(val)) {
+        enum typeFit fit = OperandFitsType(ctx->func, val, matchedType);
+        if (fit != TYPE_FIT_OK) reportTypeFit(fit, val->tok);
+    } else if (!viaEq && !TypeIsSame(val->type, matchedType)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_CASE;
     stmt.op = val;

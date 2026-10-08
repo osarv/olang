@@ -1,6 +1,0 @@
-# check: fail an expression built from literals is not itself a literal
-# T6a: a float literal is an F64, and an expression built from literals is not a literal (E4), so "0.5 * 2.0" is an
-# F64 that does not flow into an F32 (T6b) - the error says to write F32(0.5 * 2.0)
-fn main() ? {
-    f F32 = 0.5 * 2.0
-}

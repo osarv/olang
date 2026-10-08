@@ -1,0 +1,6 @@
+# check: fail this literal's value can't be represented
+# T6: 65519.99 rounds to F16's largest value, 65504, and fits; 65520 rounds to an infinity, and does not
+fn main() ? {
+    ok F16 = 65519.99
+    f F16 = 65520.0
+}

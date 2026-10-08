@@ -2888,7 +2888,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   loops, spelled by the loop's variable (`break line`); declined - the user does not like them, and some loops have
   no variable to name. `break`/`continue` act on the innermost loop only (S11); leaving an outer loop is a flag or a
   function with `return`.
-- **A float literal's own type is `F64` (T6a, 2026-10-08, the user: "do the float default to F64").** It was `F32`,
+- **A float literal's own type is `F64` (T6a, 2026-10-08, the user: "do the float default to F64"; its "what changes
+  meaning" and both flagged questions were settled the same day - see the E4a/E6d/E11a entry below).** It was `F32`,
   so `x := 0.1` held the float nearest 0.1 (0.10000000149011612 once widened), a generic reached only by `0.1` was
   instantiated at `F32`, and `0.1 + 0.2` summed in single precision; C, Go and Rust all default to 64-bit. A literal
   written against a typed float still adapts (T6) - `f F32 = 0.1`, an `F16` parameter - so the change is one line in
@@ -2917,6 +2918,29 @@ Go through this for every change to what olang means - a rule added, revised or 
   **Found on the way, pre-existing**: `extern fn exit` failed to compile (the runtime's hand-kept owned-symbol list
   lacked `exit`/`abort`/`setjmp`/`longjmp`; it now reads the runtime's own text - X7), and `n := a.Len()` was rejected
   by D15 (the built-in `Len()` and value-giving atomics are calls too now).
+- **Literal-only expressions adapt; a literal another operand cannot hold meets it at its own type; floats render
+  shortest (E4a/E6d/T6/L12b/E11a, 2026-10-08, the user's three follow-ups to T6a, plus the coordinator's E6d).**
+  **E4a**: an expression built only from numeric literals (and parentheses, unary `-`/`~`, `+ - * / % & | ^ << >>`)
+  adapts wherever one literal does - computed while compiling, an integer exactly (never wrapped), a float in `F64`
+  and rounded once to the target - then fitting as the literal holding that value: `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0`
+  and `f32 < 1.0 / 3.0` (an `F32` compare) work; `b U8 = 200 + 100` and `x I32 = 2147483647 + 1` are errors. One
+  point does it (`literalExprFold` rewriting the expression into its literal, tried in `OperandFitsType` and
+  `operandAdaptLiteral`), and every site that let a literal adapt now asks `operandIsLiteralLike`; the evaluator sees
+  only the folded literal, so it agrees by construction. With no target nothing changes (`x := 1 + 2` stays an error).
+  Names (immutable globals, `-D` constants) do not join yet - flagged; nor does an expression under `try`, which is a
+  checked computation in its own types. Integer `/` `%` by a literal-only zero is an error anywhere; **a float division
+  by zero stays an infinity/NaN** (IEEE; the prelude writes them that way) - my call against the literal wording,
+  flagged. **E6d (the coordinator's addition)**: beside an operand whose type cannot hold it, a literal meets it at the
+  literal's own type by T6b - `b + 300` (b `U8`) is an `I32`, `f32 + 1e300` an `F64` - and where that operand does not
+  flow there (`u32 - (-1)`, an integer beside `1.5`) it is an error naming the fix. **T6/L12b**: a value overflowing a
+  narrower float when rounded (`f F32 = 1e39`, `F16` given `70000` or `65520.0`; `65519.99` rounds to 65504 and fits)
+  is an error; underflow to zero or a subnormal fits (flagged); a literal beyond `F64` (`1e400`) is an error.
+  **E11a**: `$` on a float is the fewest digits (1-17) whose correctly rounded decimal reads back as the same value of
+  its own type, laid out as `%.17g` lays it out (positional for exponent -4..16): `$0.1` is `0.1` in all four float
+  types; `FloatShortest` (util.c) for the evaluator and `@__olang_fmt_float` in the runtime IR are one algorithm over
+  the same libc calls, checked identical on 1.2M values. **Found on the way, fixed**: `MinifloatFrom(0)` gave
+  -infinity's bits (`h F16 = 0.0` emitted a malformed constant, the evaluator baked an F16 zero as -inf); a numeric
+  `case` value never adapted (`match u8 { case 5 }` was an error).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

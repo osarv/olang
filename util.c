@@ -137,6 +137,7 @@ unsigned MinifloatFrom(double x, int expBits, int mantBits) {
     if (isnan(x)) return sign | (expMax << mantBits) | (1u << (mantBits - 1));
     double a = fabs(x);
     if (isinf(a)) return sign | (expMax << mantBits);
+    if (a == 0) return sign; //zero has no exponent for frexp to give - read as a normal number, it became -infinity
     int e;
     frexp(a, &e); //a = f * 2^e, f in [0.5, 1)
     int unb = e - 1;
@@ -161,4 +162,37 @@ double MinifloatTo(unsigned bits, int expBits, int mantBits) {
     else if (ex == 0) v = ldexp((double)m, 1 - bias - mantBits);
     else v = ldexp(1.0 + (double)m / (double)(1u << mantBits), (int)ex - bias);
     return neg ? -v : v;
+}
+
+double FloatRoundTo(double v, enum floatKind k) {
+    switch (k) {
+        case FLOAT_KIND_F32: return (double)(float)v;
+        case FLOAT_KIND_F16: return MinifloatTo(MinifloatFrom(v, 5, 10), 5, 10);
+        case FLOAT_KIND_BF16: return MinifloatTo(MinifloatFrom(v, 8, 7), 8, 7);
+        default: return v;
+    }
+}
+
+//the fewest significant digits p (1 to 17) for which v rounded to p digits reads back - parsed, then rounded to the
+//value's own type - as v itself; then laid out as "%.17g" lays a number out: positional where the decimal exponent x
+//is in [-4, 17), with the digits padded by zeros or split by the point, and "d.ddde+XX" otherwise. An infinity or a
+//NaN is written as "%.17g" writes it.
+int FloatShortest(char* out, size_t cap, double v, enum floatKind k) {
+    if (!isfinite(v)) return snprintf(out, cap, "%.17g", v);
+    char e[40];
+    int p = 1;
+    for (; p < 17; p++) {
+        snprintf(e, sizeof(e), "%.*e", p - 1, v);
+        if (FloatRoundTo(strtod(e, NULL), k) == v) break;
+    }
+    if (p == 17) snprintf(e, sizeof(e), "%.*e", p - 1, v);
+    int neg = e[0] == '-';
+    char* s = e + neg;            //"d" or "d.ddd", then "e+XX"
+    char* rest = s + 2;           //the digits after the first, when p > 1
+    long x = strtol(s + (p == 1 ? 1 : p + 1) + 1, NULL, 10);
+    if (x < -4 || x >= 17) return snprintf(out, cap, "%s", e);
+    static const char zeros[] = "0000000000000000000";
+    if (x >= p - 1) return snprintf(out, cap, "%.*s%c%.*s%.*s", neg, "-", s[0], p - 1, rest, (int)x + 1 - p, zeros);
+    if (x >= 0) return snprintf(out, cap, "%.*s%c%.*s.%.*s", neg, "-", s[0], (int)x, rest, p - 1 - (int)x, rest + x);
+    return snprintf(out, cap, "%.*s0.%.*s%c%.*s", neg, "-", -(int)x - 1, zeros, s[0], p - 1, rest);
 }

@@ -1,0 +1,6 @@
+# check: fail this literal's value can't be represented
+# T6: an integer literal adapts to a float type only where it does not overflow it - 70000 is beyond F16's 65504
+fn half(h F16) F16 { return h }
+fn main() ? {
+    x := half(70000)
+}
