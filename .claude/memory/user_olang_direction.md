@@ -22,3 +22,8 @@ CLAUDE.md so every session loads it; keep it current when the direction moves.
 
 **FPGA (2026-10-09):** the user wants olang to target FPGAs for spiking neural network implementations - a long-term
 domain to weigh when designing numeric types (bit widths, fixed point, saturation) and concurrency (dataflow).
+
+**oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
+the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
+in olang (the C version is only a rough reference); std/linalg's Tensor is the operand of every numeric/NN operation,
+and efficiency comes first: zero-allocation in-place forms, transposed matmul without copies, fused elementwise.
