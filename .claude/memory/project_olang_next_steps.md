@@ -261,6 +261,9 @@ because what it finds about structure feeds the refactor.
   `x[i, j]` -> At/SetAt(i, j), `assert c, "msg"` + FILE:LINE on failed checks, Schubfach `$` floats (170x), missing-`}`
   cascades. oann phase 3 (transformers) started in /home/user/oann with compiler /home/user/wt/oannc2 @ ef939ae.
   Times in CEST from here on (user_timezone.md).
+- QUEUED small fix: D13c's "no zero value" error for `List<Ticket>` (a constructor with an effect) is reported inside
+  std/prelude/list.olang with the user's line only as a note - report it at the user's `List<Ticket>` (the type
+  argument) naming `List<Ticket&>` as the fix. Goes with the next checker batch.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

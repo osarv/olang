@@ -99,9 +99,13 @@ Go's single bytes; pushing to a List during a loop over it is specified as built
 `-i`'s next stage, when -i matters, is the redesign (compact values, scope-mirroring freeing, destructors) - in
 next-steps.
 
-**OWED BY ME to the user** (they asked, I never answered): "List<Counter> should work for most counters?" and "any more
-overrides we can do?" (both 2026-10-08); a detailed proposal for R4 (a local's scope taken from where it is later
-installed - built-then-installed temps, null-initialized cursors).
+**OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
+built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
+permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
+(yes - only a constructor with an effect has no zero value; hold those as `List<T&>`) and "any more overrides?" (none
+worth it; struct patterns in `match` later if code needs them).
+**Confirmed 2026-10-09 15:35 CEST (the user: "Your decisions are fine"):** `-a TARGET` (not `-arch=`), and the
+permissions design for Q4/Q5 including losing per-field immutability.
 
 **MY CALLS (10-71)** - the details I decided while building and listed for review on 2026-10-08. Since the user gave
 me authority over details the same day, they stand as decisions; each is recorded in CLAUDE.md/HISTORY.md with its
