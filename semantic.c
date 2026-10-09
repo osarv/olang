@@ -398,9 +398,44 @@ static struct str suggestName(struct semaModule* mod, struct str name, bool with
     return best;
 }
 
+//B11: one error per unknown name - the names a module has been told are unknown, this attempt (B9c), and the module
+//- a type's for the whole module (fn NULL), a value's for the function it is written in
+struct unknownSeen { struct semaModule* mod; struct str name; void* fn; };
+static struct list unknownSeen;
+static void* unknownFn; //the function whose body the name being reported is in, for a value's name
+static bool unknownReportedIn(struct semaModule* mod, struct str name, void* fn) {
+    for (int i = 0; i < unknownSeen.len; i++) {
+        struct unknownSeen* u = ListGetIdx(&unknownSeen, i);
+        if (u->mod == mod && StrCmp(u->name, name) && (!u->fn || u->fn == fn)) return true;
+    }
+    return false;
+}
+static bool unknownReported(struct semaModule* mod, struct str name) { return unknownReportedIn(mod, name, NULL); }
+static void noteUnknownReported(struct semaModule* mod, struct str name, void* fn) {
+    if (ErrMsgMuted() || unknownReportedIn(mod, name, fn)) return; //a probe's report is never seen
+    struct unknownSeen u = { mod, name, fn };
+    ListAdd(&unknownSeen, &u);
+}
+//M10/B11: a type an import exports under the name written alone - "Json" for "json.Json" - as the name to write
+static struct str importedTypeNamed(struct semaModule* mod, struct str name) {
+    for (int i = 0; mod && i < mod->imports.len; i++) {
+        struct semaImport* im = ListGetIdx(&mod->imports, i);
+        if (!im->mod || !isPublic(name)) continue;
+        struct type* t = TypeGetList(&im->mod->types, name);
+        if (t) return StrFromCStr(StrFmt("%.*s.%.*s", im->alias.len, im->alias.ptr, name.len, name.ptr));
+    }
+    return (struct str){0};
+}
+
 //"unknown type 'Int32' - did you mean 'I32'?", or plainly "unknown type 'x'": plain takes the token, meant the token
 //and the suggestion
 static void reportUnknownName(struct semaModule* mod, struct token tok, enum diag plain, enum diag meant, bool withVars) {
+    void* fn = plain == ERR_UNKNOWN_TYPE ? NULL : unknownFn;
+    if (plain != ERR_UNKNOWN_TYPE && !fn) fn = (void*)-1; //outside a function: said where it is met
+    if (unknownReportedIn(mod, strFromTok(tok), fn)) return; //B11: said once, where it was first met
+    if (fn != (void*)-1) noteUnknownReported(mod, strFromTok(tok), fn);
+    struct str imported = importedTypeNamed(mod, strFromTok(tok));
+    if (imported.len) { Err(tok, meant, tok, imported); return; }
     struct str best = suggestName(mod, strFromTok(tok), withVars);
     //the name is a type's, met where a value is wanted - "Res&(3)": no nearer name to suggest than itself
     if (best.len && StrCmp(best, strFromTok(tok)) && (typeNamed(mod, best) || isBuiltinTypeName(best))) {
@@ -1312,8 +1347,10 @@ struct semaModule* findImport(struct semaModule* mod, struct str alias) {
 //reported the specific error (UNKNOWN_NAMESPACE/IMPORT_IS_PRIVATE/CYCLIC_IMPORT_REEXPORT).
 //M10, B11: a name used as an import that is none - when it is the first of a chain and std has a module of that name
 //("math.Min" with no import of std/math), the import to write
-static void reportUnknownImport(struct token tok, bool first) {
+static bool unknownReported(struct semaModule* mod, struct str name);
+static void reportUnknownImport(struct semaModule* mod, struct token tok, bool first) {
     struct str name = strFromTok(tok);
+    if (unknownReported(mod, name)) return; //B11: an unknown name, said once where it was first met
     char path[4096];
     bool plain = name.len > 0 && name.len < 200;
     for (int i = 0; plain && i < name.len; i++) plain = isalnum((unsigned char)name.ptr[i]) || name.ptr[i] == '_';
@@ -1332,7 +1369,7 @@ struct semaModule* resolveAliasChain(struct semaModule* mod, struct list idens, 
         struct token aliasTok = *(struct token*)ListGetIdx(&idens, i);
         struct str aliasName = strFromTok(aliasTok);
         struct semaModule* next = findImport(current, aliasName);
-        if (!next) { reportUnknownImport(aliasTok, i == 0); return NULL; }
+        if (!next) { reportUnknownImport(mod, aliasTok, i == 0); return NULL; }
         if (i > 0 && !isPublic(aliasName)) { Err(aliasTok, ERR_IMPORT_IS_PRIVATE, aliasTok); return NULL; }
         for (int j = 0; j < visited.len; j++) {
             if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
@@ -6333,7 +6370,12 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (!v) v = preludeWordVar(name); //M19f: so are the prelude's words for writing text
     //G23: a type variable written bare as a value - "return T"
     if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
-    if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
+    if (!v) {
+        unknownFn = ctx->func;
+        reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true);
+        unknownFn = NULL;
+        return NULL;
+    }
     return v;
 }
 
@@ -6387,7 +6429,11 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
             }
         }
         if (moduleHasMethodNamed(ctx->mod, name)) Err(tok, ERR_METHOD_CALLED_AS_FUNCTION, tok, name);
-        else reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_FUNCTION, ERR_UNKNOWN_FUNCTION_MEANT, true);
+        else {
+            unknownFn = ctx->func;
+            reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_FUNCTION, ERR_UNKNOWN_FUNCTION_MEANT, true);
+            unknownFn = NULL;
+        }
         return NULL;
     }
 
@@ -12795,7 +12841,7 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
     struct token kw = firstTokOfType(s, TOK_IS);
     struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
     struct operand* b = buildExprFromSyntax(ctx, partSntx(s, s->parts.len - 1));
-    if (a->type.unknown || b->type.unknown) return OperandBoolLiteral(kw); //reported where it was written
+    if (a->type.unknown || b->type.unknown) return unknownPlaceholder(kw); //reported where it was written - nothing to decide
     bool idA = a->isNullLiteral || a->type.structMAlloc || a->type.bType == BASETYPE_FUNC;
     bool idB = b->isNullLiteral || b->type.structMAlloc || b->type.bType == BASETYPE_FUNC;
     if (!idA || !idB || (a->isNullLiteral && b->isNullLiteral)) {
@@ -12884,7 +12930,8 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, ERR_AS_NEEDS_CASE, ERR_NO_SUCH_CASE);
         if (tag >= 0) { op->castTag = tag; c = ListGetIdx(&xt.vars, tag); }
         if (!c) {
-            if (isAs) op->type = unknownTypeStandIn();
+            op->type = unknownTypeStandIn(); //reported: nothing is read, or decided, from it
+            if (!isAs) op->type.bType = BASETYPE_BOOL;
             return op;
         }
         op->castEnum = true;
@@ -17008,6 +17055,7 @@ static struct list* bodyStmts(int id) {
 }
 
 //the checked condition of a queued local if, recorded where it is checked - in its own function's scope
+static bool operandHasUnknown(struct operand* op, int depth);
 static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct operand* op) {
     struct pendingCond* p = SyntaxPendingFor(condNode);
     if (!p || !p->local) return;
@@ -17017,6 +17065,7 @@ static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct 
     for (int i = 0; currentBindings && i < currentBindings->len; i++) {
         if (((struct typeBinding*)ListGetIdx(currentBindings, i))->type.bType == BASETYPE_CONST) op = NULL;
     }
+    if (operandHasUnknown(op, 0)) op = NULL; //B11: nothing is decided from an unknown name, reported or not
     p->op = op;
     p->bodyId = ctx->bodyId;
 }
@@ -17197,10 +17246,21 @@ static struct statement buildDecidedIf(struct checkCtx* ctx, struct syntax* s, b
     return stmt;
 }
 
+//B11: whether an operand reads something unknown - a name reported where it was first met (one error per unknown name,
+//so its later uses add none) - which nothing may be decided from
+static bool operandHasUnknown(struct operand* op, int depth) {
+    if (!op) return false;
+    if (op->type.unknown) return true;
+    if (depth > 64) return false;
+    for (int i = 0; i < op->args.len; i++) if (operandHasUnknown(*(struct operand**)ListGetIdx(&op->args, i), depth + 1)) return true;
+    return false;
+}
+
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+    if (operandHasUnknown(cond, 0)) errs = -1; //decided from nothing it could read
     if (ErrMsgGetNErrors() == errs) {
         int decided = constCondValue(cond, firstPartOfType(s, SNTX_EXPR));
         if (decided >= 0) return buildDecidedIf(ctx, s, decided, cond->tok);
@@ -17214,7 +17274,7 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool dependsOnBuild = false;
     if (firstPartOfType(s, SNTX_COND_DEAD)) {
         Err(cond->tok, ERR_CONDITION_CONSTANT); //found fixed by compile-time evaluation (S8b)
-    } else if (OperandIsBool(cond) && condIsConstant(cond, &dependsOnBuild, 0) && !dependsOnBuild) {
+    } else if (OperandIsBool(cond) && errs >= 0 && condIsConstant(cond, &dependsOnBuild, 0) && !dependsOnBuild) {
         Err(cond->tok, ERR_CONDITION_CONSTANT);
     }
 
@@ -18491,6 +18551,47 @@ static bool caseIsCatchAll(struct syntax* c) {
     return false;
 }
 
+//B11: whether a case's value alternative is shaped as a pattern of an enum - "Name.Case" or "Name.Case(x, y)" - whose
+//first name is nothing known here (no local, global, import or type): *head is that name
+static bool unknownPatternHead(struct checkCtx* ctx, struct syntax* alt, struct token* head) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(alt, &toks);
+    bool shaped = toks.len >= 3 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN
+                  && ((struct token*)ListGetIdx(&toks, 1))->type == TOK_DOT && ((struct token*)ListGetIdx(&toks, 2))->type == TOK_IDEN;
+    for (int i = 3; shaped && i < toks.len; i++) { //the rest: more ".Name", then one "(...)" closing the alternative
+        enum tokenType tt = ((struct token*)ListGetIdx(&toks, i))->type;
+        if (tt == TOK_DOT && i + 1 < toks.len && ((struct token*)ListGetIdx(&toks, i + 1))->type == TOK_IDEN) { i++; continue; }
+        shaped = tt == TOK_PAREN_O && ((struct token*)ListGetIdx(&toks, toks.len - 1))->type == TOK_PAREN_C;
+        break;
+    }
+    if (shaped) *head = *(struct token*)ListGetIdx(&toks, 0);
+    ListDestroy(toks);
+    if (!shaped) return false;
+    struct str name = strFromTok(*head);
+    if (lookupVarQuiet(ctx, *head) || typeNamed(ctx->mod, name) || isBuiltinTypeName(name)) return false;
+    for (int i = 0; i < ctx->mod->imports.len; i++) {
+        if (StrCmp(((struct semaImport*)ListGetIdx(&ctx->mod->imports, i))->alias, name)) return false;
+    }
+    return true;
+}
+//...and the names inside its parentheses, declared as bindings of a type not known: "v" in "case Json.Num(v)"
+static void declarePatternNamesUnknown(struct checkCtx* ctx, struct syntax* alt) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(alt, &toks);
+    int depth = 0;
+    for (int i = 0; i < toks.len; i++) {
+        struct token* t = ListGetIdx(&toks, i);
+        if (t->type == TOK_PAREN_O) depth++;
+        else if (t->type == TOK_PAREN_C) depth--;
+        else if (depth > 0 && t->type == TOK_IDEN && !StrCmp(strFromTok(*t), StrFromCStr("_"))
+                 && (i == 0 || ((struct token*)ListGetIdx(&toks, i - 1))->type != TOK_DOT)
+                 && (i + 1 >= toks.len || ((struct token*)ListGetIdx(&toks, i + 1))->type != TOK_DOT)
+                 && !lookupVarQuiet(ctx, *t) && !scopeFindLocal(ctx->scope, strFromTok(*t)))
+            scopeDeclare(NULL, ctx->scope, strFromTok(*t), *t, unknownTypeStandIn(), true);
+    }
+    ListDestroy(toks);
+}
+
 //S13-S13f: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
 //guard and the body and nowhere else
 struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct operand* subject, bool asValue) {
@@ -18522,7 +18623,9 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
         } else if (caseAltLoneName(part->sntx, &lone) && !lookupVarQuiet(ctx, lone)) {
             //S13f: a lone unknown name was most likely meant to take the value - which "_" and a guard do. It is declared
             //as though it had, so a guard reading it is not a second error for the same cause
+            unknownFn = ctx->func;
             reportUnknownName(ctx->mod, lone, ERR_CASE_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); //a near name: a typo
+            unknownFn = NULL;
             scopeDeclare(NULL, ctx->scope, strFromTok(lone), lone, subject ? subject->type : unknownTypeStandIn(), false);
         } else if (caseAltLoneName(part->sntx, &lone) && subject && subject->opType == OPERATION_READ_VAR && subject->readVar
                    && !subject->readVar->owner && scopeFindUse(ctx->scope, strFromTok(lone), lone) == subject->readVar) {
@@ -18530,6 +18633,16 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
         } else if (part->sntx->type == SNTX_CASE_PATTERN) {
             buildPatternAt(ctx, part->sntx, subject ? patPath(subject) : NULL,
                            subject ? subject->type : unknownTypeStandIn(), &stmt, &alt, altIdx, &bound, &alt.test);
+        } else if ((subject && subject->type.unknown) || unknownPatternHead(ctx, part->sntx, &lone)) {
+            //B11: a pattern of an enum whose name is unknown - "case Json.Num(v)" for json.Json - or over a value whose
+            //type is: the unknown name is reported once, where it is first met, and the names inside are declared as
+            //what they would bind, so the clause's uses of them are no further errors
+            if (!(subject && subject->type.unknown)) {
+                unknownFn = ctx->func;
+                reportUnknownName(ctx->mod, lone, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true);
+                unknownFn = NULL;
+            }
+            declarePatternNamesUnknown(ctx, part->sntx);
         } else {
             struct operand* val = buildExprFromSyntax(ctx, part->sntx);
             if (subject && !caseValueFits(ctx, val, subject->type)) Err(val->tok, ERR_CASE_VALUE_TYPE, &subject->type, &val->type);
@@ -21888,6 +22001,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     for (int attempt = 0; ; attempt++) {
         SyntaxClearPendingConditions();
         ErrMsgBufferStart();
+        unknownSeen = ListInit(sizeof(struct unknownSeen)); //B11: what this attempt has said
         int constBefore = constArgDecisions.len;
         struct semaModule* root = analyzeOnce(fileName, requireMain);
         //G21: a constant argument computed this attempt changes the types written with it, so the program is checked again
