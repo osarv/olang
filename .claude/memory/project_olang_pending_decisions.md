@@ -58,15 +58,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
    `print`/`println` that aborts on a write failure (Rust's println! panics; Python's print raises)? Default: no.
    Rec: yes - a failed write to stdout is not something a script handles.
 7. (asked 2026-10-09) the linear algebra library in std with oann a separate repo on top? Default (being built): yes.
-8. (asked 2026-10-09; the user's framing: "does the operation interpret the data vs does the data hold the
-   structure? A matrix would basically be one data dimension and one batch dimension") a 2-D `Matrix<T>` (rows =
-   batch, columns = features, row-stride views, BLAS-style transposes as op parameters; conv/attention interpret a
-   row - conv via im2col into matmul, attention as per-head matmuls on views) or an N-d `Tensor<T>` (numpy-style).
-   Rec (changed after the user's framing): Matrix - rank fixed in the type (olang generics have no integer
-   parameters, so only a fixed-rank type is checked at compile time), explicit costs (no hidden broadcasting),
-   simpler and faster kernels, fits the FPGA/dataflow direction; what is lost: arbitrary permutes/broadcasts as
-   views and checks of a row's inner layout (only its size). Default: the linalg agent builds the shared kernels and
-   holds the N-d front end until answered.
+**Decided 2026-10-09 (the user):** a 2-D Matrix, not a tensor - "Matrix cuz then we don't interpret data in two
+places (both Tensor and Operation)". And: "make the language generics take constants (and comp time expressions) as
+parameters ... Expand it across arrays too ... Array<T, size>. Then re-evaluate the matrix question on the new basis."
+Being designed (wt-constgen, phase 1 spec only until the checker agents merge); my re-evaluation: Matrix<T, R, C> with
+each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choice gets stronger, not weaker. Note:
+`Array<T, N>` partly revisits the user's earlier T11a ("make the size in the type irrelevant") - their call now.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

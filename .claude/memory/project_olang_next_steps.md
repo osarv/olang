@@ -202,6 +202,9 @@ because what it finds about structure feeds the refactor.
   /home/user/oann on its branch, compiler from /home/user/wt/oannc - a detached olang worktree to update when linalg
   merges): DESIGN.md (autograd choice, zero-allocation training), MNIST pipeline in olang, layout; phase 2 (layers,
   AdamW, >97% MNIST, vs C+OpenBLAS) after std/linalg merges - then update oannc, tell the linalg API, resume it.
+- 10:30: Matrix decided (linalg agent and oann agent told: Matrix<T> with runtime dims now, shape checks in one place,
+  kernels on (rows, cols, stride) so dims can move into the type). Const generics + Array<T, N>: wt-constgen phase 1
+  (spec design, no code) running; phase 2 implementation after chk2scope/chk2syn merge (they edit generics).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
