@@ -5276,6 +5276,61 @@ static bool operandAdaptLiteral(struct operand* op, struct type to) {
     return true;
 }
 
+//E8b: a shift of a literal by an amount that is not one ("1 << s"), and arithmetic of such with literals ("(1 << s) -
+//1"): an integer expression whose type its literal still decides. Its literals take the type it lands in - a target's,
+//or the other operand's - as a literal does, so "x I64 = 1 << s" shifts an I64 (as Go's untyped constants do)
+static bool operandShiftOfLiteral(struct operand* op, int depth) {
+    if (depth > 64 || op->isLiteral || op->isTried || op->checkRoot || op->catchClauses.len || !TypeIsInt(op->type)) return false;
+    if (operandOnlyNumericLiterals(op)) return false; //E4a's own
+    struct operand* a0 = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+    switch (op->opType) {
+        case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+            return a0 && (operandOnlyNumericLiterals(a0) || operandShiftOfLiteral(a0, depth + 1));
+        case OPERATION_MINUS: case OPERATION_BTWSE_INV: return a0 && operandShiftOfLiteral(a0, depth + 1);
+        case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV: case OPERATION_MOD:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR: {
+            if (op->args.len != 2) return false;
+            struct operand* a1 = *(struct operand**)ListGetIdx(&op->args, 1);
+            bool l0 = operandOnlyNumericLiterals(a0), l1 = operandOnlyNumericLiterals(a1);
+            bool s0 = !l0 && operandShiftOfLiteral(a0, depth + 1), s1 = !l1 && operandShiftOfLiteral(a1, depth + 1);
+            return (s0 || l0) && (s1 || l1) && (s0 || s1);
+        }
+        default: return false;
+    }
+}
+
+//E8b: whether every literal of such an expression holds a value of integer type `to`
+static bool shiftOfLiteralFits(struct operand* op, struct type to) {
+    if (operandOnlyNumericLiterals(op)) {
+        struct litValue v;
+        return literalExprValue(op, &v) == LIT_VALUE_OK && !v.isFloat && intLiteralFitsIntType(v.i, to);
+    }
+    for (int i = 0; i < op->args.len; i++) {
+        if ((op->opType == OPERATION_BTSFT_L || op->opType == OPERATION_BTSFT_R) && i == 1) break; //an amount is its own
+        if (!shiftOfLiteralFits(*(struct operand**)ListGetIdx(&op->args, i), to)) return false;
+    }
+    return true;
+}
+
+static bool operandAdaptLiteral(struct operand* op, struct type to);
+//E8b: such an expression retyped to `to`, in place - its literals adapted, a shift's amount left as it is
+static void shiftOfLiteralRetype(struct operand* op, struct type to) {
+    if (operandOnlyNumericLiterals(op)) { operandAdaptLiteral(op, to); return; }
+    for (int i = 0; i < op->args.len; i++) {
+        if ((op->opType == OPERATION_BTSFT_L || op->opType == OPERATION_BTSFT_R) && i == 1) break;
+        shiftOfLiteralRetype(*(struct operand**)ListGetIdx(&op->args, i), to);
+    }
+    op->type = to;
+}
+
+//E8b: adapts op to the primitive integer type `to` where it is such an expression and its literals fit
+static bool adaptShiftOfLiteral(struct operand* op, struct type to) {
+    if (!TypeIsInt(to) || to.owner || TypeIsSame(op->type, to) || !operandShiftOfLiteral(op, 0) || !shiftOfLiteralFits(op, to))
+        return false;
+    shiftOfLiteralRetype(op, to);
+    return true;
+}
+
 //T6's ordering for the both-operands-are-literals case below: the narrower of two literal types adapts to
 //the wider, so "'a' + 1" is int32 arithmetic rather than byte arithmetic that could wrap.
 //every integer below every float; within each by width, a signed type above the unsigned one of its width
@@ -5690,6 +5745,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         return TYPE_FIT_OK;
     }
     FinalizeLambda(op, &target); //D16a: a lambda is checked against what it is written for
+    adaptShiftOfLiteral(op, target); //E8b: "x I64 = 1 << s" shifts an I64
     //E4a: a literal-only expression is computed here, exactly, and then fits as the one literal holding its value
     //would - "b U8 = 1 + 2", "f F32 = 0.5 * 2.0"; it is an error only where that value does not fit (or has none)
     if (!op->isLiteral && TypeIsNumeric(target) && operandOnlyNumericLiterals(op)) {
@@ -7331,6 +7387,9 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             //to it, and "Pair(1, "x")" is a Pair<I32, String&>, its text built where the Pair lands
             for (int i = 0; i < bindings.len; i++) {
                 struct typeBinding* b = ListGetIdx(&bindings, i);
+                //...and a reference reaches it read-only, as that array does: "Pair(k, 3)" is a Pair<String&, I32> whatever
+                //k's permission - a writable one is asked for by its expected type or its written arguments (T25b)
+                if (b->type.structMAlloc && b->type.refMut && TypeIsPermRef(b->type)) b->type.refMut = false;
                 if (b->type.bType == BASETYPE_ARRAY && !b->type.structMAlloc) {
                     b->type.arrMalloc = true; //T11a: a reference's type has no length
                     b->type.arrLen = NULL;
@@ -8276,6 +8335,12 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         struct operand* lit = numericTypeRank(a->type) < numericTypeRank(b->type) ? a : b;
         struct operand* other = lit == a ? b : a;
         operandAdaptLiteral(lit, other->type);
+    }
+    //E8b: a shift of a literal beside a value takes the value's type, as its literal would - "i64 + (1 << s)"
+    if (rule.sameType && !aLit && !bLit && !TypeIsSame(a->type, b->type)) {
+        bool sa = operandShiftOfLiteral(a, 0), sb = operandShiftOfLiteral(b, 0);
+        if (sa && !sb) adaptShiftOfLiteral(a, b->type);
+        else if (sb && !sa) adaptShiftOfLiteral(b, a->type);
     }
     //T6b: two numeric values of one family meet at the wider - the narrower widened, losing nothing, so an Int32 and
     //an Int64 add as Int64s; a declared type meets its base as the base. Two that neither flows into stay an error.
