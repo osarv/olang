@@ -2876,7 +2876,7 @@ static int ctRtMkdtemp(char* tmpl) { return mkdtemp(tmpl) ? 0 : -1; }
 //S2: under -i the compiler's own handler is the one installed (ErrMsgInstallCrashHandler); it writes the program's
 //message first, so a crash in a foreign function the program calls says what the built program would
 static void ctRtOnCrash(const unsigned char* msg, long long len) { ErrMsgSetRunCrashMessage((const char*)msg, len); }
-//S3: -i's own dynamic call - the runtime's contract (codegen.c, emitDyncallRuntime) over the dlsym and libffi this
+//S3: -i's own dynamic call - the runtime's contract (runtime.c, emitDyncallRuntime) over the dlsym and libffi this
 //process uses for externs: kinds one byte per argument and a 0 after the last (a number type's code 1-12, 0x80 added
 //for an array), each number one word, each array a word holding its length and then its elements' bytes
 static void* ctDynsym(const char* name) {
