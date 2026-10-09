@@ -396,6 +396,10 @@ because what it finds about structure feeds the refactor.
   the engine, checkpoint RNG via State/SetState, open question 10) and a read-only usage study 3 of the newest rules
   (perm, constant generics, bare T...) with compiler /home/user/wt/s3c (master 59c109e) -> /home/user/review/study3.
   Usage 17:41 UTC: five-hour 0.11, weekly 0.50. Running: portgaps, linalg2, oann-mixed, chk4, oann-settle4, study3.
+- 20:00 CEST: portgaps merged and pushed (DESIGN.md S1-S6 all built: os.RunOnStack, os.OnCrash, std/ffi over
+  __olang_dyncall, os.RemoveAll/MkTemp/Exec(capture=false), aggregate allocations at their own alignment, n.Format(base)).
+  The port's P0 is done except the bootstrap/ move + modest refactor: start it when chk4 has merged (it rewrites
+  semantic.c); linalg2 (std only) may run beside it.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

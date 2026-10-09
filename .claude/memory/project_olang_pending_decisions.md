@@ -152,6 +152,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    `g.Mul(a, b)` on a graph builder is an ordinary method (oann had to rename). Being built in wt-chk4.
 18. (mine, G3) a non-generic struct's constructor may introduce type variables its fields do not mention (oann's
    layers built from a generic graph). Being built in wt-chk4.
+19. (wt-portgaps, X2) only the runtime's own `__olang_` functions take a function value (`fn()` only); C functions
+   never receive olang callbacks (`extern fn f(cb fn())` stays an error), so olang code never runs on a thread the
+   runtime did not set up. The agent's direction question; kept closed - raise only if a C API needs it.
+20. (wt-portgaps) std/ffi is its own module (libffi linked only where declared); RunOnStack in a test passes a failed
+   check/done/fail on to the caller's test after the join; `Format(base)` lowercase, base outside 2-36 aborts;
+   O8a revised: a struct/enum allocation takes its own alignment (trees of 40-byte nodes 0.53 -> 0.36 s, 167 -> 105 MB).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
