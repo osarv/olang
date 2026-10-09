@@ -23,3 +23,14 @@ if measure.GeomUnits == "cm" {
 } else {
     fn UnitName() String& { return "mm" }
 }
+
+# G19: Map's key constraint, met by methods of a module resolved after this one
+fn TagCount(m Map<measure.Tag&, I32>&) I64 { return m.Len() }
+
+test "a Map keyed by a neighbour's type, named in a signature here" {
+    m := Map<measure.Tag&, I32>()
+    m.Put(measure.Tag("apple"), 1)
+    m.Put(measure.Tag("avocado"), 2)        # the same key by Tag's Eq: the first letter
+    m.Put(measure.Tag("pear"), 3)
+    assert TagCount(m) == 2 and (try m.Get(measure.Tag("ax")) catch default 0) == 2
+}

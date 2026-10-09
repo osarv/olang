@@ -8,12 +8,14 @@ CFLAGS = -Wall -Werror -Wextra -Wpedantic -g -MMD -MP
 SRC = $(wildcard *.c)
 OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(SRC))))
 DEP = $(OBJ:.o=.d)
-# M1: a module is one file, and a directory only groups them - the std modules and the prelude's files,
+# M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
+# tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
+# the prelude),
 # geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
 # in olang like the rest
 OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
-	$(wildcard std/prelude/*.olang) checks/checks.olang
+	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) checks/checks.olang
 
 build/%.o: %.c
 	mkdir -p build

@@ -3,7 +3,6 @@
 # read). The keys are slices of the sequence - no text is copied.
 import "std/io"
 import "std/os"
-import "std/map"
 
 # fasta's linear congruential generator
 type Random struct() {
@@ -37,11 +36,11 @@ fn sequence(n I64) String {
 }
 
 # every k-long run of seq and how often it occurs
-fn counts(seq String&, k I64) map.Map<String&, I64>&seq {
-    m map.Map<String&, I64>&seq = map.Map<String&, I64>()
+fn counts(seq String&, k I64) Map<String&, I64>&seq {
+    m Map<String&, I64>&seq = Map<String&, I64>()
     for i in range seq.Len() - k + 1 {
         key := seq[i:i + k]
-        m.Put(key, (try m.Get(key) catch default 0) + 1)
+        m.Update(key, 0, fn(c) { return c + 1 })
     }
     return m
 }

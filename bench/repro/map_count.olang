@@ -1,18 +1,23 @@
-# Counting with a Map takes two lookups per key - Get, then Put - because Map has no way to update a value in
-# place: no find-or-insert, and no At/SetAt (and "m[k] += 1" through At/SetAt would still be two). Each lookup
-# hashes the key and walks its chain again. k-nucleotide, 2,000,000 bases: olang 1.13s, C with one find-or-insert
-# 0.83s, the same C rewritten to look up then insert 1.03s - so most of the gap is the API, not the code generator.
+# Counting with a Map, one lookup per key: Update(k, init, f) hashes the key and walks its chain once, inserting
+# f(init) when the key is missing and replacing the value with f(value) when it is there. Before Update existed the
+# count took two lookups - "m.Put(k, (try m.Get(k) catch default 0) + 1)" - two hashes and two chain walks per key,
+# which was most of k-nucleotide's gap against C (C with one find-or-insert 0.83s, the same C rewritten to look up
+# then insert 1.03s, olang 1.13s). Run with a third argument "two" for that form, to compare.
 import "std/io"
 import "std/os"
-import "std/map"
 
 fn main() ? {
     args := os.Args()
     n := try args[1].ParseInt()
-    m := map.Map<I64, I64>()
+    two Bool = args.Len() > 2 and args[2] == "two"
+    m := Map<I64, I64>()
     for i in range n {
         k I64 = i * 7919 % 1000
-        m.Put(k, (try m.Get(k) catch default 0) + 1)            # two hashes, two chain walks
+        if two {
+            m.Put(k, (try m.Get(k) catch default 0) + 1)            # two hashes, two chain walks
+        } else {
+            m.Update(k, 0, fn(c) { return c + 1 })                  # one of each
+        }
     }
     try io.Print($m.Len() "\n")
 }

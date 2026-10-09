@@ -3386,6 +3386,97 @@ Go through this for every change to what olang means - a rule added, revised or 
   literal`, `a name`, `end of line`, as the error reads; and `$` rendered a function's reference parameters with their
   hidden scope names - `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a` - now
   as written, at run time and while compiling.
+- **`std/math`, `io.Lines`, and the C math library known to the compiler (X8, K1, 2026-10-09).** **`std/math`**:
+  `Sqrt Cbrt Exp Exp2 Expm1 Log Log2 Log10 Log1p Pow Hypot Fma Sin Cos Tan Asin Acos Atan Atan2 Sinh Cosh Tanh Erf Erfc
+  Floor Ceil Trunc Round RoundEven Abs CopySign SignBit IsNan IsInf IsFinite Min Max Clamp`, constants `Pi E Sqrt2 Ln2
+  Ln10 Inf NaN` (F64 - `F32(math.Pi)` for the F32 nearest). **Decided (mine)**: free functions generic over the four
+  floats by `match <T>` (`math.Sqrt(x)`), since only the prelude may give a built-in type methods (M19d) and one name
+  per type would be four; F64/F32 call C's function for their type, F16/BF16 compute in F32 (Fma in F64) and round once;
+  a domain error is IEEE's NaN/Inf, never an error - a check per call would cost what the call does, and a NaN carries
+  the failure to one IsNan; `Min`/`Max` are IEEE 754-2019's minimum/maximum for floats (a NaN propagates, -0 < +0, so
+  they commute) and `<` for any other type, `Clamp(x, lo, hi)` gives hi when lo > hi; `Round` is half away from zero
+  (C, Go, Rust), `RoundEven` ties-to-even; `Abs` takes integers too (the most negative stays, E6c). **X8 (the compiler
+  change, the one thing missing)**: an `extern fn` naming a C math function with its exact prototype is known. An exact
+  one (sqrt, fma, floor, ceil, trunc, round, roundeven, fabs, copysign) is declared `memory(none)`, so LLVM makes it an
+  instruction and vectorizes it; any other is declared as C's default -fmath-errno would (`memory(write)`, errno) plus
+  `nobuiltin`, so LLVM never rewrites it (`pow(x, 2.0)` into `x * x`) and the program calls exactly the function the
+  evaluator called. **K1**: the evaluator calls these while compiling, by libffi with the host's libm (target = host),
+  so a math global bakes and a math assert is decided - every value equal to the run time's at -O3, -O0 and under `-i`
+  (a checks fixture compares all three). Measured: `b[i] = math.Sqrt(a[i])` 0.20s, as C with -fno-math-errno (both
+  `sqrtpd`), C's default 0.40s; `math.Exp` level with C (libm in both). **`io.Lines(fd, size = 65536)`**: `for line in
+  try io.Lines(fd) { } catch io.IoError { }`, `Next() String& ? IoError + Exhausted`. **Decided (mine)**: a line excludes
+  its newline, and one `\r` before it or before the end of the file (Go's ScanLines); a final line needs no newline;
+  "a\n" is one line, an empty file none; the buffer doubles when one line fills it; a failed read fails Next, and calling
+  it again reads again. Each line is new text built where its caller puts it (O18a) - in a `for`, the body's scope,
+  reclaimed each turn, so 5M lines read at a 2MB peak in 185ms (C's getline 115-190ms); keeping one is
+  `kept.Push($line)`, which builds the copy where it is kept, and `kept.Push(line)` is O10c's error. A slice of the
+  buffer was rejected: a kept line would silently change on the next read.
+- **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, 2026-10-09).** Four of
+  the benchmark findings were the code generator's; all four are fixed, measured A/B against the previous compiler
+  (interleaved medians on the shared machine). **(1) A function value is the pair `{code, environment}`** (my design
+  call, over `!invariant.group` on the old closure object): the code pointer is a value, so a lambda handed to a helper
+  that is inlined is a direct call and inlines; captures are read from the environment under a TBAA family of their
+  own (`!28`, written once where the closure is made, read only by its code). `!invariant.group` was rejected because
+  its soundness rests on launders at every construction and strips at every comparison against LLVM's equality
+  propagation - which is why clang still ships `-fstrict-vtable-pointers` off - and the README's own measurement of it
+  was 0.33s against 0.19s. The pair costs 16 bytes where a function value is stored; identity is both words equal (a
+  named function's value is its adapter `@f.fvt` with no environment, a capture-free lambda's its code, so T21's
+  "one value per function" holds across modules with no static object). `Array.Iter().Fold` with a capturing lambda
+  **1.63s -> 0.23s** (C 0.22s, hand loop 0.25s); `Count` with a capturing predicate **1.57s -> 0.56s** (hand loop
+  0.54s); `List.Iter().Fold` 2.13s -> 0.93s, the rest being `ListIter` (std's). **(2) A fresh array stored into a
+  reference is adopted** - `l.chunks[k] = Array<T>(n)`, a field, an element, a literal's part - no second allocation
+  and copy (`cgAdoptsFresh`); and **a zero-filled array from a freshly mapped chunk is not cleared again** (D13c
+  unchanged): a chunk of 128KB or more comes from `mmap`, flagged fresh until it is recycled through the pool, and
+  memory above a fresh chunk's bump offset has never been handed out, so it is still the system's zeros. `List` push
+  20M **0.51s -> 0.165s** (C 0.167s). **(3) A promoted instance's slot is bumped before its arguments are built**
+  (`cgPromote`), so `Node(tree(d - 1), tree(d - 1))` lays a tree out parent first; registration stays at construction
+  (O16), and O15 now says "reverse construction order", which is what it always was. The arena's fast path no longer
+  re-reads and re-rounds the cursor through a block shared with the slow path. binary-trees **0.51s -> 0.42s** (C arena
+  0.39s, ratio 1.32 -> 1.08); instructions at depth 16 780M -> 690M (C arena 591M). The order alone costs ~8
+  instructions per node built (one more register live across the recursion) and buys the walk more: fast path alone
+  measured 6% slower on the benchmark. **(4) A local array that is a function's result and nothing else** -
+  declared once in the body's own block from storage it makes, every return returning it, otherwise only indexed or
+  measured, its elements numbers, no `defer`/`join`, an infallible function - is built in the result scope, so T7b's
+  copy goes; anything else keeps the copy, since deferred code, a task or a destructor could otherwise write the
+  array after the result was computed. matmul unchanged within noise (1.25s -> 1.22s). **Found and fixed on the way**:
+  `v I64 = 7 if b else 9` (a conditional of literals into a non-default type) emitted invalid IR (E28 now takes the
+  target's type, as a match does); `return wrap(e) if e != null else Expr.Num(1.0)` crashed codegen - a value made in
+  an arm was built at the arm-type's tag, the callee's scope variable (S12b/E28: now where the checker landed it);
+  a module whose file name starts with a digit could not build (`@2go_helper`; B3b escapes a leading digit); and
+  **`x := R(...)` of a destructor-declaring type declared a value and never ran the destructor** - in a local, a
+  constructor field or a global (C11/D15: `:=` now declares the reference `x R&` would). The function-value
+  representation is not specified (T21 speaks of reference-shape and identity only), so the spec did not change for it.
+- **std closes the benchmarks' library gaps; `Map` joins the prelude (S9f, M19d, E11a, T29c, E31, G19, C2d, X6,
+  2026-10-09).** The benchmarks' std findings (3, 4, 6) and frictions (6, 8, 9, 10), plus four bugs from the usage study.
+  **`for x in c` over a type with `RunFrom(at I64) Array<T>& ? Exhausted` walks it run by run (S9f)**: an outer loop asks
+  for the run of contiguous elements from the position reached, an inner counted loop walks it as an array's elements
+  are walked - so it vectorizes - and `break` in the body leaves both (`breakOuter`). It wins over `Iter` and `At`; a
+  run is asked for where the last ended, so a push during the walk is seen as an iterator would see it. `List.RunFrom`
+  gives one chunk's used part; `ListIter` keeps a plain `Next` (returning the element itself - the r04/r05 bugs) and
+  overrides `Any`/`All`/`Count`/`Fold`/`Map`/`Filter` (M19e) with the same run-wise walk. **`Map` is in the prelude**
+  (`std/map` is gone; every import migrated), with **`m.Update(k, init, f)`** - insert-or-update in one lookup (my
+  name and shape); removed keys' slots are kept on a free list and reused (a Map whose keys come and go stays the size
+  of what it holds - 120MB -> 1.6MB on the usage study's churn); a walk hands out a copy of the entry the map keeps
+  (`MapEntry`'s `Key`/`Value` are now `mut`), so a Map of `List`s can be walked, and the entry just given may be
+  removed mid-walk. **`$n` on an integer** is a digit count (`ctlz`) and a two-digit table in the runtime IR, no
+  `snprintf` (5M renderings 0.79s -> 0.09s); the evaluator's rendering was already exact. **`Find`, `FindByte` and
+  `FindIndex` fail with the default error on a miss** (errors are errors; they returned `-1`), `Find` compares in place
+  with a one-byte fast path, and `Split` by one byte counts in one vectorizable pass. **`std/time`**: `Now()` (monotonic
+  ns), `Since(t)`, `Wall()` (ns since the epoch) over `clock_gettime`, interpreted by `-i` like any extern. **`x.Fixed(n)`**
+  on every float - `n` digits after the point, rounded as C's `%.*f` (half to even on the exact binary value), computed
+  exactly in olang with 32-bit limbs, so the evaluator gives the same text (checked against glibc on 299,910 values).
+  **`Bool.Hash`**; **`os.ReadFile` reads to the end** (a file whose size `stat` misreports, `/proc`, was cut short).
+  The prelude's tests and what only they use sit under `if TestBuild`, Map's and Fixed's in `std/prelude/tests/`, so no
+  ordinary program compiles them (a hello-world `-b` 0.7-1.0s -> 0.4s). **Compiler fixes on the way, all pre-existing**:
+  a written type's G19 constraints are checked once every signature is resolved (`Map<measure.Tag&, I32>` in a
+  signature failed when `Tag`'s methods were in a module resolved later); `measure.Tag(x)` - a declared type converted
+  through an import alias - was "unknown function"; `f() == s` with a `String` value result crashed the code generator;
+  the hidden borrow of a collection walked through `At`/`Len` (S9d) or runs kept the scope its declared type wrote and
+  so took the loop's block, rejecting `for w in ws { mine.Push(w) }`; an instantiated generic constructor's parameters
+  that became references got no scope variable (O4b), and a value a constructor field builds from its parameters
+  (`e Entry = Entry(k, v)`) was checked against whatever was being built when the pending checks next ran - it lands in
+  the instance now (C2d). Decided (mine): the API names (`Update`, `RunFrom`, `Fixed`, `Now`/`Since`/`Wall`), and that
+  `RunFrom` is a protocol method the compiler recognises by shape, as `Len` and `At` are.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

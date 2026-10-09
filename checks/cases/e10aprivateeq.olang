@@ -1,12 +1,11 @@
 # check: run
 # E10a: only a capitalized Eq takes over "==" - a private "eq" would make the declaring module and a Map of another
 # disagree about two keys, so it is an ordinary method, and "==" compares the values
-import "std/map"
 type K struct(n I32) { n }
 fn (a K) eq(b K) Bool { return a.n % 10 == b.n % 10 }
 fn (a K) Hash() I64 { return I64(a.n % 10) }
 fn main() ? {
-  m := map.Map<K, I32>()
+  m := Map<K, I32>()
   m.Put(K(1), 5)
   x := try m.Get(K(11)) catch default -1
   assert K(1) != K(11) and x == -1 and K(1).eq(K(11))

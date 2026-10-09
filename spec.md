@@ -885,6 +885,9 @@ bytes it is written against - an `Array<U8>`, or a declared type over one. Any o
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
+A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
+where the first occurrence starts, and fail with the default error (R15) when there is none - `try t.Find(sub) catch
+default -1` writes a fallback - as an array's `FindIndex(keep)` does for an element `keep` holds for.
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
 array type or a built-in one, of either length kind.
@@ -1278,7 +1281,9 @@ text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An arr
 `Array<T>` (T7): its length is not part of the type, and a later assignment may change it. It may not be
 `null`, a variable read, or any other expression built from these, which the reader would have to type
 in their head. A reference-shaped result writes no scope tag into the declaration: the local takes its
-initializer's exact scope (§8 O25a).
+initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
+(C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
+destructed when that scope closes.
 
 **D15a.** An array declared by either form holds its length beside its storage, so a later assignment may
 give it an array of any length: a value `Array<T>` gets its own copy of the new elements, a reference
@@ -1298,11 +1303,11 @@ any other, and its imports are its own.
 
 **M22a.** A module has an **identity**, from which its symbols and object files are named (§10 B3b): its
 path without the `.olang` extension. For a std module it is `std/` followed by its path within the standard
-library (`std/map`); for a remote module, the repository and the path within it as the import names them
+library (`std/chan`); for a remote module, the repository and the path within it as the import names them
 (`example.com/me/tools@v1/mathx/add`); for a local module, its path relative to the working directory the
 compiler was run from (`geom/rect`), or its file name alone when it lies outside that directory. A relative
 import (M23) is identified by the importing module's identity with its last element replaced by the
-relative path - so `import "map"` written in `std/io` names `std/map`, the module `import "std/map"` names,
+relative path - so `import "io"` written in `std/os` names `std/io`, the module `import "std/io"` names,
 and each version of a repository has its own copy of what it imports relatively.
 
 **M2.** Module imports may form cycles: module A may import module B while B imports A. This is
@@ -1322,14 +1327,14 @@ the imported module's exported names (§4.4).
 alone:
 
 - **std**: `std/PATH` - a file of the standard library, which is located by the implementation (in this one,
-  the `OLANG_STD` environment variable, or `../std` beside the compiler); `std/map` is the file `map.olang`
+  the `OLANG_STD` environment variable, or `../std` beside the compiler); `std/chan` is the file `chan.olang`
   at the standard library's root;
 - **remote**: `HOST/OWNER/REPO[@REF]/PATH`, where `HOST` contains a `.` - the file `PATH` within a remote
   version-controlled repository, at the branch or tag `REF` (its default branch when omitted);
 - **relative**: any other path - a file relative to the **importing module's own directory**, never the
   working directory, so a module means its own neighbours wherever it was found. It may descend into
   directories (`geom/rect`) and climb out of them (`../shared`). Within the standard library or a remote
-  repository a relative import stays within it: `import "map"` in `std/io` is `std/map`.
+  repository a relative import stays within it: `import "io"` in `std/os` is `std/io`.
 
 A path ending in `.olang`, a path naming no file, and a first element `std` naming anything outside the
 standard library are compile-time errors. The first element of a relative path is therefore never `std`
@@ -1362,8 +1367,8 @@ compilation does not reach are kept as they are, since several programs in one d
 a line (M23b) remains the way to update one repository alone.
 
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
-path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/map"`
-and `import map "std/map"`. If the derived alias is not a legal identifier
+path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/chan"`
+and `import chan "std/chan"`. If the derived alias is not a legal identifier
 (L6 — e.g. the file name contains a hyphen or starts with a digit), that is a compile-time error;
 such a file must be imported with an explicit alias instead.
 
@@ -1451,8 +1456,21 @@ indexes (E31): `l[i]` is `At(i)`, a copy of the element, and `l[i] = x` is `SetA
 both unchecked, as an array index is (E16), with `try l[i]` and `try l[i] = x` checking `i` against `Len()` (E31a,
 derived). Every one of these costs the same whatever the length: storage is a run of chunks, each twice the size
 of the last, so a position's chunk is found by arithmetic rather than by a search, and nothing stored is moved by
-a later `Push`. `Iter()` hands out a fresh position (S9c), so `for x in l` walks a `List` through its iterator, not
-through `At` (S9d).
+a later `Push`. `RunFrom(at)` gives the elements stored next to each other from position `at` - a read-only slice of
+the chunk holding it, to that chunk's end or the list's - and fails with `Exhausted` at `Len()`, so `for x in l` walks a
+`List` run by run (S9f), not through `At`. `Iter()` hands out a fresh position (S9c), a `ListIter<T>` whose iterator
+helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` - M19e overrides) walk the rest of the list run by run too,
+leaving it where `Next()` would.
+
+The prelude declares `type Map<K Hashable<<K>>, V>`, values found by key, keys compared with `==` (E10) and hashed
+with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
+default error (R15) when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
+where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
+and says whether it was there, and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a copy of a
+`MapEntry<K, V>` holding `Key` and `Value`, in no specified order; the entry just given may be removed while the walk
+goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
+Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
+put - so a map whose keys come and go stays the size of what it holds.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -1473,6 +1491,11 @@ a value rounding to zero). `==` compares values as IEEE 754 does: a NaN
 equals nothing, itself included, and `-0` equals `0`. Each is a struct holding its `Bits` (a `U8`), built
 from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
 it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
+
+Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (none, and no point, for `n` at most
+`0`), rounded to the nearest such number, a tie to the even one - exactly, as C's `"%.*f"` rounds - with a `-` where
+`x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
+(E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -1821,7 +1844,7 @@ built-in type declares none; its `==` is the language's.
 `Hash() I64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
 array value** whose type declares neither `Hash` nor `Eq` and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `U8`, `I32`, `I64` and `String`; a float has none,
+prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type and `String`; a float has none,
 so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
 where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
 reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key.
@@ -2537,9 +2560,16 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
-- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()` nor
-  an `Iter()` of its own - either of which says how the type wants to be walked (a `List` has all three, and is
-  walked by its iterator). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
+- a value **stored in runs** (S9f): one whose type has `RunFrom(at I64) Array<T>& ? Exhausted` and no `Next()` of its
+  own. The loop asks for the run at position `0`, walks it as an array (a counted loop over the slice, `x` each
+  element **copied**), then asks for the run where that one ended, and so on until `RunFrom` fails with `Exhausted`,
+  which the loop takes itself; `i` counts across runs. The collection is borrowed (E12c), never copied, and each run
+  is asked for when the last is done - so an element added at the end while the loop runs is walked too. `break`
+  leaves the whole loop. A type with `RunFrom` and `Iter()` must give the same elements in the same order by both; the
+  loop uses `RunFrom` (a `List` has both, S9f) - except under `try` (S9e), where it uses `Iter()`.
+- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
+  `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
+  and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
   borrowed (E12c), never copied. A type with `TryAt` and `Len` but no `At` is walked through `TryAt`, under S9e.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
@@ -3819,7 +3849,9 @@ run time (because it allocates into it, O6) is an implementation matter with no 
 
 **O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
 scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
-instances were allocated. A destructor-declaring type is reference-only (C11), so this is the sole
+instances were constructed - the order their constructor calls completed (O16). Where in the scope an
+instance's storage lies, and whether it was reserved before its constructor's arguments were built, is not
+observable. A destructor-declaring type is reference-only (C11), so this is the sole
 rule governing when a destructor runs: there is no plain-local, function-return-governed case.
 
 **O16.** An instance is registered with its scope at the point its **constructor call** completes
@@ -3897,7 +3929,11 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
   may build into, is a compile-time error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
-  existing storage (O17); a temporary argument is built in the instance scope (O18a).
+  existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
+  `<T>` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);
+- a value field whose initializer builds a value from such a parameter - a nested constructor call or an enum case,
+  `e Entry = Entry(k, v)` - lands in the instance: what it holds is held as the instance holds the parameter's
+  argument, which is checked where the instance lands (below).
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
@@ -4400,6 +4436,29 @@ calls again.
 uses, such as `exit` or `strlen`) refers to that very function: it is not a second definition, and declaring it is not
 an error.
 
+**X8 (the C math library).** An `extern fn` declaring one of the C math library's functions below, under its C name
+and with its prototype - every parameter and the result `F64`, or every one `F32` for the name with `f` after it
+(`sqrtf`) - is that function, and the language knows what it does:
+
+| | Functions (parameters) |
+|---|---|
+| exact | `sqrt`, `floor`, `ceil`, `trunc`, `round`, `roundeven`, `fabs` (one); `copysign` (two); `fma` (three) |
+| other | `cbrt`, `exp`, `exp2`, `expm1`, `log`, `log2`, `log10`, `log1p`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `erf`, `erfc` (one); `pow`, `atan2`, `hypot` (two) |
+
+- A call of one has **no effect a program can observe**: it reads and writes no storage of the program's (the C library
+  may set `errno`, which `__olang_err` reports only after a call that reported failure, X6, and these report none). So
+  it is not opaque in X3b's sense, and it can be evaluated at compile time (K1) - by calling that function of the
+  platform's C math library, the one the program calls, so a value computed while compiling is the value the program
+  computes.
+- An **exact** one's result is the correctly rounded value IEEE 754 requires of it, so every implementation agrees -
+  where the machine has an instruction for it, the call may be that instruction.
+- **Any other** is always a call of the library's function, never replaced by another function or by an expression
+  that may round differently (`pow(x, 2.0)` by `x * x`), so its result is the library's wherever it is computed: while
+  compiling, by the built program, or under `-i`. Which value that is, beyond what IEEE 754 requires, is the library's
+  (implementation-defined).
+
+A declaration naming one of these with any other prototype is an ordinary external function.
+
 ## 12. Generics
 
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate
@@ -4610,8 +4669,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
-- call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
-  is known only when the call is reached;
+- call an `extern` function other than the C math library's (X8) - a call through a function value is evaluated when
+  the function it reaches is, which is known only when the call is reached;
 - spawn or join, use an atomic operation, or end the test or the process (`done`, `fail`, `abort`,
   `unreachable`);
 - fail an `assert`, or let an error escape that no clause handles;
