@@ -6200,11 +6200,15 @@ static bool varNamedByResult(struct var* func, struct var* sv) {
 //the function holding it - the binding arg carries for V (made where the value was built and carried with it, O13c);
 //for a parameter of that function, its derived scope; and otherwise the scope arg itself lives in, which the field's
 //referent outlives (O23). False when not even that is known.
+//O23: set by instanceScopeOf when what it answered is only the scope the argument itself lives in - an underestimate of
+//where the field's referent is, good for reading the field and never for writing it (O23a)
+static bool instanceScopeFellBack;
 static bool instanceScopeOf(struct checkCtx* ctx, struct operand* arg, struct var* V, struct var** to, int* depth,
                             bool* unnamed) {
     *to = NULL;
     *depth = 0;
     *unnamed = false;
+    instanceScopeFellBack = false;
     for (int i = 0; i < arg->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&arg->scopeBindings, i);
         if (canonicalVar(b->typeParam) != canonicalVar(V) || b->landing || b->boundTo == SCOPE_AMBIGUOUS) continue;
@@ -6212,6 +6216,7 @@ static bool instanceScopeOf(struct checkCtx* ctx, struct operand* arg, struct va
         *to = canonicalVar(b->boundTo);
         *depth = b->boundTo ? 0 : normDepth(b->boundDepth);
         *unnamed = b->boundUnnamed;
+        instanceScopeFellBack = b->containerFallback && !(*to && (*to)->derivedFrom);
         return true;
     }
     struct var* pv = arg->opType == OPERATION_READ_VAR ? arg->readVar : NULL;
@@ -6220,6 +6225,7 @@ static bool instanceScopeOf(struct checkCtx* ctx, struct operand* arg, struct va
         return true;
     }
     if (!ctx || !ctx->hasOwnScope) return false;
+    instanceScopeFellBack = true;
     return RefExactScope(ctx, arg, arg->type.structMAlloc, to, depth, unnamed) && *to != SCOPE_AMBIGUOUS;
 }
 
@@ -6686,6 +6692,12 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         if (idx < 0 || idx >= args.len) return;
         struct operand* arg = *(struct operand**)ListGetIdx(&args, idx);
         shorter = resolveEffectiveScopeVar(arg, canonicalVar(o->shorter));
+        struct scopeBinding* ab = callBinding(arg, o->shorter);
+        if (ab && ab->containerFallback && !(ab->boundTo && ab->boundTo != SCOPE_AMBIGUOUS && canonicalVar(ab->boundTo)->derivedFrom)) {
+            ErrMsgSemantic(tok, FIELD_BINDING_UNKNOWN_WRITE); //O23: only the container's scope, an underestimate
+            obligationNote(o);
+            return;
+        }
         if (shorter == canonicalVar(o->shorter)) {
             struct var* argRoot = lvalueRootVar(arg);
             struct var* callerFn = ctx ? ctx->func : NULL;
@@ -6699,9 +6711,18 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         }
     } else {
         bool sLanding;
+        instanceScopeFellBack = false;
         if (!calleeScopeAt(ctx, op, func, args, o->shorter, &shorter, &sDepth, &sUnnamed, &sLanding)) {
             shorter = canonicalVar(o->shorter);
             sDepth = 0;
+        }
+        //O23a: something is stored into a field written "&p" of an argument whose binding for it is not known here -
+        //its scope fell back to where the argument lives, which the field's real referent may outlive: storing
+        //there could falsify the binding a reader of the instance relies on, so it cannot be judged (O11)
+        if (instanceScopeFellBack && derivedScopeOf(func, o->shorter)) {
+            ErrMsgSemantic(tok, FIELD_BINDING_UNKNOWN_WRITE);
+            obligationNote(o);
+            return;
         }
     }
     //O2a: where a side binds to one of the caller's own blocks, WHICH block decides it - an argument
@@ -11351,6 +11372,15 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         if (ctx->hasOwnScope && !rhsExisting && !rhs->isNullLiteral
                 && (target->type.structMAlloc || TypeHoldsReferences(target->type)) && scopeViaFallback(target))
             ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
+        //O23/O11: a field written "&p" of an instance reached through something its construction binding is not known
+        //through - an element, a field of another instance - reads at its container's scope, an underestimate; storing
+        //existing storage there could falsify the binding every reader of that instance relies on
+        if (ctx->hasOwnScope && rhsExisting && target->opType == OPERATION_MEMBER && target->type.scopeParam) {
+            struct scopeBinding* tb = callBinding(target, target->type.scopeParam);
+            if (tb && tb->containerFallback
+                    && !(tb->boundTo && tb->boundTo != SCOPE_AMBIGUOUS && canonicalVar(tb->boundTo)->derivedFrom))
+                ErrMsgSemantic(opTok, FIELD_BINDING_UNKNOWN_WRITE);
+        }
         if (ctx->hasOwnScope && target->opType == OPERATION_READ_VAR && rhsExisting && RefNarrowingMatters(target->type)
                 && scopeViaFallback(rhs))
             ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
