@@ -2488,6 +2488,10 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         ctor->name = instantiationNameFor(generic->ctorFunc->name, &generic->typeParams, bindings);
         ctor->type = TypeSubstitute(generic->ctorFunc->type, bindings);
         ctor->type.typeParams = ListInit(sizeof(struct str));
+        //O4b/G11: a parameter written "<T>" became a reference where T is one, and is passed with its scope like any
+        //other, as instantiateFunc gives a function's - the generic's constructor could not know to give it one. Left
+        //without, what the body built from it was held to a scope nothing could name (C2d)
+        assignImplicitParamScopes(&ctor->type);
         //the copy's own stable slot, never a snapshot of it: the destructor below is attached to *spec
         //after this point, and a by-value copy taken here would freeze the GENERIC's destructFunc into
         //the constructed value's type - registering the wrong (never-emitted) symbol at every
@@ -11422,6 +11426,28 @@ static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var*
     ListAdd(&call->scopeBindings, &b);
 }
 
+//C2d: whether every scope a binding names is the implicit scope of one of func's bare reference parameters, or of a
+//by-value one holding references (O4b)
+static bool bareParamScope(struct var* func, struct var* sv) {
+    if (!sv || sv == SCOPE_AMBIGUOUS) return false;
+    sv = canonicalVar(sv);
+    if (!sv->isImplicitScope || sv->derivedFrom) return false;
+    for (int j = 0; j < func->type.vars.len; j++) {
+        struct var* p = ListGetIdx(&func->type.vars, j);
+        if (p->type.scopeParam && canonicalVar(p->type.scopeParam) == sv) return true; //a reference, or a value holding some
+    }
+    return false;
+}
+static bool bareParamScopesOnly(struct var* func, struct scopeBinding* b) {
+    if (b->boundUnnamed) return false;
+    if (b->boundTo != SCOPE_AMBIGUOUS) return bareParamScope(func, b->boundTo);
+    if (!b->candidates.len) return false;
+    for (int k = 0; k < b->candidates.len; k++) {
+        if (!bareParamScope(func, *(struct var**)ListGetIdx(&b->candidates, k))) return false;
+    }
+    return true;
+}
+
 //C2d: a constructed value landing in (dstVar, dstDepth) - NULL at a depth being one of this function's own
 //block scopes - may not outlive the storage its constructor call stored by reference
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok) {
@@ -11469,12 +11495,19 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
     bool isEnum = val->type.bType == BASETYPE_CHOICE && !val->type.structMAlloc; //T17c: an enum's payload is its fields
     if (!ctx || !ctx->hasOwnScope || (val->type.bType != BASETYPE_STRUCT && !isEnum) || !val->type.hereVar) return;
     val->hereChecked = true;
+    //C2d/C2c: landing in the very instance a constructor is building - every call of it holds that instance to a bare
+    //reference parameter's argument (exactly, where something can be stored through it), so a value built from such a
+    //parameter suits it by construction
+    bool intoOwnInstance = ctx->inCtor && dstVar && dstVar != SCOPE_AMBIGUOUS && ctx->func && ctx->func->type.hasRetType
+                           && ctx->func->type.retType->hereVar
+                           && canonicalVar(dstVar) == canonicalVar(ctx->func->type.retType->hereVar);
     for (int i = 0; i < val->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&val->scopeBindings, i);
         //only the value's own: an entry carried from an argument (viaPath) is that argument's, judged where it landed
         if (canonicalVar(b->typeParam) != canonicalVar(val->type.hereVar) || b->viaPath.len) continue;
         bool ok;
-        if (b->boundTo == SCOPE_AMBIGUOUS) {
+        if (intoOwnInstance && bareParamScopesOnly(ctx->func, b)) ok = true;
+        else if (b->boundTo == SCOPE_AMBIGUOUS) {
             //several scopes, from O13b or from several arguments: the instance must suit every one of them
             ok = b->candidates.len > 0;
             for (int k = 0; ok && k < b->candidates.len; k++) {
@@ -12919,6 +12952,19 @@ static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
     return m;
 }
 
+//S9d/S9f: the type of the hidden borrow of a collection the loop walks - its own type as a reference, its scope still
+//to be taken from the collection (O25a). The scope its declared type wrote ("&y", a parameter's own) is not where the
+//borrow lives, and kept it would stop the borrow adopting anything, leaving it at the loop's block - an element pushed
+//from the loop into a list beside the collection then had no scope to show it outlives that list
+static struct type forInBorrowType(struct type t) {
+    t.structMAlloc = true;
+    t.scopeParam = NULL;
+    t.scopeWritten = false;
+    t.scopeUnknown = false;
+    t.scopeDepth = 0;
+    return t;
+}
+
 //S9f: an element read out of an array the loop walks keeps its references where the array's elements keep theirs - the
 //array's scope - so one may be returned or stored as the collection's own (O25a), as an iterator's Next would give it
 static void forInElemRefsHome(struct scope* sc, struct token elemTok, struct type arrT) {
@@ -12943,8 +12989,7 @@ static void forInElemRefsHome(struct scope* sc, struct token elemTok, struct typ
 static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx* wctx, struct list pre, struct syntax* s,
                                           struct operand* src, struct token kw, struct token* idxTok, struct token elemTok,
                                           struct comprSpec* spec, struct type* exhaustedT) {
-    struct type refT = src->type;
-    refT.structMAlloc = true;
+    struct type refT = forInBorrowType(src->type);
     bool unnamed = false;
     if (!adoptInitializerScope(wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx->blockDepth;
     reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
@@ -13160,8 +13205,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         atName = operatorMethodName(&wctx, src->type, "At");
         if (!atName) atName = tryOperatorName(&wctx, src->type, "At");
         lenName = operatorMethodName(&wctx, src->type, "Len");
-        struct type refT = src->type;
-        refT.structMAlloc = true;
+        struct type refT = forInBorrowType(src->type);
         bool unnamed = false;
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
@@ -15401,6 +15445,10 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
         //field whose own type isn't constructor-bearing, or one with no scope variables.
         field->scopeBindings = fieldOp ? fieldOp->scopeBindings : (struct list){0};
+        //C2d: a value field's initializer built from existing storage lands in the instance - judged there, now, rather
+        //than against whatever is being built when the queue of pending checks next empties
+        if (fieldOp && !field->type.structMAlloc && (opIsCtorCall(fieldOp) || opIsEnumCtor(fieldOp)) && t->hereVar)
+            checkCtorHereFits(&cctx, fieldOp, t->hereVar, 0, fieldOp->tok);
         //C2d/O18a: what the initializer built with nothing to determine it lands in the instance - recorded as
         //such for a later "instance.field.x" to resolve, on a copy, since codegen reads the call's own
         if (fieldOp && fieldOp->scopeBindings.len > 0) {
