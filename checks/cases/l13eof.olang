@@ -1,4 +1,4 @@
-# check: fail this character literal is never closed - the file ends first
+# check: fail error[L13]: unterminated character literal
 # L13: the end of the file inside a character literal
 fn main() ? {
     x := '

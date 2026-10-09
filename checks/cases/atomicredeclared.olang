@@ -1,4 +1,4 @@
-# check: fail supplied
+# check: fail error[E23, E33, P9]: the compiler supplies AtomicAdd for Hits
 # P9/T29e: a declared type extending an integer may not declare a method the compiler supplies
 type Hits extends I32
 fn (h mut Hits) AtomicAdd(v Hits) Hits { return h }

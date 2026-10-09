@@ -1,4 +1,4 @@
-# check: fail takes exactly one parameter, of the type it is declared over
+# check: fail error[T29d]: this constructor takes one parameter, of type I32
 # T29d: the constructor's one parameter is the value being built
 type Twin I32(a I32, b I32) { }
 fn main() ? { }

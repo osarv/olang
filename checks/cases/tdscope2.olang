@@ -1,4 +1,4 @@
-# check: fail R9a
+# check: fail error[R11, O25]: a reference default lives where the call's result does
 error E { X }
 type B struct(v I32) { v mut }
 fn pick(b B&, ok Bool) B&b ? E {

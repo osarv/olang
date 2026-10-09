@@ -1,4 +1,4 @@
-# check: fail a 'return' here would leave in the middle of another way out (S19b)
+# check: fail error[S19b]: deferred code may not return
 # S19b: deferred code runs while its block is being left, so it may not return
 fn f(n I32) I32 {
     defer {

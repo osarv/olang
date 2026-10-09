@@ -1,4 +1,4 @@
-# check: fail a case value must have the type of the value it is compared with
+# check: fail error[S13]: a case value here is I32, found Array<Char>
 # S13d: a literal in a payload is compared with that field by "==", so it has the field's type
 type S enum {
     A(x I32)

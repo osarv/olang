@@ -1,4 +1,4 @@
-# check: fail a value in this function's own scope cannot satisfy a longer-lived scope
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
 # E31/O14: an instance whose type declares Call, given as a function value, is the instance itself - returning a local
 # one hands out storage the function's own scope reclaims
 type Counter struct(start I64) {

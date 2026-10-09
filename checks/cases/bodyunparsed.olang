@@ -1,6 +1,6 @@
-# check: fail expected 'expression'
+# check: fail expected an expression
 # never: unknown function
-# also: compilation failed with 2 error(s)
+# also: compilation failed with 2 errors
 # a function whose body does not parse is still declared by its signature: the one syntax error is the one error, and
 # every call to it - a method's too - is checked against its signature rather than reported as an unknown function
 type P struct(x I32) { x }

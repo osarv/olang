@@ -1,4 +1,4 @@
-# check: fail the compiler supplies a method of this name for this type
+# check: fail error[E23, E33, P9]: the compiler supplies Len for Nums&
 # E23: every array has the supplied Len(), a declared one too - a Len declared on one was accepted and never called
 type Nums Array<I32>
 fn (n Nums&) Len() I64 { return 7 }

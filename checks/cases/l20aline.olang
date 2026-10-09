@@ -1,4 +1,4 @@
-# check: fail a declaration's value comes after '=' - write 'state Array<F32> = Array<F32>(4)', or let the value give the type: 'state := Array<F32>(4)'
+# check: fail a declaration's value follows '=' - write 'state Array<F32> = Array<F32>(4)', or 'state := Array<F32>(4)'
 # L20a: a closing ">" ends a declaration only as the line's last token - the "(" is not a new statement
 state Array<F32>(4)
 fn main() ? { }

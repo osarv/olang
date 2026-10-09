@@ -10,7 +10,7 @@
 struct tokRule {
     enum tokenType type;
     char* pattern;
-    char* description; //NULL = same as pattern
+    char* description; //how a diagnostic names it; NULL: its pattern, in quotes
 };
 
 /* $& = any of the following (space separated literal alternatives)
@@ -21,14 +21,14 @@ struct tokRule {
  * a rule with no $ is matched literally, char for char
  * indexed by enum value */
 struct tokRule tokRules[] = {
-    {TOK_NONE, "", "EOF"}, //description only used when TOK_NONE is EOF
-    {TOK_BOOL_LIT, "$& true false", "bool literal"},
-    {TOK_NULL_LIT, "null", "null"},
-    {TOK_INT_LIT, "$a $d", "int literal"},
-    {TOK_FLOAT_LIT, "$a $d . $a $d", "float literal"},
-    {TOK_CHAR_LIT, "' $c '", "char literal"},
-    {TOK_STR_LIT, "\" $a $c \"", "string literal"},
-    {TOK_IDEN, "$l $a $& $l $d", "identifier"},
+    {TOK_NONE, "", "end of file"}, //description only used when TOK_NONE is EOF
+    {TOK_BOOL_LIT, "$& true false", "a Bool literal"},
+    {TOK_NULL_LIT, "null", NULL},
+    {TOK_INT_LIT, "$a $d", "an integer literal"},
+    {TOK_FLOAT_LIT, "$a $d . $a $d", "a float literal"},
+    {TOK_CHAR_LIT, "' $c '", "a character literal"},
+    {TOK_STR_LIT, "\" $a $c \"", "a string literal"},
+    {TOK_IDEN, "$l $a $& $l $d", "a name"},
     {TOK_IF, "if", NULL},
     {TOK_ELSE, "else", NULL},
     {TOK_TRY, "try", NULL},
@@ -74,7 +74,7 @@ struct tokRule tokRules[] = {
     {TOK_AT, "@", NULL},
     {TOK_COMMA, ",", NULL},
     {TOK_DOT, ".", NULL},
-    {TOK_STMNT_END, "", "end of statement"}, //no literal form - only ever synthesized, see stmntEndTriggerType
+    {TOK_STMNT_END, "", "end of line"}, //no literal form - only ever synthesized, see stmntEndTriggerType
     {TOK_QSNTMRK, "?", NULL},
     {TOK_ASS, "=", NULL},
     {TOK_COLON, ":", NULL},
@@ -139,6 +139,7 @@ struct tokenContext {
     char* lastTokEnd;           //L18: where the last token ended - a synthesized statement end is placed there,
     int lastTokLine;            //on the line it ends, not at the token that happens to come next
     bool reportedCR;            //L3: a carriage return is reported once per file, not once per line
+    int tokStart;               //where the token being read began - what a malformed literal's error points at
     struct list edits;          //the splits made by TokenSplitShiftRight/Left, undone by TokenEditRewind
     int version;                //changes whenever the token list does - see TokenListVersion
 };
@@ -159,6 +160,26 @@ void unfeedChar(TokenCtx tc) {
     tc->charIdx--;
     if (tc->charIdx < 0) ErrorBugFound();
     if (charAt(tc, tc->charIdx) == '\n') tc->charLineNr--;
+}
+
+//the bytes [idx, idx + len) of the file, as a token a lexical error can point at; idx is at or before the cursor
+static struct token charSpan(TokenCtx tc, int idx, int len) {
+    struct token t = {0};
+    t.type = TOK_IDEN;
+    t.str.ptr = (char*)tc->chars.ptr + idx;
+    t.str.len = len;
+    t.lineNr = tc->charLineNr;
+    for (int i = idx; i < tc->charIdx; i++) if (charAt(tc, i) == '\n') t.lineNr--;
+    t.owner = tc;
+    t.tokId = -1;
+    return t;
+}
+
+//the token being read, from its start to the cursor - or to the end of its line, which it may not cross
+static struct token tokSoFar(TokenCtx tc) {
+    int end = tc->charIdx;
+    for (int i = tc->tokStart; i < end; i++) if (charAt(tc, i) == '\n') end = i;
+    return charSpan(tc, tc->tokStart, end - tc->tokStart);
 }
 
 static char peekChar(TokenCtx tc, int ahead) {
@@ -194,14 +215,16 @@ void readChars(TokenCtx tc) {
     //isn't a plain file up front - but only once we know it exists at all (a stat() failure here, e.g.
     //ENOENT, is left to fopen()'s own check below, which reports the more accurate "unable to open").
     struct stat st;
-    if (stat(buffer, &st) == 0 && !S_ISREG(st.st_mode)) ErrMsgNotARegularFile(tc->fileName);
+    if (stat(buffer, &st) == 0 && !S_ISREG(st.st_mode)) {
+        ErrFatal(tc->fileName, S_ISDIR(st.st_mode) ? ERR_IS_DIRECTORY : ERR_NOT_REGULAR);
+    }
 
     FILE* fp = fopen(buffer, "r");
-    if (!fp) ErrMsgUnableToOpenFile(tc->fileName);
+    if (!fp) ErrFatal(tc->fileName, ERR_CANNOT_OPEN);
 
     int c;
     while ((c = fgetc(fp)) != EOF) ListAdd(&tc->chars, &c);
-    if (ferror(fp)) ErrMsgUnableToOpenFile(tc->fileName); //e.g. a genuine I/O error mid-read
+    if (ferror(fp)) ErrFatal(tc->fileName, ERR_CANNOT_OPEN); //e.g. a genuine I/O error mid-read
     c = '\0';
     ListAdd(&tc->chars, &c);
     tc->charLineNr = 1;
@@ -248,10 +271,11 @@ bool findNextTokStart(TokenCtx tc) {
             case '#':
                 if (tryFeedChar(tc, '#')) { //L4a: "##" opens a block comment, closed by the next "##"
                     int line = tc->charLineNr;
+                    int open = tc->charIdx - 2;
                     while (true) {
                         char b = feedChar(tc);
                         if (fedEnd(tc, b)) {
-                            ErrMsgUnexpectedChar(tc, UNTERMINATED_BLOCK_COMMENT);
+                            ErrSyntax(charSpan(tc, open, 2), ERR_UNCLOSED_COMMENT);
                             return false;
                         }
                         if (b == '#' && tryFeedChar(tc, '#')) break;
@@ -280,18 +304,18 @@ void tokenizeEscapeChar(TokenCtx tc, bool inString) {
     else if (c == '\\');
     else if (inString && c == '\"');
     else if (!inString && c == '\'');
-    else ErrMsgUnexpectedChar(tc, INVALID_ESCAPE_CHAR);
+    else ErrSyntax(charSpan(tc, tc->charIdx - 2, 2), ERR_BAD_ESCAPE, c);
 }
 
 bool tokenizeCharInStringLiteral(TokenCtx tc) {
     char c = feedChar(tc);
     if (fedEnd(tc, c)) { //L14
-        ErrMsgUnexpectedChar(tc, UNTERMINATED_STRING_LITERAL);
+        ErrSyntax(tokSoFar(tc), ERR_UNCLOSED_STRING);
         return true;
     }
     if (c == '\\') tokenizeEscapeChar(tc, true);
     else if (c == '\n') {
-        ErrMsgUnexpectedChar(tc, NEWLINE_IN_STRING_LITERAL);
+        ErrSyntax(tokSoFar(tc), ERR_STRING_NEWLINE);
         return true;
     }
     else if (c == '"') return true;
@@ -300,19 +324,19 @@ bool tokenizeCharInStringLiteral(TokenCtx tc) {
 
 void tokenizeCharLiteral(TokenCtx tc) {
     char c = feedChar(tc);
-    if (fedEnd(tc, c)) { ErrMsgUnexpectedChar(tc, UNTERMINATED_CHAR_LITERAL); return; } //L13
+    if (fedEnd(tc, c)) { ErrSyntax(tokSoFar(tc), ERR_UNCLOSED_CHAR); return; } //L13
     switch (c) {
-        case '\n': ErrMsgUnexpectedChar(tc, NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL); return;
-        case '\'': ErrMsgUnexpectedChar(tc, EMPTY_CHAR_LITERAL); return;
+        case '\n': ErrSyntax(tokSoFar(tc), ERR_CHAR_NEWLINE); return;
+        case '\'': ErrSyntax(tokSoFar(tc), ERR_EMPTY_CHAR); return;
         case '\\': tokenizeEscapeChar(tc, false); break;
         default: break;
     }
     char close = feedChar(tc);
     if (close == '\'') return;
-    if (fedEnd(tc, close)) { ErrMsgUnexpectedChar(tc, UNTERMINATED_CHAR_LITERAL); return; }
-    ErrMsgUnexpectedChar(tc, EXPECTED_CLOSING_CHAR_LITERAL);
+    if (fedEnd(tc, close)) { ErrSyntax(tokSoFar(tc), ERR_UNCLOSED_CHAR); return; }
     char* str = "'\n";
     feedUntilIncludingOneOfCharsOrEOF(tc, str);
+    ErrSyntax(tokSoFar(tc), ERR_LONG_CHAR);
 }
 
 void tokenizeStringLiteral(TokenCtx tc) {
@@ -377,7 +401,7 @@ int consumeDigitRun(TokenCtx tc, bool (*isRadixDigit)(char)) {
             char next = feedChar(tc);
             unfeedChar(tc);
             if (isRadixDigit(next)) continue;
-            ErrMsgUnexpectedChar(tc, NUMBER_SEPARATOR_PLACEMENT);
+            ErrSyntax(charSpan(tc, tc->charIdx - 1, 1), ERR_DIGIT_SEPARATOR);
             continue; //reported; keep lexing so one bad literal does not derail the rest of the file
         }
         unfeedChar(tc);
@@ -388,10 +412,10 @@ int consumeDigitRun(TokenCtx tc, bool (*isRadixDigit)(char)) {
 //a prefixed literal stops at the first character that is not one of its own digits, so "0b12" would
 //otherwise lex as the binary 1 followed by a stray "2" and report something unrelated. A digit or letter
 //sitting right after the run is always a mistake in the literal, and saying so there is far clearer.
-void rejectTrailingRadixJunk(TokenCtx tc) {
+void rejectTrailingRadixJunk(TokenCtx tc, enum diag d) {
     char c = feedChar(tc);
     unfeedChar(tc);
-    if (isDigit(c) || isLetter(c)) ErrMsgUnexpectedChar(tc, RADIX_LITERAL_BAD_DIGIT);
+    if (isDigit(c) || isLetter(c)) ErrSyntax(charSpan(tc, tc->charIdx, 1), d, c);
 }
 
 enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
@@ -402,13 +426,13 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     if (first == '0') {
         char prefix = feedChar(tc);
         if (prefix == 'x' || prefix == 'X') {           //L10a
-            if (consumeDigitRun(tc, isHexDigit) == 0) ErrMsgUnexpectedChar(tc, HEX_LITERAL_NO_DIGITS);
-            rejectTrailingRadixJunk(tc);
+            if (consumeDigitRun(tc, isHexDigit) == 0) ErrSyntax(tokSoFar(tc), ERR_HEX_NO_DIGITS);
+            rejectTrailingRadixJunk(tc, ERR_HEX_DIGIT);
             return TOK_INT_LIT;
         }
         if (prefix == 'b' || prefix == 'B') {           //L10c
-            if (consumeDigitRun(tc, isBinDigit) == 0) ErrMsgUnexpectedChar(tc, BIN_LITERAL_NO_DIGITS);
-            rejectTrailingRadixJunk(tc);
+            if (consumeDigitRun(tc, isBinDigit) == 0) ErrSyntax(tokSoFar(tc), ERR_BIN_NO_DIGITS);
+            rejectTrailingRadixJunk(tc, ERR_BIN_DIGIT);
             return TOK_INT_LIT;
         }
         unfeedChar(tc);
@@ -421,9 +445,9 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     char afterDot = peekChar(tc, 1);
     if (peekChar(tc, 0) == '.' && !isLetter(afterDot) && afterDot != '_') {
         feedChar(tc);
-        if (consumeDigitRun(tc, isDigit) == 0) ErrMsgUnexpectedChar(tc, LAST_WAS_DECIMAL_POINT);
+        if (consumeDigitRun(tc, isDigit) == 0) ErrSyntax(charSpan(tc, tc->charIdx - 1, 1), ERR_POINT_NO_DIGIT);
         isFloat = true;
-        if (peekChar(tc, 0) == '.') { feedChar(tc); ErrMsgUnexpectedChar(tc, MULTIPLE_DECIMAL_POINTS); unfeedChar(tc); }
+        if (peekChar(tc, 0) == '.') ErrSyntax(charSpan(tc, tc->charIdx, 1), ERR_TWO_POINTS);
     }
 
     //L12a: an exponent - "e"/"E", an optional sign, then at least one digit. Committed to only if the
@@ -491,14 +515,17 @@ enum tokenType tokenizeOperator(TokenCtx tc) {
     if (bestLen == 0) {
         //L1/L3/L16: not the start of any token - reported once for a whole run of such bytes (a character outside
         //ASCII is several), and then dropped, so the parser reads on as though they were not there
-        char c = charAt(tc, startIdx);
+        unsigned char c = (unsigned char)charAt(tc, startIdx);
         if (c == '\r') {
-            if (!tc->reportedCR) ErrMsgUnexpectedChar(tc, CARRIAGE_RETURN);
+            if (!tc->reportedCR) ErrSyntax(charSpan(tc, startIdx, 1), ERR_CARRIAGE_RETURN);
             tc->reportedCR = true;
-        } else {
-            ErrMsgUnexpectedChar(tc, c == '\0' ? NUL_BYTE : UNKNOWN_SYMBOL);
+            return TOK_NONE;
         }
         while (!atEnd(tc) && !canStartToken(tc) && peekChar(tc, 0) != '\r') feedChar(tc);
+        struct token run = charSpan(tc, startIdx, tc->charIdx - startIdx);
+        if (c == '\0') ErrSyntax(run, ERR_NUL_BYTE);
+        else if (c >= 0x80) ErrSyntax(run, ERR_NON_ASCII, (char)c);
+        else ErrSyntax(run, ERR_UNKNOWN_CHAR, (char)c);
         return TOK_NONE;
     }
     for (int i = 1; i < bestLen; i++) feedChar(tc); //first char of the match was already fed by the caller
@@ -509,6 +536,7 @@ struct token tokenizeToken(TokenCtx tc) {
     struct token tok;
     tok.str.ptr = (char*)tc->chars.ptr + tc->charIdx;
     tok.lineNr = tc->charLineNr;
+    tc->tokStart = tc->charIdx;
 
     char c = feedChar(tc);
     if (isLetter(c) || c == '_') tok.type = tokenizeIdentifier(tc);
@@ -665,6 +693,10 @@ char TokenGetChar(TokenCtx tc, int charIdx) {
     return *(char*)ListGetIdx(&tc->chars, charIdx);
 }
 
+int TokenGetCharCount(TokenCtx tc) {
+    return tc->chars.len;
+}
+
 int TokenGetCharCursor(TokenCtx tc) {
     return tc->charIdx;
 }
@@ -748,8 +780,12 @@ void TokenSetCursor(TokenCtx tc, int cursor) {
     tc->tokIdx = cursor;
 }
 
+//a token type as a diagnostic names it: "a name", "end of line", or the token itself in quotes ("')'")
 char* TokenStrFromType(enum tokenType type) {
-    return tokRules[type].description ? tokRules[type].description : tokRules[type].pattern;
+    static char* shown[N_TOK_RULES];
+    if (tokRules[type].description) return tokRules[type].description;
+    if (!shown[type]) shown[type] = StrFmt("'%s'", tokRules[type].pattern);
+    return shown[type];
 }
 
 //the token just before t in its own file's stream, or a TOK_NONE token - only for diagnostics, so a scan is fine

@@ -1,4 +1,4 @@
-# check: fail Eq, which '==' calls, takes one parameter of its receiver's own type
+# check: fail error[E10a]: Eq takes one parameter of its receiver's own type and gives a Bool
 # E10a: a method named Eq claims "==", so it must have the shape of an equality
 type Pt struct(n I32) {
     n

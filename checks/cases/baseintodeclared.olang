@@ -1,4 +1,4 @@
-# check: fail a number flows implicitly only where nothing is lost
+# check: fail error[T6b]: I32 does not flow into Meters
 # T6b/T29: a value flows to its base, never into a declared type over it - that is the constructor's (Meters(x))
 type Meters I32
 fn main() ? {

@@ -78,7 +78,7 @@ static struct syntax* attempt(SyntaxCtx sc, struct syntax* (*parse)(SyntaxCtx)) 
 struct token peekTok(SyntaxCtx sc);
 static bool nestEnter(SyntaxCtx sc, int levels) {
     if (sc->depth + levels <= MAX_NESTING) { sc->depth += levels; return true; }
-    if (!sc->tooDeep) ErrMsgSyntax(peekTok(sc), NESTING_TOO_DEEP);
+    if (!sc->tooDeep) ErrSyntax(peekTok(sc), ERR_NESTING, MAX_NESTING);
     sc->tooDeep = true;
     return false;
 }
@@ -437,7 +437,7 @@ struct syntax* parseChoiceCase(SyntaxCtx sc) {
 //fields) is reported and then read past as though it were the line end it stands for, so one stray comma is one error
 static bool rejectSeparatorComma(SyntaxCtx sc) {
     if (peekTok(sc).type != TOK_COMMA) return false;
-    ErrMsgSemantic(TokenFeed(sc->tc), SEPARATOR_COMMA);
+    Err(TokenFeed(sc->tc), ERR_SEPARATOR_COMMA);
     return true;
 }
 
@@ -1153,7 +1153,7 @@ struct syntax* parseMultiDecl(SyntaxCtx sc, enum syntaxType nodeType) {
             if (!v) return parseFail(sc, cur);
             ListAdd(&values, &v);
         } while (acceptTok(sc, TOK_COMMA).type != TOK_NONE);
-        if (values.len != names.len) ErrMsgSemantic(*(struct token*)ListGetIdx(&names, 0), VAR_LIST_COUNT);
+        if (values.len != names.len) Err(*(struct token*)ListGetIdx(&names, 0), ERR_VAR_LIST_COUNT, names.len, values.len);
     }
     struct syntax* s = newNode(SNTX_VAR_DECLS);
     for (int i = 0; i < names.len; i++) {
@@ -1262,7 +1262,7 @@ struct syntax* parseStmntExpr(SyntaxCtx sc) {
 //condition fixed WITHOUT a build constant is left to the checker, which rejects it as dead code (S8a).
 static void skipBraceBody(TokenCtx tc);
 static bool evalLocalCond(SyntaxCtx sc, bool* value, bool* deferrable);
-struct condDecision { struct str file; int at; bool value; char* err; enum condDecisionKind kind; };
+struct condDecision { struct str file; int at; bool value; enum diag err; char* reason; enum condDecisionKind kind; };
 static struct condDecision* condDecisionFor(TokenCtx tc, int at);
 static struct token firstTokAnywhereSyntax(struct syntax* s);
 static void condTablesInit(void);
@@ -2733,7 +2733,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             int cur = TokenGetCursor(sc->tc);
             TokenFeed(sc->tc);
             //E27/E4: an array literal or a comprehension states its element type before the "["
-            recordFurthestError(sc, t, t.type == TOK_SQUARE_O ? "an element type before the [, as in I32[...]" : "expression");
+            recordFurthestError(sc, t, t.type == TOK_SQUARE_O ? "an element type before the [, as in I32[...]" : "an expression");
             TokenSetCursor(sc->tc, cur);
             return NULL;
         }
@@ -3217,13 +3217,13 @@ static bool isBinDigitChar(char c) { return c == '0' || c == '1'; }
 //B10: "true"/"false" is a Bool; text that is - after an optional "-" - a whole integer or float literal, as the lexer
 //reads one (L10, L12), is that number; anything else, or anything in double quotes, is text. A value with a "0x" or
 //"0b" prefix is always a number, and must be a valid one; a number must be one a literal can be - an integer no wider
-//than 64 bits, a float that is not an infinity. NULL when it is defined, or what is wrong
-char* SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
+//than 64 bits, a float that is not an infinity. DIAG_NONE when it is defined, or what is wrong
+enum diag SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
     buildConstsInit();
-    if (!isIdentText(name) || !strcmp(name, "_")) return "not an identifier";
+    if (!isIdentText(name) || !strcmp(name, "_")) return ERR_DEFINE_NOT_NAME;
     for (int i = 0; i < buildConsts.len; i++) {
         struct buildConst* b = ListGetIdx(&buildConsts, i);
-        if ((int)strlen(name) == b->name.len && !strncmp(name, b->name.ptr, (size_t)b->name.len)) return "defined twice";
+        if ((int)strlen(name) == b->name.len && !strncmp(name, b->name.ptr, (size_t)b->name.len)) return ERR_DEFINE_TWICE;
     }
     struct buildConst b = (struct buildConst){0};
     b.name = StrFromCStr(name);
@@ -3236,7 +3236,7 @@ char* SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
     if (radix) {
         const char* p = digits + 2;
         int n = buildDigitRun(&p, digits[1] == 'x' || digits[1] == 'X' ? isHexDigitChar : isBinDigitChar);
-        if (n <= 0 || *p) return "not a valid number - a '0x' or '0b' literal takes digits of its own base, each '_' between two of them (L10a, L10c)";
+        if (n <= 0 || *p) return ERR_DEFINE_BAD_NUMBER;
         isInt = true;
     } else if (isDecDigit(digits[0])) {
         const char* p = digits;
@@ -3265,10 +3265,10 @@ char* SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
         const char* lit = clean + (neg ? 1 : 0);
         //L10/T6a: a decimal value is at most U64's largest - above I64's maximum a U64 - and negated at least I64's most
         //negative; a "0x"/"0b" one is a bit pattern of at most 64 bits, read as an I64
-        if (!literalIntValue(lit, (int)strlen(lit), &v, &u64)) return "out of range - an integer build constant fits in 64 bits (L10, T6a)";
+        if (!literalIntValue(lit, (int)strlen(lit), &v, &u64)) return ERR_DEFINE_INT_RANGE;
         if (neg) {
             if (u64 && (unsigned long long)v == 9223372036854775808ULL) { v = LLONG_MIN; neg = false; u64 = false; }
-            else if (u64 || v == LLONG_MIN) return "out of range - a negative integer build constant is at least I64's most negative value (L10, T6a)";
+            else if (u64 || v == LLONG_MIN) return ERR_DEFINE_NEG_RANGE;
         }
         b.i = neg ? -v : v;
         b.u64 = u64;
@@ -3280,7 +3280,7 @@ char* SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
         b.kind = BUILD_FLOAT;
         b.text = StrFromCStr(clean);
         b.f = strtod(clean, NULL);
-        if (isinf(b.f)) return "out of range - a float build constant is an F64 no literal makes an infinity (L12b)";
+        if (isinf(b.f)) return ERR_DEFINE_FLOAT_RANGE;
     } else {
         b.kind = BUILD_STR;
         if (vl >= 2 && value[0] == '"' && value[vl - 1] == '"') {
@@ -3293,7 +3293,7 @@ char* SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
         }
     }
     ListAdd(&buildConsts, &b);
-    return NULL;
+    return DIAG_NONE;
 }
 
 //B9a: the token evaluator. A condition it decides is decided exactly as the program would decide it, or not at all:
@@ -3317,7 +3317,7 @@ struct condCtx {
     TokenCtx tc;
     bool failed;
     struct token errTok;
-    char* err;
+    enum diag err; //what is wrong, about errTok
     int depth; //globals evaluated through other globals, to stop a cycle
     bool deferrable; //B9c: it failed on something compile-time evaluation can still decide - a call, or a
                      //global computed by one - rather than on something wrong
@@ -3383,12 +3383,12 @@ void SyntaxResetConditionDecisions(void) {
     condTablesInit();
 }
 
-void SyntaxDecideCondition(struct str file, int at, bool value, char* err) {
-    condDecisionAdd((struct condDecision){ file, at, value, err, err ? COND_ERROR : COND_VALUE });
+void SyntaxDecideCondition(struct str file, int at, bool value, enum diag err, char* reason) {
+    condDecisionAdd((struct condDecision){ file, at, value, err, reason, err ? COND_ERROR : COND_VALUE });
 }
 
 void SyntaxDecideLocalCondition(struct str file, int at, enum condDecisionKind kind, bool value) {
-    condDecisionAdd((struct condDecision){ file, at, value, NULL, kind });
+    condDecisionAdd((struct condDecision){ file, at, value, DIAG_NONE, NULL, kind });
 }
 
 //the conditions met undecided are also found by their parsed node - the checker looks one up for every local if
@@ -3466,7 +3466,7 @@ static struct condVal condNone(void) {
 }
 
 //a mistake in the condition itself (values that do not combine, a cycle): reported wherever it is written
-static struct condVal condFail(struct condCtx* c, struct token t, char* msg) {
+static struct condVal condFail(struct condCtx* c, struct token t, enum diag msg) {
     if (!c->failed) {
         c->failed = true;
         c->errTok = t;
@@ -3480,12 +3480,12 @@ static struct condVal condFail(struct condCtx* c, struct token t, char* msg) {
 static struct condVal condDefer(struct condCtx* c, struct token t) {
     if (c->skip) return condNone();
     if (!c->failed) c->deferrable = true;
-    return condFail(c, t, BUILD_COND_NAME);
+    return condFail(c, t, ERR_COND_NAME);
 }
 
 //a value known only when the program runs - a local, a mutable global: a local condition reading one is an ordinary
 //if, and a top-level one is wrong (B9a). Where it would never be read (E7), nothing.
-static struct condVal condRuntime(struct condCtx* c, struct token t, char* msg) {
+static struct condVal condRuntime(struct condCtx* c, struct token t, enum diag msg) {
     if (c->skip) return condNone();
     return condFail(c, t, msg);
 }
@@ -3620,7 +3620,7 @@ static struct condVal condPrimary(struct condCtx* c) {
                 for (int i = 0; i < c->locals->len; i++) {
                     struct str* l = ListGetIdx(c->locals, i);
                     if (l->len == t.str.len && !strncmp(l->ptr, t.str.ptr, (size_t)t.str.len)) {
-                        return condRuntime(c, t, BUILD_COND_NAME); //a local: known only when the program runs
+                        return condRuntime(c, t, ERR_COND_NAME); //a local: known only when the program runs
                     }
                 }
             }
@@ -3661,7 +3661,7 @@ static struct condVal condUnary(struct condCtx* c) {
     struct condVal v = condUnary(c);
     if (v.anyKind) return v;
     if (v.kind == BUILD_FLOAT) { v.f = -v.f; return v; }
-    if (v.kind != BUILD_INT) return condFail(c, t, BUILD_COND_TYPES);
+    if (v.kind != BUILD_INT) return condFail(c, t, ERR_COND_TYPES);
     //E6c: negating its type's most negative value, or any unsigned value but 0, wraps
     if (v.i == LLONG_MIN || !intFits(-v.i, v.bits, v.uns)) return condDefer(c, t);
     v.i = -v.i;
@@ -3672,11 +3672,11 @@ static bool condNumeric(struct condVal v) { return v.kind == BUILD_INT || v.kind
 
 static struct condVal condArith(struct condCtx* c, struct token op, struct condVal a, struct condVal b) {
     if (a.anyKind || b.anyKind) return condNone();
-    if (!condNumeric(a) || !condNumeric(b)) return condFail(c, op, BUILD_COND_TYPES);
+    if (!condNumeric(a) || !condNumeric(b)) return condFail(c, op, ERR_COND_TYPES);
     struct condVal r = (struct condVal){0};
     if (a.kind == BUILD_INT && b.kind == BUILD_INT) {
         r.kind = BUILD_INT;
-        if (!intMeet(a, b, &r.bits, &r.uns)) return condFail(c, op, BUILD_COND_NO_MEET);
+        if (!intMeet(a, b, &r.bits, &r.uns)) return condFail(c, op, ERR_COND_NO_MEET);
         bool over = false;
         switch (op.type) {
             case TOK_ADD: over = __builtin_add_overflow(a.i, b.i, &r.i); break;
@@ -3695,7 +3695,7 @@ static struct condVal condArith(struct condCtx* c, struct token op, struct condV
     }
     //an F64 or a float literal, and an integer literal adapting to it (T6) - computed in a double, as the program does
     double x = a.f, y = b.f;
-    if ((a.kind == BUILD_INT && a.bits) || (b.kind == BUILD_INT && b.bits)) return condFail(c, op, BUILD_COND_NO_MEET);
+    if ((a.kind == BUILD_INT && a.bits) || (b.kind == BUILD_INT && b.bits)) return condFail(c, op, ERR_COND_NO_MEET);
     if ((a.kind == BUILD_INT && !intAsFloat(a, &x)) || (b.kind == BUILD_INT && !intAsFloat(b, &y))) return condDefer(c, op);
     if (op.type == TOK_MOD) return condDefer(c, op);
     r.kind = BUILD_FLOAT;
@@ -3745,11 +3745,11 @@ static struct condVal condCmp(struct condCtx* c) {
     } else if (a.kind == BUILD_INT && b.kind == BUILD_INT) {
         int bits;
         bool uns;
-        if (!intMeet(a, b, &bits, &uns)) return condFail(c, t, BUILD_COND_NO_MEET);
+        if (!intMeet(a, b, &bits, &uns)) return condFail(c, t, ERR_COND_NO_MEET);
         order = a.i < b.i ? -1 : a.i > b.i ? 1 : 0;
     } else if (condNumeric(a) && condNumeric(b)) {
         double x = a.f, y = b.f;
-        if ((a.kind == BUILD_INT && a.bits) || (b.kind == BUILD_INT && b.bits)) return condFail(c, t, BUILD_COND_NO_MEET);
+        if ((a.kind == BUILD_INT && a.bits) || (b.kind == BUILD_INT && b.bits)) return condFail(c, t, ERR_COND_NO_MEET);
         if ((a.kind == BUILD_INT && !intAsFloat(a, &x)) || (b.kind == BUILD_INT && !intAsFloat(b, &y))) return condDefer(c, t);
         if (x != x || y != y) { //a NaN is unordered: only "!=" holds
             r.i = t.type == TOK_NEQ;
@@ -3757,7 +3757,7 @@ static struct condVal condCmp(struct condCtx* c) {
         }
         order = x < y ? -1 : x > y ? 1 : 0;
     } else {
-        return condFail(c, t, BUILD_COND_TYPES);
+        return condFail(c, t, ERR_COND_TYPES);
     }
     switch (t.type) {
         case TOK_EQ:  r.i = order == 0; break;
@@ -3777,7 +3777,7 @@ static struct condVal condNot(struct condCtx* c) {
     TokenFeed(c->tc);
     struct condVal v = condNot(c);
     if (v.anyKind) return v;
-    if (v.kind != BUILD_BOOL) return condFail(c, t, BUILD_COND_TYPES);
+    if (v.kind != BUILD_BOOL) return condFail(c, t, ERR_COND_TYPES);
     v.i = !v.i;
     return v;
 }
@@ -3795,7 +3795,7 @@ static struct condVal condLogic(struct condCtx* c, enum tokenType op, struct con
         if (decided) c->skip++;
         struct condVal b = operand(c);
         if (decided) { c->skip--; continue; }
-        if (!condBoolOrAny(v) || !condBoolOrAny(b)) { v = condFail(c, t, BUILD_COND_TYPES); continue; }
+        if (!condBoolOrAny(v) || !condBoolOrAny(b)) { v = condFail(c, t, ERR_COND_TYPES); continue; }
         if (v.anyKind || b.anyKind) { v = condNone(); continue; }
         v.i = op == TOK_OR ? v.i || b.i : v.i && b.i;
     }
@@ -3936,7 +3936,7 @@ static struct condVal condAsDeclared(struct condCtx* c, struct token name, struc
 //another module's name, B9c)
 static struct condVal condGlobal(struct condCtx* c, struct token name) {
     if (!condFilesReady) return condDefer(c, name);
-    if (c->depth > 64) return condFail(c, name, BUILD_COND_CYCLE);
+    if (c->depth > 64) return condFail(c, name, ERR_COND_CYCLE);
     for (int f = 0; f < condFiles.len; f++) {
         TokenCtx tc = *(TokenCtx*)ListGetIdx(&condFiles, f);
         struct condGlobalIndex* ix = condIndexFor(tc);
@@ -3946,7 +3946,7 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
             if (x->name.len == name.str.len && !strncmp(x->name.ptr, name.str.ptr, (size_t)name.str.len)) d = x;
         }
         if (!d) continue;
-        if (d->mut) return condRuntime(c, name, BUILD_COND_MUTABLE);
+        if (d->mut) return condRuntime(c, name, ERR_COND_MUTABLE);
         struct condGlobalDecl decl = *d; //the index may be rebuilt while its initializer is read
         int saved = TokenGetCursor(tc);
         TokenSetCursor(tc, decl.init);
@@ -3964,7 +3964,7 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
             if (c->failed || c->skip) return condNone();
             c->failed = true;
             c->errTok = name;
-            c->err = inner.err && !strcmp(inner.err, BUILD_COND_CYCLE) ? BUILD_COND_CYCLE : BUILD_COND_GLOBAL_INIT;
+            c->err = inner.err == ERR_COND_CYCLE ? ERR_COND_CYCLE : ERR_COND_GLOBAL_INIT;
             c->deferrable = inner.deferrable; //a global computed by a call can still be evaluated
             return condNone();
         }
@@ -3977,7 +3977,7 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
 
 //evaluates the condition starting at the cursor, leaving the cursor after it. *ok is false when it could
 //not be evaluated, with the reason in *errTok/*err (the pre-scan ignores those; the parser reports them).
-static bool evalTopCond(TokenCtx tc, bool* ok, struct token* errTok, char** err, bool* deferrable) {
+static bool evalTopCond(TokenCtx tc, bool* ok, struct token* errTok, enum diag* err, bool* deferrable) {
     struct condCtx c = (struct condCtx){0};
     c.tc = tc;
     struct token first = condPeek(&c);
@@ -3986,7 +3986,7 @@ static bool evalTopCond(TokenCtx tc, bool* ok, struct token* errTok, char** err,
     //evaluate, and compile-time evaluation decides it (B9c). Without this the condition was judged on its prefix:
     //"if Seven.Hash() != 3" was "not true or false", having read only "Seven"
     if (!c.failed && condPeek(&c).type != TOK_CURLY_O) condDefer(&c, first);
-    if (!c.failed && v.kind != BUILD_BOOL) condFail(&c, first, BUILD_COND_NOT_BOOL);
+    if (!c.failed && v.kind != BUILD_BOOL) condFail(&c, first, ERR_COND_NOT_BOOL);
     *ok = !c.failed;
     if (errTok) *errTok = c.errTok;
     if (err) *err = c.err;
@@ -4212,16 +4212,13 @@ static void skipTopItem(SyntaxCtx sc, int start) {
     }
 }
 
-//the token a failed top-level item is reported at; where nothing got past the item's first token, every
-//alternative failed there and the last one tried says nothing useful - "a declaration" is what was wanted
-//a syntax error the bare "unexpected X, expected Y" would leave a reader puzzling over, said in terms of what was
-//probably meant - written into msg, or false where the plain report says it best
-static bool syntaxHint(struct token found, char* expected, char* msg, size_t size) {
+//a syntax error the bare "expected X, found Y" would leave a reader puzzling over, said in terms of what was probably
+//meant - reported here, or false where the plain report says it best
+static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
     //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
-        snprintf(msg, size, "'?' alone already says this can fail, without saying how - 'error' is not an error type. "
-                 "Write '?' by itself, or name the declared error types it fails with ('? IoError + ParseError') (R15)");
+        ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);
         return true;
     }
     //"state Array<F32>(n)" - a declaration's value comes after '='
@@ -4255,22 +4252,24 @@ static bool syntaxHint(struct token found, char* expected, char* msg, size_t siz
             else if (line[close] == ')' && --depth == 0) break;
         }
         if (close >= n) return false;
-        snprintf(msg, size, "a declaration's value comes after '=' - write '%.*s = %.*s%.*s', or let the value give the type: "
-                 "'%.*s := %.*s%.*s' (D12)",
-                 at - nameStart - (at - typeEnd), line + nameStart, typeEnd - typeStart, line + typeStart, close - at +1, line + at,
-                 nameEnd - nameStart, line + nameStart, typeEnd - typeStart, line + typeStart, close - at +1, line + at);
+        //"state Array<F32>", "Array<F32>(n)" and "state"
+        char decl[256], value[256], name[256];
+        snprintf(decl, sizeof(decl), "%.*s", typeEnd - nameStart, line + nameStart);
+        snprintf(value, sizeof(value), "%.*s%.*s", typeEnd - typeStart, line + typeStart, close - at +1, line + at);
+        snprintf(name, sizeof(name), "%.*s", nameEnd - nameStart, line + nameStart);
+        ErrSyntax(found, ERR_VALUE_AFTER_EQ, decl, value, name, value);
         return true;
     }
     return false;
 }
 
+//the token a failed top-level item is reported at; where nothing got past the item's first token, every
+//alternative failed there and the last one tried says nothing useful - "a declaration" is what was wanted
 static void reportTopItemFailure(SyntaxCtx sc, int start) {
     if (sc->tooDeep) return; //that is what stopped it, and it was said
     bool atFirst = sc->furthestPos <= start +1;
-    char* expected = !atFirst && sc->furthestExpected ? sc->furthestExpected : "declaration";
-    char hint[768];
-    if (syntaxHint(sc->furthestTok, expected, hint, sizeof(hint))) ErrMsgSyntax(sc->furthestTok, hint);
-    else ErrMsgUnexpectedToken(sc->furthestTok, expected);
+    char* expected = !atFirst && sc->furthestExpected ? sc->furthestExpected : "a declaration";
+    if (!syntaxHint(sc->furthestTok, expected)) ErrSyntax(sc->furthestTok, ERR_EXPECTED, expected, sc->furthestTok);
 }
 
 static void parseTopItem(SyntaxCtx sc, struct list* out) {
@@ -4342,7 +4341,7 @@ static bool parseTopIf(SyntaxCtx sc, struct list* out) {
         TokenSetCursor(sc->tc, condStart);
         bool ok;
         struct token errTok;
-        char* err;
+        enum diag err;
         bool deferrable;
         bool value = evalTopCond(sc->tc, &ok, &errTok, &err, &deferrable);
         TokenSetCursor(sc->tc, afterCond);
@@ -4350,7 +4349,8 @@ static bool parseTopIf(SyntaxCtx sc, struct list* out) {
             //B9c: left to compile-time evaluation - decided by an earlier attempt, or queued for this one
             struct condDecision* d = condDecisionFor(sc->tc, condStart);
             if (d && d->err) {
-                ErrMsgSemantic(firstTokAnywhereSyntax(cond), d->err);
+                if (d->reason) Err(firstTokAnywhereSyntax(cond), d->err, d->reason);
+                else Err(firstTokAnywhereSyntax(cond), d->err);
             } else if (d) {
                 ok = true;
                 value = d->value;
@@ -4364,7 +4364,7 @@ static bool parseTopIf(SyntaxCtx sc, struct list* out) {
                 condPendingAdd(p);
             }
         } else if (!ok) {
-            ErrMsgSemantic(errTok, err);
+            Err(errTok, err, errTok); //each condition diagnostic takes the token it is about
         }
         if (!taken && ok && value) {
             if (!parseTopBranch(sc, out)) return false;

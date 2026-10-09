@@ -1,4 +1,4 @@
-# check: fail inherits its base's methods only when it is declared with 'extends'
+# check: fail error[T29f]: Nums declares no 'Count', and does not extend its base, which has one
 # T29f: without "extends", a declared array type does not inherit the array methods
 type Nums Array<I32>
 fn main() ? {

@@ -1,4 +1,4 @@
-# check: fail nothing this loop calls can fail
+# check: fail error[S9e]: nothing this loop calls by itself can fail
 # S9e: try on a loop that calls nothing fallible
 fn main() ? {
     a := I32[1, 2]

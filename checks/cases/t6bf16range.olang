@@ -1,4 +1,4 @@
-# check: fail this literal's value can't be represented
+# check: fail error[T6]: '3.4e38' does not fit BF16
 # T6: BF16 has F32's exponent range but 8 bits of precision - its largest value is about 3.3895e38, so 3.39e38 rounds
 # to it and fits, while 3.4e38 rounds to an infinity
 fn main() ? {

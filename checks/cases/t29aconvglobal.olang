@@ -1,4 +1,4 @@
-# check: fail this reference is read-only, and this place wants a writable one
+# check: fail error[T25c]: a read-only reference cannot become writable
 # T29a/T25c: a conversion of an immutable global reference is no more writable than the global
 type Bytes Array<U8>
 fn w(s mut Bytes&) { s[0] = 1 }

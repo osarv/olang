@@ -1,4 +1,4 @@
-# check: fail these entries are separated by line ends, one per line - not by commas
+# check: fail entries are separated by line ends, not commas
 # T17/T19/C2: a comma between entries is a compile-time error
 type D enum { N, S }
 fn main() ? { }

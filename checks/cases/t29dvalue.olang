@@ -1,4 +1,4 @@
-# check: fail a number flows implicitly only where nothing is lost
+# check: fail error[T6b]: I32 does not flow into Percent
 # T29d: only a literal adapts to a type with a constructor - a typed value enters through the constructor
 type Percent I32(v mut I32) {
     if v > 100 { v = 100 }

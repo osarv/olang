@@ -1,5 +1,5 @@
-# check: fail 9 l18endofline.olang
-# also: unexpected end of line, expected '{'
+# check: fail l18endofline.olang:9:14: error
+# also: expected '{', found end of line
 # L18: a synthesized statement end is where its line ends, so a diagnostic about it names that line
 fn g(x I32) I32 {
     return x

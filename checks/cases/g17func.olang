@@ -1,4 +1,4 @@
-# check: fail this generic's instantiation requires an ever-growing set of further instantiations
+# check: fail error[G17]: this generic's instantiations never end
 # G17: a generic function instantiating itself with a bigger argument - once reported
 type Box<T> struct(v <T>) { v }
 fn deep(x <T>, n I32) I32 {

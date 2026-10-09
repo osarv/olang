@@ -1,4 +1,4 @@
-# check: fail deferred code may not 'break' or 'continue' out of itself
+# check: fail error[S19b]: 'break' may not leave deferred code
 # S19b: a break in deferred code may leave only a loop written in that deferred code
 fn f() I32 {
     t I32 = 0

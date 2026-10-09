@@ -1,4 +1,4 @@
-# check: fail -D X=99999999999999999999: out of range
+# check: fail -D X=99999999999999999999: beyond 64 bits
 # flags: -D X=99999999999999999999
 # B10: an integer build constant fits in 64 bits - this one was clamped to I64's largest
 fn main() ? { }

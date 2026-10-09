@@ -1,4 +1,4 @@
-# check: fail a number flows implicitly only where nothing is lost
+# check: fail error[T6b]: I64 does not flow into I32
 # T6b: only the lossless direction is implicit - an I64 into an I32 is written I32(x)
 fn main() ? {
     b I64 = 5
