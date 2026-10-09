@@ -3,9 +3,9 @@
 # their outputs agree byte for byte at the timed size, then times them with interleaved repetitions and prints the
 # median of each. Not part of "make verify" (and nothing here is a test: "make test" never sees this directory).
 #
-#   bench/run.sh [-r REPS] [-n] [-q] [NAME ...]
+#   bench/run.sh [-r REPS] [-x] [-q] [NAME ...]
 #     -r REPS  timed repetitions of every program, interleaved (default 7); the table gives the median and the minimum
-#     -n       also build both with -march=native and time those (olang's own IR, compiled for this CPU)
+#     -x       also build both for baseline x86-64 and time those (olang -a x86-64, C with no -march)
 #     -q       build and check the outputs only, no timing
 #     NAME     only the rows whose name contains NAME
 #   BENCH_LOCK=FILE  take this flock for the checking and timing runs - on a shared machine, the lock that other
@@ -13,18 +13,19 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 OLANG=../build/out
-# exactly what olang compiles and links its own output with (main.c, addModeFlags): -O3 and whole-program LTO,
-# for the default target - no -march
-FLAGS="-O3 -flto"
-# -ffp-contract=off keeps C's floating point exactly as written, as olang's is: clang's default would fuse a*b+c
-# into one FMA wherever the target has one, which changes results (and so the outputs would no longer agree)
-NATIVE_FLAGS="-O3 -flto -march=native -ffp-contract=off"
+# what olang compiles and links its own output with (main.c, addModeFlags): -O3 and whole-program LTO, for this
+# machine (B12: native by default) - and -ffp-contract=off keeps C's floating point exactly as written, as olang's is
+# (B12c): clang's default would fuse a*b+c into one FMA wherever the target has one, which changes results (and so the
+# outputs would no longer agree)
+FLAGS="-O3 -flto -march=native -ffp-contract=off"
+# baseline x86-64: olang -a x86-64, and C with no -march
+BASE_FLAGS="-O3 -flto"
 
-REPS=7; NATIVE=0; QUICK=0
-while getopts "r:nq" opt; do
+REPS=7; BASE=0; QUICK=0
+while getopts "r:xq" opt; do
     case $opt in
         r) REPS=$OPTARG ;;
-        n) NATIVE=1 ;;
+        x) BASE=1 ;;
         q) QUICK=1 ;;
         *) exit 2 ;;
     esac
@@ -67,18 +68,16 @@ declare -A built
 for row in "${selected[@]}"; do
     IFS='|' read -r name prog cprog args <<< "$row"
     if [ -z "${built[o.$prog]:-}" ]; then
-        $OLANG -b $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
-        if [ $NATIVE = 1 ]; then
-            # the IR olang just wrote for the program's own module, beside every other module's (link-time
-            # optimization drops what this program does not use)
-            others=$(ls build/*.ll | grep -v '\.main\.ll$' | grep -v '\.test\.ll$')
-            clang $NATIVE_FLAGS -o build/$prog.native build/$prog.main.ll $others -lm -lpthread
+        if [ $BASE = 1 ]; then
+            $OLANG -a x86-64 -b $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
+            cp build/$prog build/$prog.base
         fi
+        $OLANG -b $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
         built[o.$prog]=1
     fi
     if [ -z "${built[c.$cprog]:-}" ]; then
         clang $FLAGS -o build/${cprog}_c c/$cprog.c -lm -lpthread
-        [ $NATIVE = 1 ] && clang $NATIVE_FLAGS -o build/${cprog}_c.native c/$cprog.c -lm -lpthread
+        [ $BASE = 1 ] && clang $BASE_FLAGS -o build/${cprog}_c.base c/$cprog.c -lm -lpthread
         built[c.$cprog]=1
     fi
 done
@@ -93,7 +92,7 @@ fi
 for row in "${selected[@]}"; do
     IFS='|' read -r name prog cprog args <<< "$row"
     variants=("build/$prog|build/${cprog}_c")
-    [ $NATIVE = 1 ] && variants+=("build/$prog.native|build/${cprog}_c.native")
+    [ $BASE = 1 ] && variants+=("build/$prog.base|build/${cprog}_c.base")
     for v in "${variants[@]}"; do
         a=$(${v%%|*} $args | md5sum)
         b=$(${v##*|} $args | md5sum)
@@ -114,7 +113,7 @@ for ((r = 1; r <= REPS; r++)); do
     for row in "${selected[@]}"; do
         IFS='|' read -r name prog cprog args <<< "$row"
         bins=("o|build/$prog" "c|build/${cprog}_c")
-        [ $NATIVE = 1 ] && bins+=("on|build/$prog.native" "cn|build/${cprog}_c.native")
+        [ $BASE = 1 ] && bins+=("on|build/$prog.base" "cn|build/${cprog}_c.base")
         for b in "${bins[@]}"; do
             t0=$(now)
             ${b#*|} $args >/dev/null
@@ -137,14 +136,14 @@ ratio() { awk -v a=$1 -v b=$2 'BEGIN { printf "%.2f", a / b }'; }
 
 {
     printf "%-26s %9s %9s %7s" "benchmark" "olang" "C" "olang/C"
-    [ $NATIVE = 1 ] && printf " %10s %10s %7s" "olang -mn" "C -mn" "ratio"
+    [ $BASE = 1 ] && printf " %10s %10s %7s" "olang x86-64" "C x86-64" "ratio"
     printf "     (median of %d; min in parentheses)\n" $REPS
     for row in "${selected[@]}"; do
         IFS='|' read -r name prog cprog args <<< "$row"
         read -r om omin <<< "$(stat "${times[$name|o]}")"
         read -r cm cmin <<< "$(stat "${times[$name|c]}")"
         printf "%-26s %9s %9s %7s" "$name" "$(secs $om)" "$(secs $cm)" "$(ratio $om $cm)"
-        if [ $NATIVE = 1 ]; then
+        if [ $BASE = 1 ]; then
             read -r onm onmin <<< "$(stat "${times[$name|on]}")"
             read -r cnm cnmin <<< "$(stat "${times[$name|cn]}")"
             printf " %10s %10s %7s" "$(secs $onm)" "$(secs $cnm)" "$(ratio $onm $cnm)"

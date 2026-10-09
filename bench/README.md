@@ -6,7 +6,7 @@ same sizes and byte-identical output, timed against each other.
 
 ```
 bench/run.sh                 # build both, check the outputs agree, time (median of 7, interleaved)
-bench/run.sh -n              # also -march=native for both
+bench/run.sh -x              # also baseline x86-64 for both (olang -a x86-64, C with no -march)
 bench/run.sh -q              # build and check only
 bench/run.sh -r 9 nbody text # 9 repetitions, only some rows
 BENCH_LOCK=/home/user/verify.lock bench/run.sh   # hold a lock while checking and timing, on a shared machine
@@ -18,10 +18,12 @@ Nothing here is part of `make verify` or `make test` - the makefile names the di
 not one of them.
 
 **Fairness.** The C versions are compiled with exactly the flags olang compiles and links its own output with
-(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization, for the
-default x86-64 target. The `-n` columns build olang's own emitted IR and the C source with `-march=native`; C there
-also gets `-ffp-contract=off`, because clang's default would fuse `a*b+c` into an FMA wherever the target has one and
-change the results - olang never contracts, and has no way to ask for an FMA either. Both versions print floats as
+(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization - and, since
+olang builds for the machine it runs on (B12, 2026-10-09), `-march=native`, with `-ffp-contract=off`, because clang's
+default would fuse `a*b+c` into an FMA wherever the target has one and change the results - olang never contracts, and
+fuses only where a program writes `math.Fma`. The `-x` columns build both for baseline x86-64 (`olang -a x86-64`, C with
+no `-march`). The tables below the next section were measured before B12, when olang built for baseline x86-64 and the
+`-n` columns were its IR relinked with `-march=native`. Both versions print floats as
 olang's `$` does (the fewest digits that read back as the same value; `c/common.h` copies util.c's `FloatShortest`),
 so one differing bit in any result fails the check.
 
@@ -328,9 +330,46 @@ Training step, 784-128-10, batch 64, F32, us a step (forward, softmax cross-entr
    and libmvec's results are within 4 ulp, not the scalar function's, so it would break X8's agreement between the
    evaluator and the run time; clang 18 maps no `tanhf` at all.
 
+### Built for this machine (B12, 2026-10-09)
+
+Since B12 olang builds for the machine it runs on - here `cascadelake`: AVX-512 with FMA - and `std/linalg` picks its
+tile by the target (12 x 32 / 12 x 16 for F32 / F64 on AVX-512, 6 x 16 / 6 x 8 on AVX, 4 x 12 / 4 x 6 on SSE) and fuses
+its products' multiply-adds where `TargetHasFma`. Square C = A B single-threaded, GFLOPS (best of several runs inside
+the program, load 3-9, so differences under ~15% are noise):
+
+| type | n | before (baseline x86-64) | native | `-a x86-64` | `-a x86-64-v3` | OpenBLAS 1T |
+|---|---:|---:|---:|---:|---:|---:|
+| f32 | 256 | 15.4 | 56.6 | 16.5 | 47.9 | 106.2 |
+| f32 | 512 | 16.6 | 65.0 | 13.4 | 51.7 | 107.8 |
+| f32 | 1024 | 15.6 | 73.4 | 16.3 | 44.6 | 91.2 |
+| f32 | 2048 | 12.8 | 77.8 | 16.1 | 47.3 | 104.1 |
+| f64 | 256 | 7.8 | 25.5 | 8.0 | 21.7 | 47.7 |
+| f64 | 512 | 8.0 | 30.2 | 8.0 | 22.4 | 48.2 |
+| f64 | 1024 | 7.7 | 31.3 | 8.2 | 24.2 | 48.3 |
+| f64 | 2048 | 7.5 | 32.6 | 7.8 | 19.6 | 48.6 |
+
+The gap to OpenBLAS went from 5-7x to 1.3-1.9x. Its hand-written kernels reach ~90% of the machine's peak; olang's
+reach about half, the same algorithm with no assembly. The 784-128-10 training step (`mlp.olang`, batch 64): 2.3-2.9 ms
+before, 0.8-1.1 ms native, 1.3-1.4 ms at `x86-64-v3`, 2.3-2.7 ms at `-a x86-64`, OpenBLAS 0.4-0.5 ms, naive C 9-10 ms.
+oann's MNIST perceptron (its `bench/train.olang`, batch 128, an epoch's forward, backward and AdamW step) with its
+products through `linalg.GemmWorkspace`: **0.55 s an epoch native**, 0.68 s at `x86-64-v3`, 2.1 s at `-a x86-64`
+(2.6-2.9 s before B12; the C trainer over OpenBLAS was recorded at 0.79 s), same losses and accuracy.
+
+**The vector width, and a hazard it brings.** The code generator is told to use the target's widest vectors (512 bits
+here; LLVM's own tuning for Intel's AVX-512 parts prefers 256) so that `TargetVectorBits` is the width loops actually
+get. 512 against 256 with the tile chosen to match (interleaved pairs): GEMM F32 57-71 against 41-46 GFLOPS (512 to
+1024), F64 25-32 against 15-23, the training step 0.86-1.02 against 1.19-1.38 ms; over `bench/run.sh`, matmul 0.87 s
+against 1.15 s, the Array and List sums 0.10-0.12 against 0.14-0.16, parallel 0.90 against 1.01, the rest within the
+noise (fannkuch is ~20% slower native at either width, as C's `-march=native` is). The hazard: **a hand-tiled kernel
+whose rows are not whole vectors of `TargetVectorBits`** - oann's own copy of std/linalg's earlier 4 x 12 F32 kernel -
+is vectorized by LLVM's SLP pass across rows, sixteen accumulators at a time, with gathers and permutes: 5.1-5.4 s an
+epoch native, 1.8 s with 256-bit vectors, 2.1 s at baseline. Tile by `TargetVectorBits`, as std/linalg does, or call
+it.
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;
-Linux 6.18; Ubuntu clang 18.1.3; glibc 2.39; olang at master 3a821a1. The machine was shared with other agents'
+Linux 6.18; Ubuntu clang 18.1.3; glibc 2.39; olang at master 3a821a1 (the B12 section: wt-native after its merge of
+master 9ffa1de). The machine was shared with other agents'
 builds and tests (load average 2-5 during the runs); the checks and timings ran under `/home/user/verify.lock`, which
 keeps full test suites off it but not smaller jobs, so differences under ~10% are within the noise.

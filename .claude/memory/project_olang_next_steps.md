@@ -283,6 +283,31 @@ because what it finds about structure feeds the refactor.
   the follow-up flips it and migrates (recipe in the merge's HISTORY: keep each name's first `<X`, later `<X>` -> `X`;
   in a type item every listed name bare after the header; never the header). Known limit: a trait method returning
   `T&` (built) is not met by one returning `T&p` (borrowed).
+- 16:50 CEST: constgen pushed (verified on master), langb merged by me (conflicts in semantic.c/errmsg/SPEC/checks
+  resolved, verified) and pushed as a3ed507: M6b protocol privacy, D15 any settled type, print/println, ctordefault and
+  listzero (List needs no zero value; library errors reported at the program's use, B11). wt-tbare started (type
+  variables bare after <T>, with a re-runnable migration script; oann migrated by it later). Running: native, oann
+  transformers, oann settling, tbare. Next after tbare: the permissions batch.
+- 16:40 CEST (14:40 UTC): oann phase 3 pushed (957c4b2): transformer ops/layers/training/generation with a KV cache,
+  numpy agreement over 40 steps, tiny Shakespeare 2,000 steps val 1.806, 554 ms/step (products 83% at ~11 GFLOPS),
+  checkpoints (raw), its own copy of the workspace Gemm in kernels.olang (stopgap: delete once oann's compiler has
+  linalg.GemmWorkspace). Started oann phase 3b (BPE tokenizer, safetensors, Conv2d/MaxPool via im2col + MNIST CNN).
+  QUEUED oann catch-up after tbare lands: move oannc2 to master, run tbare's migration script on oann, adopt
+  linalg.GemmWorkspace (delete kernels.olang), check C2e/privacy/print fallout. QUEUED compiler items from oann:
+  repro/ctorunstored (O26 over-rejects a constructor only reading a reference argument), repro/capturedfn (a lambda
+  capturing a function value keeps an indirect call per element - 3.1 vs 0.55 ns). linalg wants (after native lands):
+  batched causal-aware strided Gemm for attention (~3x on attention), Gemm with bias+activation epilogue.
+- 16:55 CEST: settling networks phase 1 done (wt-settle in oann, merged with 957c4b2 as 1c0e415, make test 54 ok; NOT
+  yet on oann's branch - merge wt-settle into claude/github-environment-setup-ftu9va in /home/user/oann once phase 3b's
+  agent has finished there, then push). Results: XOR 4/4, MNIST 97.48% after 10 epochs (8.7 s/epoch vs backprop 2.4),
+  spiking LIF XOR 4/4 and MNIST-10k 90.48%; certified circuits cost ~6 points. Resumed the same agent for phase 2
+  (Agent, memories, arousal, moment loop, bandit/reversal end-to-end).
+- 17:00 CEST: native merged and pushed (189ec6a): native CPU by default, `-a TARGET` (B12), TargetCpu/
+  TargetVectorBits/TargetHasFma, per-target GEMM tiles (AVX-512 12x32 F32): GEMM F32 13-17 -> 57-78 GFLOPS (OpenBLAS
+  91-108), MLP step 2.3-2.9 -> 0.8-1.1 ms. WARNING for the oann catch-up: oann's kernels.olang copy of the old 4x12
+  kernel is 3x SLOWER native (SLP groups accumulators across rows at 512 bits) - moving oann's compiler to master
+  must replace kernels.olang by linalg.GemmWorkspace in the same step (scratch test: MNIST epoch 0.55 s).
+  Cross-arch is -c only; aarch64 refused by clang 18's bfloat selection.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

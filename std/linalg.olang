@@ -32,6 +32,11 @@
 # products accumulate in F32 and round once, and so do the sums - and the F8 types (F8E4M3, F8E5M2) are storage that
 # the products and conversions read. Integer arithmetic wraps (E6c).
 #
+# The target (B12): the products are computed for the machine the program is built for - Gemm's tile in its vector
+# registers (TargetVectorBits), and every multiply-add of a product fused into one rounding where it has fused
+# multiply-add (TargetHasFma). So a product built for two targets may differ in its last bits; built for one, it is
+# the same in the program, under -i and while compiling, which read the same build constants.
+#
 # Threads: Gemm takes a thread count (1 unless given - linalg.Cores() is the machine's), and splits a product large
 # enough to be worth it over that many tasks, by rows of the result, so the result does not depend on the count.
 # ParallelRows gives the same splitting to the row-wise kernels a caller writes itself. The count is a parameter rather
@@ -413,14 +418,12 @@ fn lesser(a I64, b I64) I64 { return a if a < b else b }
 # contiguous panels of its own accumulation type. Edges are padded with zeros in the panels; a partial tile is
 # written back through a full one.
 #
-# The micro-kernels are written with LITERAL tile sizes, never named constants: an immutable global is emitted as a
-# mutable LLVM global, so the per-module optimizer cannot see its value, and the tile loops are then neither fully
-# unrolled nor the accumulators kept in registers - measured at 10.8 against 17.5 GFLOPS. Each accumulator is read
-# and written only at constant positions, which is what lets LLVM keep all of them in registers.
-
-kc I64 = 256          # the depth of a panel - k per block
-mc I64 = 128         # the rows of A per block - a multiple of the tiles' 4 rows
-nc I64 = 2040         # the columns of B per block - a multiple of every tile's columns
+# The tile is sized for the target (B12): its accumulators, a step's B vectors and a broadcast A value fill the vector
+# registers the target has, and a multiply-add is one fused instruction where the target has one (TargetHasFma) - so
+# the same product computed for two targets may differ in its last bits, where one rounds each step once and the other
+# twice. Both conditions are build constants, so the compile-time evaluator takes the branch the program does. The
+# tile's sizes reach the micro-kernel as constants (tileRows and tileCols, inlined): each accumulator is read and
+# written only at constant positions, which is what lets LLVM keep all of them in registers.
 
 # the number of cores the machine has online, from the C library (84 is glibc's _SC_NPROCESSORS_ONLN on Linux) - the
 # usual thread count for Gemm and ParallelRows
@@ -455,9 +458,10 @@ fn Cast(x <S>, like <D>) D {
     }
 }
 
-# a tile of accumulators, kept in registers by the micro-kernels (an inline array, indexed only at constants)
+# a tile of accumulators, kept in registers by the micro-kernel (an inline array, indexed only at constants) - room for
+# the largest tile, 12 x 32
 type tile<A> struct() {
-    v mut Array<A, 48>
+    v mut Array<A, 384>
 }
 
 # A[i0 : i0 + rows, p0 : p0 + depth] (or of A's transpose) packed into ap as panels of mr rows: panel r holds, for
@@ -495,44 +499,88 @@ fn packB(transB Bool, b Array<<T>>&, ldb I64, p0 I64, j0 I64, depth I64, cols I6
     }
 }
 
-# the micro-kernels: C[i, j] = alpha * sum over k of ap[k][i] * bp[k][j] + beta * C[i, j] for one MR x NR tile, where
-# rows and cols say how much of the tile is inside C. beta == 0 never reads C, so C may hold anything (BLAS's rule).
-# 4 x 12 for four-lane element types (F32 and smaller: 12 accumulator registers of an SSE machine's 16), 4 x 6 for
-# two-lane ones (F64, I64)
-fn micro4x12(depth I64, ap Array<<A>>&, ao I64, bp Array<A>&, bo I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+# the micro-kernels: C[i, j] = alpha * sum over k of ap[k][i] * bp[k][j] + beta * C[i, j] for one MR x NR tile (4,
+# 6 or 12 rows - tileRows), where rows and cols say how much of the tile is inside C. beta == 0 never reads C, so C may
+# hold anything (BLAS's rule). Each row of a step is written out on its own line, so that every accumulator's index is a
+# constant once the tile's columns are (tileCols, inlined) - with the rows as a loop too, a tile this large is too big
+# for LLVM to unroll whole, and its accumulators would live in memory
+fn micro4(depth I64, ap Array<<A>>&, ao I64, bp Array<A>&, bo I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    nr := tileCols(alpha)
     acc := tile<A>()
     for k in range depth {
-        for i in range 4 {
-            ai := ap[ao + k * 4 + i]
-            for j in range 12 { acc.v[i * 12 + j] += ai * bp[bo + k * 12 + j] }
-        }
+        a I64 = ao + k * 4
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
     }
-    # the accumulators leave the registers in row order, which is also what lets the vectorizer group them by rows
-    out := tile<A>()
-    for i in range 4 {
-        for j in range 12 { out.v[i * 12 + j] = acc.v[i * 12 + j] }
-    }
-    storeTile(out, 12, alpha, beta, c, co, ldc, rows, cols)
+    storeTile(acc, 4, nr, alpha, beta, c, co, ldc, rows, cols)
 }
 
-fn micro4x6(depth I64, ap Array<<A>>&, ao I64, bp Array<A>&, bo I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+fn micro6(depth I64, ap Array<<A>>&, ao I64, bp Array<A>&, bo I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    nr := tileCols(alpha)
     acc := tile<A>()
     for k in range depth {
-        for i in range 4 {
-            ai := ap[ao + k * 4 + i]
-            for j in range 6 { acc.v[i * 6 + j] += ai * bp[bo + k * 6 + j] }
-        }
+        a I64 = ao + k * 6
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
+        rowStep(acc, 4 * nr, ap[a + 4], bp, b, nr)
+        rowStep(acc, 5 * nr, ap[a + 5], bp, b, nr)
     }
-    # the accumulators leave the registers in row order, which is also what lets the vectorizer group them by rows
-    out := tile<A>()
-    for i in range 4 {
-        for j in range 6 { out.v[i * 6 + j] = acc.v[i * 6 + j] }
-    }
-    storeTile(out, 6, alpha, beta, c, co, ldc, rows, cols)
+    storeTile(acc, 6, nr, alpha, beta, c, co, ldc, rows, cols)
 }
 
-# C[i, j] = alpha * t[i, j] + beta * C[i, j] for the rows x cols part of a tile held in t, row stride ts
-fn storeTile(t tile<<A>>&, ts I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+fn micro12(depth I64, ap Array<<A>>&, ao I64, bp Array<A>&, bo I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    nr := tileCols(alpha)
+    acc := tile<A>()
+    for k in range depth {
+        a I64 = ao + k * 12
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
+        rowStep(acc, 4 * nr, ap[a + 4], bp, b, nr)
+        rowStep(acc, 5 * nr, ap[a + 5], bp, b, nr)
+        rowStep(acc, 6 * nr, ap[a + 6], bp, b, nr)
+        rowStep(acc, 7 * nr, ap[a + 7], bp, b, nr)
+        rowStep(acc, 8 * nr, ap[a + 8], bp, b, nr)
+        rowStep(acc, 9 * nr, ap[a + 9], bp, b, nr)
+        rowStep(acc, 10 * nr, ap[a + 10], bp, b, nr)
+        rowStep(acc, 11 * nr, ap[a + 11], bp, b, nr)
+    }
+    storeTile(acc, 12, nr, alpha, beta, c, co, ldc, rows, cols)
+}
+
+# one row of the tile for one step of k: acc[base + j] += x * bp[b + j] for the tile's nr columns
+fn rowStep(acc mut tile<<A>>&, base I64, x A, bp Array<A>&, b I64, nr I64) {
+    for j in range nr { acc.v[base + j] = mulAdd(x, bp[b + j], acc.v[base + j]) }
+}
+
+# a * b + c - rounded once, by the target's fused multiply-add instruction, where it has one and A is a float. Every
+# product here accumulates through it: the micro-kernels, the small and matrix-vector products and the dot products
+fn mulAdd(a <A>, b A, c A) A {
+    match A {
+        case F32, F64 {
+            if TargetHasFma { return math.Fma(a, b, c) }
+        }
+        nomatch { }
+    }
+    return a * b + c
+}
+
+# C[i, j] = alpha * t[i, j] + beta * C[i, j] for the rows x cols part of the mr x nr tile held in the accumulators
+fn storeTile(acc tile<<A>>&, mr I64, nr I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    # the accumulators leave the registers in row order, which is also what lets the vectorizer group them by rows
+    t := tile<A>()
+    for i in range mr {
+        for j in range nr { t.v[i * nr + j] = acc.v[i * nr + j] }
+    }
+    ts I64 = nr
     like T
     if beta == 0 {
         for i in range rows {
@@ -545,30 +593,59 @@ fn storeTile(t tile<<A>>&, ts I64, alpha A, beta A, c mut Array<<T>>&, co I64, l
     }
 }
 
-# the columns of the tile for accumulation type A: 12 for four-lane types, 6 for two-lane ones
+# the tile for accumulation type A on the target, BLIS's: NR columns, a whole number of vectors (TargetVectorBits) of
+# B's packed row, by MR rows, each broadcast from A's panel - so the MR x NR accumulators, the vectors of B and the
+# broadcast fill the vector registers the target has: AVX-512's 32 registers of 512 bits take 12 x 32 four-byte elements
+# (24 accumulators), AVX's 16 of 256 bits 6 x 16 (12), SSE's 16 of 128 bits 4 x 12 (12); an eight-byte element type
+# has half the columns
+fn tileRows(z <A>) I64 {
+    if TargetVectorBits >= 512 { return 12 }
+    if TargetVectorBits >= 256 { return 6 }
+    return 4
+}
+
 fn tileCols(z <A>) I64 {
-    return match A {
-        case F64, I64, U64 => 6
-        nomatch => 12
+    wide I64 = match A {
+        case F64, I64, U64 => 2
+        nomatch => 1
     }
+    if TargetVectorBits >= 512 { return 32 / wide }
+    if TargetVectorBits >= 256 { return 16 / wide }
+    return 12 / wide
+}
+
+# the blocking around the tile, Goto's: kc the depth of a packed panel (k per block), mc the rows of A packed per block
+# (a multiple of the tile's rows; its panel stays in L2), nc the columns of B packed per block (a multiple of the tile's
+# columns; its panel stays in L3)
+kc I64 = 256
+
+fn blockRows(z <A>) I64 {
+    mr := tileRows(z)
+    return 128 / mr * mr
+}
+
+fn blockCols(z <A>) I64 {
+    nr := tileCols(z)
+    return 2048 / nr * nr
 }
 
 # rows i0 .. i1 of C for one packed block of B: each task's share of a product, packing A's rows into its own ap
 fn gemmRows(transA Bool, a Array<<T>>&, lda I64, i0 I64, i1 I64, p0 I64, depth I64, cols I64, alpha <A>, ap mut Array<A>&, bp Array<A>&, beta A, c mut Array<T>&, ldc I64, j0 I64) {
+    mr := tileRows(alpha)
     nr := tileCols(alpha)
+    mc := blockRows(alpha)
     for ic in range i0, i1, mc {
         rows I64 = lesser(mc, i1 - ic)
-        packA(transA, a, lda, ic, p0, rows, depth, 4, ap)
+        packA(transA, a, lda, ic, p0, rows, depth, mr, ap)
         for jr in range 0, cols, nr {
-            for ir in range 0, rows, 4 {
+            for ir in range 0, rows, mr {
                 co I64 = (ic + ir) * ldc + j0 + jr
-                match A {
-                    case F64, I64, U64 {
-                        micro4x6(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(4, rows - ir), lesser(nr, cols - jr))
-                    }
-                    nomatch {
-                        micro4x12(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(4, rows - ir), lesser(nr, cols - jr))
-                    }
+                if TargetVectorBits >= 512 {
+                    micro12(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(mr, rows - ir), lesser(nr, cols - jr))
+                } else if TargetVectorBits >= 256 {
+                    micro6(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(mr, rows - ir), lesser(nr, cols - jr))
+                } else {
+                    micro4(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(mr, rows - ir), lesser(nr, cols - jr))
                 }
             }
         }
@@ -592,7 +669,7 @@ fn gemmDirect(transA Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&, lda I64,
         for p in range k {
             aip T = alpha * (a[p * lda + i] if transA else a[i * lda + p])
             bp I64 = p * ldb
-            for j in range n { c[ci + j] = c[ci + j] + aip * b[bp + j] }
+            for j in range n { c[ci + j] = mulAdd(aip, b[bp + j], c[ci + j]) }
         }
     }
 }
@@ -617,13 +694,13 @@ fn gemv(rows I64, len I64, alpha <T>, mat Array<T>&, rs I64, cs I64, vec Array<T
         for p in range len {
             vp T = alpha * vec[p * vs]
             col I64 = p * cs
-            for i in range rows { out[i] = out[i] + vp * mat[col + i] }
+            for i in range rows { out[i] = mulAdd(vp, mat[col + i], out[i]) }
         }
         return
     }
     for i in range rows {
         acc T = z
-        for p in range len { acc = acc + mat[i * rs + p * cs] * vec[p * vs] }
+        for p in range len { acc = mulAdd(mat[i * rs + p * cs], vec[p * vs], acc) }
         out[i * os] = out[i * os] + alpha * acc
     }
 }
@@ -632,7 +709,10 @@ fn gemv(rows I64, len I64, alpha <T>, mat Array<T>&, rs I64, cs I64, vec Array<T
 fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&, lda I64, b Array<T>&, ldb I64, beta T, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, z <A>) {
     al := Cast(alpha, z)
     be := Cast(beta, z)
+    mr := tileRows(z)
     nr := tileCols(z)
+    mc := blockRows(z)
+    nc := blockCols(z)
     if k == 0 {
         for i in range m {
             for j in range n { c[i * ldc + j] = Cast(be * Cast(c[i * ldc + j], z), alpha) if be != 0 else Cast(z, alpha) }
@@ -671,10 +751,10 @@ fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&,
     depthMax I64 = lesser(k, kc)
     colsMax I64 = lesser((n + nr - 1) / nr * nr, nc)
     bp := ws.panelB(depthMax * colsMax, z)
-    # tasks: each takes a run of rows, a multiple of 4; small products stay on the calling thread
-    tasks I64 = lesser(threads, (m + 3) / 4)
+    # tasks: each takes a run of rows, a multiple of the tile's; small products stay on the calling thread
+    tasks I64 = lesser(threads, (m + mr - 1) / mr)
     if m * n * k < 2000000 { tasks = 1 }
-    share I64 = ((m + tasks - 1) / tasks + 3) / 4 * 4
+    share I64 = ((m + tasks - 1) / tasks + mr - 1) / mr * mr
     # the panels of A: each task's own, made once for the whole product
     panel I64 = lesser(mc, share) * depthMax
     ap := ws.panelsA(tasks * panel, z)
@@ -927,10 +1007,10 @@ fn dotRun(x Array<<T>>&, xf I64, y Array<T>&, yf I64, n I64, z <A>) A {
     acc := lanes<A>()
     whole I64 = n - n % 8
     for i in range 0, whole, 8 {
-        for j in range 8 { acc.v[j] = acc.v[j] + Cast(x[xf + i + j], z) * Cast(y[yf + i + j], z) }
+        for j in range 8 { acc.v[j] = mulAdd(Cast(x[xf + i + j], z), Cast(y[yf + i + j], z), acc.v[j]) }
     }
     rest A = z
-    for i in range whole, n { rest = rest + Cast(x[xf + i], z) * Cast(y[yf + i], z) }
+    for i in range whole, n { rest = mulAdd(Cast(x[xf + i], z), Cast(y[yf + i], z), rest) }
     return acc.total() + rest
 }
 
@@ -1609,6 +1689,30 @@ if TestBuild {
         assert bakedSmallSum == smallSum() and bakedSmallSum == 81.0
         assert bakedRendered == $counting(2, 3, 0.0) and bakedRendered == "[[0, 1, 2],\n [3, 4, 5]]"
         assert bakedSolved == solvedSmall() and bakedSolved == 1.0
+    }
+
+    # B12c: (1 + 2^-12)^2 needs 25 bits, so the second step of this product - [1, x] times [-(1 + 2^-11), x] - leaves
+    # 2^-24 where the multiply-add is fused and 0 where its product is rounded first. one is read from a mutable global
+    # at run time, so that product is the running program's, while one written as a literal is computed while compiling
+    fusedOne mut F32 = 1.0
+
+    fn fusedProduct(one F32) F32 {
+        x F32 = one + one / 4096.0
+        a := Matrix<F32>(1, 2)
+        b := Matrix<F32>(2, 1)
+        a.Set(0, 0, one)
+        a.Set(0, 1, x)
+        b.Set(0, 0, -(one + one / 2048.0))
+        b.Set(1, 0, x)
+        c := Matrix<F32>(1, 1)
+        Gemm(c, a, false, b, false)
+        return c.Get(0, 0)
+    }
+
+    test "a product's multiply-adds are fused exactly where the target has fused multiply-add" {
+        want F32 = 1.0 / 16777216.0 if TargetHasFma else 0.0
+        assert fusedProduct(1.0) == want
+        assert fusedProduct(fusedOne) == want
     }
 
     test "a new matrix is zeros; a view shares its storage, and writing it writes the matrix" {

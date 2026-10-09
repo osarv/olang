@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "lazytype"]
+                     "target", "lazytype"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -243,6 +243,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "fuzz" { try fuzz(r) }
         case "linalg" { try linalg(r) }
         case "chunkpool" { try chunkpool(r) }
+        case "target" { try target(r) }
         case "lazytype" { try lazytype(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
@@ -1059,6 +1060,54 @@ fn chunkpool(r mut report&) ? Failed {
     try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
     try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
+}
+
+# B12: a build is for this machine unless -a names another target - its vectors and FMA where it has them, none of
+# them at baseline x86-64 - with the build constants following -a, objects of their own for each target (B12b), and
+# the same results everywhere (B12c): what the loops computed is one line, built, interpreted, at every target
+test "a build is for this machine unless -a names another target" { assert passed("target") }
+
+fn target(r mut report&) ? Failed {
+    dir := fresh("target")
+    os.Run("cp checks/fixtures/target/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop > native.txt") == 0, "native", dir)
+    try r.expect(sh(dir, "stat -c '%n %.9Y' build/*.o | grep -v olang_build | sort > objects.txt") == 0, "objects", dir)
+    native := try os.ReadFile($dir "/native.txt") catch default ""
+    nl := try native.FindByte('\n') catch default -1
+    try r.expect(nl > 0, "native printed " $native, dir)
+    first := native[:nl]
+    results := native[nl + 1:]
+    # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for math.Fma, not a call
+    if not first.EndsWith(" 128 false") {
+        try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'ymm|zmm'") == 0, "no wide vectors in " $first, dir)
+    }
+    if first.EndsWith(" true") {
+        try r.expect(sh(dir, "objdump -d build/loop | grep -q vfmadd") == 0, "no FMA instruction in " $first, dir)
+        try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'call.*<fmaf?@plt>'") != 0, "an fma call in " $first, dir)
+    }
+    if TargetArch != "x86_64" { return }
+    # baseline x86-64: SSE2's vectors only, fma the C library's function - and the same results
+    try r.expect(sh(dir, "\"$OLANG\" -a x86-64 -b loop.olang > out.txt 2>&1 && ./build/loop > base.txt") == 0, "x86-64", dir)
+    try r.expect((try os.ReadFile($dir "/base.txt") catch default "") == "x86-64 128 false\n" $results, "x86-64 printed", dir)
+    try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'ymm|zmm|vfmadd'") != 0, "x86-64 has wide vectors or FMA", dir)
+    try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'call.*<fmaf@plt>'") == 0, "x86-64 does not call fmaf", dir)
+    # x86-64-v3 - AVX2's 256 bits and FMA, run where this machine has them
+    if first.EndsWith(" true") {
+        try r.expect(sh(dir, "\"$OLANG\" -a x86-64-v3 -b loop.olang > out.txt 2>&1 && ./build/loop > v3.txt") == 0, "v3", dir)
+        try r.expect((try os.ReadFile($dir "/v3.txt") catch default "") == "x86-64-v3 256 true\n" $results, "v3 printed", dir)
+        try r.expect(sh(dir, "objdump -d build/loop | grep -q zmm") != 0, "x86-64-v3 has 512-bit vectors", dir)
+    }
+    # back to this machine: every object it built is current, not rebuilt (the build constants' module always is)
+    try r.expect(sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop | cmp -s - native.txt") == 0,
+                 "native again", dir)
+    try r.expect(sh(dir, "stat -c '%n %.9Y' $(cut -d' ' -f1 objects.txt) | sort | cmp -s - objects.txt") == 0,
+                 "native's objects were rebuilt", dir)
+    # interpreted: the build constants and the results the built program gives
+    try r.expect(sh(dir, "\"$OLANG\" -i loop.olang | cmp -s - native.txt") == 0, "-i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -a x86-64 -i loop.olang | cmp -s - base.txt") == 0, "-a x86-64 -i", dir)
+    # another architecture: -c at most, and with this clang not even that
+    try r.expect(sh(dir, "\"$OLANG\" -a aarch64-linux-gnu -b loop.olang > out.txt 2>&1") != 0
+                 and outOf(dir).Contains("error[B12a]"), "aarch64", dir)
 }
 
 # G8b: a generic type first resolved from inside another module's signature - b.olang's ReadA names a.Wrap before a's

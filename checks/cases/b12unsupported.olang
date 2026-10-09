@@ -1,0 +1,4 @@
+# check: fail error[B12]: olang does not build for 'riscv64-linux-gnu'
+# flags: -a riscv64-linux-gnu
+# B12: the architectures are x86_64 and aarch64
+fn main() ? { }

@@ -127,6 +127,11 @@ static const char* CT_WHY_ASSERT = "an assertion in it fails, which aborts the p
 static const char* CT_WHY_SLICE = "it slices out of range, which aborts the program";
 static const char* CT_WHY_LENGTH = "it makes an array of a length out of range, which aborts the program";
 static const char* CT_WHY_FIXED = "it copies an array of another length into fixed storage, which aborts the program";
+//B12a: the target is another architecture or system than this machine's - so its C math library is not the one this
+//process calls, and a function IEEE 754 does not pin down may give another result there
+static bool ctForeignTarget;
+//B12a, X8: a function of the C math library whose result is the library's own, for another machine than this one
+static const char* CT_WHY_FOREIGN_MATH = "it calls a function of the C math library whose result is the target's own library's, and the target is another machine";
 bool CtWhyAborts(const char* why) {
     return why == CT_WHY_UNREACHABLE || why == CT_WHY_ABORT || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
            || why == CT_WHY_LENGTH || why == CT_WHY_FIXED;
@@ -1041,6 +1046,10 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
             struct var* f = op->readVar;
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
             if (!f || (f->type.isExtern && !CtMathFn(f))) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
+            if (f->type.isExtern && CtMathFn(f) == CT_MATH_INEXACT && ctForeignTarget) {
+                ctScanFail(sc, op->tok, CT_WHY_FOREIGN_MATH);
+                return;
+            }
             //a call through a function value is evaluable exactly when the function it reaches is - which only
             //the evaluation knows, so it is decided there (ctCall), not here. A function-typed global's is read first
             bool throughValue = (!f->owner || f->isGlobalVar) && !op->isCtorCall;
@@ -1444,6 +1453,9 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
 static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     struct var* func = op->readVar;
     //B3e, X8: -i calls every extern; while compiling only the C math library's, which has no effect to skip
+    if (func && func->type.isExtern && !ctRun && CtMathFn(func) == CT_MATH_INEXACT && ctForeignTarget) {
+        return ctFail(st, op->tok, CT_WHY_FOREIGN_MATH);
+    }
     if (func && func->type.isExtern && (ctRun || CtMathFn(func))) return ctExtern(st, op, func);
     struct ctCallFrame fr;
     if (!ctCallBind(st, op, &fr)) return NULL;
@@ -2622,6 +2634,8 @@ bool CtIsPlainData(struct ctVal* v) {
 
 // ---- X8: the C math library ----
 
+void CtSetForeignTarget(bool foreign) { ctForeignTarget = foreign; }
+
 //the functions of the C math library the language knows, each for F64 under its own name and for F32 with "f" after it,
 //every parameter and the result of that one type. IEEE 754 requires the correctly rounded result of the exact ones, so
 //every library, the hardware and LLVM's own folding give the same answer; the others are the C library's own
@@ -2662,7 +2676,10 @@ struct ctExternCall { struct var* f; void* sym; void (*rt)(void); ffi_cif cif; f
 static struct list ctExternCalls;
 static bool ctExternReady;
 
-//§11 X6: errno values, by the class "__olang_err" reports for them (std/os's OsError words, in order)
+//§11 X6: errno values, by the class "__olang_err" reports for them (std/os's OsError words, in order) - the kernel's,
+//one set for every architecture olang builds for (B12a)
+_Static_assert(ENOENT == 2 && EEXIST == 17 && EACCES == 13 && EPERM == 1 && ENOTDIR == 20 && EISDIR == 21
+               && ENOTEMPTY == 39, "errno's values");
 const struct osErrClass OsErrClasses[] = {
     { ENOENT, 1 }, { EEXIST, 2 }, { EACCES, 3 }, { EPERM, 3 }, { ENOTDIR, 4 }, { EISDIR, 5 }, { ENOTEMPTY, 6 },
 };

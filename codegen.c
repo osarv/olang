@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <spawn.h>
+#include <setjmp.h>
 #include <sys/stat.h>
 #include "util.h"
 #include "token.h"
@@ -102,6 +103,15 @@ struct cgDbgLoc { int sp; int line; int id; int file; };
 //defines the program's generic instantiations
 static struct semaModule* cgCompilationRoot;
 void CodegenSetRoot(struct semaModule* root) { cgCompilationRoot = root; }
+//B12: the target every module is generated for - its triple, its architecture, and the attributes every function carries
+static const char* cgTriple = "x86_64-pc-linux-gnu";
+static const char* cgArch = "x86_64";
+static const char* cgTargetAttrs = "";
+void CodegenSetTarget(const char* triple, const char* arch, const char* attrs) {
+    cgTriple = triple;
+    cgArch = arch;
+    cgTargetAttrs = attrs;
+}
 struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry recording a subprogram's own file
 
 struct cgStaticLit { struct operand* op; char* name; };
@@ -3139,6 +3149,13 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
     char target[256];
     snprintf(target, sizeof(target), "@%.*s", func->name.len, func->name.ptr);
+    //X8: an exact function of the C math library is LLVM's intrinsic for it - the same correctly rounded result, which
+    //the code generator makes the target's instruction where it has one (fma to vfmadd, given FMA) and vectorizes,
+    //and the library's own call where it has none (fma at baseline x86-64)
+    if (CtMathFn(func) == CT_MATH_EXACT) {
+        bool f32 = func->type.retType->bType == BASETYPE_FLOAT32;
+        snprintf(target, sizeof(target), "@llvm.%.*s.%s", func->name.len - (f32 ? 1 : 0), func->name.ptr, f32 ? "f32" : "f64");
+    }
 
     struct list args = ListInit(sizeof(struct cgArg));
     for (int i = 0; i < op->args.len; i++) {
@@ -6401,7 +6418,8 @@ static void emitFloatTextRuntime(FILE* out);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
  * to a test harness's recovery point (when @__olang_jmp_target is set) or hard-abort (outside test mode,
- * where it's always null). jmp_buf is assumed to be glibc's x86-64 Linux 200-byte layout - see report.
+ * where it's always null). The jmp_buf is sized by this compiler's own C library, since a test build is for this
+ * machine (B12a).
  * P9: the target is thread_local, so it is null on every task thread and a failing assert there aborts
  * rather than longjmping. A recovery point belongs to the stack that set it up, and a longjmp from a task
  * would restore the SPAWNER's stack pointer onto the task's thread while the spawner itself is still
@@ -6426,7 +6444,26 @@ void emitRuntimeDecls(FILE* out) {
         "declare i128 @llvm.cttz.i128(i128, i1)\n"
         //O8b: the chunk pool's budget, an eighth of the machine's memory
         "declare i64 @sysconf(i32)\n"
-        "declare double @llvm.arithmetic.fence.f64(double)\n"
+        "declare double @llvm.arithmetic.fence.f64(double)\n", out);
+    //X8: the exact functions of the C math library, as LLVM's intrinsics (cgExternFuncCall)
+    fputs("declare double @llvm.sqrt.f64(double)\n"
+        "declare float @llvm.sqrt.f32(float)\n"
+        "declare double @llvm.fma.f64(double, double, double)\n"
+        "declare float @llvm.fma.f32(float, float, float)\n"
+        "declare double @llvm.floor.f64(double)\n"
+        "declare float @llvm.floor.f32(float)\n"
+        "declare double @llvm.ceil.f64(double)\n"
+        "declare float @llvm.ceil.f32(float)\n"
+        "declare double @llvm.trunc.f64(double)\n"
+        "declare float @llvm.trunc.f32(float)\n"
+        "declare double @llvm.round.f64(double)\n"
+        "declare float @llvm.round.f32(float)\n"
+        "declare double @llvm.roundeven.f64(double)\n"
+        "declare float @llvm.roundeven.f32(float)\n"
+        "declare double @llvm.fabs.f64(double)\n"
+        "declare float @llvm.fabs.f32(float)\n"
+        "declare double @llvm.copysign.f64(double, double)\n"
+        "declare float @llvm.copysign.f32(float, float)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an
@@ -8161,14 +8198,49 @@ static void cgOsLoadField(FILE* out, const char* name, const char* base, size_t 
     else fprintf(out, "  %%%s = %s i%d %%%s.v to i64\n", name, isSigned ? "sext" : "zext", bits, name);
 }
 
+/* §11 X6, B12a: what the runtime reads of the C library's structures, on each architecture it builds for - Linux with
+ * the GNU C library, 64-bit: struct stat (its size, and where st_mode, st_size and st_mtim's two parts are), where
+ * struct dirent's d_name is, and the size of a posix_spawn_file_actions_t. The constants the runtime uses besides - the
+ * S_IF* file kinds, the errno values (OsErrClasses) and EINVAL - are the kernel's, one set for every architecture here.
+ * Written down rather than taken from this compiler's own headers, which describe only the machine it runs on - and
+ * checked against them for that machine, below, so the row a build for this machine uses is the C library's own. */
+struct cgLibcLayout {
+    const char* arch;
+    size_t statSize, mode, modeSize, size, mtimSec, mtimNsec, direntName, spawnActions;
+};
+static const struct cgLibcLayout cgLibcLayouts[] = {
+    { "x86_64", 144, 24, 4, 48, 88, 96, 19, 80 },
+    { "aarch64", 128, 16, 4, 48, 88, 96, 19, 80 },
+};
+#if defined(__x86_64__) && defined(__linux__) && defined(__GLIBC__)
+#define CG_HOST_LAYOUT 0
+#elif defined(__aarch64__) && defined(__linux__) && defined(__GLIBC__)
+#define CG_HOST_LAYOUT 1
+#endif
+#ifdef CG_HOST_LAYOUT
+_Static_assert(sizeof(struct stat) == (CG_HOST_LAYOUT ? 128 : 144), "struct stat's size");
+_Static_assert(offsetof(struct stat, st_mode) == (CG_HOST_LAYOUT ? 16 : 24), "st_mode's offset");
+_Static_assert(sizeof(((struct stat*)0)->st_mode) == 4, "st_mode's size");
+_Static_assert(offsetof(struct stat, st_size) == 48 && sizeof(((struct stat*)0)->st_size) == 8, "st_size");
+_Static_assert(offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_sec) == 88, "st_mtim.tv_sec");
+_Static_assert(offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_nsec) == 96, "st_mtim.tv_nsec");
+_Static_assert(sizeof(((struct stat*)0)->st_mtim.tv_sec) == 8 && sizeof(((struct stat*)0)->st_mtim.tv_nsec) == 8, "st_mtim");
+_Static_assert(offsetof(struct dirent, d_name) == 19, "d_name's offset");
+_Static_assert(sizeof(posix_spawn_file_actions_t) == 80, "posix_spawn_file_actions_t's size");
+_Static_assert(S_IFMT == 0170000 && S_IFREG == 0100000 && S_IFDIR == 0040000 && EINVAL == 22, "the kernel's constants");
+#endif
+
 /* §11 X6 / B4a: what the runtime keeps of the process and offers std through "extern fn" - its command line, its
  * environment, the error the last failing system call left, and the system calls whose C interface hands back a
  * pointer or a struct, which X2 cannot receive. Each copies what it has into a buffer its caller supplies and returns
  * a length (snprintf's contract: the whole length, whatever fitted), so nothing is ever handed back by address. A
- * structure's offsets and the constants come from this compiler's own C headers rather than from numbers written
- * here: the target is the host (B10a), so the host's C library is what the program links against. -i has its own
- * version of each (comptime.c), since these live in the built program and not in the compiler's process. */
+ * structure's offsets are the target's (cgLibcLayouts, B12a). -i has its own version of each (comptime.c), since these
+ * live in the built program and not in the compiler's process. */
 void emitOsRuntime(FILE* out) {
+    const struct cgLibcLayout* L = &cgLibcLayouts[0];
+    for (size_t i = 0; i < sizeof(cgLibcLayouts) / sizeof(cgLibcLayouts[0]); i++) {
+        if (!strcmp(cgLibcLayouts[i].arch, cgArch)) L = &cgLibcLayouts[i];
+    }
     fputs(
         //the command line, saved by "main" before anything else runs - a global initializer may read it (B5a)
         "@__olang_argc = linkonce_odr global i32 0\n"
@@ -8254,20 +8326,17 @@ void emitOsRuntime(FILE* out) {
 
     //stat(path) into out: out[0] the kind (1 a file, 2 a directory, 0 anything else), out[1] the size in bytes,
     //out[2] the modification time in nanoseconds since the epoch; 0, or -1 when stat fails (errno says why)
-    struct stat st;
     fprintf(out, "define linkonce_odr i32 @__olang_stat(ptr %%path, ptr %%out) {\n"
                  "entry:\n"
                  "  %%st = alloca [%zu x i8], align 16\n"
                  "  %%rc = call i32 @stat(ptr %%path, ptr %%st)\n"
                  "  %%ok = icmp eq i32 %%rc, 0\n"
                  "  br i1 %%ok, label %%have, label %%fail\n"
-                 "have:\n", sizeof(struct stat));
-    cgOsLoadField(out, "mode", "st", offsetof(struct stat, st_mode), sizeof(st.st_mode), false);
-    cgOsLoadField(out, "size", "st", offsetof(struct stat, st_size), sizeof(st.st_size), true);
-    cgOsLoadField(out, "sec", "st", offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_sec),
-                  sizeof(st.st_mtim.tv_sec), true);
-    cgOsLoadField(out, "nsec", "st", offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_nsec),
-                  sizeof(st.st_mtim.tv_nsec), true);
+                 "have:\n", L->statSize);
+    cgOsLoadField(out, "mode", "st", L->mode, L->modeSize, false);
+    cgOsLoadField(out, "size", "st", L->size, 8, true);
+    cgOsLoadField(out, "sec", "st", L->mtimSec, 8, true);
+    cgOsLoadField(out, "nsec", "st", L->mtimNsec, 8, true);
     fprintf(out, "  %%fmt = and i64 %%mode, %d\n"
                  "  %%isreg = icmp eq i64 %%fmt, %d\n"
                  "  %%isdir = icmp eq i64 %%fmt, %d\n"
@@ -8283,7 +8352,7 @@ void emitOsRuntime(FILE* out) {
                  "  ret i32 0\n"
                  "fail:\n"
                  "  ret i32 -1\n"
-                 "}\n\n", S_IFMT, S_IFREG, S_IFDIR);
+                 "}\n\n", 0170000, 0100000, 0040000);
 
     //the names in directory "path" - "." and ".." left out, each followed by a NUL, in the order the directory
     //gives them - as many whole names as fit in cap bytes, and the bytes all of them take; -1 when it cannot be
@@ -8335,7 +8404,7 @@ void emitOsRuntime(FILE* out) {
                  "  ret i64 %%at\n"
                  "fail:\n"
                  "  ret i64 -1\n"
-                 "}\n\n", offsetof(struct dirent, d_name));
+                 "}\n\n", L->direntName);
 
     //the program named by the count NUL-terminated entries of args, started with them as its command line - the first
     //looked up through PATH as posix_spawnp does - and with in, out and err (each -1 for this process's own) as its
@@ -8410,7 +8479,7 @@ void emitOsRuntime(FILE* out) {
                  "  %%ep = call ptr @__errno_location()\n"
                  "  store i32 %%rc, ptr %%ep\n"
                  "  ret i32 -1\n"
-                 "}\n\n", sizeof(posix_spawn_file_actions_t), EINVAL);
+                 "}\n\n", L->spawnActions, 22);
 }
 
 //B5a: one initializer per module, since one module is one object. The entry point calls them all, in
@@ -8780,11 +8849,10 @@ void cgEmitAllFunctions(struct cgCtx* ctx, struct semaModule* emitMod) {
     }
 }
 
-//pinned to match clang-20's actual host default (`clang-20 -dumpmachine`) - an unset triple still defaults
-//to something internally, and when that default doesn't match the compilation target clang prints a
-//harmless but noisy "overriding the module target triple" warning on every single build
+//B12: the target's triple, as clang normalized it when the target was resolved - for this machine its own default, so
+//clang never warns that it overrides the module's triple
 void emitTargetTriple(FILE* out) {
-    fputs("target triple = \"x86_64-pc-linux-gnu\"\n\n", out);
+    fprintf(out, "target triple = \"%s\"\n\n", cgTriple);
 }
 
 //the type tree cgTbaa's tags refer to: one root, one leaf per tagged type, all siblings - so any two
@@ -8972,7 +9040,7 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         ctx->ownScopeSlot = NULL;
 
         char* buf = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca [200 x i8], align 16\n", buf);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca [%zu x i8], align 16\n", buf, sizeof(jmp_buf)); //-t is for this machine (B12a)
         fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_jmp_target\n", buf);
         char* setjmpRes = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call i32 @setjmp(ptr %s)\n", setjmpRes, buf);
@@ -9056,13 +9124,15 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
 
 //P1/P2: emits ONE module's object. `entry` selects what tops it off - nothing for a plain module,
 //"main" for the root of a program, the test harness for a -t run.
-//P7: LLVM's ThreadSanitizer pass instruments a function only if it carries the "sanitize_thread"
-//attribute - a C/C++ frontend adds it, and there is no frontend for a .ll, so -fsanitize=thread alone
-//silently instruments NOTHING. Rewriting the finished text is what avoids threading a flag through all
-//sixteen "define" sites, several of which live inside multi-function runtime string literals; doing it
-//here also guarantees the runtime itself (the arena, the scope merge, the chunk pool, the join walk) is
-//instrumented, which is exactly the code a concurrency bug would hide in.
-static void cgWriteSanitized(FILE* dst, char* buf, size_t len) {
+//B12: every function carries the target's CPU and features (cgTargetAttrs), as a C frontend's do. Under LTO the code
+//is generated at the link, from bitcode, and what decides which instructions a function may use there is its own
+//attributes - a flag given to the compile step would reach nothing. P7: LLVM's ThreadSanitizer pass instruments a
+//function only if it carries the "sanitize_thread" attribute - a C/C++ frontend adds it, and there is no frontend for a
+//.ll, so -fsanitize=thread alone silently instruments NOTHING. Rewriting the finished text is what avoids threading
+//both through all the "define" sites, several of which live inside multi-function runtime string literals; doing it
+//here also guarantees the runtime itself (the arena, the scope merge, the chunk pool, the join walk) is built for the
+//target and, under -r, instrumented - exactly the code a concurrency bug would hide in.
+static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
     size_t i = 0;
     while (i < len) {
         size_t end = i;
@@ -9083,7 +9153,7 @@ static void cgWriteSanitized(FILE* dst, char* buf, size_t len) {
         if (end < len) fputc('\n', dst);
         i = end +1;
     }
-    fputs("\nattributes #0 = { sanitize_thread }\n", dst);
+    fprintf(dst, "\nattributes #0 = { %s%s }\n", race ? "sanitize_thread " : "", cgTargetAttrs);
 }
 
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug) {
@@ -9145,8 +9215,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     fflush(out);
     FILE* real = fopen(outPath, "w");
     if (!real) ErrorBugFound();
-    if (race) cgWriteSanitized(real, modBuf, modSize);
-    else fwrite(modBuf, 1, modSize, real);
+    cgWriteWithAttributes(real, modBuf, modSize, race);
     fclose(real);
     fclose(out);
     free(modBuf);

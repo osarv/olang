@@ -27,6 +27,24 @@ static bool gTestBuild = false;
 //asked otherwise, so this is the exception rather than one end of a spectrum of levels.
 static bool gDebug = false;
 
+//B12: the machine a build is for - what "-a" names, resolved once, before anything is analyzed. Every generated function
+//carries its CPU and features (attrs) - which is what reaches the code generator at the link, under LTO, as well as
+//at the compile - and an object's name carries all of it (B12b), so a build for one machine never reuses another's.
+struct target {
+    char* spec;       //as written after -a; "native" when no -a was given
+    char* triple;     //LLVM's, as clang normalizes it: "x86_64-pc-linux-gnu"
+    char* arch;       //TargetArch: the triple's architecture
+    char* os;         //TargetOs
+    char* cpu;        //TargetCpu: the CPU clang resolved the spec to ("native" becomes this machine's)
+    char* attrs;      //the attributes every generated function carries: CPU, features, vector width
+    char* cpuFlag;    //how clang is told the CPU at the compile and the link: "-march=X" or "-mcpu=X"
+    int vectorBits;   //TargetVectorBits
+    bool fma;         //TargetHasFma
+    bool foreign;     //another architecture or operating system than this machine's: -c only (B12a)
+};
+static struct target gTarget;
+static char* gTargetSpec = "native";
+
 //an argument list for RunProgram (util.h), as it is built
 static void argAdd(struct list* args, char* a) { ListAdd(args, &a); }
 static char** argEnd(struct list* args) {
@@ -39,6 +57,10 @@ static char** argEnd(struct list* args) {
 //can never disagree - linking -O3 objects with -O0 ones is not an error, merely silently not what was
 //asked for.
 static void addModeFlags(struct list* args) {
+    //B12: the target, as clang names it - for a foreign one its triple, and its CPU either way, which is what reaches
+    //the link-time code generator for anything not carrying the attributes every generated function carries
+    if (gTarget.foreign) argAdd(args, StrFmt("--target=%s", gTarget.triple));
+    if (gTarget.cpuFlag) argAdd(args, gTarget.cpuFlag);
     if (gDebug) {
         argAdd(args, "-O0");
         argAdd(args, "-g");
@@ -119,9 +141,12 @@ static char* objectHash(struct semaModule* mod) {
         keys[i] = StrFmt("%.*s\1%.*s", m->identity.len, m->identity.ptr, m->canonical.len, m->canonical.ptr);
     }
     qsort(keys, (size_t)seen.len, sizeof(char*), cmpCStrPtr);
-    //FNV-1a over the module's own identity first, then every key in order, each ended by a byte no path holds
+    //FNV-1a over the module's own identity first, then every key in order, each ended by a byte no path holds - and
+    //last the machine it is built for (B12b), so an object for one CPU is never taken for another's
     unsigned long long h = 14695981039346656037ULL;
     char* self = StrFmt("%.*s\1%.*s", mod->identity.len, mod->identity.ptr, mod->canonical.len, mod->canonical.ptr);
+    for (char* c = gTarget.triple; c && *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
+    for (char* c = gTarget.attrs; c && *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
     for (int i = -1; i < seen.len; i++) {
         char* k = i < 0 ? self : keys[i];
         for (char* c = k; *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
@@ -445,21 +470,211 @@ static void defineBuiltin(char* name, char* value) {
     if (SyntaxDefineBuildConst(name, value, true)) ErrUsage(ERR_DEFINE_BUILTIN, name);
 }
 
-//B10a: the constants every build defines. The target is the host, since olang does not cross-compile yet.
-static void defineBuiltinConsts(bool testBuild) {
-    struct utsname u;
-    char os[400] = "unknown", arch[400] = "unknown";
-    if (uname(&u) == 0) {
-        snprintf(os, sizeof(os), "%s", u.sysname);
-        snprintf(arch, sizeof(arch), "%s", u.machine);
-        for (char* c = os; *c; c++) *c = (char)tolower((unsigned char)*c);
+//B12: the architectures olang builds for, with how clang is told a CPU for each: a 64-bit, little-endian machine is what
+//its layouts assume, and the runtime's facts about the C library (X6's struct layouts) are known for these
+static const struct { const char* arch; const char* cpuFlag; const char* defaultCpu; } targetArchs[] = {
+    { "x86_64", "-march=", "x86-64" },
+    { "aarch64", "-mcpu=", "generic" },
+};
+
+static int targetArchIndex(const char* arch, size_t len) {
+    for (int i = 0; i < (int)(sizeof(targetArchs) / sizeof(targetArchs[0])); i++) {
+        if (strlen(targetArchs[i].arch) == len && !strncmp(targetArchs[i].arch, arch, len)) return i;
     }
+    return -1;
+}
+
+//B12: target features whose instructions LLVM would select for ordinary IR but which do not compute what IEEE 754 (and so
+//the compile-time evaluator, K1) computes: VCVTNEPS2BF16 rounds F32 to BF16 with its denormal inputs treated as zero and
+//its denormal results flushed to zero, where the conversion is to round them. Without them the conversion is a library
+//call, correct on every target
+static const char* ieeeUnsafeFeatures[] = { "avx512bf16", "avxneconvert" };
+
+//the text of attribute "name"="..." in an attribute line, or NULL
+static char* attrValue(const char* line, const char* name) {
+    char* key = StrFmt("\"%s\"=\"", name);
+    const char* at = strstr(line, key);
+    size_t kl = strlen(key);
+    free(key);
+    if (!at) return NULL;
+    at += kl;
+    const char* end = strchr(at, '"');
+    if (!end) return NULL;
+    return StrFmt("%.*s", (int)(end - at), at);
+}
+
+//whether the feature list (clang's: "+a,+b,-c") turns feature f on
+static bool hasFeature(const char* features, const char* f) {
+    size_t n = strlen(f);
+    for (const char* p = features; *p; ) {
+        const char* end = strchr(p, ',');
+        size_t len = end ? (size_t)(end - p) : strlen(p);
+        if (len == n + 1 && p[0] == '+' && !strncmp(p + 1, f, n)) return true;
+        if (!end) break;
+        p = end + 1;
+    }
+    return false;
+}
+
+//B12: the target without clang (-i only): "native" or an x86-64 level on an x86_64 machine, "native" or "generic" on an
+//aarch64 one - false for any other
+static bool targetWithoutClang(const char* cpu) {
+    gTarget.triple = StrFmt("%s-unknown-linux-gnu", gTarget.arch);
+    if (!strcmp(gTarget.arch, "aarch64")) {
+        if (strcmp(cpu, "native") && strcmp(cpu, "generic")) return false;
+        gTarget.cpu = "generic";
+        gTarget.vectorBits = 128;
+        gTarget.fma = true;
+        return true;
+    }
+    int level = !strcmp(cpu, "x86-64") ? 1 : !strcmp(cpu, "x86-64-v2") ? 2 : !strcmp(cpu, "x86-64-v3") ? 3
+              : !strcmp(cpu, "x86-64-v4") ? 4 : 0;
+#if defined(__x86_64__)
+    if (!strcmp(cpu, "native")) {
+        __builtin_cpu_init();
+        level = __builtin_cpu_supports("x86-64-v4") ? 4 : __builtin_cpu_supports("x86-64-v3") ? 3
+              : __builtin_cpu_supports("x86-64-v2") ? 2 : 1;
+    }
+#endif
+    if (!level) return false;
+    gTarget.cpu = level == 1 ? "x86-64" : StrFmt("x86-64-v%d", level);
+    gTarget.vectorBits = level == 4 ? 512 : level == 3 ? 256 : 128;
+    gTarget.fma = level >= 3;
+    return true;
+}
+
+//B12: what "-a SPEC" names, resolved by asking clang what it compiles C to for it - the CPU, its features and the
+//triple, exactly as for a C function built with -march: "native" is this machine's own CPU, as clang's -march=native
+//finds it. SPEC is a CPU of this machine's architecture ("native", "x86-64-v3", "skylake"), or a triple
+//"ARCH-linux-gnu" (any vendor between) with ":CPU" after it when the triple's default CPU is not the one wanted.
+static void resolveTarget(char* clang, bool interpreting) {
+    struct utsname u;
+    char hostOs[400] = "unknown", hostArch[400] = "unknown";
+    if (uname(&u) == 0) {
+        snprintf(hostOs, sizeof(hostOs), "%s", u.sysname);
+        snprintf(hostArch, sizeof(hostArch), "%s", u.machine);
+        for (char* c = hostOs; *c; c++) *c = (char)tolower((unsigned char)*c);
+    }
+    char* spec = gTargetSpec;
+    gTarget.spec = spec;
+    //a triple begins with an architecture and a '-'; anything else is a CPU of this machine's architecture
+    char* triple = NULL;
+    char* cpu = spec;
+    int ai = -1;
+    const char* dash = strchr(spec, '-');
+    if (dash) ai = targetArchIndex(spec, (size_t)(dash - spec));
+    if (ai >= 0) {
+        char* colon = strchr(spec, ':');
+        triple = colon ? StrFmt("%.*s", (int)(colon - spec), spec) : spec;
+        cpu = colon ? colon + 1 : NULL;
+        //the operating system part: Linux with the GNU C library, the one whose facts the runtime knows
+        size_t tl = strlen(triple);
+        if (!(tl > 10 && !strcmp(triple + tl - 10, "-linux-gnu"))) ErrUsage(ERR_TARGET_UNSUPPORTED, spec);
+        if (cpu && (!*cpu || strchr(cpu, ':'))) ErrUsage(ERR_TARGET_UNKNOWN, spec);
+    } else {
+        //a triple for an architecture olang does not build for, rather than a CPU
+        if (strstr(spec, "-linux") || strstr(spec, "-apple") || strstr(spec, "-windows")) ErrUsage(ERR_TARGET_UNSUPPORTED, spec);
+        if (strchr(spec, ':') || !*spec) ErrUsage(ERR_TARGET_UNKNOWN, spec);
+        ai = targetArchIndex(hostArch, strlen(hostArch));
+        if (ai < 0) ErrUsage(ERR_TARGET_UNSUPPORTED, hostArch);
+    }
+    const char* arch = targetArchs[ai].arch;
+    gTarget.arch = StrFmt("%s", arch);
+    gTarget.os = StrFmt("linux");
+    gTarget.foreign = strcmp(arch, hostArch) || strcmp("linux", hostOs);
+    //a triple naming this machine's architecture and system is this machine, with the triple's default CPU unless one
+    //is given: built and linked as any other build for this machine
+    if (triple && !gTarget.foreign) { triple = NULL; if (!cpu) cpu = (char*)targetArchs[ai].defaultCpu; }
+    if (cpu && !strcmp(cpu, "native") && gTarget.foreign) ErrUsage(ERR_TARGET_NATIVE_FOREIGN, spec);
+    if (gTarget.foreign && interpreting) ErrUsage(ERR_TARGET_FOREIGN_MODE, "-i", spec);
+
+    //-i runs the program without clang, and needs one only to know the target: this machine's own CPU, or an x86-64
+    //level, it knows without - the level this processor supports standing for its CPU
+    if (!clang) {
+        if (!interpreting || !targetWithoutClang(cpu)) ErrUsage(ERR_TARGET_NO_CLANG, spec);
+        return;
+    }
+    //the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
+    struct list args = ListInit(sizeof(char*));
+    argAdd(&args, clang);
+    if (triple) argAdd(&args, StrFmt("--target=%s", triple));
+    char* cpuFlag = cpu ? StrFmt("%s%s", targetArchs[ai].cpuFlag, cpu) : NULL;
+    if (cpuFlag) argAdd(&args, cpuFlag);
+    argAdd(&args, "-S"); argAdd(&args, "-emit-llvm"); argAdd(&args, "-o"); argAdd(&args, "-");
+    argAdd(&args, "-x"); argAdd(&args, "c"); argAdd(&args, "-");
+    static char out[65536];
+    int rc = RunProgramFeed(argEnd(&args), "void olang_target_probe(void) { }\n", out, sizeof(out));
+    ListDestroy(args);
+    char* tl = strstr(out, "target triple = \"");
+    char* dl = strstr(out, "target datalayout = \"");
+    char* al = strstr(out, "attributes #0 = {");
+    if (rc != 0 || !tl || !dl || !al) ErrUsage(ERR_TARGET_UNKNOWN, spec);
+    tl += strlen("target triple = \"");
+    gTarget.triple = StrFmt("%.*s", (int)(strchr(tl, '"') - tl), tl);
+    char* alEnd = strchr(al, '\n');
+    if (alEnd) *alEnd = '\0';
+    //the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
+    dl += strlen("target datalayout = \"");
+    if (dl[0] != 'e' || strstr(dl, "-p:32") || strstr(dl, "-p:16")) ErrUsage(ERR_TARGET_UNSUPPORTED, spec);
+    //another architecture is built for only where this clang can generate all the code the runtime holds: BF16 among
+    //it, which LLVM 18's AArch64 back end cannot select - an object it could not compile at the link is not built
+    if (gTarget.foreign) {
+        struct list cap = ListInit(sizeof(char*));
+        argAdd(&cap, clang);
+        argAdd(&cap, StrFmt("--target=%s", gTarget.triple));
+        argAdd(&cap, "-fno-crash-diagnostics");
+        argAdd(&cap, "-c"); argAdd(&cap, "-x"); argAdd(&cap, "ir"); argAdd(&cap, "-"); argAdd(&cap, "-o"); argAdd(&cap, "/dev/null");
+        char ignored[16];
+        int crc = RunProgramFeed(argEnd(&cap), "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n"
+                                               "  %c = fadd bfloat %b, %b\n  %r = fpext bfloat %c to float\n  ret float %r\n}\n",
+                                 ignored, sizeof(ignored));
+        ListDestroy(cap);
+        if (crc != 0) ErrUsage(ERR_TARGET_NO_BACKEND, spec);
+    }
+    gTarget.cpu = attrValue(al, "target-cpu");
+    char* features = attrValue(al, "target-features");
+    if (!gTarget.cpu) ErrUsage(ERR_TARGET_UNKNOWN, spec);
+    if (!features) features = StrFmt("%s", "");
+    //features turned off for what they would compute (ieeeUnsafeFeatures)
+    for (size_t i = 0; i < sizeof(ieeeUnsafeFeatures) / sizeof(ieeeUnsafeFeatures[0]); i++) {
+        if (!hasFeature(features, ieeeUnsafeFeatures[i])) continue;
+        char* plus = StrFmt("+%s", ieeeUnsafeFeatures[i]);
+        for (char* p = strstr(features, plus); p; p = strstr(p + 1, plus)) {
+            char after = p[strlen(plus)];
+            if ((p == features || p[-1] == ',') && (after == ',' || after == '\0')) { *p = '-'; break; }
+        }
+        free(plus);
+    }
+    //B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add
+    if (!strcmp(arch, "x86_64")) {
+        gTarget.vectorBits = hasFeature(features, "avx512f") ? 512 : hasFeature(features, "avx") ? 256 : 128;
+        gTarget.fma = hasFeature(features, "fma") || hasFeature(features, "fma4");
+    } else { //aarch64: Advanced SIMD's 128-bit registers, and fused multiply-add in the base instruction set
+        gTarget.vectorBits = hasFeature(features, "neon") ? 128 : 0;
+        gTarget.fma = true;
+    }
+    //what every generated function carries: the CPU and features (and how far a scalable vector may reach), and the
+    //vector width - told to the code generator outright, so the width the program reads (TargetVectorBits) is the one
+    //its loops are vectorized for, whatever a CPU's own tuning would have preferred
+    char* tune = attrValue(al, "tune-cpu");
+    char* tuneAttr = tune ? StrFmt(" \"tune-cpu\"=\"%s\"", tune) : "";
+    char* vs = strstr(al, "vscale_range(");
+    char* vsAttr = vs && strchr(vs, ')') ? StrFmt(" %.*s", (int)(strchr(vs, ')') + 1 - vs), vs) : "";
+    gTarget.attrs = StrFmt("\"target-cpu\"=\"%s\" \"target-features\"=\"%s\"%s%s \"prefer-vector-width\"=\"%d\"",
+                           gTarget.cpu, features, tuneAttr, vsAttr, gTarget.vectorBits ? gTarget.vectorBits : 128);
+    gTarget.cpuFlag = StrFmt("%s%s", targetArchs[ai].cpuFlag, gTarget.cpu); //resolved: "native" is looked up once
+    CodegenSetTarget(gTarget.triple, gTarget.arch, gTarget.attrs);
+    CtSetForeignTarget(gTarget.foreign);
+}
+
+//B10a: the constants every build defines - the target's (B12) and the build's own modes
+static void defineBuiltinConsts(bool testBuild) {
     //quoted, so a value that happens to look like a number is still text
-    char q[420];
-    snprintf(q, sizeof(q), "\"%s\"", os);
-    defineBuiltin("TargetOs", q);
-    snprintf(q, sizeof(q), "\"%s\"", arch);
-    defineBuiltin("TargetArch", q);
+    defineBuiltin("TargetOs", StrFmt("\"%s\"", gTarget.os));
+    defineBuiltin("TargetArch", StrFmt("\"%s\"", gTarget.arch));
+    defineBuiltin("TargetCpu", StrFmt("\"%s\"", gTarget.cpu));
+    defineBuiltin("TargetVectorBits", StrFmt("%d", gTarget.vectorBits));
+    defineBuiltin("TargetHasFma", gTarget.fma ? "true" : "false");
     defineBuiltin("DebugBuild", gDebug ? "true" : "false");
     defineBuiltin("RaceBuild", gRace ? "true" : "false");
     defineBuiltin("TestBuild", testBuild ? "true" : "false");
@@ -502,6 +717,12 @@ static int compilerMain(int argc, char** argv) {
         //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
         if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
         if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
+        //B12: the machine to build for
+        if (!strcmp(argv[i], "-a")) {
+            if (i + 1 >= argc) ErrUsage(ERR_TARGET_MISSING);
+            gTargetSpec = argv[++i];
+            continue;
+        }
         if (!strcmp(argv[i], "-D")) {
             if (i + 1 >= argc) ErrUsage(ERR_DEFINE_MISSING);
             defineFromArg(argv[++i]);
@@ -522,6 +743,12 @@ static int compilerMain(int argc, char** argv) {
     if (!strcmp(argv[1], "-e")) {
         if (argc != 3) ErrUsage(ERR_EXPLAIN_NEEDS_RULE);
         return ErrMsgExplain(argv[2]);
+    }
+    //B12: the target, for every mode but -e - a foreign one builds objects only (-c)
+    bool interpreting = !strcmp(argv[1], "-i");
+    resolveTarget(findClang(), interpreting);
+    if (gTarget.foreign && (!strcmp(argv[1], "-b") || !strcmp(argv[1], "-t"))) {
+        ErrUsage(ERR_TARGET_FOREIGN_MODE, argv[1], gTarget.spec);
     }
     //user constants were defined above; a built-in name given with -D is a clash, reported here
     defineBuiltinConsts(!strcmp(argv[1], "-t"));
