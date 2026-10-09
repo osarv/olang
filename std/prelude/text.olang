@@ -401,9 +401,9 @@ fn builtText() String& {
     return b.ToString()
 }
 
-BuiltBaked := builtText()
+builtBaked := builtText()
 
 test "a StringBuilder, evaluated while compiling as at run time" {
-    assert BuiltBaked == "0,1,2,end"
-    assert builtText() == BuiltBaked
+    assert builtBaked == "0,1,2,end"
+    assert builtText() == builtBaked
 }
