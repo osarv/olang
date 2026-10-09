@@ -11804,3 +11804,31 @@ test "S18a: an assert's message is evaluated only when it fails" {
     }
     assert(AsMsgCalls == 0), "the message ran " $AsMsgCalls " times"
 }
+
+# E11a: a float's text is computed directly (Schubfach) rather than by up to seventeen snprintf/strtod tries, giving the
+# same text - here the values where the direct digits are not trusted and the tries decide (the smallest subnormals, the
+# lopsided interval at the bottom of a binade), the largest, and the narrow types' edges; baked while compiling (K2,
+# FloatShortest) and rendered at run time (@__olang_fmt_float), identically
+RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.2250738585072014e-308 9.223372036854776e+18 "
+                  "9.332636185032189e-302 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 99999999999999980 "
+                  "1e-45 4e-45 1.1754944e-38 1.7014118e+38 3.4028235e+38 7.888609e-31 16777216 0.1 "
+                  "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 ")
+fn rsText(z U64) String {
+    s := StringBuilder()
+    for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000] {
+        s.Push($((b + z).F64FromBits()) " ")
+    }
+    for x in F64[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
+    for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($((b + U32(z)).F32FromBits()) " ") }
+    for x in F32[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
+    for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($((b + U16(z)).F16FromBits()) " ") }
+    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D] { s.Push($((b + U16(z)).BF16FromBits()) " ") }
+    return s.ToString()
+}
+RsBaked String = rsText(0)
+RsZero mut U64 = 0
+test "E11a: a float's text, computed directly, is the shortest that reads back - while compiling and at run time" {
+    assert RsBaked == RsWant, RsBaked
+    assert rsText(RsZero) == RsWant, rsText(RsZero)
+    assert $F64(5e-324) == "5e-324" and $F32(1e-45) == "1e-45" and $(0.1 + 0.2) == "0.30000000000000004"
+}
