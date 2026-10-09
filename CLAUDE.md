@@ -2178,7 +2178,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   any temporary (E12c) - so `return Array<Int32>(n)` is writable for the first time. Literals stay
   `Int32[1, 2, 3]`; `:=` from one declares an `Array<T>`, and D12a's length adoption went (it made a later
   assignment of another length abort). An array of arrays is `Array<Array<T>&>`.
-  **The in-struct problem, the user's way: compile-time evaluation (C2e).** A field written
+  **The in-struct problem, the user's way: compile-time evaluation (C2e; superseded 2026-10-09 by T7c - an inline field is written `Array<T, N>`, below).** A field written
   `m Array<Float32> = Array<Float32>(16)` (or `:=`) whose size the evaluator can compute - a literal, a constant,
   arithmetic, a call - is stored inline: the struct stays plain data and matches a C layout (`chan.olang`'s
   mutex blob). Layout must be settled before bodies are checked while the size may need checked bodies, so a
@@ -3594,7 +3594,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   report's `sum.biggest = s.item` is left by T25b (a `mut` field of a reference type is a writable reference).
 - **Constant parameters and `Array<T, N>` (G20-G28, G16b, T7c/T7d, E32b; 2026-10-09, the user: "make the language
   generics take constants (and comp time expressions) as parameters ... Expand it across arrays too ... Array<T,
-  size>") - DESIGNED, NOT YET BUILT** (spec.md's Status names every rule it adds or changes). **Declaration**: a name
+  size>") - BUILT the same day.** **Declaration**: a name
   followed by a type in a struct's or trait's parameter list, `type Matrix<T, R I64, C I64>` - followed by a trait it is
   a constraint (G19), by any other type a constant. Allowed types: integers, `Bool`, declared types over them (`Char`),
   payload-free enums, none declaring `Eq` - identity is the value; floats are out (NaN, `-0.0`: Rust's reason), and so
@@ -3626,7 +3626,23 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Rows()` choosing `<R>` or the field by G26 - so `Matrix<F32, Dynamic, 784> x Matrix<F32, 784, 128>` checks 784 at
   compile time and gives `Matrix<F32, Dynamic, 128>`; a language-level `_` argument would need hidden storage and
   hidden checks in every generic. Precedents weighed: C++ NTTPs and Eigen, Rust const generics, Zig comptime, Go's
-  `[N]T`, D value parameters (HISTORY.md).
+  `[N]T`, D value parameters (HISTORY.md). **Built (the three direction questions taken at their recommended defaults
+  until the user answers: `Dynamic` in the library, D9a kept, `<N>` in expressions).** A constant argument is a type
+  of its own kind (`BASETYPE_CONST`: its type and value, or a pattern - the expression - until its variables are
+  bound), so bindings, substitution, unification, identity and G16a naming carry constants with no parallel machinery;
+  a fixed length is the representation literals already had. Arguments fold on their syntax while types resolve;
+  one needing evaluation proper (a call, a computed global) is decided once the program has checked and the program
+  checked again - C2e's loop, which is all of C2e that survives (the inline-field form is gone; four corpus fields
+  and five checks migrated). `<N>` in an expression is its value converted to its own type, so it never adapts like a
+  literal and S8a reads it as configuration. Decided while building: G26 decides an `if`/conditional whose condition
+  has `<N>` written in it, and `match <N>` (values in its cases, no guard) - not a general `match` on a constant expression; a
+  local condition in a generic with constants is never S8b-decided (one parse serves every instantiation); a
+  mismatching copy into fixed storage aborts and is not caught by `try` (view first with `try (x as Array<T, N>&)`);
+  M19's "a receiver with a length takes precedence" was dropped (only the prelude declares array methods, and it has
+  none). **Found and fixed on the way**: a variable named only inside a constraint (`<V Shaped<<R>>>`) was not the
+  signature's; a run-time array compared with a literal was rejected ("found Array<I32> and Array<I32>"); an extern
+  handed a fixed array a copy, so what the foreign function wrote was lost; codegen still left a declared-size local
+  array uninitialized (dead until now); a method called on a value of unknown type added "'x' is no import here".
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

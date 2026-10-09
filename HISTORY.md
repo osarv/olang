@@ -10187,3 +10187,64 @@ from their original form.
   784 from both (checked while compiling) and gives `Matrix<F32, Dynamic, 128>`; the gradient `xT x dY` contracts over
   `Dynamic` on both sides and checks that one at run time, once per product. Mixing a fixed and a `Dynamic` size of
   the same dimension takes a conversion the library writes. Recommended; put to the user as a direction question.
+- **Constant parameters and `Array<T, N>`, built (G20-G28, T7c/T7d, E32b, G17; 2026-10-09).** Implemented on the same
+  branch as the design, with the three direction questions (run-time dimensions in the library, D9a kept, `<N>` in
+  expressions) taken at their recommended defaults since the user had not answered them yet.
+  **Representation.** A constant argument is a type of its own kind, `BASETYPE_CONST`: the constant's type and its
+  value, or - while a constant variable it reads is unbound - a *pattern* holding the expression and its module. A
+  constant variable is an ordinary type variable flagged `isConstVar`, bound in the same binding lists as type
+  variables. That one choice is what made the rest small: substitution computes a pattern once its variables are
+  bound, unification binds a constant variable by value from a type argument or from an array's length, identity
+  compares values (`TypeIsSame`), and an instantiation's name spells the value (`K-I64-3-k`), so `Ring<I32, 4>` and
+  `Ring<I32, 2 + 2>` are one instantiation with no parallel machinery. A fixed length is the representation literals
+  and C2e's inline fields already had (`arrMalloc` false, the length an operand); a length still a pattern rides on
+  the array (`arrLenArg`) until substitution fixes it. A generic struct's fields are substituted, not re-resolved, so
+  `data Array<<T>, <R> * <C>>` is a pattern in the generic and twelve elements in `Matrix<F32, 3, 4>`.
+  **Arguments** are folded on their syntax while types resolve - literals, operators, `<N>`, immutable globals
+  (following their initializers, with their declared types' ranges), `-D` constants, enum cases. One needing
+  evaluation proper - a call, a global computed by one - is deferred: the program is checked with it undecided (an
+  unknown type, which reports nothing), computed by K1 once the program has checked, and checked again - C2e's loop,
+  keyed now by file, line, the argument's text and the instantiation's bindings. C2e itself is gone: an inline field
+  is spelled `Array<T, N>`, and four corpus fields and five checks were migrated. A call that reads an unbound
+  constant variable (`twice(<N>)` in a signature) is a pattern, computed per instantiation.
+  **`<N>` as a value** is a literal of its parameter's type wrapped in a conversion to that same type: it emits
+  nothing and evaluates as itself, but it is no literal, so it never adapts (`x U8 = <N>` is T6b's error), and it is
+  flagged so S8a reads a condition on it as configuration. A bare `N` in a body, and `i <<N>`, are diagnosed with the
+  spelling to write.
+  **G26.** An `if` or conditional with `<N>` written in its condition is built, evaluated, and replaced by the chosen branch
+  (an always-true `if`, as a selected type-match arm is); `match <N>` is the type-match form with values in its cases.
+  Narrower than the design said, by decision: a general value `match` on a constant expression, and guards, are not
+  decided per instantiation - `match <N>` covers the use, and a guard there would decide nothing at run time. A local
+  condition in a generic with constant parameters is never decided by S8b (once, at the parse every instantiation
+  shares): `n := <N>; if n > 3` used to be judged by whichever instantiation was checked last and reported as S8a's
+  dead code. It is an ordinary condition; a condition with `<N>` written in it is decided per instantiation instead.
+  **G17** gained the chain bound the design called for: an instantiation records how many instantiations, each
+  requiring the next, led to it, and a chain past 1,000 is reported once with the last three instantiations as notes
+  (`grow` at `<N>` asking for `grow` at `<N> + 1` used to run forever). **G27** needed the instantiation note kept with
+  the assert, since S18c judges asserts after the program has checked, outside the instantiation: the error contexts
+  open when an assert is recorded are saved and reopened when it is reported.
+  **Arrays.** `Array<T, N>()` and a declaration with no initializer are zero values; where the element's zero value is
+  a constructor's (every struct) the zero is one value copied into each element, with D13c's "holds references" check -
+  no allocation, unlike `Array<T>(n)`. Fixed arrays may be fields, elements, payloads (D9a's payload exception) and
+  literal elements (`Array<I32, 2>[I32[1, 2], I32[3, 4]]`). `x as Array<T, N>&` is a slice of the whole of `x` whose
+  check is "the length is N" and whose value is the bare pointer, so every rule about slices - scope, permission,
+  borrow - applies to it unchanged. Beside an `Array<T>` in `==`, a fixed array is viewed as one (the length beside
+  its own storage) - which also fixed comparing a run-time array with a literal, rejected until now with the
+  self-contradicting "found Array<I32> and Array<I32>". The evaluator reads a fixed array's `Len()` off its type
+  where reading what holds it does nothing, as K1 states.
+  **Decided while building.** A mismatching copy into fixed storage aborts and `try` does not catch it - the design
+  said R21 would; a program wanting the error views first, `try (r as Array<T, N>&)`, which needed nothing new. M19's
+  "a receiver with a length takes precedence" was dropped from the spec: only the prelude declares array methods and it
+  declares none with a length. Diagnostics now spell a literal's type with its length (`found Array<Char, 3>`), which
+  is what it is where a length is wanted (T7d); two checks were updated.
+  **Found and fixed on the way, pre-existing.** A variable named only inside a constraint (`<V Shaped<<R>>>`) was not
+  collected as the signature's, so G19's "inferred through it" never applied to one written nowhere else. An extern
+  handed a fixed-length value a copy, so what the foreign function wrote was lost - harmless while only literals were
+  fixed, fatal for `ts Array<I64, 2>` passed to `clock_gettime`: an array is now always handed over as its own storage.
+  Codegen still left a declared-size local array uninitialized (D15b's old rule, contradicting D13's "nothing is
+  uninitialized" and dead until fixed arrays could be declared); a large one is cleared with a memset, since LLVM
+  handles a huge aggregate store badly. A method called on a value of unknown type added "'x' is no import here" -
+  which also stopped a deferred constant argument from ever being decided. `List<List<I32>>= ...` was briefly broken
+  by the constant-argument fallback and is covered by an existing check.
+  **Observed, not changed**: a trait method returning `T&` (built) is not satisfied by a method returning `T&p`
+  (borrowed from its receiver) - O13's two contracts genuinely differ, so G28's example uses a by-value result.
