@@ -366,6 +366,94 @@ is vectorized by LLVM's SLP pass across rows, sixteen accumulators at a time, wi
 epoch native, 1.8 s with 256-bit vectors, 2.1 s at baseline. Tile by `TargetVectorBits`, as std/linalg does, or call
 it.
 
+### Batched causal products, the epilogue and implicit convolutions (2026-10-09)
+
+oann's three asks of std/linalg (its DESIGN.md, section 13), built as `GemmBatch` (with `Batch`, `Heads`, `Stacked` and
+`Triangular`), `GemmAct` (with `Activation`, `Activate` and `ActivationBackward`) and `GemmPatches` (with `Patches` and
+`Im2col`), measured by `bench/fused.sh`: every variant run once, then every one again, and so on, each figure the median
+- F32, one thread unless said, ms. "master" is the same computation with master edf8238's std/linalg - a copy of it
+compiled as a module of its own beside the new one, so both ran in the same process, interleaved (not committed). The
+machine was shared (load average 5-6), so each row gives the range over two or three runs; a run that caught a spike
+in the load (every figure in it up to twice the others) is left out.
+
+Causal attention, a batch of 16 sequences of T positions, 128 columns in 4 heads of 32 (oann's transformer); forward is
+`S = Q K^T` and `Y = P V`, backward `dP = dO V^T`, `dQ = dS K`, `dK = dS^T Q` and `dV = P^T dO`:
+
+| T | | a Gemm per head, master | a Gemm per head | `GemmBatch` | `GemmBatch`, causal |
+|---:|---|---:|---:|---:|---:|
+| 64 | forward | 1.9-2.0 | 1.9-2.1 | 0.88-0.94 | 0.80-0.83 |
+| 64 | backward | 5.1-5.7 | 5.0-5.1 | 2.1-2.3 | 1.7-1.9 |
+| 256 | forward | 15.3-15.4 | 13.7-14.3 | 12.9-13.7 | 10.2-10.4 |
+| 256 | backward | 32.7-35.2 | 29.4-33.0 | 37.2-43.9 | 24.4-27.6 |
+| 64, 4 threads | forward | 1.9-2.2 | 1.8-1.9 | 0.77-1.05 | 0.74-1.00 |
+| 64, 4 threads | backward | 4.9-5.1 | 4.7-5.0 | 2.3-2.6 | 2.0-2.1 |
+| 256, 4 threads | forward | 89-98 | 80-88 | 11.8-12.3 | 9.3-9.9 |
+| 256, 4 threads | backward | 168-204 | 111-165 | 30-47 | 27-40 |
+
+- **At T 64 one call per product is 2.2-2.9x a Gemm per head, and the triangle adds 10-20%**: a 64 x 64 x 32 product
+  is small enough that a call's own work (choosing a path, the workspace, packing B) was most of it. At T 256 the
+  triangle is what pays, 1.3-1.5x, the products being large enough to amortize a call.
+- **The non-causal batched backward at T 256 is slower than a Gemm per head**, and that is locality, not the kernel:
+  a head's 256 KB of P stays in L2 across the three products a Gemm per head runs on it back to back, where one call
+  per product streams all 16 MB of P from L3 or memory three times. The causal form reads half of it, and wins.
+- **Threads**: a Gemm per head splits each small product four ways and joins every block of it - 10-20x slower than one
+  thread at T 256; `GemmBatch` gives each task a run of whole products.
+- What it took: a product one or two tiles wide reads its left operand in place, by rows, instead of packing it (the
+  weights P of `Y = P V` - packing them cost about what the product did); a transposed one is packed panel by panel,
+  steps above the diagonal written as zeros without reading and steps below copied whole (P^T in `dK`, `dV`: its
+  packing went from 13 to 5 instructions an element). Exchanging those two products (C^T = Q^T P, P then packed by
+  rows) was tried and measured no faster: P is memory-bound to read either way.
+
+A dense layer and its activation, `y = act(x w^T + b)`, `pre` keeping `x w^T + b` for the backward:
+
+| shape | act | master: Gemm, AddRow, a Map | Gemm, AddRow, Activate | `GemmAct` with pre | `GemmAct` |
+|---|---|---:|---:|---:|---:|
+| 1024 x 128 -> 512 | GELU | 3.4-3.6 | 3.0-3.6 | 3.0-6.7 | 2.9-3.2 |
+| 1024 x 512 -> 128 | none (bias) | 1.8-1.9 | 1.7-1.8 | 1.7-1.8 | 1.6 |
+| 128 x 784 -> 128 | ReLU | 0.40-0.43 | 0.36 | 0.36 | 0.33-0.36 |
+
+**The epilogue is level with the separate passes**, not faster, at these sizes: the result is 2 MB, so the passes
+`AddRow` and `Activate` make run on data in L2 or L3, and GELU's own arithmetic (a FastTanh an element, ~4 cycles) is
+what they cost. Applied as each tile was stored, in the accumulation type, it was slower (2.7 against 2.3 ms with GELU,
+4.2 with `pre`): it held C and pre tile by tile and did the activation 384 elements at a time. It now runs on each
+block of C's rows once they are summed, a row at a time, while they are in L2 - so `GemmAct` reads C from memory once,
+and `pre` costs nothing extra; for a C larger than the caches (8192 x 512) it measured 21-22 ms against 21-23 for the
+three calls. Its value is the one call, and one pass over C.
+
+A 3 x 3 convolution of a batch of 128 images, padding 1, with bias and ReLU:
+
+| layer | master: oann's im2col, Gemm, AddRow, ReLU | `Im2col` + `GemmAct` | `GemmPatches` |
+|---|---:|---:|---:|
+| 1 -> 16 channels, 28 x 28 | 5.8-6.8 | 3.7-3.9 | 3.4-3.6 |
+| 16 -> 32 channels, 14 x 14 | 12.7-13.2 | 9.0-9.5 | 7.8-8.1 |
+
+and the products alone, the patches already made:
+
+| layer | product | master | now |
+|---|---|---:|---:|
+| 1 -> 16 | forward, y = cols w^T (100352 x 16 x 9) | 2.2-2.6 | 1.5-1.9 |
+| 1 -> 16 | dW = dY^T cols (16 x 9 x 100352) | 5.2-6.2 | 2.9-3.1 |
+| 16 -> 32 | forward (25088 x 32 x 144) | 6.6-7.1 | 4.0-4.1 |
+| 16 -> 32 | dW (32 x 144 x 25088) | 9.4-10.0 | 7.4-8.5 |
+
+- **Thin products**: a result 16 wide used half of the 12 x 32 tile; it now gets a tile one vector wide (12 x 16), and
+  the 16 x 9 weight gradient - whose 9 columns used 9 of 32 - is computed as its transpose with that tile (9 rows of 12,
+  16 columns of 16): 1.4x and 1.9x. Neither changes any element's sum.
+- **`GemmPatches`** packs the patch matrix's panels straight from the images: a panel's 12 output positions gathered
+  together one patch input at a time, each window's first pixel computed once per panel and the next position found by
+  a step, not by dividing. It saves making and re-reading the patches (3.6 MB for the first layer) and the separate bias
+  and ReLU passes: 1.7x the master path on the first layer, 1.6x on the second, and 1.05-1.15x `Im2col` + `GemmAct`.
+- `Im2col` itself (the patches made, for the backward's col2im and for testing) is 1.5x oann's on one channel (1.5-1.6
+  against 2.3-2.4 ms) and level on 16: the windows' inputs walked in order with an offset kept as they go, rather than
+  as loops three elements long that LLVM tests for overlapping arrays every time round.
+- **Not built: the weights' gradient straight from the images** (the patch matrix as the right operand). It was built
+  and measured slower than `Im2col` plus `Gemm` (26 against 15-20 ms on the second layer), and the backward needs the
+  patches workspace for col2im anyway; `dW = dY^T cols` through `Gemm` gets the thin and exchanged tiles.
+
+Plain `Gemm` through the reworked core, against master's, interleaved (GFLOPS, square, one thread, `bench/gemm.olang`):
+F32 n 128 72 -> 79, 256 91-97 -> 93-98, 512 72-83 -> 90-94, 1024 74-78 -> 74-76; F64 n 512 34-36 -> 40-41 and level
+elsewhere.
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;

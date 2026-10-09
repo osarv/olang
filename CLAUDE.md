@@ -507,7 +507,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   **T11 is gone, and with it the last place storage leaked into semantics.** Whether an array is
   reference-shaped is decided by its marker and nothing else, identically for `T[N]` and `T[]`: both
   unmarked forms are values (`==` element-wise, assignment copies the elements into storage of the target's
-  own), both marked forms are references (`==` identity, assignment repoints). When a length becomes known
+  own), both marked forms are references (`==` identity, assignment repoints; `==` compares contents since
+  2026-10-09, E10, and identity is `is`). When a length becomes known
   is a difference in *representation* - `T[N]` inline, `T[]` a length paired with its own storage, since a
   runtime length cannot be embedded - and a representation difference is not a behaviour difference. What
   the old rule cost was visible in three places at once: `&` meant "make this a reference" on one array and
@@ -3299,7 +3300,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   writes into its storage when the length is unchanged (T11b)**, a struct or enum value field by field; only a new
   length gets new storage. The literal path did not, and the evaluator never did. **(5) One instance per static
   literal site (T25d)**: no `unnamed_addr`, one constant per site per object, one evaluator node per site and module.
-  **(6) Array identity is the same storage, start and length (E10)**; an allocation of nothing gets storage of its
+  **(6) Array identity is the same storage, start and length (E10; `is` since 2026-10-09, `==` comparing contents)**; an allocation of nothing gets storage of its
   own (the allocator's minimum is now 8 bytes - two `Array<T>(0)` shared an address only when nothing was allocated
   between them), and an array value's zero value, with no storage, is the same as a null array reference, bit for bit.
   **(7) A function-typed global is a variable (T21/O1b)** - it compiled to an empty function returning 0, and `-i` could
@@ -4039,6 +4040,69 @@ Go through this for every change to what olang means - a rule added, revised or 
   -> 0.62s/190MB, binary-trees unchanged. **`n.Format(base = 10)`** on every integer type, U8 included (a Char gives its
   code), lowercase, `-` before a negative's digits, a base outside 2-36 aborts. ThreadSanitizer faults past ~260,000
   nested calls (its own call record), so std/os's deep test recurses less under `RaceBuild`.
+- **List and Map are handles; `==` compares arrays however held; `case _`; keywords as method names; every guaranteed
+  check says where (T8, T11, E10, E10b, E10c, T2a, T7d, S12b, S13f, L9a, S18a, 2026-10-09; from study 3, the
+  coordinator's decisions under the revisit rule, details mine).** **List/Map**: a `List` was a struct value whose chunks
+  hung off reference fields while its counts were plain fields, so `b := a` shared the elements but not the counts and a
+  push to one overwrote the other's (and a copied `Map`'s `Remove` left the other's count wrong) - silently, `-b` and
+  `-i` agreeing. Each now holds one `mut` reference to a private record (`listState`, `mapState`) of all its state,
+  built where it is constructed (C2d): a copy of the value is a second name for the same collection, as a Go map is,
+  and `Clone()` is the real copy, built where its result lands (a Map's walks in the same order). T8 says it:
+  `Array<Map<K, V>>(n, Map<K, V>())` is n names for one map. StringBuilder, holding a List, follows. A List's zero value
+  now holds a reference (one constructor call per declaration, D13c; `Array<List<T>>(n)` with no fill is D13c's error).
+  Measured with callgrind (the machine too loaded for times): push, walking, `l[i]` and `Map.Update` the same
+  instruction counts, Map Put+Get +5% (one dependent load per call); the record's address is hoisted out of indexing and
+  walking loops, while a push loop keeps the record's counts in memory (the allocator call on its cold path may write
+  anything; caching them in the value would bring the bug back). **`==`**: through a reference to an array (`Array<T>&`,
+  `Array<T, N>&`, a declared array type with no Eq) it compares lengths then elements, each by its own `==`, where it
+  was identity - `l.ToArray() == m.ToArray()` was false for equal contents; identity is `is` (E10c). Struct and enum
+  references keep identity unless they declare Eq (no cycles walked). **Decided (mine)**: a null equals only a null (a
+  null array reference has no storage; `Array<T>(0)` has some), so `p == null` is the null test it was; a struct value
+  holding an array reference compares it by contents too; an array reference hashes its elements (E10b), so it is a Map
+  key. `is` marks its comparison (`identity`) for codegen and the evaluator; one corpus helper that meant identity moved
+  to `is`. **T7d**: an `Array<T, N>&` returned as the value `Array<T, N>` stored the pointer as the aggregate (invalid IR);
+  it is copied out. **S18a**: a slice out of range, an array length out of range, an `as` that does not hold and a copy
+  into fixed storage of another length say `FILE:LINE:` too, built and under `-i`. **S13f**: `_` at the top of a clause
+  matches any value - `case _ if cond` a guarded catch-all, `case _` a plain one; **decided (mine)**: it is its clause's
+  only alternative, an unguarded one covers every value (a match value over a number needs no `nomatch`), a clause or
+  `nomatch` after it is a dead-code error, and `case v` with `v` unknown, or the matched local itself (`v == v`, false for
+  a NaN), is an error naming `case _ if ...`; no binding names at the top of a value match. **L9a**: any keyword is a
+  method's name after a receiver clause and after `.` where `(` follows (`w.spawn()`, `p.fail(tok)`); fields and plain
+  functions keep L9. **S12b/D8c**: `case P => a, b` says a match gives one value. **Found, not fixed**: `type Nest
+  Array<Nest&>` is accepted but cannot be built ("expected Nest&, found Nest&").
+- **std/linalg for oann: batched causal products, a product with its epilogue, convolutions from the images (G9a,
+  2026-10-09; oann's DESIGN.md section 13, details mine).** **`ws.GemmBatch(c, a, transA, b, transB, alpha, beta,
+  triangular, diagonal, threads)`** runs a product per matrix of `Batch<T>`s - Groups x Members matrices of one shape in
+  one storage, two strides (`m.Heads(T, heads)` is every sequence's every head's column block, `p.Stacked(T, heads)` the
+  T x T weights stacked in rows, `b[g, m]` one matrix) - all six products of attention in one call each, tasks taking
+  runs of whole products. **`Triangular.Result`** computes only c's lower triangle (`j <= i + diagonal`) and does not
+  touch the rest, not even with beta (MKL's gemmt); **`Triangular.Left`** takes a as lower-triangular and never reads
+  above its diagonal (BLAS's trmm; upper with transA). **`ws.GemmAct(c, a, transA, b, transB, bias, act, alpha, beta,
+  threads, pre)`** is `act(alpha op(a) op(b) + beta c + bias)`, `pre` keeping what act is applied to; the epilogue runs
+  on each block of C's rows once it is summed, while in the cache, so the result is exactly Gemm, AddRow and Activate's.
+  **`Activation`** is Identity, Relu (a NaN stays one), Gelu in its tanh form (within 7e-7 / 3e-16 of the formula in
+  F32 / F64, the formula within 5e-4 of exact GELU), Tanh and Sigmoid; `Activate`, `ActivationSlope` and the matrix
+  forms `y.Activate(z, act)`, `dz.ActivationBackward(dy, z, act, beta)`; F16/BF16/F8 in F32, an integer only Identity
+  and Relu. **`ws.GemmPatches(c, Patches(x, C, H, W, K, stride, pad), w, true, bias, act)`** is a convolution of images
+  held as rows, channels last, the patch matrix (PyTorch's [C][K][K] column order) packed straight from the images and
+  never made; `p.Im2col(cols)` makes it. **Inside the core, also serving `Gemm`**: a tile one vector wide where the
+  result is narrower than two (thin), the transposed product computed where that covers the result 25% better
+  (exchanged, between two matrices only), the left operand read in place by rows where the result is one or two tiles
+  wide, panel widths constants per role. **Measured** (bench/fused.sh, shared machine): attention at T 64 forward
+  2.0 -> 0.8 ms, backward 5.2-5.7 -> 1.7-1.9 (a Gemm per head on master against causal GemmBatch); at T 256 15.3 ->
+  10.2 and 33-35 -> 24-28; the first convolution of oann's CNN 5.8-6.8 -> 3.4-3.6 ms, the second 12.7-13.2 -> 7.8-8.1;
+  its 16 x 9 weight gradient 5.2-6.2 -> 2.9-3.1; GemmAct level with the separate passes at oann's sizes (the passes run
+  in L2); plain Gemm F32 equal or faster (512: 72-83 -> 90-94 GFLOPS). **Decided (mine)**: the names and parameter
+  orders above; the `Triangular` enum plus a `diagonal` offset (decoding with a cache) rather than a causal flag;
+  Result leaves the upper part untouched rather than zeroing it; the epilogue per block of rows (applied tile by tile
+  in the accumulation type it was slower - 2.7 against 2.3 ms with GELU, 4.2 with pre - so narrow types round the
+  product before the bias, as AddRow would); ReLU's slope 0 at 0; the patch matrix only ever the left operand - the
+  weights' gradient from the images (`GemmByPatches`) was built, measured slower than Im2col plus Gemm, and dropped;
+  transposed causal products not exchanged (measured no faster: P is memory-bound to read). **Compiler fix (G9a)**:
+  `null` takes no part in inferring a type variable - `GemmAct(c, a, false, b, false, null, act)` was "cannot be
+  inferred"; a variable only null reaches still cannot be. **Recorded, not fixed**: the non-causal batched backward at
+  T 256 is slower than a Gemm per head (a head's P stays in L2 across its three products only when they run back to
+  back).
 - **What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11,
   2026-10-09; study 3, details mine under the coordinator's calls).** **O26a reaches reference locals** (#4, the
   coordinator's call): a reference local declared by `:=` or with a bare `&`, initialized by a temporary (a built result,

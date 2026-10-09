@@ -1,0 +1,9 @@
+# check: fail error[S13f]: 'v' is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'
+# S13f: "case v" with v the matched local compares v with v - true for every value but a NaN, where it silently fails
+fn sat(v F64) F64 {
+    return match v {
+        case v if v >= 32767.0 => 32767.0
+        nomatch => v
+    }
+}
+fn main() ? { println($sat(40000.0)) }

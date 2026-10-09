@@ -158,6 +158,21 @@ rule and where it is recorded; the morning report lists them all, then they move
 20. (wt-portgaps) std/ffi is its own module (libffi linked only where declared); RunOnStack in a test passes a failed
    check/done/fail on to the caller's test after the join; `Format(base)` lowercase, base outside 2-36 aborts;
    O8a revised: a struct/enum allocation takes its own alignment (trees of 40-byte nodes 0.53 -> 0.36 s, 167 -> 105 MB).
+21. (mine, from study3 #1) `List`/`Map` become handles: a copy is a second name for the same collection (Go's maps),
+   `Clone()` for a real copy - copying a value used to share storage but not counts (silent wrong answers). wt-s3std.
+22. (mine, revisit rule, study3 #3) `==` on an array reference compares lengths and elements (each by its own `==`);
+   identity is `is`. Struct/enum references keep identity unless `Eq`. wt-s3std.
+23. (mine, study3 #4) O26a extended to reference locals - `e := p.sum(); return e` and the Pratt `lhs = E.Add(lhs, rhs)`
+   loop live in the result scope (the port's parser idiom). O17 judged by the callee's body. G4 covers constants. wt-s3scope.
+24. (mine, study3 #29/#30) `case _ if cond` on any match; keywords allowed as method names (`w.spawn()`). wt-s3std.
+   Not built (deferred): raw/multi-line text literals (#35) - candidate Go-style backtick raw strings, to raise with the
+   user; comprehensions of text (#34, user-deferred relaxation); lambdas capturing a List (#28); deep permission (#33,
+   the user chose shallow).
+25. (wt-s3std, details of 21/22/24) a null array reference equals only null; a struct value's array-reference field
+   compares by contents (E10 field by field); an array reference hashes by its elements; an unguarded `case _` covers
+   every value and anything after it is dead code; `case v` naming the subject or an unknown name says `case _ if`;
+   keywords (not true/false/null) as method names (L9a); a List's zero value runs its constructor per declaration, so
+   `Array<List<T>>(n)` with no fill is D13c's "no zero value".
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

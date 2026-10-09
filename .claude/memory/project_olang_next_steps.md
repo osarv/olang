@@ -400,6 +400,25 @@ because what it finds about structure feeds the refactor.
   __olang_dyncall, os.RemoveAll/MkTemp/Exec(capture=false), aggregate allocations at their own alignment, n.Format(base)).
   The port's P0 is done except the bootstrap/ move + modest refactor: start it when chk4 has merged (it rewrites
   semantic.c); linalg2 (std only) may run beside it.
+- 20:35 CEST: usage study 3 done (/home/user/review/study3/README.md, 36 findings, repro/r01-r36): no crash beyond
+  r02's invalid IR, but r01 List/Map copies corrupt silently. Started wt-s3scope (#4 O26a for reference locals - the
+  port's parser idiom, #5-8 O17 by body, #9, #11-15, #36, #10 investigate, #31 optional, diagnostics) and wt-s3std (#1
+  List/Map handles + Clone, #2 IR, #3 == on arrays elementwise, #19 FILE:LINE on guaranteed checks, #29 `case _ if`,
+  #30 keyword method names, #24). Running: linalg2, oann-mixed, chk4, settle4, s3scope, s3std.
+- 21:20 CEST: linalg2 merged and pushed (18f6a5c): Batch/GemmBatch with Triangular (attention T64 fwd 2.0 -> 0.8 ms,
+  T256 x4 threads 93 -> 9.6 ms), GemmAct, Patches/GemmPatches (conv 5.8 -> 3.4 ms), plain Gemm F32 512 90-94 GFLOPS,
+  G9a: null takes no part in inference. oann: oann-mixed merged and pushed (e9d4ef1: attention per-head Gemm,
+  Graph<BF16> mixed precision at F32 accuracy but 3-4x slower until bf16narrow is fixed, Dataset/Loader); settle4 merged
+  locally (consolidator + sleep 95.8% retention, spiking on the board 91.6% MNIST, checkpoints keep RNG state, T=0.05).
+  Started wt-cgfix3 (oann repro spawncall CORRECTNESS, bf16narrow, capturedvalue, linalg direct path). A verify was
+  OOM-killed (shared.olang) beside 5 agents + oann tests: /home/user/vlock is TWO slots now.
+  NEXT for oann: one agent moves oannc2 to master, runs tools/perm_mut.py on oann, deletes fixed repros, adopts
+  GemmBatch in attention and GemmPatches in conv, re-measures.
+- 21:45 CEST: s3std merged and pushed (List/Map handles + Clone, == on array references by contents, FILE:LINE on
+  guaranteed checks, case _, keyword method names L9a, r02 IR fix). oann settle4 pushed (87cad06). Started wt-oann-up
+  (oann onto master 472373d: perm migration, repro hygiene, GemmBatch attention, GemmPatches conv) - it predates the
+  List/Map handle change; move oann's compiler again after. Found, not fixed: `type Nest Array<Nest&>` accepted but
+  unbuildable ("expected Nest&, found Nest&") - for the next checker batch.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

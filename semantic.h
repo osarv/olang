@@ -653,6 +653,8 @@ struct operand {
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
+    bool identity; //E10c: an OPERATION_EQ standing for "a is b" - the same instance, where "==" on two array references
+                   //compares what they name (E10)
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool sliceExact; //E32b: an OPERATION_SLICE standing for "x as Array<T, N>&" - the whole of x, whose length must be N
                      //(args[2]); its type is the fixed-length reference

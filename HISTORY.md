@@ -11613,6 +11613,206 @@ ParseInt's does, 0 included - ParseInt's base 0 reads any of a literal's three f
 choice nobody asked for. I64's most negative is written whole (its magnitude computed in U64). Pure olang, so it bakes:
 `formatBaked`, every base over four values, is a constant in the IR and equals the run time's.
 
+### Study 3's batch: List and Map are handles; `==` compares arrays however held; `case _`; keywords as method names; located checks (T8, T11, E10, E10b, E10c, T2a, T7d, S12b, S13f, L9a, S18a, 2026-10-09)
+
+A usage study (13 programs, `/home/user/review/study3`) found two silent wrong answers and a handful of rough edges.
+This batch fixes its findings 1, 2, 3, 19, 24, 29 and 30; the scope findings went to other batches.
+
+**List and Map are handles (finding 1, the coordinator's decision).** A `List` was a struct value whose storage hung off
+reference fields (`chunks`, `tail`) while its counts (`count`, `used`, `nChunks` ...) were plain fields. `b := a` copied
+the counts and shared the chunks, so a `Push` to one overwrote the other's elements; a `Map` copied with `n := m` and
+then `n.Remove("a")` left `m.Len()` at 7 while walking it gave 6 keys; and `Array<Map<..>>(n, Map<..>())`, the only
+spelling D13c allowed, gave n maps sharing one bucket array and n counts. `-b` and `-i` agreed on the wrong answers.
+This is the "Vec rule" problem (C11's record: storage reachable through a name the copy duplicates) arriving through
+the counts rather than through the buffer.
+Now each holds a single field, a `mut` reference to a private record (`listState<T>`, `mapState<K, V>`) holding all of
+its state, built where the List or Map is constructed (C2d: a bare field lives with the instance). A copy of the value is
+a second name for the same collection, as a Go map is - consistently, through an assignment, a field, an element, a
+by-value argument or a fill - and `Clone()` makes the real copy, built where its result lands (O26a: the local it
+fills is returned). Map's Clone keeps the bucket count and copies each chain in order, so the clone walks in the
+original's order. The fill note went under T8: `Array<Map<K, V>>(n, Map<K, V>())` is n names for one map, as a fill
+copies one value. The alternative the study offered - reinstating the Vec rule as "a struct owning run-time storage
+is reference-only" - would have put `&` on every List field in the corpus. **What else changed with it**: a List's zero
+value now holds a reference, so it is one constructor call per declaration (D13c) rather than zero bits, and
+`Array<List<T>>(n)` with no fill is D13c's error (it was the silent-sharing case before); nothing in the corpus wrote
+either. StringBuilder holds a List, so it is a handle too. The scope checker needed nothing: a List already held
+references, so every rule about values holding references (O25h, O26a, O17) already applied - including O17 refusing
+`b.Push(x)` through a copy whose references live elsewhere, which is now a meaningful (and sound) refusal rather than
+the guard against a corrupting one.
+**Measured** (callgrind instruction counts, the machine being too loaded for stable times; `-a x86-64-v3` since
+valgrind cannot run AVX-512): List push 2M 29,184,229 -> 29,184,262; `for x in l` 8,722,310 -> 8,721,128;
+`l.Iter().Fold` 8,694,590 -> 8,694,513; `l[i]` 177.8M -> 176.6M; `l[i] =` 139.2M -> 139.5M; Map Put+Get 10.59M -> 11.15M
+(+5%, the one extra dependent load per call); `Map.Update` counting 58,302,662 -> 58,302,666; k-nucleotide 224.6M ->
+226.5M. Interleaved medians of 11 on the machine at load 12 on 4 cores, old -> new: push 20M 0.411s -> 0.432s, `for x in l`
+0.140s -> 0.152s, Fold 0.131s -> 0.162s (another run: 0.173s -> 0.176s), `l[i]` 0.897s -> 0.871s, `l[i] =` 1.302s ->
+1.339s, Map Put+Get 0.094s -> 0.092s, Update 0.127s -> 0.142s, k-nucleotide 1.070s -> 1.107s - within what the load moves
+from run to run, the instruction counts being the measurement to trust; the optimized IR has the same vector loops. **The header pointer is hoisted**: in the optimized IR of an
+indexing loop and of a walk the record's address is loaded once before the loop, and the inner loops are the same
+instructions as before. In a push loop the record's fields (`used`, `count`, the tail) are memory operations each
+iteration rather than registers, since the record lives in the arena and the cold path's call to the allocator may
+write anything - the same instruction count, and LICM cannot promote them past that call; caching them in the value
+would bring back finding 1.
+
+**`==` on array references compares contents (finding 3, the coordinator's decision under the revisit rule).** E10
+had `==` compare an `Array<T>` value element-wise, a `String&` by text (String's Eq) and an `Array<T>&` by identity -
+so `l.ToArray() == m.ToArray()`, the model check of an LRU cache, was false for equal contents while `$` printed them
+equal. Identity has had its own word since E10c (`a is b`), so `==` meaning identity on one kind of array only kept the
+trap. Now `==` through a reference to an array - `Array<T>&`, `Array<T, N>&`, a declared array type with no Eq of its
+own - compares lengths and then elements, each by its own `==`; struct and enum references keep identity unless they
+declare Eq, which avoids walking cyclic structures (an array cannot contain itself). **Decided (mine)**: a null equals
+only a null, as through a reference to a type declaring Eq - a null array reference has no storage, an empty array that
+was built has storage and is not null, so `p == null` stays the null test it was (T2a); a struct value holding an array
+reference compares it by contents too, since E10 applies its rule part by part; and an array reference now hashes its
+elements (E10b), since `==` compares them - so `Map<Array<I64>&, V>` works. Implementation: `is` marks its comparison
+(`identity`), and codegen (`cgIdentityEq`, a null test then `cgDeepEq` of the values) and the evaluator
+(`ctArrayRef`/`ctArrayRefNull`) follow; elements whose type consults an Eq go through the prelude's `Equal` with the
+null rule built around it. Migrated: one corpus helper that meant identity (`evTwoArr` -> `is`) and two T11 tests whose
+assertion was that two equal arrays compare unequal. Comparing an array value with an array reference stays a type
+error (E10's one type); that would be a further extension.
+
+**`Array<T, N>&` returned as the value `Array<T, N>` (finding 2)** stored the pointer as the aggregate - invalid IR in
+`return a`, `v := a; return v` and a `try (row as Array<F64, 3>&) catch default ...` returned. cgBoundaryValue's
+reference-to-value copy-out took structs and enums only (a by-value array parameter being D9a's error), and a result can
+be a fixed array value; fixed arrays on both sides now load the aggregate. A run-time-length array stays out on either
+side (E12's widening keeps the pointer). `-i` was right all along.
+
+**Every guaranteed check says where (finding 19, S18a).** A slice out of range, an array length out of range, an `as`
+that does not hold and a copy into fixed storage of another length aborted with the message alone; assert, abort and
+unreachable already gave `FILE:LINE:`. Each now names its operand's line (`cgCheckMsg`, falling back to the statement
+being emitted where there is no operand, as for the fixed-storage copy and a comprehension's reservation), built and
+under `-i` (`ctRunAbortTok`). The four `@__olang_msg_*` constants it replaced are gone. A checks fixture triggers each
+one built and interpreted.
+
+**`case _` (finding 29, S13f).** On a match over a number there was no guard-only clause: `case big if big > 100` and
+`case _ if n < 0` were unknown names, and the study's first attempt, `case v if v >= 32767.0` with `v` the matched
+variable, compiled by comparing `v == v` - silently false for a NaN. **Decided (the coordinator's)**: `_` at the top of
+a clause matches any value; with a guard a guarded catch-all, without one a plain catch-all like `nomatch`; no binding
+names at the top of a value match (a name there stays a value compared by `==`, the subject is in hand). **Decided
+(mine)**: `_` is its clause's only alternative (`case 1, _` says nothing more than `case _`); an unguarded `case _`
+covers every value (S13a, S12b - so a match value over a number needs no `nomatch`, and a statement whose clauses all
+leave leaves, D10a), and a clause or `nomatch` after it is a compile-time error, being dead (S8a's spirit, R11's for
+catch clauses); a lone unknown name in a case is an error saying to write `case _ if ...` (or did-you-mean, where a
+near name exists), and the name is then declared so a guard reading it is not a second error; `case v` where `v` is the
+matched local itself is an error naming the same fix. Lowered to an always-true test, so codegen and the evaluator
+needed nothing. A `match` over a constant variable (G26) takes `case _` too, as the arm chosen when no other case's value
+is the instantiation's constant.
+
+**Keywords as method names (finding 30, L9a).** `w.spawn()`, `p.fail(tok)`: a method is reached only through its
+receiver (M19), so nothing can be misread. Any keyword is a method's name after a receiver clause and after `.` where
+`(` follows (`acceptMethodName`); `true`, `false` and `null` are literals and stay out; a field keeps L9 (a
+constructor's fields are its locals), and so does a function with no receiver. `x.done` with no call still parses as
+it did.
+
+**A match value giving several results (finding 24)** said "expected '}', found ','". A comma after `=>` at bracket
+depth 0 on the same line is now `error[S12b, D8c]: a match gives one value - to give several, return them from each case
+of a match statement`.
+
+**Found on the way, not fixed**: `type Nest Array<Nest&>` is accepted but cannot be built - `Nest(Array<Nest&>(1))` is
+"representations differ" and `n[0] = n` says "expected Nest&, found Nest&".
+
+### std/linalg for oann: batched causal products, a product with its epilogue, convolutions from the images (G9a, 2026-10-09)
+
+oann's DESIGN.md section 13 asked std/linalg for three things, in this order: a batched, strided, causal-aware `Gemm`
+covering every sequence and head of attention in one call; a `Gemm` with an epilogue, `act(alpha op(a) op(b) + bias)`;
+and for convolutions, a `Gemm` packing its A panels straight from the images, plus a thin-product path that does not
+run at half rate. All three are built; what they cost and gained is in bench/README.md ("Batched causal products, the
+epilogue and implicit convolutions"), measured with `bench/fused.sh` and, against master's library, with a scratch copy
+of master edf8238's std/linalg compiled as a module of its own in the same program. The machine was shared throughout
+(load 2-7), so every comparison was interleaved and given as medians, and several conclusions below were reached by
+counting instructions instead (callgrind, on an AVX2 build: valgrind has no AVX-512).
+
+**One core for every product.** `Gemm`'s internals were rewritten around sources that packing reads - `operand<T>` (a
+matrix's storage and row stride, read-only, so a `Gemv` vector can be one) and `Patches<T>` - and a packing routine per
+source taking the panel's role (left or right) as a phantom type, so the panel width is a constant (12 or 32) and a
+whole panel's step is an unrolled copy. Packing one role or the other is the same operation read the other way, so one
+routine serves both. On top of it: `Gemm`/`ws.Gemm`, `Gemv`, `GemmAct`, `GemmBatch`, `GemmPatches`. Plain `Gemm` came
+out level or faster (F32 at 512: 72-83 -> 90-94 GFLOPS), mostly from the store no longer copying the tile twice.
+
+**Batches.** `Batch<T>` is Groups x Members matrices of one shape at two strides - attention's sequences and heads, oann's
+q, k and v holding heads as column blocks and its weights P stacked as rows - with `m.Heads(T, heads)`,
+`m.Stacked(T, heads)` and `b[g, m]` (E31's two-index `At`). The fields were first `Outer`/`Inner`, which D2 rejected:
+`Outer` names the module's outer-product function. `GemmBatch` gives each task a run of whole products, each computed by
+the blocked algorithm on one thread with the task's own panels. Measured against a `Gemm` per sequence and head: at
+T 64, 2.2-2.9x - a 64 x 64 x 32 product is small enough that a call's own work was most of it - and with 4 threads far
+more, a per-head `Gemm` splitting each small product four ways and joining every block (at T 256, 4 threads were 10-20x
+slower than one).
+
+**The triangle** is an enum, `Triangular { None Result Left }`, with a `diagonal` offset (so a decoding step's queries,
+positions first .. first + n, against keys 0 .. first + n are `diagonal = first`) - two kinds because attention has
+both: its scores S = Q K^T and their gradient dP = dO V^T are wanted below the diagonal only (Result: tiles wholly above
+it skipped, a straddling tile stored row by row up to it, the rest of C untouched and not scaled by beta - MKL's gemmt),
+and its weights P are the triangular left operand of Y = P V, dQ = dS K, and with transA of dV = P^T dO and dK = dS^T Q
+(Left: each tile reads only the depth its rows reach, and above the diagonal is never read - BLAS's trmm, which is why
+P's upper part may hold anything, the scores left there by a softmax in place say). A first tile of a block skipped
+entirely still runs with depth 0 when it is the first block of the depth, so beta is applied exactly once.
+
+The first measurement showed the triangle saving 7% at T 256 where half was expected, and three hypotheses went by
+before the cause: **packing the weights cost about what the product did.** Y = P V has a result 32 wide - one tile -
+so each element of P is used once, and packing it (a load, a store and a load again) is pure overhead. A product one or
+two tiles wide now reads its left operand where it is, by rows (`tileInPlace`): the micro-kernels take the operand's
+layout as a phantom type (packed, or rows at a stride), and a triangular one reads in place up to where the tile's
+rows start ending at different places, packing only that tail (at most 11 steps) with its zeros, the kernel running
+the two segments into the same accumulators. Reading by columns in place (P^T) was tried too and was 1.5x slower than
+packing - the steps stride across rows a kilobyte apart and the caches do not prefetch it - so a transposed left
+operand is packed, panel by panel: steps wholly above the diagonal written as zeros without reading, steps wholly below
+copied whole, only those between cut (13 -> 5 instructions an element). One timing sent the investigation the wrong way
+for a while: a benchmark had never filled K, so every read of it hit the kernel's one zero page and was always in cache,
+which made packing look three times cheaper than it is. Exchanging the transposed products (dK^T = Q^T P, P then packed
+by rows as the right operand, the triangle moving with it) was built and measured no faster - P, 16 MB at T 256, is
+memory-bound to read either way - and was taken out again rather than kept as complexity. At T 256 the non-causal
+batched backward is slower than a Gemm per head, and that is locality, recorded rather than fixed: running a head's
+three products on P back to back keeps its 256 KB in L2, where one call per product streams all of P three times.
+
+**The epilogue** went through three forms. Applied as each tile was stored, in the accumulation type, rounding once,
+it was slower than the separate passes (2.7 against 2.3 ms for a 1024 x 128 -> 512 layer with GELU, 4.2 with `pre`):
+reading the epilogue's fields through its struct inside the loops made LLVM reload them at every store (hoisted into
+locals), its loops ran over a runtime width, and the tile's GELU ran 384 elements at a time with the result and `pre`
+held tile by tile. Applied to each block of C's rows once summed - a pass over them while they are in L2, a row at a
+time, compiled once per activation (a phantom type, so the activation's function is inlined) with the bias first
+copied into a local so that C is the only array a loop touches (with C's rows 16 wide, LLVM's overlap tests at every
+row cost more than the work) - it is level with the separate passes and `pre` costs nothing extra. It is level and not
+faster because at oann's sizes the separate passes run on data in L2 or L3 and GELU's own arithmetic (~4 cycles an
+element) is what they cost; for a result larger than the caches the one pass over C measured 21-22 ms against 21-23. The
+result is exactly Gemm, AddRow and Activate's, rounding as they do - which for F16 and BF16 means the product is rounded
+before the bias is added, the price of not doing it per tile.
+
+`Activation` is Identity, Relu, Gelu in its tanh form (GPT-2's, PyTorch's approximate="tanh", through FastTanh: within
+6.2e-7 in F32 and 2.2e-16 in F64 of the formula computed with the C library's tanh, measured at 20,001 points over
+[-10, 10]; the formula itself is within 4.7e-4 of the exact x Phi(x)), Tanh and Sigmoid; Relu lets a NaN through, and
+its slope at 0 is 0, as PyTorch has it. `ActivationSlope` gives each derivative (checked against central differences
+to 1.2e-10), and `dz.ActivationBackward(dy, z, act, beta)` the backward pass.
+
+**Convolutions.** `Patches<T>` is the patch matrix of images held as rows, channels last (oann's layout), its columns
+in PyTorch's [C][K][K] order; `GemmPatches` packs the left operand's panels from it. The first version walked each
+position's window with a general routine (position decoded by two divisions, a kernel row's three pixels as a loop) and
+was twice as slow as oann's im2col; the gathering version packs a panel's 12 positions together, one patch input at a
+time - the input's offset within a window shared, each window's first pixel computed once per panel, the next position
+found by a step - with no test per element where all 12 windows lie inside the image, and a bounds test only where one
+does not. The first convolution of oann's CNN went 5.8-6.8 -> 3.4-3.6 ms and the second 12.7-13.2 -> 7.8-8.1, against
+master's im2col, Gemm, AddRow and ReLU. `Im2col` makes the matrix (for col2im's backward and for tests), 1.5x oann's on
+one channel. The patch matrix as the right operand, for the weights' gradient straight from the images, was built
+(`GemmByPatches`) and measured slower than `Im2col` plus `Gemm` (26 against 15-20 ms on the second layer); since the
+backward needs the patches workspace for col2im anyway, it was dropped.
+
+**Thin products.** The first layer's forward, 100352 x 16 x 9, filled half of the 12 x 32 tile; a tile one vector wide
+(12 x 16) is chosen where it covers the result 15% better, and the transposed product (exchanged: C^T computed, stored
+transposed) where that covers it 25% better - the 16 x 9 weight gradient, 9 of whose columns used 9 of 32, becomes 9 rows
+of 12 by 16 columns of 16. Neither changes any element's sum. Forward 2.2-2.6 -> 1.5-1.9 ms, weight gradient 5.2-6.2 ->
+2.9-3.1. On the way the micro-kernels were made to return their tile by value, to let a tile be stored several ways;
+that put 1.5 KB through memory per tile, which at a depth of 9 cost more than the tile, so they store it themselves again -
+after copying the accumulators out in row order, without which the transposed store's column-order reads broke the
+vectorizer's grouping and every accumulator became a scalar on the stack (F32 at 4 GFLOPS, caught by the comparison
+with master).
+
+**Compiler fix (G9a).** `GemmAct(c, a, false, b, false, null, act)` was "the type arguments of GemmAct cannot be
+inferred": inference unified every argument with its parameter, and `null`'s own type unifies with nothing. A `null`
+argument now takes no part in it and is checked against the parameter once the other arguments have bound it, as a
+numeric literal or written text already is; a variable only `null` reaches still cannot be inferred
+(checks/cases/g9anull.olang), and shared.olang has the test.
+
+**The evaluator** needed nothing new: `assert causalSmall(1.0) == 2020.0` - a small causal `GemmBatch`, Result then Left,
+through the packed micro-kernels and FMA - is decided while compiling (a wrong value is S18c's compile error), and the
+same call on a mutable global runs at run time and gives the same value.
 ### What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11, 2026-10-09)
 
 Study 3 wrote realistic programs against the newest rules (permissions, constant generics, bare type variables) and

@@ -2526,6 +2526,16 @@ test "G9a: a literal adapts to a type variable another argument bound" {
     assert PickSecond(1, 2.5) == 2.5        # only literals: the widest of their types
 }
 
+# G9a: null binds nothing at all - it is checked against its parameter's type once another argument has bound the
+# variable - so a generic function with an optional reference parameter can be given null there
+fn CellOr(c Cell<<T>>&, fallback Cell<T>&) T { return fallback.v if c == null else c.v }
+
+test "G9a: null takes no part in inferring a type variable" {
+    d Cell<I64>& = Cell<I64>(8000000000)
+    assert CellOr(d, null) == 8000000000
+    assert CellOr(null, d) == 8000000000
+}
+
 test "G8a: a generic method serves every application" {
     c Cell<I32>& = Cell<I32>(6)
     d Cell<I64>& = Cell<I64>(8000000000)
@@ -3259,13 +3269,15 @@ test "reference into value copies out rather than aliasing the reference" {
     assert r[0] == 0
 }
 
-test "a marked runtime-length array is a reference: assignment repoints, == is identity" {
+# E10/E10c: "==" through an array reference compares the elements it names, as through an array value; whether two
+# references name one array is "is"
+test "a marked runtime-length array is a reference: assignment repoints, 'is' is identity" {
     n I32 = 3
     a mut Array<I32>& = Array<I32>(n)
     b mut Array<I32>& = Array<I32>(n)
-    assert a != b
+    assert a is not b and a == b              # two arrays, holding the same elements
     b = a
-    assert b == a
+    assert b is a
     b[0] = 9
     assert a[0] == 9
 }
@@ -3275,9 +3287,11 @@ test "a marked compile-time-length array is a reference too - same rule, other l
     qv := I32[1, 2, 3]
     p Array<I32>& = pv
     q Array<I32>& = qv
-    assert p != q
+    assert p is not q and p == q
     r Array<I32>& = p
-    assert r == p
+    assert r is p
+    qv[0] = 7
+    assert p != q
 }
 
 # T27: reference-shapedness IS part of a type's identity - "Cell" and "Cell&" are different types, one an
@@ -11039,7 +11053,7 @@ test "T7d: a copy into fixed storage of its length, while compiling and at run t
 # T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
 # new instance each time one site was reached)
 fn evTwo(a String&, b String&) Bool { return a is b }
-fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }
+fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a is b }   # E10c: "==" on arrays compares their elements
 fn evSites(n I64) String {
     l := List<String&>()
     for i in range n { l.Push("hello") }
@@ -13065,6 +13079,159 @@ test "D16d: a lambda capturing a function value, made for one call in a loop" {
     assert c3Through(xs, fn(x) { return x * x }, 2.0) == 28.0
 }
 
+# E10: "==" through two array references compares the arrays they name - lengths, then elements by "==" - so two lists'
+# ToArray() compare by what they hold; a null equals only a null, an empty array that was built is no null; "is" is
+# identity (E10c). A struct value holding an array reference compares it the same way, and an array reference is a Map
+# key, hashed by its elements (E10b)
+type s3Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p s3Pt&) Eq(q s3Pt&) Bool { return p.x == q.x }       # y is not compared
+fn (p s3Pt&) Hash() I64 { return p.x }
+type s3Holder struct(a Array<I64>&) {
+    a
+}
+fn s3ArrayRefEq() I64 {
+    a Array<I64>& = I64[1, 2, 3]
+    b Array<I64>& = I64[1, 2, 3]
+    s I64 = 0
+    if a == b { s += 1 }
+    if a is not b { s += 2 }
+    if a[:2] == b[:2] and a[1:3] != b[:2] { s += 4 }
+    n Array<I64>& = null
+    e Array<I64>& = Array<I64>(0)
+    e2 Array<I64>& = Array<I64>(0)
+    if n != a and n == null and e != n and e != null and e == e2 and e is not e2 { s += 8 }
+    if s3Holder(a) == s3Holder(b) { s += 16 }
+    f Array<I64, 3>& = I64[1, 2, 3]
+    if f == a[0:3] { s += 32 }
+    ps Array<s3Pt&>& = s3Pt&[s3Pt(1, 5), s3Pt(2, 6)]
+    qs Array<s3Pt&>& = s3Pt&[s3Pt(1, 7), s3Pt(2, 8)]
+    if ps == qs and ps is not qs { s += 64 }               # each element by its own Eq
+    l := List<I64>()
+    for i in range 20 { l.Push(i) }
+    if l.ToArray() == l.ToArray() { s += 128 }
+    m := Map<Array<I64>&, I64>()
+    m.Put(I64[4, 5], 9)
+    k Array<I64>& = I64[4, 5]
+    if (try m.Get(k) catch default -1) == 9 and I64[4, 5] in List<Array<I64>&>() == false { s += 256 }
+    return s
+}
+S3ArrayRefEqBaked := s3ArrayRefEq()
+
+test "E10: == through array references compares the elements they name, while compiling and at run time" {
+    assert S3ArrayRefEqBaked == 511
+    assert s3ArrayRefEq() == S3ArrayRefEqBaked
+    assert s3ArrayRefEq() == 511                  # decided while compiling (S18c)
+}
+
+# T7d: a reference to a fixed array returned where the result is the value - copied out, as a declaration copies it
+fn s3CopyOut(a Array<F64, 3>&) Array<F64, 3> { return a }
+fn s3CopyOutLocal(a Array<F64, 3>&) Array<F64, 3> {
+    v := a
+    return v
+}
+fn s3RowOf(row Array<F64>&) Array<F64, 3> ? {
+    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+    return v
+}
+fn s3BigOut(a Array<I64, 40>&) Array<I64, 40> { return a }     # big enough to be returned through memory
+fn s3FixedOut() F64 {
+    y Array<F64, 3> = F64[1.0, 2.0, 3.0]
+    a := s3CopyOut(y)
+    y[0] = 9.0                                    # the result is a copy, not the caller's storage
+    b := s3CopyOutLocal(y)
+    c := try s3RowOf(F64[4.0, 5.0, 6.0]) catch { unreachable }
+    d := try s3RowOf(F64[1.0]) catch { unreachable }
+    big Array<I64, 40> = Array<I64, 40>()
+    big[39] = 7
+    g := s3BigOut(big)
+    return a[0] + b[0] * 10.0 + c[2] * 100.0 + d[0] + F64(g[39]) * 1000.0
+}
+S3FixedOutBaked := s3FixedOut()
+
+test "T7d: a fixed array's reference returned as its value, while compiling and at run time" {
+    assert S3FixedOutBaked == 1.0 + 90.0 + 600.0 + 7000.0
+    assert s3FixedOut() == S3FixedOutBaked
+}
+
+# S13f: "case _" takes every value - with a guard, the multiway test a range or a NaN asks for; with none, the rest
+fn s3Classify(x F64) String {
+    return match x {
+        case 0.0 => "zero"
+        case _ if x >= 32767.0 => "big"
+        case _ if x != x => "nan"
+        case _ => "other"
+    }
+}
+fn s3Saturate(v I64) I64 {
+    r I64 = v
+    match v {
+        case _ if v > 10 { r = 10 }
+        case _ if v < -10 { r = -10 }
+    }
+    return r
+}
+type s3Shape enum {
+    Dot
+    Circle(r F64)
+    Square(s F64)
+}
+fn s3Kind(s s3Shape) I32 {
+    match s {
+        case s3Shape.Dot { return 0 }
+        case _ if s is s3Shape.Circle { return 1 }
+        case _ { return 2 }                       # covers the rest, so the match leaves (D10a)
+    }
+}
+S3MatchBaked := $s3Classify(40000.0) " " $s3Classify(0.0 / 0.0) " " $s3Saturate(99) $s3Saturate(-99) $s3Saturate(3) " " $s3Kind(s3Shape.Square(1.0))
+
+type s3Grid<N I64> struct() {
+    cells Array<I64, N>
+}
+fn (g s3Grid<<N>>&) kind() String {
+    return match N {
+        case 1 => "one"
+        case _ => "many"                          # G26: chosen per instantiation
+    }
+}
+
+test "S13f: 'case _' with a guard and without one, while compiling and at run time" {
+    assert s3Grid<1>().kind() == "one" and s3Grid<4>().kind() == "many"
+    assert S3MatchBaked == "big nan 10-103 2"
+    zero F64 = 0.0
+    assert s3Classify(zero) == "zero" and s3Classify(zero / zero) == "nan" and s3Classify(5.0) == "other"
+    assert s3Kind(s3Shape.Dot) == 0 and s3Kind(s3Shape.Circle(1.0)) == 1 and s3Kind(s3Shape.Square(2.0)) == 2
+}
+
+# L9a: a method's name may be a keyword - it is only ever reached through its receiver, after "." or in its declaration
+type s3World struct() {
+    next I32 = 0
+    errors I32 = 0
+}
+fn (w mut s3World&) spawn() I32 {
+    w.next++
+    return w.next
+}
+fn (w s3World&) done() Bool { return w.next >= 2 }
+fn (w mut s3World&) fail(why String&) ? {
+    w.errors++
+    error
+}
+fn (w s3World&) in(lo I32, hi I32) Bool { return lo <= w.next <= hi }
+fn s3Keywords() I32 {
+    w := s3World()
+    for not w.done() { w.spawn() }
+    try w.fail("stop") catch { }
+    worlds := Array<s3World&>(1, w)
+    return w.next * 100 + w.errors * 10 + (1 if worlds[0].in(1, 2) else 0)
+}
+S3KeywordsBaked := s3Keywords()
+
+test "L9a: keywords as method names" {
+    assert S3KeywordsBaked == 211
+    assert s3Keywords() == S3KeywordsBaked
 # ---- study 3's scope batch (2026-10-09): parsers' locals, lends the callee only reads, x[i]++ (O26a, O17, E31) ----
 
 # O26a: a reference local the function returns, built by its declaration or by a later assignment, lives in the result

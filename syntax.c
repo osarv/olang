@@ -264,6 +264,28 @@ static struct token acceptFnKeyword(SyntaxCtx sc) {
     return acceptTok(sc, TOK_FUNC);
 }
 
+//M19/L9a: a method is reached only through its receiver - after "." or in its declaration, after the receiver clause -
+//where no statement keyword can stand, so there any word is a method's name, a keyword included: "w.spawn()",
+//"fn (p mut Parser&) fail(t Token)". A field is no method: its name is a constructor's local, and stays a name. A
+//keyword after "." is taken only when "(" follows it (wantCall), so "x.done" is still read as it always was
+static bool isKeywordTok(struct token t);
+static struct token acceptMethodName(SyntaxCtx sc, bool wantCall) {
+    int cur = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    if (t.type == TOK_IDEN) return t;
+    if (isKeywordTok(t) && t.type != TOK_BOOL_LIT && t.type != TOK_NULL_LIT) { //true, false and null are literals
+        int after = TokenGetCursor(sc->tc);
+        bool call = TokenFeed(sc->tc).type == TOK_PAREN_O;
+        TokenSetCursor(sc->tc, after);
+        if (call || !wantCall) {
+            t.type = TOK_IDEN;
+            return t;
+        }
+    }
+    TokenSetCursor(sc->tc, cur);
+    return (struct token){0};
+}
+
 struct syntax* parseName(SyntaxCtx sc) {
     struct token first = acceptTok(sc, TOK_IDEN);
     if (first.type == TOK_NONE) return NULL;
@@ -273,7 +295,7 @@ struct syntax* parseName(SyntaxCtx sc) {
         int cur = TokenGetCursor(sc->tc);
         struct token dot = TokenFeed(sc->tc);
         if (dot.type != TOK_DOT) { TokenSetCursor(sc->tc, cur); break; }
-        struct token next = TokenFeed(sc->tc);
+        struct token next = acceptMethodName(sc, true);
         if (next.type != TOK_IDEN) { TokenSetCursor(sc->tc, cur); break; }
         addTok(s, dot);
         addTok(s, next);
@@ -1023,7 +1045,7 @@ static struct syntax* parseFuncHead(SyntaxCtx sc) {
         addSntx(receiver, rp);
         addTok(receiver, rClose);
     }
-    struct token name = acceptTok(sc, TOK_IDEN);
+    struct token name = receiver ? acceptMethodName(sc, false) : acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) return parseFail(sc, cur);
     //O3: "func f&b(...)" - scope declarations ride on the signature node, where resolveFuncSig finds them
     //alongside everything else it needs
@@ -2966,7 +2988,7 @@ struct syntax* parseExprMembr(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token dot = acceptTok(sc, TOK_DOT);
     if (dot.type == TOK_NONE) return NULL;
-    struct token iden = acceptTok(sc, TOK_IDEN);
+    struct token iden = acceptMethodName(sc, true);
     if (iden.type == TOK_NONE) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_EXPR_MEMBR);
     addTok(s, dot);
@@ -4526,8 +4548,27 @@ static bool joinPieceHint(struct token from, struct token to) {
     return true;
 }
 
+//S12b/D8c: "case P => a, b" - a comma after a case's value on its own line, outside every bracket: a match giving
+//several values, which it cannot (it gives one value)
+static bool caseValueComma(struct token found) {
+    if (found.type != TOK_COMMA) return false;
+    int depth = 0;
+    for (struct token t = TokenBefore(found); t.type != TOK_NONE && t.lineNr == found.lineNr; t = TokenBefore(t)) {
+        if (t.type == TOK_PAREN_C || t.type == TOK_SQUARE_C || t.type == TOK_CURLY_C) depth++;
+        else if (t.type == TOK_PAREN_O || t.type == TOK_SQUARE_O || t.type == TOK_CURLY_O) {
+            if (depth == 0) return false;
+            depth--;
+        } else if (t.type == TOK_ARROW && depth == 0) return true;
+    }
+    return false;
+}
+
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
+    if (caseValueComma(found)) {
+        ErrSyntax(found, ERR_MATCH_VALUE_ONE);
+        return true;
+    }
     //"done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
     if (isKeywordTok(prev) && prev.lineNr == found.lineNr && TokenBefore(prev).lineNr < prev.lineNr
         && (found.type == TOK_MUT || found.type == TOK_ASS_INFER || found.type == TOK_ASS || found.type == TOK_COMMA
