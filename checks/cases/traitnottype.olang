@@ -1,4 +1,4 @@
-# check: fail a trait is a constraint, not a type
+# check: fail error[T30]: S& is a trait
 # T30: a trait is written only as a constraint - a parameter of a trait's type is an error, as is a field or a local
 type S trait {
     Area() I32

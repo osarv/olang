@@ -3363,6 +3363,29 @@ Go through this for every change to what olang means - a rule added, revised or 
   workers, the machine's cores; the peak is ~0.4GB above the sequential run's, which is `agree`'s `-i bfrand.olang`
   (3.5GB). Measured on the shared machine: `checks.olang` 233s -> 106-129s, `make verify` 366s -> 186s, total CPU
   unchanged.
+- **Diagnostics are one row each, the rule in brackets; `olang -e RULE` prints the rule (B11/B11a, 2026-10-09, the
+  user: "shorten down the error messages and keep them concise ... preferably on one row ... keep the rule number ...
+  it's better for agents later ... remake the error message system completely").** `path:line:col: error[RULE]:
+  message`, then the source line and a caret (`^~~~` under the token), notes as `path:line:col: note: ...` rows - the
+  form gcc and clang write, which editors and agents already read. A message says what is wrong here, naming the names,
+  types and counts involved (`expected '}', found 'South'`, `2 names need as many values, found 1`, `-D X=1e400: beyond
+  F64's range`) - lowercase, no period, the fix in a few words where it is plain; the explanation is the rule, which `-e`
+  prints from `../spec.md` beside the compiler (found as std is). One table (an X-macro in errmsg.h: id, rule, format),
+  and calls taking typed arguments - `Err(tok, ERR_X, ...)`, `%n` a token as it reads, `%t` a type as source writes it -
+  with `checks/checks.olang` holding every call to its message's argument count and every rule to the spec. Colour only
+  on a terminal (never under `NO_COLOR` or `TERM=dumb`). **Decided (mine)**: no rule is invented - an error no rule
+  states has no brackets (a parse error, `expected X, found Y`), several are `error[T17, T19, C2]`; a command-line
+  mistake is `olang: error[B1]: ...` and ends with no "compilation failed" line; `-e` reads a lowercase first letter as
+  uppercase; the summary says `N errors` (was `error(s)`); a `%t` names a scope only inside a signature and shows
+  `mut` on inner levels (`expected Array<mut P&>&, found Array<P&>&`), the top level's permission being T25c's to say
+  in words; where the compile-time evaluator stops elsewhere than the error, a `note: here` row points at it; two
+  same-named types are told apart by the path written (`found 'lib.Other.Dir'`). Every call site names an entry (about
+  370); the old whole-message strings and their compatibility layer are gone. **Found on the way**: a lexical error
+  reported after the lexer had passed a newline (a string or character literal not closed on its line) named the next
+  line; a token type a diagnostic named was `int literal`, `identifier`, `end of statement` - now `an integer
+  literal`, `a name`, `end of line`, as the error reads; and `$` rendered a function's reference parameters with their
+  hidden scope names - `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a` - now
+  as written, at run time and while compiling.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1,4 +1,4 @@
-# check: fail needs one of the target's scopes to outlive another
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
 # O14a: a function value returned from a parameter must outlive where the result lands
 fn id(f fn() I32) fn() I32 { return f }
 fn main() ? {

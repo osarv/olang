@@ -1,4 +1,4 @@
-# check: fail no clause can come after
+# check: fail error[R11a]: a catch with no error types takes every error left, so no clause can follow it
 error E {
     A
     B

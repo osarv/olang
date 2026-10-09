@@ -1,4 +1,4 @@
-# check: fail inherits its base's methods only when it is declared with 'extends'
+# check: fail error[T29f]: Temp declares no 'Bits', and does not extend its base, which has one
 # E33/T29f: a declared float has Bits() as it has its base's other methods - by extending it
 type Temp F64
 error E { X }

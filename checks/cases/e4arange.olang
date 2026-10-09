@@ -1,4 +1,4 @@
-# check: fail this expression is built only from literals
+# check: fail error[E4a]: this literal expression's value does not fit U8
 # E4a: "200 + 100" is computed while compiling and adapts as the literal 300 would - which a U8 cannot hold
 fn main() ? {
     b U8 = 200 + 100

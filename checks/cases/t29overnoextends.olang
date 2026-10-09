@@ -1,4 +1,4 @@
-# check: fail this type does not extend its base
+# check: fail error[T29f]: B does not extend its base, so it takes no '+'
 # T29/T29f: a type declared over a type that extends I32 does not extend anything itself
 type A extends I32
 type B A

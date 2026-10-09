@@ -1,4 +1,4 @@
-# check: fail a method named for an operator takes that operator's operands
+# check: fail error[E31]: Plus's parameters besides its receiver: expected 1, found 2
 # E31: an operator method's shape
 type V struct(x I32) {
     x

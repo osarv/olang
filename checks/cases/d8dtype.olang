@@ -1,4 +1,4 @@
-# check: fail doesn't match
+# check: fail error[E12]: expected I32, found String&
 # D8d: each result is checked against its parameter as any argument is
 fn named() (I32, String&) { return 1, "x" }
 fn sum(a I32, b I32) I32 { return a + b }

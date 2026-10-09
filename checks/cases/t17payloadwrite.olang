@@ -1,4 +1,4 @@
-# check: fail a payload lives where the value does
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive
 # T17c/O25: a payload that can be written through - a writable reference to a struct holding references - must live
 # exactly where the enum value does: a node built through it is built in the value's scope and stored in the node, so a
 # node from an outer block held in an inner block's value would end up pointing into the inner block's storage

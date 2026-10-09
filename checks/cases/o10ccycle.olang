@@ -1,4 +1,4 @@
-# check: fail this call needs one of the target's scopes to outlive another
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
 # O10c: in a cycle of calls a body is checked before what it calls has been wholly checked, so a call there is held to
 # what that callee's body required only once every body is - here g's call to f first saw none of f's obligation, and
 # main's call to g, checked after, would have stored a node from the loop into the outer box

@@ -1,4 +1,4 @@
-# check: fail unknown symbol - this character begins no token
+# check: fail error[L16]: unexpected character '!'
 # also: compilation failed with 1 error
 # L16: an unknown character is reported once and dropped - it used to stand for the end of the file, and every line
 # after it failed to parse too

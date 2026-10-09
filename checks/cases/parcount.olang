@@ -1,4 +1,4 @@
-# check: fail an assignment of several targets takes one value per target
+# check: fail error[S4c]: 2 targets need as many values, found 3
 # S4c: values and targets pair one to one
 fn main() ? {
     a, b := 1, 2

@@ -1,4 +1,4 @@
-# check: fail -D X=-9223372036854775809: out of range
+# check: fail -D X=-9223372036854775809: below I64's minimum
 # flags: -D X=-9223372036854775809
 # B10/L10: a negative integer build constant is at least I64's most negative value - no type holds this one
 fn main() ? { }

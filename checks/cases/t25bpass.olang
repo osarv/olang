@@ -1,4 +1,4 @@
-# check: fail this reference is read-only, and this place wants a writable one
+# check: fail error[T25c]: a read-only reference cannot become writable
 # T25c: a read-only reference never becomes writable by being passed
 type P struct(x I32) { x mut }
 fn poke(p mut P&) { p.x = 5 }

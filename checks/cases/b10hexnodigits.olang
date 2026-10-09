@@ -1,4 +1,4 @@
-# check: fail -D X=0x: not a valid number
+# check: fail -D X=0x: not a number
 # flags: -D X=0x
 # B10: a "0x" value must be a valid literal - it was read as 0
 fn main() ? { }

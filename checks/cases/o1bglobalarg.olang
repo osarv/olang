@@ -1,4 +1,4 @@
-# check: fail this call needs one of the target's scopes to outlive another
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
 # O1b/O25e: a global argument binds the callee's scope variable to the program's scope - what is stored into it must
 # live there too, which a loop body's local does not
 type Leaf struct(v I32) {

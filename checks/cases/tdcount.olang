@@ -1,4 +1,4 @@
-# check: fail R9a
+# check: fail error[R11]: expected 2 defaults, one per result, found 1
 error E { X }
 fn two() (I32, I32) ? E { return 1, 2 }
 fn none() ? E { }

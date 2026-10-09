@@ -1,4 +1,4 @@
-# check: fail a case's guard, after 'if', is a Bool
+# check: fail error[S13e]: a guard is a Bool, found I32
 # S13e
 fn f(n I32) I32 {
     match n {

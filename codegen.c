@@ -252,7 +252,7 @@ void CodegenCheckModuleNames(void) {
             struct semaModule* b = *(struct semaModule**)ListGetIdx(all, j);
             char pb[256];
             mangleModPrefix(b, pb, sizeof(pb));
-            if (!strcmp(pa, pb)) ErrMsgFile(b->fileName, MODULE_NAME_COLLISION);
+            if (!strcmp(pa, pb)) ErrFile(b->fileName, ERR_MODULE_IDENTITY_CLASH, a->fileName);
         }
     }
 }
@@ -3787,6 +3787,9 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
 static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row);
 
 static void rdSpellTypeB(struct type t, struct cgBuf* b);
+static bool rdForDiag;              //spelling a type for a diagnostic (DiagSpellType) rather than for a rendering
+static const struct var* rdOwnScope; //the implicit scope of the parameter being spelled, written as its bare "&"
+static int rdSigDepth;               //how many signatures the type being spelled is inside
 
 //a stable name for a type, for a linkonce_odr helper's symbol (a rendering, an enum's equality). It must be a pure
 //function of the type's structure: each object names its helpers itself, and the linker keeps one body per name, so
@@ -3847,11 +3850,19 @@ static void rdKey(struct type t, struct cgBuf* b) {
 
 //"(a int32, b mut Point&) int32 ? E + F", the part of a signature after its name
 static void rdSpellSigB(struct type f, struct cgBuf* b) {
+    rdSigDepth++;
     cgBufAdd(b, "(");
     for (int i = 0; i < f.vars.len; i++) {
         struct var* p = ListGetIdx(&f.vars, i);
         cgBufAdd(b, "%s%.*s %s", i ? ", " : "", p->name.len, p->name.ptr, p->mut ? "mut " : "");
-        rdSpellTypeB(p->type, b);
+        struct type pt = p->type;
+        pt.refMut = false; //written once, before the name's type, as the parameter's own "mut"
+        const struct var* outer = rdOwnScope;
+        struct str own = pt.scopeParam ? pt.scopeParam->name : (struct str){0}; //"&p" is p's own
+        bool isOwn = own.len == p->name.len + 1 && own.ptr[0] == '&' && !memcmp(own.ptr + 1, p->name.ptr, (size_t)p->name.len);
+        rdOwnScope = isOwn ? pt.scopeParam : NULL;
+        rdSpellTypeB(pt, b);
+        rdOwnScope = outer;
     }
     cgBufAdd(b, ")");
     if (f.hasRetType && f.retType) {
@@ -3866,14 +3877,24 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
         if (TypeIsSame(*e, *SemanticGenericErrorType())) continue;
         cgBufAdd(b, "%s%.*s", written++ ? " + " : " ", e->name.len, e->name.ptr);
     }
+    rdSigDepth--;
 }
 
 static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     char mark[80] = "";
     if (t.structMAlloc) {
-        if (t.scopeParam) snprintf(mark, sizeof(mark), "&%.*s", t.scopeParam->name.len, t.scopeParam->name.ptr);
-        else snprintf(mark, sizeof(mark), "&");
+        //O4b/O13: an implicit scope is named "&p" (parameter p's) or "&result" - which is spelled "&p" where another
+        //parameter or the result names it, and as the bare "&" it is written as on p itself and on a built result
+        struct str sn = t.scopeParam ? t.scopeParam->name : (struct str){0};
+        bool implicitName = sn.len && sn.ptr[0] == '&';
+        //a diagnostic names a scope only inside a signature, where it is part of the type; elsewhere it is the scope
+        //checks' business, which say so in words
+        if (!sn.len || t.scopeParam == rdOwnScope || StrCmp(sn, StrFromCStr("&result")) || (rdForDiag && !rdSigDepth))
+            snprintf(mark, sizeof(mark), "&");
+        else snprintf(mark, sizeof(mark), "%s%.*s", implicitName ? "" : "&", sn.len, sn.ptr);
     }
+    //a diagnostic tells apart what a rendering need not: a writable reference from a read-only one, at every level
+    if (rdForDiag && t.structMAlloc && t.refMut) cgBufAdd(b, "mut ");
     if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - the length is no part of it
         cgBufAdd(b, "Array<");
         rdSpellTypeB(*t.arrElem, b);
@@ -3905,6 +3926,24 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
         return;
     }
     if (t.name.len) { cgBufAdd(b, "%.*s%s", t.name.len, t.name.ptr, mark); return; }
+    if (rdForDiag && t.bType == BASETYPE_CHOICE) { //an anonymous enum: its cases are what it is
+        cgBufAdd(b, "enum {");
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* c = ListGetIdx(&t.vars, i);
+            cgBufAdd(b, " %.*s", c->name.len, c->name.ptr);
+            if (c->type.vars.len) { //its payload, as its fields are written
+                cgBufAdd(b, "(");
+                for (int k = 0; k < c->type.vars.len; k++) {
+                    struct var* fv = ListGetIdx(&c->type.vars, k);
+                    cgBufAdd(b, "%s%.*s ", k ? ", " : "", fv->name.len, fv->name.ptr);
+                    rdSpellTypeB(fv->type, b);
+                }
+                cgBufAdd(b, ")");
+            }
+        }
+        cgBufAdd(b, " }%s", mark);
+        return;
+    }
     const char* prim = t.bType == BASETYPE_BOOL ? "Bool" : PrimInfo(t.bType) ? PrimInfo(t.bType)->name : "?"; //T4
     cgBufAdd(b, "%s%s", prim, mark);
 }
@@ -3926,6 +3965,13 @@ static void rdSpellSig(struct type f, char* buf, size_t n) {
 //the compile-time evaluator renders "$x" exactly as the generated code does, so it spells types with these
 void RdSpellType(struct type t, char* buf, size_t n) { rdSpellType(t, buf, n); }
 void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
+//a type as a diagnostic names it (errmsg.c's "%t")
+void DiagSpellType(struct type t, char* buf, size_t n) {
+    rdForDiag = true;
+    t.refMut = false; //a reference's own permission is T25c's to report, in words - inner levels' are part of the type
+    rdSpellType(t, buf, n);
+    rdForDiag = false;
+}
 
 
 //appends src[0..len) at the cursor (%rd.n) of the helper being emitted

@@ -1,4 +1,4 @@
-# check: fail this enum value holds a reference to existing storage in its payload
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive
 # O4b/T17c: a by-value enum parameter's payload lives where its argument's references do - a scope of the parameter,
 # not the program's - so a binding read out of it cannot be pushed into a longer-lived list
 type Node struct(v I32) {

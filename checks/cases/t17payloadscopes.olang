@@ -1,4 +1,4 @@
-# check: fail holds references to existing storage in two different scopes
+# check: fail error[T17c]: this payload holds references into two scopes, and it lives in one
 # T17c/O25: two writable payload references must both live exactly where the value does, so they cannot come from two
 # different blocks
 type Node struct(v I64) {

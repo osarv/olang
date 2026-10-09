@@ -1,4 +1,4 @@
-# check: fail nothing here establishes that
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
 # a function may return something built from a bare "&" parameter into its result scope: the parameter's
 # scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
 # This caller cannot - its argument lives in its own scope, and the result would outlive it

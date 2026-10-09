@@ -1,4 +1,4 @@
-# check: fail unexpected token 'Perim', expected '}'
+# check: fail expected '}', found 'Perim'
 # T30: a trait's signatures end at their line's end
 type Sh trait { Area() I32 Perim() I32 }
 fn main() ? { }

@@ -1,4 +1,4 @@
-# check: fail does not exist outside the branches
+# check: fail error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
 error E { X }
 fn f() Bool { return true }
 if f() {

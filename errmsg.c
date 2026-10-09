@@ -3,10 +3,23 @@
 #include <string.h>
 #include <limits.h>
 #include <signal.h>
+#include <stdarg.h>
+#include <ctype.h>
 #include <unistd.h>
 #include "util.h"
 #include "errmsg.h"
 #include "token.h"
+#include "semantic.h"
+
+void DiagSpellType(struct type t, char* buf, size_t n);
+
+//each diagnostic's rule and message, by id (errmsg.h)
+static const struct { const char* rule; const char* fmt; } diags[DIAG_COUNT] = {
+    [DIAG_NONE] = { "", "" },
+#define DIAG_ROW(id, rule, fmt) [id] = { rule, fmt },
+    DIAGNOSTICS(DIAG_ROW)
+#undef DIAG_ROW
+};
 
 static int nErrors = 0;
 static int nSyntaxErrors = 0;
@@ -17,6 +30,28 @@ int ErrMsgGetNErrors() {
 int ErrMsgGetNSyntaxErrors() {
     return nSyntaxErrors;
 }
+
+// ---- colour ----
+
+//B11: colour only where a person reads the diagnostics as they are written - a terminal, and not one that asked for
+//none (NO_COLOR, TERM=dumb). Written to a file, a pipe or an agent they are plain text
+static int colorState = -1;
+static bool colorOn(void) {
+    if (colorState < 0) {
+        char* term = getenv("TERM");
+        colorState = isatty(STDOUT_FILENO) && !getenv("NO_COLOR") && term && strcmp(term, "dumb") != 0;
+    }
+    return colorState;
+}
+const char* ErrMsgColor(const char* code) { return colorOn() ? code : ""; }
+
+#define SGR_BOLD "\x1b[1m"
+#define SGR_ERROR "\x1b[1;31m"
+#define SGR_NOTE "\x1b[1;36m"
+#define SGR_CARET "\x1b[1;32m"
+#define SGR_RESET "\x1b[0m"
+
+// ---- records ----
 
 //Errors are reported in source order - by file (in the order files were first reported against), then line - not
 //in the order the passes happen to find them, so a syntax error on line 5 never comes before an unknown type on
@@ -39,7 +74,6 @@ static bool buffering;
 static int recsAtBufStart;
 static int errsAtBufStart;
 static int syntaxAtBufStart;
-static FILE* errNull;
 static int muteDepth;
 static int errsAtMute;
 static int syntaxAtMute;
@@ -60,11 +94,8 @@ static void newRecord(struct str file, int line) {
     cur = open_memstream(&r->text, &r->size);
 }
 
+//the stream a note goes to: the record of the error before it
 static FILE* eo(void) {
-    if (muteDepth) {
-        if (!errNull) errNull = fopen("/dev/null", "w");
-        return errNull;
-    }
     if (!cur) newRecord((struct str){0}, INT_MAX);
     return cur;
 }
@@ -104,6 +135,16 @@ static void flushAtExit(void) {
     ErrMsgFlush();
 }
 
+//errors already found are still shown when the compiler exits early
+static void ensureFlushHooks(void) {
+    static bool done;
+    if (done) return;
+    done = true;
+    atexit(flushAtExit);
+}
+
+// ---- the crash handler ----
+
 static void writeAll(int fd, const char* p, size_t n) {
     while (n > 0) {
         ssize_t w = write(fd, p, n);
@@ -125,12 +166,12 @@ static void onCrash(int sig) {
     if (interpreting && sig == SIGABRT) raise(sig);
     const char* what = sig == SIGSEGV ? "a segmentation fault" : sig == SIGBUS ? "a bus error"
                      : sig == SIGFPE ? "an arithmetic fault" : sig == SIGILL ? "an illegal instruction" : "an abort";
-    static const char head[] = "olang: internal compiler error - the compiler crashed (";
-    static const char tail[] = "). This is a bug in the compiler, not in the program.\n";
+    static const char head[] = "olang: internal compiler error: the compiler crashed (";
+    static const char tail[] = ") - a bug in the compiler, not in the program\n";
     //an extern function the interpreted program calls runs in this process too (B3e), so a crash under -i may be
     //the program's - a wrong prototype is undefined behaviour (X1a)
     static const char tailRun[] = ") while interpreting - in a foreign function the program calls, if its extern "
-                                  "declaration is wrong (X1a), or else a bug in the compiler.\n";
+                                  "declaration is wrong (X1a), or else a bug in the compiler\n";
     writeAll(2, head, sizeof(head) - 1);
     writeAll(2, what, strlen(what));
     if (interpreting) writeAll(2, tailRun, sizeof(tailRun) - 1);
@@ -152,13 +193,7 @@ void ErrMsgInstallCrashHandler(void) {
     for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) sigaction(sigs[i], &sa, NULL);
 }
 
-//errors already found are still shown when the compiler exits early
-static void ensureFlushHooks(void) {
-    static bool done;
-    if (done) return;
-    done = true;
-    atexit(flushAtExit);
-}
+// ---- muting and holding back ----
 
 //K4: nothing between these is reported, and the count they leave is the count they found - for checking
 //something speculatively (a condition in a context it may not fully belong to) where only "did it check"
@@ -190,99 +225,164 @@ void ErrMsgBufferDiscard(void) {
 
 void ErrMsgFinishCompilation() {
     flushAtExit();
-    if (nErrors == 1) {
-        printf(COLOR_FG_RED "compilation failed with 1 error\n" COLOR_RESET);
+    if (nErrors) {
+        printf("%scompilation failed with %d error%s%s\n", ErrMsgColor(SGR_ERROR), nErrors, nErrors == 1 ? "" : "s",
+               ErrMsgColor(SGR_RESET));
         exit(EXIT_FAILURE);
     }
-    else if (nErrors) {
-        printf(COLOR_FG_RED "compilation failed with %d error(s)\n" COLOR_RESET, nErrors);
-        exit(EXIT_FAILURE);
-    }
-    puts(COLOR_FG_GREEN "compilation successful" COLOR_RESET);
+    printf("%scompilation successful%s\n", ErrMsgColor(SGR_BOLD), ErrMsgColor(SGR_RESET));
     exit(EXIT_SUCCESS);
 }
 
-void ErrMsgFatal(char* errMsg) {
-    flushAtExit(); //a fatal error ends the compilation: what is already certain is shown, and the reason
-    nErrors++;
-    fputs(COLOR_FG_RED "fatal error: " COLOR_FG_YELLOW, stdout);
-    fputs(errMsg, stdout);
-    { fputs(COLOR_RESET, stdout); fputc('\n', stdout); }
-    ErrMsgFinishCompilation();
+// ---- a message ----
+
+//a byte as a message shows it: itself where it prints, else escaped
+static void putChar(FILE* f, unsigned char c) {
+    if (c == '\t') fputs("\\t", f);
+    else if (c == '\n') fputs("\\n", f);
+    else if (c == '\r') fputs("\\r", f);
+    else if (c == '\0') fputs("\\0", f);
+    else if (c < 0x20 || c >= 0x7f) fprintf(f, "\\x%02x", c);
+    else fputc(c, f);
 }
 
-void pErrChar(char c) {
-    if (c == '\t') fputs("\\t", eo());
-    else if (c == '\n') fputs("\\n", eo());
-    else if (c == '\r') fputs("\\r", eo());
-    else if (c == '\0') fputs("\\0", eo());
-    else fputc(c, eo());
+//a token as a reader sees it (%n)
+static void putToken(FILE* f, struct token t) {
+    if (t.type == TOK_STMNT_END) { fputs("end of line", f); return; }
+    if (t.type == TOK_NONE) { fputs("end of file", f); return; }
+    fputc('\'', f);
+    for (int i = 0; i < t.str.len; i++) putChar(f, (unsigned char)t.str.ptr[i]);
+    fputc('\'', f);
 }
 
-#define MAX_CHARS_PER_LINE 80
-void printErrorLine(TokenCtx tc, int errStart, int errEnd) {
-    int linesStart = TokenGetLineStart(tc, errStart) +1;
-    int linesEnd = TokenGetLineEnd(tc, errEnd);
-
-    fputs(COLOR_FG_CYAN, eo());
-    for (int i = linesStart; i < errStart; i++) fputc(TokenGetChar(tc, i), eo());
-    fputs(COLOR_FG_RED, eo());
-    for (int i = errStart; i <= errEnd; i++) pErrChar(TokenGetChar(tc, i));
-    fputs(COLOR_FG_CYAN, eo());
-    for (int i = errEnd +1; i < linesEnd; i++) fputc(TokenGetChar(tc, i), eo());
-    { fputs("\n" COLOR_RESET, eo()); fputc('\n', eo()); }
+//writes fmt with its directives (errmsg.h) replaced by the arguments in ap
+static void putMessage(FILE* f, const char* fmt, va_list ap) {
+    for (const char* p = fmt; *p; p++) {
+        if (*p != '%') { fputc(*p, f); continue; }
+        switch (*++p) {
+            case 's': { const char* s = va_arg(ap, char*); fputs(s ? s : "", f); break; }
+            case 'S': { struct str s = va_arg(ap, struct str); fwrite(s.ptr, 1, (size_t)s.len, f); break; }
+            case 'n': putToken(f, va_arg(ap, struct token)); break;
+            case 't': {
+                struct type* t = va_arg(ap, struct type*);
+                char buf[512];
+                if (t) DiagSpellType(*t, buf, sizeof(buf));
+                fputs(t ? buf : "no type", f);
+                break;
+            }
+            case 'd': fprintf(f, "%d", va_arg(ap, int)); break;
+            case 'l': fprintf(f, "%lld", va_arg(ap, long long)); break;
+            case 'c': putChar(f, (unsigned char)va_arg(ap, int)); break;
+            case '%': fputc('%', f); break;
+            default: //a directive this table does not have: shown, so the mistake is seen rather than read past
+                fputc('%', f);
+                if (!*p) return;
+                fputc(*p, f);
+        }
+    }
 }
 
-void printTokErrorLineOneTok(struct token tok) {
-    int startIndex = TokenGetStrStart(tok);
-    printErrorLine(tok.owner, startIndex, startIndex + TokenGetStrLen(tok) -1);
+// ---- where ----
+
+//what a diagnostic is about: a span of a file's text, or a whole file, or nothing
+struct where {
+    struct str file;
+    TokenCtx tc;   //NULL: no position in the file
+    int start, len;
+    int line;
+};
+
+static struct where whereOf(struct token t) {
+    struct where w = { .file = TokenGetFileName(t.owner) };
+    if (!t.owner) return w;
+    w.line = t.lineNr;
+    w.start = TokenGetStrStart(t);
+    //a token made by the compiler, whose text is no part of the file: its line is all that is known of where it is
+    if (w.start < 0 || w.start >= TokenGetCharCount(t.owner)) return w;
+    w.tc = t.owner;
+    w.len = t.type == TOK_STMNT_END || t.type == TOK_NONE ? 0 : TokenGetStrLen(t);
+    if (t.type == TOK_NONE) {
+        //the end of the file: just past its last character, on that character's line, rather than on a line after it
+        while (w.start > 0) {
+            char c = TokenGetChar(w.tc, w.start - 1);
+            if (c != '\n' && c != ' ' && c != '\t' && c != '\r' && c != '\0') break;
+            if (c == '\n') w.line--;
+            w.start--;
+        }
+        if (w.line < 1) w.line = 1;
+    }
+    return w;
 }
 
-#define NO_LINE_NR -1
-void syntaxErrorHeader(int lineNr, struct str fileName, struct str errMsg) {
-    nErrors++;
-    ensureFlushHooks();
-    if (!muteDepth) newRecord(fileName, lineNr == NO_LINE_NR ? INT_MAX : lineNr);
-    fputs(COLOR_FG_GREEN, eo());
-    if (lineNr != NO_LINE_NR) fprintf(eo(), "%d ", lineNr);
-    StrPrint(fileName, eo());
-    fputs(COLOR_FG_RED " error: " COLOR_FG_YELLOW, eo());
-    StrPrint(errMsg, eo());
-    { fputs(COLOR_RESET, eo()); fputc('\n', eo()); }
+static int columnOf(struct where w) {
+    return w.start - (TokenGetLineStart(w.tc, w.start) + 1) + 1;
 }
 
-
-void ErrMsgUnableToOpenFile(struct str fileName) {
-    char buf[fileName.len + 64];
-    buf[0] = '\0';
-    strcat(buf, "unable to open file \"");
-    strncat(buf, fileName.ptr, fileName.len);
-    strcat(buf, "\"");
-    ErrMsgFatal(buf);
+//"path:line:col: " - or as much of it as is known
+static void putLocation(FILE* f, struct where w) {
+    fputs(ErrMsgColor(SGR_BOLD), f);
+    if (w.file.len) {
+        StrPrint(w.file, f);
+        if (w.tc) fprintf(f, ":%d:%d", w.line, columnOf(w));
+        else if (w.line > 0) fprintf(f, ":%d", w.line);
+        fputs(": ", f);
+    } else {
+        fputs("olang: ", f);
+    }
+    fputs(ErrMsgColor(SGR_RESET), f);
 }
 
-void ErrMsgNotARegularFile(struct str fileName) {
-    char buf[fileName.len + 64];
-    buf[0] = '\0';
-    strcat(buf, "\"");
-    strncat(buf, fileName.ptr, fileName.len);
-    strcat(buf, "\": " NOT_A_REGULAR_FILE);
-    ErrMsgFatal(buf);
+//a source byte in an excerpt: a tab stays a tab, so the caret line below it lines up; any other control byte, which a
+//terminal would act on, is shown as '?'
+static void putSourceByte(FILE* f, unsigned char c) {
+    fputc(c == '\t' || c >= 0x20 ? (c == 0x7f ? '?' : c) : '?', f);
 }
 
-void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg) {
-    nSyntaxErrors++;
-    struct str fileName = TokenGetFileName(tc);
-    struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(TokenGetLineNr(tc), fileName, err);
-    int idx = TokenGetCharCursor(tc) -1;
-    printErrorLine(tc, idx, idx);
+//the source line w is on, and a caret under w: "  12 | x I32 = 1.5" then "     |         ^~~". A line too long to
+//read is shown as a window around w
+#define EXCERPT_MAX 160
+#define EXCERPT_AROUND 70
+static void putExcerpt(FILE* f, struct where w) {
+    if (!w.tc) return;
+    int lineStart = TokenGetLineStart(w.tc, w.start) + 1;
+    int lineEnd = TokenGetLineEnd(w.tc, w.start);
+    bool blank = true;
+    for (int i = lineStart; i < lineEnd && blank; i++) {
+        char c = TokenGetChar(w.tc, i);
+        blank = c == ' ' || c == '\t' || c == '\r';
+    }
+    if (blank) return;
+    int spanEnd = w.start + (w.len > 0 ? w.len : 1);
+    int from = lineStart, to = lineEnd;
+    if (lineEnd - lineStart > EXCERPT_MAX) {
+        if (w.start - EXCERPT_AROUND > from) from = w.start - EXCERPT_AROUND;
+        int end = (spanEnd < w.start + EXCERPT_AROUND ? spanEnd : w.start + EXCERPT_AROUND) + EXCERPT_AROUND;
+        if (end < to) to = end;
+    }
+    fprintf(f, "%5d | %s", w.line, from > lineStart ? "..." : "");
+    for (int i = from; i < to; i++) putSourceByte(f, (unsigned char)TokenGetChar(w.tc, i));
+    fprintf(f, "%s\n      | %s", to < lineEnd ? "..." : "", from > lineStart ? "   " : "");
+    for (int i = from; i < w.start && i < to; i++) {
+        unsigned char c = (unsigned char)TokenGetChar(w.tc, i);
+        if (c >= 0x80 && c < 0xc0) continue; //a UTF-8 continuation byte: part of the character before it
+        fputc(c == '\t' ? '\t' : ' ', f);
+    }
+    fputs(ErrMsgColor(SGR_CARET), f);
+    fputc('^', f);
+    for (int i = w.start + 1; i < spanEnd && i < to; i++) {
+        unsigned char c = (unsigned char)TokenGetChar(w.tc, i);
+        if (c >= 0x80 && c < 0xc0) continue;
+        fputc('~', f);
+    }
+    fputs(ErrMsgColor(SGR_RESET), f);
+    fputc('\n', f);
 }
 
-void ErrMsgFile(struct str fileName, char* errMsg) {
-    struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(NO_LINE_NR, fileName, err);
-}
+// ---- reporting ----
+
+enum severity { SEV_ERROR, SEV_NOTE };
+
+static void noteText(struct where w, const char* text);
 
 //what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while a
 //context is open carries a note pointing at it, innermost first, so an error in shared generic code says which use
@@ -300,58 +400,189 @@ void ErrMsgPushContext(struct token tok, char* msg) {
 }
 void ErrMsgPopContext(void) { if (errContextDepth > 0) errContextDepth--; }
 
-void ErrMsgSemanticNote(struct token tok, char* msg);
-void ErrMsgSemantic(struct token tok, char* errMsg) {
-    struct str fileName = TokenGetFileName(tok.owner);
-    struct str err = StrFromCStr(errMsg);
-    syntaxErrorHeader(tok.lineNr, fileName, err);
-    if (tok.type != TOK_NONE) printTokErrorLineOneTok(tok);
+//counts an error, and says whether it is to be written (it is not while muted)
+static bool countError(bool syntax) {
+    nErrors++;
+    if (syntax) nSyntaxErrors++;
+    return muteDepth == 0;
+}
+
+//"path:line:col: error[RULE]: " - the start of an error's record
+static FILE* startError(struct where w, const char* rule) {
+    ensureFlushHooks();
+    newRecord(w.file, w.line > 0 ? w.line : INT_MAX);
+    FILE* f = eo();
+    putLocation(f, w);
+    fputs(ErrMsgColor(SGR_ERROR), f);
+    fputs("error", f);
+    if (rule && *rule) fprintf(f, "[%s]", rule);
+    fputs(":", f);
+    fputs(ErrMsgColor(SGR_RESET), f);
+    fputc(' ', f);
+    return f;
+}
+
+//the end of an error's record: its source, and the notes saying what it was reported inside
+static void endError(FILE* f, struct where w) {
+    fputc('\n', f);
+    putExcerpt(f, w);
     int top = errContextDepth < ERR_CONTEXT_MAX ? errContextDepth : ERR_CONTEXT_MAX;
     for (int i = top - 1, shown = 0; i >= 0 && shown < ERR_CONTEXT_SHOWN; i--) {
         if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
-        ErrMsgSemanticNote(errContexts[i].tok, errContexts[i].msg);
+        noteText(whereOf(errContexts[i].tok), errContexts[i].msg);
         shown++;
     }
 }
 
-//a note attached to the error just reported: not an error of its own, so it counts nothing
-void ErrMsgSemanticNote(struct token tok, char* msg) {
-    fputs(COLOR_FG_GREEN, eo());
-    fprintf(eo(), "%d ", tok.lineNr);
-    StrPrint(TokenGetFileName(tok.owner), eo());
-    fputs(COLOR_FG_CYAN " note: " COLOR_FG_YELLOW, eo());
-    fputs(msg, eo());
-    { fputs(COLOR_RESET, eo()); fputc('\n', eo()); }
-    printTokErrorLineOneTok(tok);
+static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
+    if (!countError(syntax)) return;
+    FILE* f = startError(w, diags[d].rule);
+    putMessage(f, diags[d].fmt, ap);
+    endError(f, w);
 }
 
-//a syntax error worded for what was probably meant, rather than as "unexpected X, expected Y"
-void ErrMsgSyntax(struct token tok, char* errMsg) {
-    nSyntaxErrors++;
-    ErrMsgSemantic(tok, errMsg);
+void Err(struct token at, enum diag d, ...) {
+    va_list ap;
+    va_start(ap, d);
+    errorV(whereOf(at), false, d, ap);
+    va_end(ap);
 }
 
-//a token named as it reads - a statement end is synthesized at a line's end (L18) and has no text of its own
-void ErrMsgUnexpectedToken(struct token found, char* expected) {
-    nSyntaxErrors++;
-    struct str fileName = TokenGetFileName(found.owner);
-    char* buf = NULL;
-    size_t size = 0;
-    FILE* f = open_memstream(&buf, &size);
-    if (found.type == TOK_STMNT_END) fputs("unexpected end of line", f);
-    else if (found.type == TOK_NONE) fputs("unexpected end of file", f);
-    else fprintf(f, "unexpected token '%.*s'", found.str.len, found.str.ptr);
-    fprintf(f, ", expected '%s'", expected);
-    fclose(f);
-    struct str err = StrFromCStr(buf);
-    syntaxErrorHeader(found.lineNr, fileName, err);
-    free(buf);
-    if (found.type == TOK_NONE || !found.owner) return;
-    if (found.type == TOK_STMNT_END) {
-        //nothing to underline: the place just past the line's last token
-        int at = TokenGetStrStart(found);
-        printErrorLine(found.owner, at, at);
-        return;
+void ErrSyntax(struct token at, enum diag d, ...) {
+    va_list ap;
+    va_start(ap, d);
+    errorV(whereOf(at), true, d, ap);
+    va_end(ap);
+}
+
+void ErrFile(struct str file, enum diag d, ...) {
+    va_list ap;
+    va_start(ap, d);
+    errorV((struct where){ .file = file }, false, d, ap);
+    va_end(ap);
+}
+
+//"path:line:col: note: ..." and its source - a note is no error of its own, so it counts nothing
+static void startNote(FILE* f, struct where w) {
+    putLocation(f, w);
+    fprintf(f, "%snote:%s ", ErrMsgColor(SGR_NOTE), ErrMsgColor(SGR_RESET));
+}
+
+static void noteText(struct where w, const char* text) {
+    if (muteDepth) return;
+    FILE* f = eo();
+    startNote(f, w);
+    fputs(text, f);
+    fputc('\n', f);
+    putExcerpt(f, w);
+}
+
+void Note(struct token at, enum diag d, ...) {
+    if (muteDepth) return;
+    struct where w = whereOf(at);
+    FILE* f = eo();
+    startNote(f, w);
+    va_list ap;
+    va_start(ap, d);
+    putMessage(f, diags[d].fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    putExcerpt(f, w);
+}
+
+static void fatalStart(void) {
+    flushAtExit(); //a fatal error ends the compilation: what is already certain is shown, and the reason
+    nErrors++;
+}
+
+//"path: error[RULE]: message", or "olang: ..." with no file, written straight out
+static void putFatal(struct str file, enum diag d, va_list ap) {
+    putLocation(stdout, (struct where){ .file = file });
+    printf("%serror", ErrMsgColor(SGR_ERROR));
+    if (*diags[d].rule) printf("[%s]", diags[d].rule);
+    printf(":%s ", ErrMsgColor(SGR_RESET));
+    putMessage(stdout, diags[d].fmt, ap);
+    putchar('\n');
+}
+
+void ErrFatal(struct str file, enum diag d, ...) {
+    fatalStart();
+    va_list ap;
+    va_start(ap, d);
+    putFatal(file, d, ap);
+    va_end(ap);
+    ErrMsgFinishCompilation();
+}
+
+void ErrUsage(enum diag d, ...) {
+    va_list ap;
+    va_start(ap, d);
+    putFatal((struct str){0}, d, ap);
+    va_end(ap);
+    fflush(stdout);
+    exit(EXIT_FAILURE);
+}
+
+// ---- B11a: a rule's text ----
+
+//spec.md, beside the standard library: both are found from where the compiler itself is (B3)
+static char* specPath(void) {
+    static char buf[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 16);
+    if (n <= 0) return "spec.md";
+    buf[n] = '\0';
+    char* slash = strrchr(buf, '/');
+    if (slash) *slash = '\0';
+    strcat(buf, "/../spec.md");
+    return buf;
+}
+
+//a line defining a rule: "**B1.**", "- **O25a.**", "**T6b (a title).**" - the rule's id, or 0 chars when it is none
+static int ruleIdAt(const char* line, const char** id) {
+    if (!strncmp(line, "- ", 2)) line += 2;
+    if (strncmp(line, "**", 2) || !isupper((unsigned char)line[2]) || !isdigit((unsigned char)line[3])) return 0;
+    const char* p = line + 3;
+    while (isdigit((unsigned char)*p)) p++;
+    while (islower((unsigned char)*p)) p++;
+    if (strncmp(p, ".**", 3) && strncmp(p, " (", 2)) return 0;
+    *id = line + 2;
+    return (int)(p - (line + 2));
+}
+
+int ErrMsgExplain(char* rule) {
+    char want[64];
+    snprintf(want, sizeof(want), "%s", rule);
+    want[0] = (char)toupper((unsigned char)want[0]);
+    char* path = specPath();
+    FILE* f = fopen(path, "r");
+    if (!f) ErrUsage(ERR_NO_SPEC, path);
+    char* line = NULL;
+    size_t cap = 0;
+    char* heading = NULL;
+    bool in = false, found = false;
+    int blanks = 0;
+    while (getline(&line, &cap, f) > 0) {
+        const char* id;
+        int idLen = ruleIdAt(line, &id);
+        bool head = line[0] == '#';
+        if (in && (idLen || head)) break;
+        if (head) { free(heading); heading = strdup(line); continue; }
+        if (!in && idLen == (int)strlen(want) && !strncmp(id, want, (size_t)idLen)) {
+            in = found = true;
+            //"### 10.1 Compilation modes" is "§10.1 Compilation modes"
+            char* h = heading;
+            while (h && (*h == '#' || *h == ' ')) h++;
+            if (h) printf("%s%s\n", isdigit((unsigned char)*h) ? "\u00a7" : "", h);
+        }
+        if (!in) continue;
+        if (line[0] == '\n') { blanks++; continue; } //written only if more of the rule follows
+        for (; blanks; blanks--) putchar('\n');
+        fputs(line, stdout);
     }
-    printTokErrorLineOneTok(found);
+    free(line);
+    free(heading);
+    fclose(f);
+    if (!found) ErrUsage(ERR_NO_RULE, want);
+    return 0;
 }
+
