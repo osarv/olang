@@ -2526,6 +2526,16 @@ test "G9a: a literal adapts to a type variable another argument bound" {
     assert PickSecond(1, 2.5) == 2.5        # only literals: the widest of their types
 }
 
+# G9a: null binds nothing at all - it is checked against its parameter's type once another argument has bound the
+# variable - so a generic function with an optional reference parameter can be given null there
+fn CellOr(c Cell<<T>>&, fallback Cell<T>&) T { return fallback.v if c == null else c.v }
+
+test "G9a: null takes no part in inferring a type variable" {
+    d Cell<I64>& = Cell<I64>(8000000000)
+    assert CellOr(d, null) == 8000000000
+    assert CellOr(null, d) == 8000000000
+}
+
 test "G8a: a generic method serves every application" {
     c Cell<I32>& = Cell<I32>(6)
     d Cell<I64>& = Cell<I64>(8000000000)
