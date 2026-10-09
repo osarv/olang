@@ -4244,7 +4244,8 @@ an error.
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate
 copy compiled for each distinct set of type arguments it is used with. Enum and error types can
 never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
-parameterize.
+parameterize - and neither can a declared number or array type (T29); a type-parameter list on any of them is a
+compile-time error at its declaration. A trait may be (T35a).
 
 ### 12.1 Type variables
 

@@ -3868,6 +3868,11 @@ void resolveTypeDecl(struct type* t) {
         //value could fit, reported at every use instead of at the declaration
         if (typeExprNode && partSntx(typeExprNode, 0)->type == SNTX_CHOICE_BODY) t->bType = BASETYPE_CHOICE;
         struct type resolved = resolveTypeExpr(owner, typeExprNode, NULL); //module-level, no function context
+        //section 12: only a struct type or a trait is generic
+        if (declaredParams.len && resolved.bType != BASETYPE_INTERFACE && !resolved.unknown) {
+            ErrMsgSemantic(firstTokAnywhere(paramsNode), GENERIC_TYPE_NOT_STRUCT);
+            resolved.unknown = true; //and fits anything after, so its uses add nothing to the one error
+        }
         struct str name = t->name;
         struct token tok = t->tok;
         struct semaModule* ownerSave = t->owner;
