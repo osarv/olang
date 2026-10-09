@@ -7,7 +7,7 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, spawn/join, atomics, a call through a function value or an interface whose target cannot be,
+//the write), an extern call, spawn/join, a call through a function value whose target cannot be,
 //done/fail/abort/unreachable, a failing assert, integer division by zero or an out-of-range shift or
 //conversion (undefined at run time - refused here rather than guessed), and running out of the step
 //budget. Every one of those is reported with the operation that caused it.
@@ -996,10 +996,11 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             ctScanWrite(sc, *(struct operand**)ListGetIdx(&op->args, 0));
             break;
-        case OPERATION_ATOMIC_LOAD: case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
-        case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-            ctScanFail(sc, op->tok, "it uses an atomic operation");
-            return;
+        //P9/K1: no task runs while compiling, so an atomic operation is the plain one - refused only where an ordinary
+        //write or read of its place would be (a global, which the running program would then not see written)
+        case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
+            ctScanWrite(sc, *(struct operand**)ListGetIdx(&op->args, 0));
+            break;
         case OPERATION_NONE:
             //a constructor assembling its own instance is the construction its call already is, not another
             if (op->isLiteral && ctHasDestructor(op->type) && !ctIsOwnAssembly(sc->func, op->type)) {
@@ -1903,8 +1904,10 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
             struct ctVal* fill = NULL;
-            if (op->args.len > 1) { //T7: "Array<T>(n, v)"
-                fill = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 1));
+            if (op->args.len > 1) { //T7: "Array<T>(n, v)" - v fitted to the element once, as the generated code fits it:
+                //a reference element names one instance in every element (the very one an lvalue is, one temporary
+                //built for them all, or a static literal's data), a value element is a copy each
+                fill = ctFitBoundary(st, *(struct operand**)ListGetIdx(&op->args, 1), *op->type.arrElem);
                 if (!fill) return NULL;
             }
             for (int i = 0; i < a->n; i++) a->elems[i] = fill ? ctCopy(fill) : ctZero(*op->type.arrElem);
@@ -1939,8 +1942,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return ctBinary(st, op);
         case OPERATION_ATOMIC_LOAD: case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS: {
-            if (!ctRun) return ctFail(st, op->tok, "it uses an atomic operation");
-            //B3e/P9: no task runs beside it, so an atomic operation is the plain one
+            //K1/P9: no task runs beside an evaluation, compiling or under -i (B3e), so an atomic operation is the plain one
+            //on its place - which is refused where an ordinary write (or, for AtomicLoad, read) of it would be
             struct ctVal* node = ctDeref(ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), op->opType != OPERATION_ATOMIC_LOAD));
             if (!node) return NULL;
             struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), node->type) : NULL;

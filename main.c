@@ -270,6 +270,10 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
     struct list args = ListInit(sizeof(char*));
     argAdd(&args, clang);
     addModeFlags(&args);
+    //B2c: LLVM 18's -O0 instruction selector (FastISel) keeps a "bfloat" live across a branch wrongly - a BF16 value
+    //computed before a conditional or a match and used after it read back as another number under -d (found by the
+    //differential fuzzer, fuzz/repro/bf16fastisel.ll) - so -d selects instructions as the optimizing path does
+    if (gDebug) { argAdd(&args, "-mllvm"); argAdd(&args, "-fast-isel=false"); }
     argAdd(&args, "-c");
     argAdd(&args, "-o");
     argAdd(&args, objPath);

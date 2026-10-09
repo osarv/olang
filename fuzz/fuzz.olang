@@ -1,11 +1,201 @@
-# fuzz - the differential fuzzer (K1): runs gen's programs built (-b), built at -O0 (-d) and interpreted (-i)
+# fuzz - the differential fuzzer for K1: the compile-time evaluator gives exactly the run time's answer or refuses.
+#
+# Each seed is one program from gen (see gen.olang), whose every case computes one value three ways - an immutable
+# global baked while compiling, the same call at run time on mut globals, and an assert decided while compiling - and
+# runs it four ways:
+#     1. built at -O0 (-d) and run: its "<case>: <global> | <run time>" lines, each pair the same
+#     2. the same program with the asserts added, each asserting that the case renders as step 1 printed it - built
+#        (-O3 and LTO, -b), where an assert the evaluator decides false is a compile error; then run
+#     3. that program interpreted (-i), the evaluator running all of it
+# and every output must be step 1's. What differs is a finding: the program, the outputs and a reproducer of the one
+# case go to build/fuzz/found/<seed>, and a line to build/fuzz/findings.txt.
+#
+#     fuzz run START COUNT [JOBS [CASES]]   seeds START.. START+COUNT-1, JOBS at a time (2), CASES cases each (30)
+#     fuzz show SEED [CASES [ONLY]]         prints a program - or only its case ONLY
+#
+# Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/out under the working directory.
 import "std/io"
 import "std/os"
+import "std/chan"
 import "gen"
+
+Olang mut String& = ""
+Root mut String& = ""
+Cases mut I64 = 30
+Ran mut I64 = 0
+Found mut I64 = 0
+Baked mut I64 = 0
+Total mut I64 = 0
 
 fn main() ? {
     args := os.Args()
-    seed := try args[2].ParseInt() catch default 1
-    n := try args[3].ParseInt() catch default 3
-    try io.Print(gen.Program(U64(seed), n, -1, true, Array<String&>(0), Array<Bool>(0))) catch { }
+    if args.Len() < 3 { usage() }
+    Root = try os.Cwd() catch default "."
+    Olang = try os.Env("OLANG") catch default $Root "/build/out"
+    if args[1] == "show" {
+        seed := try args[2].ParseInt() catch default 1
+        if args.Len() > 3 { Cases = try args[3].ParseInt() catch default 30 }
+        only I64 = -1
+        if args.Len() > 4 { only = try args[4].ParseInt() catch default -1 }
+        try io.Print(gen.Program(U64(seed), Cases, only, true, Array<String&>(0), Array<Bool>(0))) catch { }
+        return
+    }
+    if args[1] != "run" or args.Len() < 4 { usage() }
+    start := try args[2].ParseInt() catch default 1
+    count := try args[3].ParseInt() catch default 1
+    jobs I64 = 2
+    if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
+    if args.Len() > 5 { Cases = try args[5].ParseInt() catch default 30 }
+    os.Run("mkdir -p " $os.Quote($Root "/build/fuzz/found"))
+    queue chan.Chan<I64>& = chan.Chan<I64>(I32(count + jobs))
+    chan.Init(queue)
+    for i in range count { chan.Send(queue, start + i) }
+    for w in range jobs { chan.Send(queue, -1) }
+    join {
+        for w in range jobs { spawn worker(queue, w) }
+    }
+    summary String& = "fuzz: " $Ran " programs, " $Total " cases (" $Baked " globals baked while compiling)"
+    try io.Print($summary ", " $Found " findings\n") catch { }
+    if Found > 0 { fail }
+}
+
+fn usage() {
+    try io.PrintErr("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]\n") catch { }
+    fail
+}
+
+fn worker(queue mut chan.Chan<I64>&, w I64) {
+    dir String& = $Root "/build/fuzz/w" $w
+    os.Run("mkdir -p " $os.Quote(dir))
+    for {
+        seed := chan.Recv(queue)
+        if seed < 0 { return }
+        runSeed(seed, dir)
+        Ran.AtomicAdd(1)
+    }
+}
+
+# runs cmd inside dir, niced, with OLANG set
+fn sh(dir String&, cmd String&) I32 {
+    return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote(Olang) " && " $cmd)
+}
+
+fn read(dir String&, name String&) String& {
+    return try os.ReadFile($dir "/" $name) catch default ""
+}
+
+# what seed's program finds, in dir
+fn runSeed(seed I64, dir String&) {
+    expect Array<String&> = Array<String&>(Cases, "")
+    has Array<Bool> = Array<Bool>(Cases)
+    if not write(dir, seed, expect, has) { return }
+    if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b -d p.olang > c1.txt 2>&1") != 0 {
+        finding(dir, seed, -1, "does not compile at -d (step 1)", read(dir, "c1.txt"))
+        return
+    }
+    if sh(dir, "timeout 120 ./build/p.debug > d.txt 2> derr.txt") != 0 {
+        finding(dir, seed, -1, "-d run failed (step 1)", read(dir, "derr.txt"))
+        return
+    }
+    out := read(dir, "d.txt")
+    lines := out.Split("\n")
+    for line in lines {
+        at := line.Find(": ")
+        bar := line.Find(" | ")
+        if at < 0 or bar < at { continue }
+        ci := try line[:at].ParseInt() catch default -1
+        if ci < 0 or ci >= Cases { continue }
+        k := line[at + 2:bar]
+        r := line[bar + 3:]
+        expect[ci] = r
+        has[ci] = true
+        if k != r { finding(dir, seed, ci, "global baked while compiling is not the -d run time's value", line) }
+    }
+    # step 2: the asserts, built -O3; one decided false is a finding, and is left out to see the rest
+    for attempt in range 3 {
+        if not write(dir, seed, expect, has) { return }
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b p.olang > c2.txt 2>&1") == 0 { break }
+        c2 := read(dir, "c2.txt")
+        bad := falseAsserts(c2)
+        if bad.Len() == 0 {
+            finding(dir, seed, -1, "does not compile with its asserts (step 2)", c2)
+            return
+        }
+        for ci in bad {
+            finding(dir, seed, ci, "assert decided false while compiling: the evaluator disagrees with the -d run time", "")
+            has[ci] = false
+        }
+    }
+    sh(dir, "grep -cE 'store .* ptr @p_K[0-9]+(,|$)' build/p.main.ll > bakes.txt")
+    bakes := read(dir, "bakes.txt")
+    startup := try bakes.Trim().ParseInt() catch default 0
+    Baked.AtomicAdd(Cases - startup)
+    Total.AtomicAdd(Cases)
+    st := sh(dir, "timeout 120 ./build/p > b.txt 2> berr.txt")
+    compare(dir, seed, out, read(dir, "b.txt"), "-b")
+    if st != 0 { finding(dir, seed, -1, "-b run failed", read(dir, "berr.txt")) }
+    st = sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
+    compare(dir, seed, out, read(dir, "i.txt"), "-i")
+    if st != 0 { finding(dir, seed, -1, "-i run failed", read(dir, "ierr.txt")) }
+}
+
+# writes seed's program into dir, asserting expect[i] where has[i]
+fn write(dir String&, seed I64, expect Array<String&>&, has Array<Bool>&) Bool {
+    src := gen.Program(U64(seed), Cases, -1, true, expect, has)
+    try os.WriteFile($dir "/p.olang", src) catch {
+        try io.PrintErr("fuzz: cannot write " $dir "/p.olang\n") catch { }
+        return false
+    }
+    return true
+}
+
+# the cases whose asserts the compiler decided false, from its diagnostics
+fn falseAsserts(diag String&) List<I64>& {
+    bad List<I64>&return = List<I64>()
+    rest := diag[:]
+    for {
+        at := rest.Find("error[S18c]")
+        if at < 0 { break }
+        rest = rest[at:]
+        c := rest.Find("assert $c")
+        if c < 0 { break }
+        rest = rest[c + 9:]
+        end := rest.FindByte('(')
+        if end < 0 { break }
+        ci := try rest[:end].ParseInt() catch default -1
+        if ci >= 0 { bad.Push(ci) }
+    }
+    return bad
+}
+
+# every line of got must be want's: a case whose line differs, or is missing, is a finding
+fn compare(dir String&, seed I64, want String&, got String&, mode String&) {
+    w := want.Split("\n")
+    g := got.Split("\n")
+    for i, line in w {
+        if line.Len() == 0 { continue }
+        if i < g.Len() and g[i] == line { continue }
+        detail String& = $line "\n<missing>"
+        if i < g.Len() { detail = $line "\n" $g[i] }
+        at := line.Find(": ")
+        ci := try line[:at].ParseInt() catch default -1
+        finding(dir, seed, ci, $mode " disagrees with the -d run", detail)
+    }
+}
+
+# records a finding: the program and what was found in build/fuzz/found/<seed>, case ci's own program beside it
+fn finding(dir String&, seed I64, ci I64, what String&, detail String&) {
+    Found.AtomicAdd(1)
+    to String& = $Root "/build/fuzz/found/" $seed
+    os.Run("mkdir -p " $os.Quote(to) " && cp " $os.Quote(dir) "/p.olang " $os.Quote(dir) "/*.txt " $os.Quote(to) " 2> /dev/null")
+    if ci >= 0 {
+        one := gen.Program(U64(seed), Cases, ci, true, Array<String&>(0), Array<Bool>(0))
+        try os.WriteFile($to "/case" $ci ".olang", one) catch { }
+    }
+    line String& = "seed " $seed " case " $ci ": " $what "\n"
+    try io.Print(line) catch { }
+    os.Run("printf '%s' " $os.Quote(line) " >> " $os.Quote($Root "/build/fuzz/findings.txt"))
+    if detail.Len() > 0 {
+        try os.WriteFile($to "/detail" $ci ".txt", detail) catch { }
+    }
 }

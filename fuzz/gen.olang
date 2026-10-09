@@ -14,13 +14,16 @@
 # condition always reads a parameter, so no branch is dead (S8a).
 
 # the primitive types by code: 0-7 the integers, 8-11 the floats, 12 Bool, 13 String. A case's own struct types are
-# 100 + k, its enum types 200 + k, and Array<T> of a primitive T is 300 + T
+# 100 + k, its enum types 200 + k, Array<T> of a primitive T is 300 + T, the case's k-th function type (a lambda's)
+# 400 + k, and List<T> of a primitive T 500 + T
 Prims := String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
 Widths := I32[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
 TBool I32 = 12
 TStr I32 = 13
 
 Arith := String&["+", "-", "*"]
+# text a String is compared with or searched for: pieces renderings are made of
+Texts := String&["", "0", "1", "-", "-1", "0.5", "e+", "nan", "inf", "true", "I32[", ", ", " ", "S0_0(", "C1"]
 Bits := String&["&", "|", "^"]
 Orders := String&["<", "<=", ">", ">="]
 Compares := String&["<", "<=", ">", ">=", "==", "!="]
@@ -97,6 +100,12 @@ type Gen struct(seed U64) {
     en mut Array<I32> = Array<I32>(4)
     epn mut Array<I32> = Array<I32>(16)
     ept mut Array<I32> = Array<I32>(32)
+    # this case's function types: a parameter type and a result type each
+    nl mut I64 = 0
+    lp mut Array<I32> = Array<I32>(64)
+    lr mut Array<I32> = Array<I32>(64)
+    errs mut Bool = false                           # this case has declared its error type, Err<i>
+    fallible mut Bool = false                       # the function being made declares it (so a try may pass it on)
     # what one case adds, read by Program
     decls mut String& = ""                          # its types and helpers, then the case itself
     lits mut String& = ""                           # its literal arguments
@@ -119,7 +128,9 @@ fn (g Gen&) tn(t I32) String& {
     if t < 100 { return $Prims[t] }
     if t < 200 { return "S" $g.ci "_" $(t - 100) }
     if t < 300 { return "E" $g.ci "_" $(t - 200) }
-    return "Array<" $Prims[t - 300] ">"
+    if t < 400 { return "Array<" $Prims[t - 300] ">" }
+    if t < 500 { return "fn(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
+    return "List<" $Prims[t - 500] ">"
 }
 
 fn (g mut Gen&) intT() I32 { return I32(g.r(8)) }
@@ -163,15 +174,18 @@ fn (g Gen&) matches(k I64, want I32, mode I32) Bool {
         case 2 { return isFloat(t) }
         case 3 { return 100 <= t < 200 }                                    # a struct
         case 4 { return 200 <= t < 300 }                                    # an enum
-        case 5 { return t >= 300 }                                          # an array
+        case 5 { return 300 <= t < 400 }                                    # an array
         case 6 { return t == want and g.vmut[k] }                           # assignable, of that type
         case 7 { return isNum(t) and g.vmut[k] }                            # an assignable number
         case 8 { return t == 300 + want and g.vlen[k] > 0 }                 # an array of that element, its length known
         case 9 { return t == 300 + want }                                   # an array of that element
         case 10 { return isInt(t) and g.vmut[k] }                           # an assignable integer
         case 11 { return g.vdep[k] and (isNum(t) or t == TBool) }           # a parameter-dependent number or Bool
-        case 12 { return t >= 300 and g.vlen[k] > 0 and g.vmut[k] }        # an assignable array, length known
+        case 12 { return 300 <= t < 400 and g.vlen[k] > 0 and g.vmut[k] }  # an assignable array, length known
         case 13 { return 100 <= t < 200 and g.vmut[k] }
+        case 14 { return 400 <= t < 500 and g.lr[t - 400] == want }        # a function value giving that type
+        case 15 { return t == 500 + want }                                  # a List of that element
+        case 16 { return 500 <= t < 600 }                                   # any List
         nomatch { return false }
     }
 }
@@ -314,6 +328,12 @@ fn (g mut Gen&) leaf(t I32) String& {
         k := g.pick(t, 0)
         if k >= 0 { return g.use(k) }
     }
+    if p < 65 and t != TBool {
+        f := g.pick(t, 14)
+        if f >= 0 { return $g.use(f) "(" $g.fit(g.lp[g.vt[f] - 400], 1) ")" }
+        l := g.pick(t, 15)
+        if l >= 0 { return "(try " $g.use(l) "[" $g.ex(I32(g.r(7)), 1) "] catch default " $g.lit(t) ")" }   # flows into I64
+    }
     if p < 75 {
         k := g.pick(t, 8)
         if k >= 0 { return g.element(k, 1) }
@@ -350,7 +370,7 @@ fn (g mut Gen&) bin(t I32, d I64, op String&) String& {
 }
 
 fn (g mut Gen&) exInt(t I32, d I64) String& {
-    k := g.r(21)
+    k := g.r(22)
     w := Widths[t]
     if k < 4 { return g.bin(t, d, Arith[g.r(3)]) }
     if k < 6 { return g.bin(t, d, Bits[g.r(3)]) }
@@ -389,7 +409,13 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         if a >= 0 { return "(try " $g.use(a) "[" $g.ex(g.intT(), d - 1) "] catch default " $g.lit(t) ")" }
         if t == 3 {
             a2 := g.pick(0, 5)
+            if a2 < 0 or g.chance(50) { a2 = g.pick(0, 16) }
+            if a2 < 0 or g.chance(50) { a2 = g.pick(TStr, 0) }
             if a2 >= 0 { return $g.use(a2) ".Len()" }
+        }
+        if t == 3 or g.chance(30) {
+            sv := g.pick(TStr, 0)
+            if sv >= 0 { return $Prims[t] "((try " $g.use(sv) ".Trim().ParseInt() catch default " $g.lit(3) "))" }
         }
         e := g.pick(0, 4)
         if e >= 0 {
@@ -405,6 +431,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         m String&return = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
+    if k == 19 { return g.fallibleCall(t, d) }
     return g.leaf(t)
 }
 
@@ -436,7 +463,7 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
 }
 
 fn (g mut Gen&) exFloat(t I32, d I64) String& {
-    k := g.r(15)
+    k := g.r(17)
     if k < 4 {
         ops := String&["+", "-", "*", "/"]
         return g.bin(t, d, ops[k])
@@ -469,6 +496,7 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         m String&return = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
+    if k == 15 { return g.fallibleCall(t, d) }
     return g.leaf(t)
 }
 
@@ -483,7 +511,7 @@ fn (g mut Gen&) fromBits(t I32, d I64) String& {
 }
 
 fn (g mut Gen&) exBool(d I64) String& {
-    k := g.r(13)
+    k := g.r(14)
     if k < 3 {
         s := g.numT()
         b := g.ex(s, d - 1)
@@ -531,6 +559,21 @@ fn (g mut Gen&) exBool(d I64) String& {
         }
     }
     if k == 9 { return g.helper(TBool, d) }
+    if k == 12 {
+        sv := g.pick(TStr, 0)
+        if sv >= 0 {
+            x := g.use(sv)
+            lit := quoted(Texts[g.r(Texts.Len())])
+            p := g.r(5)
+            if p == 0 { return "(" $x " == " $lit ")" }
+            if p == 1 { return "(" $lit " in " $x ")" }
+            if p == 2 { return $x ".StartsWith(" $lit ")" }
+            if p == 3 { return $x ".EndsWith(" $lit ")" }
+            return "(" $x " != " $x ".Trim())"
+        }
+        l := g.pick(0, 16)
+        if l >= 0 { return "(" $g.ex(g.vt[l] - 500, d - 1) " in " $g.use(l) ")" }
+    }
     if k == 10 { return g.cond(TBool, d) }
     if k == 11 {
         s := g.floatT()
@@ -588,6 +631,12 @@ fn (g mut Gen&) piece(d I64) String& {
             hi I64 = lo + g.r(g.vlen[k] - lo + 1)
             return "$(" $g.use(k) "[" $lo ":" $hi "])"
         }
+    }
+    if p == 9 and g.chance(30) {
+        l := g.pick(0, 16)
+        if l >= 0 { return "$(" $g.use(l) ".ToArray())" }
+        sv := g.pick(TStr, 0)
+        if sv >= 0 { return "$((try " $g.use(sv) "[" $g.r(4) ":" $g.r(8) "] catch default \"?\"))" }
     }
     if p == 9 {                                     # a comprehension
         t := g.primT()
@@ -711,7 +760,38 @@ fn (g mut Gen&) typed(t I32, d I64) String& {
 # a call of a new helper function of a few parameters, the first an integer
 fn (g mut Gen&) helper(t I32, d I64) String& {
     if g.hdepth >= 2 or g.nh >= 6 { return g.leaf(t) }
-    name := "h" $g.ci "_" $g.nh
+    return g.newFn(t, d, false)
+}
+
+# a call of a new fallible helper - declaring the case's error type, Err<i> - handled at the call: passed on where the
+# function being made declares that type too, else caught with a default
+fn (g mut Gen&) fallibleCall(t I32, d I64) String& {
+    if t == TStr or g.hdepth >= 2 or g.nh >= 6 { return g.leaf(t) }
+    call := g.newFn(t, d, true)
+    e String& = "Err" $g.ci
+    p := g.r(4)
+    if g.fallible and p == 0 { return "(try " $call ")" }
+    if g.fallible and p == 1 { return "(try " $call " catch " $e ".B default " $g.lit(t) ")" }
+    if p == 2 { return "(try " $call " catch " $e ".A + " $e ".C default " $g.lit(t) " catch default " $g.lit(t) ")" }
+    return "(try " $call " catch default " $g.lit(t) ")"
+}
+
+# the case's error type, declared the first time it is wanted
+fn (g mut Gen&) errType() String& {
+    if not g.errs {
+        g.errs = true
+        g.decls = $g.decls "error Err" $g.ci " {\n    A\n    B\n    C\n}\n"
+    }
+    return "Err" $g.ci
+}
+
+# declares a new helper of type t and gives a call of it; a fallible one declares the case's error type, and fails
+# with it on a parameter-dependent condition
+fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
+    errs String& = ""
+    if fallible { errs = " ? " $g.errType() }
+    name String& = "h" $g.ci "_" $g.nh
+    if fallible { name = "f" $g.ci "_" $g.nh }
     g.nh += 1
     pts := Array<I32>(3)
     np I64 = 1 + g.r(3)
@@ -719,8 +799,10 @@ fn (g mut Gen&) helper(t I32, d I64) String& {
     snv := g.nv
     sdep := g.dep
     snp := g.np
+    sfal := g.fallible
     g.base = g.nv
     g.np = np
+    g.fallible = fallible
     b := StringBuilder()
     b.Push("fn " $name "(")
     for i in range np {
@@ -729,9 +811,10 @@ fn (g mut Gen&) helper(t I32, d I64) String& {
         if i > 0 { b.Push(", ") }
         b.Push("x" $x " " $Prims[pts[i]])
     }
-    b.Push(") " $Prims[t] " {\n")
+    b.Push(") " $Prims[t] $errs " {\n")
     g.hdepth += 1
     b.Push(g.stmts(1 + g.r(3), 1, "    "))
+    if fallible { b.Push("    if " $g.depCond(1) " { error Err" $g.ci "." $String&["A", "B", "C"][g.r(3)] " }\n") }
     b.Push("    return " $g.fit(t, 2) "\n}\n")
     g.hdepth -= 1
     g.decls = $g.decls $b.ToString()
@@ -739,6 +822,7 @@ fn (g mut Gen&) helper(t I32, d I64) String& {
     g.nv = snv
     g.dep = sdep
     g.np = snp
+    g.fallible = sfal
     c := StringBuilder()
     c.Push($name "(")
     for i in range np {
@@ -758,8 +842,10 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
     snv := g.nv
     sdep := g.dep
     snp := g.np
+    sfal := g.fallible
     g.base = g.nv
     g.np = 2
+    g.fallible = false
     n := g.push(2, -1, false, true)
     a := g.push(t, -1, false, true)
     g.hdepth += 1
@@ -771,6 +857,7 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
     g.nv = snv
     g.dep = sdep
     g.np = snp
+    g.fallible = sfal
     return $name "(I32(" $g.solid(g.intT(), d - 1) " & 7), " $g.fit(t, d - 1) ")"
 }
 
@@ -800,7 +887,7 @@ fn (g mut Gen&) depCond(d I64) String& {
 }
 
 fn (g mut Gen&) stmt(d I64, ind String&) String& {
-    k := g.r(21)
+    k := g.r(27)
     in2 := $ind "    "
     if k == 4 {
         v := g.pick(0, 7)
@@ -885,10 +972,13 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
     }
     if k == 15 and d > 0 {
         a := g.pick(0, 5)
+        if a < 0 or g.chance(30) { a = g.pick(0, 16) }
         if a >= 0 {
             arr := g.use(a)
             save := g.nv
-            x := g.push(g.vt[a] - 300, -1, false, true)
+            et I32 = g.vt[a] - 300
+            if et >= 200 { et = et - 200 }
+            x := g.push(et, -1, false, true)
             body := g.block(1 + g.r(3), d - 1, in2)
             g.nv = save
             return $ind "for x" $x " in " $arr " {\n" $body $ind "}\n"
@@ -927,6 +1017,79 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         }
     }
     if k == 18 and d > 0 { return g.matchStmt(d, ind) }
+    if k == 20 and g.nl < 64 {                      # a lambda, of the function type it is declared as
+        pt := g.primT()
+        rt := g.primT()
+        x := g.reserve()
+        a := g.push(pt, -1, false, true)
+        sfal := g.fallible
+        g.fallible = false
+        body := g.ex(rt, 2)
+        g.fallible = sfal
+        g.nv = a
+        li := g.nl
+        g.nl += 1
+        g.lp[li] = pt
+        g.lr[li] = rt
+        g.declare(x, I32(400 + li), -1, true)
+        return $ind "x" $x " fn(x" $a " " $Prims[pt] ") " $Prims[rt] " = fn(x" $a ") { return " $body " }\n"
+    }
+    if k == 21 {                                    # deferred code: run at its block's way out (S19)
+        v := g.pick(0, 7)
+        if v >= 0 {
+            t := g.vt[v]
+            sfal := g.fallible
+            g.fallible = false
+            e := g.fit(t, 2)
+            g.fallible = sfal
+            if isFloat(t) or g.chance(50) { return $ind "defer " $g.use(v) " = " $e "\n" }
+            return $ind "defer { " $g.use(v) " " $IntAssigns[g.r(6)] " " $e " }\n"
+        }
+    }
+    if k == 22 {
+        t := g.primT()
+        x := g.reserve()
+        g.declare(x, I32(500 + t), -1, true)
+        return $ind "x" $x " List<" $Prims[t] "> = List<" $Prims[t] ">()\n"
+    }
+    if k == 23 {
+        l := g.pick(0, 16)
+        if l >= 0 {
+            et I32 = g.vt[l] - 500
+            a := g.pick(et, 9)
+            if a >= 0 and g.chance(30) { return $ind $g.use(l) ".PushAll(" $g.use(a) ")\n" }
+            return $ind $g.use(l) ".Push(" $g.fit(et, 2) ")\n"
+        }
+    }
+    if k == 24 and g.fallible {
+        return $ind "if " $g.depCond(2) " { error Err" $g.ci "." $String&["A", "B", "C"][g.r(3)] " }\n"
+    }
+    if k == 25 and d > 0 and g.hdepth < 2 and g.nh < 6 {  # a fallible call as a statement
+        call := g.newFn(g.primT(), 2, true)
+        if g.fallible and g.chance(30) { return $ind "try " $call "\n" }
+        a := g.block(1, d - 1, $ind "    ")
+        b := g.block(1, d - 1, $ind "    ")
+        return $ind "try " $call " catch Err" $g.ci ".A {\n" $a $ind "} catch {\n" $b $ind "}\n"
+    }
+    if k == 26 and d > 0 {                          # a two-name loop over an array, or a stepped range
+        a := g.pick(0, 5)
+        save := g.nv
+        if a >= 0 and g.chance(50) {
+            arr := g.use(a)
+            i := g.push(3, -1, false, true)
+            x := g.push(g.vt[a] - 300, -1, false, true)
+            body := g.block(1 + g.r(2), d - 1, in2)
+            g.nv = save
+            return $ind "for x" $i ", x" $x " in " $arr " {\n" $body $ind "}\n"
+        }
+        lo I64 = g.r(5) - 2
+        x := g.push(2, -1, false, true)
+        body := g.block(1 + g.r(2), d - 1, in2)
+        g.nv = save
+        los String& = $lo
+        if lo < 0 { los = "(" $lo ")" }
+        return $ind "for x" $x " in range " $los ", " $(lo + g.r(9)) ", " $(1 + g.r(3)) " {\n" $body $ind "}\n"
+    }
     if k == 19 {
         x := g.reserve()
         e := g.exStr(2)
@@ -1064,6 +1227,9 @@ fn (g mut Gen&) genCase(ci I64) I32 {
     g.nh = 0
     g.ns = 0
     g.ne = 0
+    g.nl = 0
+    g.errs = false
+    g.fallible = false
     g.base = 0
     g.nv = 0
     g.hdepth = 0
@@ -1117,23 +1283,22 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     b := StringBuilder()
     b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\n")
     prints := StringBuilder()
-    asserts := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {
         g.genCase(ci)
         if only < 0 or only == ci {
             b.Push(g.decls)
             resets.Push(g.resets)
-            prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
+            # each case's assert just before its line, so one failing at run time shows which
             if ci < has.Len() and has[ci] {
-                asserts.Push("    assert $c" $ci "(" $g.lits ") == " $quoted(expect[ci]) "\n")
+                prints.Push("    assert $c" $ci "(" $g.lits ") == " $quoted(expect[ci]) "\n")
             }
+            prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
         }
     }
     b.Push("fn main() ? io.IoError {\n    if os.Args().Len() > 1000 {\n")
     b.Push(resets.ToString())
     b.Push("    }\n")
-    b.Push(asserts.ToString())
     b.Push(prints.ToString())
     b.Push("}\n")
     return b.ToString()

@@ -4612,8 +4612,7 @@ error as they would at run time. It is **not** possible when evaluation would:
   global's own initializer (K2c);
 - call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
   is known only when the call is reached;
-- spawn or join, use an atomic operation, or end the test or the process (`done`, `fail`, `abort`,
-  `unreachable`);
+- spawn or join, or end the test or the process (`done`, `fail`, `abort`, `unreachable`);
 - fail an `assert`, or let an error escape that no clause handles;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
   `-1`, shift by a count outside the type's width, convert a float the target cannot represent, or index
@@ -4624,6 +4623,10 @@ error as they would at run time. It is **not** possible when evaluation would:
   from bits that is quiet is read exactly;
 - run longer, or recurse deeper, than an implementation-defined budget - which is never a crash: evaluation that
   would run out of the stack it runs on stops there, refused (under `-i`, with that message).
+
+An atomic operation (P9) is evaluated as the plain operation on its place, since no task runs beside an evaluation:
+it reads or writes that place under the rules above, so one on a local or on what a local's references reach is
+evaluated, and one on a global is refused as any other write of it (or, for `AtomicLoad`, read of a mutable one) is.
 
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused.
