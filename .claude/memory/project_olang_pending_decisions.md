@@ -111,6 +111,10 @@ rule and where it is recorded; the morning report lists them all, then they move
 4. (wt-constgen, T7c) the C2e inline-field form (`m Array<F32> = Array<F32>(16)` stored inline) is gone: an inline
    array is `Array<T, N>` now; typed introductions `<N I64>`.
 5. (wt-chunkpool, O8b) each thread's chunk pool keeps at most 1/8 of physical memory, least-recently-used returned.
+6. (wt-native, B12) native code uses the widest vectors the CPU has (512-bit on AVX-512), not LLVM's tuned 256 -
+   faster everywhere measured (GEMM 57-71 vs 41-46 GFLOPS) but a kernel tiled for another width can fall off a cliff;
+   AVX512-BF16 conversions switched off (they flush subnormals, breaking evaluator agreement); cross-architecture
+   builds are -c only.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
