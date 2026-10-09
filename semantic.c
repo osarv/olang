@@ -11699,6 +11699,9 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
             *unnamed = op->readVar->scopeUnnamed || v->scopeUnnamed;
             return true;
         }
+        //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
+        //storage this call keeps for its whole length: its own copy, or the caller's when it may not write it
+        if (isParam && !op->type.structMAlloc) { *outDepth = 1; return true; }
         if (isParam) { *outVar = SCOPE_AMBIGUOUS; return true; } //a caller's scope with no variable to name it
         *outDepth = op->type.scopeDepth;
         *unnamed = op->readVar->scopeUnnamed || v->scopeUnnamed;

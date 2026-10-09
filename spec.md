@@ -1164,6 +1164,12 @@ This applies to the array itself, not its elements: `Array<Handle&>` is an array
 value and is rejected; `Array<Handle&>&` is a reference to it and is accepted. It does not apply to an `extern-param`
 (§11 X3), which marshals to a raw pointer and so never copies anything to begin with.
 
+**D9b.** Nor does it apply to a generic's by-value parameter (`x <T>`, `x mut <T>`) instantiated with an array: the
+declaration does not say array, and its meaning is the by-value parameter's, as for a struct. Without `mut` the callee
+reads the caller's array itself - storage that outlives the call, so it may be borrowed like any value the callee holds
+(passed to a `T&` parameter, compared by `Eq`); with `mut` the callee gets its own copy of the elements, which it may
+write without the caller seeing it. The compile-time evaluator (K1) gives both the same meaning.
+
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
 parameter's type rather than modifying it: for a value parameter it makes the callee's own copy

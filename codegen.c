@@ -7827,6 +7827,10 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
         }
     }
+    //D9: a "mut" parameter holding a run-time-length array by value - a generic's, instantiated with one (D9a) - is the
+    //callee's own copy, as a struct's is: it was handed the caller's { length, storage } pair, and writing through that
+    //changed the caller's array (or faulted on a constant one)
+    struct list ownCopies = ListInit(sizeof(int));
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         if (cgIsDtor(func)) { //C9: the instance itself, in place - its storage is where the pointer passed points
@@ -7854,6 +7858,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         //cgStoreInto's by-ref branch which expects our internal ptr-to-storage convention
         fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
         cgDbgVar(ctx, slot, p->name, p->type, func->tok.lineNr, i + 1);
+        if (p->mut && !p->type.structMAlloc && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc) ListAdd(&ownCopies, &i);
     }
 
     //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the
@@ -7863,6 +7868,15 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", ownScope);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
+    for (int k = 0; k < ownCopies.len; k++) {
+        struct var* p = ListGetIdx(&func->type.vars, *(int*)ListGetIdx(&ownCopies, k));
+        struct cgLocal* l = cgFindLocal(ctx, p->name);
+        char* cur = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load { i64, ptr }, ptr %s\n", cur, l->llvmVal);
+        char* mine = cgCopyRuntimeLengthArray(ctx, p->type, cur, ownScope, NULL);
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", mine, l->llvmVal);
+    }
+    ListDestroy(ownCopies);
     //O2: the body IS a block, and the checker counts it as depth 1 (buildBlock). This path emits its
     //statements directly rather than through cgBlock, so the depth has to be set to match or every
     //nested block lands one level too shallow and never gets an arena of its own.
