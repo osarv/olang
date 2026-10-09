@@ -309,7 +309,7 @@ type ListIter<T> struct(of List<T>&) {
 }
 
 fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
-    if it.at == it.list.count { error Exhausted.END }
+    if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {                  # this chunk is used up: on to the next one
         it.chunk = it.list.chunks[it.k]
         it.room = it.chunk.Len()
@@ -324,7 +324,7 @@ fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
 # moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
 # that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
 fn (it mut ListIter<<T>>&) enter() ? Exhausted {
-    if it.at == it.list.count { error Exhausted.END }
+    if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {
         it.chunk = it.list.chunks[it.k]
         it.room = it.chunk.Len()

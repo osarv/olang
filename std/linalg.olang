@@ -3517,6 +3517,35 @@ if TestBuild {
         assert dz.Get(1, 1) == 2.0 * ActivationSlope(-1.0, Activation.Gelu)
     }
 
+    # E4a/E28: ActivationSlope's "1.0 if x > 0.0 else 0.0" beside an F32 value is an F32 - it did not compile at F32
+    test "an activation's slope and backward at F32, and through it at F16, are the F64 ones rounded" {
+        worst := 0.0
+        for i in range 2001 {
+            x F64 = -10.0 + 20.0 * F64(i) / 2000.0
+            for act in Activation[Activation.Identity, Activation.Relu, Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
+                worst = math.Max(worst, math.Abs(F64(ActivationSlope(F32(x), act)) - ActivationSlope(x, act)))
+            }
+        }
+        assert worst < 1e-4
+        assert ActivationSlope(F32(0.5), Activation.Relu) == 1.0 and ActivationSlope(F32(0.0), Activation.Relu) == 0.0
+        assert ActivationSlope(F32(-3.0), Activation.Identity) == 1.0 and ActivationSlope(F16(2.0), Activation.Relu) == 1.0
+        z := Matrix<F32>(3, 4)
+        z.Convert(counting(3, 4, -6.0))
+        dy := Full(3, 4, F32(2.0))
+        for act in Activation[Activation.Identity, Activation.Relu, Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
+            dz := Full(3, 4, F32(1.0))
+            dz.ActivationBackward(dy, z, act)
+            dz2 := Full(3, 4, F32(1.0))
+            dz2.ActivationBackward(dy, z, act, 1)
+            for r in range 3 {
+                for c in range 4 {
+                    assert dz.Get(r, c) == 2.0 * ActivationSlope(z.Get(r, c), act)
+                    assert dz2.Get(r, c) == 1.0 + 2.0 * ActivationSlope(z.Get(r, c), act)
+                }
+            }
+        }
+    }
+
     test "GemmAct is Gemm, the bias row and the activation, in one pass" {
         r := rand.Rand(10)
         for size in range 6 {

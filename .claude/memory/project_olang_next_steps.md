@@ -467,6 +467,8 @@ because what it finds about structure feeds the refactor.
   06:00 CEST: 28% left over 6 h, ~flat out). send_later armed for 03:03 UTC (05:03 CEST). oannc2 moved to master
   db2af5d; started oann wt-oann-p7 (catch-up, BF16 re-measure after inline narrowing, consolidator wired into the agent
   = settling open question 11, FastExp in the softmax). Running: rvfix, rv2fix, qc, s4cg, oann-p7.
+- 00:30 CEST: rvfix merged and pushed (e046142, its own verify on the merged code). qc and rv2fix told to merge
+  master. Running: qc, rv2fix, s4cg, oann-p7.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

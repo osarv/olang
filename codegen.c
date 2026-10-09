@@ -1142,6 +1142,14 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
         if (cgIsReference(innerBase->type) || cgValueHomeVar(base)) {
             return cgResolveEffectiveScope(ctx, innerBase);
         }
+        //O4b/O25h: a reference held in a value lives where that value's references were put - a by-value parameter's
+        //in its own scope variable, as the checker reads it (RefExactScope): "fn grow(b Box) { b.n.next = N(9) }"
+        //built N(9) in grow's own scope, closed at its return, and stored it in the caller's node
+        struct var* to;
+        int depth;
+        bool unnamed;
+        if (base->type.structMAlloc && !innerBase->type.structMAlloc && SemanticValueRefsHome(innerBase, &to, &depth, &unnamed))
+            return unnamed ? cgProgramScope(ctx) : cgResolveScope(ctx, to, depth);
     }
     struct var* home = base->type.structMAlloc ? NULL : cgValueHomeVar(base);
     if (home) return cgResolveScope(ctx, home->valueHome, home->valueHomeDepth);
@@ -2752,25 +2760,95 @@ static char* cgIdentityEq(struct cgCtx* ctx, struct type t, char* aVal, char* bV
     return cgDeepEq(ctx, t, aVal, bVal);
 }
 
+//a struct value compared field by field, inline: aVal/bVal its two addresses
+static char* cgDeepEqFields(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
+    char storTy[256];
+    structAggSpelling(t, storTy, sizeof(storTy));
+    char* acc = "true";
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* mv = ListGetIdx(&t.vars, i);
+        char* addrA = cgNewTmp(ctx);
+        char* addrB = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", addrA, storTy, aVal, i);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", addrB, storTy, bVal, i);
+        char* valA = cgLoadOrAddr(ctx, mv->type, addrA, false);
+        char* valB = cgLoadOrAddr(ctx, mv->type, addrB, false);
+        char* eq = cgDeepEq(ctx, mv->type, valA, valB);
+        char* next = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", next, acc, eq);
+        acc = next;
+    }
+    return acc;
+}
+
+//E10: whether comparing a value of type `from` walks into a struct value of type `target` - through value fields and the
+//elements of arrays, held by value or by reference (an array reference compares what it names). An enum's payload is
+//compared by a function of its own (cgChoiceEqFn) and a struct or enum reference by identity, so neither goes on
+static bool cgEqWalksInto(struct type from, struct type target, struct list* seen) {
+    if (from.bType == BASETYPE_ARRAY) return from.arrElem && cgEqWalksInto(*from.arrElem, target, seen);
+    if (from.bType != BASETYPE_STRUCT || from.structMAlloc) return false;
+    from.refMut = false;
+    if (TypeIsSame(from, target)) return true;
+    for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), from)) return false;
+    ListAdd(seen, &from);
+    for (int i = 0; i < from.vars.len; i++) {
+        if (cgEqWalksInto(((struct var*)ListGetIdx(&from.vars, i))->type, target, seen)) return true;
+    }
+    return false;
+}
+
+//E10: a struct value whose comparison walks back into its own type ("type S struct(xs Array<S>&)") is compared by a
+//function per type, as an enum's payload is (cgChoiceEqFn) - expanded inline, its fields would be expanded again
+//without end, and the compiler did exactly that. Named by the type's structure, emitted once per object, and calling
+//itself where the type comes round again: data that holds itself is compared as a recursion that does not end
+static char* cgStructEqFn(struct cgCtx* ctx, struct type t) {
+    struct type keyT = t;
+    keyT.structMAlloc = false;
+    keyT.refMut = false;
+    struct cgBuf key = {0};
+    rdKey(keyT, &key);
+    struct cgBuf symB = {0};
+    cgBufAdd(&symB, "@olang.structeq.%s", cgBufStr(&key));
+    free(key.p);
+    char* sym = cgBufStr(&symB);
+    if (cgSymAlreadyEmitted(ctx, sym)) return sym;
+    FILE* savedOut = ctx->fnOut;
+    bool savedTerm = ctx->terminated;
+    char* buf;
+    size_t sz;
+    FILE* body = open_memstream(&buf, &sz);
+    if (!body) ErrorBugFound();
+    ctx->fnOut = body;
+    ctx->terminated = false;
+    fprintf(body, "define linkonce_odr i1 %s(ptr %%se.a, ptr %%se.b) {\nentry:\n", sym);
+    struct cgBodyBuf bb;
+    cgBodyBegin(ctx, &bb); //O2c: its allocas in its own entry block
+    char* r = cgDeepEqFields(ctx, keyT, "%se.a", "%se.b");
+    fprintf(ctx->fnOut, "  ret i1 %s\n}\n\n", r);
+    cgBodyEnd(ctx, &bb);
+    ctx->fnOut = savedOut;
+    ctx->terminated = savedTerm;
+    fflush(body);
+    fwrite(buf, 1, sz, ctx->out);
+    fclose(body);
+    free(buf);
+    return sym;
+}
+
 char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     if (t.bType == BASETYPE_STRUCT && !t.structMAlloc) {
-        char storTy[256];
-        structAggSpelling(t, storTy, sizeof(storTy));
-        char* acc = "true";
-        for (int i = 0; i < t.vars.len; i++) {
-            struct var* mv = ListGetIdx(&t.vars, i);
-            char* addrA = cgNewTmp(ctx);
-            char* addrB = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", addrA, storTy, aVal, i);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", addrB, storTy, bVal, i);
-            char* valA = cgLoadOrAddr(ctx, mv->type, addrA, false);
-            char* valB = cgLoadOrAddr(ctx, mv->type, addrB, false);
-            char* eq = cgDeepEq(ctx, mv->type, valA, valB);
-            char* next = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", next, acc, eq);
-            acc = next;
-        }
-        return acc;
+        struct type self = t;
+        self.refMut = false;
+        struct list seen = ListInit(sizeof(struct type));
+        bool recursive = false;
+        for (int i = 0; i < t.vars.len && !recursive; i++)
+            recursive = cgEqWalksInto(((struct var*)ListGetIdx(&t.vars, i))->type, self, &seen);
+        ListDestroy(seen);
+        if (!recursive) return cgDeepEqFields(ctx, t, aVal, bVal);
+        char* fn = cgStructEqFn(ctx, t);
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i1 %s(ptr %s, ptr %s)\n", r, fn, aVal, bVal);
+        return r;
     }
     //E10: two array references compare the arrays they name - lengths, then elements by this same rule - except that a
     //null equals only a null. Either length kind: a marked run-time-length array is { i64, ptr }, a marked fixed one the
@@ -9082,8 +9160,13 @@ void emitStackRuntime(FILE* out) {
         "declare i32 @sigaltstack(ptr, ptr)\n"
         "declare i32 @raise(i32)\n"
         "declare i64 @write(i32, ptr, i64)\n"
-        //code, environment, whether a test is running, and the value a jump out of the thread carried (0: none)
-        "%%olang.stackrun = type { ptr, ptr, i32, i32 }\n"
+        "declare ptr @dlsym(ptr, ptr)\n"
+        //code, environment, whether a test is running, the value a jump out of the thread carried (0: none), and the
+        //program's scope as the caller reaches it (O1b/P2: a task's private stand-in)
+        "%%olang.stackrun = type { ptr, ptr, i32, i32, ptr }\n"
+        //glibc's own answer to the least stack a thread may have - its guard, its static TLS and PTHREAD_STACK_MIN
+        //- found at run time, as Rust's std finds it: a private symbol, so never linked against
+        "@__olang_minstack_name = linkonce_odr unnamed_addr constant [23 x i8] c\"__pthread_get_minstack\\00\"\n"
         //OnCrash's message, its length first, and this thread's alternate stack
         "@__olang_crash_msg = linkonce_odr global ptr null\n"
         "@__olang_crash_stack = linkonce_odr thread_local(initialexec) global ptr null\n\n"
@@ -9103,13 +9186,27 @@ void emitStackRuntime(FILE* out) {
         "  store i32 %%t, ptr %%testp\n"
         "  %%leftp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 3\n"
         "  store i32 0, ptr %%leftp\n"
-        //a size below the least a thread may have is raised to it
+        "  %%progp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 4\n"
+        "  %%prog = load ptr, ptr @__olang_prog_scope\n"
+        "  store ptr %%prog, ptr %%progp\n"
+        //a size below the least a thread may have is raised to it: what glibc says it needs, which counts the static
+        //TLS the stack also holds - else the system's PTHREAD_STACK_MIN, at least 16KB
+        "  %%ai = call i32 @pthread_attr_init(ptr %%attr)\n"
         "  %%min = call i64 @sysconf(i32 %d)\n"
         "  %%minok = icmp sgt i64 %%min, 16384\n"
-        "  %%least = select i1 %%minok, i64 %%min, i64 16384\n"
+        "  %%floor = select i1 %%minok, i64 %%min, i64 16384\n"
+        "  %%gm = call ptr @dlsym(ptr null, ptr @__olang_minstack_name)\n"
+        "  %%hasgm = icmp ne ptr %%gm, null\n"
+        "  br i1 %%hasgm, label %%askglibc, label %%sized\n"
+        "askglibc:\n"
+        "  %%gmv = call i64 %%gm(ptr %%attr)\n"
+        "  br label %%sized\n"
+        "sized:\n"
+        "  %%need = phi i64 [ %%floor, %%entry ], [ %%gmv, %%askglibc ]\n"
+        "  %%needmore = icmp sgt i64 %%need, %%floor\n"
+        "  %%least = select i1 %%needmore, i64 %%need, i64 %%floor\n"
         "  %%small = icmp slt i64 %%bytes, %%least\n"
         "  %%size = select i1 %%small, i64 %%least, i64 %%bytes\n"
-        "  %%ai = call i32 @pthread_attr_init(ptr %%attr)\n"
         "  %%ss = call i32 @pthread_attr_setstacksize(ptr %%attr, i64 %%size)\n"
         "  %%ssok = icmp eq i32 %%ss, 0\n"
         "  br i1 %%ssok, label %%create, label %%refused\n"
@@ -9139,7 +9236,9 @@ void emitStackRuntime(FILE* out) {
         "  unreachable\n"
         "done:\n"
         "  ret void\n"
-        "}\n\n"
+        "}\n\n",
+        L->attrSize, (int)_SC_THREAD_STACK_MIN);
+    fprintf(out,
         //the thread: f run, behind a recovery point of its own while a test is running, then its pool given back.
         //Nothing is written between the setjmp and a jump to it but by the thread's own code (the volatile question X3b
         //answers for the harness): %%run is read after the landing, and set before the setjmp
@@ -9147,6 +9246,11 @@ void emitStackRuntime(FILE* out) {
         "entry:\n"
         "  %%jb = alloca [%zu x i8], align 16\n"
         "  call void @__olang_alt_stack()\n"
+        //the program's scope is reached as the caller reaches it - through a task's stand-in when a task called (P2):
+        //this thread starts with the real one, which another task, or the thread the join lets go on, may be using
+        "  %%progp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 4\n"
+        "  %%prog = load ptr, ptr %%progp\n"
+        "  store ptr %%prog, ptr @__olang_prog_scope\n"
         "  %%codep = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 0\n"
         "  %%code = load ptr, ptr %%codep\n"
         "  %%envp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 1\n"
@@ -9179,7 +9283,7 @@ void emitStackRuntime(FILE* out) {
         "  call void @__olang_alt_stack_free()\n"
         "  ret ptr null\n"
         "}\n\n",
-        L->attrSize, (int)_SC_THREAD_STACK_MIN, L->jmpBuf);
+        L->jmpBuf);
     fprintf(out,
         //S2: this thread's alternate stack, made once OnCrash has said what to write - 64KB, room for the signal frame
         //of the widest vector registers and the handler's few calls
@@ -9301,7 +9405,6 @@ void emitDyncallRuntime(FILE* out) {
         if (!strcmp(cgLibcLayouts[i].arch, cgArch)) L = &cgLibcLayouts[i];
     }
     fputs(
-        "declare ptr @dlsym(ptr, ptr)\n"
         "declare ptr @dlopen(ptr, i32)\n"
         "declare i32 @ffi_prep_cif(ptr, i32, i32, ptr, ptr)\n"
         "declare void @ffi_call(ptr, ptr, ptr, ptr)\n"
@@ -10224,12 +10327,26 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
 //both through all the "define" sites, several of which live inside multi-function runtime string literals; doing it
 //here also guarantees the runtime itself (the arena, the scope merge, the chunk pool, the join walk) is built for the
 //target and, under -r, instrumented - exactly the code a concurrency bug would hide in.
+//B3: a "linkonce_odr" global or constant - the runtime's, which every object carries - goes in a comdat of its own name,
+//as clang puts an inline variable: without one a link that is not LTO's (-d, -r) keeps every object's copy of its
+//storage, only the symbol being resolved to one, so the static TLS a thread needs grew with the number of modules
+//(0x4680 bytes for 16 objects against 0x448) and os.RunOnStack's small stacks no longer held it
 static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
     size_t i = 0;
     while (i < len) {
         size_t end = i;
         while (end < len && buf[end] != '\n') end++;
         size_t lineLen = end - i;
+        char* sp = lineLen > 1 && buf[i] == '@' ? memchr(&buf[i], ' ', lineLen) : NULL;
+        if (sp && (size_t)(&buf[i] + lineLen - sp) > 16 && !strncmp(sp, " = linkonce_odr ", 16)) {
+            int nameLen = (int)(sp - &buf[i + 1]);
+            fprintf(dst, "$%.*s = comdat any\n", nameLen, &buf[i + 1]);
+            fwrite(&buf[i], 1, lineLen, dst);
+            fputs(", comdat", dst);
+            if (end < len) fputc('\n', dst);
+            i = end +1;
+            continue;
+        }
         //"define <...> {" - the attribute group goes immediately before the brace. The last brace on the
         //line is the right one: a struct return type ("define { i32, i32 } @f() {") contains others.
         //Under -d the line also carries "!dbg !N", and attributes must come before it.
