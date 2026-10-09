@@ -6168,58 +6168,28 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_READ_ONLY) Err(tok, ERR_READ_ONLY_TO_WRITABLE);
 }
 
-//D15: ":=" reads the declared type off the initializer, which is only legible when the type is written at
-//the declaration - a literal, a constructor call (the type name is right there), or a SLICE, whose type is
-//its base's element type with a runtime length: "s := a[1:3]" says as much about s as "s := int32[1,2,3]"
-//does. An ordinary call is still rejected: its return type lives in another declaration entirely.
-bool OperandTypeIsWrittenHere(struct operand* op) {
-    //T2a: "null" is the one literal that writes no type at all - it adapts to whatever it meets, so there
-    //is nothing for ":=" to read off it. "x := null" is rejected here rather than reaching codegen with a
-    //BASETYPE_NULL variable, which is what it did until this line existed.
-    if (op->isNullLiteral) return false;
-    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->isLambda) return true; //D16: its signature
-    //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
-    //then carries. A call returning nothing has no type to give.
-    if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
-    //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
-    //the atomic methods that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
-    //while "n := l.Len()" on a List compiled
-    if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST || op->suppliedCall) return true;
-    if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
-    //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
-    if (op->opType == OPERATION_SEQ && op->args.len)
-        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
-    //E11a/E11b: a rendering or a join is always byte[], and the "$" or the quotes say so where it is written
-    if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
-    if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
-    if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
-    if (op->opType == OPERATION_AS) return true; //E32: "x as T" names its type
-    if (op->opType == OPERATION_MATCH) { //S12b: when each value would, as a conditional's (E28)
-        struct list vs = SemanticMatchValues(op);
-        for (int i = 0; i < vs.len; i++) if (!OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&vs, i))) return false;
-        return vs.len > 0;
-    }
-    //E28: "x := a if c else b" - when each value would name its type for ":=" on its own
-    if (op->opType == OPERATION_COND && op->args.len == 3) {
-        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 1))
-            && OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 2));
-    }
-    //a conversion names its type as plainly as a constructor call does - "String(bytes)", "Int64(n)"
-    if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT || op->viaConversion) return true;
-    //D15: a field read - its type is the field's declared one, as a call's is its callee's result, and it is how
-    //a cursor starts: "c := l.head" takes the field's type and where its referent lives (O25a)
-    if (op->opType == OPERATION_MEMBER) return true;
-    //...and an element read, for the same reason: its type is the array's declared element type, and it is how
-    //generic code holds an element - "t := a[i]" lives where the element does, whatever the element is
-    if (op->opType == OPERATION_INDEX && !op->catchClauses.len) return true;
-    return op->isLiteral || op->opType == OPERATION_SLICE;
+//D15: ":=" declares the type of its initializer - any expression whose type is settled where it is written. Two have
+//none: "null", which adapts to whatever it meets (and so an expression whose type is null's, "null if c else null"),
+//and a call returning nothing. A call's several results are destructured instead (D8c, reported by the declaration).
+static bool operandHasDeclType(struct operand* op) {
+    if (op->isNullLiteral || op->type.bType == BASETYPE_NULL) return false;
+    return op->type.bType != BASETYPE_VOID;
 }
 
 //D15 + T29c: the type ":=" gives a declaration from its initializer - wherever ":=" appears (a local, a "for"
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (!OperandTypeIsWrittenHere(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
+    if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
+    else if (!operandHasDeclType(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
+    //...and an expression of numeric literals alone (E4a), computed while compiling, declares what its value written
+    //as one literal would (T6a): "x := 1 + 2" an I32, "x := 2147483647 + 1" an I64, as "x := 2147483648" is
+    if (!rhs->isLiteral && operandOnlyNumericLiterals(rhs)) {
+        struct operand saved = *rhs;
+        enum litValueFail why = literalExprFold(rhs);
+        if (why == LIT_VALUE_OK) markFoldedAway(&saved);
+        else if (why == LIT_VALUE_NONE) Err(rhs->tok, ERR_LITERAL_EXPR_NO_VALUE);
+    }
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(rhs)) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);

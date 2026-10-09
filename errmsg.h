@@ -201,7 +201,8 @@ struct type;
     X(ERR_LITERAL_EXPR_RANGE,           "E4a",   "this literal expression's value does not fit %t") \
     X(ERR_LITERAL_NEEDS_CTOR,           "T29d",  "a value of %t is made by its constructor - write %t(...)") \
     X(ERR_READ_ONLY_TO_WRITABLE,        "T25c",  "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") \
-    X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and this one names none - write the type") \
+    X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and a call returning nothing has none") \
+    X(ERR_DECL_FROM_NULL,               "D15",   "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") \
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
     X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
     X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \

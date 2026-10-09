@@ -1314,16 +1314,16 @@ the array would then run past.
 message `out of memory`, as a task the system declines to start does (P1c). It is never an error a program
 handles: no `try` reaches it.
 
-**D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
-must be a literal (an array literal or primitive literal — see §5), a **call** that
-returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
-`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic method that gives a value (P9)), a **field read**
-(`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
-(`t := a[i]` — the array's element type), a **slice** (E16a), or
-text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
-`Array<T>` (T7): its length is not part of the type, and a later assignment may change it. It may not be
-`null`, a variable read, or any other expression built from these, which the reader would have to type
-in their head. A reference-shaped result writes no scope tag into the declaration: the local takes its
+**D15.** In the second form (`:=`), no type is written; the declared type is the type of `expr`, which may be any
+expression whose type is settled where it is written - a literal, a variable, field or element read, a call, a
+slice, arithmetic, a comparison, a conditional, a `match`, a conversion, text. Two have no type to give, and are
+compile-time errors: `null`, which has none until it meets one (T2a) - and so any expression whose type is null's,
+`null if c else null` - and a call that returns nothing. A call's several results are destructured instead (D8c).
+An expression of numeric literals alone (E4a), `x := 1 + 2`, is computed while compiling and declares what its value
+written as one literal would (T6a: `I32`, else `I64`, else `U64` for an integer; `F64` for a float) - so `x :=
+2147483647 + 1` is the `I64` 2147483648, exactly as `x := 2147483648` is; one whose value no type holds is an error.
+Text declares a `String` (T29c). An array literal declares an
+`Array<T>` (T7): its length is not part of the type, and a later assignment may change it. A reference-shaped result writes no scope tag into the declaration: the local takes its
 initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
 (C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
 destructed when that scope closes.
@@ -1753,7 +1753,8 @@ expressions, even if their value is known at compile time.
 
 **E4a (literal-only expressions).** An expression built only from numeric literals (`INT_LIT`, `FLOAT_LIT`,
 `CHAR_LIT`), parentheses, prefix `-` and `~`, and the binary operators `+ - * / % & | ^ << >>` is a **literal-only
-expression**. It is not a literal expression (E4) - `x := 1 + 2` has no type to read - but wherever a literal adapts
+expression**. It is not a literal expression (E4) - with no target, `x := 1 + 2` declares what its value as one literal would (D15) -
+but wherever a literal adapts
 (T6: an initializer, an assignment, an argument, a returned value, a `try` default, a `case` value, an operand beside
 a typed one) it adapts exactly as one literal does: its value is computed while compiling, and it is then the one
 literal holding that value. The value is computed **exactly** - an integer as a mathematical integer, never wrapped
@@ -2358,7 +2359,7 @@ referent type (a temporary, E12c: a call's value, a constructor call, an enum ca
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
-`:=` takes one when it would take each value on its own (D15).
+`:=` declares its type (D15).
 
 ### 5.13 Membership
 
@@ -2763,7 +2764,7 @@ has a `nomatch`; over any other type it has a `nomatch`. Every value has one typ
 written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
 the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
-value is "written here" for `:=` (D15) only when each of its values is, as a conditional is. Over a type variable
+value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
 
 ```
@@ -3716,8 +3717,8 @@ value where it dangles. Accordingly:
   somewhere must live in exactly that scope; a temporary is built there. `x := e` writes no scope, and takes
   `e`'s exact scope — the one way a local adopts where its value lives. A type written as a **bare type variable**
   (`acc <U> = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
-  references, the local takes its initializer's scope as `:=` does - generic code has no other spelling for "a local
-  where this parameter's referent lives", and writing `:=` there is not allowed (D15). A local declared from a field
+  references, the local takes its initializer's scope as `:=` does - the spelling generic code has for "a local of this
+  variable's type, where its initializer lives" beside `:=` itself. A local declared from a field
   read through a parameter takes the derived scope it reads at (O23a), exact for what it is.
 - **O25b.** Assigning to a reference local or parameter requires the value's exact scope to be that target's
   exact scope; between two of the function's scope variables that is an equality obligation on its callers
