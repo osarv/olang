@@ -662,7 +662,7 @@ static void resolveTarget(char* clang, bool interpreting) {
     char* vsAttr = vs && strchr(vs, ')') ? StrFmt(" %.*s", (int)(strchr(vs, ')') + 1 - vs), vs) : "";
     gTarget.attrs = StrFmt("\"target-cpu\"=\"%s\" \"target-features\"=\"%s\"%s%s \"prefer-vector-width\"=\"%d\"",
                            gTarget.cpu, features, tuneAttr, vsAttr, gTarget.vectorBits ? gTarget.vectorBits : 128);
-    gTarget.cpuFlag = cpuFlag ? cpuFlag : StrFmt("%s%s", targetArchs[ai].cpuFlag, gTarget.cpu);
+    gTarget.cpuFlag = StrFmt("%s%s", targetArchs[ai].cpuFlag, gTarget.cpu); //resolved: "native" is looked up once
     CodegenSetTarget(gTarget.triple, gTarget.arch, gTarget.attrs);
     CtSetForeignTarget(gTarget.foreign);
 }
