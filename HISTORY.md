@@ -10907,3 +10907,115 @@ tiled for a narrower width is the price, and it is visible, measurable and fixed
 width's price would be paid by every program on every AVX-512 machine. What would remove the choice altogether is a way
 to say the width per function or in a type - explicit SIMD vectors (`Vec<F32, 16>` lowering to `<16 x float>`) - which
 is a language feature and not built.
+
+### A returned local lives where the result goes; what a constructor holds (O26a, O13a, C2d, C2g, E28, L18b, 2026-10-09)
+
+A usage study wrote an olang front end in olang and kept a reproducer for everything it had to work around
+(review/study2/repro r01-r15); oann added two more (a constructor that only reads its argument, a lambda calling a
+captured function value), and a review two soundness holes of the same family.
+
+**The hole first.** A local `List` or `Map` built by its constructor, filled, and returned by value compiled - and its
+chunks or buckets lived in the callee's block, so the caller read freed arena memory (a segfault, or `Map.Get` silently
+answering 0). A struct holding a `List` filled through a `mut` method (`b.fill()`) did the same, and so did a struct
+built with no arguments given this function's text in a field afterwards (`h.name = a`, the review's 01; its 03 through
+an inline array). Every one slipped through the same door: `checkValueResult` exempts a struct or enum "built here" and
+judges it by what its constructor bound (O13a) - but `List<I64>()` binds nothing, and what a callee stores through a
+borrow of the local, or an assignment into one of its fields, updates no binding. So the binding said "nothing here" and
+the storage said "this block".
+
+**The decision (the coordinator's, for the user's review): such a local lives in the result scope.** A value local the
+function returns has its references built where the result goes - Go's escape analysis, but static and read off the
+program: the declaration and the `return` say it, nothing else does, and the cost is memory rather than safety. The
+details were mine:
+
+- **Which locals.** One whose declaration makes its value (a call's result, an instance, a literal or array built
+  there, its zero value, a destructured or a parallel-declared result) and that holds references - or any value returned
+  through a built reference result, which then needs no `&return` either. A copy of storage that already lives somewhere
+  (`t := a[i]`) is O25h's and O14c's: it keeps its references where they are and does not move.
+- **Which returns.** `return x`, `return x.f.g`, parenthesized, an arm of a conditional (E28) or a value of a `match`
+  (S12b) given by a `return`, or one of several results - found by scanning the rest of the block the local is declared
+  in. D3a means no other local can share its name there, so the scan is exact for that block; a lambda's returns are its
+  own. Scanning the whole function would have caught a sibling block's same-named local too.
+- **Its storage as well as its references.** The first version moved only the references. That is not enough: a borrow
+  of the local - `l.Push(i)`, `b.fill()` - hands the callee a reference to the local's own storage, and a method can keep
+  that reference (`fn (b mut Box&) link() { b.me = b }`, legal - same scope, exactly); with the storage on the stack and
+  the claim "result scope", the returned copy would point into a dead frame. So the slot is an allocation in the result
+  scope (`__olang_scope_alloc` where an `alloca` was), and a borrow binds the callee's scope variable to the result scope.
+  What a scalar-only local would lose (registers) does not arise: only locals holding references, or returned through a
+  reference, move.
+- **What follows them** is every rule for a place in the result scope: a temporary assigned to the local or into it is
+  built there (the code generator now does this for every value local whose references live elsewhere than its block -
+  an array of fresh text assigned to one used to be built in the block, a use-after-free found writing the test), what
+  is pushed into it is built there by O18b, existing storage stored into it must be there (O25c, C2d) - which is why the
+  review's 01 and 03 are now O20 errors at the field store, and the fix the message names is to build the text there.
+
+**And the door itself is narrower.** A value local is no longer judged by its construction bindings alone once it has
+been lent to a callee that can keep what it builds in the value's own slots, or written into - `lentForStores`. With
+O26a no direct return reaches that path any more; it is what keeps one that does (a future form of return the scan does
+not know) from silently passing.
+
+**r01** was O17's split-scope check not knowing a global: a global's storage and its references are both in the
+program's scope, so `GL.Len()` on an immutable global `List` is fine. **r11**: a slice kept its base's declared type
+(T29c) but dropped `extendsBase`, so `path[0:3].Count(f)` lost the array methods `String` inherits; the failed `in` then
+built a literal `false` placeholder, which S8a judged a dead condition - it is an unknown placeholder now. **r13**: a
+module reached as `../x` has an identity beginning `..`, whose first element contains a dot - the test for a remote
+repository's host - so its relative imports were held inside "the repository `../x`". The working directory decided
+whether a program compiled; `.` and `..` are never hosts.
+
+**r05/r07 (E28).** A conditional of two references from one scope had no scope when held by `:=` or passed into an enum
+case: `RefExactScope` knew nothing of conditionals, so the local fell back to its block. It now takes the scope the
+values share - `null` fitting any, a new value being built there (landed with the conditional, or it was built in the
+block while the local claimed the shared scope: the first version had exactly that use-after-free, caught by reading
+the value back after a churn). Values in different scopes share none, and the old behaviour stands.
+
+**C2d, which constructor arguments the instance holds (ctorunstored).** Every bare reference parameter of a constructor
+bound the instance (`hereVar`), and every implicit parameter scope was judged at a return (O13a), so `Counts(t)` - a
+constructor that counts its text's letters and keeps nothing of it - could not be returned when `t` was a local. The
+answer is read off the constructor's checked body: variables are grouped (union-find) wherever a value that can carry a
+reference flows - a declaration, an assignment (to the root of its target), a case binding, and a call (whose arguments
+could be stored one into another, the lent ones' roots included); a value that cannot carry a reference (a count, a flag,
+a new array of numbers) joins nothing. A parameter is held when its group meets one of the operands the instance is
+assembled from. oann's real case, `Corpus(text)` building a vocabulary and token ids, is accepted: those are new arrays
+of numbers. The first version computed it as each type's body was built, so a function declared before the type it
+constructs still saw "unknown, so held"; a constructor's body is now built on demand when a call needs the answer (the
+on-demand machinery `ensureBodyChecked` used, factored into `onDemand`).
+
+**C2g (oann's ctorpush, and one found while looking at it).** A constructor pushing onto a `List` field
+(`items.Push(6)` in its body) put the chunk in the constructor's own scope - the field local was depth 1, the
+constructor's own block, which closes as it returns. And a value field a reference was taken to
+(`r mut List<I64>& = v`) pointed into the constructor's stack frame. Both had the same root: a constructor's top-level
+locals are the instance's fields (C2a), but they were stored and built as a function's. Now a constructor's top-level
+allocations are the instance scope's (`%here`), and a value field a reference is taken to is stored there. The
+checker needed nothing new: it already treated the fields as living in depth 1, which every parameter scope outlives,
+and the C2d bindings keep the instance from outliving its arguments. A `:=` reference field also took its initializer's
+type with the *callee's* scope variable on it (`x := text.Trim()` was an O10 error); it now takes the initializer's
+exact scope, as `:=` does everywhere (O25a).
+
+**r10, a recorded limit lifted.** `r.mods[0].top.Get(n)` failed O10c: the element read (`At`, a borrowed result by O14b)
+landed in the caller's block because it was neither declared nor passed directly. O18c already lands a call's result
+passed on as an argument by its obligations; a field or element read out of one on its way to the argument now lands the
+same way, as `m := r.mods[0]; m.top.Get(n)` always did.
+
+**Diagnostics.** r03: a type whose declaration fails to parse was "unknown type" at every use, printed first; it is now
+declared as a type nothing more is said about (the unknown stand-in, which fits anything), as a function whose body does
+not parse already was. r15: C2d's error pointed at the declaration and suggested building the instance where the
+argument lives - here the argument (`src`, built in the block) was the thing to move; the error points at it and a note
+names `src String&r = ...`. r04: `"(" $op (" try" ...)` calls `op` (E13b); the message says to write `$(...)`, and a
+value that is not callable recovers as an unknown placeholder rather than an `I32` literal (which added a D8 error).
+
+**L18b (the coordinator's grammar decision).** A `}` synthesizes no statement end, so a line beginning with `if` after
+`f := fn() { ... }` was tried as the rest of a conditional, `f := (fn ... if c else ...)`, and backtracked when no
+`else` came - or did not, when one did. The tokenizer now records every `if` that begins a line outside brackets, and
+the conditional's parser never takes one.
+
+**D16d, capturedfn (performance).** A lambda capturing a function value and calling it - `fn(d, g, v) { return d +
+f(g, v) }` handed to `Map3` - ran 2.3-2.9 ns an element against 0.55 written out. The closure's environment lived in an
+arena (where its captures did, D16d); once `Map3` and the lambda were inlined, the captured code pointer was loaded from
+that memory before every indirect call, and the call itself, unknown, might have written it - so LLVM could never
+forward the store it was made by. `noalias` on the allocator does not survive the allocator being inlined. A closure
+made as an argument for a callee that can keep nothing of it - no obligation of the callee names that parameter's
+scope, its result does not, no other parameter shares it (`SemanticParamTransient`, asked by the code generator once
+every obligation is final) - now has its environment in the caller's frame, an `alloca` SROA dissolves: the code
+pointer becomes a constant, the call direct, the lambda inlined and the loop vectorized - 0.6 ns, as written out.
+Sound because a callee with no such obligation cannot keep the value (storing it anywhere, returning it, capturing it
+in something it keeps are all obligations, and a global cannot hold a parameter's function value).

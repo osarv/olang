@@ -122,6 +122,7 @@ struct token {
 
 TokenCtx TokenizeFile(char* fileName);
 struct str TokenGetFileName(TokenCtx tc);
+bool TokenIfBeginsLine(TokenCtx tc, struct token t);
 bool isLetter(char c);
 bool isDigit(char c);
 struct token TokenFeed(TokenCtx tc);

@@ -1,0 +1,22 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# also: 15:42: error[C2d]
+# also: declare it where 'r' lives: 'src String&r = ...'
+# B11/C2d: the error names the argument the instance would outlive, and the note says where to make it
+type Module struct(Path String&, Dir String&, Src String&) {
+    Path
+    Dir
+    Src
+}
+type R struct() {
+    mods mut List<mut Module&>
+}
+fn (r mut R&) load(path String&) {
+    src := "text" $path
+    m Module&r = Module(path, path[0:1], src)
+    r.mods.Push(m)
+}
+fn main() ? {
+    r := R()
+    r.load("abc")
+    println($r.mods.Len())
+}

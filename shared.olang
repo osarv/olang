@@ -12489,3 +12489,262 @@ test "G28: a trait's constant parameter is bound through its methods" {
     b := KBag<3>()
     assert kCountOf(b) == 33
 }
+
+# ---- chk3 (2026-10-09): a returned local lives where the result goes (O26a); what a constructor holds (C2d, C2g) ----
+
+# O26a: a value local the function returns lives in the result scope - its storage and what is built into it - so a
+# List or Map filled here, a struct holding one filled through a method, a conditional's or a destructuring's local and
+# a value returned through a reference result all outlive the call, read back after the arena has been reused
+fn c3MkList(n I64) List<I64> {
+    l := List<I64>()
+    for i in range n { l.Push(i) }
+    return l
+}
+fn c3Sum(l List<I64>&) I64 {
+    t I64 = 0
+    for v in l { t += v }
+    return t
+}
+fn c3Table(n I64) Map<I64, String&> {
+    m := Map<I64, String&>()
+    for i in range n { m.Put(i, $i "!") }
+    return m
+}
+type c3Box struct(name String&) {
+    name
+    items mut List<I64>
+}
+fn (b mut c3Box&) fill(n I64) {
+    for i in range n { b.items.Push(i * 2) }
+}
+fn c3MakeBox(name String&, n I64) c3Box {
+    b := c3Box(name)
+    b.fill(n)
+    return b
+}
+fn c3Pick(n I64, first Bool) List<I64> {
+    a := List<I64>()
+    b := List<I64>()
+    for i in range n {
+        a.Push(i)
+        b.Push(i * 10)
+    }
+    return a if first else b
+}
+fn c3Two(n I64) (List<I64>, I64) {
+    l := c3MkList(n)
+    return l, n
+}
+fn c3Destructured(n I64) List<I64> {
+    l, k := c3Two(n)
+    l.Push(k)
+    return l
+}
+fn c3RefResult(n I64) List<I64>& {
+    l := List<I64>()
+    for i in range n { l.Push(i) }
+    return l
+}
+fn c3Texts(n I64) Array<String&> {
+    items := Array<String&>(1)
+    if n > 0 { items = String&["x" $n, "y" $n] }
+    return items
+}
+C3Baked I64 = c3Sum(c3MkList(10)) + c3Sum(c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3))
+test "O26a: a returned List, Map, struct, conditional, destructured local and reference result outlive the call" {
+    l := c3MkList(sbRun * 100)
+    m := c3Table(sbRun * 20)
+    b := c3MakeBox("box" $sbRun, sbRun * 10)
+    p := c3Pick(sbRun * 5, false)
+    d := c3Destructured(sbRun * 5)
+    r := c3RefResult(sbRun * 5)
+    t := c3Texts(sbRun)
+    sbChurn()
+    assert c3Sum(l) == 4950
+    assert (try m.Get(19) catch default "") == "19!"
+    assert b.name == "box1" and c3Sum(b.items) == 90
+    assert c3Sum(p) == 100
+    assert c3Sum(d) == 15
+    assert c3Sum(r) == 10
+    assert t.Len() == 2 and t[0] == "x1" and t[1] == "y1"
+    assert C3Baked == 45 + 12 + 6
+    assert c3Sum(c3MkList(10)) + c3Sum(c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3)) == 63
+}
+
+# O25e: an immutable global List or Map is read through its methods - a global is in the program's scope, its storage
+# and its references alike
+C3Words List<String&> = c3Words()
+C3Counts Map<String&, I64> = c3CountMap()
+fn c3Words() List<String&> {
+    l := List<String&>()
+    l.Push("a")
+    l.Push("bc")
+    return l
+}
+fn c3CountMap() Map<String&, I64> {
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    m.Put("bc", 2)
+    return m
+}
+fn c3GlobalReads() I64 {
+    t I64 = C3Words.Len() + C3Counts.Len()
+    for w in C3Words { t += w.Len() }
+    for e in C3Counts { t += e.Value }
+    if "bc" in C3Counts { t += 100 }
+    return t + (try C3Counts.Get("a") catch default 0) + C3Words[1].Len()
+}
+C3GlobalBaked I64 = c3GlobalReads()
+test "O25e: an immutable global List or Map, read through its methods" {
+    assert c3GlobalReads() == 113
+    assert C3GlobalBaked == 113
+    assert c3GlobalReads() + sbRun == 114
+}
+
+# T29c/T29f: a slice of a String is a String - with String's methods, those it inherits by "extends" included
+fn c3Dots(path String&) I64 {
+    return path[0:3].Count(fn(ch Char) Bool { return ch == '.' })
+}
+fn c3HasDot(path String&) Bool {
+    if "." in path[0:3] { return path[0:3].Contains(".") }
+    return false
+}
+test "T29f: a slice of a String has the array methods String inherits" {
+    assert c3Dots("a.cd") == 1 and c3HasDot("a.cd") and not c3HasDot("abc.")
+    s := "a." $sbRun "cd"
+    assert c3Dots(s) == 1 and c3HasDot(s)
+}
+
+# E28/O25a: a conditional of references lives where its values share a scope - null fitting any, a new value built there
+type c3Leaf struct(v I64) { v }
+type c3Node enum {
+    One(s c3Leaf&)
+    Many(items Array<c3Node&>&)
+}
+type c3Parser struct() {
+    a c3Leaf& = c3Leaf(1)
+    b c3Leaf& = c3Leaf(2)
+    pos mut I64 = 0
+}
+fn (p c3Parser&) first() c3Leaf&p { return p.a }
+fn (p c3Parser&) second() c3Leaf&p { return p.b }
+fn (p mut c3Parser&) node() c3Node&p {
+    p.pos++
+    return c3Node.One(c3Leaf(p.pos * 10))
+}
+fn (p mut c3Parser&) either(c Bool) c3Node&p {
+    x := p.first() if c else p.second()
+    return c3Node.One(x)
+}
+fn (p mut c3Parser&) direct(c Bool) c3Node&p {
+    return c3Node.One(p.first() if c else p.second())
+}
+fn (p mut c3Parser&) maybe(c Bool) c3Node&p {
+    x := p.node() if c else null
+    return c3Node.Many(c3Node&[x])
+}
+fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
+    x := p.first() if c else c3Leaf(5)
+    return c3Node.One(x)
+}
+fn c3Leafs(n c3Node&) I64 {
+    return match n {
+        case c3Node.One(s) => s.v
+        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] == null else c3Leafs(items[0]))
+    }
+}
+test "E28: a conditional of references shares their scope, and is held and passed as one of them" {
+    p := c3Parser()
+    e := p.either(false)
+    d := p.direct(true)
+    m := p.maybe(true)
+    n := p.orNew(false)
+    sbChurn()
+    assert c3Leafs(e) == 2 and c3Leafs(d) == 1 and c3Leafs(m) == 110 and c3Leafs(n) == 5
+}
+
+# C2d: a constructor that only reads its argument holds nothing of it, so an instance built from a local is returned;
+# C2g: what a constructor builds through a field while it runs - a List it holds, grown - lives where the instance does
+fn c3CountLetters(t String&) I64 {
+    n I64 = 0
+    for c in t { if c.IsLetter() { n++ } }
+    return n
+}
+type c3Counts struct(text String&) {
+    letters I64 = c3CountLetters(text)
+    vowels := c3Vowels(text).Len()
+}
+fn c3Vowels(t String&) Array<Char> {
+    out Array<Char>&return = Array<Char>(t.Len())
+    k I64 = 0
+    for c in t { if c == 'a' or c == 'e' {
+        out[k] = c
+        k++
+    } }
+    return out[:k]
+}
+fn c3FromLocal() c3Counts {
+    t := String(Array<Char>(3, 'a'))
+    return c3Counts(t)
+}
+type c3Holder struct() {
+    items mut List<I64>& = List<I64>()
+    items.Push(6)
+    for i in range 40 { items.Push(i) }
+}
+type c3Lent struct() {
+    v mut List<I64> = List<I64>()
+    r mut List<I64>& = v
+    r.Push(5)
+}
+C3HolderLen I64 = c3Holder().items.Len() + c3FromLocal().letters
+test "C2d/C2g: a constructor reads an argument it does not keep, and grows what its fields hold" {
+    h := c3Holder()
+    q := c3Lent()
+    c := c3FromLocal()
+    sbChurn()
+    assert h.items[0] == 6 and h.items.Len() == 41 and h.items[40] == 39
+    assert q.r.Len() == 1 and q.r[0] == 5
+    assert c.letters == 3 and c.vowels == 3
+    assert C3HolderLen == 44
+}
+
+# O18c: a call's result read through on the way to a receiver lands as ":=" from it would - an element of a list of
+# modules whose map of symbols is looked up in place
+type c3Sym struct(name String&) { name }
+type c3Mod struct() {
+    top mut Map<String&, c3Sym&>
+}
+type c3Modules struct() {
+    mods mut List<mut c3Mod&>
+}
+fn (r c3Modules&) find(n String&) c3Sym&r {
+    t := try r.mods[0].top.Get(n) catch default null
+    return t
+}
+test "O18c: a lookup chained through a list element whose type holds a map" {
+    r := c3Modules()
+    m := c3Mod()
+    m.top.Put("a", c3Sym("alpha"))
+    r.mods.Push(m)
+    s := r.find("a")
+    sbChurn()
+    assert s.name == "alpha" and r.find("b") == null
+}
+
+# D16d: a lambda made for a callee that keeps nothing of it is made in the caller's frame, once per call
+fn c3Apply(xs Array<F64>&, f fn(x F64) F64) F64 {
+    t F64 = 0.0
+    for x in xs { t += f(x) }
+    return t
+}
+fn c3Through(xs Array<F64>&, g fn(x F64) F64, k F64) F64 {
+    return c3Apply(xs, fn(x) { return g(x) * k })
+}
+test "D16d: a lambda capturing a function value, made for one call in a loop" {
+    xs := F64[1.0, 2.0, 3.0]
+    t F64 = 0.0
+    for i in range 3 { t += c3Through(xs, fn(x) { return x + 1.0 }, F64(i)) }
+    assert t == 27.0
+    assert c3Through(xs, fn(x) { return x * x }, 2.0) == 28.0
+}

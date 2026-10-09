@@ -1034,9 +1034,18 @@ char* cgLookupVarAddr(struct cgCtx* ctx, struct var* v);
 //(whatever scope the caller bound it to) is an ordinary local read.
 //the slot for a block depth: 0 (not a block tag - a parameter, field or return type) and 1 (the body's
 //own top level) are both the body's arena; deeper ones are the nested blocks currently open.
+static bool cgIsCtor(struct var* func);
+//C2d: what a body allocates at its top level - into its own scope - except in a constructor, whose top-level locals are
+//the instance's fields: there it is the instance scope, the one the instance lands in, so a field's referent - and
+//what is built through a field while the constructor runs (a Push onto a List it holds) - outlives the constructor
+static char* cgOwnAllocSlot(struct cgCtx* ctx) {
+    if (ctx->ctorHere && ctx->curFunc && cgIsCtor(ctx->curFunc)) return ctx->ctorHere;
+    return ctx->ownScopeSlot;
+}
+
 char* cgScopeSlotAt(struct cgCtx* ctx, int depth) {
     int idx = depth - 2;
-    if (idx < 0 || idx >= ctx->blockSlots.len) return ctx->ownScopeSlot;
+    if (idx < 0 || idx >= ctx->blockSlots.len) return cgOwnAllocSlot(ctx);
     return *(char**)ListGetIdx(&ctx->blockSlots, idx);
 }
 
@@ -1097,7 +1106,7 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
         if (SemanticReferentScope(ctx->curFunc, base, &to, &depth)) return cgResolveScope(ctx, to, depth);
         if (base->opType == OPERATION_MEMBER || base->opType == OPERATION_INDEX)
             return cgResolveEffectiveScope(ctx, *(struct operand**)ListGetIdx(&base->args, 0));
-        return ctx->ownScopeSlot;
+        return cgOwnAllocSlot(ctx);
     }
     if (base->type.scopeParam) return cgResolveScope(ctx, base->type.scopeParam, base->type.scopeDepth);
     if (base->opType == OPERATION_MEMBER || base->opType == OPERATION_INDEX) {
@@ -1108,7 +1117,7 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
     }
     struct var* home = base->type.structMAlloc ? NULL : cgValueHomeVar(base);
     if (home) return cgResolveScope(ctx, home->valueHome, home->valueHomeDepth);
-    return ctx->ownScopeSlot;
+    return cgOwnAllocSlot(ctx);
 }
 
 char* cgValue(struct cgCtx* ctx, struct operand* op);
@@ -2866,10 +2875,13 @@ static char* cgClosureType(struct var* L) {
 static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     struct var* L = op->readVar;
     char* envTy = cgClosureType(L);
-    char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-            obj, scope, envTy);
+    if (op->cgEnvOnStack) fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align 8\n", obj, envTy); //made for one call
+    else {
+        char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                obj, scope, envTy);
+    }
     int field = 0;
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
@@ -3033,6 +3045,11 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                      || (paramT.scopeParam && paramT.scopeParam->isImplicitScope
                          && SemanticBindingIsLanding(op, paramT.scopeParam))))
             scopeOverride = here;
+        //D16c: a capturing lambda made for a callee that cannot keep it lives only while the call runs - its environment in
+        //this frame, where LLVM sees what it holds: a function value it captured is then known at the call through it
+        if (!spawnMerges && argOp->opType == OPERATION_READ_VAR && argOp->readVar && argOp->readVar->isLambda
+                && argOp->readVar->lambdaCaptures.len && SemanticParamTransient(func, i))
+            argOp->cgEnvOnStack = true;
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
@@ -3167,7 +3184,7 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
             cgArgAdd(&args, "ptr", cgValue(ctx, argOp));
             continue;
         }
-        char* boundary = cgBoundaryValue(ctx, argOp, paramT, ctx->ownScopeSlot);
+        char* boundary = cgBoundaryValue(ctx, argOp, paramT, cgOwnAllocSlot(ctx));
         if (paramT.bType == BASETYPE_ARRAY) {
             char* ptr;
             if (paramT.arrMalloc) {
@@ -5297,7 +5314,18 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(s->var.type));
+    //O26a: a value the function returns lives where its result is put - its own storage too, so a reference to it, or
+    //into it, that something built here keeps is never left pointing into this frame
+    char* resultHere = NULL;
+    if (s->var.storeInResult && ctx->curFunc && ctx->curFunc->type.resultScope) {
+        resultHere = cgResolveScope(ctx, ctx->curFunc->type.resultScope, 0);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, resultHere,
+                TypeGetSize(s->var.type));
+    } else if (s->ctorField && ctx->ctorHere && !cgIsReference(s->var.type) && canonicalVar(&s->var)->slotBorrowed) {
+        //C2d: a field a reference was taken to is stored where the instance lands, as what it refers to is
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, ctx->ctorHere,
+                TypeGetSize(s->var.type));
+    } else fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(s->var.type));
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
     //D15c: "x T[N] = v" / "x T[expr] = v" - every element gets v
     if (s->fillValue) {
@@ -5340,7 +5368,7 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     }
     //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope name
     //of its own - a reference field's referent, a nested constructor call's - goes where the instance lands
-    char* here = s->ctorField ? ctx->ctorHere : NULL;
+    char* here = s->ctorField ? ctx->ctorHere : resultHere;
     //T7b: the function's result, built where it is returned to (cgResultLocal)
     if (s == ctx->resultLocal) {
         struct type rt = *ctx->curFunc->type.retType;
@@ -5369,6 +5397,12 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
         if (cgIsReference(base->type) || cgValueHomeVar(s->target) || cgIsGlobalRead(base)) {
             scopeOverride = cgResolveEffectiveScope(ctx, base);
         }
+    }
+    //O25h/O26a: a value local whose references live elsewhere than its block - the result scope, for one the function
+    //returns - is assigned what is built there, its storage included when its length changes (T11b)
+    if (s->target->opType == OPERATION_READ_VAR && s->target->readVar && !cgIsReference(s->target->type)) {
+        struct var* tv = canonicalVar(s->target->readVar);
+        if (tv->valueHomeSet && !tv->refsHomeSet) scopeOverride = cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth);
     }
     //O1b/O18a: a global reference - or a global value holding references - is assigned what lives in the program's
     //scope, so a temporary assigned to it is built there

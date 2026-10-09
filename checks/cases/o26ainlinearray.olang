@@ -1,0 +1,15 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O26a/T7c: the same through an inline fixed array of references - its elements would outlive the text they name
+type Holder struct() {
+    names mut Array<String&, 2>
+}
+fn make() Holder {
+    a := "alpha" $3
+    h := Holder()
+    h.names[0] = a
+    return h
+}
+fn main() ? {
+    h := make()
+    println($h.names[0])
+}
