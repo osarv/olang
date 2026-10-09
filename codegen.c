@@ -1989,6 +1989,12 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         char* elemAddr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %d\n", elemAddr, storTy, slot, i);
         struct type elemT = *op->type.arrElem;
+        //T25d: constant text reaching a read-only element is the constant itself - nothing copied, nothing built
+        char* st = cgStaticLiteral(ctx, arg, elemT);
+        if (st) {
+            fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", st, elemAddr);
+            continue;
+        }
         char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
         char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
         cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope, false, OperandIsLvalue(arg), true);

@@ -275,6 +275,8 @@ struct var {
     struct token tok;
     bool mut; //local variables are mutable by default
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
+    bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
+                       //element is constant data, which lives as long as the program
     bool inProgram;    //O1b: a local whose referent - or, for a value, whose references - live in the program's scope
     //O25a: a value local holding references, declared with ":=", lives where its initializer built them - a
     //scope variable, or a block (valueHome NULL, at valueHomeDepth)

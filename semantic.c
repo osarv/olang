@@ -5124,6 +5124,7 @@ enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct typ
 static bool bindingIsLanding(struct operand* op, struct var* sv);
 bool callIsLanding(struct operand* op);
 static struct operand* projectionBase(struct operand* op);
+static struct operand* heldResult(struct operand* op);
 void landCall(struct operand* op, struct var* dst, int depth);
 static void landCallIn(struct operand* op, struct var* dst, int depth, bool program);
 bool storageInProgram(struct operand* op);
@@ -5239,6 +5240,11 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
         return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+    }
+    if (heldResult(op)) { //what hidden locals ahead of a value lead to is that value, judged as it is
+        enum typeFit r = OperandFitsType(func, heldResult(op), target);
+        op->type = heldResult(op)->type;
+        return r;
     }
     if (op->opType == OPERATION_MATCH) { //S12b: the same, for each of a match's values
         struct list vs = SemanticMatchValues(op);
@@ -5781,7 +5787,9 @@ bool paramTypeNamesScope(struct type pt, struct var* sv) {
 bool scopeViaFallback(struct operand* op);
 static bool bindingIsLanding(struct operand* callOp, struct var* sv);
 static struct operand* projectionBase(struct operand* op);
+static struct operand* heldResult(struct operand* op);
 bool argDeterminesScope(struct operand* arg) {
+    if (heldResult(arg)) return argDeterminesScope(heldResult(arg));
     if (!(arg->type.structMAlloc || (arg->type.bType == BASETYPE_ARRAY && arg->type.arrMalloc))) return false;
     //O18a: a call whose result is still landing has no storage yet - it is built where its parameter says, and so is
     //the value a field, element, slice or payload of one is read from
@@ -5978,6 +5986,25 @@ static bool arrayHoldsExisting(struct operand* op) {
     return false;
 }
 
+//T25d: whether an array literal reaching a read-only array reference of read-only references holds only constant text
+//(or null) - each element is then constant data itself, never built anywhere, so it lives as long as the program
+static bool literalElemsStatic(struct operand* lit, struct type refT) {
+    if (!opIsArrayLiteral(lit) || refT.refMut || !refT.arrElem || !refT.arrElem->structMAlloc || refT.arrElem->refMut) return false;
+    for (int i = 0; i < lit->args.len; i++) {
+        struct operand* e = *(struct operand**)ListGetIdx(&lit->args, i);
+        if (e->isNullLiteral) continue;
+        if (!(e->isLiteral && e->opType == OPERATION_NONE && e->tok.type == TOK_STR_LIT)) return false;
+    }
+    return true;
+}
+
+//the value an operand with hidden locals ahead of it gives (a derived "try c[i]", E31, held once by heldOnce) - the same
+//value, so where it lives and where it lands are its own
+static struct operand* heldResult(struct operand* op) {
+    if (op->opType == OPERATION_SEQ && op->args.len && !op->isTryStmt) return *(struct operand**)ListGetIdx(&op->args, op->args.len - 1);
+    return NULL;
+}
+
 //O18a: a field, an element, a slice or a payload of a value - reading it reads the value, so where a call's value is
 //still to land, so is what is read out of it: it lands where the read is put
 static struct operand* projectionBase(struct operand* op) {
@@ -5988,6 +6015,7 @@ static struct operand* projectionBase(struct operand* op) {
 }
 
 bool callIsLanding(struct operand* op) {
+    if (heldResult(op)) return callIsLanding(heldResult(op));
     if (projectionBase(op)) return callIsLanding(projectionBase(op));
     //an array built here lands with its elements - and, holding existing storage, is checked where it lands (T7, O25c)
     if (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC) {
@@ -6021,6 +6049,7 @@ static void landCallIn(struct operand* op, struct var* dst, int depth, bool prog
         dst = SemanticRuntimeScope(dst, &depth);                //through is where it would really be built
         if (dst) depth = 0;
     }
+    if (op && heldResult(op)) { landCallIn(heldResult(op), dst, depth, program); return; }
     if (op && (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC)) {
         if (op->ctorLanded) return;
         op->ctorLanded = true; //where it was put, which what it holds is checked against (checkCtorHereFits)
@@ -6494,7 +6523,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         //and so does what is read out of one still landing (a field, an element, a slice, a payload)
         bool lands = arg->opType == OPERATION_FUNCCALL || opIsEnumCtor(arg) || arg->opType == OPERATION_COND
                      || arg->opType == OPERATION_MATCH || projectionBase(arg) || opIsArrayLiteral(arg)
-                     || arg->opType == OPERATION_SIZED_ARRAY_ALLOC;
+                     || arg->opType == OPERATION_SIZED_ARRAY_ALLOC || heldResult(arg);
         if (!lands || !psv || !callIsLanding(arg)) continue;
         for (int k = 0; k < op->scopeBindings.len; k++) {
             struct scopeBinding* pb = ListGetIdx(&op->scopeBindings, k);
@@ -10512,6 +10541,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     *outDepth = 0;
     *unnamed = false;
     if (op->isNullLiteral) return false;
+    if (heldResult(op)) return RefExactScope(ctx, heldResult(op), asRef, outVar, outDepth, unnamed);
     //D16: a function named as a value, or a lambda, has no storage to adopt - it is built where it lands - unless
     //it captured references, when it lives where they do (D16c)
     if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->isFuncDecl) {
@@ -10541,6 +10571,11 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         //a bare slot lives wherever its container's storage does - and a reference in one of a value, where that
         //value's references were put (O18c)
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (asRef && op->opType == OPERATION_INDEX && base->opType == OPERATION_READ_VAR && base->readVar
+                && (base->readVar->elemsStatic || canonicalVar(base->readVar)->elemsStatic)) {
+            *unnamed = true; //T25d: constant data, as long-lived as the program
+            return true;
+        }
         if (asRef && valueRefsHome(base, outVar)) return true;
         return RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed);
     }
@@ -10755,6 +10790,7 @@ static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var*
 //C2d: a constructed value landing in (dstVar, dstDepth) - NULL at a depth being one of this function's own
 //block scopes - may not outlive the storage its constructor call stored by reference
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok) {
+    if (heldResult(val)) { checkCtorHereFits(ctx, heldResult(val), dstVar, dstDepth, tok); return; }
     //E28/S12b: a conditional or a match puts whichever value it gives there
     if (val->opType == OPERATION_COND && val->args.len == 3) {
         checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&val->args, 1), dstVar, dstDepth, tok);
@@ -12304,6 +12340,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         arr = scopeDeclare(wctx.mod, wctx.scope, at.str, at, refT, true);
         arr->scopeUnnamed = unnamed;
         arr->scopeBindings = src->scopeBindings;
+        arr->elemsStatic = literalElemsStatic(src, refT);
         struct statement d = (struct statement){0};
         d.sType = STATEMENT_VAR_DECL;
         d.var = *arr;
@@ -13315,8 +13352,14 @@ bool storageInProgram(struct operand* op) {
     switch (op->opType) {
         case OPERATION_READ_VAR:
             if (!op->readVar || op->readVar->isFuncDecl) return false;
+            if (op->type.structMAlloc && (op->readVar->scopeUnnamed || canonicalVar(op->readVar)->scopeUnnamed)) return true;
             return canonicalVar(op->readVar)->owner != NULL || canonicalVar(op->readVar)->inProgram || op->readVar->inProgram;
         case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_AS:
+            if (op->opType == OPERATION_INDEX && op->type.structMAlloc && op->args.len) { //T25d: constant data
+                struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+                if (b->opType == OPERATION_READ_VAR && b->readVar && (b->readVar->elemsStatic || canonicalVar(b->readVar)->elemsStatic))
+                    return true;
+            }
             if (op->opType == OPERATION_MEMBER && op->type.structMAlloc && op->type.scopeParam) {
                 for (int i = 0; i < op->scopeBindings.len; i++) {
                     struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
