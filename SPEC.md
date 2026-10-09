@@ -2581,7 +2581,8 @@ built in the scope of whatever it lands in. The element expression and the condi
 the condition first, in the order the values are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
-length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full.
+length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. A
+comprehension that keeps nothing is an empty array with storage of its own, never a null one (T2a).
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
