@@ -184,6 +184,9 @@ struct cgCtx {
     char* retSlot;
     char retSlotTy[256];
     bool retSlotUsed;
+    //T7b: the declaration of the local array that is this function's result and nothing else, built in the result
+    //scope from the start (cgResultLocal) - NULL when there is none
+    struct statement* resultLocal;
     //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
     //allocas), the scope its storage comes from, and its element type
     struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
@@ -5173,6 +5176,11 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope name
     //of its own - a reference field's referent, a nested constructor call's - goes where the instance lands
     char* here = s->ctorField ? ctx->ctorHere : NULL;
+    //T7b: the function's result, built where it is returned to (cgResultLocal)
+    if (s == ctx->resultLocal) {
+        struct type rt = *ctx->curFunc->type.retType;
+        here = cgResolveScope(ctx, rt.scopeParam, rt.scopeDepth);
+    }
     char* prev = ctx->targetScopeOverride;
     if (here) ctx->targetScopeOverride = here;
     char* scope = here && !s->var.type.scopeParam ? here : NULL;
@@ -5425,6 +5433,73 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
     cgPopScope(ctx);
 }
 
+//T7b: a function returning an array value copies a local it returns into the result scope (cgRet). The copy is
+//skipped for a local whose storage is built there from the start, which is safe exactly when nothing can tell: the
+//local is declared once (in the body's own block, outside every loop) from storage it makes itself, every return
+//returns it, nothing assigns it, and it is otherwise only indexed or measured - its elements numbers, which cannot be
+//borrowed - so no reference to it or into it exists for deferred code, a task or a destructor to write through after
+//the result is computed (and the body has none of the first two). An infallible function only: a call that failed
+//would leave the array in its caller's scope. Anything else keeps the copy.
+static bool cgReadsDecl(struct operand* op, struct statement* d) {
+    return op && op->opType == OPERATION_READ_VAR && op->readVar && StrCmp(op->readVar->name, d->var.name)
+           && op->readVar->tok.str.ptr == d->var.tok.str.ptr;
+}
+static bool cgStmtsLeaveDecl(struct list* stmts, struct statement* d);
+//every read of d's local within op is the array an index or a length reads
+static bool cgOpLeavesDecl(struct operand* op, struct statement* d) {
+    if (!op) return true;
+    if (cgReadsDecl(op, d)) return false;
+    bool indexed = (op->opType == OPERATION_INDEX || op->opType == OPERATION_LEN) && op->args.len > 0
+                   && cgReadsDecl(*(struct operand**)ListGetIdx(&op->args, 0), d);
+    for (int i = indexed ? 1 : 0; i < op->args.len; i++) if (!cgOpLeavesDecl(*(struct operand**)ListGetIdx(&op->args, i), d)) return false;
+    for (int i = 0; i < op->chainOperands.len; i++) if (!cgOpLeavesDecl(*(struct operand**)ListGetIdx(&op->chainOperands, i), d)) return false;
+    if (!cgOpLeavesDecl(op->callee, d) || !cgOpLeavesDecl(op->placeOf, d) || !cgStmtsLeaveDecl(&op->comprBody, d)) return false;
+    for (int c = 0; c < op->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        if (!cgStmtsLeaveDecl(&cc->block, d) || !cgOpLeavesDecl(cc->dflt, d)) return false;
+    }
+    return true;
+}
+static bool cgStmtLeavesDecl(struct statement* s, struct statement* d) {
+    if (s->sType == STATEMENT_DEFER || s->sType == STATEMENT_JOIN || s->sType == STATEMENT_SPAWN) return false;
+    if (s->sType == STATEMENT_RET) return cgReadsDecl(s->op, d);
+    if (s != d && !cgOpLeavesDecl(s->op, d)) return false;
+    if (!cgOpLeavesDecl(s->target, d) || !cgOpLeavesDecl(s->fillValue, d) || !cgOpLeavesDecl(s->forInit, d)) return false;
+    if (s->sType == STATEMENT_ASSIGN && cgReadsDecl(s->target, d)) return false;
+    if ((s->forPost && !cgStmtLeavesDecl(s->forPost, d)) || (s->elseStmnt && !cgStmtLeavesDecl(s->elseStmnt, d))) return false;
+    if (!cgStmtsLeaveDecl(&s->block, d) || !cgStmtsLeaveDecl(&s->nomatchBlock, d) || !cgStmtsLeaveDecl(&s->matchHold, d))
+        return false;
+    for (int i = 0; i < s->matchCases.len; i++) if (!cgStmtLeavesDecl(ListGetIdx(&s->matchCases, i), d)) return false;
+    if (!cgOpLeavesDecl(s->caseGuard, d) || !cgOpLeavesDecl(s->nomatchValue, d)) return false;
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        if (!cgOpLeavesDecl(a->test, d)) return false;
+        for (int b = 0; b < a->binds.len; b++) if (!cgOpLeavesDecl(((struct caseBind*)ListGetIdx(&a->binds, b))->from, d)) return false;
+    }
+    for (int c = 0; c < s->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+        if (!cgStmtsLeaveDecl(&cc->block, d)) return false;
+    }
+    return true;
+}
+static bool cgStmtsLeaveDecl(struct list* stmts, struct statement* d) {
+    for (int i = 0; i < stmts->len; i++) if (!cgStmtLeavesDecl(ListGetIdx(stmts, i), d)) return false;
+    return true;
+}
+static struct statement* cgResultLocal(struct var* func) {
+    if (func->type.errors.len || !func->type.hasRetType || !func->type.retType) return NULL;
+    struct type rt = *func->type.retType;
+    if (rt.bType != BASETYPE_ARRAY || !rt.arrMalloc || rt.structMAlloc || !rt.arrElem) return NULL;
+    if (!(TypeIsNumeric(*rt.arrElem) || rt.arrElem->bType == BASETYPE_BOOL)) return NULL;
+    for (int i = 0; i < func->codeBlock.len; i++) {
+        struct statement* d = ListGetIdx(&func->codeBlock, i);
+        if (d->sType != STATEMENT_VAR_DECL || !d->op || d->fillValue || !cgAdoptsFresh(d->var.type, d->op, false)) continue;
+        if (!TypeIsSame(d->var.type, rt) || !cgStmtsLeaveDecl(&func->codeBlock, d)) continue;
+        return d;
+    }
+    return NULL;
+}
+
 //T7b: whether cgBoundaryValue built op's array value in the result scope itself - fresh storage the expression made
 //there (on every path, for a conditional or a match), a literal copied there, or a call whose own result landed there
 static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type retT) {
@@ -5438,6 +5513,7 @@ static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type r
         return vs.len > 0;
     }
     if (cgIsFreshTemp(op) || typeNeedsRuntimeLengthPromotion(retT, op->type)) return true;
+    if (ctx->resultLocal && cgReadsDecl(op, ctx->resultLocal)) return true; //built there (cgResultLocal)
     if (op->opType == OPERATION_FUNCCALL && op->readVar && !op->type.structMAlloc && op->readVar->type.resultScope
             && retT.scopeParam) {
         struct var* bound = SemanticBoundScope(op, op->readVar->type.resultScope);
@@ -7552,6 +7628,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     cgPushOwnUnwind(ctx);
 
     ctx->defers.len = 0; //S19: the body's own deferred code - cgCloseOwnScope runs it on every way out
+    ctx->resultLocal = cgResultLocal(func);
     for (int i = 0; i < func->codeBlock.len; i++) {
         struct statement* s = ListGetIdx(&func->codeBlock, i);
         if (ctx->terminated) cgDeadLabel(ctx); //written after a return, a break or an error
@@ -7582,6 +7659,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     }
     ctx->retSlot = NULL;
     ctx->retSlotUsed = false;
+    ctx->resultLocal = NULL;
     fputs("}\n\n", ctx->fnOut);
     cgBodyEnd(ctx, &bb);
     ctx->curFunc = NULL;

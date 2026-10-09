@@ -9416,6 +9416,40 @@ test "T7/E12c: a reference field or element adopts a fresh array, each its own s
     assert adoptFresh(k + 3) == 5 + 40 + 4 + 3 and AdoptBaked == 52
 }
 
+# T7b: an array value returned is the caller's own - a local the function only fills, indexes and returns is built where
+# it is returned to, and any other is copied there before the function's scopes close and its deferred code runs
+fn rlFilled(n I64) Array<F32> {
+    m := Array<F32>(n)
+    for i in range n { m[i] = F32(i) * 0.5 }
+    if n > 100 { return m }
+    m[0] = 7.0
+    return m
+}
+fn rlDeferred(n I64) Array<I64> {
+    m := Array<I64>(n)
+    defer { m[0] = 99 }                            # runs after the result is computed: not part of it
+    m[0] = 1
+    return m
+}
+fn rlLent(n I64) Array<I64> {
+    m := Array<I64>(n, 3)
+    view := m[0:1]
+    view[0] = 5
+    return m
+}
+RlBaked F32 = rlFilled(4)[3]
+
+test "T7b: a returned local array is the caller's own, built where it lands or copied there" {
+    k I64 = I64(ctRuntimeZero)
+    a := rlFilled(k + 4)
+    big := rlFilled(k + 200)
+    b := rlDeferred(k + 2)
+    c := rlLent(k + 2)
+    assert churnArena() == 2469000
+    assert a[0] == 7.0 and a[3] == 1.5 and big[199] == 99.5 and b[0] == 1 and c[0] == 5 and c[1] == 3
+    assert RlBaked == rlFilled(k + 4)[3]
+}
+
 # D13c: "Array<T>(n)" is zeros however its memory was got - a large one from a chunk the system has just mapped (and
 # so not cleared again), anything from a chunk recycled through the pool (cleared), and a later one bumped from the
 # untouched rest of a fresh chunk

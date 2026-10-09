@@ -3819,7 +3819,9 @@ run time (because it allocates into it, O6) is an implementation matter with no 
 
 **O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
 scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
-instances were allocated. A destructor-declaring type is reference-only (C11), so this is the sole
+instances were constructed - the order their constructor calls completed (O16). Where in the scope an
+instance's storage lies, and whether it was reserved before its constructor's arguments were built, is not
+observable. A destructor-declaring type is reference-only (C11), so this is the sole
 rule governing when a destructor runs: there is no plain-local, function-return-governed case.
 
 **O16.** An instance is registered with its scope at the point its **constructor call** completes
