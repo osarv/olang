@@ -14,7 +14,7 @@ of work in different areas at the same time".
 
 **How to apply:** parallelize independent work with subagents, each implementation agent in its own git worktree
 (`git worktree add /home/user/wt/NAME -b wt-NAME`), committing there without pushing, records (CLAUDE.md, HISTORY.md,
-spec.md) written by the agent, memory/ledger left to me; I merge, resolve the append conflicts, run `make verify`
+SPEC.md) written by the agent, memory/ledger left to me; I merge, resolve the append conflicts, run `make verify`
 and push. Pure searches go to a cheaper model. Judge per situation; there is no fixed rule.
 
 **Pacing by usage** (the user: ration "at the end of a week where there is a bunch of tokens left to burn, but not

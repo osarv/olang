@@ -1,6 +1,6 @@
 # olang principles
 
-What olang is for and how it should feel. This is the yardstick every design detail is measured against; `spec.md`
+What olang is for and how it should feel. This is the yardstick every design detail is measured against; `SPEC.md`
 says what the rules are, `CLAUDE.md` records each decision, `HISTORY.md` why.
 
 olang is a general-purpose language for AI and data work, scripting, tools and GUIs, and the base of larger projects.

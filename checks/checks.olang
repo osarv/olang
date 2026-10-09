@@ -1005,7 +1005,7 @@ fn linalg(r mut report&) ? Failed {
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {
     table := try os.ReadFile("errmsg.h") catch default ""
-    spec := try os.ReadFile("spec.md") catch default ""
+    spec := try os.ReadFile("SPEC.md") catch default ""
     assert table.Len() > 0 and spec.Len() > 0
     bad := 0
     entries := 0
@@ -1020,7 +1020,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
             end I64 = rules.Len() if comma < 0 else comma
             r := rules[:end]
             if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which spec.md does not state\n") catch { }
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch { }
                 bad++
             }
             rules = rules[end:] if comma < 0 else rules[end + 2:]

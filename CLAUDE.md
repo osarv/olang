@@ -13,7 +13,7 @@ Rust-like compile-time memory/security guarantees (underway - see the ownership-
 Settled decisions below; scope-containment is checked at compile time, a general borrow checker is
 not).
 
-This file is a living design record, kept terse on purpose - it is not a spec (see `spec.md` for the
+This file is a living design record, kept terse on purpose - it is not a spec (see `SPEC.md` for the
 normative, current-state language reference) and not the full story either (see `HISTORY.md`
 for the complete discursive record behind every entry below: why each decision was made, what was
 tried and reverted, what bugs were found and fixed along the way). Whenever a design decision is
@@ -59,7 +59,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 
 Go through this for every change to what olang means - a rule added, revised or removed - before calling it done:
 
-1. **Spec first**: write or revise the rule in `spec.md`, grammar included.
+1. **Spec first**: write or revise the rule in `SPEC.md`, grammar included.
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
 3. **Compile-time evaluator** (`comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
@@ -3373,7 +3373,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   form gcc and clang write, which editors and agents already read. A message says what is wrong here, naming the names,
   types and counts involved (`expected '}', found 'South'`, `2 names need as many values, found 1`, `-D X=1e400: beyond
   F64's range`) - lowercase, no period, the fix in a few words where it is plain; the explanation is the rule, which `-e`
-  prints from `../spec.md` beside the compiler (found as std is). One table (an X-macro in errmsg.h: id, rule, format),
+  prints from `../SPEC.md` beside the compiler (found as std is). One table (an X-macro in errmsg.h: id, rule, format),
   and calls taking typed arguments - `Err(tok, ERR_X, ...)`, `%n` a token as it reads, `%t` a type as source writes it -
   with `checks/checks.olang` holding every call to its message's argument count and every rule to the spec. Colour only
   on a terminal (never under `NO_COLOR` or `TERM=dumb`). **Decided (mine)**: no rule is invented - an error no rule
@@ -3715,9 +3715,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   ("the block opened on line N has no '}'") with the next item read from the declaration found, so a second one is found
   too; a checked-only index recovers as unknown (one error). Study leftovers kvtool:89, matrix:127, calc:157 and
   widgets:26 compile and run as first written (fixed by the merged batches; checked against their workarounds' output).
-- **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
+- **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
   process anywhere in it. A language change is made spec-first: write or revise the relevant rule(s)
-  in `spec.md`, then implement so the code conforms to what was just written, then record the *why*
+  in `SPEC.md`, then implement so the code conforms to what was just written, then record the *why*
   here (extending HISTORY.md too, if there's a longer story worth keeping).

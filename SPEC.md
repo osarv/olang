@@ -4488,7 +4488,7 @@ Every diagnostic is written to standard output. Colour is used only when standar
 **B11a.** `-e RULE` prints the text of rule `RULE` of this specification - from its definition to the next rule or
 heading, under the heading of the section holding it - and compiles nothing. The rule is the one an error's brackets
 name; a first letter written in lowercase is read as uppercase (`-e t6b` is T6b). The specification is found as the
-standard library is (M23): `../spec.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
+standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
 error.
 
 ## 11. External Functions

@@ -1602,18 +1602,18 @@ from their original form.
   documented, not re-added as passing tests (a rejected program can't run as a `test{}` block, the same
   convention every other compile-error case in this file already follows), in a new comment in shared.olang
   next to the existing `BARE_SCOPE_RETURN_TYPE`/transitive-case documentation.
-- **The specification moved from `spec/` (a directory of 11 files) to a single `spec.md` at the repository
+- **The specification moved from `spec/` (a directory of 11 files) to a single `SPEC.md` at the repository
   root.** User-requested consolidation, purely a packaging change - no rule was added, removed, or
   renumbered; every `<prefix><n>` citation (`T24`, `O13`, etc.) still means exactly what it meant before,
   and every one of the 172 rules present beforehand is still present. Every inter-file markdown link (e.g.
   `[04-modules.md](04-modules.md)`) was mechanically rewritten to an in-file section reference (`§4`, or
   `§4.4` where a specific subsection was already being cited) - the "Standing process change" and every
   other still-current instruction referring to `spec/` in the two entries above should now be read as
-  referring to `spec.md`.
-- **`spec.md` itself no longer says anything about CLAUDE.md, Claude, or the design process - it is a pure
+  referring to `SPEC.md`.
+- **`SPEC.md` itself no longer says anything about CLAUDE.md, Claude, or the design process - it is a pure
   language reference manual, nothing else.** User-requested: the file's own former "Relationship to
   CLAUDE.md" and "Process for language changes" front-matter sections (self-referential process/meta
-  content, not language rules) are removed from `spec.md` outright, not just reworded - that framing now
+  content, not language rules) are removed from `SPEC.md` outright, not just reworded - that framing now
   lives only here, in CLAUDE.md (this entry, and the "Standing process change" note above), which is the
   correct place for it. The rule content and numbering (§1-§10, all 172 rules) is completely unaffected;
   only the "Structure" section's closing sentence and the "Status" section were trimmed of their own
@@ -1622,7 +1622,7 @@ from their original form.
 - **Fixed: passing a directory (or any non-regular file) to `-c`/`-t` silently compiled as an empty
   module instead of reporting an error - in `-t` mode this actually "succeeded" with `0 passed, 0
   failed` and exit 0.** A CLI robustness bug, not a language design decision, closed the same session
-  the `spec.md`/CLAUDE.md split happened in. Root cause: `readChars` (token.c) only ever checked
+  the `SPEC.md`/CLAUDE.md split happened in. Root cause: `readChars` (token.c) only ever checked
   `fopen`'s own return value; on Linux, `fopen(path, "r")` succeeds for a directory just like it does
   for a regular file, and the subsequent `fgetc` loop immediately returns `EOF` - indistinguishable
   from a genuinely empty file - because `fgetc` never separates "clean end of stream" from "a real
@@ -1656,10 +1656,10 @@ from their original form.
   entry above) or any other semantics; only where the `?` marker sits, and which side of it the
   return type vs. the error set live on, changed.
   **Process note, an honest deviation from this project's own "spec first" rule:** this one was
-  implemented before `spec.md` was updated to match, not after - the user's request read as a direct,
+  implemented before `SPEC.md` was updated to match, not after - the user's request read as a direct,
   unambiguous fix-this-now instruction (much like the earlier file-validation fix in the same
   session), and the grammar/parser work started immediately rather than pausing to write the spec
-  rule first. `spec.md` (D8, T21, P4) was brought in sync with the implementation directly afterward,
+  rule first. `SPEC.md` (D8, T21, P4) was brought in sync with the implementation directly afterward,
   in the same session, before this entry was written - so nothing is left out of sync going forward -
   but the *order* of spec-then-code that this file's own standing process calls for wasn't followed
   this time. Worth naming plainly rather than quietly implying the usual order happened, since the
@@ -1777,7 +1777,7 @@ from their original form.
   struct(s scope, inner Point<s>) { inner }` then `x mut Wrapper[n]` - was also confirmed broken the
   same way, via `cgSizedArrayAlloc`'s own `llvm.memset` zero-fill, a different codegen mechanism than
   the "T[N]" case's `zeroinitializer` but the identical underlying defect.
-  **Spec-first this time, unlike the signature-reorder entry above:** D13 (`spec.md`) was rewritten
+  **Spec-first this time, unlike the signature-reorder entry above:** D13 (`SPEC.md`) was rewritten
   first to state the real rule precisely - a compile-time-constant outermost size is necessary but
   not sufficient for zero-fill; the declared type must additionally contain no reference (a
   `<>`/`<name>`-marked struct/compile-time-length array, or, unconditionally, a runtime-length array) anywhere within it,
@@ -1867,7 +1867,7 @@ from their original form.
   array-index case is now correctly rejected, documented in shared.olang (a rejected program can't be
   a permanent `test{}` block, same convention as every other compile-error case in this file) right
   next to the two now-passing-for-the-right-reason tests that prove the fix doesn't overcorrect.
-  **Spec updated to match (O11, O12, spec.md): "unverifiable" is now defined as a compile-time error,
+  **Spec updated to match (O11, O12, SPEC.md): "unverifiable" is now defined as a compile-time error,
   the same as a proven-unsafe flow, not a lenient default - with an explicit note that extending what
   this checker's tracing can follow can only ever accept more genuinely-safe programs, never make an
   already-rejected one newly unsafe (the correct direction for a checker that's sound but
@@ -1989,7 +1989,7 @@ from their original form.
   that fully handles the named type itself, leaving only the bare error able to escape, confirms
   `catch error` alone is sufficient to cover what's left - which it provably would not be if it
   matched the named type too). `make verify` (87 tests, `-c` build/run) passes with no regressions;
-  spec.md gained a new §7.6 (R15-R19) plus updates to D8, L18, and T21's own prose, all written before
+  SPEC.md gained a new §7.6 (R15-R19) plus updates to D8, L18, and T21's own prose, all written before
   any implementation code changed, this time genuinely spec-first from the start - the exploratory
   "flip a check and see what breaks" methodology from the scope-checker entry above was appropriate
   there because the correct *behavior* was itself in question; here, the design conversation had
@@ -2068,7 +2068,7 @@ from their original form.
   wrong-argument-count and non-numeric-argument rejection for `TypeName(x)`, negative literals via
   both a var-decl and `:=`, arithmetic/comparison/bitwise widening together, and `addLong` - previously
   declared and totally unreachable - actually called and correct for the first time in this project's
-  history. `make verify` (90 tests, `-c` build/run) passes with no regressions. spec.md gained a
+  history. `make verify` (90 tests, `-c` build/run) passes with no regressions. SPEC.md gained a
   rewritten T6 (the general widening rule, referenced from E6/E8/E9/E10 rather than restated), an
   extended E4 (negated literals count as literal expressions), a corrected E12, a fixed T5, and a new
   §5.12/E26 for the explicit conversion - one numbering slip caught and fixed before it shipped: an
@@ -3118,7 +3118,7 @@ from their original form.
   `extern-ret-type` to a numeric primitive only, splitting what X2 allows for a parameter from what it
   allows for a return type for the first time, and adding the reasoning as new text in X3. Caught and
   fixed in-session (per this project's standing convention of surfacing and fixing incidental issues
-  found along the way, not quietly patching around them), not left as a latent gap - `spec.md` reflects
+  found along the way, not quietly patching around them), not left as a latent gap - `SPEC.md` reflects
   the corrected rule, not the originally-approved one.
 
   **Implementation**, following this project's three-pass semantic-analysis structure end to end:
@@ -3235,12 +3235,12 @@ from their original form.
   (`applyRefMarker`'s presence check and its error token, and `isScopeTypeRef`'s rejection check) swap
   `TOK_LST` for `TOK_BTWSE_AND`; `token.c` needed **no change at all**, since `>` was never a statement-end
   trigger either and `&` inherits that position unchanged. Plus five error messages in errmsg.h, the
-  marker's spelling throughout spec.md (T24's production, L20's implicit-statement-end exception rewritten
+  marker's spelling throughout SPEC.md (T24's production, L20's implicit-statement-end exception rewritten
   for the bare form, and ~28 prose mentions), and 128 marker occurrences across the `.olang` test files.
   `make verify` passes unchanged at 67/12/13 tests - this was a pure notation change with no semantic
   content, which is precisely why it was worth doing now, before generics exist and before the marker
   acquires a second meaning.
-  **Incidental fix found along the way:** `unary-op` was referenced by the E1 grammar block in spec.md but
+  **Incidental fix found along the way:** `unary-op` was referenced by the E1 grammar block in SPEC.md but
   never actually defined anywhere - the operator set only appeared in E5/E9/E11 prose. Added the missing
   production (`"-" | "!" | "~" | "++" | "--"`), verified against `isUnaryOpTok` in syntax.c.
 
@@ -3377,7 +3377,7 @@ from their original form.
   distinction was never dynamism at all but *when the length is known* - `T[N]` carries it in the type at
   compile time, `T[]` carries it at runtime alongside the pointer in the `{ i64, ptr }` value - and the
   new pair names exactly that, with the user's own observation that both are static as the deciding
-  argument. Renamed throughout spec.md, CLAUDE.md, HISTORY.md (including older entries, since they
+  argument. Renamed throughout SPEC.md, CLAUDE.md, HISTORY.md (including older entries, since they
   describe the same concepts), every code comment, the one error message that mentioned it, and the
   `.olang` test comments; `typeNeedsDynamicPromotion`/`cgPromoteFixedArrayToDynamic` became
   `typeNeedsRuntimeLengthPromotion`/`cgPromoteFixedToRuntimeLength`. `arrMalloc` was deliberately left
@@ -4210,7 +4210,7 @@ from their original form.
   across `codegen.c`, `semantic.c`, `syntax.c`, `chan.olang` and `shared.olang`, much of it in prose the
   language's own corpus explains itself with, against roughly a dozen for §10 - and `P` reads as
   "parallelism" where §10's rules are about turning source into a program and running it, which `B`
-  (build) names at least as well. Purely mechanical: rule labels and every reference in `spec.md`,
+  (build) names at least as well. Purely mechanical: rule labels and every reference in `SPEC.md`,
   `codegen.c`, `codegen.h`, `errmsg.h`, `main.c` and this file. No rule's content changed.
 
 - **Run-time bounds checking removed from array indexing (E16); slices keep theirs (E16b).** User-directed,
@@ -9555,8 +9555,8 @@ from their original form.
   (`Err(tok, ERR_VAR_LIST_COUNT, names.len, values.len)`). The directives are the compiler's own: `%n` renders a token
   as a reader sees it (`'x'`, or `end of line`, `end of file`), `%t` a type through the code generator's source speller
   (`Array<U8>&`), `%S` an olang `struct str`; `%c` escapes what does not print. The long explanations did not vanish:
-  they are what the spec's rules already say, and `olang -e D12b` prints the rule from `spec.md` - found as std is,
-  `../spec.md` beside the compiler - under its section heading, from its definition to the next rule or heading. Of the
+  they are what the spec's rules already say, and `olang -e D12b` prints the rule from `SPEC.md` - found as std is,
+  `../SPEC.md` beside the compiler - under its section heading, from its definition to the next rule or heading. Of the
   formats considered, the X-macro table won over one function per diagnostic (typed parameters, but 400 functions) and
   over keeping strings at the call site (no single place to read every message, or to check them): it is the one place
   the messages live, the enum and the rule column come from it, and the user had asked for nothing cleverer.
@@ -10432,3 +10432,11 @@ from their original form.
   already pinned by a test, so nothing was added.
   Measured beside: a cold hello-world build unchanged within noise (the float table is not written without a float
   rendered).
+
+### The specification is `SPEC.md` (2026-10-09)
+
+Renamed from `spec.md` at the user's request ("Capitalize it"), after they asked why the project's Markdown files were
+capitalized: the top-level documents about the project (`CLAUDE.md`, `PRINCIPLES.md`, `HISTORY.md`, a `README.md`)
+follow the Unix habit of capitals, which sort first in a listing, and `spec.md` was the one exception. `olang -e RULE`
+reads `../SPEC.md` beside the compiler, and the checks hold every rule an error names to it. References in the records
+were updated, older entries included, since it is the same file.
