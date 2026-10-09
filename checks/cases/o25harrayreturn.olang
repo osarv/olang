@@ -1,12 +1,22 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# O14c/T7b: an array returned by value is copied into the result scope, but what its elements refer to is not - text
-# made in this function's block dies at the return. It used to be returned unchecked and read freed storage
+# check: run
+# O26a/T7b: an array local returned by value lives in the result scope, so the text its elements refer to is built there
+# too. This was an error (the text was made in the block); o25harrayslice.olang keeps it for an array that is not what is
+# returned
 fn mk(n I64) Array<String&> {
     a := Array<String&>(1)
     a[0] = $n $n
     return a
 }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
 fn main() ? {
     a := mk(12)
-    assert a.Len() == 1
+    churn()
+    assert a.Len() == 1 and a[0] == "1212"
 }

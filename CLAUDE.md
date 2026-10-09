@@ -3911,7 +3911,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   to a receiver lands by its obligations (`r.mods[0].top.Get(n)`, O18c); a capturing lambda passed to a callee that can
   keep nothing of it gets its environment in the caller's frame (D16d, codegen: `captured` 2.3-2.9 -> 0.6 ns an element,
   as `direct`); diagnostics - an unparsed type is declared (one error, not "unknown type" at every use), a join piece
-  followed by `(` says to write `$(...)` (E11b), C2d's error points at the argument with a note naming the fix.
+  followed by `(` says to write `$(...)` (E11b), C2d's error points at the argument with a note naming the fix. Found
+  writing the tests, pre-existing: a reference copied out into a by-value result (`return a[0:1]`, a slice of a local
+  array of text) was never judged - the text was returned from the dying block (O14c now holds it).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

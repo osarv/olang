@@ -4054,7 +4054,10 @@ return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a c
 `y`.
 
 **O14c.** A **by-value** built result holding references (T17c), returned from a by-value parameter holding them (O4b)
-or from storage reached through one, is the third exception: there is no borrowed form for a value. The parameter's
+or from storage reached through one, is the third exception: there is no borrowed form for a value. A reference copied
+out into such a result (E12: `return p`, `return a[0:1]`) holds what its referent holds, which lives where the referent
+does - or, for a slice of a value, where that value's references are: in one of the function's own blocks it is an
+error, in a parameter's scope this obligation. The parameter's
 scope must outlive the result scope - be exactly it where something can be stored through one of the references
 (O25g) - as an obligation of the function, checked at every call once the result has landed (O18a). `fn id(h Holder)
 Holder { return h }` is legal, and `keep = id(Holder(inner))` a compile-time error where `inner` dies before `keep`.

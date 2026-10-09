@@ -11114,3 +11114,12 @@ every obligation is final) - now has its environment in the caller's frame, an `
 pointer becomes a constant, the call direct, the lambda inlined and the loop vectorized - 0.6 ns, as written out.
 Sound because a callee with no such obligation cannot keep the value (storing it anywhere, returning it, capturing it
 in something it keeps are all obligations, and a global cannot hold a parameter's function value).
+
+**Four must-fail cases became legal, as they should.** `o13afieldstore`, `o13aloopreturn`, `o17borrowsplit` and
+`o25harrayreturn` each returned a local whose references O26a now builds in the result scope - text stored into a field,
+a value assigned to it in a loop, a value lent to a `mut` method, an array's elements - so each now runs (read back after
+a churn), and each has a `...wrap`/`...slice` twin keeping its error where the local is not itself what is returned
+(inside another value, or a slice of it). Writing the slice twin found a hole: a reference copied out into a by-value
+result - `return a[0:1]`, a slice of a local array of text - was never judged at all (`checkValueResult` stopped at
+anything reference-shaped), so the text was returned from the dying block. It is judged now by where the referent's
+references live: the block's is an error, a parameter's an obligation (O14c).

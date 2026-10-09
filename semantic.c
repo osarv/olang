@@ -16680,10 +16680,25 @@ static void checkValueResult(struct checkCtx* ctx, struct operand* v, struct typ
         return;
     }
     struct var* rs = ctx->func ? ctx->func->type.resultScope : NULL;
-    if (!rs || et.structMAlloc || !TypeHoldsReferences(et) || !OperandNamesExistingStorage(v) || v->type.structMAlloc) return;
+    if (!rs || et.structMAlloc || !TypeHoldsReferences(et) || !OperandNamesExistingStorage(v)) return;
     struct var* hv;
     int hd;
     bool hu;
+    if (v->type.structMAlloc) {
+        //T7b/O5: a reference copied out into the result holds what its referent holds, which lives where the referent
+        //does - or, for a slice of a value, where that value's references are. A slice of a local array of text was
+        //returned with its text left in the block
+        struct operand* base = v;
+        while (base->opType == OPERATION_SLICE && base->args.len) base = *(struct operand**)ListGetIdx(&base->args, 0);
+        bool found = base != v && !base->type.structMAlloc ? valueRefsScope(ctx, base, &hv, &hd, &hu)
+                                                           : RefExactScope(ctx, v, true, &hv, &hd, &hu);
+        if (!found || hu) return;
+        if (hv == SCOPE_AMBIGUOUS || (!hv && !reported)) { Err(v->tok, ERR_RETURN_OWN_STORAGE); return; }
+        if (!hv || canonicalVar(hv) == canonicalVar(rs) || !varIsOwnParam(canonicalVar(hv), ctx->func)) return;
+        scopeObligationAdd(ctx->func, canonicalVar(hv), canonicalVar(rs));
+        if (valueRefsAdmitStores(et)) scopeObligationAdd(ctx->func, canonicalVar(rs), canonicalVar(hv));
+        return;
+    }
     if (!valueRefsScope(ctx, v, &hv, &hd, &hu) || hu) return; //the program's scope outlives every result
     //a struct or enum built here: what its constructor bound its scope variables to says where its references are, and
     //that is judged (O13a) - a copy, an array or anything read out of one has no such record
