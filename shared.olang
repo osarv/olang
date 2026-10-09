@@ -10549,7 +10549,7 @@ fn evIdentity(n I64) String {
     x Array<I32>
     y Array<I32>
     none Array<I32>& = null
-    return $same(a, b) " " $(a == b) " " $same(c, d) " " $same(e, f) " " $same(a, g) " " $same(x[:], y[:]) " " $same(x[:], none)
+    return $(a is b) " " $(a == b) " " $(c is d) " " $(e is f) " " $(a is g) " " $(x[:] is y[:]) " " $(x[:] is none)
 }
 EvIdentityBaked String = evIdentity(2)
 test "E10: an array reference is the same as another with the same storage and the same length" {
@@ -10629,7 +10629,7 @@ test "C2e: a copy into fixed storage of its length, while compiling and at run t
 
 # T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
 # new instance each time one site was reached)
-fn evTwo(a String&, b String&) Bool { return same(a, b) }
+fn evTwo(a String&, b String&) Bool { return a is b }
 fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }
 fn evSites(n I64) String {
     l := List<String&>()
@@ -10651,11 +10651,11 @@ EvG fn(x I32) I32 = evTri
 EvSix I32 = EvG(2)
 EvVia I32 = evApply(EvG, 5)
 test "a function-typed global holds a function value, read, called and assigned as one" {
-    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and same(EvG, evTri)
+    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and EvG is evTri
     assert EvF(4) == 8 and evApply(EvF, 4) == 8
     k I32 = I32(evRun) + 6
     EvF = evTri
-    assert EvF(4) == 12 and same(EvF, evTri)
+    assert EvF(4) == 12 and EvF is evTri
     EvF = fn(x I32) I32 { return x + k }
     assert EvF(4) == 11
     EvF = evDbl
@@ -10729,7 +10729,7 @@ test "K1: a global reaching what a writable reference can change is not a compil
     EvHold.a[0] = 9
     assert evHeld(0) == 9 and EvHold.a[0] == 9
     EvHold.a[1] = 6
-    assert EvHold.b[0] == 6 and same(EvHold.b, EvHold.a[1:3])
+    assert EvHold.b[0] == 6 and EvHold.b is EvHold.a[1:3]
 }
 
 # K2b: globals sharing an instance, or a slice of one, share it in the program's data (each global's data was its own copy)
@@ -10744,13 +10744,13 @@ fn evIdr(n EvNode&) EvNode&n { return n }
 EvA EvNode& = evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
-EvSameAB Bool = same(EvA, EvB)
+EvSameAB Bool = EvA is EvB
 EvArr Array<I64>& = I64[1, 2, 3, 4]
 EvSl Array<I64>& = EvArr[1:3]
-EvSameSl Bool = same(EvSl, EvArr[1:3])
+EvSameSl Bool = EvSl is EvArr[1:3]
 test "K2b: globals sharing an instance or a slice of one share it in the program's data too" {
     assert EvSameAB and EvSameSl
-    assert same(EvA, EvB) and same(EvC, EvA) and same(EvSl, EvArr[1:3]) and EvSl[0] == 2
+    assert EvA is EvB and EvC is EvA and EvSl is EvArr[1:3] and EvSl[0] == 2
 }
 
 # E30/E27: a comparison chain re-evaluated inside its own Less (its cached operands were the outer chain's), and
