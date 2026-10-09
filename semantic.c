@@ -2741,6 +2741,23 @@ static bool typeHoldsByValue(struct type t, struct type* target, int depth) {
 //stand-in type so nothing after walks the cycle - it used to reach codegen as an unsized type (a struct) or, once an
 //enum's snapshots were refreshed, recurse forever (an enum)
 static void checkHoldsItself(struct type* t) {
+    //T29: a type over an array holding itself through its elements - directly, or through another such type - finished
+    //with its element still the snapshot taken while it was being declared, so nothing could ever be converted into it
+    //("expected Nest&, found Nest&"). Reported at the type whose element is that snapshot, which then fits anything,
+    //so its uses add nothing to the one error
+    if (t->bType == BASETYPE_ARRAY && t->owner && t->name.len) {
+        struct type* e = t->arrElem;
+        while (e && e->bType == BASETYPE_ARRAY && !(e->owner && e->name.len)) e = e->arrElem;
+        struct type* c = e && e->placeholder && e->owner && e->name.len ? TypeGetList(&e->owner->types, e->name) : NULL;
+        if (c && c->bType == BASETYPE_ARRAY) {
+            struct type shown = *t;
+            shown.owner = NULL;
+            shown.name = StrFromCStr("");
+            Err(t->tok, ERR_ARRAY_TYPE_HOLDS_ITSELF, t->name, t->name, &shown);
+            t->unknown = true;
+        }
+        return;
+    }
     if (t->bType != BASETYPE_STRUCT && t->bType != BASETYPE_CHOICE) return;
     for (int i = 0; i < t->vars.len; i++) {
         struct var* f = ListGetIdx(&t->vars, i);
@@ -4800,8 +4817,11 @@ void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, s
 
 //O4b for one parameter: a bare reference gets its own anonymous scope variable, added to scopeVars
 static bool valueParamHoldsRefs(struct type t) {
-    return !t.structMAlloc && !t.scopeParam && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && !t.isTuple
-           && TypeHoldsReferences(t);
+    if (t.structMAlloc || t.scopeParam || t.isTuple) return false;
+    //D9b: a run-time-length array held by value - a generic's, instantiated with one (D9a) - is the caller's array or
+    //the callee's copy of it, and either way the references it holds live where the caller's array has them
+    if (t.bType == BASETYPE_ARRAY) return t.arrMalloc && TypeHoldsReferences(t);
+    return (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && TypeHoldsReferences(t);
 }
 static void giveImplicitScope(struct var* p, struct list* scopeVars) {
     bool bareRef = p->type.structMAlloc && !p->type.scopeParam
@@ -7447,6 +7467,12 @@ static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool
     if (unnamed) *unnamed = v->refsHomeUnnamed;
     return true;
 }
+//codegen's reading of valueRefsHome: where the references the value op holds were put - false where it says nothing
+//(op's own storage decides) or where that is not known here (nothing is built there; the checker refused it, O12)
+bool SemanticValueRefsHome(struct operand* op, struct var** to, int* depth, bool* unnamed) {
+    if (!valueRefsHome(op, to, depth, unnamed)) return false;
+    return *to != SCOPE_AMBIGUOUS;
+}
 //O4b/O25h: where the references a value holds live - where its ":=" call or its parameter's scope put them (valueRefsHome),
 //else where it lives itself (its block, its container's scope, the program's for a global's). False when it has no
 //storage of its own to read that off (a temporary)
@@ -8861,9 +8887,14 @@ static bool ownSlotsAdmitStores(struct type v, int depth) {
 //D9: whether a callee may write what its parameter pv holds, and so build into the scope its references live in -
 //through a reference, as the reference's type permits (T25b); a by-value parameter is the callee's own copy, written
 //where its body writes it (D9b): known once that body is checked, assumed while it is not (a cycle, a function value)
+//...and through the references a by-value parameter holds wherever they may be stored through, decided by the type
+//as a writable reference parameter's is: "fn grow(b Box) { b.n.next = N(9) }" writes no part of b, and builds in the
+//scope b's references live in
+bool valueRefsAdmitStores(struct type t);
 static bool paramMayWrite(struct var* func, struct var* pv) {
     if (TypeIsPermRef(pv->type)) return pv->type.refMut;
     if (pv->type.bType == BASETYPE_FUNC) return false; //nothing is written through a function value (D16d)
+    if (valueRefsAdmitStores(pv->type)) return true;
     if (func && func->bodyState == 2 && func->owner) return pv->paramWritten;
     return true;
 }
@@ -13991,6 +14022,10 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         if ((!asRef || !op->type.structMAlloc) && v->storeInResult && ctx && ctx->func) { *outVar = v->valueHome; return true; }
         if (!asRef) { *outDepth = isParam ? 1 : op->type.scopeDepth; return true; } //a by-value slot is ours
         if (op->type.scopeUnknown) { *outVar = SCOPE_AMBIGUOUS; return true; } //O11/O12: not known here
+        //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
+        //storage this call keeps for its whole length: its own copy, or the caller's when it may not write it. Its scope
+        //variable (O4b) is where the references it holds live (valueRefsHome), not its storage
+        if (isParam && !op->type.structMAlloc && op->type.bType == BASETYPE_ARRAY) { *outDepth = 1; return true; }
         if (op->type.scopeParam) {
             struct var* r = resolveEffectiveScopeVar(op, op->type.scopeParam);
             if (r == SCOPE_AMBIGUOUS) { *outVar = SCOPE_AMBIGUOUS; return true; }
@@ -14675,14 +14710,17 @@ static void bareLocalLivesInBlock(struct checkCtx* ctx, struct type* t) {
 
 //T25b/D11a: a local's written type decides what its reference permits - "x mut T&" writable, "x T&" read-only - since the
 //local itself may always be reassigned (D11). "mut" before a value type says nothing, and is the error D11a states
-//(before ":=", which takes the initializer's permission already, its other one). Returns whether "mut" was written
-static bool localPermission(struct syntax* s, struct type* declType) {
+//(before ":=", which takes the initializer's permission already, its other one). A type variable written bare
+//("x mut T") is T2's "writable when bound to a reference", as on a parameter or a field - so it is no error where an
+//instantiation binds it to a value type (declTypePermission's rule, which sees the variable itself). Returns whether
+//"mut" was written
+static bool localPermission(struct syntax* s, struct syntax* typeExprNode, struct type* declType) {
     if (!hasTokOfType(s, TOK_MUT)) {
         if (TypeIsPermRef(*declType)) declType->refMut = false;
         return false;
     }
     if (TypeIsPermRef(*declType) || declType->bType == BASETYPE_TYPEVAR) declType->refMut = true;
-    else if (!declType->unknown) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_LOCAL, declType);
+    else if (!declType->unknown && !typeExprIsBareTypeVar(typeExprNode)) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_LOCAL, declType);
     return true;
 }
 
@@ -14707,7 +14745,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
         scopeTagBody = NULL;
         bareLocalLivesInBlock(ctx, &declType);
-        if (ctx->hasOwnScope) permByType = !localPermission(s, &declType) && TypeIsPermRef(declType); //T25b
+        if (ctx->hasOwnScope) permByType = !localPermission(s, typeExprNode, &declType) && TypeIsPermRef(declType); //T25b
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
         inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, NULL); //O26a
     } else {
@@ -14719,7 +14757,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             //T25b: what the written type permits - "x mut T&" writable, "x T&" read-only; a type variable's binding
             //carries its own permission ("acc U = init"), which "mut" may make writable
             if (ctx->hasOwnScope && !(bareVar && !hasTokOfType(s, TOK_MUT)))
-                permByType = !localPermission(s, &declType) && TypeIsPermRef(declType) && !bareVar;
+                permByType = !localPermission(s, typeExprNode, &declType) && TypeIsPermRef(declType) && !bareVar;
             rhs = buildExpecting(ctx, exprNode, &declType); //G10c
             inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, rhs); //O26a
             if (bareVar) { //...writes no scope, whatever the binding's type carried
@@ -16715,7 +16753,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
         scopeTagBody = NULL;
         bareLocalLivesInBlock(&innerCtx, &declType);
-        permByType = !localPermission(initNode, &declType) && TypeIsPermRef(declType); //T25b
+        permByType = !localPermission(initNode, typeExprNode, &declType) && TypeIsPermRef(declType); //T25b
         if (declType.scopeParam || declType.scopeWritten) landCall(initVal, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
         reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok, initVal, declType);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer

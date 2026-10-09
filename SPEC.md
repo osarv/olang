@@ -918,7 +918,10 @@ A type may be declared over a primitive, an array, or another declared type over
 it is then a new name over the same representation and takes **none** of the other type's constructor (T29d),
 destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a trait or a generic type's instance
 (`type Names List<String&>`) is a compile-time error - such a type has no representation apart from its identity; a
-struct holding it as a field is the way to name one.
+struct holding it as a field is the way to name one. A type declared over an array may not hold **itself** through its
+elements - `type Nest Array<Nest&>`, or two such types each over an array of the other: its representation would be
+spelled in terms of a type not yet declared, and it is a compile-time error at the declaration. A struct holding the
+array (`type Nest struct(kids Array<Nest&>&)`) is how a value holds others of its own type.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
 constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] { ... }`.
@@ -1379,7 +1382,8 @@ on it belongs to its type, `x mut T&` a writable reference and `x T&` a read-onl
 
 **D11a.** `mut` before a local's value type (`x mut I32`), or before `:=` (`x mut := e`, which gives the local `e`'s
 permission already), is a compile-time error: it would state nothing, and its absence elsewhere would read as
-immutability that does not exist.
+immutability that does not exist. Before a type variable written bare (`x mut T = v`) it is T2's "writable when bound
+to a reference", as on a parameter or a field, and states nothing where an instantiation binds `T` to a value type.
 
 **D12.** In the first form (explicit type), `= expr` is **optional for every declared type**: a
 declaration with no initializer is D13's zero value. When present, `expr`'s type must fit the declared type
@@ -1664,7 +1668,9 @@ number, and takes `i` from `0` to `Len() - 1` (`RemoveAt`) or `Len()` (`Insert`)
 program, checked once per call, and stops it as an `assert` does. `Reverse()` reverses the elements in place, and
 `Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. A `List` of texts has
 `Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
-leaves which elements the rest of the walk gives unspecified.
+leaves which elements the rest of the walk gives unspecified - but a walk only ever gives elements the list holds or
+held, and it ends: once the list holds no more than the walk has given (after a `Clear()`, or `Pop()`s below its
+position) the next step is its end.
 A `List` is a **handle**: its chunks and its counts are one record, made where the `List` is constructed (C2d), and
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
@@ -2112,6 +2118,13 @@ the type, and a type may say it itself:
 - a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `a is b` (E10c).
+
+The comparison takes no shortcut through identity, and it walks only what these rules say: a value whose parts reach
+values of its own type - a struct holding an array of references to its own type, `type S struct(xs Array<S>&)` - is
+compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element naming the
+array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a comparison
+evaluated while compiling (K1), or under `-i`, stops with a message instead, each level it descends counting as a call
+does against the evaluator's depth limit. A struct or enum reference (identity, above) ends any such walk.
 
 **E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
 same instance - for a reference to an array, whose value is a length paired with a pointer, the same storage from the
@@ -3867,8 +3880,12 @@ A parameter passed **by value** whose type holds references (T17c, C2d: a struct
 or a type variable bound to one) has a scope variable too, `&x` for parameter `x`: where the references it holds live,
 bound by the argument - an existing value's references' scope (O25h), or, for a temporary, wherever the call places
 it. A reference read out of the parameter - a field, an element, a payload bound by `match` or taken by `as` - lives
-there, never in the program's scope nor in the function's own. A by-value result handing such references back is
-O14c's obligation.
+there, never in the program's scope nor in the function's own: a temporary stored through one (`fn grow(b Box) {
+b.n.next = N(9) }`) is built in that scope. So a callee may build into a by-value parameter's scope variable as into a
+reference parameter's - wherever something can be stored through what the parameter holds (O25g), decided by its type as
+a reference parameter's is by its permission, whether its body writes the parameter itself or not - and an argument
+whose references live where the caller cannot say (O12, a `&p` field, O23a) is not passed for one (O25e). A by-value
+result handing such references back is O14c's obligation.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations (field access,
 indexing, calls) are valid; it only constrains where the value may be allocated (§8.3) and where a reference
@@ -4670,7 +4687,8 @@ X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so the
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
 implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
-interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
+interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of data that
+holds itself (E10).
 
 **B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -5470,8 +5488,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
   a hang: evaluation that would run out of the stack it runs on stops there, refused (under `-i`, with that message),
-  every turn of a loop counts toward the first, and an array too long for the memory budget is refused before it is
-  made.
+  every turn of a loop counts toward the first, each level `==` descends into a value (E10) toward the second, and an
+  array too long for the memory budget is refused before it is made.
 
 An atomic operation (P9) is evaluated as the plain operation on its place, since no task runs beside an evaluation:
 it reads or writes that place under the rules above, so one on a local or on what a local's references reach is

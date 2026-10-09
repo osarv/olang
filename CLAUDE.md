@@ -4133,6 +4133,39 @@ Go through this for every change to what olang means - a rule added, revised or 
   a type variable `<T>` where G8b writes `T`; a type's name met as a value said "unknown name 'Res' - did you mean
   'Res'?" (now "'Res' is a type, not a value"). Confirmed gone on this compiler: oann's `ctorpush`, `ctorunstored` and
   `capturedfn` (captured 0.52 ns an element against 0.55 direct).
+- **A review of tonight's merges, fixed (O1b/P2, O4b/D9, E10/K1, D9b, S9c, B3, D11a, T29, X6, 2026-10-09).** A
+  read-only review (`/home/user/review/tonight`) reproduced eight bugs and traced three more; all fixed, each with a test.
+  (1) **os.RunOnStack's thread reaches the program's scope as its caller does** - a task's private stand-in (P2) - where
+  it started with the real one, so f's on two tasks bumped one arena unlocked (heap corruption; `-r` found it). (2) **A
+  temporary stored through a reference a by-value parameter holds is built in that parameter's scope variable** (O4b):
+  `fn grow(b Box) { b.n.next = N(9) }` built N(9) in grow's own scope and stored it in the caller's node - a
+  use-after-free, pre-existing; a generic's array taken by value now has the scope variable O4b always promised it (a
+  build through `x[0]` did the same). (3) **`==` on a struct that comes round to its own type** through array references
+  (`type S struct(xs Array<S>&)`) is a function per type, as an enum's payload is - inline it expanded without end and
+  crashed the compiler; data that holds itself is compared without end at run time, as any unbounded recursion (E10
+  says so), and stops the evaluator and `-i` with a message where they segfaulted. (4) The evaluator shares a by-value
+  array argument whenever the run time does - through a reference or a slice too (D9b; it copied, so a baked global and
+  an assert disagreed with the program). (5) **ListIter ends at `at >= count`**: after `Clear()` or `Pop()` below it,
+  it walked past the chunks (MapIter, LineIter likewise; SPEC: such a walk gives only what the list holds or held, and
+  ends). (6) **The runtime's `linkonce_odr` globals and constants are in comdats**, as clang puts an inline variable - a
+  `-d` link kept every object's copy of its TLS (0x4680 bytes, now 0x470; `-r` 0x2ab8 -> 0xc60) - and RunOnStack's least
+  stack is glibc's own answer, `__pthread_get_minstack` found by dlsym as Rust's std does (else PTHREAD_STACK_MIN, at
+  least 16KB), so `-d` no longer aborts at 20000 bytes. (7) `x mut T = v` in a generic is T2's "writable when bound to a
+  reference" on a local too (D11a). (8) **`type Nest Array<Nest&>`**, or two such types over each other, is an error at
+  the declaration (T29) - it finished with its element a snapshot and nothing could be converted into it. (9) os.Exec
+  closes the first memory file when the second fails. The review's finding 4 - a copy of a `List`/`Map` taken out of a
+  read-only place writes the shared state - is left to its own batch (the user: close it).
+  **Decided (mine)**: (a) a callee may build into a by-value parameter's scope variable wherever what it holds can be
+  stored through (O25g) - by the type, as a reference parameter's by its permission, not by whether the body writes the
+  parameter (the review's P1: `paramWritten` never saw a build through a reference field); (b) each level `==` descends
+  (a part of an aggregate, the array a reference names) counts as one call against the evaluator's depth limit (2000
+  while compiling, 100,000 under `-i`) and its stack guard - at run time each level of such a type is a call too; (c)
+  every program links `-ldl` (an empty library on glibc 2.34+); (d) comdats for the runtime's globals and constants,
+  not its functions (those cost only code size outside LTO); (e) the self-holding array type is rejected rather than made
+  buildable - a type whose element is itself would make every walker through elements cycle, and a struct holding the
+  array says the same thing. **Found on the way**: the checks harness ran a `# flags: -d` case's binary under its plain
+  name (fixed: `-d`/`-r` binaries are found by their suffix). **Not changed**: `bad == I64[0, 0]` with `bad` an
+  `Array<I64>&` is "one type" error - a literal does not adapt to an array reference in `==`.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

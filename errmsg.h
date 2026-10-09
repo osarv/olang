@@ -138,6 +138,7 @@ struct type;
     X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
     X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
     X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%S cannot hold itself by value - hold it through a reference ('&')") \
+    X(ERR_ARRAY_TYPE_HOLDS_ITSELF,      "T29",   "%S holds itself through the array it is declared over - hold the array in a struct: 'type %S struct(items %t&)'") \
     X(ERR_MISSING_TYPE_ARGS,            "G7",    "%n is generic - write its type arguments, as '%S<I32>'") \
     X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
     X(ERR_TYPE_ARGS_ON_NON_GENERIC,     "G7",    "%S is not generic, so it takes no type arguments") \

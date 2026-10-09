@@ -1,0 +1,15 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# D9/O4b: a callee may build through the references a by-value parameter holds wherever they may be stored through, as
+# through a writable reference parameter - so a generic taking an array of such references by value is not given one
+# read through a '&p' field, whose scope is not known here
+type N struct(v I32) {
+    v
+    next mut N& = null
+}
+type Cur struct(of mut Array<mut N&>&) { at mut Array<mut N&>&of = of }
+fn growFirst(k <T>, x T) { x[0].next = N(9) }
+fn fill(c mut Cur&) {
+    local := Array<mut N&>(0)
+    growFirst(local, c.at)
+}
+fn main() ? { }
