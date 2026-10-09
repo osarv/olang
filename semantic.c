@@ -9374,6 +9374,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
             if (operandOnlyNumericLiterals(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //E4a: one too
             if (arg->pendingLambda || arg->isDefaultArg) continue; //D16a: once the others have fixed what it can take
+            if (arg->isNullLiteral) continue; //G9a: null binds nothing - it fits the type the others bound, or not, at the fit check
             if (OperandIsWrittenText(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //G9a, below
             //G9b: a variable an earlier argument - a method's receiver, say - already bound is no longer
             //inferred from this one: the argument is checked against the bound type as in any call, so E12's

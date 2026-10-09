@@ -11612,6 +11612,110 @@ code (`'A'.Format(16)` is `41`), unlike PadStart, where a Char should pad its ch
 ParseInt's does, 0 included - ParseInt's base 0 reads any of a literal's three forms, and writing one would need a
 choice nobody asked for. I64's most negative is written whole (its magnitude computed in U64). Pure olang, so it bakes:
 `formatBaked`, every base over four values, is a constant in the IR and equals the run time's.
+### std/linalg for oann: batched causal products, a product with its epilogue, convolutions from the images (G9a, 2026-10-09)
+
+oann's DESIGN.md section 13 asked std/linalg for three things, in this order: a batched, strided, causal-aware `Gemm`
+covering every sequence and head of attention in one call; a `Gemm` with an epilogue, `act(alpha op(a) op(b) + bias)`;
+and for convolutions, a `Gemm` packing its A panels straight from the images, plus a thin-product path that does not
+run at half rate. All three are built; what they cost and gained is in bench/README.md ("Batched causal products, the
+epilogue and implicit convolutions"), measured with `bench/fused.sh` and, against master's library, with a scratch copy
+of master edf8238's std/linalg compiled as a module of its own in the same program. The machine was shared throughout
+(load 2-7), so every comparison was interleaved and given as medians, and several conclusions below were reached by
+counting instructions instead (callgrind, on an AVX2 build: valgrind has no AVX-512).
+
+**One core for every product.** `Gemm`'s internals were rewritten around sources that packing reads - `operand<T>` (a
+matrix's storage and row stride, read-only, so a `Gemv` vector can be one) and `Patches<T>` - and a packing routine per
+source taking the panel's role (left or right) as a phantom type, so the panel width is a constant (12 or 32) and a
+whole panel's step is an unrolled copy. Packing one role or the other is the same operation read the other way, so one
+routine serves both. On top of it: `Gemm`/`ws.Gemm`, `Gemv`, `GemmAct`, `GemmBatch`, `GemmPatches`. Plain `Gemm` came
+out level or faster (F32 at 512: 72-83 -> 90-94 GFLOPS), mostly from the store no longer copying the tile twice.
+
+**Batches.** `Batch<T>` is Groups x Members matrices of one shape at two strides - attention's sequences and heads, oann's
+q, k and v holding heads as column blocks and its weights P stacked as rows - with `m.Heads(T, heads)`,
+`m.Stacked(T, heads)` and `b[g, m]` (E31's two-index `At`). The fields were first `Outer`/`Inner`, which D2 rejected:
+`Outer` names the module's outer-product function. `GemmBatch` gives each task a run of whole products, each computed by
+the blocked algorithm on one thread with the task's own panels. Measured against a `Gemm` per sequence and head: at
+T 64, 2.2-2.9x - a 64 x 64 x 32 product is small enough that a call's own work was most of it - and with 4 threads far
+more, a per-head `Gemm` splitting each small product four ways and joining every block (at T 256, 4 threads were 10-20x
+slower than one).
+
+**The triangle** is an enum, `Triangular { None Result Left }`, with a `diagonal` offset (so a decoding step's queries,
+positions first .. first + n, against keys 0 .. first + n are `diagonal = first`) - two kinds because attention has
+both: its scores S = Q K^T and their gradient dP = dO V^T are wanted below the diagonal only (Result: tiles wholly above
+it skipped, a straddling tile stored row by row up to it, the rest of C untouched and not scaled by beta - MKL's gemmt),
+and its weights P are the triangular left operand of Y = P V, dQ = dS K, and with transA of dV = P^T dO and dK = dS^T Q
+(Left: each tile reads only the depth its rows reach, and above the diagonal is never read - BLAS's trmm, which is why
+P's upper part may hold anything, the scores left there by a softmax in place say). A first tile of a block skipped
+entirely still runs with depth 0 when it is the first block of the depth, so beta is applied exactly once.
+
+The first measurement showed the triangle saving 7% at T 256 where half was expected, and three hypotheses went by
+before the cause: **packing the weights cost about what the product did.** Y = P V has a result 32 wide - one tile -
+so each element of P is used once, and packing it (a load, a store and a load again) is pure overhead. A product one or
+two tiles wide now reads its left operand where it is, by rows (`tileInPlace`): the micro-kernels take the operand's
+layout as a phantom type (packed, or rows at a stride), and a triangular one reads in place up to where the tile's
+rows start ending at different places, packing only that tail (at most 11 steps) with its zeros, the kernel running
+the two segments into the same accumulators. Reading by columns in place (P^T) was tried too and was 1.5x slower than
+packing - the steps stride across rows a kilobyte apart and the caches do not prefetch it - so a transposed left
+operand is packed, panel by panel: steps wholly above the diagonal written as zeros without reading, steps wholly below
+copied whole, only those between cut (13 -> 5 instructions an element). One timing sent the investigation the wrong way
+for a while: a benchmark had never filled K, so every read of it hit the kernel's one zero page and was always in cache,
+which made packing look three times cheaper than it is. Exchanging the transposed products (dK^T = Q^T P, P then packed
+by rows as the right operand, the triangle moving with it) was built and measured no faster - P, 16 MB at T 256, is
+memory-bound to read either way - and was taken out again rather than kept as complexity. At T 256 the non-causal
+batched backward is slower than a Gemm per head, and that is locality, recorded rather than fixed: running a head's
+three products on P back to back keeps its 256 KB in L2, where one call per product streams all of P three times.
+
+**The epilogue** went through three forms. Applied as each tile was stored, in the accumulation type, rounding once,
+it was slower than the separate passes (2.7 against 2.3 ms for a 1024 x 128 -> 512 layer with GELU, 4.2 with `pre`):
+reading the epilogue's fields through its struct inside the loops made LLVM reload them at every store (hoisted into
+locals), its loops ran over a runtime width, and the tile's GELU ran 384 elements at a time with the result and `pre`
+held tile by tile. Applied to each block of C's rows once summed - a pass over them while they are in L2, a row at a
+time, compiled once per activation (a phantom type, so the activation's function is inlined) with the bias first
+copied into a local so that C is the only array a loop touches (with C's rows 16 wide, LLVM's overlap tests at every
+row cost more than the work) - it is level with the separate passes and `pre` costs nothing extra. It is level and not
+faster because at oann's sizes the separate passes run on data in L2 or L3 and GELU's own arithmetic (~4 cycles an
+element) is what they cost; for a result larger than the caches the one pass over C measured 21-22 ms against 21-23. The
+result is exactly Gemm, AddRow and Activate's, rounding as they do - which for F16 and BF16 means the product is rounded
+before the bias is added, the price of not doing it per tile.
+
+`Activation` is Identity, Relu, Gelu in its tanh form (GPT-2's, PyTorch's approximate="tanh", through FastTanh: within
+6.2e-7 in F32 and 2.2e-16 in F64 of the formula computed with the C library's tanh, measured at 20,001 points over
+[-10, 10]; the formula itself is within 4.7e-4 of the exact x Phi(x)), Tanh and Sigmoid; Relu lets a NaN through, and
+its slope at 0 is 0, as PyTorch has it. `ActivationSlope` gives each derivative (checked against central differences
+to 1.2e-10), and `dz.ActivationBackward(dy, z, act, beta)` the backward pass.
+
+**Convolutions.** `Patches<T>` is the patch matrix of images held as rows, channels last (oann's layout), its columns
+in PyTorch's [C][K][K] order; `GemmPatches` packs the left operand's panels from it. The first version walked each
+position's window with a general routine (position decoded by two divisions, a kernel row's three pixels as a loop) and
+was twice as slow as oann's im2col; the gathering version packs a panel's 12 positions together, one patch input at a
+time - the input's offset within a window shared, each window's first pixel computed once per panel, the next position
+found by a step - with no test per element where all 12 windows lie inside the image, and a bounds test only where one
+does not. The first convolution of oann's CNN went 5.8-6.8 -> 3.4-3.6 ms and the second 12.7-13.2 -> 7.8-8.1, against
+master's im2col, Gemm, AddRow and ReLU. `Im2col` makes the matrix (for col2im's backward and for tests), 1.5x oann's on
+one channel. The patch matrix as the right operand, for the weights' gradient straight from the images, was built
+(`GemmByPatches`) and measured slower than `Im2col` plus `Gemm` (26 against 15-20 ms on the second layer); since the
+backward needs the patches workspace for col2im anyway, it was dropped.
+
+**Thin products.** The first layer's forward, 100352 x 16 x 9, filled half of the 12 x 32 tile; a tile one vector wide
+(12 x 16) is chosen where it covers the result 15% better, and the transposed product (exchanged: C^T computed, stored
+transposed) where that covers it 25% better - the 16 x 9 weight gradient, 9 of whose columns used 9 of 32, becomes 9 rows
+of 12 by 16 columns of 16. Neither changes any element's sum. Forward 2.2-2.6 -> 1.5-1.9 ms, weight gradient 5.2-6.2 ->
+2.9-3.1. On the way the micro-kernels were made to return their tile by value, to let a tile be stored several ways;
+that put 1.5 KB through memory per tile, which at a depth of 9 cost more than the tile, so they store it themselves again -
+after copying the accumulators out in row order, without which the transposed store's column-order reads broke the
+vectorizer's grouping and every accumulator became a scalar on the stack (F32 at 4 GFLOPS, caught by the comparison
+with master).
+
+**Compiler fix (G9a).** `GemmAct(c, a, false, b, false, null, act)` was "the type arguments of GemmAct cannot be
+inferred": inference unified every argument with its parameter, and `null`'s own type unifies with nothing. A `null`
+argument now takes no part in it and is checked against the parameter once the other arguments have bound it, as a
+numeric literal or written text already is; a variable only `null` reaches still cannot be inferred
+(checks/cases/g9anull.olang), and shared.olang has the test.
+
+**The evaluator** needed nothing new: `assert causalSmall(1.0) == 2020.0` - a small causal `GemmBatch`, Result then Left,
+through the packed micro-kernels and FMA - is decided while compiling (a wrong value is S18c's compile error), and the
+same call on a mutable global runs at run time and gives the same value.
+
 
 ### A method is an operator only in its shape; a generic constructor; a value built from a local the return reads (E31, M6b, E10a, E10b, E11c, G10d, O26a, D13c, B11, 2026-10-09)
 

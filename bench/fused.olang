@@ -1,0 +1,232 @@
+# fused: std/linalg's batched, fused and implicit products against what they replace, each timed interleaved with the
+# others (every variant once, then every variant again, and so on) and given as the median - the side of bench/fused.sh
+# that runs. Not part of "make verify".
+#   attention: causal attention's products over a batch of 16 sequences of T positions, 128 columns in 4 heads, as a
+#     Gemm per sequence and head, as one GemmBatch per product, and as one causal GemmBatch (Triangular) per product
+#   epilogue: a dense layer and its activation as Gemm, AddRow and Activate, and as one GemmAct (with and without pre)
+#   conv: a 3 x 3 convolution of a batch of 128 images with bias and ReLU as oann's im2col (conv.olang, copied below),
+#     Gemm, AddRow and a ReLU pass; as std/linalg's Im2col and one GemmAct; and as one GemmPatches, the patches never
+#     made - and the products alone, and the patches alone
+# Arguments: attention|epilogue|conv|all, and the repetitions (15)
+import "std/time"
+import "std/os"
+import "std/rand"
+import "std/linalg"
+
+reps mut I64 = 15
+
+# the median of each variant's times over reps runs, the variants run one after another each time round
+fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, d fn() = null) {
+    n I64 = 2
+    if c != null { n = 3 }
+    if d != null { n = 4 }
+    times := Array<I64>(n * reps)
+    for r in range reps {
+        for v in range n {
+            t0 := time.Now()
+            if v == 0 { a() }
+            if v == 1 { b() }
+            if v == 2 { c() }
+            if v == 3 { d() }
+            times[v * reps + r] = time.Since(t0)
+        }
+    }
+    print(title)
+    for v in range n {
+        xs := Array<I64>(reps)
+        for r in range reps { xs[r] = times[v * reps + r] }
+        xs.Sort(fn(x, y) { return x < y })
+        ms := (F64(xs[reps / 2]) / 1e6).Fixed(3)
+        nm := names[v]
+        print("  " $nm " " $ms)
+    }
+    println()
+}
+
+fn attention(T I64, threads I64) {
+    r := rand.Rand(1)
+    B I64 = 16
+    D I64 = 128
+    heads I64 = 4
+    dh I64 = D / heads
+    n I64 = B * T
+    q, k, v, dy linalg.Matrix<F32>& = linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D)
+    q.FillUniform(r, -1.0, 1.0)
+    k.FillUniform(r, -1.0, 1.0)
+    v.FillUniform(r, -1.0, 1.0)
+    dy.FillUniform(r, -1.0, 1.0)
+    p linalg.Matrix<F32>& = linalg.Matrix<F32>(B * heads * T, T)
+    p.FillUniform(r, 0.0, 1.0)
+    s, dp linalg.Matrix<F32>& = linalg.Matrix<F32>(B * heads * T, T), linalg.Matrix<F32>(B * heads * T, T)
+    y, dq, dk, dv linalg.Matrix<F32>& = linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D)
+    ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
+    Q, K, V, DY linalg.Batch<F32>& = q.Heads(T, heads), k.Heads(T, heads), v.Heads(T, heads), dy.Heads(T, heads)
+    P, S, DP linalg.Batch<F32>& = p.Stacked(T, heads), s.Stacked(T, heads), dp.Stacked(T, heads)
+    Y, DQ, DK, DV linalg.Batch<F32>& = y.Heads(T, heads), dq.Heads(T, heads), dk.Heads(T, heads), dv.Heads(T, heads)
+    scale F64 = 0.17677669529663687
+    title := "attention T " $T " threads " $threads " forward (S = Q K^T, Y = P V), ms:"
+    compare(title, String&["per head", "batched", "batched causal"], fn() {
+        for g in range B {
+            for h in range heads {
+                ws.Gemm(S[g, h], Q[g, h], false, K[g, h], true, scale, 0, threads)
+                ws.Gemm(Y[g, h], P[g, h], false, V[g, h], false, 1, 0, threads)
+            }
+        }
+    }, fn() {
+        ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.None, 0, threads)
+    }, fn() {
+        ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.Result, 0, threads)
+        ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.Left, 0, threads)
+    })
+    title2 := "attention T " $T " threads " $threads " backward (dP = dO V^T, dQ = dS K, dK = dS^T Q, dV = P^T dO), ms:"
+    compare(title2, String&["per head", "batched", "batched causal"], fn() {
+        for g in range B {
+            for h in range heads {
+                ws.Gemm(DP[g, h], DY[g, h], false, V[g, h], true, 1, 0, threads)
+                ws.Gemm(DQ[g, h], P[g, h], false, K[g, h], false, 1, 0, threads)
+                ws.Gemm(DK[g, h], P[g, h], true, Q[g, h], false, 1, 0, threads)
+                ws.Gemm(DV[g, h], P[g, h], true, DY[g, h], false, 1, 0, threads)
+            }
+        }
+    }, fn() {
+        ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.None, 0, threads)
+    }, fn() {
+        ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.Result, 0, threads)
+        ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.Left, 0, threads)
+        ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.Left, 0, threads)
+        ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.Left, 0, threads)
+    })
+}
+
+fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) {
+    r := rand.Rand(2)
+    x linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, inner)
+    w linalg.Matrix<F32>& = linalg.Matrix<F32>(outer, inner)
+    b linalg.Matrix<F32>& = linalg.Matrix<F32>(1, outer)
+    x.FillUniform(r, -1.0, 1.0)
+    w.FillUniform(r, -0.1, 0.1)
+    b.FillUniform(r, -0.1, 0.1)
+    z, y linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, outer), linalg.Matrix<F32>(rows, outer)
+    ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
+    title := "dense " $rows " x " $inner " -> " $outer " " $act ", ms:"
+    compare(title, String&["Gemm+AddRow+Activate", "GemmAct with pre", "GemmAct"], fn() {
+        ws.Gemm(z, x, false, w, true)
+        z.AddRow(b)
+        y.Activate(z, act)
+    }, fn() {
+        ws.GemmAct(y, x, false, w, true, b, act, 1, 0, 1, z)
+    }, fn() {
+        ws.GemmAct(y, x, false, w, true, b, act)
+    })
+}
+
+# oann's im2col (conv.olang), single-threaded: the current path
+fn oannIm2col(x Array<F32>&, n I64, C I64, H I64, W I64, K I64, S I64, P I64, cols mut Array<F32>&) {
+    OH I64 = (H + 2 * P - K) / S + 1
+    OW I64 = (W + 2 * P - K) / S + 1
+    KK I64 = K * K
+    z F32 = 0.0
+    width I64 = C * KK
+    for b in range n {
+        img I64 = b * H * W * C
+        for oy in range OH {
+            y0 I64 = oy * S - P
+            for ox in range OW {
+                x0 I64 = ox * S - P
+                row I64 = ((b * OH + oy) * OW + ox) * width
+                if C < K and y0 >= 0 and y0 + K <= H and x0 >= 0 and x0 + K <= W {
+                    q I64 = 0
+                    for c in range C {
+                        for ky in range K {
+                            at I64 = img + ((y0 + ky) * W + x0) * C + c
+                            for kx in range K {
+                                cols[row + q] = x[at + kx * C]
+                                q++
+                            }
+                        }
+                    }
+                    continue
+                }
+                for ky in range K {
+                    iy I64 = y0 + ky
+                    for kx in range K {
+                        ix I64 = x0 + kx
+                        w0 I64 = ky * K + kx
+                        if iy < 0 or iy >= H or ix < 0 or ix >= W {
+                            for c in range C { cols[row + w0 + c * KK] = z }
+                        } else {
+                            at I64 = img + (iy * W + ix) * C
+                            for c in range C { cols[row + w0 + c * KK] = x[at + c] }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn conv(C I64, H I64, W I64, K I64, outC I64) {
+    r := rand.Rand(3)
+    n I64 = 128
+    x linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)
+    x.FillUniform(r, -1.0, 1.0)
+    p linalg.Patches<F32>& = linalg.Patches(x, C, H, W, K, 1, 1)
+    cols linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, p.Cols)
+    w linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
+    w.FillUniform(r, -0.3, 0.3)
+    b linalg.Matrix<F32>& = linalg.Matrix<F32>(1, outC)
+    y linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
+    g linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
+    g.FillUniform(r, -1.0, 1.0)
+    dw linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
+    ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
+    title := "conv " $C "->" $outC " on " $H "x" $W ", batch 128, forward with bias and ReLU, ms:"
+    compare(title, String&["oann im2col+Gemm+AddRow+ReLU", "Im2col+GemmAct", "GemmPatches"], fn() {
+        oannIm2col(x.Data, n, C, H, W, K, 1, 1, cols.Data)
+        ws.Gemm(y, cols, false, w, true)
+        y.AddRow(b)
+        y.Activate(y, linalg.Activation.Relu)
+    }, fn() {
+        p.Im2col(cols)
+        ws.GemmAct(y, cols, false, w, true, b, linalg.Activation.Relu)
+    }, fn() {
+        ws.GemmPatches(y, p, w, true, b, linalg.Activation.Relu)
+    })
+    title3 := "conv " $C "->" $outC " on " $H "x" $W ", the products alone (patches made), ms:"
+    compare(title3, String&["forward, y = cols w^T", "dW = dY^T cols"], fn() {
+        ws.Gemm(y, cols, false, w, true)
+    }, fn() {
+        ws.Gemm(dw, g, true, cols, false)
+    })
+    title4 := "conv " $C " channels on " $H "x" $W ": making the patches, ms:"
+    compare(title4, String&["oann im2col", "Im2col"], fn() {
+        oannIm2col(x.Data, n, C, H, W, K, 1, 1, cols.Data)
+    }, fn() {
+        p.Im2col(cols)
+    })
+}
+
+fn main() ? {
+    args := os.Args()
+    what String& = args[1] if args.Len() > 1 else "all"
+    if args.Len() > 2 { reps = try args[2].ParseInt() }
+    if what == "attention" or what == "all" {
+        attention(64, 1)
+        attention(256, 1)
+        attention(64, 4)
+        attention(256, 4)
+    }
+    if what == "epilogue" or what == "all" {
+        epilogue(1024, 128, 512, linalg.Activation.Gelu)
+        epilogue(1024, 512, 128, linalg.Activation.Identity)
+        epilogue(128, 784, 128, linalg.Activation.Relu)
+    }
+    if what == "conv" or what == "all" {
+        conv(1, 28, 28, 3, 16)
+        conv(16, 14, 14, 3, 32)
+    }
+}

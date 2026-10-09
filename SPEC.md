@@ -5120,6 +5120,11 @@ while another argument binds the variable, and is then built as a temporary of t
 `m.Put("apple", 1)` on a `Map<String&, I32>` passes the text where a `String&` is wanted. Reached only by text,
 the variable is the text's own type (`String`).
 
+`null` (T2a) takes no part in the matching at all, whatever its parameter's type: it is checked against that type
+once the other arguments have bound its variables, as at any call - so `GemmAct(c, a, false, b, false, null, act)`,
+whose fifth parameter is a `Matrix<T>&`, is `GemmAct` at the element type `c` binds. A variable only `null` reaches
+cannot be inferred.
+
 **G9b.** Matching runs left to right, the receiver of a method first. An argument whose parameter is a bare type
 variable already bound by an earlier argument takes no part in it: the argument is then checked against the
 bound type as in any call, with E12's conversions - so `m.Get(key)` with `K` bound to `String&` borrows a `String`
