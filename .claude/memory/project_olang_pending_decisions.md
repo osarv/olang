@@ -35,6 +35,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
    Default (in effect): private operators kept; lowercase eq/hash/str ordinary, ignored by ==/Map/$ (tfix's decision F).
    Rec: drop them (Go's fmt, Rust impls and Python dunders are all type-global; no mainstream language has
    module-private operators).
+2. (asked 2026-10-09, from the benchmarks) keep integer overflow wrapping (E6c)? It costs `nsw`: spectral-norm 1.4x
+   slower than C (`(i+j)*(i+j+1)/2` keeps a 3-instruction signed divide); `>> 1` or unsigned types avoid it. Default:
+   wrapping stays. Rec: keep - the alternative is C's undefined behaviour, which the evaluator could not reproduce
+   (K1) and the language has spent weeks removing; Rust (release) and Go pay the same cost.
+3. (asked 2026-10-09, from the benchmarks: nbody writes F64 on ten temporaries) relax D15 so `x := a - b` (any
+   expression whose type is determined; still not `null` or an untyped literal-only expression beyond today's rule)
+   declares with that type? Default: D15 as is. Rec: relax - the operands' types are visible and every mainstream
+   language infers here.
 **Decided 2026-10-09 (the user: "Yes, do both"), queued after the tfix/sfix merges (both touch buildIsAs and method
 resolution):** `same(a, b)` becomes `a is b` (identity when the right side names no case or type; a case/type on the
 right is the existing test, read through a reference); the five atomics become methods on the integer types
