@@ -10813,3 +10813,107 @@ test "E31: a Call adapter, evaluated while compiling as at run time" {
     assert EvAdaptersBaked == 45000000 + 240000 + 2600 + 26
     assert evAdapters(I32(evRun) + 1) == EvAdaptersBaked
 }
+
+# ---- found by the differential fuzzer (fuzz/, K1) ----
+# Each value three ways: a global baked while compiling (K2), an assert decided while compiling (S18c), and the same
+# call at run time on a mutable global, so nothing folds it. Reproducers in fuzz/repro.
+fzRun mut I64 = 1
+
+# a local named like a method, initialized by calling that method: the call went through the local, as though it held
+# a function value (fuzz/repro/localnamedmethod.olang - a segfault)
+type fzG struct(n I32) {
+    n
+}
+fn (g fzG&) lit(t I32) I32 { return t + g.n }
+fn fzLocalLikeMethod(k I32) I32 {
+    g := fzG(1)
+    lit := g.lit(k)
+    return lit
+}
+FzLocalLikeMethodBaked I32 = fzLocalLikeMethod(3)
+test "a local named like a method calls the method" {
+    assert FzLocalLikeMethodBaked == 4 and fzLocalLikeMethod(3) == 4
+    assert fzLocalLikeMethod(I32(fzRun) + 2) == 4
+}
+
+# E28/T29c: a conditional of two text literals, returned as a built text: each literal was copied into the function's
+# own scope and returned dangling - the next allocation wrote over it (fuzz/repro/condtextreturn.olang)
+fn fzBoolText(k I64) String& { return "true" if k == 0 else "false" }
+fn fzChurn(n I64) I64 {
+    b := StringBuilder()
+    for i in range n { b.Push("x" $i) }
+    return b.Len()
+}
+fn fzTextCond(k I64) String& {
+    c String&return = fzBoolText(k)
+    j := fzChurn(50)
+    return "(" $c " " $j ")"
+}
+FzTextCondBaked String& = fzTextCond(1)
+test "E28: text chosen by a conditional and returned is built where the result lives" {
+    assert FzTextCondBaked == "(false 140)" and fzTextCond(1) == "(false 140)"
+    assert fzTextCond(fzRun) == "(false 140)" and fzTextCond(fzRun - 1) == "(true 140)"
+}
+
+# T6b/E28: a conditional whose values widen into the target - each value was widened and the conditional kept its own
+# type, so its slot was stored with the wider value: invalid IR (fuzz/repro/condwiden.olang)
+fn fzCondWiden(a U16, c Bool) I64 { return (U16(a) if c else U16(a + 1)) }
+fn fzCondWidenFloat(a F16, c Bool) F64 { return a if c else a * 2 }
+FzCondWidenBaked I64 = fzCondWiden(7, false)
+test "T6b: a conditional widening into its target is of the target's type" {
+    assert FzCondWidenBaked == 8 and fzCondWiden(7, true) == 7 and fzCondWidenFloat(1.5, false) == 3.0
+    assert fzCondWiden(U16(fzRun) + 6, fzRun > 5) == 8 and fzCondWidenFloat(F16(fzRun) / 2, fzRun > 5) == 1.0
+}
+
+# E10a: "==" on a call giving a String value and a String reference - the call's value is held in a hidden local, which took
+# the callee's result scope as its own and crashed codegen (fuzz/repro/eqcallheld.olang)
+fn fzRender(n I64) String { return $n }
+test "E10a: a call's String value compared with a String reference" {
+    want String& = "3"
+    assert fzRender(3) == want and fzRender(fzRun + 2) == want
+}
+
+# T8/E13a: "Array<T>(n, v)" - every element is v: a literal reaching a text element was stored as its own fixed-length
+# address (invalid IR), and the evaluator copied v into every element where a reference element names one instance -
+# the very one an lvalue is, or one temporary built for them all (fuzz/repro/fillliteral.olang, fillref.olang)
+fn fzFill(n I64) String {
+    a := Array<String&>(n, "ab")
+    b := Array<mut String&>(n, "cd")
+    b[0][0] = 'x'
+    c := Array<I32>(n, 7)
+    d := Array<mut Array<I32>&>(n, c)
+    d[0][1] = 9
+    return $a " " $b " " $(b[1] is b[2]) " " $d " " $(d[0] is d[1]) " " $c
+}
+FzFillBaked String = fzFill(3)
+test "T8: an array filled with a reference names one instance in every element" {
+    want String& = "String&[\"ab\", \"ab\", \"ab\"] String&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
+    assert FzFillBaked == want and fzFill(3) == want
+    assert fzFill(fzRun + 2) == want
+}
+
+# K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
+# evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
+type fzCtr struct(n I32) {
+    v mut I32 = n
+}
+fn fzAtomics(start I32) String {
+    x I32 = start
+    x.AtomicStore(x + 7)
+    a := x.AtomicAdd(3)
+    b := x.AtomicSwap(99)
+    c := x.AtomicCompareSwap(99, 5)
+    d := x.AtomicCompareSwap(99, 8)
+    k fzCtr& = fzCtr(start)
+    k.v.AtomicAdd(250)
+    xs := Array<U8>(2, U8(start))
+    xs[1].AtomicAdd(U8(250))
+    return $a " " $b " " $c " " $d " " $x.AtomicLoad() " " $k.v " " $xs
+}
+FzAtomicsBaked String = fzAtomics(1)
+FzAtomicsGlobal mut I32 = 4
+FzAtomicsRead I32 = FzAtomicsGlobal.AtomicLoad()           # a mutable global: read at startup, not while compiling
+test "K1/P9: atomic operations are evaluated while compiling, and agree with the run time" {
+    assert FzAtomicsBaked == "8 11 99 5 5 251 U8[1, 251]" and fzAtomics(1) == FzAtomicsBaked
+    assert fzAtomics(I32(fzRun)) == FzAtomicsBaked and FzAtomicsRead == 4
+}

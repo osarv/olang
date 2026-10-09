@@ -27,7 +27,7 @@ Workers I32 = 4
 # the scenarios below, by the directory each runs in - the longest first, so the last check to finish is a short one. A
 # scenario is a function reporting into a report (r.expect(ok, what, dir) for each thing it checks), named here and in
 # scenario(), with a test reporting it: one missing from either is reported as a failure, never skipped.
-Scenarios := String&["cgreview", "agree", "objnames", "remote", "interp", "landing", "typereview", "manymods",
+Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag"]
@@ -242,6 +242,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "cgreview" { try cgreview(r) }
         case "typereview" { try typereview(r) }
         case "agree" { try agree(r) }
+        case "fuzz" { try fuzz(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1011,4 +1012,15 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     }
     assert calls > 0
     assert bad == 0
+}
+
+# K1: the differential fuzzer (fuzz/), on a few fixed seeds - each program built at -O3, built at -O0 and interpreted,
+# every value computed while compiling the same as the run time's, and every output the same; "make fuzz" runs it longer
+test "the differential fuzzer finds nothing on its fixed seeds" { assert passed("fuzz") }
+
+fn fuzz(r mut report&) ? Failed {
+    dir := fresh("fuzz")
+    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
+    try r.expect(sh(dir, "./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
 }

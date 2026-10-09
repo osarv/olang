@@ -106,6 +106,8 @@ type Gen struct(seed U64) {
     lr mut Array<I32> = Array<I32>(64)
     errs mut Bool = false                           # this case has declared its error type, Err<i>
     fallible mut Bool = false                       # the function being made declares it (so a try may pass it on)
+    inLambda mut Bool = false                       # a lambda's body is being made: a List, holding references, is not
+                                                    # captured (D16c)
     # what one case adds, read by Program
     decls mut String& = ""                          # its types and helpers, then the case itself
     lits mut String& = ""                           # its literal arguments
@@ -167,7 +169,7 @@ fn (g mut Gen&) use(k I64) String& {
 # whether variable k is what "mode" asks for, given "want"
 fn (g Gen&) matches(k I64, want I32, mode I32) Bool {
     t := g.vt[k]
-    if t < 0 { return false }
+    if t < 0 or (g.inLambda and t >= 500) { return false }
     match mode {
         case 0 { return t == want }                                         # exactly that type
         case 1 { return isInt(t) }                                          # any integer
@@ -800,9 +802,11 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     sdep := g.dep
     snp := g.np
     sfal := g.fallible
+    slam := g.inLambda
     g.base = g.nv
     g.np = np
     g.fallible = fallible
+    g.inLambda = false
     b := StringBuilder()
     b.Push("fn " $name "(")
     for i in range np {
@@ -823,6 +827,7 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     g.dep = sdep
     g.np = snp
     g.fallible = sfal
+    g.inLambda = slam
     c := StringBuilder()
     c.Push($name "(")
     for i in range np {
@@ -1023,9 +1028,12 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         x := g.reserve()
         a := g.push(pt, -1, false, true)
         sfal := g.fallible
+        slam := g.inLambda
         g.fallible = false
+        g.inLambda = true
         body := g.ex(rt, 2)
         g.fallible = sfal
+        g.inLambda = slam
         g.nv = a
         li := g.nl
         g.nl += 1
