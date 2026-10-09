@@ -9126,7 +9126,7 @@ static struct token markerNameIn(struct syntax* t) {
 //qualified name is, the type and the case each visible from here, and the type the very enum xt is (owner and name, not
 //a same-named enum of another module). The case's index, or -1 once reported (mismatch the message when the type is
 //another one)
-static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt, char* mismatch) {
+static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt, char* mismatch, char* noCase) {
     if (idens.len < 2) {
         if (idens.len) ErrMsgSemantic(*(struct token*)ListGetIdx(&idens, 0), mismatch);
         return -1;
@@ -9149,7 +9149,7 @@ static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt
         if (t->owner != ctx->mod && !isPublic(strFromTok(caseTok))) { ErrMsgSemantic(caseTok, CHOICE_CASE_IS_PRIVATE); return -1; }
         return i;
     }
-    ErrMsgSemantic(caseTok, UNKNOWN_CHOICE_CASE);
+    ErrMsgSemantic(caseTok, noCase);
     return -1;
 }
 
@@ -9177,7 +9177,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     if (xt.bType == BASETYPE_CHOICE) {
         struct list idens = allTokOfTypeDeep(tNode, TOK_IDEN);
         struct var* c = NULL;
-        int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, AS_ENUM_CASE);
+        int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, AS_ENUM_CASE, AS_ENUM_CASE);
         if (tag >= 0) { op->castTag = tag; c = ListGetIdx(&xt.vars, tag); }
         if (!c) {
             if (isAs) op->type = unknownTypeStandIn();
@@ -12954,7 +12954,7 @@ static bool buildPatternAt(struct checkCtx* ctx, struct syntax* p, struct operan
     if (at && !t.unknown) {
         if (t.bType != BASETYPE_CHOICE) ErrMsgSemantic(typeTok, PATTERN_TYPE_MISMATCH);
         else {
-            tag = resolveCaseOf(ctx, idens, t, PATTERN_TYPE_MISMATCH);
+            tag = resolveCaseOf(ctx, idens, t, PATTERN_TYPE_MISMATCH, UNKNOWN_CHOICE_CASE);
             if (tag >= 0) c = ListGetIdx(&t.vars, tag);
             if (c && hasList && subs.len != c->type.vars.len) { ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY); c = NULL; }
         }
