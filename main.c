@@ -423,6 +423,9 @@ static int runTestFile(char* file, char* clang) {
     printf("%s== %s ==%s\n", ErrMsgColor(COLOR_FG_CYAN), file, ErrMsgColor(COLOR_RESET));
     char* run[] = { StrFmt("./%s", binPath), NULL };
     int runRc = RunProgram(run, false);
+    //the tests' own process ended by a signal - a crash: it can say nothing more itself, so the run says it
+    if (runRc > 128) printf("%s%s: the tests ended by a signal (%s)%s\n", ErrMsgColor(COLOR_FG_RED), file,
+                            strsignal(runRc - 128), ErrMsgColor(COLOR_RESET));
     return runRc == 0 ? 0 : 1;
 }
 

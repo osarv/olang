@@ -121,6 +121,14 @@ rule and where it is recorded; the morning report lists them all, then they move
 8. (mine, from study2 grammar point 7) outside brackets, a line beginning with `if` always begins a statement - it
    never continues a conditional expression (`a if c else b` keeps `if` on its line or inside parentheses).
 
+9. (wt-stdport) `io.Writer` never fails on Write: the first refused write is remembered and every `Flush` fails with
+   it (C stdio, Go bufio); `print`/`println` stay unbuffered; paths in `std/filepath` (not `path`, which M20 would
+   reserve in every importer); `ParseInt(0)` reads olang literal syntax.
+
+10. (wt-cgfix2, T7c) storage over 64KB (Go's bound) never goes on the stack: locals, zero values, literals and
+   by-value copies that large come from the current block's arena. And (T29a/E32b) converting a run-time array to a
+   declared `Array<T, N>` type is a view checked once, never a copy.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"

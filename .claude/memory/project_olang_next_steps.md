@@ -319,6 +319,45 @@ because what it finds about structure feeds the refactor.
   path helpers, padded formatting, isatty, radix/unsigned ParseInt) -> a std batch after tbare. `-i` cannot run the
   parser (3 GB on 30 KB): -i stage 2 matters for the port's testing. Clean builds of a 25k-line port would take
   minutes (22 IR lines per source line; clang 2.8 s per 1.5 MB IR).
+- 17:30 CEST (15:30 UTC): tbare merged and pushed (6999023): G8b is the introduction rule for type variables and
+  constants; tools/bare_typevars.py migrates (idempotent); oann needs it run once its compiler moves (324 occurrences).
+  Usage at 15:13 UTC: five-hour 0.61, weekly 0.38 (five-hour ~19%/h, weekly ~4.7%/h, ratio ~4). Started wt-perm (the
+  permissions batch, its own migration script for oann) and wt-stdport (buffered writer, path helpers, padding,
+  IsTerminal, radix/unsigned parsing). Running: review (today's code), oann 3b, settle phase 2, chk3, perm, stdport.
+  OANN CATCH-UP once 3b and settle-2 finish: move oannc2 to master; merge wt-settle into oann's branch; run
+  tools/bare_typevars.py and the perm script on oann; replace kernels.olang by linalg.GemmWorkspace in the same step
+  (native is 3x slower with the copy); fix C2e inline arrays (now Array<T, N>); make test; push.
+- 17:35 CEST: settling phase 2 done on wt-settle (e730a9c, make test 63 ok): agent.olang (Arousal, Memory, Trace,
+  Critic, Agent moment loop, safetensors-layout checkpoints), FlatAdamW/FlatSgd in optim, examples/bandit_settle;
+  bandit regret 0.19 -> 0.03-0.05, reversal recovered; 4 defaults tuned (decision 21). Found a compiler UAF
+  (repro/ctorpush: a constructor pushing onto a List in its own reference field builds in the ctor's scope) - handed
+  to chk3. Wants: std/rand state save/restore. Open question 8 (calm moments never explore). Merge wt-settle into
+  oann's branch with the catch-up.
+- 17:35 CEST (15:35 UTC): oann phase 4 pushed (BPE tokenizer 1.656 nats/char vs char model 1.840, safetensors both
+  ways vs numpy, Conv2d/MaxPool im2col + MNIST CNN 98.84%), then wt-settle merged into oann's branch (3a2ad16, DESIGN
+  section 17 = settling; make test 76 ok) and pushed. Review of today's code (/home/user/review/today, README): 15
+  confirmed - #1 UAF (bare field stored after construction, returned by value) handed to chk3; #2-12 + #15 -> wt-cgfix2
+  (started); #13 idle workers keep their pools (783MB retained after 4x200MB tasks; bound 64 x RAM/8) and #14
+  GemmWorkspace keeps superseded panels (grow geometrically) -> a small runtime/linalg batch, QUEUED. Structural notes
+  for the refactor: three evaluators (cfExpr, B9a tokens, comptime.c); per-element unrolled codegen paths; parameter
+  defaults context-free; the crash handler's sigaltstack breaks ASan. oann catch-up agent started (oannc2 -> 9621af3,
+  migrate, kernels.olang -> linalg.GemmWorkspace, re-measure). Running: chk3, perm, stdport, cgfix2, oann catch-up.
+- 17:40 CEST: stdport merged and pushed (a29c257): io.Writer (errors surface at Flush, as stdio/bufio), std/filepath
+  (Go's path/filepath on `/`), PadStart/PadEnd, os.IsTerminal, ParseInt/ParseUint(base) with base 0 = olang literal
+  syntax, Rand.State/SetState (oann's agents can use it now); compiler fixes L10b, D15 fixed lengths, G21 computed
+  lengths, E24 try covers a chain's last call, B3a crashed test binaries reported. Started wt-poolfix (review #13 idle
+  worker pools, #14 GemmWorkspace geometric growth) and wt-portdesign (compiler/DESIGN.md: architecture, the 13 grammar
+  points decided, bootstrap, order of work - no code). Running: chk3, perm, cgfix2, oann catch-up, poolfix, portdesign.
+- 18:25 CEST: cgfix2 merged and pushed (0734820; today's review #2-12, #15): typed constant fold (G21, defers what it
+  cannot decide exactly), `V3(a)` is the E32b view, `:=` keeps Array<T, N>, fixed->run-time copies one memcpy, `==` on
+  long fixed arrays loops, lambdas over fixed arrays, constant defaults per instantiation, U64 constants, storage over
+  64KB from the block's arena (T7c), diagnostics. Re-verifying the merged tip myself (agent left no log). Usage 16:23
+  UTC: five-hour 0.86 (reset 17:00 UTC = 19:00 CEST), weekly 0.45. AFTER THE RESET start: (1) `-i` stage 2 - compact
+  values, scope-mirroring freeing, destructors (comptime.c; needed so -i can run the port's parser; decided earlier as
+  the redesign); (2) linalg attention kernels (batched strided Gemm, causal-aware, bias/activation epilogue) once
+  poolfix lands (same file); (3) oann features once its catch-up lands (settling phase 3 fixed-point simulation for the
+  PYNQ-Z2, implicit GEMM convolution, BF16 training); (4) QUEUED small: D13c's List<Ticket> error located at the
+  user's type argument.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

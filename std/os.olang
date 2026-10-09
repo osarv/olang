@@ -26,6 +26,8 @@ extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
 extern fn waitpid(pid I32, status Array<I32>, options I32) I32
 extern fn memfd_create(name Array<U8>, flags U32) I32
+extern fn isatty(fd I32) I32
+extern fn pipe(fds Array<I32>) I32
 
 # why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
 # every other
@@ -103,6 +105,10 @@ fn Env(name String&) String& ? {
 fn Exit(code I32) {
     exit(code)
 }
+
+# whether the descriptor fd is a terminal - for a program deciding whether to colour what it writes, or whether there is
+# someone to ask: "os.IsTerminal(io.Stdout)". A file, a pipe, and a descriptor that is closed or never was, are not
+fn IsTerminal(fd I32) Bool { return isatty(fd) == 1 }
 
 # runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at
 # all, or one ended by a signal, is reported as a nonzero status like any other failure.
@@ -557,6 +563,23 @@ test "what os gives back lives where it is put" {
     assert names.Len() == 3 and names[0] == "aa" and names[1] == "bb" and names[2] == "ln"
     assert link == "bb"
     assert real.EndsWith("/build/os_files/c/bb")
+}
+
+test "IsTerminal tells a terminal from a file, a pipe and no descriptor" {
+    assert not IsTerminal(-1) and not IsTerminal(1000000)
+    fd := try Open("/dev/null") catch default -1
+    assert fd >= 0 and not IsTerminal(fd)
+    try Close(fd) catch { fail }
+    p := Array<I32>(2)
+    assert pipe(p) == 0 and not IsTerminal(p[0]) and not IsTerminal(p[1])
+    close(p[0])
+    close(p[1])
+    # the controlling side of a new pseudo-terminal is one, where the system has them
+    pt := open("/dev/ptmx\0", 0x102)            # O_RDWR | O_NOCTTY
+    if pt >= 0 {
+        assert IsTerminal(pt)
+        close(pt)
+    }
 }
 
 test "Exec runs a program without a shell, and gathers what it writes" {

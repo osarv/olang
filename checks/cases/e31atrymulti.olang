@@ -1,0 +1,14 @@
+# check: fail error[E31a]: 'try' on several indices needs Grid to declare TryAt
+# never: 'try' needs something that can fail
+# E31a/R20: a checked multi-index with no TryAt is one error - the "try" around it says nothing more
+type Grid struct(w I64) {
+    w
+    cells mut Array<I64>& = Array<I64>(w * w)
+}
+fn (g Grid&) At(r I64, c I64) I64 { return g.cells[r * g.w + c] }
+fn (g Grid&) Len() I64 { return g.w * g.w }
+fn main() ? {
+    g := Grid(3)
+    a := try g[0, 1] catch default -1
+    println($a)
+}

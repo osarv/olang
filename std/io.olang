@@ -168,6 +168,71 @@ fn (l Lines&) line(first I64, last I64) String& {
     return text
 }
 
+# text and bytes gathered and written to a descriptor in large pieces - the way to write a lot (a compiler's output, a
+# report, a table), where print and println make one write per call, so the system is entered once for every line:
+#
+#     out := io.Writer(io.Stdout)
+#     for r in rows { out.Write($r.Name ": " $r.Count "\n") }
+#     try out.Flush()
+#
+# What is written waits in a buffer of "size" bytes and goes to the descriptor when the buffer is full, and whatever is
+# left when Flush is called; something larger than the buffer goes straight through. So nothing reaches the
+# descriptor until a Flush or a full buffer - what a program prints with println meanwhile comes before it.
+# Writing never fails where it is written: a write the system refuses is remembered, everything after it is dropped,
+# and Flush fails with it - IoError.FAILED, or PARTIAL for a descriptor taking nothing more - then and every time after,
+# since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the first failure the same way).
+# Flush where the output is complete, so a failure is the caller's to handle; to have it written however a function is
+# left, an error included, defer it - "defer try out.Flush() catch IoError { fail }", deferred code having no caller to
+# pass a failure on to (S19b). The descriptor is the caller's to close. A pipe whose reader has gone ends the program on
+# the write, as it ends one writing with println - the system's default for a pipe, which "prog | head" relies on.
+type Writer struct(fd I32, size I64 = 65536) {
+    fd
+    buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
+    used I64 = 0                     # buf[:used] waits to be written
+    broken I32 = 0                   # 0 while every write has gone through; 1 FAILED, 2 PARTIAL - the first that did not
+}
+
+# t, after what is written already
+fn (w mut Writer&) Write(t Array<U8>&) {
+    if w.broken != 0 { return }
+    n := t.Len()
+    if n > w.buf.Len() - w.used {
+        w.drain()
+        if n >= w.buf.Len() {        # as large as the buffer: through as it is, copied nowhere
+            w.send(t)
+            return
+        }
+    }
+    at := w.used
+    for i in range n { w.buf[at + i] = t[i] }
+    w.used = at + n
+}
+
+# one character, after what is written already
+fn (w mut Writer&) WriteChar(c Char) {
+    if w.used == w.buf.Len() { w.drain() }
+    if w.broken != 0 { return }
+    w.buf[w.used] = c
+    w.used++
+}
+
+# what waits in the buffer, written now - failing with the first write the system refused, now or before
+fn (w mut Writer&) Flush() ? IoError {
+    w.drain()
+    if w.broken == 1 { error IoError.FAILED }
+    if w.broken == 2 { error IoError.PARTIAL }
+}
+
+# what waits in the buffer, to the descriptor - or dropped, once a write has failed
+fn (w mut Writer&) drain() {
+    if w.used > 0 and w.broken == 0 { w.send(w.buf[:w.used]) }
+    w.used = 0
+}
+
+fn (w mut Writer&) send(t Array<U8>&) {
+    try Write(w.fd, t) catch IoError.FAILED { w.broken = 1 } catch IoError.PARTIAL { w.broken = 2 }
+}
+
 test "Write reports a failure from the underlying syscall" {
     failed Bool = false
     try Write(-1, "no such fd") catch IoError {
@@ -333,4 +398,96 @@ test "a line kept is built where it is kept" {
     close(fd)
     assert ioChurn() > 0
     assert kept.Len() == 3 and kept[0] == "alpha" and kept[1] == "beta" and kept[2] == "gamma"
+}
+
+# what a pipe's read end holds once its write end is closed, as text
+fn drained(fd I32) String& {
+    out mut String&return = ""
+    for line in try Lines(fd) {
+        out = $out $line "\n"
+    } catch IoError { fail }
+    return out
+}
+
+test "a Writer gathers what is written and writes it when flushed" {
+    fds Array<I32, 2>
+    assert pipe(fds) == 0
+    w := Writer(fds[1], 16)
+    w.Write("alpha ")
+    w.WriteChar('b')
+    w.Write("")
+    w.Write("eta\n")
+    try w.Flush() catch IoError { fail }
+    w.Write("this line is longer than the buffer itself\n")       # straight through
+    for i in range 30 {
+        w.Write($i)
+        w.WriteChar('\n' if i % 10 == 9 else ' ')
+    }
+    try w.Flush() catch IoError { fail }
+    try w.Flush() catch IoError { fail }                           # nothing waiting: nothing written
+    close(fds[1])
+    got := drained(fds[0])
+    close(fds[0])
+    assert got == "alpha beta\nthis line is longer than the buffer itself\n0 1 2 3 4 5 6 7 8 9\n10 11 12 13 14 15 16 17 18 19\n20 21 22 23 24 25 26 27 28 29\n"
+}
+
+test "a Writer keeps every byte in order across its buffer's edges" {
+    fds Array<I32, 2>
+    assert pipe(fds) == 0
+    w := Writer(fds[1], 7)
+    want := StringBuilder()
+    for i in range 200 {
+        piece := $"x".Repeat(i % 13) $i "\n"            # pieces shorter and longer than the buffer
+        w.Write(piece)
+        want.Push(piece)
+    }
+    try w.Flush() catch IoError { fail }
+    close(fds[1])
+    got := drained(fds[0])
+    close(fds[0])
+    assert got == want.ToString()
+}
+
+# a Writer to "fd" that fails: how many Flushes failed of three, each with FAILED
+fn failedFlushes(fd I32) I64 {
+    w := Writer(fd, 4)
+    w.Write("more than four bytes")
+    w.WriteChar('!')
+    n I64 = 0
+    for i in range 3 {
+        try w.Flush() catch IoError.FAILED { n++ } catch IoError.PARTIAL { }
+    }
+    return n
+}
+
+test "a Writer's failed write is Flush's, and every Flush's after it" {
+    assert failedFlushes(-1) == 3
+    fds Array<I32, 2>
+    assert pipe(fds) == 0
+    close(fds[0])
+    close(fds[1])
+    assert failedFlushes(fds[1]) == 3            # closed: the system refuses the write
+}
+
+# writes "n" lines and fails partway through - what the deferred Flush still writes
+fn reportTo(fd I32, n I64) ? IoError {
+    w := Writer(fd)
+    defer try w.Flush() catch IoError { fail }
+    for i in range n {
+        if i == 3 { error IoError.PARTIAL }
+        w.Write("line " $i "\n")
+    }
+}
+
+test "a deferred Flush writes what was written however the function is left" {
+    fds Array<I32, 2>
+    assert pipe(fds) == 0
+    try reportTo(fds[1], 2) catch IoError { fail }
+    left := false
+    try reportTo(fds[1], 9) catch IoError.PARTIAL { left = true } catch IoError { }
+    assert left
+    close(fds[1])
+    got := drained(fds[0])
+    close(fds[0])
+    assert got == "line 0\nline 1\nline 0\nline 1\nline 2\n"
 }

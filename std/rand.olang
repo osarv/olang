@@ -43,6 +43,28 @@ fn (r mut Rand&) Next() U64 {
     return out
 }
 
+# the generator's whole state, its four 64-bit words - what a checkpoint keeps so that SetState can put a generator back
+# exactly where this one is, to continue the same sequence, rather than replaying every draw made since its seed
+fn (r Rand&) State() Array<U64, 4> {
+    s Array<U64, 4>
+    s[0] = r.s0
+    s[1] = r.s1
+    s[2] = r.s2
+    s[3] = r.s3
+    return s
+}
+
+# puts the generator in the state "s", one State gave: from here it draws what the generator State was asked of drew
+# after it. Four zeros are no state xoshiro256** can be in - from them it would give zeros forever, and State never
+# gives them - so they are a mistake in the program, stopped as a failed assert is
+fn (r mut Rand&) SetState(s Array<U64, 4>&) {
+    assert s[0] != 0 or s[1] != 0 or s[2] != 0 or s[3] != 0, "a generator's state is never four zeros"
+    r.s0 = s[0]
+    r.s1 = s[1]
+    r.s2 = s[2]
+    r.s3 = s[3]
+}
+
 # a uniform integer in [0, n), n > 0 - unbiased: a draw from the incomplete last stretch of 2^64 is drawn again
 fn (r mut Rand&) Below(n I64) I64 {
     m := U64(n)
@@ -104,6 +126,40 @@ test "from the state 1, 2, 3, 4 xoshiro256** gives its reference outputs" {
     r.s2 = 3
     r.s3 = 4
     assert r.Next() == 11520 and r.Next() == 0 and r.Next() == 1509978240 and r.Next() == 1215971899390074240
+}
+
+# a generator restored from a saved state draws what the saved one did after it was saved - into another generator, or
+# into the same one after it has drawn on
+fn restoredDraws() U64 {
+    r := Rand(2024)
+    for i in range 5 { r.Next() }
+    saved := r.State()
+    a := r.Next()
+    b := r.Below(1000)
+    c := r.Float()
+    other := Rand(1)
+    other.SetState(saved)
+    assert other.Next() == a and other.Below(1000) == b and other.Float() == c
+    for i in range 100 { r.Next() }
+    r.SetState(saved)
+    assert r.Next() == a and r.State()[0] != saved[0]
+    return a
+}
+
+restoredBaked := restoredDraws()
+
+test "State and SetState put a generator back where it was, evaluated while compiling as at run time" {
+    assert restoredDraws() == restoredBaked
+    r := Rand(9)
+    s := r.State()
+    fresh := Rand(9)
+    assert s[0] == fresh.s0 and s[1] == fresh.s1 and s[2] == fresh.s2 and s[3] == fresh.s3
+    s[0] = 1
+    s[1] = 2
+    s[2] = 3
+    s[3] = 4
+    r.SetState(s)
+    assert r.Next() == 11520 and r.Next() == 0 and r.Next() == 1509978240     # the reference outputs from 1, 2, 3, 4
 }
 
 test "Below is uniform and in range" {

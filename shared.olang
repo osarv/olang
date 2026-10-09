@@ -6364,6 +6364,27 @@ test "E13b: a field holding a function is called as x.f(args)" {
     assert FieldFnGlobalE.f(5) == 10        # through a global, as through a local
 }
 
+# E24: "try" before a chain covers its last call - a method called on a call's result, an element or a parenthesized
+# value included (it reached only a method on a name chain: "try g().Parse()" said Parse was not tried)
+fn textE() String& { return " 42 " }
+fn textsE() Array<String&>& { return String&["7", "x8"] }
+type ParserE struct(t String&) { t }
+fn (p ParserE&) Text() String&p { return p.t }
+fn chainTriedE() I64 {
+    a := try textE().Trim().ParseInt() catch default -1
+    b := try textsE()[0].ParseInt() catch default -1
+    c := try textsE()[1].ParseInt() catch default -1
+    d := try (textE()).ParseInt() catch default -1
+    e := try ParserE("9").Text().ParseInt() catch default -1
+    return a * 10000 + b * 1000 + c * 100 + d * 10 + e
+}
+ChainTriedBakedE := chainTriedE()
+
+test "E24: try covers a chain's last call, whatever the chain starts with" {
+    assert chainTriedE() == 42 * 10000 + 7 * 1000 - 100 - 10 + 9
+    assert ChainTriedBakedE == chainTriedE()
+}
+
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
     y fn(a I32) I32 = doubleO
     (y)(2)
@@ -12399,6 +12420,23 @@ test "G24: constant variables are inferred, and an expression of them computed p
     assert c.Len() == 5 and c[4] == 5 and KConcatBaked.Len() == 5 and KConcatBaked[2] == 3
 }
 
+# D15: ":=" from an expression whose type is an Array<T, N> declares that type - a call's result, a fixed-length local -
+# and only an array literal's length is dropped, so a later assignment may give it another
+fn kFive(a Array<I32, 5>&) I32 { return a[4] }
+fn kFixedBack() I32 {
+    c := kConcat(I32[1, 2], I32[3, 4, 5])
+    d := c
+    d[4] = 9
+    return kFive(c) * 10 + kFive(d)
+}
+KFixedBackBaked := kFixedBack()
+test "D15: := keeps a fixed length, except a literal's" {
+    assert kFixedBack() == 59 and KFixedBackBaked == 59
+    lit := I32[1, 2]
+    lit = I32[1, 2, 3]
+    assert lit.Len() == 3
+}
+
 # G21/G22: a matrix whose storage length is computed from its dimensions, and a product whose shape the types check
 type KMat<T, R I64, C I64> struct() {
     data Array<T, R * C>
@@ -12611,4 +12649,159 @@ fn kCountOf(x <V KSized<<N>>>&) I64 { return N * 10 + x.Items().Len() }
 test "G28: a trait's constant parameter is bound through its methods" {
     b := KBag<3>()
     assert kCountOf(b) == 33
+}
+
+# T29a/E32b: a conversion to a declared type over an Array<T, N> from an array of a run-time length is the view of it -
+# its length checked once, the very storage named under the type's name
+type KfV3 extends Array<F32, 3>
+fn kfThird(v KfV3&) F32 { return v[2] }
+fn kfRun(n I64) Array<F32> { return Array<F32>(n, 1.5) }
+fn kfSafe(a Array<F32>&) F32 ? BuiltinError {
+    v := try KfV3(a)
+    return v[0] + v[2]
+}
+KfThirdBaked F32 = kfThird(KfV3(kfRun(3)))
+KfShortBaked F32 = try kfSafe(kfRun(2)) catch BuiltinError default -1.0
+test "T29a/E32b: a declared type over an Array<T, N> converted from a run-time array views it, its length checked" {
+    b Array<F32> = F32[1.5, 2.5, 3.5]
+    assert kfThird(KfV3(b)) == 3.5
+    x := KfV3(b)
+    x[0] = 7.0
+    assert b[0] == 7.0 and x.Len() == 3                     # the very storage, under KfV3's name
+    w KfV3 = KfV3(b)                                        # a value declared from the view copies it
+    w[1] = 9.0
+    assert b[1] == 2.5
+    assert (try kfSafe(F32[1.0, 2.0]) catch BuiltinError default -1.0) == -1.0
+    assert KfThirdBaked == 1.5 and KfShortBaked == -1.0
+}
+
+# G21: a constant argument is computed as the program computes it - in its operands' types, wrapping where the program
+# wraps, a conditional choosing one value - so the type's length and the same expression in the body agree
+KfB U8 = 255
+type KfWrap<N U8> struct() {
+    a Array<I32, N + 1>
+    b Array<I32, N - 20 + 256>
+    c Array<I32, (10 / I64(N) if N != 0 else 1)>
+}
+fn (w KfWrap<<N>>&) Body() I64 { return I64(N + 1) * 1000 + I64(N - 20 + 256) }
+type KfBig<N U64> struct() { x I32 }
+fn (k KfBig<<N>>&) Val() U64 { return N }
+type KfMin<N I64> struct() { x I32 }
+fn (k KfMin<<N>>&) Val() I64 { return N }
+fn kfTwice(n I64) I64 { return n * 2 }
+type KfCalled<N I64> struct() { a Array<I32, kfTwice(N)> }
+fn kfFolds() I64 {
+    w := KfWrap<255>()
+    z := KfWrap<0>()
+    return w.a.Len() * 1000000 + w.b.Len() * 1000 + z.c.Len()
+}
+KfFoldsBaked := kfFolds()
+test "G21: a constant argument is computed in its operands' types, as the program computes it" {
+    assert Array<I32, KfB + 1>().Len() == 0                # U8 arithmetic wraps, as KfB + 1 does at run time
+    w := KfWrap<255>()
+    assert w.a.Len() == 0 and w.b.Len() == 491 and w.Body() == 491
+    v := KfWrap<10>()
+    assert v.a.Len() == 11 and v.b.Len() == 502 and v.c.Len() == 1 and v.Body() == 11502
+    assert KfWrap<0>().c.Len() == 1                        # the branch not taken is not computed
+    assert KfFoldsBaked == kfFolds() and KfFoldsBaked == 491001
+    assert KfBig<18446744073709551615>().Val() == 18446744073709551615
+    assert KfBig<0xFFFFFFFFFFFFFFFF>().Val() == 18446744073709551615
+    assert KfMin<-9223372036854775808>().Val() == -9223372036854775807 - 1
+    c := KfCalled<3>()                                     # decided by evaluation, then checked again
+    c.a[5] = 9
+    x Array<I32, 6> = c.a
+    assert x[5] == 9 and c.a.Len() == 6
+}
+
+# D15: ":=" declares an Array<T, N> from an expression of that type; an array literal declares an Array<T>
+fn kfTake4(a Array<U8, 4>&) I64 { return a.Len() }
+fn kfMk3() Array<I32, 3> { return I32[1, 2, 3] }
+fn kfGen(x <T>) T { return x }
+test "D15: ':=' keeps a fixed length; a literal declares an Array<T>" {
+    a := Array<U8, 4>()
+    b := kfMk3()
+    c := b
+    d := kfGen(b)
+    assert kfTake4(a) == 4 and c.Len() == 3 and d[2] == 3
+    c[0] = 9
+    assert b[0] == 1
+    l := I32[1, 2]
+    l = I32[1, 2, 3]                                       # a literal's length is no part of the type it declares
+    assert l.Len() == 3
+}
+
+# T7d/E10: a long fixed array copied into a run-time one, and compared, by a loop rather than element by element
+KfX mut I64 = 7
+test "T7d/E10: long fixed arrays are copied and compared whole" {
+    x Array<I32, 20000> = Array<I32, 20000>()
+    x[KfX] = 5
+    y Array<I32> = x
+    assert y.Len() == 20000 and y[7] == 5
+    z Array<I32, 20000> = x
+    assert z == x and y == x
+    z[19999] = 1
+    assert z != x
+}
+
+# D9a/D16a: a lambda's parameter whose type the expected function type gives - an array the generic's by-value
+# parameter is bound to - is D9b's
+test "D9a/D16a: a lambda over an array of fixed arrays" {
+    a := Array<Array<I32, 2>>(3)
+    a[1][0] = 5
+    a[2][1] = 9
+    a[0][0] = 7
+    assert a.Any(fn(x) { return x[0] == 5 }) and a.Count(fn(x) { return x[0] > 4 }) == 2
+    a.Sort(fn(x, y) { return x[0] < y[0] })
+    assert a[0][1] == 9 and a[2][0] == 7
+    assert a.Map(fn(x) { return x[0] + x[1] })[1] == 5
+}
+
+# G23/D8a: a default reading the declaration's constant variables is each instantiation's
+fn kfCount(a Array<I64, <N>>&, k I64 = N * 2) I64 { return k }
+type KfDef<N I64> struct(k I64 = N * 10) { k }
+fn (d KfDef<<N>>&) F(x I64 = N + 1) I64 { return x }
+KfDefBaked := KfDef<5>()
+test "G23/D8a: a default reads its declaration's constant variables, per instantiation" {
+    x Array<I64, 4> = Array<I64, 4>()
+    assert kfCount(x) == 8 and kfCount(x, 1) == 1
+    d := KfDef<3>()
+    assert d.k == 30 and d.F() == 4 and d.F(9) == 9
+    assert KfDefBaked.k == 50 and KfDefBaked.F() == 6
+}
+
+# E10c: an Array<T, N>& and an Array<T>& are one instance when they view the same storage over the same length
+test "E10c: 'is' meets an Array<T, N>& and an Array<T>& as '==' does" {
+    a := I64[1, 2, 3, 4]
+    f := a[0:3] as Array<I64, 3>&
+    r Array<I64>& = a[0:3]
+    q Array<I64>& = a[0:2]
+    assert f is r and r is f and f == r and f is not q
+}
+
+# T7c: a local too large for a stack frame lives in its block's arena - declared, written and read like any other
+type KfHuge struct() {
+    a Array<I64, 20000>
+    n I64
+}
+fn kfMkHuge(k I64) KfHuge {
+    h := KfHuge()
+    h.a[k] = k
+    h.n = k
+    return h
+}
+fn kfHugeSum(h KfHuge&) I64 {
+    s I64 = 0
+    for v in h.a { s = s + v }
+    return s + h.n
+}
+test "T7c: a fixed-array local beyond a stack frame's size" {
+    t I64 = 0
+    for i in range 50 {
+        a Array<I64, 100000> = Array<I64, 100000>()
+        a[KfX] = i
+        h := kfMkHuge(i)
+        c := a
+        t = t + c[KfX] + kfHugeSum(h) + (1 if a == c else 0)
+    }
+    assert t == 3725
 }

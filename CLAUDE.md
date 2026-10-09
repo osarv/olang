@@ -3886,6 +3886,50 @@ Go through this for every change to what olang means - a rule added, revised or 
   point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
   on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`
   spelling (`typeExprIsBareTypeVar`), so the prelude's `acc U = init` in `Fold` failed O25 - it reads `U` now.
+- **std for the port: a buffered writer, paths, padding, terminals, integer parsing in any base, a generator's state
+  (2026-10-09, the pieces study2's front end wrote by hand; details mine).** **`io.Writer(fd, size = 65536)`**:
+  `Write(t Array<U8>&)`, `WriteChar(c Char)`, `Flush() ? IoError`. Writing never fails where it is written: the first
+  write the system refuses is remembered, what follows is dropped, and every `Flush` fails with it (C's stdio, Go's
+  bufio); a write as large as the buffer goes straight through; the descriptor stays the caller's; `defer try w.Flush()
+  catch IoError { fail }` writes on every way out. **`print`/`println` stay unbuffered** - each call one write, so
+  output is never held back from stderr, other tasks or a crash; the Writer is the bulk path. Measured through a pipe,
+  76k lines: println 0.071s, Writer 0.0068s, StringBuilder + one print 0.014s, C's printf 0.020s, C's write per line
+  0.085s (760k: 0.87 / 0.025 / 0.075 / 0.086 / 1.0s). **`std/filepath`** (its own module: pure text, evaluable while
+  compiling, and not named `path`, which M20 would reserve in every importer): Go's path/filepath on `/` - `IsAbs`,
+  `Base`, `Ext` (borrows), `Dir` and `Clean` (`String&path`: the path's own beginning when that is the clean form, else
+  built where the path lives), `Join(a, b, c..f = "")` (empty parts left out, then cleaned) and `Rel(base, target) ?`.
+  **Padding**: `PadStart(width, fill = ' ')`/`PadEnd` on text (new text, never cut, width in Chars) and on every integer
+  type but `U8` (whose methods a `Char` inherits, T29f), zeros after a `-` (`(-7).PadStart(4, '0')` is `-007`).
+  **`os.IsTerminal(fd)`** over isatty. **`t.ParseInt(base = 10)`, `t.ParseUint(base = 10)`**: bases 2-36 read plain
+  digits; **base 0 reads an olang integer literal** (L10: `0x`/`0b`, `_` between digits; Go's and Python's convention
+  for "as the language writes it"), a hex/binary pattern being `ParseInt`'s `I64` reading (L10a) and `ParseUint`'s
+  value; a base outside those aborts as an assert. **`Rand.State()`** (`Array<U64, 4>`) and **`SetState(s)`** (four zeros
+  rejected), for oann's checkpoints. **Found and fixed on the way, all pre-existing**: the lexer took `0x_FF`, `0b_1`
+  and `1e_5` (and `-D` took `1__0`) - a `_` stands between two digits (L10b, grammar `[ "_" ]`); `x := f()` dropped the
+  length of an `Array<T, N>` result, which D15 says it declares; a result length a call computes (`Array<I32,
+  kTwice(N)>`) was `Array<I32, 0>` at every call site, its placeholder's errors keeping the program from ever checking
+  long enough to compute it (G21: it now fits anything until decided); `try g().Parse()` did not cover `Parse` and
+  `try a.F().G()` covered `F` too (E24: the chain's last call only); and a test binary a signal ended printed nothing,
+  losing the results stdio held - each result is flushed and the signal reported (B3a).
+- **A review of constant generics, fixed (G21, G16b, G20, G22, G23, D8a, D9a, D15, T29a, E32b, E10, E10c, T7c, T7d,
+  2026-10-09).** Items 2-12 and 15 of the day's review. **Decided (mine)**: (1) `V3(a)`, `V3` over `Array<T, N>` and `a` of
+  a run-time length, is the E32b view read as `V3` - checked once, `OUT_OF_BOUNDS` under `try` - never a copy (it was
+  invalid IR) (T29a); (2) **the constant-argument fold computes only what it computes exactly, as the program would** -
+  every value typed (a literal exact, E4a), operators in the type the operands meet at (T6b/E6d), 128-bit so `U64`
+  values above `I64`'s maximum and `I64`'s minimum are written as they are - and defers to evaluation (K1) whatever the
+  program would wrap or decides by where it lands (G21; it had computed untyped 64-bit arithmetic, so `Array<I32, B + 1>`
+  with `B U8 = 255` had 256 elements where the program's `B + 1` is 0, and a field's length could exceed what the body
+  computed); a conditional computes only the value it chooses and `and`/`or` short-circuit; an undecided or reported
+  argument is the unknown constant, reported once with its instantiation; (3) D9a judges a lambda's parameter only where
+  its type is written - an omitted one is the expected function type's, D9b's (Sort/Map/Filter on an
+  `Array<Array<I32, 2>>`); (4) a default reading its declaration's constant variables is each instantiation's (D8a/G23);
+  (5) storage over 64KB - a local's, a temporary's - comes from its block's arena, not the stack (T7c; Go's bound);
+  (6) `:=` from a conditional or match of array literals declares `Array<T>`, as a literal does (D15). **Fixed**: G20's
+  "declares no Eq" is judged once methods are known (it never was); `is` meets `Array<T, N>&` and `Array<T>&` as `==`
+  does (E10c); fixed-array copies and `==` are a `memcpy`/loop, not unrolled (18MB of IR for 100,000 elements); constant
+  variables may not be named `print`/`println` (M19f); G16b's notes always keep the outermost (the program's own call);
+  cascades after an unknown trait, a `try` multi-index without `TryAt`, and an M6b error reached twice; a private `len()`
+  of the wrong shape says it is `Len`'s spelling.
 - **`mut` speaks only about what a reference reaches; a binding's reassignability is never written (T25b, D9, D9b,
   D11/D11a, C3, C4, S6, O25g, X3a, 2026-10-09; designed by the coordinator, confirmed by the user: "Your decisions are
   fine" - their questions 4, "aren't locals always mutable?", and 5, a reassignable field could not hold a read-only
@@ -3919,8 +3963,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   'mut'" error is now S6's "only a local, a parameter or a 'mut' global can". **Migration**: `tools/perm_mut.py`,
   re-runnable (oann: `python3 /home/user/olang/tools/perm_mut.py --olang /home/user/olang/build/out /home/user/oann`):
   puns by text, the rest from the compiler's own D9/C3/D11a errors and the note above, iterated to a fixed point.
-  Over the repository: 125 pun `mut`s, 212 value `mut`s on parameters, receivers and fields removed, 331 locals given
-  `mut`, six type-variable `mut`s and the fuzzer's generated puns by hand. The evaluator needed only D9b: it already
+  Over the repository (run again after merging master): 125 pun `mut`s, 227 value `mut`s on parameters, receivers and
+  fields removed, 333 locals given `mut`, six type-variable `mut`s and the fuzzer's generated puns by hand. The evaluator needed only D9b: it already
   treated every part of a writably reached aggregate as changeable (K1's ownership is by address).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,

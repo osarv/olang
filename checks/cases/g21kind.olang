@@ -1,0 +1,8 @@
+# check: fail error[G21]: this constant argument is not a value of I8
+# G21: a constant argument is of its operands' types - a U8 does not flow into an I8 (T6b), whatever its value
+type K<N I8> struct() { x I32 }
+X U8 = 3
+fn main() ? {
+    k := K<X + 1>()
+    println($k.x)
+}

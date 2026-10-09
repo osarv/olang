@@ -11004,6 +11004,214 @@ unknown type) - plus a corpus test writing a struct's fields, a method's body, a
 `match T` bare, with a generic global baked (`TrioBaked`, `constant i64 6` in the IR) and asserts decided while
 compiling.
 
+### std for the port: a buffered writer, paths, padding, terminals, integers in any base, a generator's state (2026-10-09)
+
+The port's rehearsal (study2: a scanner, parser and resolver written in olang) listed what it had written by hand
+because std did not have it: a buffered writer, path helpers, padded number formatting, isatty, and unsigned and radix
+integer parsing. oann's settling-network work added one more: saving and restoring a random generator exactly. All
+details below are mine, under the standing authority over details.
+
+**`io.Writer`.** The question was what may fail where. A `Write` that can fail needs a `try` at every call - a
+compiler emitting IR would write it thousands of times - while what actually fails is the system call a full buffer
+triggers, which happens at some unrelated `Write`. So `Write` and `WriteChar` never fail: the first write the system
+refuses is remembered, everything after it is dropped (there is no completing an output with a hole in it), and
+`Flush` fails with it - then and every time after. That is exactly C's stdio (`ferror` is sticky) and Go's bufio ("if
+an error occurs writing to a Writer, no more data will be accepted and all subsequent writes, and Flush, will return
+the error"), and it is still an error, delivered where the caller decides the output is complete - not a flag. Deferred
+code may not pass an error on (S19b), so the defer idiom handles it on the spot: `defer try w.Flush() catch IoError {
+fail }`; a function that also flushes explicitly at its end gets the failure there and the deferred flush finds nothing
+left. A write at least as large as the buffer goes straight to the descriptor after what waits (Go does the same), the
+buffer defaults to 64KB, and the descriptor stays the caller's to close. Writing to a pipe whose reader has gone ends
+the program (SIGPIPE), as it does for `println` - the system's default, which `prog | head` relies on; the first version
+of the failure test assumed otherwise and the test process died silently, which is how the `-t` gap below was found.
+
+**`print`/`println` stay unbuffered.** Each call is one write, nothing held back: a buffered `println` would hold a
+script's output back from its stderr, interleave badly with tasks writing lines, and lose everything not yet flushed
+when the program crashes or aborts - the cases where output matters most. Scripts and diagnostics want immediate;
+bulk output says so by making a Writer. Measured through a pipe into `cat > /dev/null` (medians of 7 and 5 runs on the
+shared machine): 76,000 lines of "N identifier" - `println` 0.071s, a Writer 0.0068s, a `StringBuilder` and one `print`
+0.014s, C's `printf` through stdio 0.020s, C's `snprintf` + `write` per line 0.085s; 760,000 lines - 0.87s, 0.025s,
+0.075s, 0.086s and 1.0s. The Writer beats stdio because `$i` renders an integer from a digit table (no format string to
+interpret) and the copy into the buffer vectorizes.
+
+**Paths are `std/filepath`.** Three choices. A module of its own rather than `std/os`: the helpers are text in and text
+out, ask the file system nothing, and so run while compiling, where os is about effects (Go keeps `path/filepath` out of
+`os` for the same reason). Named `filepath`, not `path`: M20 reserves an import's name in the importing module, and
+`path` is the name every function taking one wants - study2's resolver alone has a dozen such parameters. And Go's
+semantics rule for rule (on `/` only), since Go's rules are specified, tested (its own tables are the tests here, Clean's
+and Rel's, case for case) and what the port's authors would reach for: `Base("a/b/")` is `b`, `Dir("a/b/")` is `a/b`
+(the last element of a path ending in `/` is the empty one), `Ext(".bashrc")` is `.bashrc`, `Clean` removes `.`, inner
+`..` with what precedes it, `..` at the root, and repeated and trailing slashes, `""` and what cleans to nothing being
+`.`. **Borrowing**: `Base` and `Ext` are always a part of the path, and `Dir` and `Clean` are when the clean form is the
+path's own beginning - the usual case, a path already clean - which the result type `String&path` allows; otherwise the
+new text is built where the path lives, as `Split`'s array is. The cleaning is done in a scratch array of the
+function's own block and compared with the path's beginning, so a borrow costs no allocation that outlives the call.
+`Join` takes up to six parts through defaults, an empty part being left out as Go's variadic `Join` leaves it out, so
+the defaults change nothing and `filepath.Join(cache, host, owner, repo)` reads as it would in Go; an array of parts is
+`Clean(parts.Join("/"))`. `Rel` fails with the default error where the answer is not lexical (one path absolute and
+the other not, or the base climbing through `..` that the target does not).
+
+**Padding.** `PadStart` and `PadEnd`, after text's `TrimStart` and `TrimEnd` (JavaScript's pair; Python's
+`rjust`/`ljust` and C#'s `PadLeft`/`PadRight` were the other spellings). On text they repeat a fill character, a space
+by default, and never cut. On integers they pad the decimal rendering, so a diagnostic's gutter is `$line.PadStart(4)`
+- `$` applies to the whole postfix chain, so without integer methods the natural spelling would have been an error -
+and a zero fill goes after the sign, as printf's `%05d` puts it: `(-7).PadStart(4, '0')` is `-007`, where padding the
+text `"-7"` gives `00-7`, which is no number. Every integer type but `U8`: a `Char` extends `U8` and inherits its methods
+(T29f), so `'a'.PadStart(3)` would have padded `97`. Floats have none: `x.Fixed(2).PadStart(8)` says how many digits,
+and a zero fill of `inf` or `nan` would need a rule of its own.
+
+**`os.IsTerminal(fd)`** is `isatty(fd) == 1`, through `extern` like the rest of os, so `-i` calls the C library's own
+(checked under `script`, built and interpreted). Its test opens `/dev/ptmx` - the controlling side of a new pseudo-
+terminal is a terminal - where the system has one.
+
+**Integers in any base.** `ParseInt` and `ParseUint` take a base defaulting to 10, so every existing call reads as
+before. Bases 2 to 36 read plain digits - no prefix, no separators, so data is read exactly - and base 0 reads an
+integer as olang writes its literal, which is what the port's scanner and its `-D` handling need: `0x`/`0X` and
+`0b`/`0B` prefixes, no octal (L10: a leading `0` is no prefix), and `_` exactly where L10b allows one. Base 0 meaning
+"as the language writes it" is Go's (`strconv.ParseInt(s, 0, 64)`) and Python's (`int(s, 0)`) convention, so it needs
+no new name. Under base 0 a hexadecimal or binary literal keeps L10a's meaning - a bit pattern - so `ParseInt` gives
+its `I64` reading (`"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, as the literal is in an `I64`) and `ParseUint` its value;
+an explicit base reads a magnitude (`"ffffffffffffffff".ParseInt(16)` overflows). Both read into a `U64` magnitude
+against a limit and its last digit (computed once, so no division per digit), `ParseInt` taking `2^63` as the limit
+for a negative number. `ParseUint` takes a `+` (as `ParseInt` does) and refuses a `-`. A base outside 0 and 2-36 is the
+program's mistake and aborts as an assert does, as an out-of-range `List.RemoveAt` does. A literal's float form needs
+nothing new: the scanner removes the separators and `ParseFloat` reads the rest.
+
+**`Rand.State()` and `SetState(s)`.** A checkpoint keeps the four words, an `Array<U64, 4>` (a fixed array: it has
+exactly four, and an array is what a checkpoint writes out in a loop), and restoring sets them, so the generator
+continues where it was rather than replaying every draw since its seed. Four zeros are the one state xoshiro256** may
+not be in (it would give zeros forever) and that `State` never gives, so `SetState` refuses them as an assert does.
+
+**Found on the way, all pre-existing, all fixed.**
+- **The lexer accepted a `_` with no digit before it** - `0x_FF`, `0b_1`, `1e_5` - against L10a's grammar (a hex
+  literal begins with a digit) and against `consumeDigitRun`'s own comment, which listed `0x_FF` as an error: the run
+  checked only that the next character was a digit. A separator now stands between two digits (and `1__0` is one error,
+  not two); the decimal run starts at its first digit so `1_0` still reads; the message says "must stand between two
+  digits"; the `-D` reader's own copy of the rule, which also skipped a run of underscores (`-D X=1__0` was 10), follows
+  it. L10b's grammar said `{ "_" }` while its prose and both readers allowed one: it says `[ "_" ]` now.
+- **`x := f()` dropped the length of an `Array<T, N>` result.** D15 says an expression whose type is an `Array<T, N>`
+  declares that type, and only an array literal declares an `Array<T>`; `declaredArrayType` erased the length of every
+  fixed array, so `saved := r.State()` could not be passed to `SetState`. It now erases only a literal's.
+- **That exposed a second bug, in constant generics (G21).** A result whose length a call computes - shared.olang's
+  `kWiden(...) Array<I32, kTwice(N)>` - was `Array<I32, 0>` at every call site: the length is computed once the program
+  has checked, and until then the substitution stood a known 0 in for it, so `w[1]` was "outside the array's 0
+  elements", and those errors kept the program from checking, so the length was never computed. Erasing the length at
+  the `:=` had hidden it (a direct `takes4(kWiden(...))` failed the same way). An undecided length now fits anything,
+  as an undecided argument written in a type already did (`constUndecided`), and the next attempt has its value.
+- **`try` before a chain covered the wrong calls (E24/E13b).** The one primary under a `try` consumes its allowance to
+  fail, so in `try g().Parse()` the call `g()` took it and `Parse` - the chain's last call, which the `try` is for - was
+  "a call that can fail"; and a method on a name chain gave the allowance back, so `try a.F().G()` covered `F` as well
+  as `G`. A chain is now built with no allowance and its last part - a function value's call or a method call - gets it.
+  `try (g()).Parse()`, `try h()[1].Parse()` and `try g().Trim().Parse()` work; a fallible `g` in `try g().Parse()` is the
+  error E24 says it is (a checks case).
+- **A test binary a signal ended said nothing** (B3a). Its results were written by `printf` and sat in stdio's buffer
+  while stdout was a pipe, so a crash took the results of the tests before it down with it, and the driver reported
+  only a nonzero status. The harness now flushes after each result, and the driver says `FILE: the tests ended by a
+  signal (Broken pipe)`.
+
+**Checked**: every test file at -t (shared.olang 566, the std files, the prelude's, worker, runner, geom), the new checks
+cases (`l10bprefix`, `l10bdouble`, `e24chaininner`), and, beside the run-time tests, globals baked from each evaluable
+piece (filepath's tables, the parse readings, a restored generator) compared with the same computation at run time; a
+program using the Writer, IsTerminal, padding and parsing gives the same output built and under `-i`.
+
+### A review of constant generics, fixed (G21, G16b, G20, G22, G23, D8a, D9a, D15, T29a, E32b, E10, E10c, T7c, T7d, M6b, M19f, E31a, G19, 2026-10-09)
+
+A read-only review of the day's features (compiler 189ec6a; reproducers in /home/user/review/today) found fifteen
+confirmed defects; this batch took items 2-12 and the diagnostics of 15 (1 went to the scope batch, 13-14 to the pool
+batch). Each was reproduced on this branch first and checked after under `-b`, `-b -d` and `-i`.
+
+**A declared type over an `Array<T, N>` converted from a run-time array (T29a, E32b).** `type V3 extends Array<F32, 3>`
+then `V3(a)` with `a` an `Array<F32>`: accepted, with no length check, and lowered as the conversion that emits nothing -
+a `{ i64, ptr }` used as a `ptr`, invalid IR under `-b`/`-d`; `-i` gave a `V3` of length 2. **Decided (mine): it is the
+E32b view** - `a as Array<F32, 3>&` read under `V3`'s name, its length checked once where the conversion is evaluated
+(an abort as a slice bound's, `OUT_OF_BOUNDS` under `try`), for any argument, a temporary included. T7d's checked copy
+into a `V3` value was the other choice; it would have made this the one conversion that copies, where T29a says a
+conversion names its argument's storage (`V3(f)` from a fixed `f` already does). `V3(b)` then writes into `b`, and
+`w V3 = V3(b)` copies, as any value declaration does.
+
+**The constant-argument fold had a semantics of its own (G21).** `cfExpr`/`cfBinary` computed every constant argument
+in exact 64-bit arithmetic with no types, so with `B U8 = 255` `Array<I32, B + 1>` had length 256 where `B + 1` is 0 in
+the program, and a field `Array<I32, N - 20 + 256>` of a `<N U8>` type had 246 elements where the same expression in the
+body - U8 arithmetic wrapping, then a literal too large for `U8` meeting it at `I32` (E6d) - is 502: a loop over "the
+array's length" as the body computed it wrote past the array into the next field. A third semantics beside the program's
+and the evaluator's. **Decided (mine): the fold computes only what it computes exactly, as the program would, and defers
+the rest to evaluation (K1).** Every value carries its type - none for a literal or a literal-only expression, which is
+exact (E4a); its own for a constant variable, a global (declared, or its literal's own by D15), a build constant -
+and an operator is computed in the type its operands meet at (T6b; a literal adapting, or meeting at its own type,
+E6d). A result its type cannot hold (the program wraps), a shift of a literal by a value (E8b decides its type by where
+it lands), two types that do not meet, a declared type's operators: deferred, computed once the program has checked and
+the program checked again (C2e's/B9c's loop). Values are 128-bit, so a `U64` argument above `I64`'s maximum
+(`K<18446744073709551615>`, `K<0xFFFFFFFFFFFFFFFF>`, L10/L10a) and `I64`'s minimum (`K<-9223372036854775808>`) are
+written as they are; both were rejected, the first as "beyond I64's range", the second because the literal's magnitude
+was. The reviewer's other option, routing every constant argument through the evaluator, needs a checked operand - which
+does not exist while types are resolved - and would make every constant argument cost a whole re-check of the program;
+deciding only what is decided exactly is B9a's design for the token evaluator, and the same argument. A typed value of a
+type that does not flow into the parameter's (`K<X + 1>`, `X U8`, an `I8` parameter) is the error the program would give.
+A `U64` constant's value is spelled unsigned in a type (`K<18446744073709551615>`; it read `K<-1>`).
+
+**A deferred argument read as a known 0 (G21).** In an instantiation, an argument evaluation proper had to decide
+(`Array<I32, twice(N)>`) stood a known 0 in for its value on the first attempt, so `b.a[5]` was "outside the array's 0
+elements" - and those errors kept the program from checking, so the value was never computed. The stdport batch, merged
+meanwhile, had made it the unknown constant `resolveConstArg` already used (`constUndecided`); here the pattern path
+(`constPatternValue`) has one outcome of three - still a pattern, known, undecided - and an argument reported as not
+computable is undecided too, so it is one error and not a cascade.
+
+**Both branches of a conditional were computed (G21, E28, E7).** `(10 / N if N != 0 else 1)` at `N = 0` failed with
+"it divides by zero" - twice, the field's type and the constructor's being substituted separately, and with no note of
+the instantiation. The fold now computes the condition first and only the value it chooses, and `and`/`or` short-circuit,
+as at run time. A pattern's error is reported once per instantiation and attempt (`constArgReported`), with the G16b note
+of the instantiation it was computed for (`bindingsNote`).
+
+**`:=` dropped a fixed length (D15).** `a := Array<U8, 4>()` declared an `Array<U8>`. The stdport batch made
+`declaredArrayType` drop only a literal's length; here a conditional or `match` all of whose values are array literals is
+literal-like too (they adapt as their values do).
+
+**Code proportional to an array's length (T7d, E10).** Promoting a fixed array into a run-time one copied it one
+`load`/`store` pair per element in the IR, and `==` on two fixed arrays compared one element per IR block: 100,000
+elements were 18MB of IR and 9.4s to build, and `Array<U8, 3000000000>` grew the compiler past 4.7GB. The copy is one
+`memcpy` (a loop where each row needs storage of its own), and a fixed array of more than 8 elements is compared by the
+run-time-length loop: 126KB of IR for each.
+
+**A lambda over an array of fixed arrays (D9a, D16a).** `a.Any(fn(x) { return x[0] == 5 })` on an
+`Array<Array<I32, 2>>`: the expected function type's parameter is the prelude's `x T` with `T = Array<I32, 2>` - a
+generic's by-value parameter bound to an array, which D9b gives its meaning - but the lambda's parameter, given that type,
+was D9a's "array parameter passed by value". Sort, Map and Filter were unusable on such arrays. **Decided (mine):** D9a
+judges a lambda's parameter only where its type is written; an omitted one is the expected parameter's, as a generic's
+by-value parameter is.
+
+**A constant variable could not be read in a default (D8a, G23).** `struct(k I64 = N * 10)` and `F(x I64 = N + 1)` were
+"unknown name 'N'": a default was built once, with no bindings, for every instantiation. A default whose syntax reads a
+variable its declaration introduced (`readsVars`) is now each instantiation's: substitution gives the instantiated
+signature its own copy holding the bindings, built when a call omits it, as the instantiation's body is checked with
+them; the generic's own is never built. One no call omits is checked by none - as the generic's body is not.
+
+**G20's "declares no Eq" was never enforced.** `constParamTypeOk` ran while types resolved, before any method is
+collected, so `Box<N K>` was accepted with `K` declaring `Eq` in either order. It is now judged once every signature is
+resolved (`constParamEqChecks`), with a message of its own naming `Eq`.
+
+**A fixed-array local larger than the stack (T7c).** `a Array<U8, 64000000> = Array<U8, 64000000>()` segfaulted: the
+local and the zero value it was copied from were each an `alloca` of 64MB. **Decided (mine): storage over 64KB** - Go's
+bound on a variable it keeps in a frame implicitly - **is taken from the arena of the block it is made in** (one
+`__olang_scope_alloc` where the value is made, which comes before every use, as a declaration does), reclaimed with the
+block as the frame's would be: a local's, a zero value's, a literal's, a conditional's or match's value, a by-value
+argument's copy, a result through memory. A helper with no arena keeps its frame. `-i` holds such an array as one node
+per element and cannot run one of 100,000 in a loop (the stage-2 limit recorded with B3e).
+
+**`is` between an `Array<T, N>&` and an `Array<T>&` (E10c).** `f is r` with `f` the view `a[0:3] as Array<I64, 3>&` and
+`r` the slice `a[0:3]` said they "never name one instance" while `f == r` - identity, T7d meeting them as `Array<T>&`s -
+was true. `is` meets them the same way now.
+
+**Diagnostics.** An unknown trait in a constraint added "I32 is not a trait" (the unknown stand-in's type); `try g[0, 1]`
+with no `TryAt` added R20's "'try' needs something that can fail" after E31a's error (the derived form recovers as unknown
+now, and R20 says nothing about an unknown operand); an M6b error reached twice by one operation (`==` part by part over
+two fields of one type) was printed twice; a private `len()` returning `I32` was "Len gives an I64", now with a note
+saying `len` is `Len`'s private spelling and is held to its shape; constant variables named `print`/`println` were
+accepted, reading the constant where every module reads the prelude's function (M19f, G22); and G16b's notes, capped at
+three innermost, dropped the program's own call that began a long chain - the outermost is always shown now.
+
+**Checked**: shared.olang's tests (eight new ones beside the others, each with globals baked and asserts decided while
+compiling compared with the run time), the fifteen reproducers under `-b`, `-b -d` and `-i`, and twelve checks cases.
+
 ## `mut` speaks only about what a reference reaches (2026-10-09)
 
 **The question.** Two of the user's questions met here. Question 4, from the second usage study (r08): a local's
@@ -11080,8 +11288,10 @@ or one added after the noted local's name - and that repeats until nothing chang
 A checks case that must fail keeps its failure: nothing is applied from a diagnostic carrying its expected text, and a
 case about the old spelling itself opts out of the text pass with `# perm_mut: skip`. Over the repository: 125 pun
 `mut`s and 212 others removed (value fields above all - std's List, Map, iterators, chan, json, linalg - then by-value
-parameters and receivers), 331 locals given `mut`, three rounds to a fixed point, plus the six type-variable `mut`s and
-the fuzzer's generated puns by hand. Comments and test descriptions describing the old rules were rewritten.
+parameters and receivers), 331 locals given `mut`, three rounds to a fixed point; run again over the tree after
+merging master (filepath, the buffered Writer, the constant-generics review's cases), 15 more removed and 2 added;
+plus the six type-variable `mut`s and the fuzzer's generated puns by hand. Comments and test descriptions describing
+the old rules were rewritten.
 
 **Checked**: the corpus and std at -t (794 tests), every checks case, the bench programs, and new cases for each error
 (a by-value parameter's and receiver's `mut`, a value field's and a `:=` field's, a local's value type and `:=`, a
