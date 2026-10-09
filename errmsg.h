@@ -119,6 +119,7 @@ struct type;
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
     X(ERR_NAME_IS_TYPE,                 "D2",    "%n is already a type's name in this module - choose another") \
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
+    X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
     X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \
@@ -194,12 +195,14 @@ struct type;
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
     X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
     X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
+    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to write 'try'") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
     X(ERR_STR_SHAPE,                    "E11c",  "Str takes no parameters and gives a String") \
     X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
-    X(ERR_OPERATOR_BOTH_CASES,          "E31",   "this type declares %s twice, as %s and %s - one operator, one method") \
+    X(ERR_PROTOCOL_BOTH_SPELLINGS,      "M6b",   "%t declares %s twice, public and private - keep one: %s, or %s for its own module only") \
+    X(ERR_PROTOCOL_PRIVATE,             "M6b",   "%n needs %t's %S, which is private to its module - declare it %s to use it here") \
     X(ERR_OVERRIDE_SIGNATURE,           "M19e",  "%S does not have the signature of the default it overrides - match it, or choose another name") \
     X(ERR_DEFAULT_OUTSIDE_TRAIT,        "M19e",  "a default of trait %S is declared in that trait's module") \
     X(ERR_METHOD_ON_FOREIGN_TYPE,       "M19",   "a method of %t is declared in that type's module") \
@@ -230,7 +233,8 @@ struct type;
     X(ERR_LITERAL_EXPR_RANGE,           "E4a",   "this literal expression's value does not fit %t") \
     X(ERR_LITERAL_NEEDS_CTOR,           "T29d",  "a value of %t is made by its constructor - write %t(...)") \
     X(ERR_READ_ONLY_TO_WRITABLE,        "T25c",  "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") \
-    X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and this one names none - write the type") \
+    X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and a call returning nothing has none") \
+    X(ERR_DECL_FROM_NULL,               "D15",   "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") \
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
     X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
     X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \
@@ -271,6 +275,8 @@ struct type;
     X(ERR_IMMUTABLE,                    "D9",    "%S is not 'mut', so it cannot be written") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
+    X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
@@ -496,6 +502,12 @@ struct errContextSaved;
 struct errContextSaved* ErrMsgSaveContext(void);
 void ErrMsgPushSaved(struct errContextSaved* s);
 void ErrMsgPopSaved(struct errContextSaved* s);
+//B11: an error in the standard library's code, met while it is checked for one of the program's uses of it (a generic
+//instantiated with the program's types), is reported at that use - the innermost open context in the program's own
+//files - with a note at the library's line. isLibrary says which files are the library's.
+void ErrMsgSetLibraryTest(bool (*isLibrary)(struct str file));
+//...the same for an error reported later, once the contexts are closed: where it is to be reported, if not at `at`
+bool ErrMsgProgramUse(struct token at, struct token* use);
 //K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
 void ErrMsgBufferStart(void);
 void ErrMsgBufferFlush(void);

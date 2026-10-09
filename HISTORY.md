@@ -10688,3 +10688,103 @@ were updated, older entries included, since it is the same file.
   width and the task split, which only the product knows. **Measured end to end**: oann's MNIST trainer peaked at 793MB
   over three epochs and now at 57MB, with the same losses and accuracies; `checks/cases/gemmflat.olang` runs 600 products
   with a 400KB B panel at an 11MB peak (242MB before).
+
+### Protocol methods follow privacy; `:=` infers; `print`; defaults naming globals; a List needs no zero value (M6b, E6c, D15, M19f, D8a, D13c, B11, 2026-10-09)
+
+The user answered four of my numbered questions in one message, and two checker bugs came from oann's `repro/`.
+
+**M6b - the methods the compiler calls follow the privacy rules.** The question was whether a lowercase `eq`/`hash`/
+`str` should be ignored (the type checker's review had decided that morning that only a capitalized `Eq` takes over
+`==`, as only `Str` renders - "equality belongs to the type, not to one module's view of it"), an error, or private like
+the operators' lowercase spellings already were. The user: "call private ones if in private and public if in public, if
+calling a private in public it can't be found and is an error. One may not declare both public and private." So every
+method the compiler calls by itself - the operators' (`Plus` ... `MatMul`, `Neg`, `Less`, `At`, `SetAt`, `Slice`, the
+bitwise ones, `Inc`, `Dec`, `Call`, `Len`, the Try forms), `Eq`, `Hash`, `Str`, `Next`, `Iter`, `RunFrom`, `Has` and
+`Contains` - may be declared capitalized or lowercase, never both. The lowercase one is that method, held to its shape
+(a private `eq(b I32)` used to be an ordinary method; it is now E10a's error), and an operation reaches whichever the
+type declares. Outside its module a private one cannot be found and the operation is an error naming it - where before a
+private operator outside its module silently fell back to the built-in operation (a `type Money extends I64` with a
+private `plus` added like an `I64` in another module) and a private `eq` was simply not consulted. The type checker's
+morning decision is reversed: the user's rule is the uniform one, and the "two modules disagree" worry it answered is
+gone - another module cannot use the private `eq` at all, so it cannot disagree about it.
+
+**Which module's view (mine, within the user's rule).** An operation is judged from the module whose code it is written
+in, and in a generic's body that is the generic's own module wherever it is instantiated - the rule G16 already used
+for M22's method visibility. So a generic of the type's module reaches the private method, and the prelude's do not: a
+`Map` keyed by a type with a private `eq` is an error, as the user's own example said, and so is `x in a` over an array
+of them (an array's `Has` is the prelude's). But what the language itself defines is judged where it is written,
+whatever code carries it out: `==` comparing a struct, an array or an enum part by part (E10), rendering a value's parts
+(E11a), and the `Hash` the compiler supplies (E10b). Struct and enum `==` and the supplied struct `Hash` were already
+lowered at the site; an array's go through the prelude's `Equal` and `HashElements`, so those two are checked
+**transparently** - no protocol method is judged inside their instantiations, an explicit `y.Hash()` there reaches a
+private `hash`, and instead every `Eq` or `Hash` the array's elements reach is walked and judged at the `==` or the
+hash (`eqReachWalk`, `hashReachWalk`). An explicit `a.Equal(b)` is walked the same way, so the transparency is no
+loophole. `HashElements` lost its `Hashable` constraint for it (the constraint names `Hash`). Without this, `==` on two
+arrays of a private-`eq` type would have been an error in that type's own module, since E10 defines array `==` as the
+language's operation and the prelude only carries it out.
+Other details: a trait's method is met only under its own name, so a private `hash` meets no `Hashable` - the G19 error
+gets a note at the private method; a private `eq` or `hash` keeps the supplied `Hash` out, as the public ones do; on an
+extending type (T29e) a private `Eq`/`Hash`/`Str` replaces the inherited one as a public one does, and the private
+spelling of any other inherited protocol method is an error, as redeclaring it would be; a private `next` makes a loop
+iterator in its own module by its shape (`Iterator<T>` names `Next`); a private `call` lets the value stand for a
+function only in its module (a new fit result, `TYPE_FIT_PRIVATE_CALL`). The message: `'==' needs Key's eq, which is
+private to its module - declare it Eq to use it here`; both spellings: `K declares Str twice, public and private - keep
+one: Str, or str for its own module only`.
+**Migration**: `std/json`'s private reader method `str()` (a mutating, fallible one) named Str's private spelling now,
+and was renamed `string()`; nothing else in the corpus or std declared a lowercase protocol name it did not mean.
+
+**B11 - an error met in the standard library is the program's.** The user's oann report on `listzero` complained that
+the D13c error pointed into `std/prelude/list.olang`. The library cannot be changed where it is used, the type argument
+can: an error found while checking the prelude's or std's code for one of the program's instantiations is now reported
+at that use - the innermost open instantiation context in the program's own files - with a note at the library's line
+(`in the standard library's code, here`) and the contexts from the use outward. Done in `errorV` for every error
+(`ErrMsgSetLibraryTest`, with the library being the modules whose identity starts `std/`), and for D13c's zero values,
+which are reported after checking, by capturing the use when the zero value is recorded (`ErrMsgProgramUse`).
+
+**D13c - a List needs no zero value of its elements.** `List.grow` made each chunk with `Array<T>(n)`, which needs `T`'s
+zero value, so a `List<Item>` where `Item`'s constructor reads through a reference parameter (oann's layer registering
+its parameters with a graph) could not be written, although List never reads a slot before writing it. A new chunk is
+now filled with the element being pushed (`grow(fill <T>)`), and `ToArray`, `Array.Map` and `Array.Filter` fill with an
+element, and return `Array<T>(0)` when there is none - which needs no zero value now, having no element (D13c). A first
+version returned an array value's zero value instead, and the suite caught it: that is a null array reference, and `==`
+through a `String&` treats a null as equal only to a null (E10), so `StringBuilder().ToString() == ""` was false. Doing it exposed an
+over-rejection in the checker: an array filled from a by-value parameter holding references was judged by the
+parameter's own slot instead of where its references live (O4b/O25h, `valueRefsScope`), and the exactness O25c asks of
+an element stored through was an error between two scope variables of the function where it is an equality obligation
+on the callers (as C2d's and O25h's are); both now are as an assignment `b.a[0] = x` already was, with the callers held
+to it (`fill2`/`fill3` probes: an inner-block value filled into an outer box is still rejected). `Replace` and `Repeat`
+(text-oriented) still make their arrays from zero values; with B11, their error names the program's line.
+
+**D8a - a default naming a global.** `type Runner struct(n I64, M Mode = DefaultMode)` gave `expected Mode, found ?`,
+twice. Defaults were built where the signature is resolved: a constructor's with its type, before any global has a
+type, and a function's in declaration order, so `fn rate(m Mode = DefaultMode)` failed too when the global came later
+(the oann note said functions worked - only because its global was declared first). A default is now recorded with the
+signature and built on first need, in the declaring module's context - a global initializer calling the function builds
+it then - and every one no call needed is built once all global initializers are (`buildParamDefaults`), before any body.
+One that does not fit its parameter stands in as the unknown type, so a call does not report it again.
+
+**D15 - `:=` infers from any settled expression** (the user: relax it). `x := a - b`, `d := a < c`, `q := p`, a
+conditional, a global - anything whose type is settled. Two have no type: `null` (its own message now, `write the type:
+'x T& = null'`) and a call returning nothing. **Decided (mine)**: an expression of numeric literals alone is computed
+while compiling (E4a's fold) and declares what its value as one literal would - `x := 1 + 2` an `I32`, `x := 2147483647 +
+1` the `I64` 2147483648, as `x := 2147483648` is - so it is never a wrapped `I32`; one whose value no type holds is
+E4a's error. `'a' + 1` is the `I32` 98, as it already was everywhere with no target. Existing code with written types was
+left alone, as asked.
+
+**E6c** - the user: keep wrapping. One sentence added: it is deliberate, the one defined result that costs nothing.
+
+**M19f - `print`, `println`, `eprint`, `eprintln`** (the user: yes, for scripts). In the prelude, `std/prelude/print.olang`
+over `extern fn write`. **Decided (mine)**: one `String&` each - `$` and joins make the formatting - and `println`/
+`eprintln` default it to `""`; the text and its line end go out as one write, so lines from tasks are not interleaved
+mid-line; a short write retries with the rest; a write that fails or moves nothing writes `print could not write to the
+standard output` (naming the function and stream) to the standard error and runs `abort` - a failed check's ending,
+recoverable inside a test. They are lowercase, as the user named them, and reached by bare name in every module as a
+build constant is - the one exception to M6 (the prelude's other lowercase functions stay its own); so no module may
+declare a function or global of those names, and no local may take one (D3a). A write is an extern call, so the
+evaluator refuses them while compiling and `-i` performs them. The `print` checks scenario compares a built and an
+interpreted run's standard output and error, and runs one with its standard output closed (status 134, the message).
+
+**Found on the way**: a capitalized `Str`, `Eq`, `Len`, `Less` or bitwise operator declaring errors was told to use its
+checked form `TryStr` and so on, which do not exist - now `Str cannot fail - the operation calling it has nowhere to
+write 'try'`. A type-variable array literal (`<T>[a, b]`), which E19's grammar admits, does not parse in expression
+position; not fixed here (List's empty case uses an array's zero value instead) - recorded for the parser.

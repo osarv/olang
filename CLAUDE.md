@@ -333,7 +333,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   declaration", which a constructor call satisfies as plainly as a literal and a slice satisfies again (it
   is the base's element type with a runtime length). **Relaxed to any call (the user's call)**: `x := f()`
   is legal, since the callee's declared result is a type the reader can find and the rule was an irritant
-  for no safety gain; `null` and non-call expressions are still rejected. A `:=` reference local writes no
+  for no safety gain; `null` and non-call expressions are still rejected (relaxed 2026-10-09: any settled expression, D15). A `:=` reference local writes no
   scope tag and takes the call's exact scope (O25a) - copying the result type's tag verbatim at first put
   the *callee's* scope variable on the local, which the no-narrowing check then rejected. The parser is hand-written recursive descent, not table-driven,
   with a cheap top-level name-collection pre-pass (`ScanTopLevelDecls`) run before real parsing so
@@ -3259,7 +3259,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   a symbol longer than 120 characters spelled as its beginning and a 128-bit hash; **G17** fires at a type nesting 48 deep,
   once; an inline field's length is decided **per instantiation** (C2e); a **generic constructor binds an array value as a
   reference** (`Pair(1, "x")` is a `Pair<I32, String&>`, G10c); **only a capitalized `Eq`** takes over `==`, as only `Str`
-  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree); `x.f(args)` on a field calls the
+  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree; reversed the same day by the user's
+  M6b, below); `x.f(args)` on a field calls the
   function value it holds (E13b); a type variable may not be named after a type (G1); a type-parameter list is only for a
   struct or a trait (section 12); a method meeting a trait agrees in each parameter's `mut` and permission (T31); a
   generic call may leave off defaulted parameters (E14); a constraint reached by substitution is checked where the
@@ -3799,6 +3800,35 @@ Go through this for every change to what olang means - a rule added, revised or 
   behind the switch, an `At` call that failed crashed `x[i] = v` and a struct field whose declaration failed crashed the
   constructor's assembly. **G22 also keeps a constant variable's name apart** from the module's globals, functions and
   build constants and from parameters and locals (D3a), so a bare `N` means one thing.
+- **Protocol methods follow privacy; `:=` infers; `print`; two checker fixes from oann (M6b, E6c, D15, M19f, D8a, D13c,
+  B11, 2026-10-09, the user's answers to my questions 1, 2, 3 and 6).** **M6b, the user: "call private ones if in
+  private and public if in public, if calling a private in public it can't be found and is an error. One may not
+  declare both public and private."** Every method the compiler calls by itself - the operators', `Len`, `Call`, the Try
+  forms, `Eq`, `Hash`, `Str`, `Next`, `Iter`, `RunFrom`, `Has`, `Contains` - is capitalized or lowercase, never both;
+  the lowercase one is held to the same shape, and an operation reaches whichever the type declares. In another module a
+  private one is an error naming it, never a fall-back to the built-in operation, a part-by-part `==`, a supplied `Hash`
+  or the default `$`. Reverses E10a's and E11c's "always capitalized" (the type review's call that morning). **Decided
+  (mine)**: an operation is judged from the module whose code it is written in - a generic's own module wherever it is
+  instantiated, so the prelude's `Map` and an array's `Has` cannot use a private `eq` (an error at the program's use) -
+  except what the language itself defines (`==` part by part, rendering parts, the supplied `Hash`, an array's
+  included), judged where written: the prelude's `Equal`/`HashElements` are checked transparently and the elements'
+  methods walked at the site (`HashElements` lost its `Hashable` constraint). A trait method is met only under its own
+  name (a note points at the private spelling); a private `eq`/`hash` keeps the supplied `Hash` out; on an extending type
+  a private `Eq`/`Hash`/`Str` replaces the inherited one, another private spelling of an inherited one is an error.
+  std/json's private `str()` reader became `string()`. **E6c** (the user: keep wrapping): stated deliberate. **D15** (the
+  user: relax): `:=` declares any settled expression's type; `null` and a call returning nothing are errors; a
+  literal-only expression declares what its value as one literal would (`x := 2147483647 + 1` an `I64`, mine).
+  **M19f** (the user: yes): `print`, `println`, `eprint`, `eprintln` in the prelude - one `String&` (println's defaulting
+  to `""`), the line end in the same write, a failed write ends the program as a failed check does with a stderr line
+  naming the function and stream; reached by bare name everywhere, the one exception to M6, and no module may declare
+  those names (all mine). **oann's bugs**: a default naming a global (D8a - defaults were built before globals had
+  types; now built on first need, after global initializers) and a `List` of a type with no zero value (D13c - a new
+  chunk is filled with the pushed element, `ToArray`/`Map`/`Filter` with an element, and `Array<T>(0)` needs no zero value). **B11 (mine)**: an error met in
+  the standard library's code while checked for the program's use (an instantiation) is reported at that use, with a
+  note at the library's line. **Found on the way**: an array filled from a by-value parameter holding references was
+  judged by the parameter's slot, and O25c's exactness between two of a function's scope variables was an error, not an
+  obligation (both over-rejections, closed soundly); a capitalized `Str`/`Eq`/`Less` declaring errors pointed at a
+  `TryStr` that does not exist. Not fixed: a type-variable array literal (`<T>[...]`, E19's grammar) does not parse.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
