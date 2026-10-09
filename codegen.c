@@ -6144,6 +6144,40 @@ static char* cgGlobalConstInit(struct var* v, const char* gname, FILE* aux) {
     return init;
 }
 
+//K2: another module's immutable global baked as plain data, which no writable reference reaches - its value, to be
+//declared "available_externally": the global is still that module's (nothing is emitted for it here), but this object's
+//optimizer reads its value at every load before the link. A generic's instantiation lives in the root object (B3d), so
+//a library kernel's bounds held in the library's named globals were unknown where the kernel was optimized - unrolled
+//and register-allocated only with the literals written in (std/linalg's GEMM, 7 against 16.6 GFLOPS). NULL when the
+//value needs storage of its own (an array's elements), or its own module would not bake it (cgDecideBakes)
+static char* cgExternConstInit(struct var* v) {
+    if (v->mut || !v->constVal || CtNodeWritable(v->constVal)) return NULL;
+    struct list nodes = ListInit(sizeof(struct ctVal*));
+    CtReachableNodes(v->constVal, &nodes);
+    bool own = true;
+    for (int j = 0; j < nodes.len && own; j++) {
+        struct var* owner = CtNodeOwner(*(struct ctVal**)ListGetIdx(&nodes, j));
+        if (owner && owner != v) own = false;
+    }
+    ListDestroy(nodes);
+    if (!own) return NULL;
+    struct list savedNodes = cgAuxNodes;
+    FILE* savedOut = cgAuxOut;
+    const char* savedBase = cgAuxBase;
+    int savedCtr = cgAuxCtr;
+    cgAuxNodes = ListInit(sizeof(struct cgAuxNode));
+    cgAuxOut = NULL;
+    cgAuxBase = "@dry";
+    char* init = cgConstInit(v->constVal, v->type);
+    if (cgAuxNodes.len) init = NULL; //storage of its own, which only its module defines
+    ListDestroy(cgAuxNodes);
+    cgAuxNodes = savedNodes;
+    cgAuxOut = savedOut;
+    cgAuxBase = savedBase;
+    cgAuxCtr = savedCtr;
+    return init;
+}
+
 void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
     cgBakedFor = NULL; //a new object: its own decisions
     cgDecideBakes(emitMod);
@@ -6160,7 +6194,12 @@ void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
             //P1: one module, one object. Another module's global is a reference to storage that object
             //defines, never a second definition of it - two would be a duplicate symbol at link time.
             char* init = mod == emitMod ? cgGlobalConstInit(v, name, out) : NULL;
-            if (mod == emitMod) fprintf(out, "%s = global %s %s\n", name, ty, init ? init : "zeroinitializer");
+            //K2: an immutable global baked while compiling, which no writable reference reaches, is never written -
+            //a constant, so the optimizer reads its value at every load before the link (a GEMM kernel's tile bounds,
+            //held in named globals, were neither unrolled nor kept in registers while it was a mutable global)
+            bool ro = init && !v->mut && !CtNodeWritable(v->constVal ? v->constVal : v->bakeVal);
+            if (mod == emitMod) fprintf(out, "%s = %s %s %s\n", name, ro ? "constant" : "global", ty, init ? init : "zeroinitializer");
+            else if ((init = cgExternConstInit(v))) fprintf(out, "%s = available_externally constant %s %s\n", name, ty, init);
             else fprintf(out, "%s = external global %s\n", name, ty);
         }
     }
