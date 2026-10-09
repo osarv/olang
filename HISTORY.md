@@ -9326,3 +9326,19 @@ from their original form.
   capturing only values is a temporary (D16d), built in the program's scope like any temporary stored into a global,
   and the check now says so (verified: the closure is allocated from `@__olang_prog_scope`, and one capturing a local
   reference is still rejected).
+  **After the merges.** The stack guard's 8MB spare assumed the compiler's own 1GB thread; where that cannot be made
+  (`ulimit -v 800000`, as the check of `-t` past a crash runs it) the compiler runs on the process's 256KB stack and
+  every evaluation stopped at once - every global and condition then "recursed too deep", so `-t`'s untouched files
+  failed. The spare is now a quarter of the stack when that is less. The type checker's review left two `-i`
+  disagreements to this batch, both small, both fixed: an error leaving a bare-`?` function kept its own name under
+  `-i` ("unhandled error: Err.LOUD") where the built program re-encodes it as the function's default error at the
+  boundary (R17) - the evaluator now does the same where a call returns, so the report reads "unhandled error"; and a
+  value whose type declares `Call`, given where a function value is wanted (E31), was refused ("a function value
+  compile-time evaluation does not model"). It is now a function value naming `Call` and holding a reference to the
+  instance - the very one where it has storage, a copy of a temporary, as the generated adapter holds it - so `-i`
+  calls through it and a global computed through one bakes; the writability walk follows the receiver's permission,
+  and B5a counts a `Call` method as named wherever a value of its type appears (conservatively: a wrong order would
+  be silent, a spurious cycle is not). Checked three ways in the `agree` fixture, and by a baked corpus global.
+  **Flaky, not fixed**: std/cancel's "a busy task stops when the token is cancelled" asserts the task counted at least
+  once in the 5ms before `Cancel()`; under three concurrent verifies the task can start after it, and the test failed
+  once in four full runs here (it passed three times alone).

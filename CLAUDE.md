@@ -3301,7 +3301,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   the evaluator's state); comprehensions nested at most 64 deep in the evaluator; `-i` crashed past about 70,000 calls
   (15KB of C stack each) and now stops where its stack ends, with a message; a comprehension's up-front reservation was
   not checked under `-i`; signed overflow in the compiler's own `++` and atomic add; `-i` refused an `extern` taking an
-  array of `F16`/`BF16`. Corpus: a section comparing each
+  array of `F16`/`BF16`; and, left by the type checker's review, `-i` reported an error leaving a bare-`?` function by
+  its original name (R17 now re-encodes at the evaluator's call boundary too) and could not call through a `Call`
+  adapter (E31 - now a function value holding its instance, the very one where it has storage, so such calls bake).
+  The evaluator's stack guard keeps a quarter of a small stack free rather than 8MB, or a compiler that could not make
+  its own 1GB thread evaluated nothing. Corpus: a section comparing each
   baked global with the run time, a checks scenario comparing a program built, built `-d` and interpreted, and the
   cycle errors as cases.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
