@@ -460,9 +460,10 @@ take their zero values (D13) — `type P struct() { x mut I32 }`, built as `P()`
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
 (§2.9).
 
-**T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-array,
-non-reference) member or payload types, if that chain passes through a reference marker (§2.9) at least once;
-an unmarked, unbroken self-embedding cycle is a compile-time error, reported at the member that closes it.
+**T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-reference)
+member or payload types - an inline array field (C2e) included, since it holds its elements in the value - if that
+chain passes through a reference marker (§2.9) at least once; an unmarked, unbroken self-embedding cycle is a
+compile-time error, reported at the member that closes it.
 
 ### 2.5 Enum types
 

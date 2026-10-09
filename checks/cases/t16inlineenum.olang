@@ -1,0 +1,12 @@
+# check: fail a type cannot hold itself by value
+# T16/C2e: the same through an enum payload holding a struct with an inline array of the enum
+type W struct() {
+  a Array<E> = Array<E>(2)
+}
+type E enum {
+  Leaf
+  Node(w W)
+}
+fn main() ? {
+  e := E.Leaf
+}

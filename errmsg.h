@@ -142,7 +142,7 @@
 #define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
 #define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
 #define TYPE_MATCH_NOT_EXHAUSTIVE "no 'case' of this 'match' covers the type this generic was instantiated with, and there is no 'nomatch' clause - unlike a match over a value, a match over a type must cover every instantiation, or the generic would silently do nothing for some of them"
-#define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. A struct holds itself through a reference ('next Node&'); an enum through a struct holding a reference to it (T17)"
+#define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. Hold it through a reference: a struct field 'next Node&', an enum payload 'Add(a Expr&, b Expr&)', an array 'Array<Node&>' (T16)"
 #define INVALID_REFERENCE_TARGET "only a struct, enum or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----

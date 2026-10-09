@@ -2216,6 +2216,8 @@ void refreshStructSnapshots(struct type* t) {
 //(or an array, whose elements are held through a pointer)
 static bool typeHoldsByValue(struct type t, struct type* target, int depth) {
     if (depth > 64 || t.structMAlloc || t.unknown) return false;
+    //an inline array (C2e) holds its elements in the value itself
+    if (t.bType == BASETYPE_ARRAY) return !t.arrMalloc && t.arrElem && typeHoldsByValue(*t.arrElem, target, depth + 1);
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return false;
     if (t.owner && t.name.len && canonicalStructOf(t) == target) return true;
     for (int i = 0; i < t.vars.len; i++) {
@@ -2645,17 +2647,24 @@ struct list TypeValueChildren(struct type t) {
     return out;
 }
 
-bool typeHasBareDestructStruct(struct type t) {
+//the walkers through TypeValueChildren stop at a reference, which ends a cycle through one; a type holding itself by
+//value (T16) is reported, but a walk can meet it first - while an inline field's length is still being decided (C2e),
+//say - so each is bounded too
+#define VALUE_WALK_LIMIT 64
+
+static bool typeHasBareDestructStructAt(struct type t, int depth) {
+    if (depth > VALUE_WALK_LIMIT) return false;
     if (t.bType == BASETYPE_STRUCT) return t.hasDestruct && !t.structMAlloc;
     //always recurse into an array's element type, marker or not: a "&" on an array makes the array as a
     //whole reference-shaped ("a reference to a [3]Point"), never its elements individually - so a
     //"Handle[3]&s" is still three Handle *values* sharing one allocation, exactly what C11 forbids
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
-        if (typeHasBareDestructStruct(*(struct type*)ListGetIdx(&kids, i))) return true;
+        if (typeHasBareDestructStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) return true;
     }
     return false;
 }
+bool typeHasBareDestructStruct(struct type t) { return typeHasBareDestructStructAt(t, 0); }
 
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
@@ -10239,16 +10248,18 @@ static bool sameExactScope(struct var* a, int da, struct var* b, int db) {
 //true when a value of this type can hold a reference - a field, element or payload that is one. Only
 //then does a narrowed tag matter: writing through a reference to plain data allocates nothing and stores
 //no reference, so there is nothing for a wrong scope to be wrong about.
-bool TypeHoldsReferences(struct type t) {
+static bool typeHoldsReferencesAt(struct type t, int depth) {
+    if (depth > VALUE_WALK_LIMIT) return false;
     t.structMAlloc = false;
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
         if (k.structMAlloc) return true;
-        if (TypeHoldsReferences(k)) return true;
+        if (typeHoldsReferencesAt(k, depth + 1)) return true;
     }
     return false;
 }
+bool TypeHoldsReferences(struct type t) { return typeHoldsReferencesAt(t, 0); }
 
 //O25: whether a write through a reference of type t can store a reference where its referent lives - into a slot it
 //may write (a "mut" field through a writable reference, an element of a writable array), or through a writable
@@ -10306,15 +10317,17 @@ bool RefNarrowingMatters(struct type t) {
 }
 
 //O25h: whether a reference a value of type t holds - directly, or inside a value it holds - can be stored through
-bool valueRefsAdmitStores(struct type t) {
+static bool valueRefsAdmitStoresAt(struct type t, int depth) {
+    if (depth > VALUE_WALK_LIMIT) return false;
     t.structMAlloc = false;
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStores(k)) return true;
+        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStoresAt(k, depth + 1)) return true;
     }
     return false;
 }
+bool valueRefsAdmitStores(struct type t) { return valueRefsAdmitStoresAt(t, 0); }
 
 bool varIsParamOf(struct var* v, struct var* func);
 
