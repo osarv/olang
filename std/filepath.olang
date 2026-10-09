@@ -105,7 +105,7 @@ fn Clean(path String&) String&path {
         }
     }
     if same { return path[:w] }
-    text String&path = String(Array<Char>(w))
+    text mut String&path = String(Array<Char>(w))
     for i in range w { text[i] = out[i] }
     return text
 }

@@ -51,7 +51,7 @@ fn bracketed(text String&) String& {
 
 # the lines of text kept in a List - borrows of the text, so the List lives where the text does
 fn linesOf(t String&) List<String&>&t {
-    out List<String&>&t = List<String&>()
+    out mut List<String&>&t = List<String&>()
     for line in t.Lines() { out.Push(line) }
     return out
 }

@@ -4,7 +4,7 @@ import "std/io"
 import "std/os"
 
 # the length of the Collatz chain from x down to 1
-fn steps(x mut I64) I64 {
+fn steps(x I64) I64 {
     s I64 = 0
     for x != 1 {
         x = x / 2 if x % 2 == 0 else 3 * x + 1

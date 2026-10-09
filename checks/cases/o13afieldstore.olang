@@ -3,7 +3,7 @@
 # was an error (O13a/O25h - the text was built in the block, which O13a did not see until it judged the stored binding);
 # o13afieldstorewrap.olang keeps that error where the local is not what is returned
 type H struct(r mut String&) {
-    r mut
+    r
 }
 fn mk(n I64, s mut String&) H {
     e := H(s)
@@ -19,7 +19,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    q String& = "x"
+    q mut String& = "x"
     w := mk(12, q)
     churn()
     assert w.r.Len() == 4 and w.r == "1212"

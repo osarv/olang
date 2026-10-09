@@ -1,6 +1,6 @@
 # check: fail error[T25c]: a read-only reference cannot become writable
 # T25c: a read-only reference never becomes writable by being passed
-type P struct(x I32) { x mut }
+type P struct(x I32) { x }
 fn poke(p mut P&) { p.x = 5 }
 fn pass(p P&) { poke(p) }
 error E { X }

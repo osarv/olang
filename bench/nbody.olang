@@ -10,8 +10,8 @@ SolarMass F64 = 4.0 * Pi * Pi
 DaysPerYear F64 = 365.24
 
 type Body struct(x F64, y F64, z F64, vx F64, vy F64, vz F64, mass F64) {
-    x, y, z mut
-    vx, vy, vz mut
+    x, y, z
+    vx, vy, vz
     mass
 }
 

@@ -20,7 +20,7 @@ fn (b Bag&) len() I64 { return b.items.Len() }
 fn (b Bag&) has(x I32) Bool { return x in b.items }
 
 type Gen struct() {
-    i mut I64 = 0
+    i I64 = 0
 }
 fn (g mut Gen&) next() I64 ? Exhausted {
     if g.i == 3 { error Exhausted.END }

@@ -12,7 +12,7 @@ fn main() ? {
     base Node& = Node(0)
     keep Node&base = Node(0)
     for i in range 3 {
-        inner Node& = Node(i)
+        inner mut Node& = Node(i)
         v := View(inner)
         keep = v.n
     }

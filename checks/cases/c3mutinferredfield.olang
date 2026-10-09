@@ -1,0 +1,6 @@
+# check: fail error[C3]: a field is writable wherever its instance is - 'mut' is for a reference, and I64 is none
+# C3: a ":=" field's "mut" says what its inferred reference permits - on a value it says nothing
+type Counter struct(start I64) {
+    n mut := start
+}
+fn main() ? { }

@@ -1,24 +1,24 @@
 import "ctlib"
 error E { X }
 type CtPair struct(a I32, b F64) {
-    a mut
-    b mut
+    a
+    b
 }
 fn fib(n I32) I32 {
     if n < 2 { return n }
     return fib(n - 1) + fib(n - 2)
 }
 fn table() Array<I32>& {
-    t Array<I32>&return = Array<I32>(4)
+    t mut Array<I32>&return = Array<I32>(4)
     for i in range 4 { t[i] = fib(i + 10) }
     return t
 }
 type Node struct(v I32, next mut Node&) {
-    v mut
-    next mut
+    v
+    next
 }
 fn ring() Node& {
-    a Node&return = Node(1, null)
+    a mut Node&return = Node(1, null)
     a.next = a
     return a
 }

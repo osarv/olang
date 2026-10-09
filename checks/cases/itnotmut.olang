@@ -1,5 +1,5 @@
 # check: fail error[S9a]: C& cannot be walked
-type C struct(n I32) { n mut }
+type C struct(n I32) { n }
 fn (c C&) Next() I32 ? Exhausted { error Exhausted.END }
 error E { X }
 fn main() ? E {

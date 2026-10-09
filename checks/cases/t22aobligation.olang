@@ -12,7 +12,7 @@ fn apply(f fn(a mut Node&, b Node&), a mut Node&, b Node&) {
 }
 error E { X }
 fn main() ? E {
-    a Node& = Node(1)
+    a mut Node& = Node(1)
     b Node& = Node(2)
     apply(hang, a, b)
 }

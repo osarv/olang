@@ -1,14 +1,14 @@
 # check: fail error[R11, O25]: a reference default lives where the call's result does
 # R9a: a returned call lands in the result scope, which the function's own local n does not live in
 type Node struct(v I32) {
-    v mut
+    v
 }
 fn mk(k I64) Node& ? {
     if k > -5 { error }
     return Node(7)
 }
 fn get() Node& {
-    n Node& = Node(42)
+    n mut Node& = Node(42)
     return try mk(1) catch default n
 }
 fn main() ? {

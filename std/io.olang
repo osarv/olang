@@ -120,9 +120,9 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 type Lines struct(fd I32, size I64 = 65536) {
     fd
     buf mut String& = String(Array<U8>(size if size > 0 else 1))
-    start mut I64 = 0                # buf[start:end] is what has been read and not yet given as a line
-    end mut I64 = 0
-    ended mut Bool = false           # read has said the file is over
+    start I64 = 0                    # buf[start:end] is what has been read and not yet given as a line
+    end I64 = 0
+    ended Bool = false               # read has said the file is over
 }
 
 fn (l mut Lines&) Next() String& ? IoError + Exhausted {
@@ -163,7 +163,7 @@ fn (l mut Lines&) Next() String& ? IoError + Exhausted {
 # buf[first:last] as new text, a carriage return at its end dropped
 fn (l Lines&) line(first I64, last I64) String& {
     n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
-    text String&return = String(Array<U8>(n))
+    text mut String&return = String(Array<U8>(n))
     for k in range n { text[k] = l.buf[first + k] }
     return text
 }
@@ -188,8 +188,8 @@ fn (l Lines&) line(first I64, last I64) String& {
 type Writer struct(fd I32, size I64 = 65536) {
     fd
     buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
-    used mut I64 = 0                 # buf[:used] waits to be written
-    broken mut I32 = 0               # 0 while every write has gone through; 1 FAILED, 2 PARTIAL - the first that did not
+    used I64 = 0                     # buf[:used] waits to be written
+    broken I32 = 0                   # 0 while every write has gone through; 1 FAILED, 2 PARTIAL - the first that did not
 }
 
 # t, after what is written already
@@ -317,7 +317,7 @@ fn reading(text String&) I32 {
 # the lines of "text", read through Lines with a buffer of "size" bytes, each in brackets
 fn bracketed(text String&, size I64) String& {
     fd := reading(text)
-    out String&return = ""
+    out mut String&return = ""
     for line in try Lines(fd, size) {
         out = $out "[" $line "]"
     } catch IoError { fail }
@@ -402,7 +402,7 @@ test "a line kept is built where it is kept" {
 
 # what a pipe's read end holds once its write end is closed, as text
 fn drained(fd I32) String& {
-    out String&return = ""
+    out mut String&return = ""
     for line in try Lines(fd) {
         out = $out $line "\n"
     } catch IoError { fail }

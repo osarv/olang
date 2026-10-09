@@ -9,9 +9,9 @@ type Link enum {
     Two(a mut Node&, b mut Node&)
 }
 fn main() ? {
-    x Node& = Node(1)
+    x mut Node& = Node(1)
     if TargetOs == "linux" {
-        y Node& = Node(2)
+        y mut Node& = Node(2)
         l Link& = Link.Two(x, y)
     }
 }

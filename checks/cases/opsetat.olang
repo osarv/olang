@@ -1,7 +1,7 @@
 # check: fail error[E31]: R& declares At but not SetAt, which x[i] = v calls
 # E31: assigning through an index calls SetAt
 type R struct() {
-    v mut I32 = 0
+    v I32 = 0
 }
 fn (r R&) At(i I64) I32 { return r.v }
 fn main() ? {

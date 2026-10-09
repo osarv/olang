@@ -3,7 +3,7 @@
 # D8c/O18a: results destructured into new locals land in the loop body's block - a reference from there cannot be
 # stored into the outer keep
 type Node struct(v I32) {
-    v mut
+    v
 }
 fn two(k I64) (mut Node&, mut Node&) {
     return Node(I32(k) + 40), Node(2)

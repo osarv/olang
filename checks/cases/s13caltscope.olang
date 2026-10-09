@@ -3,7 +3,7 @@
 # S13c/O12: alternatives binding one name from payloads in different scopes - x's scope is not known, so it cannot be
 # stored where either one's would go (it used to take the first alternative's, outer's, and keep pointed at inner)
 type Node struct(v I32) {
-    v mut
+    v
 }
 type Box enum {
     Has(n Node&)

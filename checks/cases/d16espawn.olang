@@ -1,10 +1,10 @@
 # check: fail error[P2, D16e]: this function value closes before the join does
 # P2: a lambda made inside the join block lives in the block it was made in - a task calling through it could
 # outlive it
-type Slot struct() { v mut I32 = 0 }
+type Slot struct() { v I32 = 0 }
 error E { X }
 fn main() ? E {
-    s Slot& = Slot()
+    s mut Slot& = Slot()
     join {
         for i in range 4 {
             w := fn(t mut Slot&) { t.v = 1 }

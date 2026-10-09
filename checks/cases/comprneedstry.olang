@@ -4,10 +4,10 @@ error E {
     X
 }
 type It struct() {
-    i mut I32 = 0
+    i I32 = 0
 }
 fn (t mut It&) Next() I32 ? E + Exhausted { error E.X }
 fn main() ? {
-    t It& = It()
+    t mut It& = It()
     xs := I32[x for x in t]
 }

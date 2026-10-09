@@ -59,9 +59,9 @@ type Object struct(Keys Array<String&>&, Values Array<Json&>&) {
 # where Parse stopped: the byte offset into the text, and the line and the column there, both from 1 - a column
 # counting characters (UTF-8 sequences), not bytes. "$at" is "LINE:COL".
 type Position struct() {
-    Offset mut I64 = 0
-    Line mut I64 = 1
-    Col mut I64 = 1
+    Offset I64 = 0
+    Line I64 = 1
+    Col I64 = 1
 }
 
 fn (p Position&) Str() String { return $p.Line ":" $p.Col }
@@ -226,7 +226,7 @@ fn nameIndex(keys Array<String&>&) Array<I32>& {
     if n <= 8 { return Array<I32>(0) }
     size I64 = 16
     for size < 2 * n { size = size * 2 }
-    slots Array<I32>&return = Array<I32>(size)
+    slots mut Array<I32>&return = Array<I32>(size)
     mask I64 = size - 1
     for i in range n {
         s I64 = nameHash(keys[i]) & mask
@@ -323,7 +323,7 @@ fn (j Json&) Hash() I64 {
 # ignored). Fails with the JsonError that says why the text is not JSON; "at", when given, is set to where reading
 # stopped - the start of the problem, or the end of the text.
 fn Parse(text String&, at mut Position& = null) Json& ? JsonError {
-    r reader&return = reader(text)
+    r mut reader&return = reader(text)
     defer {
         if at != null { r.place(at) }
     }
@@ -336,14 +336,14 @@ fn Parse(text String&, at mut Position& = null) Json& ? JsonError {
 # Parse's result does, so everything it builds - each value pushed, each array gathered - is built there.
 type reader struct(src String&) {
     src
-    pos mut I64 = 0
+    pos I64 = 0
     vals mut Array<mut Json&>& = Array<mut Json&>(64)
-    nv mut I64 = 0
+    nv I64 = 0
     names mut Array<String&>& = Array<String&>(16)
-    nn mut I64 = 0
+    nn I64 = 0
     starts mut Array<I64>& = Array<I64>(16)     # for each open array, where its items start in vals; for an object,
     nameStarts mut Array<I64>& = Array<I64>(16) # also where its names start in names - -1 for an array
-    depth mut I64 = 0
+    depth I64 = 0
 }
 
 # where pos is, as a Position
@@ -405,14 +405,14 @@ fn (r mut reader&) close() {
     r.depth--
     from I64 = r.starts[r.depth]
     n I64 = r.nv - from
-    items Array<Json&>&r = Array<Json&>(n)
+    items mut Array<Json&>&r = Array<Json&>(n)
     for i in range n { items[i] = r.vals[from + i] }
     r.nv = from
     namesFrom I64 = r.nameStarts[r.depth]
     if namesFrom < 0 {
         r.push(Json.Arr(items))
     } else {
-        names Array<String&>&r = Array<String&>(n)
+        names mut Array<String&>&r = Array<String&>(n)
         for i in range n { names[i] = r.names[namesFrom + i] }
         r.nn = namesFrom
         r.push(Json.Obj(Object(names, items)))
@@ -570,7 +570,7 @@ fn (r mut reader&) string() String& ? JsonError {
         }
     }
     end I64 = r.pos
-    out String&return = String(Array<U8>(size))
+    out mut String&return = String(Array<U8>(size))
     w I64 = 0
     r.pos = start
     for r.pos < end {
@@ -792,7 +792,7 @@ fn (j Json&) Str() String { return Encode(j) }
 
 type writer struct(indent String&) {
     indent
-    out mut StringBuilder = StringBuilder()
+    out StringBuilder = StringBuilder()
 }
 
 fn (w mut writer&) newline(depth I64) {

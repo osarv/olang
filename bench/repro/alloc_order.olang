@@ -8,8 +8,8 @@ import "std/io"
 import "std/os"
 
 type Node struct(left mut Node&, right mut Node&) {
-    left mut
-    right mut
+    left
+    right
 }
 
 fn byArgs(depth I64) Node& {
@@ -18,7 +18,7 @@ fn byArgs(depth I64) Node& {
 }
 
 fn parentFirst(depth I64) Node& {
-    n Node&return = Node(null, null)                        # parent allocated first
+    n mut Node&return = Node(null, null)                    # parent allocated first
     if depth == 0 { return n }
     n.left = parentFirst(depth - 1)
     n.right = parentFirst(depth - 1)

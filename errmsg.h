@@ -188,6 +188,8 @@ struct type;
     X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable %S appears in no parameter's type, so no call can infer it") \
     X(ERR_EXTERN_TYPE,                  "X2",    "%t cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") \
     X(ERR_MUT_ON_VALUE_TYPE,            "T25b",  "'mut' makes a reference writable, and %t is no reference") \
+    X(ERR_MUT_ON_VALUE_PARAM,           "D9",    "a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and %t is none") \
+    X(ERR_MUT_ON_VALUE_FIELD,           "C3",    "a field is writable wherever its instance is - 'mut' is for a reference, and %t is none") \
     X(ERR_PRIM_CTOR_NOT_PRIMITIVE,      "T29d",  "only a type over a primitive has a constructor written this way - a struct writes 'struct(params) { ... }'") \
     X(ERR_PRIM_CTOR_PARAM,              "T29d",  "this constructor takes one parameter, of type %t - the value it checks") \
     X(ERR_TYPE_DEFINED_THROUGH_ITSELF,  "",      "%S is used while it is still being declared") \
@@ -281,13 +283,14 @@ struct type;
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
-    X(ERR_IMMUTABLE,                    "D9",    "%S is not 'mut', so it cannot be written") \
+    X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
     X(NOTE_PROTOCOL_SPELLING,           "",      "'%S' is %s's private spelling, held to %s's shape - a helper of another shape needs another name") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
+    X(NOTE_DECLARE_WRITABLE,            "",      "'%S' is declared read-only here - declare it '%S mut %t' to write through it") \
     X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
@@ -378,7 +381,8 @@ struct type;
     X(ERR_VALUE_REFS_OUTLIVED,          "O25h",  "this value holds references into a scope the target outlives - build it where the target is") \
     X(ERR_CONTAINER_SCOPE_UNBUILDABLE,  "O25a",  "this container's scope cannot be built into from here - write through the global itself") \
     /* ---- statements ---- */ \
-    X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable, so 'mut' says nothing here - remove it") \
+    X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable - 'mut' is for a reference, and %t is none") \
+    X(ERR_MUT_ON_INFERRED_LOCAL,        "D11a",  "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") \
     X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'try c[i] = v' checks against Len, and %t has neither TrySetAt nor Len") \
     X(ERR_NOT_A_STATEMENT,              "S3",    "this computes a value and discards it - only a call, '++' or '--' stands alone") \
     X(ERR_JOIN_NEXT_LINE,               "S3, E11b", "text on a line of its own does nothing - a join continues onto the next line only inside parentheses") \

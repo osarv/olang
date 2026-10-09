@@ -70,7 +70,7 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? OsError {
     n := fill(Array<U8>(0))
     for {
         try check(n)
-        text String&return = String(Array<U8>(n))
+        text mut String&return = String(Array<U8>(n))
         got := fill(text)
         if got <= n {
             try check(got)
@@ -85,7 +85,7 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? OsError {
 # being interpreted - then each argument, as given
 fn Args() Array<String&>& {
     n := __olang_arg_count()
-    args Array<String&>&return = Array<String&>(n)
+    args mut Array<String&>&return = Array<String&>(n)
     for i in range n {
         text String&return = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
         __olang_arg(i, text, text.Len())
@@ -219,7 +219,7 @@ fn readBack(fd I32) String& ? OsError {
     size := lseek(fd, 0, 2)
     if size < 0 { try raise(__olang_err()) }
     lseek(fd, 0, 0)
-    text String&return = String(Array<U8>(size))
+    text mut String&return = String(Array<U8>(size))
     got I64 = 0
     for got < size {
         n := read(fd, text[got:], size - got)
@@ -241,11 +241,11 @@ fn ReadFile(path String&) String& ? OsError {
     # has no size to give (lseek fails or says 0), and a file may grow while it is read
     size := lseek(fd, 0, 2)
     if size < 0 { size = 0 } else { lseek(fd, 0, 0) }
-    text String&return = String(Array<U8>(size + 1))
+    text mut String&return = String(Array<U8>(size + 1))
     got I64 = 0
     for {
         if got == text.Len() {
-            more String&return = String(Array<U8>(text.Len() * 2))
+            more mut String&return = String(Array<U8>(text.Len() * 2))
             for i in range got { more[i] = text[i] }
             text = more
         }
@@ -413,7 +413,7 @@ fn Rename(from String&, to String&) ? OsError {
 fn ReadLink(path String&) String& ? OsError {
     p := $path "\0"
     cap I64 = 256
-    buf Array<U8>&return = Array<U8>(cap)
+    buf mut Array<U8>&return = Array<U8>(cap)
     n := readlink(p, buf, cap)
     for n == cap {                                  # it may not all have fitted: again, with twice the room
         cap = cap * 2

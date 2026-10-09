@@ -14,10 +14,10 @@ fn f(a mut Holder&, b mut Item&, n I64) {
 }
 fn g(x mut Holder&, y mut Item&, n I64) { f(x, y, n) }
 fn main() ? {
-    h Holder& = Holder()
+    h mut Holder& = Holder()
     f(h, Item(1), 0)
     for i in range 3 {
-        it Item& = Item(i)
+        it mut Item& = Item(i)
         g(h, it, 2)
     }
 }

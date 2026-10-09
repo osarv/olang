@@ -24,10 +24,10 @@ fn rotl(x U64, k U64) U64 {
 
 # a generator whose sequence is decided by "seed" alone: the first four outputs of splitmix64 from it
 type Rand struct(seed U64) {
-    s0 mut U64 = mix64(seed + golden)
-    s1 mut U64 = mix64(seed + 2 * golden)
-    s2 mut U64 = mix64(seed + 3 * golden)
-    s3 mut U64 = mix64(seed + 4 * golden)
+    s0 U64 = mix64(seed + golden)
+    s1 U64 = mix64(seed + 2 * golden)
+    s2 U64 = mix64(seed + 3 * golden)
+    s3 U64 = mix64(seed + 4 * golden)
 }
 
 # the next 64 random bits

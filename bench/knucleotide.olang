@@ -6,7 +6,7 @@ import "std/os"
 
 # fasta's linear congruential generator
 type Random struct() {
-    last mut I64 = 42
+    last I64 = 42
 }
 
 fn (r mut Random&) Next(max F64) F64 {
@@ -37,7 +37,7 @@ fn sequence(n I64) String {
 
 # every k-long run of seq and how often it occurs
 fn counts(seq String&, k I64) Map<String&, I64>&seq {
-    m Map<String&, I64>&seq = Map<String&, I64>()
+    m mut Map<String&, I64>&seq = Map<String&, I64>()
     for i in range seq.Len() - k + 1 {
         key := seq[i:i + k]
         m.Update(key, 0, fn(c) { return c + 1 })

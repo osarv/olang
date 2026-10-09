@@ -2,7 +2,7 @@
 # O1b/D16d: a lambda capturing a reference lives where it does - storing it in a global needs what it captured to live
 # in the program's scope, which a by-value parameter's payload does not (it used to be taken for the program's own)
 type Node struct(v I32) {
-    v mut
+    v
 }
 type Box enum {
     Has(n Node&)

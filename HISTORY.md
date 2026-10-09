@@ -11406,3 +11406,94 @@ length (`grown(have, n)`), so the panels a workspace ever made sum to less than 
 twice the largest need - under 4x in all, replaced a logarithmic number of times. `pool/03` ends at 8.1MB. The linalg
 test that pins it counts replacements by identity (`ws.b is before`): 5 now, 49 with AVX-512's 32-column tile before.
 No rule changed; the workspace's comment says so.
+
+## `mut` speaks only about what a reference reaches (2026-10-09)
+
+**The question.** Two of the user's questions met here. Question 4, from the second usage study (r08): a local's
+reference permission could not be written. `x mut Node&p = ...` was D11a's error ("a local is always writable"), though
+there `mut` would have been the reference's permission, not the binding's; and a local initialized with `null`, an empty
+array or text was *writable*, so it could never later take a read-only reference - `path String& = ""` then
+`path = args[1]` failed T25c. A parser's optional children and "name starts empty" locals hit it everywhere: 25 sites in
+the study's parser, worked around by making every parse function return `mut ...&p`. Question 5: a reassignable field
+holding a READ-ONLY reference could not be written - a field's top `mut` meant both "reassignable" and "writable
+referent" (T25c), so an LRU's value field and a query's `order` field forced `$x` copies. The user, asked whether
+locals were not always mutable, then: "Your decisions are fine" to the coordinator's design.
+
+**The design.** `mut` says one thing, in every position: what a reference reaches may be written. `mut T&` is a writable
+reference and `T&` a read-only one - in type arguments and elements as before, and now in fields, locals, parameters,
+receivers and results alike. A binding's reassignability is never written: a local and a parameter (or receiver) may
+always be assigned - a by-value parameter is the callee's own copy, a reference parameter its own cursor (S4a) - and a
+field may be assigned exactly where its instance is reached writably, Rust's model: through a local, a parameter, a
+`mut` global or a writable reference. So `mut` before a value type is an error everywhere but the top of a global, where
+it stays the binding's (and, on a reference global, also its permission - so a mutable global holding a read-only
+reference remains inexpressible, which nothing needs yet). Each position's error names its rule and the fix: D9 for a
+by-value parameter or receiver, C3 for a value field (`x mut I32`, `n mut := 0`), D11a for a local's value type or
+`:=`, T25b for an enum payload. The cost the user accepted: **per-field immutability is gone** - a field without `mut`
+used to be unwritable even through a writable reference. X3a's pthread blobs in std/chan relied on exactly that; they
+rest on privacy now, which they already had (`lock`, `notEmpty`, `notFull` are lowercase, so no other module can name
+them).
+
+**What followed from it, decided while building (mine).**
+1. A bare pun takes its parameter's type, permission included, and takes no `mut`. Its `mut` only ever asserted what
+   the parameter's type already said (a pun of a read-only parameter written `x mut` was an error, of a writable one
+   writable either way), and on a value it was the binding's, which no longer exists - so `x mut` is simply gone: no
+   longer a statement end (L18's `mut` entry and L20a's bullet went), a parse error rather than a diagnostic kept for
+   it (PRINCIPLES.md 4).
+2. Likewise a lambda parameter whose type is left out (`fn(a mut)`): its type, permission included, is the expected
+   one's.
+3. A match binding is a local and may be reassigned. It was the one immutable binding nothing could lift; codegen and
+   the evaluator already bound it as a copy (a slot, a `ctCopy`), so nothing else changed.
+4. A captured value stays read-only (D16c) - unlike a parameter, since writing a capture would read as state the
+   lambda keeps - and a captured reference's copy may be repointed within the call, as before.
+5. `mut` before a by-value type variable at the top of a declaration (`x mut <T>`, `v mut T = n`) means only what T2
+   says: writable when bound to a reference. Six corpus uses meant the binding (MapEntry's `Key`/`Value`, two
+   `Cell`-like fields, `gvBump`, `cnDrain`) and were dropped by hand; the migration cannot tell the two apart.
+6. **D9b had to be rethought.** A generic's by-value parameter bound to a run-time-length array used to be the caller's
+   array without `mut` and the callee's own copy with it. With parameters always writable, the copy is made exactly
+   when the body may write the parameter - assigns it or an element, or makes a writable reference to its storage (a
+   slice, a borrow into a `mut` reference parameter) - which the checker records as it accepts each such write
+   (`paramWritten`, on the instantiation's signature parameter) and codegen reads. Copying always was the other choice,
+   and a hidden O(n) per call on every generic reading an array (`Eq`, `Hash` on text keys) is what principle 2 rules
+   out. Building it found a **pre-existing disagreement**: the evaluator always copied a by-value parameter, so a call
+   writing the caller's array through another parameter while reading it through this one - `permSee(a, a)` - read
+   the old element while compiling and the new one at run time (505 baked, 7005 run). The evaluator now shares the
+   caller's array exactly where the run time does.
+7. The same analysis answers whether a callee may build into a by-value parameter's scope variable (O4b holds one for
+   a value holding references): known once the callee's body is checked, assumed while it is not (a cycle, a call
+   through a function value). Before, only a `mut` value parameter could be written.
+8. **O25g**: through a writable reference every field can now be assigned, not only `mut` ones, so a writable
+   reference to a struct with any reference-holding field asks exactness where it used to ask only outliving. Read-only
+   references never ask it, which is the common case for trees and views. The corpus needed nothing for it.
+9. A borrowed value (E12c) gives a writable reference when it may itself be written - a local, a parameter's copy, a
+   `mut` global, or a field or element of those or of a writable reference (T25c).
+10. Diagnostics (B11): writing through a local that its written type made read-only, or passing one where a writable
+    reference is wanted, adds a note at the local - `'r' is declared read-only here - declare it 'r mut P&' to write
+    through it` - following a `:=` local, a slice or a capture back to the declaration that decided it. The old
+    "x is not 'mut', so it cannot be written" (D9) became S6's "x cannot be written - only a local, a parameter or a
+    'mut' global can", since only immutable globals reach it now.
+
+**The evaluator** needed only item 6. K1's view of what a writable reference can change (`ctMarkWritable`) already
+treated every by-value part of a writably reached aggregate as changeable, whatever the field declared - it had been
+more permissive than the checker, and now they say the same thing.
+
+**The migration** is `tools/perm_mut.py`, kept and re-runnable, written to be driven by the compiler rather than by
+guessing types from text: a text pass removes the puns' `mut`; then every file is compiled (`-c`, or `-t` for one that
+tests on `TestBuild`) and the D9/C3/D11a errors and the note above are applied - a `mut` removed at the error's column,
+or one added after the noted local's name - and that repeats until nothing changes, keeping trailing comments' columns
+and moving a `LINE:COL` a case's header names on an edited line.
+A checks case that must fail keeps its failure: nothing is applied from a diagnostic carrying its expected text, and a
+case about the old spelling itself opts out of the text pass with `# perm_mut: skip`. Over the repository: 125 pun
+`mut`s and 212 others removed (value fields above all - std's List, Map, iterators, chan, json, linalg - then by-value
+parameters and receivers), 331 locals given `mut`, three rounds to a fixed point; run again over the tree after
+merging master (filepath, the buffered Writer, the constant-generics review's cases), 15 more removed and 2 added, and
+again after the next (checker batch 3's tests and cases), 8 removed and 3 added; plus the six type-variable `mut`s and
+the fuzzer's generated puns by hand. Comments and test descriptions describing
+the old rules were rewritten.
+
+**Checked**: the corpus and std at -t (794 tests), every checks case, the bench programs, and new cases for each error
+(a by-value parameter's and receiver's `mut`, a value field's and a `:=` field's, a local's value type and `:=`, a
+read-only local written through with the note, a writable local from a read-only initializer, a field through a
+read-only parameter, a field of an immutable global, the pun spelling gone) - plus corpus tests of a by-value
+parameter, struct parameter and receiver written, a read-only reference field reassigned through a writable instance,
+a read-only local taking a read-only element later (r08's shape), a match binding reassigned, and D9b's sharing and
+copying, each baked while compiling and computed at run time.

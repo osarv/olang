@@ -167,7 +167,7 @@ test "originating a two-hop re-exported error type directly with 'error alias.al
 # having a matching method - no import of the interface into the declaration, no declared intent, no
 # mention of Metre anywhere in wk.Base.
 type Metre struct(len I32) {
-    n mut I32 = len
+    n I32 = len
 }
 fn (m Metre&) Size() I32 { return m.n * 100 }
 

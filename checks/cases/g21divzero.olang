@@ -3,7 +3,7 @@
 # also: compilation failed with 1 error
 # G21/G16b: a constant argument that cannot be computed for an instantiation is reported once, at that instantiation
 type Box<N I64> struct() {
-    a mut Array<I32, 10 / N>
+    a Array<I32, 10 / N>
 }
 fn main() ? {
     b := Box<0>()
