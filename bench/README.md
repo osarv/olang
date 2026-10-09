@@ -64,6 +64,45 @@ text 5M numbers.
 | parallel, 4 tasks | 0.724 | 0.798 | **0.91** | 1.08 | 0.712 | 0.781 | 0.91 |
 | text | 1.186 | 0.482 | **2.46** | 2.33 | 1.099 | 0.522 | 2.11 |
 
+### After the code generator fixes (2026-10-09)
+
+Items 1, 2, 7 and 8 below were fixed in the compiler (CLAUDE.md, "Code generator gaps from the benchmarks, closed").
+Before and after, each the previous compiler's binary against the new one's, interleaved medians in seconds (A/B runs
+of 5-11 repetitions under the lock, load 1-6):
+
+| benchmark | before | after | C | after/C |
+|---|---:|---:|---:|---:|
+| sum: Array.Iter().Fold (capturing lambda) | 1.627 | 0.228 | 0.217 | 1.05 |
+| `a.Iter().Count(f)`, f capturing (hand loop 0.543) | 1.566 | 0.556 | - | 1.02 of the hand loop |
+| sum: List.Iter().Fold | 2.125 | 0.929 | 0.195 | 4.76 |
+| List push | 0.510 | 0.165 | 0.167 | 0.98 |
+| binary-trees, C arena | 0.514 | 0.422 | 0.391 | 1.08 |
+| matmul F32 | 1.247 | 1.223 | 1.313 | 0.93 |
+
+And the whole suite after them, `bench/run.sh -r 7` (load 2-4):
+
+| benchmark | olang (s) | C (s) | olang/C |
+|---|---:|---:|---:|
+| nbody | 0.936 | 0.996 | 0.94 |
+| spectral-norm | 0.687 | 0.561 | 1.22 |
+| mandelbrot | 0.913 | 0.921 | 0.99 |
+| fannkuch-redux | 1.043 | 0.996 | 1.05 |
+| binary-trees | 0.442 | 2.574 | **0.17** |
+| binary-trees, C arena | 0.448 | 0.395 | **1.13** |
+| k-nucleotide | 1.127 | 0.766 | 1.47 |
+| matmul F32 | 1.135 | 1.437 | 0.79 |
+| List push | 0.166 | 0.172 | **0.96** |
+| sum: for x in List | 0.915 | 0.179 | 5.11 |
+| sum: List.Iter().Fold | 1.150 | 0.183 | **6.27** |
+| sum: for x in Array | 0.243 | 0.181 | 1.34 |
+| sum: Array.Iter().Fold | 0.195 | 0.183 | **1.07** |
+| parallel, 4 tasks | 0.778 | 0.805 | 0.97 |
+| text | 1.137 | 0.544 | 2.09 |
+
+`for x in Array` moved within the run's noise (it measured 0.245s before and after the fixes in the A/B runs); what is
+left of the `List` rows is `ListIter` (item 3), of k-nucleotide `Map`'s API (item 6), of text the renderer (item 4) -
+std's - and of spectral-norm the wrapping arithmetic (item 5).
+
 In short: **the code generator is at C's level wherever the program is loops over arrays and numbers** - nbody,
 mandelbrot, fannkuch, matmul, array loops and the parallel fan-out are level with C (within about 10% either way,
 which is this machine's noise), and allocation-heavy code is 5x faster than C with malloc/free. **The gaps are in the
