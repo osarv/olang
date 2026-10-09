@@ -228,10 +228,10 @@ because what it finds about structure feeds the refactor.
 - 11:55 (the user: "remove the mention of [the inspiration] from anything in the project ever. Be thorough about
   both commits and specs. We don't license either Oann or Olang"): olang's whole local history rewritten with
   git-filter-repo (every file in every commit and every message; verified zero matches), active worktrees (constgen,
-  fuzz, linalg) scrubbed and re-synced, backup bundle /home/user/olang-pre-scrub.bundle. The FORCE-PUSH of master and
-  claude/github-environment-setup-ftu9va was refused by the auto-mode classifier - waiting for the user to allow it or
-  push themselves; until then normal pushes fail (diverged). oann: the tip commit is being replaced by
-  docs/settling.md (amend) - needs the same force-push. Neither repo gets a licence file.
+  fuzz, linalg) scrubbed and re-synced, backup bundle /home/user/olang-pre-scrub.bundle. Force-pushed 2026-10-09 ~12:20 after the user switched the session from Auto to Accept edits (the auto-mode classifier
+  refuses history rewrites; in Accept edits it asks): olang master + claude branch, oann's branch (settling.md + phase 2).
+  Afterwards: the backup bundle, the original-project clone and stale worktrees deleted, scratch copies scrubbed, reflogs
+  expired and gc'd. GitHub may still serve old commits by SHA until its own GC (support request to purge fully). Neither repo gets a licence file.
 - 12:10: std/linalg + std/rand merged LOCALLY (9b88d44; push on hold): Matrix<T>, GEMM 14-17 GFLOPS F32 single-thread
   (= C same algorithm; OpenBLAS 5-7x ahead by instruction set), Gemv beats a C loop, MLP step 2.4ms vs OpenBLAS ~0.5ms.
   Queued for small fixes: an immutable baked plain-data global is emitted `global` not `constant` (cost the GEMM
