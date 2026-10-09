@@ -85,6 +85,9 @@ enum floatKind { FLOAT_KIND_F64, FLOAT_KIND_F32, FLOAT_KIND_F16, FLOAT_KIND_BF16
 //T4: v rounded to a float type, as a conversion to it rounds - nearest, ties to even; beyond the type's largest
 //finite value it is an infinity
 double FloatRoundTo(double v, enum floatKind k);
+//T4: an integer - negative when neg, of magnitude mag - rounded once to float type k's significant bits, as a conversion
+//rounds it; FloatRoundTo then gives the type's value (an infinity where it overflows)
+double IntRoundTo(bool neg, unsigned long long mag, enum floatKind k);
 //E11a: v, a value of float type k, as the shortest decimal text reading back as it in that type - snprintf's
 //contract (writes what fits in cap, returns the length the text needs). The runtime's "@__olang_fmt_float" is the
 //same algorithm written in IR, through the same C library calls, so the two give identical text.

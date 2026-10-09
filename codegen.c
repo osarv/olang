@@ -101,6 +101,7 @@ static struct semaModule* cgCompilationRoot;
 void CodegenSetRoot(struct semaModule* root) { cgCompilationRoot = root; }
 struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry recording a subprogram's own file
 
+struct cgStaticLit { struct operand* op; char* name; };
 struct cgCtx {
     struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
@@ -197,6 +198,7 @@ struct cgCtx {
     int tmpCtr;
     int lblCtr;
     int strCtr;
+    struct list staticLits; //T25d: struct cgStaticLit - the constant each static literal site in this object is
     struct list emittedSyms; //list of char*: shared helpers (equality, rendering, call adapters) already written into this
                               //object. They are linkonce_odr so the LINKER keeps one across objects, but a
                               //second definition within one object is a redefinition error, and the same
@@ -1260,15 +1262,25 @@ char* cgFloatConst(double v, enum baseType b);
 //T25b: a literal known while compiling that reaches a READ-ONLY array reference is never written through it, so it
 //is the constant itself - static data, no arena allocation, nothing copied. NULL where that does not apply: a
 //writable target, or a literal with anything not constant in it
+char* cgStringLiteralGlobalAt(struct cgCtx* ctx, struct operand* op, bool addrSignificant);
 char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
-    if (!(dstT.bType == BASETYPE_ARRAY && dstT.arrMalloc && dstT.structMAlloc && !dstT.refMut)) return NULL;
+    if (!CtIsStaticLiteral(op, dstT)) return NULL;
     if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len) op = *(struct operand**)ListGetIdx(&op->args, 0);
-    if (!op->isLiteral || op->opType != OPERATION_NONE || op->type.bType != BASETYPE_ARRAY || op->type.arrMalloc
-            || !op->type.arrLen) return NULL;
     long long n = op->type.arrLen->intLiteralVal;
+    //E10/T25d: a site is one instance however often it is reached - and however often it is written out (deferred
+    //code is emitted once per way out of its block) - and two sites are two: the constant is not unnamed_addr, so
+    //nothing merges two sites holding the same text
+    for (int i = 0; i < ctx->staticLits.len; i++) {
+        struct cgStaticLit* l = ListGetIdx(&ctx->staticLits, i);
+        if (l->op == op) {
+            char* r = MallocOrCrash(96);
+            snprintf(r, 96, "{ i64 %lld, ptr %s }", n, l->name);
+            return r;
+        }
+    }
     char* data;
     if (op->tok.type == TOK_STR_LIT) {
-        data = cgStringLiteralGlobal(ctx, op);
+        data = cgStringLiteralGlobalAt(ctx, op, true);
     } else {
         struct type et = *op->type.arrElem;
         bool scalar = (TypeIsNumeric(et) && !et.owner) || et.bType == BASETYPE_BOOL;
@@ -1281,7 +1293,7 @@ char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
         llvmType(et, ety, sizeof(ety));
         data = MallocOrCrash(32);
         snprintf(data, 32, "@.arr.%d", ctx->strCtr++);
-        fprintf(ctx->out, "%s = private unnamed_addr constant [%lld x %s] [", data, n, ety);
+        fprintf(ctx->out, "%s = private constant [%lld x %s] [", data, n, ety);
         for (int i = 0; i < op->args.len; i++) {
             struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
             char v[64];
@@ -1294,6 +1306,8 @@ char* cgStaticLiteral(struct cgCtx* ctx, struct operand* op, struct type dstT) {
         }
         fputs("]\n", ctx->out);
     }
+    struct cgStaticLit sl = { op, data };
+    ListAdd(&ctx->staticLits, &sl);
     char* r = MallocOrCrash(96);
     snprintf(r, 96, "{ i64 %lld, ptr %s }", n, data);
     return r;
@@ -1512,6 +1526,13 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
     }
     if (typeNeedsRuntimeLengthPromotion(dstT, srcT)) {
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
+        //T7: assigned to a value array holding a value already, a literal of the same length is written into the storage
+        //that value has, as any other array is - a borrow taken earlier sees the new elements
+        if (dstHoldsLiveValue && !dstT.structMAlloc && !srcT.structMAlloc) {
+            char* copied = cgCopyRuntimeLengthArray(ctx, dstT, cgBorrowValue(ctx, dstT, srcT, src), scopeVal, dstAddr);
+            fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", copied, dstAddr);
+            return;
+        }
         char* slice = cgPromoteFixedToRuntimeLength(ctx, dstT, srcT, src, scopeVal);
         fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", slice, dstAddr);
         return;
@@ -1573,14 +1594,23 @@ static bool cgIsFreshClosure(struct operand* op) {
 
 //storage made by the expression itself, with nothing to borrow - built in the scope of whatever it lands in
 //(E12c): rendered or joined text, a capturing lambda's closure, "Array<T>(n)" and a comprehension (E27)
+static bool cgIsFreshTemp(struct operand* op);
+//a conditional's or a match's value v, landing in their type t, makes storage of its own: a fresh temporary, or a literal
+//promoted into t's run-time length (a copy of it, made there)
+static bool cgValueIsFresh(struct operand* v, struct type t) {
+    return cgIsFreshTemp(v) || typeNeedsRuntimeLengthPromotion(t, v->type);
+}
 static bool cgIsFreshTemp(struct operand* op) {
     //E28: a conditional either of whose values is one - only that value is built in the target's scope
     if (op->opType == OPERATION_COND && op->args.len == 3) {
-        return cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 1)) || cgIsFreshTemp(*(struct operand**)ListGetIdx(&op->args, 2));
+        return cgValueIsFresh(*(struct operand**)ListGetIdx(&op->args, 1), op->type)
+               || cgValueIsFresh(*(struct operand**)ListGetIdx(&op->args, 2), op->type);
     }
-    if (op->opType == OPERATION_MATCH) { //S12b: the same, for any of a match's values
+    //S12b: the same, for any of a match's values. A text literal among them was copied into the match's own block and
+    //returned from there, read after that block's scope closed ("return match n { case 7 => "seven" ... }")
+    if (op->opType == OPERATION_MATCH) {
         struct list vs = SemanticMatchValues(op);
-        for (int i = 0; i < vs.len; i++) if (cgIsFreshTemp(*(struct operand**)ListGetIdx(&vs, i))) return true;
+        for (int i = 0; i < vs.len; i++) if (cgValueIsFresh(*(struct operand**)ListGetIdx(&vs, i), op->type)) return true;
         return false;
     }
     return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
@@ -1814,8 +1844,8 @@ char* cgLookupVarAddr(struct cgCtx* ctx, struct var* v) {
     char* buf = MallocOrCrash(256);
     //a function named as a VALUE (passed to a func-type parameter) is its own symbol, not storage holding
     //one - and M21 makes that symbol depend on whether it is a method, exactly as at a call
-    if (v->type.bType == BASETYPE_FUNC) mangleFuncSym(v, buf, 256);
-    else mangleGlobal(v->owner, v->name, buf, 256);
+    if (v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) mangleFuncSym(v, buf, 256);
+    else mangleGlobal(v->owner, v->name, buf, 256); //a function-typed global is storage holding a function value
     return buf;
 }
 
@@ -1942,7 +1972,10 @@ char* cgGlobalStringConst(struct cgCtx* ctx, char* cStr) {
     return result;
 }
 
-char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
+char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) { return cgStringLiteralGlobalAt(ctx, op, false); }
+
+//addrSignificant: the constant is a static literal's own storage (T25d), whose address is its identity
+char* cgStringLiteralGlobalAt(struct cgCtx* ctx, struct operand* op, bool addrSignificant) {
     char* raw = op->tok.str.ptr +1;
     int rawLen = op->tok.str.len -2;
     //decoding only ever shortens the text, so its own length bounds it - a fixed buffer here cut every literal over
@@ -1963,7 +1996,7 @@ char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
     }
     char name[32];
     snprintf(name, sizeof(name), "@.str.%d", ctx->strCtr++);
-    fprintf(ctx->out, "%s = private unnamed_addr constant [%d x i8] c\"", name, n);
+    fprintf(ctx->out, "%s = private %sconstant [%d x i8] c\"", name, addrSignificant ? "" : "unnamed_addr ", n);
     for (int i = 0; i < n; i++) emitLLVMCharEscape(ctx->out, decoded[i]);
     fputs("\"\n", ctx->out);
     free(decoded);
@@ -2483,15 +2516,23 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     }
     //T11 gone: the MARKER decides, for either length kind. A marked compile-time-length array is a bare
     //ptr and falls through to the pointer leaf below (identity, as for a marked struct); a marked
-    //runtime-length one is { i64, ptr }, which no icmp accepts, so its identity is its buffer pointer -
-    //two descriptors naming the same storage.
+    //runtime-length one is { i64, ptr }, which no icmp accepts. E10: its identity is the same storage AND the same
+    //length - two descriptors naming one buffer from one start, over as many elements - so a[:2] is not a[:3]
     if (t.bType == BASETYPE_ARRAY && t.arrMalloc && t.structMAlloc) {
         char* pa = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pa, aVal);
         char* pb = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pb, bVal);
+        char* na = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", na, aVal);
+        char* nb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", nb, bVal);
+        char* eqP = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqP, pa, pb);
+        char* eqN = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", eqN, na, nb);
         char* eq = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eq, pa, pb);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", eq, eqP, eqN);
         return eq;
     }
     if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc) {
@@ -2678,6 +2719,16 @@ static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOu
     if (local) {
         char* obj = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, local->llvmVal);
+        char* code = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
+        *closureOut = obj;
+        return code;
+    }
+    if (func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
+        char g[256];
+        mangleGlobal(func->owner, func->name, g, sizeof(g));
+        char* obj = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, g);
         char* code = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
         *closureOut = obj;
@@ -3126,6 +3177,27 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
         }
         instr = tb > fb ? "fpext" : "fptrunc";
     } else if (fromF) instr = TypeIsUnsigned(to) ? "fptoui" : "fptosi";
+    else if (toF && to.bType == BASETYPE_BF16) { //T4: rounded once, by the runtime's own conversion
+        bool u = TypeIsUnsigned(from);
+        char* x = val;
+        if (fb < 8) {
+            x = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", x, u ? "zext" : "sext", fromTy, val);
+        }
+        char* neg = "false";
+        char* mag = x;
+        if (!u) {
+            neg = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp slt i64 %s, 0\n", neg, x);
+            char* nx = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = sub i64 0, %s\n", nx, x);
+            mag = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = select i1 %s, i64 %s, i64 %s\n", mag, neg, nx, x);
+        }
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call bfloat @__olang_int_bf16(i64 %s, i1 %s)\n", r, mag, neg);
+        return r;
+    }
     else if (toF) instr = TypeIsUnsigned(from) ? "uitofp" : "sitofp";
     else if (tb == fb) return val;
     else instr = tb > fb ? (TypeIsUnsigned(from) ? "zext" : "sext") : "trunc";
@@ -3912,7 +3984,8 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     bool isFloat = TypeIsFloat(t);
     bool u64 = t.bType == BASETYPE_U64;
     char* wide = cgNewTmp(ctx);
-    if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, 0.0\n", wide, v);
+    //E11a: "x + -0.0" is x for every x - a negative zero included, which "+ 0.0" would turn into a positive one
+    if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, -0.0\n", wide, v);
     else if (isFloat) fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", wide, ty, v);
     else if (TypeGetSize(t) == 8) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
     else fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", wide, TypeIsUnsigned(t) ? "zext" : "sext", ty, v);
@@ -4605,7 +4678,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             //already the value (an LLVM `define`, not a `global` storage declaration) - loading "through"
             //it would read the function's own machine code as if it were a stored pointer. Every other
             //global genuinely is a storage slot, so this only carves out the function case.
-            if (op->opType == OPERATION_READ_VAR && op->type.bType == BASETYPE_FUNC
+            if (op->opType == OPERATION_READ_VAR && op->type.bType == BASETYPE_FUNC && !op->readVar->isGlobalVar
                     && !cgFindLocal(ctx, op->readVar->name)) {
                 if (op->readVar->isLambda && op->readVar->lambdaCaptures.len) return cgClosure(ctx, op, addr); //D16c
                 return cgFuncValue(ctx, op->readVar, addr);
@@ -5552,17 +5625,18 @@ void emitStructTypeDefs(FILE* out) {
     }
 }
 
-//K2a: what a baked global's references and arrays point at - each node its own private global, so two
-//references to one node stay one instance (identity, E10) and a cycle terminates. cgAuxOut is where they
-//are written; NULL asks only whether the value can be written out at all.
+//K2a/K2b: what a baked global's references and arrays point at - each node its own private global, shared by every
+//global of the module that reaches it, so two references to one node stay one instance (identity, E10) and a cycle
+//terminates; a slice is the address of its place in its base's global. cgAuxOut is where they are written; NULL asks
+//only whether the value can be written out at all.
 struct cgAuxNode { struct ctVal* node; char* name; };
 static struct list cgAuxNodes;
 static FILE* cgAuxOut;
 static const char* cgAuxBase;
-static bool cgAuxReadOnly; //T25b: the global these belong to is immutable - plain data under it is never written
 static int cgAuxCtr;
 
 static char* cgConstInit(struct ctVal* v, struct type t);
+static struct type cgElementsType(struct type arrT, int n);
 
 //the private global holding node as a value of storeT, or NULL when it has no constant form
 static char* cgAuxGlobal(struct ctVal* node, struct type storeT) {
@@ -5578,10 +5652,29 @@ static char* cgAuxGlobal(struct ctVal* node, struct type storeT) {
     if (!init) return NULL;
     char ty[256];
     llvmType(storeT, ty, sizeof(ty));
-    //T25b: plain data an immutable global owns is reached only through it, read-only - so it is read-only data
-    bool ro = cgAuxReadOnly && CtIsPlainData(node);
+    //T25b: what no writable reference reaches from any global is never written while the program runs - so it is
+    //read-only data. What one does reach (a "mut" field's referent, say) is written, and must not be: it was emitted
+    //read-only when it held no reference itself, and a write through the field then faulted (or was folded away)
+    bool ro = !CtNodeWritable(node);
     if (cgAuxOut) fprintf(cgAuxOut, "%s = internal %s %s %s\n", name, ro ? "constant" : "global", ty, init);
     return name;
+}
+
+//E10/K2b: the address an array's storage starts at, as a constant - null for an array with none (its zero value), the
+//place in its base's global for a slice, and its own global otherwise (an empty one included: one element's room, so
+//it is an instance of its own, as the allocator gives an allocation of nothing). NULL where it has no constant form
+static char* cgAuxArrayPtr(struct ctVal* elems, struct type arrT) {
+    struct ctVal* base = elems->viewOf ? elems->viewOf : elems;
+    if (!base->elems) return "null";
+    struct type st = cgElementsType(arrT, base->n ? base->n : 1);
+    char* g = cgAuxGlobal(base, st);
+    if (!g) return NULL;
+    if (!elems->viewOf) return g;
+    char ty[256];
+    llvmType(st, ty, sizeof(ty));
+    char* expr = MallocOrCrash(strlen(g) + strlen(ty) + 96);
+    sprintf(expr, "getelementptr inbounds (%s, ptr %s, i64 0, i64 %d)", ty, g, elems->viewOff);
+    return expr;
 }
 
 //an array's elements laid out as a fixed array of their count, the shape cgAuxGlobal stores
@@ -5632,9 +5725,9 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
         struct ctVal* elems = v->kind == CT_REF ? v->target : v;
         unsigned long long n = (unsigned long long)elems->n;
         for (int i = 0; i < 8; i++) buf[i] = (unsigned char)(n >> (8 * i));
-        if (elems->n == 0) return true; //null storage: zero bits
-        char* g = cgAuxGlobal(elems, cgElementsType(t, elems->n));
+        char* g = cgAuxArrayPtr(elems, t);
         if (!g) return false;
+        if (!strcmp(g, "null")) return true; //no storage: zero bits
         struct cgPtrWord pw = { (long long)(buf + 8 - cgPtrBase), g };
         ListAdd(cgPtrWords, &pw);
         return true;
@@ -5703,12 +5796,9 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
     } else if (t.bType == BASETYPE_ARRAY && t.arrMalloc && (v->kind == CT_AGG || (v->kind == CT_REF && v->target->kind == CT_AGG))) {
         //an array of a run-time length is { length, storage }: its elements go in a global of their own
         struct ctVal* elems = v->kind == CT_REF ? v->target : v;
-        if (elems->n == 0) fputs("{ i64 0, ptr null }", f);
-        else {
-            char* g = cgAuxGlobal(elems, cgElementsType(t, elems->n));
-            if (!g) ok = false;
-            else fprintf(f, "{ i64 %d, ptr %s }", elems->n, g);
-        }
+        char* g = cgAuxArrayPtr(elems, t);
+        if (!g) ok = false;
+        else fprintf(f, "{ i64 %d, ptr %s }", elems->n, g);
     } else if (v->kind == CT_REF && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc
                && (v->target->kind == CT_AGG || (t.bType == BASETYPE_CHOICE && v->target->kind == CT_INT))) {
         //a reference to a struct or an enum (T17d): its referent in a global of its own
@@ -5718,6 +5808,8 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
         char* g = cgAuxGlobal(v->target, vt);
         if (!g) ok = false;
         else fputs(g, f);
+    } else if (v->kind == CT_AGG && t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc && v->n == 0) {
+        fputs("zeroinitializer", f); //an empty array's room (cgAuxArrayPtr)
     } else if (v->kind == CT_AGG && t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc) {
         char ety[256];
         llvmType(*t.arrElem, ety, sizeof(ety));
@@ -5777,27 +5869,86 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
     return out;
 }
 
+//K2b: which of a module's globals are written out as data - decided once per object, before any is written. One whose
+//value has no constant form is set at startup, and so is one reaching an instance another global holds that is set at
+//startup (or that belongs to another module's object): set at startup, that instance is built anew there, and data
+//written here would be a second copy of it - two globals the evaluator found sharing one instance would not
+static struct list cgBakedVars; //struct var*
+static struct semaModule* cgBakedFor;
+
+static bool cgIsBaked(struct var* v) {
+    for (int i = 0; i < cgBakedVars.len; i++) if (*(struct var**)ListGetIdx(&cgBakedVars, i) == v) return true;
+    return false;
+}
+
+static void cgDecideBakes(struct semaModule* emitMod) {
+    if (cgBakedFor == emitMod) return;
+    cgBakedFor = emitMod;
+    cgBakedVars = ListInit(sizeof(struct var*));
+    struct list cands = ListInit(sizeof(struct var*));
+    for (int i = 0; i < emitMod->vars.len; i++) {
+        struct var* v = ListGetIdx(&emitMod->vars, i);
+        if (v->isFuncDecl || !(v->constVal || v->bakeVal)) continue;
+        ListAdd(&cands, &v);
+    }
+    int n = cands.len;
+    struct list* nodes = MallocOrCrash(sizeof(struct list) * (size_t)(n ? n : 1));
+    bool* baked = calloc((size_t)(n ? n : 1), sizeof(bool));
+    for (int k = 0; k < n; k++) {
+        struct var* v = *(struct var**)ListGetIdx(&cands, k);
+        struct ctVal* val = v->constVal ? v->constVal : v->bakeVal;
+        nodes[k] = ListInit(sizeof(struct ctVal*));
+        CtReachableNodes(val, &nodes[k]);
+        cgAuxNodes = ListInit(sizeof(struct cgAuxNode)); //a dry run: does it have a constant form at all
+        cgAuxOut = NULL;
+        cgAuxBase = "@dry";
+        baked[k] = cgConstInit(val, v->type) != NULL;
+        for (int j = 0; j < nodes[k].len && baked[k]; j++) {
+            struct var* owner = CtNodeOwner(*(struct ctVal**)ListGetIdx(&nodes[k], j));
+            if (owner && owner->owner != emitMod) baked[k] = false; //another object's instance
+        }
+    }
+    for (bool changed = true; changed; ) { //an instance a global set at startup builds is built there, not here
+        changed = false;
+        for (int k = 0; k < n; k++) {
+            if (!baked[k]) continue;
+            for (int j = 0; j < nodes[k].len && baked[k]; j++) {
+                struct var* owner = CtNodeOwner(*(struct ctVal**)ListGetIdx(&nodes[k], j));
+                for (int q = 0; q < n && owner; q++) {
+                    if (!baked[q] && *(struct var**)ListGetIdx(&cands, q) == owner) { baked[k] = false; changed = true; break; }
+                }
+            }
+        }
+    }
+    for (int k = 0; k < n; k++) if (baked[k]) ListAdd(&cgBakedVars, ListGetIdx(&cands, k));
+    for (int k = 0; k < n; k++) ListDestroy(nodes[k]);
+    free(nodes);
+    free(baked);
+    ListDestroy(cands);
+    cgAuxNodes = ListInit(sizeof(struct cgAuxNode)); //shared by every global of the module, as the instances are
+    cgAuxCtr = 0;
+}
+
 //K2/K2a: a global's baked initializer, its private globals written to aux - or NULL to set it at startup
 static char* cgGlobalConstInit(struct var* v, const char* gname, FILE* aux) {
-    struct ctVal* val = v->constVal ? v->constVal : v->bakeVal;
-    if (!val) return NULL;
-    cgAuxNodes = ListInit(sizeof(struct cgAuxNode));
+    if (!cgIsBaked(v)) return NULL;
     cgAuxOut = aux;
     cgAuxBase = gname;
-    cgAuxReadOnly = !v->mut;
-    cgAuxCtr = 0;
-    char* init = cgConstInit(val, v->type);
+    cgAuxCtr = 0; //each global numbers what it writes out first; an instance another wrote out already keeps that name
+    char* init = cgConstInit(v->constVal ? v->constVal : v->bakeVal, v->type);
     cgAuxOut = NULL;
     return init;
 }
 
 void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
+    cgBakedFor = NULL; //a new object: its own decisions
+    cgDecideBakes(emitMod);
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType == BASETYPE_FUNC) continue;
+            if (v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) continue; //a function, not storage
             char name[256];
             mangleGlobal(mod, v->name, name, sizeof(name));
             char ty[256];
@@ -5901,6 +6052,7 @@ void emitRuntimeDecls(FILE* out) {
         "declare ptr @aligned_alloc(i64, i64)\n"
         "declare void @free(ptr)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
+        "declare i64 @llvm.ctlz.i64(i64, i1)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an
@@ -6118,7 +6270,11 @@ void emitScopeRuntime(FILE* out) {
         //one per registered instance) made it near-certain to be hit. The chunk's own data area is
         //already 8-aligned: malloc is at least 16-aligned and the header is exactly 24 bytes.
         "  %sizeup = add i64 %rawsize, 7\n"
-        "  %size = and i64 %sizeup, -8\n"
+        "  %size8 = and i64 %sizeup, -8\n"
+        //E10: an allocation of nothing still gets storage of its own, so two of them are two instances (an empty array
+        //made twice, a struct with no fields built twice) - a zero size bumped nothing, and handed both the same address
+        "  %size0 = icmp eq i64 %size8, 0\n"
+        "  %size = select i1 %size0, i64 8, i64 %size8\n"
         //the alignment this allocation gets, from its own size: enough for SSE at 32 bytes and for AVX-512
         //or a cache line at 64. Two selects, no branch, and small allocations are unaffected.
         "  %a32 = icmp uge i64 %size, 32\n"
@@ -6190,6 +6346,49 @@ void emitScopeRuntime(FILE* out) {
         "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_u, i64 %v)\n"
         "  %n64 = sext i32 %n to i64\n"
         "  ret i64 %n64\n"
+        "}\n\n"
+        //T4: an integer - negative when %neg, of magnitude %m - as a BF16, rounded ONCE to its 8 significant bits, ties
+        //to even. LLVM's own "sitofp ... to bfloat" goes through a float at -O0, rounding twice, and so came out one
+        //step off where -O3 and the evaluator did not: the magnitude is cut to its top 8 bits here, in integers
+        "define linkonce_odr bfloat @__olang_int_bf16(i64 %m, i1 %neg) {\n"
+        "entry:\n"
+        "  %lz = call i64 @llvm.ctlz.i64(i64 %m, i1 false)\n"
+        "  %bits = sub i64 64, %lz\n"
+        "  %big = icmp ugt i64 %bits, 8\n"
+        "  %shr = sub i64 %bits, 8\n"
+        "  %sh = select i1 %big, i64 %shr, i64 0\n"
+        "  %q = lshr i64 %m, %sh\n"
+        "  %one = shl i64 1, %sh\n"
+        "  %mask = sub i64 %one, 1\n"
+        "  %rem = and i64 %m, %mask\n"
+        "  %half = lshr i64 %one, 1\n"
+        "  %gt = icmp ugt i64 %rem, %half\n"
+        "  %eq = icmp eq i64 %rem, %half\n"
+        "  %odd = trunc i64 %q to i1\n"
+        "  %tie = and i1 %eq, %odd\n"
+        "  %up0 = or i1 %gt, %tie\n"
+        "  %up = and i1 %up0, %big\n"
+        "  %upi = zext i1 %up to i64\n"
+        "  %q2 = add i64 %q, %upi\n"
+        "  %lsh = sub i64 8, %bits\n"
+        "  %lsh2 = select i1 %big, i64 0, i64 %lsh\n"
+        "  %q3 = shl i64 %q2, %lsh2\n"
+        "  %carry = icmp eq i64 %q3, 256\n"
+        "  %q4 = select i1 %carry, i64 128, i64 %q3\n"
+        "  %e0 = sub i64 %bits, 1\n"
+        "  %ce = zext i1 %carry to i64\n"
+        "  %e1 = add i64 %e0, %ce\n"
+        "  %be = add i64 %e1, 127\n"
+        "  %mant = and i64 %q4, 127\n"
+        "  %ebits = shl i64 %be, 7\n"
+        "  %mag16 = or i64 %ebits, %mant\n"
+        "  %nz = icmp ne i64 %m, 0\n"
+        "  %mag = select i1 %nz, i64 %mag16, i64 0\n"
+        "  %sign = select i1 %neg, i64 32768, i64 0\n"
+        "  %all = or i64 %mag, %sign\n"
+        "  %w = trunc i64 %all to i16\n"
+        "  %r = bitcast i16 %w to bfloat\n"
+        "  ret bfloat %r\n"
         "}\n\n"
         "", out);
     fputs(
@@ -6950,12 +7149,15 @@ void cgInitGlobalsFunc(struct cgCtx* ctx, struct semaModule* emitMod) {
     //scope that outlives a global. Before it existed, a global holding a reference emitted invalid IR
     ctx->ownScopeSlot = "@__olang_global_scope";
     ctx->targetScopeOverride = NULL;
-    for (int i = 0; i < emitMod->vars.len; i++) {
-        struct var* v = ListGetIdx(&emitMod->vars, i);
-        if (v->type.bType == BASETYPE_FUNC || !v->initExpr || v->initExpr->zeroBits) continue; //D13c: zero bits is BSS
+    //B5a: in the order the checker found, each after the globals its initializer reads
+    int count = emitMod->globalOrderSet ? emitMod->globalOrder.len : emitMod->vars.len;
+    for (int i = 0; i < count; i++) {
+        struct var* v = emitMod->globalOrderSet ? *(struct var**)ListGetIdx(&emitMod->globalOrder, i)
+                                                : (struct var*)ListGetIdx(&emitMod->vars, i);
+        if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || !v->initExpr || v->initExpr->zeroBits) continue; //D13c: zero bits is BSS
         char gname[256];
         mangleGlobal(emitMod, v->name, gname, sizeof(gname));
-        if (cgGlobalConstInit(v, gname, NULL)) continue; //K2: already the global's data
+        if (cgIsBaked(v)) continue; //K2: already the global's data
         char gaddr[256];
         mangleGlobal(emitMod, v->name, gaddr, sizeof(gaddr));
         char* val = cgValueForTarget(ctx, v->initExpr, v->type, NULL);
@@ -7056,7 +7258,7 @@ void cgEmitForeignFuncDecls(FILE* out, struct semaModule* emitMod) {
         if (mod == emitMod) continue;
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
+            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern || v->isGlobalVar) continue;
             if (v->type.typeParams.len != 0) continue; //a generic has no code of its own (G16)
             cgEmitFuncDecl(out, v);
         }
@@ -7244,7 +7446,7 @@ void cgEmitAllFunctions(struct cgCtx* ctx, struct semaModule* emitMod) {
         if (mod != emitMod) continue; //P1: one module, one object - the rest are declares, not defines
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern) continue;
+            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern || v->isGlobalVar) continue;
             //G16: an uninstantiated generic has no code of its own - only its monomorphized copies are
             //emitted, each a separate ordinary function with every type variable substituted away
             if (v->type.typeParams.len != 0) continue;
@@ -7606,6 +7808,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
 
     ctx.debug = debug;
     ctx.fnValues = ListInit(sizeof(struct var*));
+    ctx.staticLits = ListInit(sizeof(struct cgStaticLit));
     cgDbgInit(&ctx, mod);
     cgEmitModuleDecls(out, mod);
     cgEmitForeignFuncDecls(out, mod);
