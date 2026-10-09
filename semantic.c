@@ -1966,7 +1966,6 @@ static void TypeCollectConstraints(struct type t, struct list* out) {
 //G19: binds what the constraints determine and checks each constrained variable's binding satisfies its
 //interface, reporting at tok. A variable named only in a constraint is bound through the methods of the type
 //its constrained variable is bound to (G9c). Returns false when a constraint is not met.
-void RdSpellType(struct type t, char* buf, size_t n);
 static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
 bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed);
 static bool checkTypeConstraints(struct list* constraints, struct list* bindings, struct token tok) {
@@ -2212,7 +2211,7 @@ struct str instantiationNameFor(struct str base, struct list* typeParams, struct
 }
 
 //"instantiated here, with T = I32, U = String" - the note an error inside an instantiation's body carries
-void RdSpellType(struct type t, char* buf, size_t n);
+void DiagSpellType(struct type t, char* buf, size_t n);
 static char* instantiationNote(struct list* typeParams, struct list* bindings) {
     struct sbuf b = {0};
     sbufStr(&b, "instantiated here");
@@ -2221,7 +2220,7 @@ static char* instantiationNote(struct list* typeParams, struct list* bindings) {
         struct type* bt = bindingGet(bindings, pn);
         if (!bt) continue;
         char tn[200];
-        RdSpellType(*bt, tn, sizeof(tn));
+        DiagSpellType(*bt, tn, sizeof(tn));
         sbufStr(&b, i ? ", " : ", with ");
         sbufS(&b, pn);
         sbufStr(&b, " = ");
