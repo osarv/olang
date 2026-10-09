@@ -1709,7 +1709,14 @@ number (a sign alone included) and `OVERFLOW` for a number beyond its type's ran
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
 with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
-none, since a `Char` would inherit them (T29f) and pad its number rather than the character.
+none, since a `Char` would inherit them (T29f) and pad its number rather than the character. Every integer type, `U8`
+included, has `n.Format(base = 10) String`: new text writing `n` in `base`, `2` to `36`, the digits past `9` being the
+lowercase letters, with a `-` before a negative number's digits and nothing else - no prefix, no padding, no `_`
+(`(255).Format(16)` is `"ff"`, `(-255).Format(16)` is `"-ff"`, `I64`'s most negative is written whole). It is what
+`ParseInt` and `ParseUint` read back in the same base, and in base `10` it is `$n`; an unsigned value's text is its
+bits read unsigned (`U64(-1).Format(16)` is sixteen `f`s), and a `Char`'s is its code (`'A'.Format(16)` is `"41"`, the
+method a `Char` inherits from `U8`). A base outside `2` to `36` - `0` included, which `ParseInt` reads as any of a
+literal's three forms - is a mistake in the program, stopping it as an `assert` does.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
@@ -3835,10 +3842,12 @@ implementation may set aside in the local's block's scope (unobservably, since i
 guarantee when or by what underlying storage is reused: it is valid until the owning scope closes, and invalid
 after.
 
-**O8a (allocation alignment).** Storage a scope hands out is aligned by its own size: 8 bytes below 32,
-32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
+**O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
+below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
 SIMD unit loads, and for a cache line, so an array large enough to be worth vectorising is always aligned
-for it without anything being written at the declaration.
+for it without anything being written at the declaration. Storage for any other value - a struct or an enum an
+instance of which is made in a scope, a lambda's captures, a value too large for a frame - is aligned as its type is
+(§3.2), and to 8 bytes at least, so instances of one type made one after another lie their size apart.
 
 Alignment beyond 64 bytes is not expressible (see also §11 X3a, which states the same ceiling for a
 foreign type reached through an array).
@@ -4877,7 +4886,10 @@ numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or a
 compile-time-length or runtime-length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
 return type is never valid (see X3 for why). No other type — `Bool`, a struct, an enum type, an
 error type, a function type, or an array of any type outside the numeric-primitive set —
-is valid in an `extern-param` or `extern-ret-type` position.
+is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the runtime's
+own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result, no errors -
+where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and set up
+itself, and only before it returns; no C function is ever handed one.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
 only — never its length (a runtime-length array's own `{ len, ptr }` representation, T11, is reduced to
@@ -4891,6 +4903,10 @@ in reverse: a raw pointer an external function returns carries no length anywher
 there is no sound way to reconstruct a real `{ len, ptr }` value from it — accepting one would mean
 either fabricating a length (silently unsound) or inventing a real pointer-typed value somewhere in
 the language (exactly what X3's own marshalling exists to avoid).
+
+A `fn()` parameter (X2) is passed as two pointers: the function value's code, then its environment - what a lambda
+captured, or nothing for a named function - which the code takes as its one argument, as C's own callbacks take a
+context pointer.
 
 **X3a (foreign opaque storage).** A foreign type with no olang spelling — a `pthread_mutex_t`, say — is held as an
 `Array<I64, N>` (or another fixed-length array, T7c) and handed over by X3's marshalling. Three things make that
@@ -4955,6 +4971,11 @@ must state exactly the prototype below (X1a).
 | `__olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64` | the names of the entries of the directory `path`, `.` and `..` left out, each followed by a zero byte, in the order the directory gives them: copies as many whole names as fit in `cap` bytes into `buf` and returns the bytes all of them take — `-1` when the directory cannot be read |
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error; returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function) |
+| `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
+| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, a `done` or a `fail` inside `f` ends the test as it would have had `f` been called directly (S16a, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `-i` as the call `f()`, the evaluator's own limits on depth standing for the stack |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |
+| `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
+| `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 
 A length a function returns may exceed `cap`, and then only part was copied: a caller allocates the length returned and
 calls again.
@@ -5382,7 +5403,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   global's own initializer (K2c);
 - call an `extern` function other than the C math library's (X8) - or, building for another machine (B12a), one of
   the library's that is not exact - a call through a function value is evaluated when the function it reaches is,
-  which is known only when the call is reached;
+  which is known only when the call is reached; the runtime's `__olang_run_on_stack(bytes, f)` (X6) is evaluated as
+  the call `f()` is;
 - end the test or the process (`done`, `fail`);
 - let an error escape that no clause handles;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by

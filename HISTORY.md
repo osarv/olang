@@ -11498,6 +11498,121 @@ parameter, struct parameter and receiver written, a read-only reference field re
 a read-only local taking a read-only element later (r08's shape), a match binding reassigned, and D9b's sharing and
 copying, each baked while compiling and computed at run time.
 
+### What the port needs from std and the runtime: a bigger stack, a crash message, a dynamic call, temporary directories, aggregate alignment, integers in a base (S1-S6, X2, X3, X6, K1, O8a, 2026-10-09)
+
+compiler/DESIGN.md's section 7 listed six gaps the self-hosted compiler needs closed before its milestones start, each
+with its design decided. All six are built, in C and std; the details below were decided while building.
+
+**S1 - `os.RunOnStack(bytes I64, f fn())`.** The C compiler runs everything on a thread with a 1GB reserved stack
+(main.c, `COMPILER_STACK`), because every pass recurses over the program's nesting and L21 allows 20,000 levels; the
+port needs the same, and olang had no way to ask for a stack. The runtime's `__olang_run_on_stack(bytes, code, env)`
+makes a thread with `pthread_attr_setstacksize` (a size below `sysconf(_SC_THREAD_STACK_MIN)` raised to it), joins
+it, and so is the call `f()` would be, with nothing beside it: no new scope rule was needed, which is what the design
+meant by "P1b and P2 apply unchanged" - f's captures are ordinary borrows checked as for any call through a function
+value, and what f builds in the caller's scopes is built with the caller waiting. The thread gives its chunk pool back
+when it ends: the part above a batch to the pool every thread shares (O8b), the rest to the system.
+- **How a function value reaches the runtime - a decision.** X2's vocabulary was numbers and arrays of numbers, so no
+  extern could take one. Three ways were weighed: a compiler intrinsic recognising std's function (a special case the
+  principles rule out), admitting `fn()` for every extern (C's callback-with-context convention - it fits
+  `pthread_create` exactly - but then C code could call olang code on a thread the runtime never set up: no recovery
+  point, no alternate stack, a chunk pool never given back, and a closure kept past its scope), or admitting it only
+  for the runtime's own functions. The last was chosen: X2 admits `fn()` - no parameters, no result, no errors - as a
+  parameter of a function named `__olang_...` whose X6 prototype has one, and X3 passes it as two pointers, the code
+  and then its environment, which the code takes as its one argument. Every thread olang code runs on is still one the
+  runtime made. A `fn()` given to any other extern, and any other function shape, are X2's error.
+- **Transparent in tests - a decision.** A task's failed assert aborts (P6), because nothing can recover across
+  threads. RunOnStack can do better, since the caller is parked waiting: the thread gets a recovery point of its own
+  when a test is running, a failed check, `done` or `fail` inside f lands there (its own scopes unwound by P1d's chain,
+  which starts empty on the new thread), and after the join the caller unwinds its scopes and jumps to its test's
+  recovery point with the same value. So f behaves exactly as if called directly - a failed assert fails that test, a
+  `done` ends it as passed, and the next test runs; checked by hand with all three, and pinned by a corpus test that
+  ends through `done` and a following one that sees f's destructor ran. Outside tests nothing changes: a check aborts,
+  `done`/`fail` exit, from any thread.
+- **The evaluator calls f directly.** While compiling (K1) and under `-i` a call of `__olang_run_on_stack` is the call
+  `f()`, through the function value as any such call is (E13b's synthetic callee), the size evaluated and ignored; K1a's
+  scan admits that one extern. The evaluator's own depth and stack guards stand for the stack, since its frames bear no
+  relation to the program's (about 15KB of C stack per call against a native frame of tens of bytes): a recursion
+  RunOnStack makes room for natively stops under `-i` with "it recurses deeper than -i allows". A global computed
+  through RunOnStack is baked (`stackBaked` in std/os's tests is `constant i64 500500`).
+- **ThreadSanitizer cannot follow it deep**: in a `-r` test build, recursion deeper than ~260,000 calls faults inside
+  TSan's own record of the call stack - a limit of the tool, measured (100,000 passed, 300,000 failed; a `-b -r` build
+  of the same recursion folds it into a loop and passes at a million). std/os's test recurses 200,000 deep under
+  `RaceBuild`, a million otherwise.
+
+**S2 - `os.OnCrash(message String&)`.** The C compiler's crash handler (errmsg.c) is the model: the runtime's
+`__olang_on_crash` keeps a malloc'd copy of the message (the text belongs to a scope) behind one atomically published
+pointer, and installs one handler for SIGSEGV, SIGBUS, SIGFPE, SIGILL and SIGABRT with `SA_ONSTACK | SA_RESETHAND |
+SA_NODEFER`; the handler writes the message with `write()` - all of it, nothing added - and raises the signal again,
+its default action restored, so the status (139, 134) and any core dump are as they would have been. SIGABRT is
+included so a failed check outside a test - the compiler's own `assert`s, for the port - is reported after the check's
+line. An alternate stack is per thread, so the runtime makes one (64KB) for the thread calling OnCrash, and for every
+thread it starts afterwards before olang code runs on it - RunOnStack's, and each task's (the worker loop asks before
+each task, one thread-local load) - and frees it when such a thread ends; that is what lets a stack overflow, the crash
+the port most needs reported, run the handler at all. Under `-i` the interpreter's own handler is installed; the
+program's message is recorded and written first when the interpreter's process crashes (a foreign function the program
+calls). The structures' layouts (`struct sigaction`, `stack_t`) and the signal and flag numbers are written into
+cgLibcLayouts for both architectures and checked against this compiler's headers, as X6's other structures are.
+Checked by a scenario (`crash`): a stack overflow on the main thread, on a 64KB RunOnStack thread and on a task, and a
+failed check, each giving its status and exactly the message; a million-deep recursion on RunOnStack's 1GB where the
+main thread's 8MB overflows; the same program interpreted; and `-i` writing the program's message before its own line
+when `strlen` is handed a null array. **Found on the way, no change needed**: a null dereference the optimizer can see
+(a function returning `null`, inlined) is deleted at `-O3` as LLVM's undefined behaviour - T2b says exactly that ("in
+practice a deterministic trap", not a guarantee), so the fixture crashes by overflowing the stack instead.
+
+**S3 - a dynamic call, `std/ffi`.** For the port's `-i` (M8), which must call an interpreted program's externs by
+name. The runtime part `__olang_dyncall(name, kinds, words, ret) U64` and `__olang_dyncall_check(name, kinds, ret) I32`
+is IR over `dlsym` (RTLD_DEFAULT, then libm opened once - what `-i` does today) and libffi (`ffi_prep_cif` into a 64-byte
+reservation, `ffi_call`). **Decided**: kinds are one byte per argument ended by a 0 (a name ends at its NUL already),
+codes 1-12 in X2's type order with 0x80 for an array; a number is one word of its bits; an array is a word holding its
+length followed by its elements packed into words, the function handed a pointer to them, so the copy in and out the
+design asks for is the caller packing its elements and reading them back (`ffi.Pack`/`ffi.Unpack` for bytes); an
+integer result is extended to 64 bits as its type extends, a float result is its bits; a scalar F16/BF16 is refused
+(libffi has no half type - inside an array it is fine), as is an array result. Failure is reported by the check
+function (0, 1 no such function, 2 a kind that cannot be passed); a call the check would refuse stops the program as a
+failed check does. **Linked only where declared**: the part is emitted only into the object of a module declaring one of
+the two functions (std/ffi's, or any that declares them), and `-lffi -ldl` are added to the link only when such a
+module is in the program - a part in every object would leave `ffi_call` undefined in a `-d` or `-r` build, whose
+objects are native. X7's owned-symbol test became per object for it: the runtime's text with the part where the object
+has it, so `extern fn dlsym` beside a dyncall declaration is the part's own declaration, and elsewhere an ordinary
+extern. std's module is `std/ffi` (mine): `Kind`, `Code`, `ArrayOf`, `Has(name)`, `Call(name, kinds, words, result) U64 ?
+FfiError` (`NOT_FOUND`, `UNSUPPORTED`; words holding less than the kinds describe are an assert), `Pack`, `Unpack`,
+`WordsFor`. `-i` has its own C version over the same libraries. Checked built, at `-d`, under `-r` and under `-i`, with
+identical results (`labs`, `abs` sign-extended, `sqrt`/`sqrtf` bits, `strlen` of packed text, `memset` writing back).
+
+**S4 - `os.RemoveAll`, `os.MkTemp`, `os.Exec(..., capture = false)`.** RemoveAll is olang over `remove` and ReadDir:
+it removes what is at the path, recursing only when `remove` says the directory is not empty, so a symbolic link is
+removed and never followed (rm -rf, Go's RemoveAll); **decided**: nothing at the path, and the empty path, are not
+errors (Go's answers), and a path whose last element is `.` or `..` fails with FAILED before anything is removed.
+MkTemp is `mkdtemp` through a new runtime function `__olang_mkdtemp(template)` (mkdtemp returns a pointer, which X2
+cannot receive; it writes the name over the template, which X3 already hands over); **decided**: `MkTemp(dir = "",
+prefix = "")` - TMPDIR, else /tmp, when dir is empty; a prefix holding `/` fails with FAILED; mode 0700 as mkdtemp makes
+it. Exec gained `capture Bool = true`: false leaves the child this program's standard output and error (the memory
+files are not made at all) - for clang and test binaries whose output should be seen - and `Stdout`/`Stderr` empty;
+stdin stays `input`, so a child never reads this program's input by accident.
+
+**S5 - a struct's or an enum's storage takes its own alignment (O8a).** O8a aligned every arena allocation by its size
+- 32 from 32 bytes, 64 from 64 - which is what makes an array SIMD-ready, and a waste for every other value: two 40-byte
+instances made one after another lay 64 apart, two 72-byte ones 128. `__olang_scope_alloc` became a thin, always-inlined
+wrapper computing the size class and calling `__olang_scope_alloc_a(scope, size, aln)`, the old body with the alignment
+a parameter; codegen asks for `cgAllocAlign(t)` - 0 (the size class) for an array value's elements, else the type's own
+alignment and at least 8 - at every place it makes storage for a value: a promoted instance (`cgPromote`), a value
+made into a reference (`cgStoreInto`), a value too large for a frame, a parameter's copy for a task, a value local living
+in the result scope or where its instance lands, a closure's or a task's environment, the task and merge nodes and the
+destructor nodes. Arrays - `Array<T>(n)`, text joins, comprehensions, promotions of array literals - keep the size
+class. Measured, interleaved medians of 7 on the shared machine (load ~5): trees of 40-byte nodes 0.529s -> 0.356s and
+166.6MB -> 105.3MB peak; of 72-byte nodes 0.961s -> 0.620s and 331.6MB -> 190.2MB; binary-trees (16-byte nodes,
+already 8-aligned) unchanged - 144,401,928 against 144,401,973 instructions under callgrind - and an enum tree of 32-byte
+nodes unchanged (they were 32 apart either way). The evaluator models no addresses, and P2's merge relinks chunks
+whatever is in them, so neither needed anything.
+
+**S6 - `n.Format(base = 10)`.** On every integer type, in the prelude beside PadStart: digits of base 2-36, the
+letters lowercase (Go's FormatInt, C's `%x`; ParseInt reads either case), a `-` before a negative number's digits and
+nothing else - no prefix, padding (`PadStart`) or `_`. **Decided**: U8 has it too, so a Char inherits it and gives its
+code (`'A'.Format(16)` is `41`), unlike PadStart, where a Char should pad its character; a base outside 2-36 aborts as
+ParseInt's does, 0 included - ParseInt's base 0 reads any of a literal's three forms, and writing one would need a
+choice nobody asked for. I64's most negative is written whole (its magnitude computed in U64). Pure olang, so it bakes:
+`formatBaked`, every base over four values, is a constant in the IR and equals the run time's.
+
 ### A method is an operator only in its shape; a generic constructor; a value built from a local the return reads (E31, M6b, E10a, E10b, E11c, G10d, O26a, D13c, B11, 2026-10-09)
 
 A batch from oann's `repro/` and the usage studies, each reproduced first.

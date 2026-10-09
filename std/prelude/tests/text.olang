@@ -287,3 +287,53 @@ test "the integers pad as numbers, zeros after a sign" {
     caret := $line.PadStart(4) " | " $" ".Repeat(5) "^"
     assert caret == "   7 |      ^"
 }
+
+test "Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint" {
+    assert (255).Format(16) == "ff" and (255).Format(2) == "11111111" and (255).Format(8) == "377" and (255).Format() == "255"
+    assert (0).Format(16) == "0" and (35).Format(36) == "z" and (-255).Format(16) == "-ff" and (-1).Format(2) == "-1"
+    big I64 = 9223372036854775807
+    least I64 = -9223372036854775807 - 1
+    assert big.Format(16) == "7fffffffffffffff" and least.Format(16) == "-8000000000000000"
+    assert least.Format(2) == "-1" $"0".Repeat(63) and least.Format() == $least
+    top U64 = 18446744073709551615
+    assert top.Format(16) == "ffffffffffffffff" and top.Format(36) == "3w5e11264sgsf" and top.Format() == $top
+    b I8 = -128
+    h I16 = -300
+    w U32 = 4000000000
+    u U16 = 65535
+    assert b.Format(16) == "-80" and h.Format(10) == "-300" and w.Format(16) == "ee6b2800" and u.Format(2) == "1".Repeat(16)
+    c Char = 'A'
+    assert c.Format(16) == "41" and c.Format() == "65"           # a Char's is its code: U8's method, inherited
+    m U64 = U64(least)
+    assert m.Format(16) == "8000000000000000"                   # an I64's bits, read unsigned
+    for base in range 2, 37 {
+        for v in I64[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
+            assert (try v.Format(base).ParseInt(base) catch default 0) == v
+        }
+        for v in U64[0, 7, 18446744073709551615, 12345678901234567890] {
+            assert (try v.Format(base).ParseUint(base) catch default 1) == v
+        }
+    }
+}
+
+# Format's texts, computed while compiling (K2) into formatBaked and at run time from a mutable global
+fn formattedAll(start I64) String {
+    b := StringBuilder()
+    for base in I64[2, 8, 10, 16, 36] {
+        for v in I64[start, -start, start * 1000003, -9223372036854775807 - 1] {
+            b.Push(v.Format(base))
+            b.PushChar(' ')
+            b.Push(U64(v).Format(base))
+            b.PushChar(';')
+        }
+    }
+    return b.ToString()
+}
+formatBaked := formattedAll(255)
+formatStart mut I64 = 255
+
+test "Format, evaluated while compiling as at run time" {
+    assert formattedAll(formatStart) == formatBaked
+    assert formatBaked.StartsWith("11111111 11111111;-11111111 ")
+    assert (255).Format(16) == "ff"                               # an assert the evaluator decides (S18c)
+}

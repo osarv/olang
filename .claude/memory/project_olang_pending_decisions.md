@@ -144,6 +144,30 @@ rule and where it is recorded; the morning report lists them all, then they move
 14. (wt-chk3, E28) a conditional or match of references lives where its values share a scope.
 15. (wt-poolfix, O8b/P2a) a parked worker keeps at most a 1MB batch of its chunk pool and moves the rest into one pool
    all threads share (locked, RAM/8 bound); a thread finding nothing that fits takes a batch from it before mapping.
+16. (wt-perm, T25b/D9/C3/D11a - the user confirmed the design) `mut` speaks only about what a reference reaches; per-field
+   immutability is gone (X3a's pthread blobs rest on privacy); a pun takes no `mut`; a match binding is assignable; a
+   generic by-value array parameter is copied only when the body writes it (D9b, `paramWritten`); `tools/perm_mut.py`
+   migrates (oann not yet - after its agents finish).
+17. (mine, E31 revisited under the revisit rule) a method takes an operator only when it has the operator's shape;
+   `g.Mul(a, b)` on a graph builder is an ordinary method (oann had to rename). Being built in wt-chk4.
+18. (mine, G3) a non-generic struct's constructor may introduce type variables its fields do not mention (oann's
+   layers built from a generic graph). Being built in wt-chk4.
+19. (wt-portgaps, X2) only the runtime's own `__olang_` functions take a function value (`fn()` only); C functions
+   never receive olang callbacks (`extern fn f(cb fn())` stays an error), so olang code never runs on a thread the
+   runtime did not set up. The agent's direction question; kept closed - raise only if a C API needs it.
+20. (wt-portgaps) std/ffi is its own module (libffi linked only where declared); RunOnStack in a test passes a failed
+   check/done/fail on to the caller's test after the join; `Format(base)` lowercase, base outside 2-36 aborts;
+   O8a revised: a struct/enum allocation takes its own alignment (trees of 40-byte nodes 0.53 -> 0.36 s, 167 -> 105 MB).
+21. (mine, from study3 #1) `List`/`Map` become handles: a copy is a second name for the same collection (Go's maps),
+   `Clone()` for a real copy - copying a value used to share storage but not counts (silent wrong answers). wt-s3std.
+22. (mine, revisit rule, study3 #3) `==` on an array reference compares lengths and elements (each by its own `==`);
+   identity is `is`. Struct/enum references keep identity unless `Eq`. wt-s3std.
+23. (mine, study3 #4) O26a extended to reference locals - `e := p.sum(); return e` and the Pratt `lhs = E.Add(lhs, rhs)`
+   loop live in the result scope (the port's parser idiom). O17 judged by the callee's body. G4 covers constants. wt-s3scope.
+24. (mine, study3 #29/#30) `case _ if cond` on any match; keywords allowed as method names (`w.spawn()`). wt-s3std.
+   Not built (deferred): raw/multi-line text literals (#35) - candidate Go-style backtick raw strings, to raise with the
+   user; comprehensions of text (#34, user-deferred relaxation); lambdas capturing a List (#28); deep permission (#33,
+   the user chose shallow).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

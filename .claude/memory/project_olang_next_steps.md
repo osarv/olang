@@ -384,6 +384,27 @@ because what it finds about structure feeds the refactor.
   task), oann wt-oann-settle3 (settling phase 3: fixed-point board engine, sparse-code store, readout groups, CSR).
   Still running: wt-perm. When linalg2 lands, tell oann-mixed to switch attention to the batched causal Gemm. Next
   after perm: the small checker batch (above). Then the bootstrap/ move + modest refactor when no compiler agent runs.
+- 19:30 CEST: perm merged and pushed (59c109e, verified). portgaps and linalg2 told to merge master and run
+  tools/perm_mut.py before their verify. Started wt-chk4 (genericctor, D13c List<Ticket> location, Node.Many(l.ToArray())
+  O26, E31 shape-only operator names). oann repro ctorpush/ctorunstored/capturedfn no longer reproduce (edf8238).
+  OANN MIGRATION once oann-mixed and oann-settle3 finish: move oannc2 to master, run
+  `python3 /home/user/olang/tools/perm_mut.py --olang /home/user/wt/oannc2/build/out <oann dir>`, delete the fixed
+  repros (ctorpush, ctorunstored, capturedfn; operatornames/genericctor once chk4 lands), make test, push.
+- 19:45 CEST: oann settling phase 3 pushed (98d37a7): board.olang (bit-exact Q1.15/Q4.14 engine, golden vectors,
+  MNIST through it 91.1-93.4% agreeing 99.99-100% with F32), store.olang, readout groups, sparse.olang (CSR, Auto at
+  density <= 0.25); decisions 31-47 in docs/settling.md. Started oann wt-oann-settle4 (consolidator + Sleep, spiking on
+  the engine, checkpoint RNG via State/SetState, open question 10) and a read-only usage study 3 of the newest rules
+  (perm, constant generics, bare T...) with compiler /home/user/wt/s3c (master 59c109e) -> /home/user/review/study3.
+  Usage 17:41 UTC: five-hour 0.11, weekly 0.50. Running: portgaps, linalg2, oann-mixed, chk4, oann-settle4, study3.
+- 20:00 CEST: portgaps merged and pushed (DESIGN.md S1-S6 all built: os.RunOnStack, os.OnCrash, std/ffi over
+  __olang_dyncall, os.RemoveAll/MkTemp/Exec(capture=false), aggregate allocations at their own alignment, n.Format(base)).
+  The port's P0 is done except the bootstrap/ move + modest refactor: start it when chk4 has merged (it rewrites
+  semantic.c); linalg2 (std only) may run beside it.
+- 20:35 CEST: usage study 3 done (/home/user/review/study3/README.md, 36 findings, repro/r01-r36): no crash beyond
+  r02's invalid IR, but r01 List/Map copies corrupt silently. Started wt-s3scope (#4 O26a for reference locals - the
+  port's parser idiom, #5-8 O17 by body, #9, #11-15, #36, #10 investigate, #31 optional, diagnostics) and wt-s3std (#1
+  List/Map handles + Clone, #2 IR, #3 == on arrays elementwise, #19 FILE:LINE on guaranteed checks, #29 `case _ if`,
+  #30 keyword method names, #24). Running: linalg2, oann-mixed, chk4, settle4, s3scope, s3std.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

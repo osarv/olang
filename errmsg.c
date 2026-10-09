@@ -161,7 +161,21 @@ static void writeAll(int fd, const char* p, size_t n) {
 static volatile sig_atomic_t interpreting;
 void ErrMsgSetInterpreting(bool on) { interpreting = on; }
 
+//S2: the message an interpreted program gave os.OnCrash - written before anything else when the process crashes while
+//interpreting, as the built program would write it
+static char* volatile runCrashMsg;
+static volatile size_t runCrashLen;
+void ErrMsgSetRunCrashMessage(const char* msg, long long len) {
+    size_t n = len > 0 ? (size_t)len : 0;
+    char* copy = MallocOrCrash(n ? n : 1);
+    memcpy(copy, msg, n);
+    runCrashLen = 0;
+    runCrashMsg = copy;
+    runCrashLen = n;
+}
+
 static void onCrash(int sig) {
+    if (interpreting && runCrashMsg) writeAll(2, runCrashMsg, runCrashLen);
     //B3e: under -i an abort is the interpreted program's own - a check it guarantees failed, its message written
     if (interpreting && sig == SIGABRT) raise(sig);
     const char* what = sig == SIGSEGV ? "a segmentation fault" : sig == SIGBUS ? "a bus error"

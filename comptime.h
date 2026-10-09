@@ -73,6 +73,7 @@ void CtReset(void);
 //prototype - and if so whether IEEE 754 requires its correctly rounded result (sqrt, fma, floor ...)
 enum ctMathFn { CT_MATH_NONE, CT_MATH_EXACT, CT_MATH_INEXACT };
 enum ctMathFn CtMathFn(struct var* f);
+bool CtRunsOnStack(struct var* f);
 //B12a: the build is for another architecture or system than this machine's, so the C math library's inexact functions
 //are not evaluated while compiling (the exact ones give the same result everywhere)
 void CtSetForeignTarget(bool foreign);

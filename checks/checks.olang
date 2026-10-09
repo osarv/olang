@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir"]
+                     "target", "lazytype", "updir", "crash"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -246,6 +246,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "target" { try target(r) }
         case "lazytype" { try lazytype(r) }
         case "updir" { try updir(r) }
+        case "crash" { try crashes(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1213,4 +1214,37 @@ fn fuzz(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
+}
+
+# S1, S2: os.OnCrash's message is what the program writes when it crashes - on the main thread, on RunOnStack's and on
+# a task's, a stack overflow included, and after a failed check's own line - and the process still ends as the signal
+# ends it; os.RunOnStack's recursion finishes where the main thread's 8MB overflows, built and interpreted; and under -i
+# a crash in a foreign function the program calls writes the program's message first
+test "os.OnCrash reports a crash on every thread, and os.RunOnStack makes room" { assert passed("crash") }
+
+# the fixture program, run in dir with its arguments and no core file left behind, through no shell of its own
+fn crashRun(dir String&, args String&) os.Output {
+    return try os.Exec(String&["sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args]) catch { unreachable }
+}
+
+fn crashes(r mut report&) ? Failed {
+    dir := fresh("crash")
+    os.Run("cp checks/fixtures/crash/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b crash.olang > out.txt 2>&1") == 0, "crash did not build", dir)
+    for how in String&["overflow", "small", "task", "shallow"] {
+        o := crashRun(dir, "./build/crash " $how)
+        try r.expect(o.Status == 139 and o.Stderr == "crash.olang crashed: " $how "\n" and o.Stdout == "",
+                     "crash " $how ": status " $o.Status ", " $o.Stderr, dir)
+    }
+    a := crashRun(dir, "./build/crash assert")
+    try r.expect(a.Status == 134 and a.Stderr.EndsWith("assertion failed: c.v is 0\ncrash.olang crashed: assert\n"),
+                 "crash assert: status " $a.Status ", " $a.Stderr, dir)
+    d := crashRun(dir, "./build/crash deep")
+    try r.expect(d.Status == 0 and d.Stdout == "deep 1000000\n", "RunOnStack deep: status " $d.Status ", " $d.Stdout, dir)
+    olang := $root() "/build/out"
+    i := crashRun(dir, $os.Quote(olang) " -i crash.olang deep 20000")
+    try r.expect(i.Status == 0 and i.Stdout == "deep 20000\n", "RunOnStack -i: " $i.Stdout $i.Stderr, dir)
+    f := crashRun(dir, $os.Quote(olang) " -i foreign.olang")
+    try r.expect(f.Status == 139 and f.Stderr.StartsWith("foreign.olang crashed\nolang: internal compiler error")
+                 and f.Stderr.Contains("while interpreting"), "OnCrash -i: status " $f.Status ", " $f.Stderr, dir)
 }

@@ -693,6 +693,14 @@ Notes on the schedule:
 | S5 | AST memory: every struct or enum allocation is rounded to O8a's SIMD size class (r14), so 40 bytes take 64 | an aggregate allocation gets its type's own alignment; O8a's classes stay for arrays, which is what they were for | M3 |
 | S6 | hexadecimal for IR constants | `n.Format(base = 10)` on integers, the inverse of `ParseInt(base)` | M9 |
 
+**Built 2026-10-09** (records: CLAUDE.md and HISTORY.md, "What the port needs from std and the runtime"): S1
+`os.RunOnStack`, S2 `os.OnCrash`, S3 `std/ffi` (`ffi.Call`, `ffi.Has`, `Pack`/`Unpack`) over `__olang_dyncall` - a
+separate runtime part, emitted only into a declaring module's object, `-lffi -ldl` linked only then - S4 `os.RemoveAll`,
+`os.MkTemp(dir = "", prefix = "")` and `os.Exec(args, input, capture = false)`, S5 (O8a: an aggregate takes its own
+alignment, an array its size class), and S6 `n.Format(base)`. The runtime's new pieces are in codegen.c's runtime IR
+(`emitStackRuntime`, `emitDyncallRuntime`) and move to `runtime.ll` with the rest (section 1.10); the dynamic call
+stays a part of its own there too.
+
 Already in flight, and prerequisites:
 
 - global `Map` methods (r01);

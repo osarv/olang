@@ -12,6 +12,10 @@
 #include <errno.h>
 #include <spawn.h>
 #include <setjmp.h>
+#include <signal.h>
+#include <pthread.h>
+#include <dlfcn.h>
+#include <ffi.h>
 #include <sys/stat.h>
 #include "util.h"
 #include "token.h"
@@ -1491,10 +1495,31 @@ static long long cgStackAlign(struct type t) {
 //an Array<U8, 64000000> local had overflowed the stack at its first touch. Defined where it is made, which comes before
 //every use, as a declaration does; a helper with no arena keeps its frame
 #define CG_FRAME_LIMIT 65536
+
+//O8a: the alignment storage for a value of type t asks the arena for - 0 for an array's own elements, which take the
+//size class an array of their size gets, ready for vector loads; any other value's own alignment, at least the 8 every
+//allocation has. A struct or an enum is never vector-loaded whole, and the size class made a 40-byte one take 64
+static long long cgAllocAlign(struct type t) {
+    if (t.bType == BASETYPE_ARRAY && !t.structMAlloc && !t.arrMalloc) return 0;
+    long long a = TypeGetAlign(t);
+    return a > 8 ? a : 8;
+}
+
+//dst = storage of "size" bytes (an LLVM i64 expression) from the scope "scope", aligned as align says (cgAllocAlign)
+static void cgArenaAlloc(struct cgCtx* ctx, const char* dst, const char* scope, const char* size, long long align) {
+    if (align) fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc_a(ptr %s, i64 %s, i64 %lld)\n", dst, scope, size, align);
+    else fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", dst, scope, size);
+}
+
+//dst = storage for one value of type t, from the scope "scope"
+static void cgArenaAllocFor(struct cgCtx* ctx, const char* dst, const char* scope, struct type t) {
+    char size[32];
+    snprintf(size, sizeof(size), "%lld", TypeGetSize(t));
+    cgArenaAlloc(ctx, dst, scope, size, cgAllocAlign(t));
+}
 static void cgValueSlotAs(struct cgCtx* ctx, char* slot, struct type t, const char* ty) {
     if (TypeGetSize(t) > CG_FRAME_LIMIT && ctx->ownScopeSlot) {
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, cgScopeSlotAt(ctx, ctx->blockDepth),
-                TypeGetSize(t));
+        cgArenaAllocFor(ctx, slot, cgScopeSlotAt(ctx, ctx->blockDepth), t);
         return;
     }
     fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(t));
@@ -1589,7 +1614,7 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         llvmType(srcT, storTy, sizeof(storTy));
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
         char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
+        cgArenaAllocFor(ctx, heap, scopeVal, srcT);
         char* loaded = src; //an enum is already the value (T17d); anything else is the address of one
         if (cgViaMemory(srcT)) {
             fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, src,
@@ -1809,13 +1834,13 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         char ty[256];
         llvmType(op->type, ty, sizeof(ty));
         inst = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", inst, where, TypeGetSize(op->type));
+        cgArenaAllocFor(ctx, inst, where, op->type);
         char* v = cgValue(ctx, op);
         cgStoreInto(ctx, op->type, op->type, v, inst, where, false, false, false);
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 16)\n", obj, where);
+    cgArenaAlloc(ctx, obj, where, "16", 8);
     char* p2 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", inst, obj, cgCaptureTbaa);
     fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s%s\n", p2, obj, instScope, p2,
@@ -1856,7 +1881,7 @@ static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
     char storTy[256];
     llvmType(op->type, storTy, sizeof(storTy));
     char* heap = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
+    cgArenaAllocFor(ctx, heap, scopeVal, op->type);
     char* prev = ctx->targetScopeOverride;
     ctx->targetScopeOverride = scopeVal;
     char* v = cgValue(ctx, op);
@@ -2930,8 +2955,7 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     if (op->cgEnvOnStack) fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align 8\n", obj, envTy); //made for one call
     else {
         char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-                obj, scope, envTy);
+        cgArenaAlloc(ctx, obj, scope, StrFmt("ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64)", envTy), 8);
     }
     int field = 0;
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
@@ -3013,7 +3037,7 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
     struct cgScopeMerge m;
     m.parent = parent;
     m.sub = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", m.sub, cgScopeSlotAt(ctx, ctx->joinDepth));
+    cgArenaAlloc(ctx, m.sub, cgScopeSlotAt(ctx, ctx->joinDepth), "24", 8);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", m.sub);
     ListAdd(merges, &m);
     return m.sub;
@@ -3080,8 +3104,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                 llvmType(paramT, ty, sizeof(ty));
                 copy = cgNewTmp(ctx);
                 if (spawnMerges)
-                    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", copy,
-                            cgScopeSlotAt(ctx, ctx->joinDepth), TypeGetSize(paramT));
+                    cgArenaAllocFor(ctx, copy, cgScopeSlotAt(ctx, ctx->joinDepth), paramT);
                 else cgValueSlotAs(ctx, copy, paramT, ty);
                 fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", copy, src,
                         TypeGetSize(paramT));
@@ -3232,6 +3255,18 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
         //copied first, so what the foreign function writes there is in the array afterwards
         if (paramT.bType == BASETYPE_ARRAY && argOp->type.bType == BASETYPE_ARRAY && !argOp->type.arrMalloc) {
             cgArgAdd(&args, "ptr", cgValue(ctx, argOp));
+            continue;
+        }
+        //X3: a function value (X2 admits "fn()" for a runtime function) is its two words, the code and then its
+        //environment, which the code takes as its one argument
+        if (paramT.bType == BASETYPE_FUNC) {
+            char* pair = cgBoundaryValue(ctx, argOp, paramT, cgOwnAllocSlot(ctx));
+            char* code = cgNewTmp(ctx);
+            char* env = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 0\n", code, pair);
+            fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", env, pair);
+            cgArgAdd(&args, "ptr", code);
+            cgArgAdd(&args, "ptr", env);
             continue;
         }
         char* boundary = cgBoundaryValue(ctx, argOp, paramT, cgOwnAllocSlot(ctx));
@@ -5077,8 +5112,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     char* envTy = cgBufStr(&envB);
 
     char* env = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-            env, joinScope, envTy);
+    cgArenaAlloc(ctx, env, joinScope, StrFmt("ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64)", envTy), 8);
     char* fnSlot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", fnSlot, envTy, env);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", target, fnSlot);
@@ -5092,13 +5126,13 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     //P1: the task node lives in the join block's arena and carries the thread handle plus whatever
     //sub-scopes have to be folded back. Pushed onto the join's list, which the block walks at its end.
     char* node = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", node, joinScope);
+    cgArenaAlloc(ctx, node, joinScope, "24", 8);
     char* mergeHead = MallocOrCrash(8);
     strcpy(mergeHead, "null");
     for (int i = 0; i < merges->len; i++) {
         struct cgScopeMerge* m = ListGetIdx(merges, i);
         char* mn = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", mn, joinScope);
+        cgArenaAlloc(ctx, mn, joinScope, "24", 8);
         char* slot0 = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %%olang.merge, ptr %s, i32 0, i32 0\n", slot0, mn);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", mergeHead, slot0);
@@ -5373,12 +5407,10 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     struct var* home = s->var.valueHome ? s->var.valueHome : ctx->curFunc ? ctx->curFunc->type.resultScope : NULL;
     if (s->var.storeInResult && ctx->curFunc && home) {
         resultHere = cgResolveScope(ctx, home, 0); //the result scope, or a borrowed result's parameter scope (O26a)
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, resultHere,
-                TypeGetSize(s->var.type));
+        cgArenaAllocFor(ctx, slot, resultHere, s->var.type);
     } else if (s->ctorField && ctx->ctorHere && !cgIsReference(s->var.type) && canonicalVar(&s->var)->slotBorrowed) {
         //C2d: a field a reference was taken to is stored where the instance lands, as what it refers to is
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, ctx->ctorHere,
-                TypeGetSize(s->var.type));
+        cgArenaAllocFor(ctx, slot, ctx->ctorHere, s->var.type);
     } else cgValueSlotAs(ctx, slot, s->var.type, ty);
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
     //D15c: "x T[N] = v" / "x T[expr] = v" - every element gets v
@@ -6426,6 +6458,27 @@ void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
 }
 
 void emitRuntimeDecls(FILE* out);
+void emitDyncallRuntime(FILE* out);
+
+//S3: whether module m declares the runtime's dynamic call (X6) - the one object its separate runtime part, over dlsym
+//and libffi, goes into; a program that has such a module links -lffi -ldl (main.c), and no other does
+static bool cgModuleDeclaresDyncall(struct semaModule* m) {
+    for (int i = 0; i < m->vars.len; i++) {
+        struct var* v = ListGetIdx(&m->vars, i);
+        if (v->type.bType == BASETYPE_FUNC && v->type.isExtern
+                && (StrCmp(v->name, StrFromCStr("__olang_dyncall")) || StrCmp(v->name, StrFromCStr("__olang_dyncall_check"))))
+            return true;
+    }
+    return false;
+}
+
+bool CodegenProgramUsesDyncall(void) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        if (cgModuleDeclaresDyncall(*(struct semaModule**)ListGetIdx(all, m))) return true;
+    }
+    return false;
+}
 
 //P1e/X7: an "extern fn" naming a function the runtime itself declares or defines refers to that very function, and
 //must not be declared a second time - LLVM rejects a duplicate "declare", and a "declare" beside a definition, even
@@ -6434,14 +6487,17 @@ void emitRuntimeDecls(FILE* out);
 //that disagrees is an X1a error the program is already responsible for. The answer comes from the runtime's own
 //text, rendered once, rather than from a list kept beside it: a list missed "exit", "abort", "setjmp" and "longjmp",
 //so "extern fn exit(status I32)" failed to compile with an invalid redefinition reported against the IR.
-static bool cgRuntimeDeclaresSym(struct str name) {
-    static char* text;
-    static size_t len;
+static bool cgRuntimeDeclaresSym(struct str name, bool dyncall) {
+    static char* texts[2];
+    static size_t lens[2];
+    char* text = texts[dyncall];
     if (!text) {
-        FILE* f = open_memstream(&text, &len);
+        FILE* f = open_memstream(&texts[dyncall], &lens[dyncall]);
         if (!f) ErrorBugFound();
         emitRuntimeDecls(f);
+        if (dyncall) emitDyncallRuntime(f);
         fclose(f);
+        text = texts[dyncall];
     }
     //"@NAME(" with nothing but the name between: a call, a declare or a define - each means the runtime has it
     for (char* at = strchr(text, '@'); at; at = strchr(at + 1, '@')) {
@@ -6455,7 +6511,7 @@ static bool cgRuntimeDeclaresSym(struct str name) {
 //plain C-ABI signature (llvmType already gives an array-typed param/local its right shape everywhere
 //else; here it's simply overridden to "ptr", matching the marshalling cgExternFuncCall performs at
 //every call site - X3). No body, ever - an extern-func-decl has none to emit.
-void emitExternDecls(FILE* out) {
+void emitExternDecls(FILE* out, bool dyncall) {
     struct list* all = SemanticAllModules();
     //X1 names the linker symbol directly, so two modules declaring the same external function name the
     //same symbol - which is legal and ordinary (io.olang and a program can both want "write"). LLVM
@@ -6468,7 +6524,7 @@ void emitExternDecls(FILE* out) {
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->type.bType != BASETYPE_FUNC || !v->type.isExtern) continue;
-            if (cgRuntimeDeclaresSym(v->name)) continue;
+            if (cgRuntimeDeclaresSym(v->name, dyncall)) continue;
             bool dup = false;
             for (int k = 0; k < seen.len && !dup; k++) {
                 if (StrCmp(*(struct str*)ListGetIdx(&seen, k), v->name)) dup = true;
@@ -6483,6 +6539,7 @@ void emitExternDecls(FILE* out) {
                 struct var* param = ListGetIdx(&v->type.vars, p);
                 char pty[16];
                 if (param->type.bType == BASETYPE_ARRAY) snprintf(pty, sizeof(pty), "ptr");
+                else if (param->type.bType == BASETYPE_FUNC) snprintf(pty, sizeof(pty), "ptr, ptr"); //X3: code, environment
                 else llvmType(param->type, pty, sizeof(pty));
                 fprintf(out, "%s%s", p > 0 ? ", " : "", pty);
             }
@@ -6500,6 +6557,7 @@ void emitExternDecls(FILE* out) {
 
 void emitScopeRuntime(FILE* out);
 void emitOsRuntime(FILE* out);
+void emitStackRuntime(FILE* out);
 static void emitFloatTextRuntime(FILE* out);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
@@ -6590,6 +6648,7 @@ void emitRuntimeDecls(FILE* out) {
         "@__olang_msg_oom = linkonce_odr unnamed_addr constant [15 x i8] c\"out of memory\\0A\\00\"\n"
         "@__olang_msg_arrayfit = linkonce_odr unnamed_addr constant [47 x i8] c\"array length does not match its fixed storage\\0A\\00\"\n"
         "@__olang_msg_spawn = linkonce_odr unnamed_addr constant [22 x i8] c\"could not start task\\0A\\00\"\n"
+        "@__olang_msg_stack = linkonce_odr unnamed_addr constant [42 x i8] c\"could not start a thread with that stack\\0A\\00\"\n"
         "\n"
         //S16a: "done" and "fail" end the innermost thing that can end - the current test if one is
         //running, the process otherwise. status 0 is done, 1 is fail; under a test they become setjmp
@@ -6696,6 +6755,7 @@ void emitRuntimeDecls(FILE* out) {
         "}\n\n", out);
     emitScopeRuntime(out);
     emitOsRuntime(out);
+    emitStackRuntime(out);
 }
 
 /* the real backing for every scope (O2): a growable, chunked bump allocator. A chunk is a 64-byte header followed by
@@ -7252,9 +7312,24 @@ void emitScopeRuntime(FILE* out) {
         "  ret i64 %%limit\n"
         "}\n\n", (int)_SC_PHYS_PAGES, (int)_SC_PAGESIZE);
     fputs(
-        //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
-        //doesn't have room
-        "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
+        //O8a: an array's storage, or anything else that is not one aggregate - aligned by its own size, so a large array
+        //is ready for the widest vector loads: 8 bytes below 32, 32 below 64, and 64 from 64 up. Two selects, no
+        //branch; with the size known while compiling, as it mostly is, they fold away
+        "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) alwaysinline {\n"
+        "entry:\n"
+        "  %sizeup = add i64 %rawsize, 7\n"
+        "  %size8 = and i64 %sizeup, -8\n"
+        "  %a32 = icmp uge i64 %size8, 32\n"
+        "  %a64 = icmp uge i64 %size8, 64\n"
+        "  %alnA = select i1 %a32, i64 32, i64 8\n"
+        "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
+        "  %p = call ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln)\n"
+        "  ret ptr %p\n"
+        "}\n\n"
+        //bump-allocates size bytes from scope, aligned to aln (a power of two, at least 8), growing (linking on one more
+        //chunk) if the current one doesn't have room. O8a: a struct's or an enum's storage takes its own alignment
+        //(cgAllocAlign) - the size class an array's takes would leave a 40-byte struct 64 bytes apart from the next
+        "define linkonce_odr noalias ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) {\n"
         "entry:\n"
         //every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
         //raw byte sum, so without this a 12-byte "int32[3]" left the following allocation at offset 12 -
@@ -7268,16 +7343,10 @@ void emitScopeRuntime(FILE* out) {
         //made twice, a struct with no fields built twice) - a zero size bumped nothing, and handed both the same address
         "  %size0 = icmp eq i64 %size8, 0\n"
         "  %size = select i1 %size0, i64 8, i64 %size8\n"
-        //the alignment this allocation gets, from its own size: enough for SSE at 32 bytes and for AVX-512
-        //or a cache line at 64. Two selects, no branch, and small allocations are unaffected.
-        "  %a32 = icmp uge i64 %size, 32\n"
-        "  %a64 = icmp uge i64 %size, 64\n"
-        "  %alnA = select i1 %a32, i64 32, i64 8\n"
-        "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
         "  %alnm1 = sub i64 %aln, 1\n"
         "  %alnmask = sub i64 0, %aln\n"
-        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - which is every one under
-        //32 bytes, decided while compiling where the size is known - takes the offset as it is
+        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - every aggregate, and every
+        //array under 32 bytes, decided while compiling where the size is known - takes the offset as it is
         "  %round = icmp ugt i64 %aln, 8\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
@@ -7675,6 +7744,8 @@ void emitScopeRuntime(FILE* out) {
         "  %tkp = getelementptr %olang.worker, ptr %w, i32 0, i32 4\n"
         "  %tk = load ptr, ptr %tkp\n"
         "  call i32 @pthread_mutex_unlock(ptr %m)\n"
+        //S2: a crash in the task is reported as on any thread, a stack overflow included - once OnCrash has run
+        "  call void @__olang_alt_stack()\n"
         "  call ptr %fn(ptr %env)\n"
         //O8b: a worker about to park keeps at most a batch of its pool (1MB), the rest going where every thread can take
         //it - before the task is reported finished, so that what the task gave back is there for whoever its join lets
@@ -7714,6 +7785,7 @@ void emitScopeRuntime(FILE* out) {
         "  call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)\n"
         "  call i32 @pthread_mutex_unlock(ptr %m)\n"
         "  call void @__olang_pool_drain()\n"
+        "  call void @__olang_alt_stack_free()\n"
         "  call void @free(ptr %w)\n"
         "  ret ptr null\n"
         "stay:\n"
@@ -7871,7 +7943,7 @@ void emitScopeRuntime(FILE* out) {
         //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
         "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
-        "  %node = call ptr @__olang_scope_alloc(ptr %scope, i64 24)\n"
+        "  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 24, i64 8)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %oldhead = load ptr, ptr %dheadptr\n"
         "  %nextptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 0\n"
@@ -8480,10 +8552,14 @@ static void cgOsLoadField(FILE* out, const char* name, const char* base, size_t 
 struct cgLibcLayout {
     const char* arch;
     size_t statSize, mode, modeSize, size, mtimSec, mtimNsec, direntName, spawnActions;
+    //S1, S2: a pthread_attr_t's size, a jmp_buf's, a struct sigaction's and where its sa_flags are
+    size_t attrSize, jmpBuf, sigactionSize, saFlags;
+    //S3: libffi's default calling convention (FFI_DEFAULT_ABI), whose number is the architecture's
+    int ffiAbi;
 };
 static const struct cgLibcLayout cgLibcLayouts[] = {
-    { "x86_64", 144, 24, 4, 48, 88, 96, 19, 80 },
-    { "aarch64", 128, 16, 4, 48, 88, 96, 19, 80 },
+    { "x86_64", 144, 24, 4, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2 },
+    { "aarch64", 128, 16, 4, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1 },
 };
 #if defined(__x86_64__) && defined(__linux__) && defined(__GLIBC__)
 #define CG_HOST_LAYOUT 0
@@ -8501,7 +8577,20 @@ _Static_assert(sizeof(((struct stat*)0)->st_mtim.tv_sec) == 8 && sizeof(((struct
 _Static_assert(offsetof(struct dirent, d_name) == 19, "d_name's offset");
 _Static_assert(sizeof(posix_spawn_file_actions_t) == 80, "posix_spawn_file_actions_t's size");
 _Static_assert(S_IFMT == 0170000 && S_IFREG == 0100000 && S_IFDIR == 0040000 && EINVAL == 22, "the kernel's constants");
+_Static_assert(sizeof(pthread_attr_t) == (CG_HOST_LAYOUT ? 64 : 56) && sizeof(pthread_t) == 8, "pthread_attr_t, pthread_t");
+_Static_assert(sizeof(jmp_buf) == (CG_HOST_LAYOUT ? 312 : 200), "jmp_buf's size");
+_Static_assert(sizeof(struct sigaction) == 152 && offsetof(struct sigaction, sa_flags) == 136
+               && sizeof(((struct sigaction*)0)->sa_flags) == 4, "struct sigaction");
+_Static_assert(sizeof(stack_t) == 24 && offsetof(stack_t, ss_flags) == 8 && offsetof(stack_t, ss_size) == 16, "stack_t");
+_Static_assert(FFI_DEFAULT_ABI == (CG_HOST_LAYOUT ? 1 : 2) && sizeof(ffi_cif) <= 64 && FFI_OK == 0
+               && sizeof(ffi_arg) == 8, "libffi's ABI number, an ffi_cif's size");
+_Static_assert(RTLD_NOW == 2 && RTLD_GLOBAL == 0x100, "dlopen's flags"); //RTLD_DEFAULT is a null handle on glibc
 #endif
+//the kernel's and the C library's constants, one set for every architecture here (asm-generic's): the fatal signals
+//an OnCrash handler takes, the handler's flags, SS_DISABLE, and sysconf's name for the least stack a thread may have
+_Static_assert(SIGILL == 4 && SIGABRT == 6 && SIGBUS == 7 && SIGFPE == 8 && SIGSEGV == 11, "the fatal signals");
+_Static_assert(SA_ONSTACK == 0x08000000 && (unsigned)SA_RESETHAND == 0x80000000u && SA_NODEFER == 0x40000000
+               && SS_DISABLE == 2, "the handler's flags");
 
 /* §11 X6 / B4a: what the runtime keeps of the process and offers std through "extern fn" - its command line, its
  * environment, the error the last failing system call left, and the system calls whose C interface hands back a
@@ -8525,7 +8614,8 @@ void emitOsRuntime(FILE* out) {
         "declare ptr @opendir(ptr)\n"
         "declare ptr @readdir(ptr)\n"
         "declare i32 @closedir(ptr)\n"
-        "declare ptr @realpath(ptr, ptr)\n\n"
+        "declare ptr @realpath(ptr, ptr)\n"
+        "declare ptr @mkdtemp(ptr)\n\n"
         //up to cap bytes of the NUL-terminated s into buf, and s's whole length
         "define linkonce_odr i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap) {\n"
         "entry:\n"
@@ -8583,6 +8673,15 @@ void emitOsRuntime(FILE* out) {
         "  ret i64 %len\n"
         "fail:\n"
         "  ret i64 -1\n"
+        "}\n\n"
+        //S4: a new directory, named by the NUL-terminated template ending in six X's, which mkdtemp replaces with what
+        //makes the name unused - written over the template in place; 0, or -1 when it fails (errno says why)
+        "define linkonce_odr i32 @__olang_mkdtemp(ptr %template) {\n"
+        "entry:\n"
+        "  %r = call ptr @mkdtemp(ptr %template)\n"
+        "  %bad = icmp eq ptr %r, null\n"
+        "  %v = select i1 %bad, i32 -1, i32 0\n"
+        "  ret i32 %v\n"
         "}\n\n", out);
 
     //the class of the error the last failing call on this thread left in errno - the table -i reads too
@@ -8753,6 +8852,502 @@ void emitOsRuntime(FILE* out) {
                  "  store i32 %%rc, ptr %%ep\n"
                  "  ret i32 -1\n"
                  "}\n\n", L->spawnActions, 22);
+}
+
+/* S1, S2 (§11 X6): a call on a stack of a given size, and a message for a crash. os.RunOnStack runs a function value
+ * - its code, taking its environment as its one argument (X3) - on a thread of its own made with that stack, and waits
+ * for it, so it is the call f() would be, on a bigger stack: nothing runs beside it. In a test the thread has a
+ * recovery point of its own, and a check failing, a "done" or a "fail" on it ends there and is passed on to the
+ * caller's, which unwinds and jumps as it would have had f run on its own thread; so f behaves as it would called
+ * directly. The thread's chunk pool goes where every thread reuses it (O8b) when it ends, and the rest back to the
+ * system.
+ * os.OnCrash keeps a copy of its message and handles the fatal signals: on an alternate stack - one per thread, made
+ * when a thread the runtime runs olang code on starts after OnCrash, or at OnCrash for the thread calling it - so even
+ * a stack overflow is reported; the handler writes the message with write() and nothing else, then raises the signal
+ * again with the default action restored, so the process ends as it would have, status and core dump included. */
+void emitStackRuntime(FILE* out) {
+    const struct cgLibcLayout* L = &cgLibcLayouts[0];
+    for (size_t i = 0; i < sizeof(cgLibcLayouts) / sizeof(cgLibcLayouts[0]); i++) {
+        if (!strcmp(cgLibcLayouts[i].arch, cgArch)) L = &cgLibcLayouts[i];
+    }
+    fprintf(out,
+        "declare i32 @pthread_attr_init(ptr)\n"
+        "declare i32 @pthread_attr_destroy(ptr)\n"
+        "declare i32 @pthread_attr_setstacksize(ptr, i64)\n"
+        "declare i32 @pthread_join(i64, ptr)\n"
+        "declare i32 @sigaction(i32, ptr, ptr)\n"
+        "declare i32 @sigaltstack(ptr, ptr)\n"
+        "declare i32 @raise(i32)\n"
+        "declare i64 @write(i32, ptr, i64)\n"
+        //code, environment, whether a test is running, and the value a jump out of the thread carried (0: none)
+        "%%olang.stackrun = type { ptr, ptr, i32, i32 }\n"
+        //OnCrash's message, its length first, and this thread's alternate stack
+        "@__olang_crash_msg = linkonce_odr global ptr null\n"
+        "@__olang_crash_stack = linkonce_odr thread_local(initialexec) global ptr null\n\n"
+        "define linkonce_odr void @__olang_run_on_stack(i64 %%bytes, ptr %%code, ptr %%env) {\n"
+        "entry:\n"
+        "  %%attr = alloca [%zu x i8], align 16\n"
+        "  %%tid = alloca i64\n"
+        "  %%run = alloca %%olang.stackrun, align 8\n"
+        "  %%codep = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 0\n"
+        "  store ptr %%code, ptr %%codep\n"
+        "  %%envp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 1\n"
+        "  store ptr %%env, ptr %%envp\n"
+        "  %%tgt = load ptr, ptr @__olang_jmp_target\n"
+        "  %%intest = icmp ne ptr %%tgt, null\n"
+        "  %%t = zext i1 %%intest to i32\n"
+        "  %%testp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 2\n"
+        "  store i32 %%t, ptr %%testp\n"
+        "  %%leftp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 3\n"
+        "  store i32 0, ptr %%leftp\n"
+        //a size below the least a thread may have is raised to it
+        "  %%min = call i64 @sysconf(i32 %d)\n"
+        "  %%minok = icmp sgt i64 %%min, 16384\n"
+        "  %%least = select i1 %%minok, i64 %%min, i64 16384\n"
+        "  %%small = icmp slt i64 %%bytes, %%least\n"
+        "  %%size = select i1 %%small, i64 %%least, i64 %%bytes\n"
+        "  %%ai = call i32 @pthread_attr_init(ptr %%attr)\n"
+        "  %%ss = call i32 @pthread_attr_setstacksize(ptr %%attr, i64 %%size)\n"
+        "  %%ssok = icmp eq i32 %%ss, 0\n"
+        "  br i1 %%ssok, label %%create, label %%refused\n"
+        "create:\n"
+        "  %%rc = call i32 @pthread_create(ptr %%tid, ptr %%attr, ptr @__olang_stack_main, ptr %%run)\n"
+        "  %%ad = call i32 @pthread_attr_destroy(ptr %%attr)\n"
+        "  %%rcok = icmp eq i32 %%rc, 0\n"
+        "  br i1 %%rcok, label %%started, label %%failed\n"
+        "refused:\n"
+        "  %%ad2 = call i32 @pthread_attr_destroy(ptr %%attr)\n"
+        "  br label %%failed\n"
+        //a thread the system will not make with that stack: a guarantee broken, as P1c's task
+        "failed:\n"
+        "  call void @__olang_check_failed(ptr @__olang_msg_stack)\n"
+        "  ret void\n"
+        "started:\n"
+        "  %%tv = load i64, ptr %%tid\n"
+        "  %%jr = call i32 @pthread_join(i64 %%tv, ptr null)\n"
+        "  %%left = load i32, ptr %%leftp\n"
+        "  %%stayed = icmp eq i32 %%left, 0\n"
+        "  br i1 %%stayed, label %%done, label %%onward\n"
+        //f left its test on its own thread: the caller's test leaves the same way, its scopes unwound first (P1d)
+        "onward:\n"
+        "  %%mk = load ptr, ptr @__olang_unwind_mark\n"
+        "  call void @__olang_unwind_to(ptr %%mk)\n"
+        "  call void @longjmp(ptr %%tgt, i32 %%left)\n"
+        "  unreachable\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
+        //the thread: f run, behind a recovery point of its own while a test is running, then its pool given back.
+        //Nothing is written between the setjmp and a jump to it but by the thread's own code (the volatile question X3b
+        //answers for the harness): %%run is read after the landing, and set before the setjmp
+        "define linkonce_odr ptr @__olang_stack_main(ptr %%run) {\n"
+        "entry:\n"
+        "  %%jb = alloca [%zu x i8], align 16\n"
+        "  call void @__olang_alt_stack()\n"
+        "  %%codep = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 0\n"
+        "  %%code = load ptr, ptr %%codep\n"
+        "  %%envp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 1\n"
+        "  %%env = load ptr, ptr %%envp\n"
+        "  %%testp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 2\n"
+        "  %%test = load i32, ptr %%testp\n"
+        "  %%intest = icmp ne i32 %%test, 0\n"
+        "  br i1 %%intest, label %%guard, label %%plain\n"
+        "plain:\n"
+        "  call void %%code(ptr %%env)\n"
+        "  br label %%out\n"
+        "guard:\n"
+        "  store ptr %%jb, ptr @__olang_jmp_target\n"
+        "  %%r = call i32 @setjmp(ptr %%jb)\n"
+        "  %%first = icmp eq i32 %%r, 0\n"
+        "  br i1 %%first, label %%call, label %%landed\n"
+        "call:\n"
+        "  call void %%code(ptr %%env)\n"
+        "  br label %%cleared\n"
+        "landed:\n"
+        "  %%leftp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 3\n"
+        "  store i32 %%r, ptr %%leftp\n"
+        "  br label %%cleared\n"
+        "cleared:\n"
+        "  store ptr null, ptr @__olang_jmp_target\n"
+        "  br label %%out\n"
+        "out:\n"
+        "  call void @__olang_pool_share()\n"
+        "  call void @__olang_pool_drain()\n"
+        "  call void @__olang_alt_stack_free()\n"
+        "  ret ptr null\n"
+        "}\n\n",
+        L->attrSize, (int)_SC_THREAD_STACK_MIN, L->jmpBuf);
+    fprintf(out,
+        //S2: this thread's alternate stack, made once OnCrash has said what to write - 64KB, room for the signal frame
+        //of the widest vector registers and the handler's few calls
+        "define linkonce_odr void @__olang_alt_stack() {\n"
+        "entry:\n"
+        "  %%ss = alloca [24 x i8], align 8\n"
+        "  %%have = load ptr, ptr @__olang_crash_stack\n"
+        "  %%made = icmp ne ptr %%have, null\n"
+        "  br i1 %%made, label %%done, label %%check\n"
+        "check:\n"
+        "  %%m = load atomic ptr, ptr @__olang_crash_msg acquire, align 8\n"
+        "  %%none = icmp eq ptr %%m, null\n"
+        "  br i1 %%none, label %%done, label %%make\n"
+        "make:\n"
+        "  %%mem = call ptr @malloc(i64 65536)\n"
+        "  %%got = icmp ne ptr %%mem, null\n"
+        "  br i1 %%got, label %%set, label %%done\n"
+        "set:\n"
+        "  store ptr %%mem, ptr %%ss\n"
+        "  %%fp = getelementptr i8, ptr %%ss, i64 8\n"
+        "  store i32 0, ptr %%fp\n"
+        "  %%zp = getelementptr i8, ptr %%ss, i64 16\n"
+        "  store i64 65536, ptr %%zp\n"
+        "  %%rc = call i32 @sigaltstack(ptr %%ss, ptr null)\n"
+        "  store ptr %%mem, ptr @__olang_crash_stack\n"
+        "  br label %%done\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
+        //a thread that ends gives its alternate stack back: switched off first, then freed
+        "define linkonce_odr void @__olang_alt_stack_free() {\n"
+        "entry:\n"
+        "  %%ss = alloca [24 x i8], align 8\n"
+        "  %%have = load ptr, ptr @__olang_crash_stack\n"
+        "  %%none = icmp eq ptr %%have, null\n"
+        "  br i1 %%none, label %%done, label %%off\n"
+        "off:\n"
+        "  call void @llvm.memset.p0.i64(ptr %%ss, i8 0, i64 24, i1 false)\n"
+        "  %%fp = getelementptr i8, ptr %%ss, i64 8\n"
+        "  store i32 %d, ptr %%fp\n"
+        "  %%rc = call i32 @sigaltstack(ptr %%ss, ptr null)\n"
+        "  call void @free(ptr %%have)\n"
+        "  store ptr null, ptr @__olang_crash_stack\n"
+        "  br label %%done\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
+        //the handler: the message written, as much of it as write() takes, then the signal again - its action reset
+        //to the default before this ran (SA_RESETHAND), so the process ends as the signal ends it
+        "define linkonce_odr void @__olang_crash_handler(i32 %%sig) {\n"
+        "entry:\n"
+        "  %%m = load atomic ptr, ptr @__olang_crash_msg acquire, align 8\n"
+        "  %%none = icmp eq ptr %%m, null\n"
+        "  br i1 %%none, label %%again, label %%say\n"
+        "say:\n"
+        "  %%n = load i64, ptr %%m\n"
+        "  %%data = getelementptr i8, ptr %%m, i64 8\n"
+        "  br label %%loop\n"
+        "loop:\n"
+        "  %%p = phi ptr [ %%data, %%say ], [ %%p1, %%more ]\n"
+        "  %%left = phi i64 [ %%n, %%say ], [ %%left1, %%more ]\n"
+        "  %%all = icmp sle i64 %%left, 0\n"
+        "  br i1 %%all, label %%again, label %%put\n"
+        "put:\n"
+        "  %%w = call i64 @write(i32 2, ptr %%p, i64 %%left)\n"
+        "  %%wrote = icmp sgt i64 %%w, 0\n"
+        "  br i1 %%wrote, label %%more, label %%again\n"
+        "more:\n"
+        "  %%p1 = getelementptr i8, ptr %%p, i64 %%w\n"
+        "  %%left1 = sub i64 %%left, %%w\n"
+        "  br label %%loop\n"
+        "again:\n"
+        "  %%r = call i32 @raise(i32 %%sig)\n"
+        "  ret void\n"
+        "}\n\n",
+        SS_DISABLE);
+    fprintf(out,
+        //S2: the message kept (a copy: the text it came from belongs to a scope), the alternate stack of this thread
+        //made, and the handler installed for the fatal signals. Called again, the message is replaced
+        "define linkonce_odr void @__olang_on_crash(ptr %%msg, i64 %%len) {\n"
+        "entry:\n"
+        "  %%sa = alloca [%zu x i8], align 16\n"
+        "  %%pos = icmp sgt i64 %%len, 0\n"
+        "  %%n = select i1 %%pos, i64 %%len, i64 0\n"
+        "  %%bytes = add i64 %%n, 8\n"
+        "  %%copy = call ptr @malloc(i64 %%bytes)\n"
+        "  call void @__olang_alloc_check(ptr %%copy)\n"
+        "  store i64 %%n, ptr %%copy\n"
+        "  %%data = getelementptr i8, ptr %%copy, i64 8\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %%data, ptr %%msg, i64 %%n, i1 false)\n"
+        "  store atomic ptr %%copy, ptr @__olang_crash_msg release, align 8\n"
+        "  call void @__olang_alt_stack()\n"
+        "  call void @llvm.memset.p0.i64(ptr %%sa, i8 0, i64 %zu, i1 false)\n"
+        "  store ptr @__olang_crash_handler, ptr %%sa\n"
+        "  %%flagsp = getelementptr i8, ptr %%sa, i64 %zu\n"
+        "  store i32 %d, ptr %%flagsp\n",
+        L->sigactionSize, L->sigactionSize, L->saFlags, (int)(SA_ONSTACK | SA_RESETHAND | SA_NODEFER));
+    int sigs[] = { SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT };
+    for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) {
+        fprintf(out, "  %%s%zu = call i32 @sigaction(i32 %d, ptr %%sa, ptr null)\n", i, sigs[i]);
+    }
+    fputs("  ret void\n}\n\n", out);
+}
+
+/* S3 (§11 X6): a C function called by its name, chosen while the program runs - what an interpreter needs to call the
+ * externs of the program it runs. A separate part of the runtime, over the C library's dlsym and libffi, emitted only
+ * into the object of a module declaring one of the two functions below, and linked, with -lffi -ldl, only into a
+ * program holding such a module.
+ * A call is described by bytes, its kinds: one per argument and a 0 after the last, each a number type's code - I8 1,
+ * I16 2, I32 3, I64 4, U8 5, U16 6, U32 7, U64 8, F16 9, BF16 10, F32 11, F64 12 - with 0x80 added for an array of
+ * them; and the result's code, 0 for none. Its values are 64-bit words, in order: a number is one word, holding its
+ * bits from the lowest; an array is a word holding its length, then its elements' bytes packed into as many words as
+ * they fill. The function is handed a pointer to those bytes, so what it writes into the array is in the words after
+ * the call - the copy in and out an interpreter makes of the array it holds. A 16-bit float is passed only in an array
+ * (libffi has no such type), and nothing else is passed at all, which is X2's vocabulary. */
+void emitDyncallRuntime(FILE* out) {
+    const struct cgLibcLayout* L = &cgLibcLayouts[0];
+    for (size_t i = 0; i < sizeof(cgLibcLayouts) / sizeof(cgLibcLayouts[0]); i++) {
+        if (!strcmp(cgLibcLayouts[i].arch, cgArch)) L = &cgLibcLayouts[i];
+    }
+    fputs(
+        "declare ptr @dlsym(ptr, ptr)\n"
+        "declare ptr @dlopen(ptr, i32)\n"
+        "declare i32 @ffi_prep_cif(ptr, i32, i32, ptr, ptr)\n"
+        "declare void @ffi_call(ptr, ptr, ptr, ptr)\n"
+        "@ffi_type_void = external global i8\n"
+        "@ffi_type_uint8 = external global i8\n"
+        "@ffi_type_sint8 = external global i8\n"
+        "@ffi_type_uint16 = external global i8\n"
+        "@ffi_type_sint16 = external global i8\n"
+        "@ffi_type_uint32 = external global i8\n"
+        "@ffi_type_sint32 = external global i8\n"
+        "@ffi_type_uint64 = external global i8\n"
+        "@ffi_type_sint64 = external global i8\n"
+        "@ffi_type_float = external global i8\n"
+        "@ffi_type_double = external global i8\n"
+        "@ffi_type_pointer = external global i8\n"
+        "@__olang_libm = linkonce_odr global ptr null\n"
+        "@__olang_libm_name = linkonce_odr unnamed_addr constant [10 x i8] c\"libm.so.6\\00\"\n"
+        "@__olang_msg_dyncall = linkonce_odr unnamed_addr constant [55 x i8] c\"dynamic call of a function not found, or not callable\\0A\\00\"\n"
+        //the bytes one element of kind k (an array's) takes, and the libffi type a value of kind k is passed as: a
+        //pointer for an array, null for what cannot be passed (a 16-bit float alone, an unknown code)
+        "@__olang_kind_size = linkonce_odr unnamed_addr constant [13 x i64] [i64 0, i64 1, i64 2, i64 4, i64 8, i64 1, "
+            "i64 2, i64 4, i64 8, i64 2, i64 2, i64 4, i64 8]\n"
+        "@__olang_kind_type = linkonce_odr unnamed_addr constant [13 x ptr] [ptr null, ptr @ffi_type_sint8, "
+            "ptr @ffi_type_sint16, ptr @ffi_type_sint32, ptr @ffi_type_sint64, ptr @ffi_type_uint8, ptr @ffi_type_uint16, "
+            "ptr @ffi_type_uint32, ptr @ffi_type_uint64, ptr null, ptr null, ptr @ffi_type_float, ptr @ffi_type_double]\n\n"
+        "define linkonce_odr ptr @__olang_ffi_type(i8 %k) {\n"
+        "entry:\n"
+        "  %arr = icmp uge i8 %k, -128\n"
+        "  %code = and i8 %k, 127\n"
+        "  %c = zext i8 %code to i64\n"
+        "  %known = icmp ult i64 %c, 13\n"
+        "  %zero = icmp eq i64 %c, 0\n"
+        "  br i1 %known, label %look, label %none\n"
+        "look:\n"
+        "  br i1 %zero, label %none, label %have\n"
+        "have:\n"
+        "  br i1 %arr, label %array, label %scalar\n"
+        "array:\n"
+        "  ret ptr @ffi_type_pointer\n"
+        "scalar:\n"
+        "  %slot = getelementptr [13 x ptr], ptr @__olang_kind_type, i64 0, i64 %c\n"
+        "  %t = load ptr, ptr %slot\n"
+        "  ret ptr %t\n"
+        "none:\n"
+        "  ret ptr null\n"
+        "}\n\n", out);
+    fputs(
+        //the function "name" names: among what the process has loaded, else in the C math library, opened once
+        "define linkonce_odr ptr @__olang_dynsym(ptr %name) {\n"
+        "entry:\n"
+        "  %s = call ptr @dlsym(ptr null, ptr %name)\n"
+        "  %found = icmp ne ptr %s, null\n"
+        "  br i1 %found, label %done, label %libm\n"
+        "libm:\n"
+        "  %h0 = load atomic ptr, ptr @__olang_libm monotonic, align 8\n"
+        "  %closed = icmp eq ptr %h0, null\n"
+        "  br i1 %closed, label %open, label %look\n"
+        "open:\n"
+        "  %h1 = call ptr @dlopen(ptr @__olang_libm_name, i32 258)\n"
+        "  store atomic ptr %h1, ptr @__olang_libm monotonic, align 8\n"
+        "  br label %look\n"
+        "look:\n"
+        "  %h = phi ptr [ %h0, %libm ], [ %h1, %open ]\n"
+        "  %none = icmp eq ptr %h, null\n"
+        "  br i1 %none, label %done, label %inlibm\n"
+        "inlibm:\n"
+        "  %s2 = call ptr @dlsym(ptr %h, ptr %name)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  %r = phi ptr [ %s, %entry ], [ null, %look ], [ %s2, %inlibm ]\n"
+        "  ret ptr %r\n"
+        "}\n\n"
+        //how many kinds there are before their 0
+        "define linkonce_odr i64 @__olang_dyncall_count(ptr %kinds) {\n"
+        "entry:\n"
+        "  br label %loop\n"
+        "loop:\n"
+        "  %n = phi i64 [ 0, %entry ], [ %n1, %next ]\n"
+        "  %p = getelementptr i8, ptr %kinds, i64 %n\n"
+        "  %k = load i8, ptr %p\n"
+        "  %end = icmp eq i8 %k, 0\n"
+        "  br i1 %end, label %done, label %next\n"
+        "next:\n"
+        "  %n1 = add i64 %n, 1\n"
+        "  br label %loop\n"
+        "done:\n"
+        "  ret i64 %n\n"
+        "}\n\n", out);
+    fprintf(out,
+        //0 when "name" can be called with these n kinds and that result - its call interface prepared in %cif, the
+        //argument types in %types, the function in %fnslot - 1 when there is no such function, 2 when a kind is one
+        //that cannot be passed
+        "define linkonce_odr i32 @__olang_dyncall_ready(ptr %%name, ptr %%kinds, i64 %%n, i8 %%ret, ptr %%cif, ptr %%types, ptr %%fnslot) {\n"
+        "entry:\n"
+        "  %%void = icmp eq i8 %%ret, 0\n"
+        "  %%isarr = icmp uge i8 %%ret, -128\n"
+        "  br i1 %%isarr, label %%cannot, label %%rtype\n"
+        "rtype:\n"
+        "  %%rt0 = call ptr @__olang_ffi_type(i8 %%ret)\n"
+        "  %%rt = select i1 %%void, ptr @ffi_type_void, ptr %%rt0\n"
+        "  %%rtnone = icmp eq ptr %%rt, null\n"
+        "  br i1 %%rtnone, label %%cannot, label %%loop\n"
+        "loop:\n"
+        "  %%i = phi i64 [ 0, %%rtype ], [ %%i1, %%next ]\n"
+        "  %%more = icmp slt i64 %%i, %%n\n"
+        "  br i1 %%more, label %%one, label %%find\n"
+        "one:\n"
+        "  %%kp = getelementptr i8, ptr %%kinds, i64 %%i\n"
+        "  %%k = load i8, ptr %%kp\n"
+        "  %%t = call ptr @__olang_ffi_type(i8 %%k)\n"
+        "  %%tnone = icmp eq ptr %%t, null\n"
+        "  br i1 %%tnone, label %%cannot, label %%next\n"
+        "next:\n"
+        "  %%tp = getelementptr ptr, ptr %%types, i64 %%i\n"
+        "  store ptr %%t, ptr %%tp\n"
+        "  %%i1 = add i64 %%i, 1\n"
+        "  br label %%loop\n"
+        "find:\n"
+        "  %%fn = call ptr @__olang_dynsym(ptr %%name)\n"
+        "  %%fnnone = icmp eq ptr %%fn, null\n"
+        "  br i1 %%fnnone, label %%missing, label %%prep\n"
+        "prep:\n"
+        "  store ptr %%fn, ptr %%fnslot\n"
+        "  %%n32 = trunc i64 %%n to i32\n"
+        "  %%st = call i32 @ffi_prep_cif(ptr %%cif, i32 %d, i32 %%n32, ptr %%rt, ptr %%types)\n"
+        "  %%ok = icmp eq i32 %%st, 0\n"
+        "  %%r = select i1 %%ok, i32 0, i32 2\n"
+        "  ret i32 %%r\n"
+        "missing:\n"
+        "  ret i32 1\n"
+        "cannot:\n"
+        "  ret i32 2\n"
+        "}\n\n"
+        //0 when the call "name" with these kinds and result can be made, 1 when there is no such function, 2 when a
+        //kind is one that cannot be passed
+        "define linkonce_odr i32 @__olang_dyncall_check(ptr %%name, ptr %%kinds, i8 %%ret) {\n"
+        "entry:\n"
+        "  %%cif = alloca [64 x i8], align 16\n"
+        "  %%fnslot = alloca ptr\n"
+        "  %%n = call i64 @__olang_dyncall_count(ptr %%kinds)\n"
+        "  %%n1 = add i64 %%n, 1\n"
+        "  %%bytes = mul i64 %%n1, 8\n"
+        "  %%types = call ptr @malloc(i64 %%bytes)\n"
+        "  call void @__olang_alloc_check(ptr %%types)\n"
+        "  %%r = call i32 @__olang_dyncall_ready(ptr %%name, ptr %%kinds, i64 %%n, i8 %%ret, ptr %%cif, ptr %%types, ptr %%fnslot)\n"
+        "  call void @free(ptr %%types)\n"
+        "  ret i32 %%r\n"
+        "}\n\n", L->ffiAbi);
+    fputs(
+        //the call made: each number passed from its word, each array as a pointer to the words after its length, and
+        //the result's bits returned, an integer's extended as its type extends. A call that cannot be made - the
+        //caller asks __olang_dyncall_check first - stops the program as a failed check does
+        "define linkonce_odr i64 @__olang_dyncall(ptr %name, ptr %kinds, ptr %words, i8 %ret) {\n"
+        "entry:\n"
+        "  %cif = alloca [64 x i8], align 16\n"
+        "  %fnslot = alloca ptr\n"
+        "  %rv = alloca i64, align 16\n"
+        "  store i64 0, ptr %rv\n"
+        "  %n = call i64 @__olang_dyncall_count(ptr %kinds)\n"
+        "  %n1 = add i64 %n, 1\n"
+        "  %bytes = mul i64 %n1, 8\n"
+        "  %types = call ptr @malloc(i64 %bytes)\n"
+        "  call void @__olang_alloc_check(ptr %types)\n"
+        "  %values = call ptr @malloc(i64 %bytes)\n"
+        "  call void @__olang_alloc_check(ptr %values)\n"
+        "  %ptrs = call ptr @malloc(i64 %bytes)\n"
+        "  call void @__olang_alloc_check(ptr %ptrs)\n"
+        "  %ready = call i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot)\n"
+        "  %ok = icmp eq i32 %ready, 0\n"
+        "  br i1 %ok, label %loop, label %refused\n"
+        "refused:\n"
+        "  call void @__olang_check_failed(ptr @__olang_msg_dyncall)\n"
+        "  ret i64 0\n"
+        "loop:\n"
+        "  %i = phi i64 [ 0, %entry ], [ %i1, %next ]\n"
+        "  %at = phi i64 [ 0, %entry ], [ %at1, %next ]\n"
+        "  %more = icmp slt i64 %i, %n\n"
+        "  br i1 %more, label %one, label %call\n"
+        "one:\n"
+        "  %kp = getelementptr i8, ptr %kinds, i64 %i\n"
+        "  %k = load i8, ptr %kp\n"
+        "  %wp = getelementptr i64, ptr %words, i64 %at\n"
+        "  %vp = getelementptr ptr, ptr %values, i64 %i\n"
+        "  %isarr = icmp uge i8 %k, -128\n"
+        "  br i1 %isarr, label %array, label %scalar\n"
+        "scalar:\n"
+        "  store ptr %wp, ptr %vp\n"
+        "  %ats = add i64 %at, 1\n"
+        "  br label %next\n"
+        "array:\n"
+        "  %len = load i64, ptr %wp\n"
+        "  %code = and i8 %k, 127\n"
+        "  %c = zext i8 %code to i64\n"
+        "  %szp = getelementptr [13 x i64], ptr @__olang_kind_size, i64 0, i64 %c\n"
+        "  %sz = load i64, ptr %szp\n"
+        "  %nb = mul i64 %len, %sz\n"
+        "  %nb7 = add i64 %nb, 7\n"
+        "  %nw = lshr i64 %nb7, 3\n"
+        "  %data = getelementptr i64, ptr %wp, i64 1\n"
+        "  %pp = getelementptr ptr, ptr %ptrs, i64 %i\n"
+        "  store ptr %data, ptr %pp\n"
+        "  store ptr %pp, ptr %vp\n"
+        "  %ata0 = add i64 %at, 1\n"
+        "  %ata = add i64 %ata0, %nw\n"
+        "  br label %next\n"
+        "next:\n"
+        "  %at1 = phi i64 [ %ats, %scalar ], [ %ata, %array ]\n"
+        "  %i1 = add i64 %i, 1\n"
+        "  br label %loop\n"
+        "call:\n"
+        "  %fn = load ptr, ptr %fnslot\n"
+        "  call void @ffi_call(ptr %cif, ptr %fn, ptr %rv, ptr %values)\n"
+        "  call void @free(ptr %types)\n"
+        "  call void @free(ptr %values)\n"
+        "  call void @free(ptr %ptrs)\n"
+        "  %raw = load i64, ptr %rv\n"
+        //an integer narrower than a word: its own bits, extended as its type extends (libffi widens it, but says the
+        //caller should read it so)
+        "  switch i8 %ret, label %whole [ i8 1, label %s8 i8 2, label %s16 i8 3, label %s32 i8 5, label %u8 "
+            "i8 6, label %u16 i8 7, label %u32 i8 11, label %f32 ]\n"
+        "s8:\n"
+        "  %t8 = trunc i64 %raw to i8\n"
+        "  %e8 = sext i8 %t8 to i64\n"
+        "  ret i64 %e8\n"
+        "s16:\n"
+        "  %t16 = trunc i64 %raw to i16\n"
+        "  %e16 = sext i16 %t16 to i64\n"
+        "  ret i64 %e16\n"
+        "s32:\n"
+        "  %t32 = trunc i64 %raw to i32\n"
+        "  %e32 = sext i32 %t32 to i64\n"
+        "  ret i64 %e32\n"
+        "u8:\n"
+        "  %v8 = and i64 %raw, 255\n"
+        "  ret i64 %v8\n"
+        "u16:\n"
+        "  %v16 = and i64 %raw, 65535\n"
+        "  ret i64 %v16\n"
+        "u32:\n"
+        "  %v32 = and i64 %raw, 4294967295\n"
+        "  ret i64 %v32\n"
+        //an F32's bits are the first four bytes libffi wrote
+        "f32:\n"
+        "  %fbits = load i32, ptr %rv\n"
+        "  %fw = zext i32 %fbits to i64\n"
+        "  ret i64 %fw\n"
+        "whole:\n"
+        "  ret i64 %raw\n"
+        "}\n\n", out);
 }
 
 //B5a: one initializer per module, since one module is one object. The entry point calls them all, in
@@ -9180,7 +9775,9 @@ void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
     emitStructTypeDefs(out);
     fputs("\n", out);
     emitRuntimeDecls(out);
-    emitExternDecls(out);
+    bool dyncall = cgModuleDeclaresDyncall(emitMod);
+    if (dyncall) emitDyncallRuntime(out);
+    emitExternDecls(out, dyncall);
     emitTbaaTypeTree(out);
     emitGlobalDecls(out, emitMod);
     fputs("\n", out);
