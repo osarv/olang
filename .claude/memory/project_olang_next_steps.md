@@ -276,6 +276,8 @@ because what it finds about structure feeds the refactor.
   to oann (after transformers: settling networks per docs/settling.md, clean room; then checkpoints (save/load
   parameters), BF16 training, convolution via im2col, a tokenizer, data loaders; whatever the transformer work showed
   missing), each oann agent beside the compiler work, not instead of it.
+- 16:05 CEST: chunkpool merged (66ce3d1, pushed): per-thread size-class pool with an LRU cap at 1/8 of memory (O8b),
+  oann MNIST peak RSS 793MB -> 57MB, `linalg.GemmWorkspace` (a training step allocates nothing after its first).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
@@ -324,7 +326,7 @@ then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 size cap, Go-style); with it, stack SIMD alignment for local arrays (O8a covers the arena only).
 
 **Revisit only if:** ThinLTO if programs get big; M:N scheduling only with async I/O; `volatileLoad`/`volatileStore`
-builtins only for MMIO; the chunk pool reusing more than its head chunk if allocation patterns demand it.
+builtins only for MMIO. (The chunk pool's reuse beyond its head chunk was done 2026-10-09 - O8b size classes + an LRU cap.)
 
 **Small known debts found 2026-10-08:** the re-export-plus-import-cycle ordering fragility was worked around by
 reordering worker.olang's imports, never fixed at the cause; several "must not compile" shapes from early history were
