@@ -571,7 +571,7 @@ struct token tokenizeToken(TokenCtx tc) {
  * it, by synthesizing an invisible TOK_STMNT_END. This is exactly the set of tokens the grammar's own
  * TOK_STMNT_END positions can follow: literals/identifiers, ++/--, closing ')'/']', the bare
  * no-value forms of return/exit. It deliberately excludes '}' - no rule in the grammar ever expects a
- * TOK_STMNT_END after one - so blocks, struct/choice bodies, and if/for/match never need it.
+ * TOK_STMNT_END after one - so blocks, struct/enum bodies, and if/for/match never need it.
  * As with any such scheme (Go's automatic semicolon insertion works the same way), an operator meant to
  * continue an expression must stay at the end of the previous line, not the start of the next
  * (`1 +\n2` works, `1\n+ 2` does not). */
@@ -721,11 +721,6 @@ struct token TokenFeed(TokenCtx tc) {
     return *tokPtr;
 }
 
-void TokenUnfeed(TokenCtx tc) {
-    if (tc->tokIdx <= 0) ErrorBugFound();
-    tc->tokIdx--;
-}
-
 //where a token's text starts in its file. A token whose text was replaced by the parser (E31: an operator in a
 //method's name position is renamed) no longer points into the file, and is located through the token it came from
 static struct token tokenAsWritten(struct token tok) {
@@ -768,14 +763,6 @@ int TokenGetCharCount(TokenCtx tc) {
     return tc->chars.len;
 }
 
-int TokenGetCharCursor(TokenCtx tc) {
-    return tc->charIdx;
-}
-
-int TokenGetLineNr(TokenCtx tc) {
-    return tc->charLineNr;
-}
-
 //splits the token at the cursor in two, its first character becoming a token of type `first` and the rest one of
 //type `rest`, leaving the cursor on the first; recorded, so TokenEditRewind can put it back
 static void splitTokenAtCursor(TokenCtx tc, enum tokenType first, enum tokenType rest) {
@@ -795,7 +782,7 @@ static void splitTokenAtCursor(TokenCtx tc, enum tokenType first, enum tokenType
     tc->version++;
 }
 
-//">>" closing a nested type-argument list ("Vec<Vec<int32>>") lexes as one TOK_BTSFT_R, since maximal munch can't
+//">>" closing a nested type-argument list ("List<List<I32>>") lexes as one TOK_BTSFT_R, since maximal munch can't
 //know it is two closers rather than a shift - and a declaration's "=" right after one ("x List<List<I32>>= v") makes it
 //">>=", as a lone closer's makes ">=". If the token at the cursor is one of those, its first ">" is split off as a
 //TOK_GRT of its own, the cursor left on it, and true returned - the fix C++11, Rust, Java and C# all make. Rewriting

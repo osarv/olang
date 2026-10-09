@@ -79,7 +79,7 @@ void emitRuntimeDecls(FILE* out, const char* arch) {
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an
-        //"extern func" of its own (chan.olang does, with an i64 attr argument where this would want a
+        //"extern fn" of its own (chan.olang does, with an i64 attr argument where this would want a
         //ptr), and two declares of one symbol with different signatures is invalid IR. The worker's pair
         //is zeroed instead, which IS the initialized state - glibc's PTHREAD_MUTEX_INITIALIZER and
         //PTHREAD_COND_INITIALIZER are both all-zero. The same glibc dependency chan.olang already carries.
@@ -795,7 +795,7 @@ static void emitScopeRuntime(FILE* out) {
         "define linkonce_odr noalias ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) {\n"
         "entry:\n"
         //every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
-        //raw byte sum, so without this a 12-byte "int32[3]" left the following allocation at offset 12 -
+        //raw byte sum, so without this a 12-byte "Array<I32>(3)" left the following allocation at offset 12 -
         //fine for an i32 but misaligned for any i64 or pointer field, which is UB at the LLVM level even
         //where the hardware tolerates it. Latent before; the dtor nodes below (24 bytes, three pointers,
         //one per registered instance) made it near-certain to be hit. The chunk's own data area is

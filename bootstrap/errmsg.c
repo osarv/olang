@@ -408,8 +408,6 @@ static void putExcerpt(FILE* f, struct where w) {
 
 // ---- reporting ----
 
-enum severity { SEV_ERROR, SEV_NOTE };
-
 static void noteText(struct where w, const char* text);
 
 //what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while a

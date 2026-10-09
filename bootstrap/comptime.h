@@ -11,13 +11,13 @@ enum ctKind { CT_INT, CT_FLOAT, CT_BOOL, CT_AGG, CT_NULL, CT_REF, CT_FUNC };
 struct ctVal {
     enum ctKind kind;
     struct type type;
-    long long i;          //CT_INT (also a payload-free choice's ordinal), CT_BOOL
+    long long i;          //CT_INT (also a payload-free enum's ordinal), CT_BOOL
     double f;             //CT_FLOAT - a narrower type's NaN with its payload at the top of the double's (E33)
     bool nanExact;        //CT_FLOAT, E33: a NaN whose sign and payload are its own - made from bits, or written in the
                           //program, and only moved since. Any other NaN's are unspecified, so its bits are not evaluated
     int n;                //CT_AGG: element or field count
     struct ctVal** elems; //CT_AGG
-    struct ctVal* target; //CT_REF (an interface value too: the instance it names)
+    struct ctVal* target; //CT_REF
     struct var* fn;       //CT_FUNC: the function a function value names
     bool callAdapter;     //CT_FUNC, E31: a value whose type declares Call, standing for a function value - fn is its Call,
                           //elems[0] a reference to the instance it calls it on

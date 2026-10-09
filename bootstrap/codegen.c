@@ -183,10 +183,10 @@ struct cgCtx {
     //ordinary cross-module call, so this was a live bug in optimized builds and not merely at -O0.
     FILE* allocaOut;
     struct list scopePool;  //list of char*: one entry-block alloca per nesting depth, index = depth - 2
-    //ambient "this is the scope a struct/array literal currently under construction is ultimately being
+    //ambient "this is the scope a struct instance or array literal currently under construction is ultimately being
     //promoted into" - set by cgValueForTarget/cgBoundaryValue around a recursive cgValue() call so a
-    //literal's own nested bare-"&" fields (built inside cgAggregateLiteral) inherit the *same* scope as
-    //the literal itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
+    //value's own nested bare-"&" fields (built inside cgAggregateLiteral) inherit the *same* scope as
+    //the value itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
     //NULL when nothing is currently being promoted (the common case - most values never touch this).
     char* targetScopeOverride;
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
@@ -217,7 +217,7 @@ struct cgCtx {
     struct list emittedSyms; //list of char*: shared helpers (equality, rendering, call adapters) already written into this
                               //object. They are linkonce_odr so the LINKER keeps one across objects, but a
                               //second definition within one object is a redefinition error, and the same
-                              //(interface, type) pair is reached once per conversion site.
+                              //helper is reached from every site needing it.
     bool terminated; //true once the current basic block has a terminator - see cgLabel/cgBr
     //R9a: the try-with-default being emitted - its result slot and the label both paths join at. The
     //failure branch (a callee's error, a failed bounds check) stores the default there instead of
@@ -318,8 +318,8 @@ void mangleFuncSym(struct var* f, char* buf, size_t n) {
     char prefix[256];
     mangleModPrefix(f->owner, prefix, sizeof(prefix));
     //a built-in receiver has no name of its own, so it is spelled by shape. An array is keyed by its
-    //element alone, since that is all a built-in method's identity depends on (M19): "int32[4]&" and
-    //"int32[]&" are receivers of the same method
+    //element alone, since that is all a built-in method's identity depends on (M19): "Array<I32, 4>&" and
+    //"Array<I32>&" are receivers of the same method
     struct str rn = recv->name;
     if (!(recv->owner && recv->name.len)) {
         struct str e = typeShortName(recv->bType == BASETYPE_ARRAY ? *recv->arrElem : *recv);
@@ -388,13 +388,11 @@ static char* structAggSpelled(struct type t) {
 /* the LLVM type of a value of type t, used everywhere: alloca operands, function signatures, GEP pointee
  * types. Struct types are always represented by-pointer at the value level (ptr when structMAlloc, the
  * named aggregate itself otherwise - both cases point at memory laid out per structAggSpelling); a fixed
- * array is the real aggregate [N x ElemT] when embedded, or a bare ptr when "&"-heap-indirect (same
- * "ptr when referenced" rule a struct already gets, since its own size is compile-time-known either way -
- * see the report on extending scope/"&" to arrays); a runtime-length ("T[]") array is always the two-word slice
- * { i64, ptr } regardless of structMAlloc - a genuinely runtime-sized array always needs to carry its own
- * length somewhere, so "arrMalloc" wins the shape question over "structMAlloc" for that one case (whether
- * scope-tracking a runtime-length array's own backing store is a separate, not-yet-implemented step - see the
- * report). */
+ * array ("Array<T, N>") is the real aggregate [N x ElemT] when embedded, or a bare ptr when a reference (same
+ * "ptr when referenced" rule a struct already gets, since its own size is compile-time-known either way); a
+ * runtime-length ("Array<T>") array is always the two-word slice { i64, ptr } regardless of structMAlloc - a
+ * genuinely runtime-sized array always needs to carry its own length somewhere, so "arrMalloc" wins the shape
+ * question over "structMAlloc" for that one case. */
 static void llvmTypeB(struct type t, struct cgBuf* b) {
     switch (t.bType) {
         //a type variable never reaches codegen: monomorphization (G16) substitutes every one away before
@@ -411,7 +409,7 @@ static void llvmTypeB(struct type t, struct cgBuf* b) {
         case BASETYPE_F16: case BASETYPE_BF16:
             cgBufAdd(b, "%s", PrimInfo(t.bType)->llvm); //T4
             return;
-        //T17: a payload-free choice is the bare i32 ordinal it always was; one carrying a payload is a
+        //T17: a payload-free enum is the bare i32 ordinal it always was; one carrying a payload is a
         //tag plus a buffer big enough for the largest case, since exactly one case is live at a time
         case BASETYPE_CHOICE:
             if (t.structMAlloc) cgBufAdd(b, "ptr");
@@ -1021,9 +1019,9 @@ char* cgDeclareLocal(struct cgCtx* ctx, struct str name, struct type type) {
 }
 
 //NULL if not a local in the current codegen scope chain. A scope variable's slot (the hidden argument
-//carrying it) is in the same table but a different namespace: a scope name is not a value (O3), so a local
-//may share one, and "return out" beside a "&out" tag has to find the local. Keying both by bare name made
-//it find the scope pointer instead, and return that as the array.
+//carrying it) is in the same table but a different namespace: a scope variable is not a value (O3), so a
+//local may share its name, and a local has to be found as itself. Keying both by bare name once made a
+//return find the scope pointer instead, and return that as the array.
 static struct cgLocal* cgFindLocalKind(struct cgCtx* ctx, struct str name, bool scopeVar) {
     for (struct cgScope* sc = ctx->scope; sc; sc = sc->parent) {
         for (int i = 0; i < sc->locals.len; i++) {
@@ -1175,8 +1173,6 @@ static bool cgClausesCoverAll(struct list* a, struct list* b, struct type* funcT
 }
 void cgBlock(struct cgCtx* ctx, struct list* block);
 
-//true for a type that "&"/"&name" can mark as a reference - a struct, or a compile-time-length ("T[N]") array;
-//a runtime-length ("T[]") array is excluded, same reasoning as typeNeedsMallocPromotion.
 //a REFERENCE - a marked struct or array of any length kind - which is what a container has to be for a slot
 //inside it to live in its scope. typeIsRefShaped answers which types a marker can MAKE a reference, and leaves
 //out a run-time-length array; testing containers with it made "b.a[0] = N(...)" allocate the new node in the
@@ -1185,21 +1181,15 @@ static bool cgIsReference(struct type t) {
     return t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
 }
 
+//true for a type that "&"/"&x" can mark as a reference - a struct, an enum, or a compile-time-length ("Array<T, N>")
+//array; a runtime-length ("Array<T>") array is excluded, same reasoning as typeNeedsMallocPromotion.
 static bool typeIsRefShaped(struct type t) {
     return (t.bType == BASETYPE_STRUCT) || t.bType == BASETYPE_CHOICE || (t.bType == BASETYPE_ARRAY && !t.arrMalloc);
 }
 
-//a parameter's own declared type may name ANOTHER parameter of the *same* signature as its scope tag
-//(e.g. "func f(s scope, p Point<s>)") - fine for type-checking (semantic.c already resolves this), but at
-//a call site that name has no meaning yet: "s" isn't a local in the CALLER's own scope, it's whatever
-//scope value THIS call happens to be passing as its own "s" argument. Returns that value directly - found
-//by locating which parameter index paramT's scope tag names, then evaluating the caller's own argument
-//expression for that same index - instead of letting cgResolveScope try (and fail) to look "s" up as a
-//caller-local. NULL when paramT's scope tag doesn't need this (bare "&", or names a scope the caller
-//already has in its own scope, e.g. a scope variable of the caller itself being passed straight through).
 //C2d: a constructor is the function a struct type points at as its own (an instantiation's monomorphized
 //one included). It takes one hidden leading "ptr" more than its signature shows: the scope the instance
-//it builds lands in, which a field holding a reference with no scope name of its own is built into.
+//it builds lands in, which a field holding a reference of no other scope is built into.
 static bool cgIsCtor(struct var* func) {
     return func->type.hasRetType && func->type.retType && func->type.retType->bType == BASETYPE_STRUCT
            && func->type.retType->ctorFunc == func;
@@ -1238,14 +1228,16 @@ char* cgWhereBuilt(struct cgCtx* ctx, struct operand* op) {
 //the scope a constructor call's instance lands in (C2d)
 static char* cgCtorHereArg(struct cgCtx* ctx, struct operand* op) { return cgWhereBuilt(ctx, op); }
 
+//a parameter's type names one of the CALLEE's scope variables, which mean nothing in the caller's frame: the scope
+//this call bound it to (cgBoundScopeArg), or NULL when paramT names none or is no reference
 char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct operand* callOp, struct type paramT) {
     (void)func;
-    //T11: a run-time-length array is pointer-backed whatever marker it carries, so a "&s" on one is as
-    //real a scope tag as a struct's and has to be resolved through THIS call's binding - it names the
+    //T11: a run-time-length array is pointer-backed whatever marker it carries, so its scope is as real a
+    //scope tag as a struct's and has to be resolved through THIS call's binding - it names the
     //CALLEE's variable, which does not exist in our frame. typeIsRefShaped answers a different question
     //(which types a marker can make a reference) and excludes arrMalloc, so such a parameter got no
     //override at all and cgBoundaryValue looked the callee's own scope up here: the compiler SEGFAULTED
-    //on a temporary passed to a "T[]&s" parameter, mangling a global with a NULL owner.
+    //on a temporary passed to an "Array<T>&" parameter, mangling a global with a NULL owner.
     bool refLike = (paramT.bType == BASETYPE_ARRAY && paramT.arrMalloc)
                     || (typeIsRefShaped(paramT) && paramT.structMAlloc)
                     || (paramT.bType == BASETYPE_FUNC && paramT.structMAlloc); //D16: so does a function value's
@@ -1282,12 +1274,10 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
 }
 
 
-//true if a plain (non-referenced) value of srcT needs to be malloc-and-copied to fit a "&"-heap-indirect
-//dstT - a struct, or a compile-time-length array (same rule either way, see the report on extending scope/"&" to
-//arrays): dstT wants a reference, srcT doesn't have one yet. Deliberately excludes a runtime-length ("T[]")
-//array target even when structMAlloc: a runtime-length array's own backing store already gets a fresh @malloc
-//at the point its literal is built (cgAggregateLiteral), before this promotion step would even run -
-//scope-tracking *that* allocation is a separate, not-yet-implemented step, not attempted here.
+//true if a plain (non-referenced) value of srcT needs to be copied into fresh storage to fit a reference dstT - a
+//struct, an enum, or a compile-time-length array (the same rule for each): dstT wants a reference, srcT doesn't have
+//one yet. Excludes a runtime-length ("Array<T>") target even when structMAlloc: such an array's descriptor already
+//points at storage of its own, and cgStoreInto handles it.
 bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
     if (dstT.bType != srcT.bType) return false;
     if (!dstT.structMAlloc || srcT.structMAlloc) return false;
@@ -1296,7 +1286,7 @@ bool typeNeedsMallocPromotion(struct type dstT, struct type srcT) {
     return false;
 }
 
-//true if a compile-time-length array value needs malloc-and-copy to fit a runtime-length ("T[]") target - the array-sizing
+//true if a compile-time-length array value needs copying to fit a runtime-length ("Array<T>") target - the array-sizing
 //counterpart to typeNeedsMallocPromotion above, an orthogonal axis (arrMalloc, not structMAlloc/"&" -
 //see the report): dstT wants a runtime-length slice, srcT is still a compile-time-length, embedded aggregate. Applies equally
 //to a fresh literal or an already-existing compile-time-length-array value (semantic.c's OperandFitsType admits both -
@@ -1379,10 +1369,10 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct 
     llvmType(elemT, elemTy, sizeof(elemTy));
     long long elemSize = TypeGetSize(elemT);
     long long count = srcT.arrLen->intLiteralVal;
-    //E12: a "T[N]&" source is already a reference, so this is a WIDENING, not a promotion - keep the
+    //E12: an "Array<T, N>&" source is already a reference, so this is a WIDENING, not a promotion - keep the
     //pointer and materialise the length beside it. Nothing is allocated and nothing is copied, so the
-    //target names the very storage the source did, which is the whole point of "byte[]&" being one
-    //parameter that takes any length. (It also emitted invalid IR before: llvmType of a "T[N]&" is a bare
+    //target names the very storage the source did, which is the whole point of "Array<U8>&" being one
+    //parameter that takes any length. (It also emitted invalid IR before: llvmType of an "Array<T, N>&" is a bare
     //"ptr", which the element-copy loop below then GEP'd as if it were an "[N x T]" aggregate.)
     if (srcT.structMAlloc) {
         char* w1 = cgNewTmp(ctx);
@@ -1398,12 +1388,9 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct 
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", bytes, scopeVal, dstElemSize * count);
     char srcStorTy[256];
     llvmType(srcT, srcStorTy, sizeof(srcStorTy)); //"[N x ElemT]"
-    //a multi-dimensional promotion ("int32[2][2]" -> "int32[][]") promotes each ROW as well: T8a makes the
-    //length kind uniform across dimensions, so if the target's elements are runtime-length then the
-    //source's are compile-time-length and each one needs its own allocation, with the resulting
-    //{ i64, ptr } descriptor stored in this level's buffer. Without this the outer level was copied
-    //verbatim and the row descriptors were nonsense - which is why a nested literal could not reach a
-    //fully runtime-length target at all.
+    //where the target's elements are runtime-length arrays and the source's compile-time-length ones, each element
+    //is promoted as well: it needs its own allocation, with the resulting { i64, ptr } descriptor stored in this
+    //level's buffer. Without this the outer level was copied verbatim and the element descriptors were nonsense.
     bool promoteElems = typeNeedsRuntimeLengthPromotion(*dstT.arrElem, elemT);
     char dstElemTy[256];
     llvmType(*dstT.arrElem, dstElemTy, sizeof(dstElemTy));
@@ -1472,7 +1459,7 @@ bool OperandIsLvalue(struct operand* op);
 //(an address for a by-ref type, a { i64, ptr } descriptor for a runtime-length array). The one thing a
 //borrow still has to build is a length: a compile-time-length array reaching a runtime-length reference
 //keeps the pointer it already has and materialises the length it knows statically beside it. That is E12's
-//widening half, which copies nothing - distinct from the by-value "T[N]" -> "T[]" conversion next to it,
+//widening half, which copies nothing - distinct from the by-value "Array<T, N>" -> "Array<T>" conversion next to it,
 //which does allocate because the two representations genuinely differ.
 static char* cgBorrowValue(struct cgCtx* ctx, struct type dstT, struct type srcT, char* src) {
     if (dstT.bType != BASETYPE_ARRAY || !dstT.arrMalloc || srcT.arrMalloc) return src;
@@ -1499,11 +1486,8 @@ static char* cgBorrowSource(struct cgCtx* ctx, struct operand* op) {
     return op->type.bType == BASETYPE_CHOICE ? cgAddr(ctx, op) : cgValue(ctx, op);
 }
 
-//dstHoldsLiveValue says whether dstAddr already contains a valid value of dstT - true only for an
-//ASSIGNMENT to an existing lvalue, false at every initialization (a var-decl slot, a struct field or array
-//element being built, a global's initializer), where the storage is still undefined. Only one thing reads
 //O8a on the stack. The arena aligns what it hands out by size; an alloca is aligned by LLVM from the
-//ELEMENT type instead, so "float64[8]" sat at 8 bytes and no vector load could use it. Same rule here, so
+//ELEMENT type instead, so "Array<F64, 8>" sat at 8 bytes and no vector load could use it. Same rule here, so
 //where storage lives stops deciding whether it is SIMD-ready. Harmless where it is not wanted: over-
 //aligning a slot costs a few bytes of frame and nothing at run time.
 static long long cgStackAlign(struct type t) {
@@ -1562,8 +1546,8 @@ static char* cgValueSlot(struct cgCtx* ctx, struct type t, const char* ty) {
 //address changes per iteration cannot vectorize at all.
 //There are TWO families per type, and which one an access gets is decided by the LAST step of its path: an
 //array ELEMENT (reached by indexing) or a FIELD (a struct member, a local, a global). That split is sound
-//here because no storage is reachable both ways - olang has no way to build an "int32[]" view over a
-//"Point[]", so a field is never nameable as an element of that same storage. It is what lets a count kept
+//here because no storage is reachable both ways - olang has no way to build an "Array<I32>" view over an
+//"Array<Point>", so a field is never nameable as an element of that same storage. It is what lets a count kept
 //beside a buffer stay in a register across a loop that writes the buffer, which is the whole cost of an
 //append. "pts[i].x" is a FIELD access, since its last step is the member - consistently so from every path
 //that can reach it.
@@ -1590,7 +1574,7 @@ static const char* cgTbaa(struct type t, bool elem) {
         case BASETYPE_FLOAT64: return elem ? ", !tbaa !36" : ", !tbaa !26";
         //the "{ i64, ptr }" descriptor. llvmType gives a runtime-length array that shape whatever marker it
         //carries (T11), so the marker is irrelevant here; a compile-time-length array is inline storage or
-        //a bare ptr and stays untagged. An element variant is needed too, for a "T[][]"'s rows.
+        //a bare ptr and stays untagged. An element variant is needed too, for an array of arrays' elements.
         case BASETYPE_ARRAY: return t.arrMalloc ? (elem ? ", !tbaa !37" : ", !tbaa !27") : "";
         default: return "";
     }
@@ -1673,7 +1657,7 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
     //T11 gone: a runtime-length array follows its marker like any other, so the four combinations are the
     //same four every other type has, and only reference-to-reference is a descriptor store:
     //  value    -> value      copy (value semantics)
-    //  value    -> reference  copy into fresh storage (E12 promotion - the "T[N]" -> "T[N]&" case, which
+    //  value    -> reference  copy into fresh storage (E12 promotion - the "Array<T, N>" -> "Array<T, N>&" case, which
     //                         typeNeedsMallocPromotion handles for a compile-time length and used to skip
     //                         here, leaving the new reference aliasing the value's own buffer)
     //  reference-> value      copy out (E12's other direction)
@@ -1713,7 +1697,7 @@ char* cgAddr(struct cgCtx* ctx, struct operand* op);
 //about to be promoted into dstT ("&"-heap-indirect, op itself a plain value), the scope that promotion
 //will use is resolved *before* op's own value is built (rather than after, as a bare cgValue()+cgStoreInto
 //pair would), and set as the ambient override for the duration of that build - so if op is itself a
-//struct/array literal, any of ITS OWN bare-"&" fields (built recursively by cgAggregateLiteral, which
+//struct instance or array literal, any of ITS OWN bare-"&" fields (built recursively by cgAggregateLiteral, which
 //consults ctx->targetScopeOverride for exactly this) inherit the *same* scope dstT is being promoted into,
 //instead of each independently defaulting to ctx->ownScopeSlot. This is the general, type-level version of
 //what cgAssign's own scopeOverride computation already did for one narrow case - see the report. A no-op
@@ -1881,7 +1865,7 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
         return cgCallAdapterValue(ctx, op, dstT, scopeOverride);
     }
     //E11a/E11b: "$x" and a text join produce fresh storage with nothing to borrow, which makes them
-    //temporaries in E12c's sense - so they are built in the TARGET's scope, exactly as a struct literal
+    //temporaries in E12c's sense - so they are built in the TARGET's scope, exactly as a constructor's instance
     //is. Building them in the block the expression sits in instead made every string-building function
     //impossible: the result could never outlive the block, so "return "hi " + name" was rejected.
     bool isFreshText = cgIsFreshTemp(op);
@@ -2079,7 +2063,7 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
     //a constant index into a fixed-size array is settled at compile time (see OperandIndex), and a SLICE
     //is still always checked (E16b) because that cost is per slice expression, never per element access.
     if (op->isTried || op->checkRoot) {
-        //widened for the compare: an Int64 already is, a Byte is unsigned (T4) and zero-extends
+        //widened for the compare: an I64 already is, a U8 is unsigned (T4) and zero-extends
         char* idx64 = idxVal;
         if (strcmp(idxTy, "i64") != 0) {
             idx64 = cgNewTmp(ctx);
@@ -2226,11 +2210,11 @@ char* cgFloatConst(double v, enum baseType b) {
     return buf;
 }
 
-//"Type[v1, v2, ...]" (struct) or "T[v1, ...]" (array) - constructs a value inline. Both are by-ref (see
-//typeIsByRef): allocate storage, store each value into its slot, and return the address, exactly like
-//reading an existing by-ref variable would. A literal is always compile-time-length now, at every array level -
-//see buildArrLiteralLevel in semantic.c; a runtime-length ("T[]") target is reached only via a separate promotion
-//step (cgPromoteFixedToRuntimeLength), never by building one directly here.
+//a struct's instance assembled from its fields (C6), or "T[v1, ...]" (an array literal) - constructs a value inline.
+//Both are by-ref (see typeIsByRef): allocate storage, store each value into its slot, and return the address, exactly
+//like reading an existing by-ref variable would. A literal is always compile-time-length - see buildArrLiteralLevel
+//in semantic.c; a runtime-length ("Array<T>") target is reached only via a separate promotion step
+//(cgPromoteFixedToRuntimeLength), never by building one directly here.
 char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
     if (op->type.bType == BASETYPE_STRUCT) {
         char storTy[256];
@@ -2238,14 +2222,14 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         char* slot = cgValueSlot(ctx, op->type, storTy);
         for (int i = 0; i < op->args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
-            //the field's own declared type (not arg->type) is what decides malloc-promotion - a "&"
-            //field is exactly where a plain struct literal argument needs one (see cgStoreInto)
+            //the field's own declared type (not arg->type) is what decides promotion - a "&" field is
+            //exactly where a plain value needs one (see cgStoreInto)
             struct type fieldT = (*(struct var*)ListGetIdx(&op->type.vars, i)).type;
             char* fieldAddr = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fieldAddr, storTy, slot, i);
-            //a bare "&" field (no scopeParam) inherits whatever scope THIS WHOLE literal is itself being
+            //a bare "&" field (no scopeParam) inherits whatever scope THIS WHOLE value is itself being
             //promoted into (ctx->targetScopeOverride, threaded in by cgValueForTarget/cgBoundaryValue) -
-            //an explicitly-tagged "&name" field ignores it and resolves its own named scope as usual
+            //a field with a scope of its own ("&x") ignores it and resolves that scope as usual
             char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
             cgStoreOperand(ctx, fieldT, arg, fieldAddr, fieldScope, false, false);
         }
@@ -2273,7 +2257,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
     return slot;
 }
 
-//T17: a payload-carrying choice value - "Shape.Circle(3)". Built the way an aggregate literal is, into
+//T17: a payload-carrying enum value - "Shape.Circle(3)". Built the way an aggregate literal is, into
 //{ i64 tag, [N x i64] payload }: zero the whole thing first (so a smaller case leaves no stale bytes behind
 //in the tail), write the tag, then write the payload's fields through the case's own struct shape. The
 //buffer is sized for the LARGEST case, which is the whole space saving over a struct holding every
@@ -2317,11 +2301,11 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
     char* buf = MallocOrCrash(64);
     //T2a: by here "null" has been retagged to whatever nullable type it met (OperandFitsType), so its
     //value is simply that type's zero - "null" for a single pointer, "zeroinitializer" for the two-word
-    //shapes ({ len, ptr } and { itab, data }), which is what makes "len(null)" 0 rather than garbage.
+    //shapes ({ len, ptr }, { code, environment }), which is what makes a null array's "Len()" 0 rather than garbage.
     if (op->isNullLiteral) return cgZeroValue(op->type);
     switch (op->type.bType) {
         case BASETYPE_BOOL: strcpy(buf, op->intLiteralVal ? "true" : "false"); return buf;
-        //a choice value's intLiteralVal is its declared ordinal (see OperandChoiceValue) - represented as
+        //an enum value's intLiteralVal is its declared ordinal (see OperandChoiceValue) - represented as
         //a plain i32 same as any other small integer type, but never exposed to olang code as one (no
         //arithmetic/ordering operators accept BASETYPE_CHOICE - see TypeIsNumeric/TypeIsInt)
         case BASETYPE_CHOICE:
@@ -2333,7 +2317,7 @@ char* cgLiteral(struct cgCtx* ctx, struct operand* op) {
         case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: case BASETYPE_F16: case BASETYPE_BF16:
             return cgFloatConst(op->floatLiteralVal, op->type.bType);
         //a string literal's own token IS the TOK_STR_LIT it was decoded from (see OperandStringLiteral) -
-        //an aggregate "T[][...]"/"T[N][...]" literal's tok is TOK_SQUARE_O instead, so this reliably
+        //an array literal's tok is TOK_SQUARE_O instead, so this reliably
         //tells the two apart without needing a dedicated flag
         case BASETYPE_ARRAY: return op->tok.type == TOK_STR_LIT ? cgStringLiteralGlobal(ctx, op) : cgAggregateLiteral(ctx, op);
         case BASETYPE_STRUCT: return cgAggregateLiteral(ctx, op);
@@ -2473,7 +2457,7 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal);
 //and returns the resulting { i64, ptr } descriptor. This is what an UNMARKED runtime-length array's
 //assignment does now that T11 is gone: without a marker it is a value, so "b = a" must give b storage of
 //its own rather than pointing it at a's - the same thing "b = a" already did for a compile-time-length
-//array, and the whole point of making the two behave alike. A marked "T[]&" keeps copying the descriptor
+//array, and the whole point of making the two behave alike. A marked "Array<T>&" keeps copying the descriptor
 //instead (that is what a reference assignment means, S4a). Length is a runtime value here, so this is a real loop.
 char* cgCopyRuntimeLengthArray(struct cgCtx* ctx, struct type t, char* srcVal, char* scopeVal, char* liveDstAddr) {
     char elemTy[256];
@@ -2649,7 +2633,7 @@ char* cgDeepEqSlice(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
  * loaded value otherwise). A <>-indirect struct is deliberately excluded from the "struct" case below and
  * falls through to the plain pointer-compare leaf: <> means "this is a reference", so identity is the
  * semantically correct meaning of "==" there, same as comparing object references in Java. */
-//T17a: emits (once per object) the structural-equality function for one payload-carrying choice type.
+//T17a: emits (once per object) the structural-equality function for one payload-carrying enum type.
 //Each arm RETURNS rather than branching to a join, so no phi node is needed anywhere and cgDeepEq's own
 //recursion stays straight-line - the reason this is a function at all. Reading a payload as case N is
 //sound here precisely because the tag test above the switch already established that is the live case,
@@ -2668,7 +2652,7 @@ static char* cgChoiceEqFn(struct cgCtx* ctx, struct type t) {
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
 
     //emitted into its own stream: this can be reached while another function body is mid-emission, and a
-    //nested choice payload can reach it again from inside this very body
+    //nested enum payload can reach it again from inside this very body
     FILE* savedOut = ctx->fnOut;
     bool savedTerm = ctx->terminated;
     char* buf;
@@ -2707,7 +2691,7 @@ static char* cgChoiceEqFn(struct cgCtx* ctx, struct type t) {
         ctx->terminated = false;
         //the payload is an ordinary struct, so this is the ordinary structural comparison - including all
         //of E10's own rules for what a field of each kind means (a reference compares by identity, a
-        //nested value struct memberwise, and a nested choice through its own function)
+        //nested value struct memberwise, and a nested enum through its own function)
         char* r = cgDeepEq(ctx, c->type, "%ce.pa", "%ce.pb");
         fprintf(ctx->fnOut, "  ret i1 %s\n", r);
     }
@@ -2918,7 +2902,7 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         return acc;
     }
     if (t.bType == BASETYPE_ARRAY && t.arrMalloc) return cgDeepEqSlice(ctx, t, aVal, bVal);
-    //T17a: a payload-carrying choice compares tag first, then the live case's payload - which means the
+    //T17a: a payload-carrying enum compares tag first, then the live case's payload - which means the
     //comparison BRANCHES, since which values get compared depends on a run-time tag. That is emitted as
     //its own function rather than inline: a branch in the middle of an expression would need phi nodes
     //threaded back out through every level of cgDeepEq's recursion, where a function simply returns from
@@ -3427,10 +3411,10 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     return payload;
 }
 
-//an "extern func" (§11) call: the unmangled name (X5 - it's also the linker symbol, never olang's own
+//an "extern fn" (§11) call: the unmangled name (X5 - it's also the linker symbol, never olang's own
 //module-prefix mangling), never fallible (X4 - a plain call, never the {code,payload} wrapping), and an
 //array-typed argument marshalled down to a bare pointer to its first element (X3) - cgBoundaryValue still
-//does the ordinary promotion work first (a compile-time-length-array literal flowing into a runtime-length "byte[]" param, a
+//does the ordinary promotion work first (a compile-time-length-array literal flowing into a runtime-length "Array<U8>" param, a
 //plain value flowing into a "&"-marked param), so this only ever has to peel the final boundary-form
 //value (a "{ i64, ptr }" slice, a real "[N x T]" aggregate, or an already-bare "ptr") down to that ptr.
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
@@ -3506,9 +3490,6 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     return result;
 }
 
-//"len(arr)" - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
-//anything more than a bare variable read, e.g. a function call producing the array) even when the
-//dimension turns out to be compile-time-known and the loaded value itself goes unused.
 //P9: one atomic method, one LLVM atomic instruction, always sequentially consistent. The address comes
 //from cgAddr, so a local, a field and an array element all work; natural alignment is what LLVM's own
 //layout already gives every integer (TypeGetAlign), which is exactly what an atomic instruction requires.
@@ -3544,6 +3525,9 @@ char* cgAtomic(struct cgCtx* ctx, struct operand* op) {
     }
 }
 
+//"a.Len()" (T10) - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
+//anything more than a bare variable read, e.g. a function call producing the array) even when the
+//length turns out to be compile-time-known and the loaded value itself goes unused.
 char* cgLen(struct cgCtx* ctx, struct operand* op) {
     struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
     char* argVal = cgValue(ctx, arg);
@@ -3557,18 +3541,6 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
     return result;
 }
 
-//"TypeName(x)" - the explicit numeric-conversion builtin (see the report). Picks the one LLVM
-//instruction the (source, target) pair actually needs: same type is a no-op (returns the value
-//unchanged - OperandNumericConversion already lets this through as a harmless identity); float<->float
-//is fpext (widening, float32->float64) or fptrunc (narrowing, the reverse - LLVM requires the matching
-//direction, unlike the integer instructions below, which are each only ever reachable one way); int<-
-//>float is sitofp/fptosi for a signed source/target or uitofp/fptoui for byte, this language's one
-//unsigned integer type (T4); int<->int compares TypeGetSize to decide zext (byte's own unsigned width,
-//never sign-extended) /sext (int32/int64) for widening vs. trunc for narrowing - byte/int32/int64 are
-//the only three integer types, so a size mismatch always means exactly one of those three directions.
-//T4: the instructions converting val from one numeric type to another - none between two of one width and kind (a
-//retag, or I32 and U32 which share a representation), an extension or truncation chosen by the source's signedness,
-//and between F16 and BF16 (one width, neither containing the other) a trip through float
 //a BF16 widened to F32 (wide "float") or F64 ("double"): its bits are the top half of the F32 holding the same value, so
 //by an integer shift - exact for every value and payload. Not "fpext bfloat": LLVM 18's InstCombine takes a value
 //extended from bfloat to fit in any type of at least bfloat's precision, so "fptrunc (fdiv (fpext b), (fpext b)) to
@@ -3633,6 +3605,9 @@ static char* cgBF16Arith(struct cgCtx* ctx, const char* instr, char* av, char* b
     return cgNarrowBF16(ctx, r);
 }
 
+//T4: the instructions converting val from one numeric type to another - none between two of one width and kind (a
+//retag, or I32 and U32 which share a representation), an extension or truncation chosen by the source's signedness,
+//and between F16 and BF16 (one width, neither containing the other) a trip through float
 static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to, char* val) {
     char fromTy[16], toTy[16];
     llvmType(from, fromTy, sizeof(fromTy));
@@ -3753,6 +3728,8 @@ static void cgCheckConvert(struct cgCtx* ctx, struct operand* op, struct type fr
     cgFailIf(ctx, op, out, "OVERFLOW");
 }
 
+//"T(x)" - an explicit numeric conversion. Same type is a no-op (OperandNumericConversion lets it through as a harmless
+//identity); otherwise cgConvertValue's instructions, checked under "try" (R20)
 char* cgNumericConvert(struct cgCtx* ctx, struct operand* op) {
     struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
     char* val = cgValue(ctx, arg);
@@ -3769,9 +3746,8 @@ char* cgNumericConvert(struct cgCtx* ctx, struct operand* op) {
     return cgConvertValue(ctx, from, to, val);
 }
 
-//"T[expr]" with no initializer (expr not a compile-time constant) - see OPERATION_SIZED_ARRAY_ALLOC and
-//the report. Arena-allocates expr zero-valued elements into op->type's own scope (own by default, or its
-//declared "&name" tag - same cgResolveScope convention every other reference allocation already uses) and
+//"Array<T>(n)" - see OPERATION_SIZED_ARRAY_ALLOC. Arena-allocates n zero-valued elements into op->type's own scope
+//(where it is built, cgWhereBuilt - the convention every other reference allocation uses) and
 //returns the resulting { i64, ptr } slice value, zero-filled via memset (chunk-pool memory is reused, not
 //guaranteed zero, unlike a fresh @malloc - see emitScopeRuntime).
 static void cgFillLoop(struct cgCtx* ctx, struct type elemT, char* basePtr, char* countVal, char* fillVal);
@@ -3826,7 +3802,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "", scopeVal,
             byteSize);
-    //D15b: a local "T[expr]" is left as the arena hands it over - chunk memory is recycled, so that is
+    //D15b: a local "Array<T>(n)" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
     //only at the local var-decl), since a field has no "= v" form to ask for a fill with.
     if (op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) { //D13c: a zero-bits fill is the memset
@@ -4119,7 +4095,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
     cgLabel(ctx, okLbl);
 }
 
-//E31: a derived TryAt/TrySlice's check - v itself, once lo <= v < hi (<= hi when inclusive), compared as Int64
+//E31: a derived TryAt/TrySlice's check - v itself, once lo <= v < hi (<= hi when inclusive), compared as I64
 static char* cgAsI64(struct cgCtx* ctx, struct operand* x, char* v) {
     if (TypeGetSize(x->type) == 8) return v;
     char ty[64];
@@ -4318,7 +4294,7 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
 //measures every piece, allocates once, and writes each piece in place - nothing is rendered into an
 //intermediate buffer. Anything that is not a primitive renders through one helper function per type,
 //"i64 @olang.rd.<key>(ptr dst, ptr valueAddr, i32 depth)", emitted once per object as linkonce_odr (the
-//choice-equality helpers' pattern) - a function rather than inline code because a type can reach itself
+//enum-equality helpers' pattern) - a function rather than inline code because a type can reach itself
 //through a reference, and because an array needs a loop.
 
 #define RD_MAX_DEPTH 8 //E11a: references followed along one path before the rest is written as "..."
@@ -4387,7 +4363,7 @@ static void rdKey(struct type t, struct cgBuf* b) {
 //parameter and result types of a function rendering. Spelled into a growable buffer: a fixed one per level cut a
 //long type short, and two long function types then shared a rendering helper's name
 
-//"(a int32, b mut Point&) int32 ? E + F", the part of a signature after its name
+//"(a I32, b mut Point&) I32 ? E + F", the part of a signature after its name
 static void rdSpellSigB(struct type f, struct cgBuf* b) {
     rdSigDepth++;
     cgBufAdd(b, "(");
@@ -5308,7 +5284,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
             char* addr = cgAddr(ctx, op);
             //a bare read of a global FUNCTION (not a local variable/parameter that merely *holds* a
-            //function pointer, e.g. "f" inside "func apply(f func(...) ? T)") has no separate storage
+            //function pointer, e.g. "f" inside "fn apply(f fn(...) ? T)") has no separate storage
             //slot to load through at all - cgLookupVarAddr's "not a local, so mangle as global" branch
             //returns the function's own mangled symbol directly, which unlike every other global IS
             //already the value (an LLVM `define`, not a `global` storage declaration) - loading "through"
@@ -5339,7 +5315,7 @@ void cgStatement(struct cgCtx* ctx, struct statement* s);
 //P2: one task's view of one scope. The task gets a private, empty arena standing in for the scope its
 //caller named, and the spawner folds it back in after the join (see cgSpawn) - so a scope is only ever
 //bumped by the thread that owns it, while every value allocated through it still lives exactly as long as
-//the scope it was tagged with. Without this, two tasks handed the same "&s" bumped one cursor with no
+//the scope it was tagged with. Without this, two tasks handed the same scope bumped one cursor with no
 //synchronisation at all: they were handed the same chunk, wrote over each other, and prepended two chunks
 //onto one list head - reliably glibc-level heap corruption, not a lost update.
 //P1: one task. Its arguments are evaluated here, in the spawner's frame, by the very lowering an ordinary call
@@ -5691,14 +5667,14 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         cgArenaAllocFor(ctx, slot, ctx->ctorHere, s->var.type);
     } else cgValueSlotAs(ctx, slot, s->var.type, ty);
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
-    //D15c: "x T[N] = v" / "x T[expr] = v" - every element gets v
+    //D15c: "Array<T>(n, v)" - every element gets v
     if (s->fillValue) {
         struct type elemT = *s->var.type.arrElem;
         char* fillVal = cgValueForTarget(ctx, s->fillValue, elemT, NULL);
         char* basePtr = slot;
         char* countVal;
         if (s->op) {
-            //"T[expr]": the allocation produces { i64 len, ptr }, which is the variable's own value
+            //"Array<T>(n)": the allocation produces { i64 len, ptr }, which is the variable's own value
             char* arr = cgValue(ctx, s->op);
             fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, arr, slot);
             countVal = cgNewTmp(ctx);
@@ -5730,7 +5706,7 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", d, slot);
         return;
     }
-    //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope name
+    //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope
     //of its own - a reference field's referent, a nested constructor call's - goes where the instance lands
     char* here = s->ctorField ? ctx->ctorHere : resultHere;
     //T7b: the function's result, built where it is returned to (cgResultLocal)
@@ -6451,7 +6427,7 @@ static struct type cgElementsType(struct type arrT, int n) {
 }
 
 //K2d: a value's bytes as the target lays them out (little-endian, natural alignment - TypeGetAlign's rule), for
-//a choice payload, whose LLVM type is an untyped byte buffer. False where a byte would have to be an address
+//an enum payload, whose LLVM type is an untyped byte buffer. False where a byte would have to be an address
 //(a reference, a function, a run-time-length array): those have no constant byte spelling
 //K2e: where a payload's bytes hold an address - the byte offset of its word, and the private global it points at.
 //NULL while nothing is collecting them, when an address has no byte spelling
@@ -6543,7 +6519,7 @@ static char* cgConstInit(struct ctVal* v, struct type t) {
     if (v->kind == CT_NULL) {
         fputs("zeroinitializer", f);
     } else if (v->kind == CT_FLOAT) {
-        //LLVM's exact form: a float32 too is written as the double it widens to, F16/BF16 in their own (T4)
+        //LLVM's exact form: an F32 too is written as the double it widens to, F16/BF16 in their own (T4)
         fputs(cgFloatConst(v->f, t.bType), f);
     } else if (v->kind == CT_BOOL) {
         fputs(v->i ? "true" : "false", f);
@@ -6803,7 +6779,7 @@ static bool cgRuntimeDeclaresSym(struct str name, bool dyncall) {
     return false;
 }
 
-//"declare RETTY @NAME(ARGTYS)" for every "extern func" (§11) in the program - the unmangled name (X5:
+//"declare RETTY @NAME(ARGTYS)" for every "extern fn" (§11) in the program - the unmangled name (X5:
 //it's also the linker symbol, no module-prefix mangling like an ordinary olang function gets) and a
 //plain C-ABI signature (llvmType already gives an array-typed param/local its right shape everywhere
 //else; here it's simply overridden to "ptr", matching the marshalling cgExternFuncCall performs at
