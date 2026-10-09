@@ -1,0 +1,6 @@
+# check: fail expected 'expression'
+# "return -" with nothing after the operator was a return with no value
+fn g() {
+    return -
+}
+fn main() ? { g() }

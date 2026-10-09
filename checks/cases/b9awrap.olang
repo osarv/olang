@@ -1,0 +1,27 @@
+# check: run
+# flags: -D N=2147483647
+# B9a: N is an I32, so N + 1 wraps in the program - the token evaluator does not compute it in 64 bits and decide
+# otherwise, but leaves it to compile-time evaluation (B9c), which agrees with the run time
+fn viaIf() I32 {
+    if N + 1 < 0 {
+        return 1
+    }
+    return 2
+}
+if N + 1 < 0 {
+    fn top() I32 { return 1 }
+} else {
+    fn top() I32 { return 2 }
+}
+fn viaValue() I32 {
+    v I32 = N + 1
+    if v < 0 {
+        return 1
+    }
+    return 2
+}
+fn main() ? {
+    assert viaValue() == 1
+    assert viaIf() == 1
+    assert top() == 1
+}

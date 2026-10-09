@@ -1,0 +1,5 @@
+# check: fail expected 'expression'
+# the same inside an array literal - "I32[~]" was an empty array
+fn main() ? {
+    a := I32[~]
+}

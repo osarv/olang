@@ -63,17 +63,23 @@ language.
 ### 1.1 Source files
 
 **L1.** A source file is a sequence of 8-bit bytes, treated as ASCII. There is no escape for
-non-ASCII source text.
+non-ASCII source text. Outside a comment and a string or character literal, a byte that begins no token, whitespace
+or comment - a non-ASCII byte, a control character, a NUL - is a compile-time error, reported once for a run of such
+bytes and then passed over, so the rest of the file is read as though it were not there. The file ends where its
+bytes do: a NUL byte inside it is one more byte, never its end.
 
 **L2.** A source file's name conventionally ends in `.olang`. A file is the unit of tokenization,
 parsing, and (per §4) the unit of module identity.
 
 ### 1.2 Whitespace and comments
 
-**L3.** Space (`' '`) and tab (`'\t'`) are insignificant except as token separators.
+**L3.** Space (`' '`) and tab (`'\t'`) are insignificant except as token separators. A carriage return is not
+whitespace: a line ends at a newline alone, and a file with CR-LF line endings is a compile-time error (reported once per
+file).
 
-**L4.** A line comment begins with a single `#` and runs to the end of the line (exclusive of the newline). It is
-treated as whitespace, except that it counts as a newline for the purpose of L18 (automatic statement termination).
+**L4.** A line comment begins with a single `#` and runs to the end of the line (exclusive of the newline), or of the
+file. It is treated as whitespace, except that it counts as a newline for the purpose of L18 (automatic statement
+termination).
 
 **L4a.** `##` opens a **block comment**, which runs to the next `##` (block comments do not nest). It is treated as
 whitespace, and as a newline for L18 exactly when it spans one - so `x := 1 ## note ## + 2` is one statement. A block
@@ -144,7 +150,8 @@ nullable type it is used against; see §2.1 T2a.
 
 **L12.** `FLOAT_LIT ::= digit { digit } [ "." digit { digit } ] exponent
 | digit { digit } "." digit { digit } [ exponent ]` — at least one digit is required on *both* sides of
-the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more than one `.`.
+the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more than one `.`. A `.` followed by a
+letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call.
 
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
@@ -214,7 +221,8 @@ other field.)
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
 implicit end-of-statement token before continuing. This token has no literal spelling; it exists
 only in the token stream produced by the tokenizer, and appears in the grammar as `STMNT_END`
-wherever a rule below requires it.
+wherever a rule below requires it. It stands at the end of the line it ends - just past that line's last token - and
+a diagnostic about one names that line, as "end of line".
 
 **L19.** Consequently, an operator or continuation that is meant to extend an expression onto the
 next line must appear at the *end* of the first line, not the start of the next:
@@ -257,6 +265,10 @@ because the grammar never expects one there and L18 never produces one there eit
 Each of the last three applies only where its token is the last on its line (or of the file): a token after it
 on the same line continues the statement, so `s Array<I32>(4)` is a syntax error at the `(`, not a declaration
 followed by a parenthesized expression.
+
+**L21.** Every construct that nests - a parenthesized or otherwise nested expression, a block, a `not`, each operator
+of a chain such as `a + b + c` applied to what the operators before it built - adds a level, and a program nested more
+than 20,000 levels deep is a compile-time error, reported once where the limit is passed.
 
 ## 2. Types
 
@@ -453,9 +465,9 @@ an unmarked, unbroken self-embedding cycle is a compile-time error, reported at 
 representation available to a program: it supports only equality (`==`/`!=`) and structural matching
 (`match`/`case`, §6.4) — no ordering, no arithmetic, no explicit conversion to or from any integer type.
 
-Cases are separated by statement ends, not commas (L18/L20) - a comma between two is a compile-time error - the same
-way a constructor body's fields and an error type's words (T19) are:
-a case is a declaration rather than an item in a list.
+Cases are separated by statement ends, not commas (L18/L20) - a comma between two is a compile-time error, and so are
+two written on one line with nothing between them - the same way a constructor body's fields and an error type's words
+(T19) are: a case is a declaration rather than an item in a list.
 
 **T17a.** A case may carry a **payload**, written as a parameter list after its name:
 
@@ -844,7 +856,8 @@ method-sig ::= [ "mut" ] IDEN func-sig
 ```
 
 `func-sig` is the parameter list, optional return type and optional error list of §3.4, written without a leading
-`fn`. Method names must be unique within the trait. A trait may declare no methods at all; such a trait is
+`fn`. A signature ends at its line's end - one whose last token is a type's `>` or a reference marker's `&` too, as
+L20a's declarations do - or at the body's `}`; two on one line are a compile-time error. Method names must be unique within the trait. A trait may declare no methods at all; such a trait is
 satisfied by every type, built-in types included. The leading `mut` marks a method that needs a **mutable
 receiver**, one that writes through to the value it is called on - the receiver half of D9's two axes.
 
@@ -2227,7 +2240,10 @@ error, as for any other non-numeric type.
 reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
 whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
 received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
-(`is` is the question it asks). On anything else `is` and `as` are a compile-time error.
+(`is` is the question it asks). On anything else `is` and `as` are a compile-time error. What follows `is` or `as` is a
+`type-ref`, so an `&` touching it with a name after it is that type's reference marker (§2.9): `b as Box.Val & mask` is
+an `as` to the type `Box.Val&mask`, and a compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the
+result.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `try` (E15a) it fails with
 `BuiltinError.INVALID` instead. `is` never fails. A null reference to an enum is no case: `is` is false and `as`
@@ -3930,13 +3946,24 @@ S8a and S8b say when its condition is dead code and when the build decides it.
 types are resolved where it can be: when it uses only **literals**, **build constants** (B10), and
 **immutable globals** the module declares at its top level outside every conditional — in any of its files
 — whose own initializers are built the same way; combined with parentheses, `not`, unary `-`, `* / % + -`,
-the six comparisons, `and` and `or`. It must evaluate to a `Bool`. Integers and floats mix as their values,
-a global declared with a float type reads as a float, and text (a string literal, a text build constant,
+the six comparisons, `and` and `or`. It must evaluate to a `Bool`. Text (a string literal, a text build constant,
 or a global holding one) compares with `==` and `!=` **by content**. A mutable global has no value a build
 could decide on and is rejected, as are globals defined in terms of each other.
 
-**B9c.** Any other condition — one that calls a function or a method, reads a global computed by one, or names
-another module's declaration — is decided by **compile-time evaluation** (§13): the program is checked
+A condition decided this way is decided **exactly as the program would decide it**, or it is left to B9c. Every
+number keeps its type: a literal's adapts (T6), a build constant's is its literal's (T6a), a global's is the one it is
+declared with or, for `:=`, its initializer's. Two numbers combine only where they meet (T6b, E6d) - an integer of a
+type of its own never meets a float, and is a compile-time error beside one; an integer literal adapts to a float - and
+an operation's result must fit the type it is computed in. One that would not - it **wraps** in the program (E6c), or
+has no value (a zero divisor, the most negative value divided by `-1`, E6a) - is decided by B9c instead, as is a global
+whose type the value depends on: a float narrower than `F64`, or a number of a declared type. Floats are computed as
+`F64`s. `and` and `or` evaluate their right side only when their left does not decide them (E7): a right side that is
+never evaluated is read for whether its values combine and for nothing else - nothing it names is a value the condition
+depends on.
+
+**B9c.** Any other condition — one that calls a function or a method, reads a global computed by one, names
+another module's declaration, or computes a value B9a cannot (one depending on a type's width) — is decided by
+**compile-time evaluation** (§13): the program is checked
 without the branches of such conditions, each condition is then checked as an ordinary `Bool` expression
 in its module and evaluated, and the program is checked again with the branches chosen, repeating while a
 chosen branch holds further such conditions (to an implementation-defined depth). Diagnostics from every
@@ -3948,9 +3975,12 @@ compares here as it does everywhere else: a `String` by content, through its `Eq
 **B10.** `-D Name=value` (or `-DName=value`), given any number of times alongside any mode, defines a
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
-shaped as an integer literal is an integer and text shaped as a float literal an `F64` (each typed by T6a), each
-optionally preceded by `-`; anything else — or anything in double quotes — is text, a `String` (T29c), so it
-compares, renders and passes as any other text does.
+that is - after an optional `-` - one whole integer literal (L10) is an integer, and one whole float literal (L12) an
+`F64` (each typed by T6a); anything else — or anything in double quotes — is text, a `String` (T29c), so it
+compares, renders and passes as any other text does: `-D Version=1.2.3` is text. A value beginning `0x` or `0b` is
+always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be: an integer
+of at most 64 bits - a decimal one at most `I64`'s largest, or negated its most negative value - and a float that is not
+an infinity. A malformed or out-of-range value is an error naming the `-D` flag that gave it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, as is defining one name twice.

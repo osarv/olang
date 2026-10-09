@@ -387,6 +387,7 @@ static void reportUnknownName(struct semaModule* mod, struct token tok, const ch
 }
 
 static struct type unknownTypeStandIn(void) { struct type t = TypeVanilla(BASETYPE_INT32); t.unknown = true; return t; }
+static struct operand* unknownPlaceholder(struct token tok);
 
 static void reportUnknownType(struct semaModule* mod, struct token nameTok) {
     reportUnknownName(mod, nameTok, "unknown type", false,
@@ -5465,7 +5466,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (!OperandTypeIsWrittenHere(rhs)) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+    if (!OperandTypeIsWrittenHere(rhs) && !rhs->type.unknown) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(rhs)) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok);
@@ -6366,8 +6367,13 @@ struct operand* OperandNumericConversion(struct type target, struct operand* arg
 
 struct operand* OperandIndex(struct operand* base, struct operand* index, struct token tok) {
     if (base->type.bType != BASETYPE_ARRAY) {
-        ErrMsgSemantic(tok, NOT_AN_ARRAY);
-        return operandNew(tok, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
+        //an unknown base was reported where it was written. Either way the index keeps its operands, so what walks an
+        //lvalue's chain (its mutability, its scope) finds them and nothing reads past the end of an empty list
+        if (!base->type.unknown) ErrMsgSemantic(tok, NOT_AN_ARRAY);
+        struct operand* op = operandNew(tok, OPERATION_INDEX, unknownTypeStandIn());
+        ListAdd(&op->args, &base);
+        ListAdd(&op->args, &index);
+        return op;
     }
     if (!TypeIsInt(index->type)) ErrMsgSemantic(index->tok, OPERATION_REQUIRES_INT);
 
@@ -6397,8 +6403,8 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
 //has to know they could be missing.
 struct operand* OperandSlice(struct operand* base, struct operand* lo, struct operand* hi, struct token tok) {
     if (base->type.bType != BASETYPE_ARRAY) {
-        ErrMsgSemantic(tok, SLICE_REQUIRES_ARRAY);
-        return operandNew(tok, OPERATION_SLICE, TypeVanilla(BASETYPE_INT32));
+        if (!base->type.unknown) ErrMsgSemantic(tok, SLICE_REQUIRES_ARRAY);
+        return unknownPlaceholder(tok); //not a slice with no base - nothing reads past what it has
     }
     if (!lo) {
         lo = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
@@ -6471,6 +6477,7 @@ bool scopeViaFallback(struct operand* op) {
 }
 
 struct operand* OperandMember(struct semaModule* referencingMod, struct operand* base, struct str member, struct token tok) {
+    if (base->type.unknown) return unknownPlaceholder(tok); //an unknown name or type, reported where it is written
     if (base->type.bType != BASETYPE_STRUCT) {
         ErrMsgSemantic(tok, UNKNOWN_STRUCT_MEMBER);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
@@ -6605,6 +6612,7 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
 struct operand* incDec(struct operand* in, enum operation opType, struct token tok) {
     struct operand* op = operandNew(tok, opType, in->type);
     ListAdd(&op->args, &in);
+    if (in->type.unknown) return op; //an unknown name, reported where it is written
     if (!OperandIsLvalue(in)) {
         ErrMsgSemantic(tok, NOT_AN_LVALUE);
         return op;
@@ -7073,13 +7081,28 @@ struct operand* OperandCharLiteral(struct token tok) {
 //matters even though T6 no longer cares about the tag when adapting: without it a literal too large for
 //int32 was tagged int32 anyway, so an int32 target matched it EXACTLY, skipped T6 entirely, and truncated
 //it silently at codegen.
+struct operand* OperandIntLiteralValue(struct token tok, long long value);
+
+//what an unknown name, already reported, stands for: of the stand-in type every check lets through, so the one
+//misspelling is the one error - "nope[0] = 1" is not also "operand is not an array"
+static struct operand* unknownPlaceholder(struct token tok) {
+    struct operand* op = OperandIntLiteralValue(tok, 0);
+    op->type = unknownTypeStandIn();
+    return op;
+}
+
 struct operand* OperandIntLiteral(struct token tok) {
-    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
-    op->isLiteral = true;
     char buf[tok.str.len +1];
     memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
     buf[tok.str.len] = '\0';
-    op->intLiteralVal = parseIntLiteralText(buf);
+    return OperandIntLiteralValue(tok, parseIntLiteralText(buf));
+}
+
+//an integer literal whose value is already known - a -D build constant's (B10), typed as T6a types its literal
+struct operand* OperandIntLiteralValue(struct token tok, long long value) {
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    op->isLiteral = true;
+    op->intLiteralVal = value;
     if (!intLiteralFitsIntType(op->intLiteralVal, TypeVanilla(BASETYPE_INT32))) {
         op->type = TypeVanilla(BASETYPE_INT64);
     }
@@ -7465,6 +7488,15 @@ static struct operand* eqAnd(struct operand* acc, struct operand* next, struct t
     return acc ? OperandBinary(acc, next, OPERATION_AND, tok) : next;
 }
 
+//a call an "==" is lowered to, or - where it could not be built, an operand already reported (an undeclared name
+//reached as the receiver) - a Bool standing in for it, so the comparison stays one error rather than a crash
+static struct operand* eqCallOr(struct checkCtx* ctx, struct operand* call, struct token tok) {
+    (void)ctx;
+    if (call) return call;
+    if (!ErrMsgGetNErrors()) ErrMsgSemantic(tok, EQ_SHAPE);
+    return OperandBoolLiteral(tok);
+}
+
 //E10/E10a: "a == b" as the type says - a declared Eq called, null references kept away from it; a value's parts
 //compared one by one where any of them consults an Eq; otherwise the built-in comparison
 static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token tok) {
@@ -7496,7 +7528,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
     if (eqName) {
         bool aNull = a->type.structMAlloc && !a->isLiteral, bNull = b->type.structMAlloc && !b->isLiteral;
         if (!aNull && !bNull) {
-            r = operatorCall(ctx, a, b, eqName, tok);
+            r = eqCallOr(ctx, operatorCall(ctx, a, b, eqName, tok), tok);
         } else {
             //a null is equal to another null and to nothing else; Eq never sees one
             struct operand* ha = eqHold(ctx, a, tok, seq);
@@ -7507,7 +7539,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
                 struct operand* bn = OperandBinary(hb, OperandNullLiteral(tok), OPERATION_EQ, tok);
                 anyNull = anyNull ? OperandBinary(anyNull, bn, OPERATION_OR, tok) : bn;
             }
-            struct operand* call = operatorCall(ctx, ha, hb, eqName, tok);
+            struct operand* call = eqCallOr(ctx, operatorCall(ctx, ha, hb, eqName, tok), tok);
             if (aNull && bNull) {
                 r = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_BOOL));
                 struct operand* same = OperandBinary(ha, hb, OPERATION_EQ, tok);
@@ -7530,7 +7562,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
         //element by element, through the prelude's "Equal" - "==" on each pair, so each consults its Eq
         struct list args = ListInit(sizeof(struct operand*));
         ListAdd(&args, &b);
-        r = operatorCallArgs(ctx, a, args, "Equal", tok);
+        r = eqCallOr(ctx, operatorCallArgs(ctx, a, args, "Equal", tok), tok);
     } else if (v.bType == BASETYPE_CHOICE) {
         //the same case, and that case's payload equal - each case asked with "is", its payload read with "as"
         struct operand* ha = eqHold(ctx, a, tok, seq);
@@ -8050,6 +8082,22 @@ static struct list allTokOfTypeDeep(struct syntax* s, enum tokenType t) {
     return out;
 }
 
+//the name a reference marker in a type carries ("&mask" in "Box.Val&mask"), or a TOK_NONE token
+static struct token markerNameIn(struct syntax* t) {
+    for (int i = 0; i < t->parts.len; i++) {
+        struct syntaxPart* p = partAt(t, i);
+        if (p->isToken) continue;
+        if (p->sntx->type == SNTX_ELEM_REF_MARKER || p->sntx->type == SNTX_REF_MARKER) {
+            struct token n = firstTokOfType(p->sntx, TOK_IDEN);
+            if (n.type == TOK_IDEN) return n;
+        } else {
+            struct token n = markerNameIn(p->sntx);
+            if (n.type == TOK_IDEN) return n;
+        }
+    }
+    return (struct token){0};
+}
+
 struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     bool isAs = s->type == SNTX_EXPR_AS;
     struct token kw = firstTokOfType(s, isAs ? TOK_AS : TOK_IS);
@@ -8057,6 +8105,19 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* tNode = firstPartOfType(s, SNTX_TYPE_EXPR);
     struct operand* op = operandNew(kw, isAs ? OPERATION_AS : OPERATION_IS, TypeVanilla(BASETYPE_BOOL));
     ListAdd(&op->args, &x);
+    //"b as Box.Val & mask": the type after is/as takes "&mask" as its reference marker, which says where a reference
+    //lives - and no reference is made here. Said for what it is, since that reading is never what was meant
+    struct token marked = markerNameIn(tNode);
+    if (marked.type == TOK_IDEN) {
+        char* msg = MallocOrCrash(512);
+        snprintf(msg, 512, "'&%.*s' right after the type is read as part of it - a reference marker naming where '%.*s' "
+                 "lives - not as the operator '&'; to apply '&' to the result, parenthesize: '(x %s T) & %.*s' (E32)",
+                 marked.str.len, marked.str.ptr, marked.str.len, marked.str.ptr, isAs ? "as" : "is",
+                 marked.str.len, marked.str.ptr);
+        ErrMsgSemantic(marked, msg);
+        if (isAs) op->type = unknownTypeStandIn(); //what it would have given is unknown - one error, not two
+        return op;
+    }
     struct type xt = x->type;
     if (xt.bType == BASETYPE_CHOICE) {
         struct list idens = allTokOfTypeDeep(tNode, TOK_IDEN);
@@ -8069,7 +8130,11 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
                 if (StrCmp(v->name, strFromTok(caseTok))) { op->castTag = i; c = v; }
             }
         }
-        if (!c) { ErrMsgSemantic(firstTokAnywhere(tNode), AS_ENUM_CASE); return op; }
+        if (!c) {
+            ErrMsgSemantic(firstTokAnywhere(tNode), AS_ENUM_CASE);
+            if (isAs) op->type = unknownTypeStandIn();
+            return op;
+        }
         op->castEnum = true;
         if (!isAs) return op;
         if (c->type.vars.len == 0) { ErrMsgSemantic(kw, AS_NOTHING); return op; }
@@ -9067,7 +9132,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                     }
                 }
                 struct var* v = lookupVar(ctx, tok);
-                if (!v) return OperandIntLiteral(tok); //placeholder, keeps checking the rest of the file
+                if (!v) return unknownPlaceholder(tok); //keeps checking the rest of the file
                 if (v->isFuncDecl) noteFuncValueUse(v, tok); //T22a
                 return OperandReadVar(v, tok);
             }
@@ -9260,7 +9325,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         bool allowed = ctx->allowFallibleCall;
         ctx->allowFallibleCall = false;
         struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
-        if (!func) return OperandIntLiteral(nameTok);
+        if (!func) return unknownPlaceholder(nameTok); //reported - and nothing after says so again
         if (func->type.bType != BASETYPE_FUNC) {
             //E31: "next()" on a variable whose type declares Call
             const char* cn = operatorMethodName(ctx, func->type, "Call");
@@ -9475,7 +9540,11 @@ void buildStatementsInto(struct checkCtx* ctx, struct syntax* s, struct list* ou
         //S8b: this attempt skipped its branches; its condition is still checked here, in its own scope, so
         //a later attempt can decide it
         struct syntax* condNode = firstPartOfType(actual, SNTX_EXPR);
-        if (condNode) noteLocalCond(ctx, condNode, buildExprFromSyntax(ctx, condNode));
+        if (condNode) {
+            int errs = ErrMsgGetNErrors();
+            struct operand* cond = buildExprFromSyntax(ctx, condNode);
+            noteLocalCond(ctx, condNode, ErrMsgGetNErrors() == errs ? cond : NULL);
+        }
         return;
     }
     if (actual->type == SNTX_STMNT_CHOSEN) {
@@ -10116,8 +10185,14 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
         if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) idx = OperandReadVar(holdInHidden(ctx, idx, opTok, "idx", &pre), opTok);
     }
     if (isCompound) {
-        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok)
-                                               : operatorCall(ctx, base, idx, operatorMethodName(ctx, base->type, "At"), opTok);
+        //"x[i] += v" reads x[i] first, through At
+        const char* atName = operatorMethodName(ctx, base->type, "At");
+        if (!atName && !(ctx->checkingTry && tryOperatorName(ctx, base->type, "At"))) {
+            ErrMsgSemantic(opTok, AT_UNDECLARED);
+            return (struct statement){0};
+        }
+        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok) : operatorCall(ctx, base, idx, atName, opTok);
+        if (!cur) return (struct statement){0}; //reported
         struct token binTok = opTok;
         switch (compoundOp) {
             case OPERATION_ADD: binTok.type = TOK_ADD; break;
@@ -10159,7 +10234,8 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     if (target->isAtCall) return buildSetAt(ctx, target, rhs, opTok);
     if (rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE);
-    if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
+    if (target->type.unknown) {} //an unknown name, reported where it is written
+    else if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
     else if (!OperandIsMutableLvalue(target)) {
         struct var* root = lvalueRootVar(target);
         ErrMsgSemantic(target->tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(target) ? READ_ONLY_REF_WRITE : writeIntoCallValue(target) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
@@ -10410,7 +10486,7 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (!exprCanStandAsStatement(op)) ErrMsgSemantic(op->tok, EXPR_NOT_A_STATEMENT);
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) ErrMsgSemantic(op->tok, EXPR_NOT_A_STATEMENT);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;
@@ -10648,35 +10724,35 @@ static bool condIsConstant(struct operand* op, bool* build, int depth) {
 
 // ---- S8b: locals that provably hold one value ----
 
-struct bodyRec { int id; struct list stmts; };
+//by id: body id is at index id - 1 - a module of thousands of local ifs looks one up per if
+struct bodyRec { bool ended; struct list stmts; };
 static struct list bodyRecs;
 static int nextBodyId;
 
 static int bodyBegin(void) {
     if (nextBodyId == 0) bodyRecs = ListInit(sizeof(struct bodyRec));
+    struct bodyRec r = (struct bodyRec){0};
+    ListAdd(&bodyRecs, &r);
     return ++nextBodyId;
 }
 
 static void bodyEnd(int id, struct list stmts) {
-    struct bodyRec r = { id, stmts };
-    ListAdd(&bodyRecs, &r);
+    struct bodyRec* r = ListGetIdx(&bodyRecs, id - 1);
+    if (r->ended) return; //the first recorded is the one kept
+    r->ended = true;
+    r->stmts = stmts;
 }
 
 static struct list* bodyStmts(int id) {
-    for (int i = 0; id && i < bodyRecs.len; i++) {
-        struct bodyRec* r = ListGetIdx(&bodyRecs, i);
-        if (r->id == id) return &r->stmts;
-    }
-    return NULL;
+    if (id <= 0 || id > bodyRecs.len) return NULL;
+    struct bodyRec* r = ListGetIdx(&bodyRecs, id - 1);
+    return r->ended ? &r->stmts : NULL;
 }
 
 //the checked condition of a queued local if, recorded where it is checked - in its own function's scope
 static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct operand* op) {
-    struct list* pending = SyntaxPendingConditions();
-    for (int i = 0; i < pending->len; i++) {
-        struct pendingCond* p = ListGetIdx(pending, i);
-        if (p->local && p->cond == condNode) { p->op = op; p->bodyId = ctx->bodyId; return; }
-    }
+    struct pendingCond* p = SyntaxPendingFor(condNode);
+    if (p && p->local) { p->op = op; p->bodyId = ctx->bodyId; }
 }
 
 //a plain scalar value: nothing but its own name can reach it - there is no reference to a primitive - so a
@@ -10766,20 +10842,67 @@ static struct statement* stmtsFindDecl(struct list* stmts, struct var* v) {
 
 //CtLocalFixer: the initializer that fixes a local's value everywhere in its body - a plain scalar declared
 //with one and written nowhere after, so wherever it can be read it holds that initializer's value
+//answers remembered for the attempt - finding a local's declaration and every write to it walks its whole body, and
+//a body of thousands of ifs or asserts asks about one local for each (fixedCacheReset clears it as bodies are rebuilt)
+struct fixedCacheSlot { struct list* body; struct var* v; struct operand* init; };
+static struct fixedCacheSlot* fixedCache;
+static int fixedCacheCap, fixedCacheLen;
+
+static void fixedCacheReset(void) {
+    if (fixedCacheCap) memset(fixedCache, 0, sizeof(*fixedCache) * (size_t)fixedCacheCap);
+    fixedCacheLen = 0;
+}
+
+static unsigned fixedCacheHash(struct list* body, struct var* v) {
+    return (unsigned)((((uintptr_t)body >> 4) * 31u + ((uintptr_t)v >> 4)) * 2654435761u);
+}
+
+static struct fixedCacheSlot* fixedCacheFind(struct list* body, struct var* v) {
+    if (!fixedCacheCap) return NULL;
+    unsigned m = (unsigned)fixedCacheCap - 1;
+    for (unsigned k = fixedCacheHash(body, v) & m; fixedCache[k].v; k = (k + 1) & m) {
+        if (fixedCache[k].body == body && fixedCache[k].v == v) return &fixedCache[k];
+    }
+    return NULL;
+}
+
+static void fixedCachePut(struct list* body, struct var* v, struct operand* init) {
+    if ((fixedCacheLen + 1) * 2 > fixedCacheCap) {
+        struct fixedCacheSlot* old = fixedCache;
+        int oldCap = fixedCacheCap;
+        fixedCacheCap = fixedCacheCap ? fixedCacheCap * 2 : 256;
+        fixedCache = MallocOrCrash(sizeof(*fixedCache) * (size_t)fixedCacheCap);
+        memset(fixedCache, 0, sizeof(*fixedCache) * (size_t)fixedCacheCap);
+        fixedCacheLen = 0;
+        for (int i = 0; i < oldCap; i++) if (old[i].v) fixedCachePut(old[i].body, old[i].v, old[i].init);
+        free(old);
+    }
+    unsigned m = (unsigned)fixedCacheCap - 1;
+    unsigned k = fixedCacheHash(body, v) & m;
+    while (fixedCache[k].v) k = (k + 1) & m;
+    fixedCache[k] = (struct fixedCacheSlot){ body, v, init };
+    fixedCacheLen++;
+}
+
 static struct operand* fixedLocalInit(struct var* local, void* ctx) {
     struct list* body = ctx;
     struct var* v = canonicalVar(local);
     if (!body || !scalarType(v->type)) return NULL;
+    struct fixedCacheSlot* known = fixedCacheFind(body, v);
+    if (known) return known->init;
     struct statement* decl = stmtsFindDecl(body, v);
-    if (!decl || !decl->op || decl->fillValue) return NULL;
-    if (stmtsWrite(body, v)) return NULL;
-    return decl->op;
+    struct operand* init = decl && decl->op && !decl->fillValue && !stmtsWrite(body, v) ? decl->op : NULL;
+    fixedCachePut(body, v, init);
+    return init;
 }
 
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
+    int errs = ErrMsgGetNErrors();
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
-    noteLocalCond(ctx, firstPartOfType(s, SNTX_EXPR), cond); //S8b: decided, if it can be, after this attempt
+    //S8b: decided, if it can be, after this attempt - but one that does not check is the running program's, so the
+    //attempt that follows reports what is wrong with it rather than deciding it from a value it cannot have
+    noteLocalCond(ctx, firstPartOfType(s, SNTX_EXPR), ErrMsgGetNErrors() == errs ? cond : NULL);
     //S8a: a condition that is the same on every build decides nothing - one of the branches is dead code,
     //which is far more often a mistake than an intention. One that depends on a build constant is
     //configuration (S8b).
@@ -13512,7 +13635,7 @@ static struct semaModule* makeBuildModule(void) {
                 break;
             case BUILD_INT:
                 tok.type = TOK_INT_LIT;
-                init = OperandIntLiteral(tok);
+                init = OperandIntLiteralValue(tok, b->i); //the value -D gave, read once (B10)
                 break;
             case BUILD_FLOAT:
                 tok.type = TOK_FLOAT_LIT;
@@ -13576,6 +13699,7 @@ bool SemanticIsBuildConst(struct var* v) { return v && buildModule && v->owner =
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     nextBodyId = 0; //S8b: every attempt rebuilds every body
+    fixedCacheReset();
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d

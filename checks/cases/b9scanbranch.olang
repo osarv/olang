@@ -1,0 +1,16 @@
+# check: run
+# B9c: a branch only compile-time evaluation chooses is pre-scanned like any other - the types and the imports it
+# declares exist
+fn pick() I32 { return 3 }
+if pick() == 3 {
+    import "std/os"
+    type Mode enum {
+        Fast
+        Slow
+    }
+}
+fn main() ? {
+    m := Mode.Fast
+    assert m == Mode.Fast
+    assert os.Exists(".")
+}

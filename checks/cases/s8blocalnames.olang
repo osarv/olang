@@ -1,0 +1,15 @@
+# check: run
+# S8b: a statement beginning with a build constant's name ("TargetOs.Trim()", first tried as a destructuring) does not
+# make that name a local, so a later "if" on it is still the build's to decide - and a function existing only on plan9
+# is never looked for
+if TargetOs == "plan9" {
+    fn only9() I32 { return 9 }
+}
+fn f() I32 {
+    TargetOs.Trim()
+    if TargetOs == "plan9" {
+        return only9()
+    }
+    return 1
+}
+fn main() ? { assert f() == 1 }

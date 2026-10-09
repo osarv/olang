@@ -1,0 +1,4 @@
+# check: fail unexpected token 'South', expected '}'
+# T17: an enum's cases end at their line's end, as an error type's words do - "{ North South }" is not two cases
+type Dir enum { North South }
+fn main() ? { }

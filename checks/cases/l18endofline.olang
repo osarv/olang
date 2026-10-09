@@ -1,0 +1,13 @@
+# check: fail 9 l18endofline.olang
+# also: unexpected end of line, expected '{'
+# L18: a synthesized statement end is where its line ends, so a diagnostic about it names that line
+fn g(x I32) I32 {
+    return x
+}
+fn main() ? {
+    x := g(1)
+    if x == 3
+    {
+        x = 1
+    }
+}

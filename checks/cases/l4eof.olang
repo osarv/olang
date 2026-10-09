@@ -1,0 +1,4 @@
+# check: build
+# L4: a line comment ends at the end of the file as at a newline
+fn main() ? { }
+# the last line, with no newline after it

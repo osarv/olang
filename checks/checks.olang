@@ -2,6 +2,7 @@
 # whole builds (a remote fetch, rebuilds under -D, the code generated). Every file in checks/cases is an
 # ordinary olang program whose first lines say what it must do:
 #     # check: fail <text>    it must fail to build, with <text> in the diagnostics
+#     # also: <text>          and with <text> too - any number of these lines, each checked
 #     # check: build          it must build
 #     # check: run            it must build, and the program must exit 0
 #     # flags: <arguments>    passed to the compiler (a -D value, say)
@@ -62,6 +63,17 @@ fn runCase(dir String&, name String&) Bool {
         if status == 0 { return failed($name " compiled but should not have", dir) }
         want := check[5:]
         if not outOf(dir).Contains(want) { return failed($name ": expected '" $want "'", dir) }
+        rest := src[:]
+        for {
+            at := rest.Find("# also: ")
+            if at < 0 { break }
+            line := rest[at + 8:]
+            end := line.FindByte('\n')
+            if end < 0 { end = line.Len() }
+            also := line[:end]
+            if not outOf(dir).Contains(also) { return failed($name ": expected '" $also "'", dir) }
+            rest = line[end:]
+        }
         return true
     }
     if status != 0 { return failed($name " did not build", dir) }
@@ -323,4 +335,54 @@ test "editing the prelude rebuilds what uses it" {
     assert sh(dir, "sed -i 's/return p.First }/return p.Second }/' std/prelude/pair.olang") == 0
     assert sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0 or failed("second build", dir)
     assert sh(dir, "grep -qx 4 got.txt") == 0 or failed("the edited prelude was not used", dir)
+}
+
+# a program written by the check itself: n levels of open, then the middle, then n levels of close
+fn nested(head String&, open String&, middle String&, close String&, tail String&, n I64) String& {
+    b := StringBuilder()
+    b.Push(head)
+    for i in range n { b.Push(open) }
+    b.Push(middle)
+    for i in range n { b.Push(close) }
+    b.Push(tail)
+    return b.ToString()
+}
+
+# several statement forms begin with an expression and only what follows tells them apart, so each read it - and every
+# lambda and catch block inside - again: 3^depth readings, a depth of 10 taking seconds and 12 running out of memory.
+# The parse is remembered by position now, so forty levels of each are read once - interpreted (-i), with no native
+# build to wait for, and under a timeout that the old parser would have run far past
+test "nested lambdas and try-catch statements parse in time linear in their depth" {
+    dir := fresh("nestparse")
+    lambdas String& = nested("fn k() { }\nfn f(g fn()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
+    try os.WriteFile($dir "/lambdas.olang", lambdas) catch { }
+    assert sh(dir, "timeout 60 \"$OLANG\" -i lambdas.olang > out.txt 2>&1") == 0 or failed("nested lambdas", dir)
+    tries String& = nested("error E { X }\nfn k() { }\nfn g() ? E { error E.X }\nfn main() ? {\n    ",
+                           "try g() catch E { ", "k()", " }", "\n}\n", 40)
+    try os.WriteFile($dir "/tries.olang", tries) catch { }
+    assert sh(dir, "timeout 60 \"$OLANG\" -i tries.olang > out.txt 2>&1") == 0 or failed("nested try-catch", dir)
+}
+
+# every pass recurses once per level of nesting, so a program nested past what the compiler's stack holds is refused by
+# the parser - one diagnostic - where it crashed the checker at about 2,000 parentheses. 5,000 is well within it
+test "nesting is bounded with a diagnostic, never a crash" {
+    dir := fresh("nestdeep")
+    ok String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n    assert x == 1\n}\n", 5000)
+    try os.WriteFile($dir "/ok.olang", ok) catch { }
+    assert sh(dir, "\"$OLANG\" -i ok.olang > out.txt 2>&1") == 0 or failed("5000 parentheses", dir)
+    deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 25000)
+    try os.WriteFile($dir "/deep.olang", deep) catch { }
+    assert sh(dir, "\"$OLANG\" -c deep.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("this nests too deeply") or failed("25000 parentheses", dir)
+    assert outOf(dir).Contains("compilation failed with 1 error") or failed("25000 parentheses, one error", dir)
+}
+
+# B9a/S8b: a module of many local ifs - each condition used to look its names up by reading the whole file again, and
+# then by walking the whole function for the locals it reads, each once per condition
+test "a function of many local ifs compiles in time linear in their number" {
+    dir := fresh("manyifs")
+    many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I32 {\n    s := 0\n",
+                          "    if g(x) > 5 { s += 1 }\n", "", "", "    return s\n}\nfn main() ? { assert f(9) == 20000 }\n", 20000)
+    try os.WriteFile($dir "/many.olang", many) catch { }
+    assert sh(dir, "timeout 60 \"$OLANG\" -i many.olang > out.txt 2>&1") == 0 or failed("20000 local ifs", dir)
 }

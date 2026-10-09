@@ -125,19 +125,31 @@ int tokIdCtrCount() {
     return tokIdCtr++;
 }
 
+struct tokenEdit { int idx; enum tokenType was; }; //a token split in two by the parser, and what it was
+
 struct tokenContext {
     struct str fileName;
-    struct list chars;
+    struct list chars; //the file's bytes, then one '\0' marking the end - a NUL byte before it is the file's own
     int charIdx;
     int charLineNr;
     struct list tokens;
     int tokIdx;
     enum tokenType lastTokType; //for implicit statement-end synthesis, see stmntEndTriggerType
     bool sawNewline;            //for implicit statement-end synthesis, see stmntEndTriggerType
+    char* lastTokEnd;           //L18: where the last token ended - a synthesized statement end is placed there,
+    int lastTokLine;            //on the line it ends, not at the token that happens to come next
+    bool reportedCR;            //L3: a carriage return is reported once per file, not once per line
+    struct list edits;          //the splits made by TokenSplitShiftRight/Left, undone by TokenEditRewind
+    int version;                //changes whenever the token list does - see TokenListVersion
 };
 
+//the byte at idx, or '\0' past the end - the cursor may step past the terminating '\0' and back
+static char charAt(TokenCtx tc, int idx) {
+    return idx >= 0 && idx < tc->chars.len ? *(char*)ListGetIdx(&tc->chars, idx) : '\0';
+}
+
 char feedChar(TokenCtx tc) {
-    char c = *(char*)ListGetIdx(&tc->chars, tc->charIdx);
+    char c = charAt(tc, tc->charIdx);
     tc->charIdx++;
     if (c == '\n') tc->charLineNr++;
     return c;
@@ -146,15 +158,29 @@ char feedChar(TokenCtx tc) {
 void unfeedChar(TokenCtx tc) {
     tc->charIdx--;
     if (tc->charIdx < 0) ErrorBugFound();
-    if (*(char*)ListGetIdx(&tc->chars, tc->charIdx) == '\n') tc->charLineNr--;
+    if (charAt(tc, tc->charIdx) == '\n') tc->charLineNr--;
+}
+
+static char peekChar(TokenCtx tc, int ahead) {
+    return charAt(tc, tc->charIdx + ahead);
+}
+
+//true when the cursor is at (or past) the end of the file - a NUL byte inside the file is not its end
+static bool atEnd(TokenCtx tc) {
+    return tc->charIdx >= tc->chars.len - 1;
+}
+
+//true when c, just fed, was the end of the file rather than a byte of it; the cursor is then put back on the end,
+//so a scan that stops there leaves nothing consumed past it
+static bool fedEnd(TokenCtx tc, char c) {
+    if (c != '\0' || tc->charIdx - 1 < tc->chars.len - 1) return false;
+    unfeedChar(tc);
+    return true;
 }
 
 bool tryFeedChar(TokenCtx tc, char c) {
-    char fed = feedChar(tc);
-    if (fed != c) {
-        unfeedChar(tc);
-        return false;
-    }
+    if (atEnd(tc) || peekChar(tc, 0) != c) return false;
+    feedChar(tc);
     return true;
 }
 
@@ -199,16 +225,17 @@ bool isIdentifierBodyChar(char c) {
     return false;
 }
 
+//consumes through the first of the chars in toFind, or to the end of the file. A NUL byte inside the file is
+//only a byte here (a comment's text, a broken literal's rest) - the end of the file is the one place it stops
 void feedUntilIncludingOneOfCharsOrEOF(TokenCtx tc, char* toFind) {
-    char c;
-    bool run = true;
-    while (run && (c = feedChar(tc)) != '\0') {
-        for (int i = 0; i < (int)strlen(toFind); i++) {
-            if (c == toFind[i]) run = false;
-        }
+    while (true) {
+        char c = feedChar(tc);
+        if (fedEnd(tc, c)) return;
+        if (c != '\0' && strchr(toFind, c)) return;
     }
 }
 
+//L4: a comment runs to the end of its line - or of the file, which ends it as well as a newline does
 void discardComment(TokenCtx tc) {
     char* str = "\n";
     feedUntilIncludingOneOfCharsOrEOF(tc, str);
@@ -223,7 +250,7 @@ bool findNextTokStart(TokenCtx tc) {
                     int line = tc->charLineNr;
                     while (true) {
                         char b = feedChar(tc);
-                        if (b == '\0') {
+                        if (fedEnd(tc, b)) {
                             ErrMsgUnexpectedChar(tc, UNTERMINATED_BLOCK_COMMENT);
                             return false;
                         }
@@ -237,7 +264,7 @@ bool findNextTokStart(TokenCtx tc) {
             case '\n': tc->sawNewline = true; break;
             case '\t': break;
             case ' ': break;
-            case '\0': return false;
+            case '\0': if (fedEnd(tc, c)) return false; unfeedChar(tc); return true; //L1: a NUL byte is reported where it is
             default: unfeedChar(tc); return true;
         }
     }
@@ -245,6 +272,7 @@ bool findNextTokStart(TokenCtx tc) {
 
 void tokenizeEscapeChar(TokenCtx tc, bool inString) {
     char c = feedChar(tc);
+    if (fedEnd(tc, c)) return; //the literal is unterminated, which its own loop reports
     if (c == 'n');
     else if (c == 't');
     else if (c == 'r');
@@ -257,9 +285,13 @@ void tokenizeEscapeChar(TokenCtx tc, bool inString) {
 
 bool tokenizeCharInStringLiteral(TokenCtx tc) {
     char c = feedChar(tc);
+    if (fedEnd(tc, c)) { //L14
+        ErrMsgUnexpectedChar(tc, UNTERMINATED_STRING_LITERAL);
+        return true;
+    }
     if (c == '\\') tokenizeEscapeChar(tc, true);
     else if (c == '\n') {
-        ErrMsgUnexpectedChar(tc, NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL);
+        ErrMsgUnexpectedChar(tc, NEWLINE_IN_STRING_LITERAL);
         return true;
     }
     else if (c == '"') return true;
@@ -268,13 +300,16 @@ bool tokenizeCharInStringLiteral(TokenCtx tc) {
 
 void tokenizeCharLiteral(TokenCtx tc) {
     char c = feedChar(tc);
+    if (fedEnd(tc, c)) { ErrMsgUnexpectedChar(tc, UNTERMINATED_CHAR_LITERAL); return; } //L13
     switch (c) {
         case '\n': ErrMsgUnexpectedChar(tc, NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL); return;
         case '\'': ErrMsgUnexpectedChar(tc, EMPTY_CHAR_LITERAL); return;
         case '\\': tokenizeEscapeChar(tc, false); break;
         default: break;
     }
-    if (feedChar(tc) == '\'') return;
+    char close = feedChar(tc);
+    if (close == '\'') return;
+    if (fedEnd(tc, close)) { ErrMsgUnexpectedChar(tc, UNTERMINATED_CHAR_LITERAL); return; }
     ErrMsgUnexpectedChar(tc, EXPECTED_CLOSING_CHAR_LITERAL);
     char* str = "'\n";
     feedUntilIncludingOneOfCharsOrEOF(tc, str);
@@ -381,15 +416,14 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
 
     bool isFloat = false;
     consumeDigitRun(tc, isDigit);
-    char c = feedChar(tc);
-    if (c == '.') {
+    //L12: a "." before a name is not part of the number - it is a member access or a method call on the integer
+    //("7.Hash()"); before anything else it begins the fraction, which must then have a digit
+    char afterDot = peekChar(tc, 1);
+    if (peekChar(tc, 0) == '.' && !isLetter(afterDot) && afterDot != '_') {
+        feedChar(tc);
         if (consumeDigitRun(tc, isDigit) == 0) ErrMsgUnexpectedChar(tc, LAST_WAS_DECIMAL_POINT);
         isFloat = true;
-        char after = feedChar(tc);
-        unfeedChar(tc);
-        if (after == '.') ErrMsgUnexpectedChar(tc, MULTIPLE_DECIMAL_POINTS);
-    } else {
-        unfeedChar(tc);
+        if (peekChar(tc, 0) == '.') { feedChar(tc); ErrMsgUnexpectedChar(tc, MULTIPLE_DECIMAL_POINTS); unfeedChar(tc); }
     }
 
     //L12a: an exponent - "e"/"E", an optional sign, then at least one digit. Committed to only if the
@@ -425,6 +459,17 @@ bool isPlainLiteralPattern(char* pattern) {
     return pattern[0] != '\0';
 }
 
+//true when the byte at the cursor begins a token, whitespace or a comment
+static bool canStartToken(TokenCtx tc) {
+    char c = peekChar(tc, 0);
+    if (isIdentifierBodyChar(c) || c == '\'' || c == '"' || c == ' ' || c == '\t' || c == '\n' || c == '#') return true;
+    for (int i = 0; i < N_TOK_RULES; i++) {
+        char* pattern = tokRules[i].pattern;
+        if (isPlainLiteralPattern(pattern) && !isLetter(pattern[0]) && tokPatternMatchLen(tc, tc->charIdx, pattern) > 0) return true;
+    }
+    return false;
+}
+
 //matches the longest literal operator/punctuation rule starting at the char just fed
 enum tokenType tokenizeOperator(TokenCtx tc) {
     int startIdx = tc->charIdx -1;
@@ -444,7 +489,16 @@ enum tokenType tokenizeOperator(TokenCtx tc) {
     }
 
     if (bestLen == 0) {
-        ErrMsgUnexpectedChar(tc, UNKNOWN_SYMBOL);
+        //L1/L3/L16: not the start of any token - reported once for a whole run of such bytes (a character outside
+        //ASCII is several), and then dropped, so the parser reads on as though they were not there
+        char c = charAt(tc, startIdx);
+        if (c == '\r') {
+            if (!tc->reportedCR) ErrMsgUnexpectedChar(tc, CARRIAGE_RETURN);
+            tc->reportedCR = true;
+        } else {
+            ErrMsgUnexpectedChar(tc, c == '\0' ? NUL_BYTE : UNKNOWN_SYMBOL);
+        }
+        while (!atEnd(tc) && !canStartToken(tc) && peekChar(tc, 0) != '\r') feedChar(tc);
         return TOK_NONE;
     }
     for (int i = 1; i < bestLen; i++) feedChar(tc); //first char of the match was already fed by the caller
@@ -492,18 +546,20 @@ bool stmntEndTriggerType(enum tokenType type) {
     }
 }
 
+//L18: placed where the statement it ends ends - just past its last token, on its line - so a diagnostic about a
+//missing continuation points at the line that stopped short, not at whatever the next line holds
 struct token synthesizeStmntEnd(TokenCtx tc) {
     struct token tok = {0};
     tok.type = TOK_STMNT_END;
-    tok.str.ptr = (char*)tc->chars.ptr + tc->charIdx;
-    tok.lineNr = tc->charLineNr;
+    tok.str.ptr = tc->lastTokEnd;
+    tok.lineNr = tc->lastTokLine;
     tok.owner = tc;
     tok.tokId = tokIdCtrCount();
     return tok;
 }
 
 void tokenizeTokensFromChars(TokenCtx tc) {
-    while (*(char*)ListGetIdx(&tc->chars, tc->charIdx) != '\0') {
+    while (!atEnd(tc)) {
         tc->sawNewline = false;
         if (!findNextTokStart(tc)) break;
         if (tc->sawNewline && stmntEndTriggerType(tc->lastTokType)) {
@@ -512,7 +568,10 @@ void tokenizeTokensFromChars(TokenCtx tc) {
         }
 
         struct token tok = tokenizeToken(tc);
+        if (tok.type == TOK_NONE) continue; //reported and dropped - see tokenizeOperator
         tc->lastTokType = tok.type;
+        tc->lastTokEnd = tok.str.ptr + tok.str.len;
+        tc->lastTokLine = tok.lineNr;
         ListAdd(&tc->tokens, &tok);
     }
     //the end of the file ends a statement exactly as a newline does. Without this a file whose last line is
@@ -531,6 +590,7 @@ TokenCtx TokenizeFile(char* fileName) {
     tc->charIdx = 0;
     tc->charLineNr = 1;
     tc->tokens = ListInit(sizeof(struct token));
+    tc->edits = ListInit(sizeof(struct tokenEdit));
     tc->tokIdx = 0;
     tc->fileName = StrFromCStr(fileName);
 
@@ -560,16 +620,6 @@ struct token TokenFeed(TokenCtx tc) {
     struct token* tokPtr = ListGetIdx(&tc->tokens, tc->tokIdx);
     tc->tokIdx++;
     return *tokPtr;
-}
-
-struct token TokenFeedUntil(TokenCtx tc, enum tokenType type) {
-    struct token tok = TokenFeed(tc);
-    while (tok.type != type && tok.type != TOK_NONE) tok = TokenFeed(tc);
-    return tok;
-}
-
-void TokenFeedPast(TokenCtx tc, enum tokenType type) {
-    TokenFeedUntil(tc, type);
 }
 
 void TokenUnfeed(TokenCtx tc) {
@@ -623,74 +673,71 @@ int TokenGetLineNr(TokenCtx tc) {
     return tc->charLineNr;
 }
 
-struct token TokenMerge(struct token head, struct token tail) {
-    if (head.owner != tail.owner) ErrorBugFound();
-    head.str.len = (int)(tail.str.ptr + tail.str.len - head.str.ptr);
-    head.tokId = tokIdCtrCount();
-    return head;
+//splits the token at the cursor in two, its first character becoming a token of type `first` and the rest one of
+//type `rest`, leaving the cursor on the first; recorded, so TokenEditRewind can put it back
+static void splitTokenAtCursor(TokenCtx tc, enum tokenType first, enum tokenType rest) {
+    struct token* tok = ListGetIdx(&tc->tokens, tc->tokIdx);
+    struct tokenEdit e = { tc->tokIdx, tok->type };
+    ListAdd(&tc->edits, &e);
+    struct token head = *tok;
+    head.type = first;
+    head.str.len = 1;
+    struct token tail = *tok;
+    tail.type = rest;
+    tail.str.ptr = tok->str.ptr + 1;
+    tail.str.len = tok->str.len - 1;
+    tail.tokId = tokIdCtrCount();
+    *tok = head;
+    ListInsertIdx(&tc->tokens, tc->tokIdx + 1, &tail);
+    tc->version++;
 }
 
-struct token TokenMergeFromListRange(struct list l, int start, int end) {
-    if (start > end) ErrorBugFound();
-    if (start < 0) ErrorBugFound();
-    if (end > l.len) ErrorBugFound();
-    struct token head = *(struct token*)ListGetIdx(&l, start);
-    struct token tail = *(struct token*)ListGetIdx(&l, end -1);
-    return TokenMerge(head, tail);
-}
-
-struct token TokenMergeFromList(struct list l) {
-    struct token head = *(struct token*)ListGetIdx(&l, 0);
-    struct token tail = *(struct token*)ListGetIdx(&l, l.len -1);
-    return TokenMerge(head, tail);
-}
-
-//">>" closing a nested type-argument list ("Vec<Vec<int32>>") lexes as one TOK_BTSFT_R, since maximal
-//munch can't know it is two closers rather than a shift. If the token at the cursor is one, rewrite it
-//in place as two TOK_GRT tokens and return true, leaving the cursor on the first - the same fix C++11,
-//Rust, Java and C# all make. Rewriting the stored token list rather than tracking a "half-consumed"
-//cursor keeps every existing cursor save/restore in the parser correct with no changes: a restore to a
-//point before the split simply re-reads the two ">"s, which parse identically to the original ">>"
-//everywhere the parser could legitimately have been (a shift operator is never valid in a type
-//position, and a type-argument list is never valid in an expression one).
+//">>" closing a nested type-argument list ("Vec<Vec<int32>>") lexes as one TOK_BTSFT_R, since maximal munch can't
+//know it is two closers rather than a shift - and a declaration's "=" right after one ("x List<List<I32>>= v") makes it
+//">>=", as a lone closer's makes ">=". If the token at the cursor is one of those, its first ">" is split off as a
+//TOK_GRT of its own, the cursor left on it, and true returned - the fix C++11, Rust, Java and C# all make. Rewriting
+//the stored token list rather than tracking a "half-consumed" cursor keeps every cursor save/restore in the parser
+//correct; a parse that splits and then fails puts the token back with TokenEditRewind, so an expression read
+//afterwards ("a < B >> c") still sees its shift.
 bool TokenSplitShiftRight(TokenCtx tc) {
     if (tc->tokIdx >= tc->tokens.len) return false;
-    struct token* tok = ListGetIdx(&tc->tokens, tc->tokIdx);
-    if (tok->type != TOK_BTSFT_R) return false;
-    struct token first = *tok;
-    first.type = TOK_GRT;
-    first.str.len = 1;
-    struct token second = first;
-    second.str.ptr = first.str.ptr + 1;
-    second.tokId = tokIdCtrCount();
-    *tok = first;
-    ListInsertIdx(&tc->tokens, tc->tokIdx + 1, &second);
+    enum tokenType t = ((struct token*)ListGetIdx(&tc->tokens, tc->tokIdx))->type;
+    enum tokenType rest = t == TOK_BTSFT_R ? TOK_GRT : t == TOK_GRE ? TOK_ASS : t == TOK_ASS_BTSFT_R ? TOK_GRE : TOK_NONE;
+    if (rest == TOK_NONE) return false;
+    splitTokenAtCursor(tc, TOK_GRT, rest);
     return true;
 }
 
-//the opening counterpart: "List<<T>>" lexes its opening as one "<<" token, where a type-args list whose
-//first item is a type variable needs "<" "<". Split only while trying that parse; TokenJoinShiftLeft puts
-//it back if the parse fails, so "x << 2" is untouched however the parser got there.
+//the opening counterpart: "List<<T>>" lexes its opening as one "<<" token, where a type-args list whose first item is
+//a type variable needs "<" "<"
 bool TokenSplitShiftLeft(TokenCtx tc) {
     if (tc->tokIdx >= tc->tokens.len) return false;
-    struct token* tok = ListGetIdx(&tc->tokens, tc->tokIdx);
-    if (tok->type != TOK_BTSFT_L) return false;
-    struct token first = *tok;
-    first.type = TOK_LST;
-    first.str.len = 1;
-    struct token second = first;
-    second.str.ptr = first.str.ptr + 1;
-    second.tokId = tokIdCtrCount();
-    *tok = first;
-    ListInsertIdx(&tc->tokens, tc->tokIdx + 1, &second);
+    if (((struct token*)ListGetIdx(&tc->tokens, tc->tokIdx))->type != TOK_BTSFT_L) return false;
+    splitTokenAtCursor(tc, TOK_LST, TOK_LST);
     return true;
 }
 
-void TokenJoinShiftLeft(TokenCtx tc, int idx) {
-    struct token* tok = ListGetIdx(&tc->tokens, idx);
-    tok->type = TOK_BTSFT_L;
-    tok->str.len = 2;
-    ListRemoveIdx(&tc->tokens, idx + 1);
+int TokenEditMark(TokenCtx tc) {
+    return tc->edits.len;
+}
+
+//undoes every split made since mark, latest first - each pair of tokens joined back into the one it was
+void TokenEditRewind(TokenCtx tc, int mark) {
+    while (tc->edits.len > mark) {
+        struct tokenEdit e = *(struct tokenEdit*)ListGetIdx(&tc->edits, tc->edits.len - 1);
+        ListRemoveIdx(&tc->edits, tc->edits.len - 1);
+        struct token* tok = ListGetIdx(&tc->tokens, e.idx);
+        struct token* tail = ListGetIdx(&tc->tokens, e.idx + 1);
+        tok->type = e.was;
+        tok->str.len += tail->str.len;
+        ListRemoveIdx(&tc->tokens, e.idx + 1);
+        tc->version++;
+    }
+}
+
+//changes whenever the token list does, so a position recorded under one version means nothing under another
+int TokenListVersion(TokenCtx tc) {
+    return tc->version;
 }
 
 int TokenGetCursor(TokenCtx tc) {

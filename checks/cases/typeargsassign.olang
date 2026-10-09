@@ -1,0 +1,7 @@
+# check: run
+# a type-argument list closed right before a declaration's "=" lexes as ">>=" (or ">="); its ">" is split off
+fn main() ? {
+    x List<List<I32>>= List<List<I32>>()
+    y List<I32>= List<I32>()
+    assert x.Len() == 0 and y.Len() == 0
+}

@@ -8539,3 +8539,105 @@ from their original form.
   `t17payloadscopes`, `t24primref`, and `t17enumref` turned from "must fail" into "runs"; the `-i` fixture prints a
   folded tree identically interpreted and built. `-r` could not be checked: the container has no ThreadSanitizer
   runtime to link.
+
+- **The lexer and parser hardened from a review (L1/L3/L4/L12/L18/L21, B9a/B9c/B10, T17/T30, E32, 2026-10-09).** A
+  review of token.c and syntax.c by a read-only agent reported findings it reproduced with small programs; this is the
+  batch that fixed them, with the checker crashes the same review found on error recovery.
+  **The lexer read past the end of the file.** A file ending inside a line comment, a string or a character literal
+  ran the cursor past the terminating NUL, and the next read was an internal error ("bug found"). The cause was one
+  primitive: `feedChar` read the list at whatever index the cursor held. It now reads a NUL past the end, the cursor
+  may step past it and back symmetrically, and every loop that stops at the end asks `fedEnd` - the end of the file,
+  not a NUL byte in it. So a comment ends there (L4), and an unterminated literal is "never closed - the file ends
+  first" (L13/L14). The same pass found a string literal's newline reported as "newline before closing of character
+  literal".
+  **TOK_NONE meant two things.** It was the end of the token stream and also the type of an unknown character's
+  token, which went into the list - so the parser, seeing "end of file" mid-function, failed there and every later
+  line of the file failed again (one `!` gave a screenful). An unknown byte is now reported once for a run of them (a
+  non-ASCII character is several bytes) and dropped; a carriage return says to save with LF line endings, once per
+  file; a NUL byte, which used to end the module silently, is reported like any other (L1). Inside a literal or a
+  comment any byte is still content.
+  **`7.Hash()`** was "float literals must not end in a decimal point": a `.` after an integer's digits now begins a
+  fraction only when no letter or `_` follows it (L12). `7.` alone is still that error.
+  **A synthesized statement end pointed at the next line.** It was created after the whitespace was skipped, so it
+  carried the next token's position and an empty text: "unexpected token '' expected '{'" on the line after the
+  mistake. It now sits just past the last token of the line it ends, and a diagnostic calls it "end of line" ("end of
+  file" for the stream's end); the message is built with a memstream instead of a stack array sized by a token.
+  **Exponential parsing.** `parseStmnt` tried twenty-three forms in turn; three of them (destructuring, assignment,
+  expression) begin by reading a postfix expression, and a try-catch statement is read as an expression and as a
+  statement - each reading every lambda and catch block inside again. Nested in each other that is 3^depth: depth 10 took
+  seven seconds, depth 12 ran out of memory. Restructuring `parseStmnt` to read the leading expression once was
+  considered and not done, because the same doubling happens in `spawn`, the `for` post clause, `try` before a store and
+  the runtime-if fallback; memoizing by position fixes every such site at once. `parseExprPostfix` and `parseBlock` keep
+  what they produced and where they stopped, per token position, and a hit costs nothing. Two things had to be got
+  right. Positions only mean something for one shape of the token list, and the parser splits `>>` (and now `>=`,
+  `>>=`) into separate tokens - so the list has a version, bumped by every split and by `TokenEditRewind`, which undoes a
+  failed type-argument list's splits (a split `>>` used to stay split). And a remembered node must never change after it
+  is built: `joinStrLit` used to rewrite the first literal's token in place to join `"a" "b"`, which on a memo hit joined
+  again - it builds a new node now. The one context a postfix depends on (a `try` at `defaultListAt`, R9a) bypasses the
+  memo; `listOk` is now decided before the operand is read, since a `return` in a lambda inside it reset `defaultListAt`.
+  Forty levels of nested lambdas and of nested try-catch statements are now checked to parse under a timeout.
+  **A failed parse leaves the cursor unchanged.** `parseExprUnaryOne` consumed its prefix operators and returned NULL
+  without putting them back, so `f(-)` parsed as `f()` and `return -` as a bare return; the committed array-literal
+  branches did the same (`f(I32[)`). Every failure now returns through `parseFail`, and the statement forms are tried
+  through `attempt`, which also truncates the S8b locals list: a speculative destructuring recorded `TargetOs` (in
+  `TargetOs.Trim()`) as a local, so a later `if TargetOs == "plan9"` was no longer the build's to decide - B9c rescued
+  it, at the cost of a second attempt. The destructuring and `for` init now record their names once they succeed.
+  **Smaller parser defects.** A constructor body tried "a field followed by a separator comma" before a statement, so
+  `a, b = b, a` was reported as a separator comma; the separator reading is now the last resort. A chosen local `if`
+  skipped an `else if` condition by brackets to the first `{`, which a `match` in the condition opens - it is read by
+  the expression parser now. An enum's cases and a trait's signatures took no separator (`enum { North South }` was two
+  cases) - each now ends at a line end, or at a type's `>` or a marker's `&` as L20a allows, or at `}`.
+  `b as Box.Val & mask` reads `&mask` as the type's reference marker, which is the grammar and stays; the diagnostic was
+  "after 'is' or 'as' comes one of its cases" pointing at `Box` - it now names the marker and the parenthesized fix.
+  **B9a decided against the program.** The token evaluator computed integers in a `long long` whatever their type, so
+  `-D N=2147483647` with `if N + 1 < 0` was false where the program's own `N + 1` wraps to negative; `MIN / -1` killed
+  the compiler with SIGFPE; a global declared `F32` was read as the double nearest its literal. The decision taken was
+  that it decides only what it can decide exactly and defers the rest to B9c, which knows types. In detail (mine): each
+  number carries its type - a literal none until it adapts (T6), a `-D` constant its literal's (T6a), a global the one it
+  is declared with or its initializer's for `:=` - and two numbers meet as T6b and E6d say, so an operation is computed
+  exactly in 64 bits (overflow builtins - no undefined behaviour in the compiler) and kept only if the result fits the
+  type the program computes it in. Two numbers that do not meet - an integer of a type of its own beside a float - are
+  an error here, as they are in the program, rather than deferred: B9c would report them only as "does not check". A
+  float global narrower than `F64`, a number of a declared type, a zero divisor, `MIN / -1`, a literal past `I64`, and
+  any shape the evaluator does not read (a character, an array, `$`) all defer. The comparison to the program is a
+  check, not an argument: an `I32` global's `+ 1` and an `F32` global's `+ 0.2 == 0.3` decide a top-level branch and are
+  compared with the same expressions computed at run time.
+  **`and`/`or` did not short-circuit** in the token evaluator, so `X != 0 and 10 / X > 1` with `X=0` failed on the
+  division. The right side of a decided operator is still read - for where the condition ends, and for values that
+  cannot combine, which are an error wherever they are written - but nothing it reads is a value: no call defers, no
+  local makes the condition the running program's, no build constant counts as depended on (which matches B9c, whose
+  evaluator never runs that side).
+  **A branch B9c decides was never pre-scanned.** `scanTopIf` read the condition with the token evaluator and then
+  expected the branch's `{` - but a condition B9c decides is exactly one the evaluator stopped inside, so the scan gave
+  up and the branch's types and imports were never registered. It now skips the condition's tokens to the first `{` that
+  does not open a match, lambda or catch body.
+  **`-D` values.** `-D X=-0x10` had two values: `b.i` was -16, but the build module's operand re-parsed the text
+  `-0x10` in base 10 and read 0, so a condition and the program disagreed. `-D X=0x` was silently 0,
+  `99999999999999999999` silently clamped, and `1e400` an error with no file and no flag. A value is now a number only
+  when it is one whole literal by the lexer's rules after an optional `-` (`-D Version=1.2.3` stays text); a `0x`/`0b`
+  prefix always makes it a number, which must be valid; an integer must fit 64 bits and a float must not be infinite;
+  the error names the flag. The operand is built from the value (`OperandIntLiteralValue`), never from the text.
+  **Quadratic compile time in local ifs.** Each condition naming something not local looked it up by reading the whole
+  file's tokens (`condGlobal`); the top-level immutable globals are now indexed once per file and token-list version.
+  That alone was not enough, measured: deciding the queued conditions then found each one's decision, pending record
+  and body by linear search, and `fixedLocalInit` walked the whole function once per condition for the locals it reads.
+  Hashes for the first two, an array by body id for the third, and a cache for the last: a function of 16,000 ifs went
+  from quadratic (8,000: 20.8s before) to 1.8s for the front end. What is left superlinear is the number of functions in
+  a module - every declaration looks the module's names up in a list - which is not the parser's and was not touched.
+  **Deep nesting crashed the checker** - at about 2,000 parentheses, 1,500 nested ifs, or a 12,000-term `a + a + ...`
+  (a left-deep tree). The compiler now runs on a thread with a 1GB reserved stack (as `-i` already did), and the parser
+  bounds nesting at 20,000 levels - parentheses, blocks, `not`, and each link of an operator chain - with one diagnostic
+  (L21); measured, 60,000 levels fit the stack.
+  **Checker crashes in error recovery.** An unknown name stood for an `I32` literal whose text was the name, so
+  `nope[0] = 1` reported "not an array", built an index with no operands, and crashed reading one; `nope = 1` and
+  `nope++` added "not an lvalue"/"immutable", and a call of an unknown function was also "a value discarded" (S3). Both
+  are now a placeholder of the unknown stand-in type, which every check already lets through, and an index, slice or
+  member of such a value keeps its operands. `a == b` with `a` undeclared
+  and `b` a `String` crashed because the Eq call could not be built (`eqCallOr` stands in a Bool); `b[0] += 1` on a type
+  with `SetAt` and no `At` called an operator method with a NULL name.
+  **Found on the way.** A local condition depending on a build constant that did not type-check was decided anyway: B9c
+  checks queued conditions with diagnostics muted, and evaluated the operand regardless - `if X > 0.5` with `X` an `I32`
+  constant compiled, its error never reported. A condition whose checking reported errors is now recorded without an
+  operand, which decides it a runtime if, so the next attempt reports the error where it is written.
+  **Considered and not done**: freeing abandoned parse trees - remembered nodes are shared between readings, so freeing
+  one is unsafe, and the memo already makes what is abandoned linear.
