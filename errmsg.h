@@ -369,9 +369,11 @@ struct type;
     X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
     /* ---- literals and constructions ---- */ \
     X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - an array of arrays holds references: Array<I32>&[r0, r1]") \
-    X(ERR_ARRAY_OF_ERRORS,              "",      "%t has no values to put in an array") \
+    X(ERR_ARRAY_OF_ERRORS,              "T20",   "%t has no values to put in an array") \
+    X(ERR_ERROR_TYPE_AS_VALUE,          "T20",   "%t is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch %t.WORD { }')") \
     X(ERR_COMPREHENSION_REFERENCES,     "E27",   "a comprehension's elements may not be or hold references yet - build the array with a loop") \
     X(ERR_NOT_AN_ENUM,                  "E22",   "%n is not an enum type, so it has no values 'T.Case'") \
+    X(ERR_ERROR_WORD_AS_VALUE,          "T20",   "'%S' is an error word, not a value - raise it with 'error %S', tell it apart with a catch clause") \
     X(ERR_TAKES_NO_ARGS,                "E14",   "%n takes no arguments") \
     X(ERR_METHOD_AMBIGUOUS,             "M22",   "two imported modules declare %n for this type - import only the one meant") \
     X(ERR_DEFAULT_AMBIGUOUS,            "M19e",  "two traits %t satisfies both declare a default %n - the call cannot choose") \

@@ -747,7 +747,10 @@ one per line, or a single word on the declaration's own line; a comma between tw
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
-§7.
+§7. An error is raised (`error E.WORD`) and caught (`catch E.WORD`), never held: an error type is not a value's type,
+so naming one as the type of a parameter, a local, a field, a result, an element or a type argument is a compile-time
+error, and so is a word written as a value (`e != E.A`). Which word failed is told apart by catch clauses
+(`try f() catch E.A { ... } catch E.B { ... }`).
 
 ### 2.7 Function types
 

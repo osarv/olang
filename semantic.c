@@ -5288,6 +5288,16 @@ static bool typeExprHasMut(struct syntax* typeExprNode) {
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     struct type t = resolveTypeExprShape(mod, typeExprNode, scopeParams);
+    //T20: an error type names no value - it is raised and caught, so a parameter, local, field, result, element or type
+    //argument of one could never be given anything. Said here, where it is written; afterwards it fits anything
+    if (t.bType == BASETYPE_ERROR && !t.unknown) {
+        struct type shown = t;
+        shown.structMAlloc = false;
+        shown.scopeParam = NULL;
+        shown.refMut = false;
+        Err(firstTokAnywhere(typeExprNode), ERR_ERROR_TYPE_AS_VALUE, &shown, &shown);
+        t.unknown = true;
+    }
     if (typeExprHasMut(typeExprNode)) {
         //a type variable may be bound to a reference, which it then makes writable (G8a)
         if (TypeIsPermRef(t) || t.bType == BASETYPE_TYPEVAR) t.refMut = true;
@@ -11041,7 +11051,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
         case OPERATION_STR_OF: {
             struct operand* op = operandNew(tok, OPERATION_STR_OF, textValueType());
             ListAdd(&op->args, &in);
-            if (!strOfRenderable(in->type)) {
+            if (!in->type.unknown && !strOfRenderable(in->type)) { //an unknown type was reported where it was written
                 Err(tok, ERR_STR_OF_NOTHING);
             }
             struct list seen = ListInit(sizeof(struct type));
@@ -13790,7 +13800,14 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
     }
     resolveTypeDecl(t);
     if (t->bType != BASETYPE_CHOICE) {
-        Err(typeTok, ERR_NOT_AN_ENUM, typeTok);
+        //T20: an error type's word is raised and caught, never a value
+        if (t->bType == BASETYPE_ERROR) {
+            char* w = MallocOrCrash(typeTok.str.len + wordTok.str.len + 2);
+            snprintf(w, typeTok.str.len + wordTok.str.len + 2, "%.*s.%.*s", typeTok.str.len, typeTok.str.ptr, wordTok.str.len,
+                     wordTok.str.ptr);
+            Err(typeTok, ERR_ERROR_WORD_AS_VALUE, StrFromCStr(w), StrFromCStr(w));
+        }
+        else Err(typeTok, ERR_NOT_AN_ENUM, typeTok);
         return unknownPlaceholder(wordTok);
     }
     return OperandChoiceValue(ctx, *t, wordTok, firstPartOfType(s, SNTX_EXPR_ARGS),
