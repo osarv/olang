@@ -9479,6 +9479,61 @@ from their original form.
   way: it asserted a 20ms token had not fired right after making it, false if the test thread lost its core for 20ms;
   it times from before the token now, asserting only what holds however long a preemption lasts. And P8b still said "olang has no atomic operations, so no access is
   atomic", written before P9; it now says only P9's methods are atomic.
+- **`checks/checks.olang` runs its checks side by side (2026-10-09).** Once `-t` built each file in a process of its own
+  (B3a), `checks/checks.olang` was most of `make verify`'s time - 156s of ~240s when that was measured, 233s of 366s by
+  the time this was built, with the evaluator's and the type checker's review checks added - because it is a
+  sequential driver of a few hundred small, independent compiler runs: every file in `checks/cases`, then each
+  multi-step scenario in turn. Measured per test at 78508eb: the cases 81s, the 28 scenarios 102s, the longest
+  `cgreview` (15s) and `objnames` (12s).
+  **What kept them from running at once was the build directory.** The cases all ran in one directory, so they shared
+  `build/`: each build rewrites `build/olang_build.ll` and its object (the module of build constants, always rebuilt,
+  under one name whatever the `-D` values), so two builds at once would compile each other's half-written IR - with
+  different `-D` values, different content. Each case now gets a directory of its own, `build/checks/cases/<case>`, as
+  each scenario already had (`build/checks/<scenario>`); no two checks write one file, which the scenarios were checked
+  for one by one (each remote one uses its own cache and its own repository under its own directory; `preludestale`
+  edits a copy of std). Two more shared things turned up: `root()` ran `pwd > build/checks.root` and read it back on
+  every call - every `sh()` - so two at once could read the file while the other had just truncated it and run the
+  compiler as `/build/out`; it is `os.Cwd()` now. And the type checker's review check, merged while this was built, ran
+  in `fresh("cases")` - the directory every case's own lives under, which it would have deleted mid-run; it runs in
+  `typereview`.
+  **The prelude's objects are built once and copied into each case's `build/`** (`Seed`, `build/checks/prelude`): in
+  one shared directory the cases built them once between them, and building them again in each of the 34 cases (39
+  since) that get as far as code is ~1.6s each - two thirds of the cases' time again, measured as 77s against 53s for
+  the whole file. Copied rather than hard-linked so that no build could ever write into another's object (clang replaces its
+  output, but nothing here should rest on that); they are ~90KB of bitcode. Each copy is current - newer than the
+  prelude and the compiler, and named by the same identity hash - so no case rebuilds it, verified by no
+  `std_prelude_*.ll` appearing in any case directory. If the seed build fails, a case simply builds its own.
+  **How they run.** A global initializer (`Outcomes := runAll()`) runs every check before the first test, so the tests
+  keep their order and their names and report exactly as before: the cases' failures are printed in case order by the
+  one cases test, a scenario's by its own test, and `N passed, M failed` counts the same tests. Being an `extern`-reaching
+  initializer it is never evaluated while compiling (K1a). The work is a queue of check numbers in a `std/chan` channel,
+  ordinary olang, and four `spawn`ed workers in one `join` each take the next number until a -1; the scenarios are
+  queued first, longest first, and the cases only once the seed is built, which the spawning thread does while the
+  workers are busy with the scenarios. Each check's outcome is text - "" for a pass, the failure and the compiler's
+  output otherwise - stored by its worker into its own slot of one array (P1g's parallel-map shape; distinct slots, so
+  no lock, and P2's stand-in arenas fold the text back at the join).
+  **Why a scenario is no longer a test body.** An `assert` failing on a task thread aborts the process (P6) with only
+  "assertion failed", so a scenario failing in a task would end the whole run and not say which. Each scenario is a
+  function `fn name(r mut report&) ? Failed` whose checks are `try r.expect(ok, what, dir)` - the original assertion's
+  condition unchanged, `assert c or failed(w, d)` becoming `try r.expect(c, w, d)` - and the first that fails records
+  its message and ends the scenario through the error, as the assert ended the test. A bare `assert c` gained a message
+  of its own. Every assertion was carried over (209 before, 209 after), and the reporting was checked by breaking one
+  case of each kind (fail, build, run) and one scenario: each was reported with its message, in order, and the rest
+  passed. A scenario must be named in `Scenarios` and dispatched in `scenario()`; a test naming one that is not, or an
+  entry with no function, fails rather than being skipped.
+  **Decided (mine): four at a time.** The machine has four cores and a check is mostly one single-threaded compiler or
+  clang run. At 78508eb, with other agents loading the machine (load 3-9, so these are indicative): 2 workers 117s, 3
+  64s, 4 53s and 70s, 6 67s, 8 66s; peak tree memory 1.7, 1.8, 2.0, 2.3 and 2.55GB. More than four only takes a larger
+  share of a machine other verifies use too. On the current tip the sequential file peaks at 3.68GB and the parallel
+  one at ~4.0GB: the largest single process is `agree`'s `olang -i bfrand.olang` at 3.5GB (`-i` frees nothing, B3e) -
+  larger now than any compile in the suite, runner.olang's included.
+  **Measured** (wall times on the shared machine; total CPU is the comparable number and did not change - 163s against
+  168s at 78508eb, 221s against 212-221s on the tip): `checks.olang` 183-186s -> 53-58s at 78508eb, 233s -> 106-129s on
+  the tip under heavier load; `make verify` 366s -> 186s (and 220s), one run each, interleaved.
+  **Friction found, not fixed here**: text pieces still cannot continue onto the next line (recorded), so one long shell
+  command went into a variable; and an element of a static text literal (`for i, s in String&["a", "b"] { all[i] = s }`,
+  into an array in the result scope, directly or through a local holding the literal) is rejected by O20 as storage
+  that does not live long enough, though T25d makes it static data that lives as long as the program.
 - **Diagnostics remade: one row, the rule in brackets, `-e` for the rule (B11/B11a, 2026-10-09).** The user: "shorten
   down the error messages and keep them concise. They should preferably exist on one row. I am still split about keeping
   the rule number in there. I'd say keep it probably. It's better for agents later. You can also just remake the error
