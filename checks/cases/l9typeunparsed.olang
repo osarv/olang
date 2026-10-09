@@ -1,0 +1,21 @@
+# check: fail error[L9]: 'destruct' is a keyword, not a name
+# never: unknown type
+# never: Box is not generic
+# a type declaration that does not parse is reported once: the type stays declared, so its uses say nothing more
+type A enum {
+    Leaf(v I64)
+    Many(b B&)
+}
+type B enum {
+    One(destruct I64)
+}
+type Box<T> struct(v T) {
+    v
+    destruct I64
+}
+fn f(b Box<I64>&) I64 { return 1 }
+fn main() ? {
+    x A& = A.Leaf(3)
+    c := Box<I64>(3)
+    println($x " " $f(c))
+}

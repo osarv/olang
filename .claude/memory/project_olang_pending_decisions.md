@@ -28,7 +28,13 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): QA and QB below.
+**Asked 2026-10-09 18:35 CEST (from the port's design, compiler/DESIGN.md):**
+- QA. Should `Name<` open type arguments only when the `<` touches the name (`<` whitespace-significant - a language
+  change, zero corpus sites change)? It lets any file be parsed alone (formatters, editors, tree-sitter). In effect:
+  a declared-name oracle (D2/D3a make it exact). My recommendation: no for now; revisit when tooling is built.
+- QB. Should C compiler feature work pause, fixes only, while the port builds its checker (DESIGN.md M5-M12), so no
+  feature is built twice? In effect: features keep landing in C and are ported. My recommendation: yes, fixes only.
 **Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
 - Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
   public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).
@@ -128,6 +134,14 @@ rule and where it is recorded; the morning report lists them all, then they move
 10. (wt-cgfix2, T7c) storage over 64KB (Go's bound) never goes on the stack: locals, zero values, literals and
    by-value copies that large come from the current block's arena. And (T29a/E32b) converting a run-time array to a
    declared `Array<T, N>` type is a view checked once, never a copy.
+
+11. (wt-chk3, O26a) a value local the function returns - read off the rest of its declaring block - lives in the
+   result scope, its own storage included (an arena slot, not the stack): `l := List<I64>(); ...; return l` and a
+   struct holding one filled through a method are correct as written. Closes a pre-existing UAF.
+12. (wt-chk3, C2d/C2g) a constructor argument binds the instance only when the constructor's body can make the
+   instance hold it; a constructor's top level allocates into the instance's scope (oann's ctorpush UAF).
+13. (wt-chk3, C2d) a `:=` reference field takes its initializer's scope (`x := text.Trim()` is `x String&text`).
+14. (wt-chk3, E28) a conditional or match of references lives where its values share a scope.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

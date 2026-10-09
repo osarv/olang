@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype"]
+                     "target", "lazytype", "updir"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -245,6 +245,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "chunkpool" { try chunkpool(r) }
         case "target" { try target(r) }
         case "lazytype" { try lazytype(r) }
+        case "updir" { try updir(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -488,6 +489,20 @@ fn diag(r mut report&) ? Failed {
     crash String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -c deep.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
     try r.expect(sh(dir, $crash " && test $(cat rc.txt) -ne 0") == 0, "the crash did not fail", dir)
     try r.expect(outOf(dir).Contains("internal compiler error"), "a crash was silent", dir)
+}
+
+# M23: what a program means does not depend on the directory it is compiled from - a module imported as "../x" imports
+# its own neighbour, built from the directory above it or from the one below
+test "a module outside the working directory imports its neighbours" { assert passed("updir") }
+
+fn updir(r mut report&) ? Failed {
+    dir := fresh("updir")
+    os.Run("cp -r checks/fixtures/updir/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b sub/main.olang > out.txt 2>&1 && ./build/sub_main > out.txt") == 0, "from above", dir)
+    try r.expect(outOf(dir) == "7\n", "from above: expected 7", dir)
+    try r.expect(sh(dir, "cd sub && \"$OLANG\" -b main.olang > ../out.txt 2>&1 && ./build/main > ../out.txt") == 0,
+                 "from below", dir)
+    try r.expect(outOf(dir) == "7\n", "from below: expected 7", dir)
 }
 
 # M1/M22: a module is a file - a directory is not one, and files in one directory see each other only

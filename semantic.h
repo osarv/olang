@@ -103,6 +103,11 @@ struct type {
     //writes. A call binds it only where an argument for a reference parameter with no scope name of its
     //own is existing storage, whose scope the instance must not outlive; see bindCtorHere
     struct var* hereVar;
+    //C2d: once the constructor's body is checked, for each of its parameters (a bool each) whether the instance may hold
+    //what the argument refers to - a parameter only read (its length counted, its text scanned) binds nothing
+    int ctorBodyState;  //0 not built, 1 being built, 2 built (buildTypeBodies)
+    bool ctorHeldKnown;
+    struct list ctorHeld;
     struct var* ctorFunc; //synthetic BASETYPE_FUNC var (params = the constructor's own declared
                            //parameters, errors = its declared error union, retType = this struct's plain
                            //value type) registered under an internal, never-user-typable name so ordinary
@@ -280,6 +285,8 @@ struct scopeBinding {
     //C2d: with several candidates from several arguments, which of them need exactness (a bool each);
     //empty when needExact speaks for all of them
     struct list candidateExact;
+    //C2d (an instance-scope binding only): the argument whose scope it is, where one is - what a diagnostic names (B11)
+    struct operand* fromArg;
     //O18a: no argument determined this variable and none was written, so it follows the call's result:
     //rebound to wherever the result lands (landCall), the caller's own block until then
     bool landing;
@@ -318,6 +325,11 @@ struct var {
     bool valueHomeSet;
     struct var* valueHome;
     int valueHomeDepth;
+    bool slotBorrowed;  //C2d: a value local whose storage a reference was taken to (E12c) - a constructor's field local so
+                        //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
+    bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
+    bool storeInResult; //O26a: a value local the function returns - its storage, and its references (valueHome), are in
+                        //the result scope
     //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where
     //its references were put, which a reference field read through it finds its referent at; unlike valueHome, never
     //where the local's own storage is (that is its block, which borrowing it hands over). O25h: also a value local
@@ -667,6 +679,8 @@ struct operand {
                                 //by what the call bound them to - which the default is stored against
     void* pendingLambda; //D16: a lambda not checked yet - it is checked where its expected type is known
     bool isMoveSource;   //T7b: a destructured result's element - its array is taken, not copied
+    bool cgEnvOnStack;   //D16c (codegen): a capturing lambda passed to a callee that cannot keep it - its environment is
+                         //the caller's frame's, where LLVM can see through it
     struct operand* callee; //E13b: a call through the function value this expression gives, rather than through a
                             //named function or variable - readVar is then a synthetic var of the callee's type
     bool isSpreadSource; //D8d: several results passed as a call's arguments - each argument reads one of them
@@ -829,6 +843,7 @@ int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15)
                                               //never for ordinal encoding (already generic, see the report)
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
+bool SemanticParamTransient(struct var* func, int j);
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
 bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit

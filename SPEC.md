@@ -253,6 +253,18 @@ bracket begins a line of its own, as above; on one line (`I32[1, 2,]`) such a co
 declaration starting a line - `type`, `test`, `import`, `extern`, or `fn` followed by a name - ends a bracket still
 open from before it outside any block, so a missing `)` is one error and not one per declaration after it.
 
+**L18b (a line beginning with `if`).** Outside brackets (L18a), an `if` that begins a line begins a statement: it never
+continues a conditional expression (E28) on the line before, even where nothing ends that line's statement - after a
+`}` closing a lambda's body or a `match` value, which synthesizes no end (L18). A conditional runs over several lines
+only inside brackets:
+
+```
+f := fn() I32 { return 1 }
+if ready { start() }          # a statement of its own, never "f := (fn ... if ready else ...)"
+x := (small
+      if n < 10 else big)     # inside parentheses a line may begin with "if"
+```
+
 **L19.** Consequently, outside brackets (L18a), an operator or continuation that is meant to extend an expression onto
 the next line must appear at the *end* of the first line, not the start of the next:
 
@@ -1308,7 +1320,10 @@ instead, each scope it captures from required to outlive that - an obligation of
 another of its scope variables, as returning a parameter's function value is (O14a). Every rule for a reference (§8)
 then decides where it may be stored, passed and returned, so it can never be called after something it captured is gone. A function named as a value captures nothing and fits
 anywhere. Nothing is written through a function value itself, so it need only outlive where it is put: the
-exactness O25 requires of a reference does not apply to one.
+exactness O25 requires of a reference does not apply to one. Where the lambda lives is unobservable beyond that, so an
+implementation may keep one made as an argument for a callee that can keep nothing of it - no obligation of the
+callee names that parameter's scope, its result does not, and no other parameter shares it - in the caller's frame,
+where its captures are seen through: a function value it captured is then known at the call through it.
 
 **D16e (spawning a lambda).** `spawn fn() { ... }` starts a task running the lambda's body (§6.8 P1). The lambda
 takes no parameters; its captures are made when the `spawn` runs, so a loop spawning one per iteration hands
@@ -1475,7 +1490,9 @@ alone:
 - **relative**: any other path - a file relative to the **importing module's own directory**, never the
   working directory, so a module means its own neighbours wherever it was found. It may descend into
   directories (`geom/rect`) and climb out of them (`../shared`). Within the standard library or a remote
-  repository a relative import stays within it: `import "io"` in `std/os` is `std/io`.
+  repository a relative import stays within it: `import "io"` in `std/os` is `std/io`. A local module reached by
+  climbing out of the working directory (its identity beginning `..`, M22a) is local all the same - its own
+  relative imports are its neighbours, so what a program means never depends on the directory it is compiled from.
 
 A path ending in `.olang`, a path naming no file, and a first element `std` naming anything outside the
 standard library are compile-time errors. The first element of a relative path is therefore never `std`
@@ -2165,7 +2182,9 @@ Only a call that returns nothing has no rendering.
 or a `$` rendering; nothing else can stand beside one, so `f("a" b)` is a syntax error rather than a join —
 a value becomes text only through `$`. Pieces are written on one line (a line end ends the statement, L18), except
 inside brackets, where a join may run over several lines (L18a): `("n is " $n` then `"!")` on the next. Text on a
-line of its own outside brackets is a statement that discards its value (S3).
+line of its own outside brackets is a statement that discards its value (S3). A parenthesized value right after a piece
+is a call of that piece (E13b) - `"(" $op (" try" if t else "")` calls `op` - and since neither text nor what a piece
+renders is a function there, it is a compile-time error that says to write the value as `$(...)`.
 
 String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
@@ -2350,7 +2369,8 @@ kind, marked or not; `lo` and `hi` must be integer types, and either may be omit
 `base.Len()` (E23) respectively. The result is a **borrow** of `base`'s own storage with the pointer and
 length adjusted — never a copy and never an allocation — so its type is a runtime-length reference
 `Array<T>&` whose element type is `base`'s (keeping `base`'s declared type, T29a: a slice of a `String` is a
-`String&`), tagged (§8) to the scope `base`'s storage belongs to: slicing a
+`String&`, with every method a `String` has - those it inherits by `extends` included, T29f), tagged (§8) to the
+scope `base`'s storage belongs to: slicing a
 local yields a reference in that local's block, slicing an array reference yields one in its referent's scope. The result has
 length `hi - lo`, and writing through it writes `base`.
 
@@ -2529,7 +2549,10 @@ referent type (a temporary, E12c: a call's value, a constructor call, an enum ca
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
-`:=` declares its type (D15).
+`:=` declares its type (D15). A conditional of references lives where the values it can give share a scope (§8 O25a) -
+`null` fits any, and a new value is built there - so `x := p.one() if c else p.two()` lives where both do and
+`x := p.leaf() if b else null` where `p.leaf()` does; values in different scopes share none, and such a conditional is
+then held where it is declared, as a reference's block is. A `match` giving values (S12b) is held the same way.
 
 ### 5.13 Membership
 
@@ -4063,7 +4086,10 @@ return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a c
 `y`.
 
 **O14c.** A **by-value** built result holding references (T17c), returned from a by-value parameter holding them (O4b)
-or from storage reached through one, is the third exception: there is no borrowed form for a value. The parameter's
+or from storage reached through one, is the third exception: there is no borrowed form for a value. A reference copied
+out into such a result (E12: `return p`, `return a[0:1]`) holds what its referent holds, which lives where the referent
+does - or, for a slice of a value, where that value's references are: in one of the function's own blocks it is an
+error, in a parameter's scope this obligation. The parameter's
 scope must outlive the result scope - be exactly it where something can be stored through one of the references
 (O25g) - as an obligation of the function, checked at every call once the result has landed (O18a). `fn id(h Holder)
 Holder { return h }` is legal, and `keep = id(Holder(inner))` a compile-time error where `inner` dies before `keep`.
@@ -4088,6 +4114,40 @@ fn inner() Point& {
 It is valid only inside a function that has a result scope; anywhere else — a function with no result, a
 borrowed result, a test — it names nothing and is a compile-time error.
 
+**O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
+scope** - its own storage, and everything built into it - with nothing written: `&return` is implied. A local is
+returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
+as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
+to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
+here, its zero value (D13c), a result destructured into it (S4b) - when it holds references (T17c, O4b), or when the
+function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). So
+
+```
+fn mk(n I64) List<I64> {
+    l := List<I64>()
+    for i in range n { l.Push(i) }      # l is lent where it lives (O17): the chunks are built in the result scope
+    return l
+}
+fn Scan(src String&) Scanner {
+    s := Scanner(src)
+    s.run()                              # what run builds into s is built where the result goes
+    return s
+}
+```
+
+are correct as written. What follows from it is the rules for any place in the result scope: a temporary assigned to
+it, into a field or an element of it, or given to a call that keeps it there is built there (O18a, O18b, O25h);
+existing storage stored there must be there exactly where something can be stored through it, and outlive it
+otherwise (O25c, C2d); a borrowed value's callee binds its scope variable to the result scope (O17). A copy of storage
+that already lives somewhere (`t := a[i]`) keeps its references where they are (O25h) and is not moved: returning it is
+O14c's. An array value so returned (T7b) is still handed back as a new array - copied into the result scope at the
+return, where its storage already is - so nothing that refers to the local refers to the caller's array. It is Go's escape analysis, made static and read off the program: the declaration and the `return` say where
+the local lives. The cost is memory, never safety - the result scope is the scope the caller puts the result in (O18a),
+so what is built into the local lives as long as the result does: deferred code, a join's tasks and a destructor
+registered in it (O15, run when the caller's scope closes) see it; a local declared in a loop body and returned from it
+is built in the result scope on every turn; and a call that fails leaves what it built in the caller's scope until that
+scope closes.
+
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
 tagged field) carries whatever those were bound to where the value was built. If one of them was bound to one
 of the returning function's own block scopes, the return is a compile-time error: the value hands back a
@@ -4095,7 +4155,11 @@ reference to storage that dies at the return, arriving through a binding the sig
 binding actually recorded on the returned value is judged; a value returned with no binding of its own — a
 parameter handed straight back out — is not, since its scopes were bound by whoever built it. A loop's body runs again
 after itself, so a return in it is judged by every binding an assignment anywhere in the same loop gives the local - one
-written after the return included - where the local is declared outside the loop.
+written after the return included - where the local is declared outside the loop. A local whose construction is no
+longer the whole story is not judged by its bindings but by where its own references are (O25h): one lent to a callee
+that can keep what it builds in the value's own slots (O17 - `l.Push(x)` on a `List`, `b.fill()` on a struct holding
+one), and one a reference is assigned into (`h.name = a`). Its construction recorded nothing about what was put there
+afterwards. A returned local is in the result scope (O26a), where whatever it holds is.
 
 **O13c (what a result carries).** A function's body decides, for the value it returns, two things a call adds to its
 result where every `return` agrees:
@@ -4120,7 +4184,8 @@ binding the same variable — a parameter and those written `&` it (O4a) — mus
 is a compile-time error.
 
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
-so it binds the variable to where that storage is - a value local's block, wherever its references were built. Where
+so it binds the variable to where that storage is - a value local's block, wherever its references were built, or
+the result scope for a local the function returns (O26a). Where
 those live elsewhere (a value built in the result scope by a scope argument, `b := Box&return(n)`, or a copy of an
 element, O25h) and the callee can keep something it builds in the value's own slots - a field it may assign a reference
 to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
@@ -4142,7 +4207,7 @@ as a temporary is built where it lands (E12c):
 | a declaration written with a bare `&` | the local's block |
 | a declaration written `&x` | where `x` lives |
 | a declaration written `&return` | the result scope (O26) |
-| a declaration of a value holding references | the local's own block, as the local is (O25h) |
+| a declaration of a value holding references | the local's own block, as the local is (O25h) - the result scope, for one the function returns (O26a) |
 | an assignment's target | the scope the target's referent lives in (O25) |
 | `return f()` | the returning function's result scope, or `p`'s scope for a result borrowed from `p` |
 | an argument for a parameter of another call | that parameter's binding — and, where that is itself still landing, wherever the outer call's result lands |
@@ -4262,7 +4327,9 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 - a **bare-pun** field of a bare reference parameter lives in the instance scope too, and the argument stored
   in it must outlive the instance (below);
 - a field written `&p`, naming a reference parameter, lives where that parameter's argument lives, and one
-  written `&f` where an earlier field `f` does (O4a). The constructed value carries these bindings, so a
+  written `&f` where an earlier field `f` does (O4a). A reference field declared with `:=` writes no scope and takes its
+  initializer's (O25a): `x := text.Trim()` lives where `text`'s argument does, as `x String&text = text.Trim()` would,
+  and one initialized with a new value or anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
   each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
@@ -4283,7 +4350,21 @@ argument or several from different scopes. An argument for a parameter a field n
 (`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
 be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
 had closed while the instance could still be read.
-A violation is a compile-time error at that point.
+A violation is a compile-time error at that point, reported at the argument.
+
+An argument binds the instance this way only when the instance **may hold** what it refers to, as read off the
+constructor's checked body: the parameter is stored in a field (a bare pun included), built into one, passed to a call
+together with a field (which could keep one in the other), or shares what it refers to - through a local, a slice, a
+borrowed result - with something that is. A value that cannot carry a reference (a count, a flag, a new array of
+numbers, T17c) carries nothing, so a constructor that only reads an argument binds nothing for it:
+`type Counts struct(text String&) { letters I64 = count(text) }` built from a local may be returned. A constructor
+whose body is being checked when its call is (a call inside its own body) binds every such argument.
+
+**C2g (a constructor's own scope is the instance's).** A constructor's top-level locals are the instance's fields
+(C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
+closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
+growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
+own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2).
 
 ```
 type Box struct(v I32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does

@@ -3926,6 +3926,38 @@ Go through this for every change to what olang means - a rule added, revised or 
   variables may not be named `print`/`println` (M19f); G16b's notes always keep the outermost (the program's own call);
   cascades after an unknown trait, a `try` multi-index without `TryAt`, and an M6b error reached twice; a private `len()`
   of the wrong shape says it is `Len`'s spelling.
+- **A returned local lives where the result goes; what a constructor holds (O26a, O13a, C2d, C2g, E28, L18b, M23, T29f,
+  D16d, 2026-10-09; O26a the coordinator's decision for the user's review, details mine).** From a usage study that wrote a
+  front end in olang. **O26a**: a value local the function returns - `return l`, `return b.items`, parenthesized, an arm
+  of a conditional or match there, one of several results - lives in the result scope, its own storage (an arena slot,
+  not a stack one) and everything built into it, with nothing written; so `l := List<I64>(); l.Push(i); return l` and
+  `s := Scanner(src); s.run(); return s` are correct as written - Go's escape analysis, static and read off the program.
+  **Decided (mine)**: it applies to a local its declaration makes (a call's result, an instance, a literal, a zero value,
+  a destructured or parallel-declared result) that holds references, or to any value returned through a built reference
+  result; "returned" is read off the rest of the declaring block (D3a makes the name one variable there); a copy of
+  existing storage keeps O25h/O14c; storage too, because a borrow of the local could otherwise leave a reference into
+  the dead frame (`b.me = b` through a method). **The hole it closes, pre-existing**: a local `List`/`Map` - or a struct
+  holding one filled through a `mut` method - returned by value was accepted with its storage in the dying block
+  (segfaults, `Map.Get` silently 0), because O13a trusted construction bindings that a `Push` through a borrow, or a field
+  assigned later (`h.name = a`, the review's 01/03), never updated; such a local is now judged by where its references
+  are (`lentForStores`). **C2d decided (mine)**: an argument binds the instance only when the constructor's checked body
+  may make the instance hold it - a union-find over the variables a value that can carry references joins (a count, a
+  flag, a new array of numbers joins nothing); `Counts(t)` from a local that is only counted is returned; a constructor
+  body is built on demand when a call needs the answer, so declaration order decides nothing. **C2g (pre-existing UAFs,
+  oann's ctorpush and one found on the way)**: a constructor's top level allocates into the instance scope (`%here`), so
+  `items.Push(6)` on a field `List` no longer leaves the chunk in the closing scope, and a value field a reference is
+  taken to is stored there too (it pointed into the constructor's stack frame). A `:=` reference field takes its
+  initializer's scope (`x := text.Trim()` is `x String&text`; it was an O10 error). **E28**: a conditional or match of
+  references lives where its values share a scope (null fits any, a new value is built there). **L18b (the
+  coordinator's grammar decision)**: outside brackets a line beginning with `if` begins a statement - after a `}` it
+  used to continue a conditional. Also: global `List`/`Map` method calls (O17's split-scope check knew no global);
+  a slice keeps `extends` (T29f); `../x` importing `y` from a subdirectory (M23); a call's result read through on the way
+  to a receiver lands by its obligations (`r.mods[0].top.Get(n)`, O18c); a capturing lambda passed to a callee that can
+  keep nothing of it gets its environment in the caller's frame (D16d, codegen: `captured` 2.3-2.9 -> 0.6 ns an element,
+  as `direct`); diagnostics - an unparsed type is declared (one error, not "unknown type" at every use), a join piece
+  followed by `(` says to write `$(...)` (E11b), C2d's error points at the argument with a note naming the fix. Found
+  writing the tests, pre-existing: a reference copied out into a by-value result (`return a[0:1]`, a slice of a local
+  array of text) was never judged - the text was returned from the dying block (O14c now holds it).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

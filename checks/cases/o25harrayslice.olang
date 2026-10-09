@@ -1,0 +1,13 @@
+# check: fail error[O26]: this value refers to this function's own storage
+# O14c/T7b: an array returned by value is copied into the result scope, but what its elements refer to is not - text made
+# in this function's block dies at the return. It used to be returned unchecked and read freed storage. A local returned
+# itself lives in the result scope (O26a, o25harrayreturn.olang); a slice of one is not the local
+fn mk(n I64) Array<String&> {
+    a := Array<String&>(2)
+    a[0] = $n $n
+    return a[0:1]
+}
+fn main() ? {
+    a := mk(12)
+    assert a.Len() == 1
+}

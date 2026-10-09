@@ -1,0 +1,9 @@
+# check: fail error: expected '{', found 'else'
+# L18b: a line beginning with "if" begins a statement - it never continues a conditional on the line before, even after
+# a "}" that ends nothing (this used to read as "f := (fn ... if c else fn ...)")
+fn main() ? {
+    c := true
+    f := fn() I64 { return 1 }
+    if c else fn() I64 { return 2 }
+    println($f())
+}
