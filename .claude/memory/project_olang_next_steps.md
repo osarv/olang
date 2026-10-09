@@ -187,6 +187,15 @@ because what it finds about structure feeds the refactor.
   amount any integer type, a shifted literal adapts to the target, `:=` from a text conditional, join/keyword/
   destruct diagnostics). Also running: perfcg, perfstd, fuzz, stdmath. After all merge: the bootstrap/ move and the
   modest refactor (nothing else in flight).
+- 10:20 (the user: "we are not hitting the usage goals ... a JSON lib, HTTP is probably better outsourced to a Unix
+  command. Can you start working on Oann? ... centered around a linear algebra library that either should or should
+  not be part of stdlib. Thoughts?"): started wt-stdjson (std/json as a recursive enum tree, os.Exec without a shell
+  capturing output, std/http over curl) and wt-linalg (std/linalg: Tensor<T>, views, broadcasting, `@` matmul packed
+  + blocked + join/spawn, vs C and OpenBLAS). My recommendation, being built (ledger question 7): the tensor/linalg
+  core in std, oann (layers, autograd, optimizers, datasets) its own repo on top - PyTorch on ATen. Next: an oann
+  agent rewriting /home/user/oann (C, ~1150 lines: dense/relu/softmax-cross-entropy/AdamW/MNIST, OpenBLAS+curl) in
+  olang on std/linalg once its API lands (oann repo, branch claude/github-environment-setup-ftu9va). Environment:
+  libopenblas-dev installed for the session (benchmarks) - another setup-script line for the user.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
