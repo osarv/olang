@@ -12215,3 +12215,104 @@ during another worktree's verify, not a finding):
    asked for the bounds check and the failure is defined (`OUT_OF_BOUNDS`); in a generic it means "element 2 if there
    is one" can only be written with G26's `if N > 2`. `fuzz/repro/trygenericindex.olang`; the generator writes a
    non-literal index there.
+
+### From study 4's systems, concurrency and scripting programs: null reads trap, a crash handler TSan cannot hang, Clear, a following io.Lines, chan.Close, process handles, -i runs joins, defaults for build constants (T2b, P7, E27, O8c, X6, B3e, B10c, 2026-10-09)
+
+Study 4 (`/home/user/review/study4`) wrote thirteen systems, concurrency and scripting programs; this batch took its
+findings outside the scope rules, plus one the fuzzer found.
+
+1. **A null read the optimizer could see miscompiled (T2b).** `s.top.v` with `top` defaulted to null, read in an
+   inlined `Peek`, let LLVM prove the load undefined and delete everything from it on - `main`'s return included - so
+   control fell into the C `main` that calls it and the program printed its first lines forever (r02; other shapes
+   exited 48, printed garbage and exited 0, or printed a line twice). T2b said "undefined behaviour - in practice a
+   deterministic trap", which held only at `-d`. Every function the compiler writes, the runtime's included, now
+   carries LLVM's `null_pointer_is_valid` - the kernel's `-fno-delete-null-pointer-checks` - so the optimizer may no
+   longer assume a pointer it sees read through is non-null: the load stays a load and faults. T2b now says a null read
+   **traps**, as a guarantee, with the one honest limit: a field further into a struct than the unmapped range (64KB on
+   Linux) is not covered, and is undefined as an out-of-range index is. E16e and X1a no longer list a null dereference
+   among the unchecked holes; they list a data race instead. The evaluator and `-i` report a null read as before.
+   **Measured** (callgrind, `-a x86-64-v3`, every bench program before and after, identical output): nbody, spectral-norm,
+   mandelbrot, fannkuch, k-nucleotide, List push/walk/fold, Array walk/fold, parallel all within 0.001%; binary-trees
+   +0.010%; matmul +0.022%; text +0.78% - three instructions per iteration in `main`, a null check the optimizer used to
+   remove because a load had proved the pointer non-null. Two checks pin it: the r02 shape built `-b` and `-d` ends with
+   status 139 and OnCrash's message, and `-i` stops naming it.
+2. **`-r` with `os.OnCrash` could hang (P7).** A fault inside ThreadSanitizer's own bookkeeping ran the crash handler,
+   whose instrumented atomic load waited for the slot lock its own thread held. The handler is now emitted with an
+   attribute group of its own, without `sanitize_thread` (`cgWriteWithAttributes` recognizes it), so a crash ends with
+   its signal. Found while checking it: the recursion that triggers this (r11, 400,000 frames on a RunOnStack stack)
+   corrupts TSan's state on its own, OnCrash or not - TSan pushes every call on a fixed-size shadow stack whose overrun
+   is checked only in its debug builds - and a run then crashes, exits 66 or spins in `MetaMap::FreeRange` freeing a
+   block. Measured: 100,000 frames always clean, 200,000 sometimes 139, 300,000 sometimes a hang with no OnCrash at all.
+   That is the detector's limit, not olang's; P7 now states both.
+3. **`StringBuilder.Clear()` (O8c).** Empties the builder and keeps its chunks, as `List.Clear` does: r22's loop
+   replacing a builder field per turn peaked at 193MB over a million turns, and Clear-ing it at 10MB. **O8c** states the
+   arena's rule where people meet it: nothing is reclaimed before its scope closes, so what a loop puts into a scope
+   that outlives it - a replaced field's old value, text sent through a long-lived channel, an element a List removed -
+   stays until that scope closes; std/chan's and std/io's docs say the same.
+4. **`io.Lines` reads again after the end (r21).** It latched the end of the file, so it could not follow a file still
+   being written. Every `Next` now reads when it has nothing buffered, `Exhausted` meaning "no more lines now" - one
+   system call per call at the end - so `tail -f` is a loop with a wait. A test in std/os appends to a file between calls.
+   **Decided**: the end of the file still ends a line without a newline (Python's `readline` and Go's `ReadString` do the
+   same), so a writer that writes a line in pieces can be read as two; one that writes whole lines is read line by line.
+5. **`chan.Close`, `ChanError.CLOSED`, `for v in c`.** Close says no more values will be sent; what is buffered is still
+   received, in order, and then `Recv` and `RecvUntil` fail with `ChanError.CLOSED` - so `Recv` is fallible now (`try`),
+   which is "errors are errors" for a channel that can end. A channel is its own iterator (`Next() T ? Exhausted`), so
+   `for v in c` receives until the channel is closed and drained, and the iterator helpers work on one. **Decided**: a
+   `Send` on a closed channel - or one still blocked, or a rendezvous value not yet taken, when it closes - **stops the
+   program** ("send on a closed channel", an assert after letting go of the lock), as Go panics, rather than failing:
+   the side that sends is the side that closes, so it is a protocol mistake, and an error would put `try` on every
+   `Send` of every program that never closes. Closing twice changes nothing (Go panics; that panic is a common source
+   of shutdown bugs and buys nothing here). `IsClosed` for a look. checks.olang and the fuzzer's worker pools close
+   their queues instead of sending -1 markers. Tests: drain-then-CLOSED, `for v in c` over buffered and rendezvous
+   channels across tasks, a close waking three walkers and a `RecvUntil`, all three times under `-r` with no report; a
+   check that a send after close aborts with status 134.
+6. **Processes (X6).** `os.Exec` takes `dir` (the program's working directory; a relative program path is found from
+   it); `os.Start` gives a running `Process` with `Wait() Output ? OsError`, `WaitUntil(tok)`, `Kill()` (SIGKILL;
+   nothing once waited for, since the pid may be reused) and `Pid()`; `os.ExecUntil(args, tok, ...)` is Exec with a
+   cancel token whose firing kills the child and fails with the token's reason. **Decided**: the token is a function of
+   its own, named as chan's `SendUntil`/`RecvUntil` are, so `Exec`'s error set is unchanged; a wait with a token polls
+   `waitpid(WNOHANG)` with a sleep doubling from 50us to `cancel.PollNs`, which works the same under `-i` (a pidfd would
+   need a newer glibc and a raw syscall); a missing or non-directory `dir` is `NOT_FOUND`/`NOT_DIR`, checked before
+   spawning so it cannot be mistaken for a missing program; a second `Wait` fails with FAILED. The runtime's
+   `__olang_spawn` takes the directory and uses `posix_spawn_file_actions_addchdir_np`, declared `extern_weak`; where
+   the C library lacks it (glibc before 2.29) the program runs through `/bin/sh -c 'cd -- "$0" && exec "$@"'` with the
+   directory and arguments as the shell's arguments, never its script - checked by hand on the IR with the weak symbol
+   forced null. `-i`'s spawn does the same. Tests in std/os; the interp check builds and interprets a fixture using all
+   of it.
+7. **`-i` runs joins (B3e).** A join's tasks run as K1 already ran them: in sequence at the join, after its body and its
+   deferred code, each to completion in spawn order - one of the orders the built program may take, so fan-outs and
+   channel hand-offs with room run as built (r23 prints what `-b` prints). A task that needs another running at the same
+   time cannot: a condition-variable wait (`pthread_cond_wait`/`timedwait` - what a channel's Send and Recv block in)
+   made inside a task, while tasks wait to run, or untimed at all, stops `-i` with "it waits for another task, and -i
+   runs a join's tasks one after another, never beside each other - here in the task spawned at FILE:LINE". A timed wait
+   with no task in sight still waits its time out (a `RecvUntil` with a deadline on the main thread times out as built).
+   **Deferred code when -i stops**: an error leaving `main` already ran it on the way out, and `done`/`fail`/`os.Exit`/a
+   failed check end the process without it, as the built program does (S19c); what changed is a stop on something -i
+   does not run (a destructor, a task's wait, recursion beyond its stack): the blocks it is in are still left as the
+   built program, which would go on, leaves them - their deferred code runs, innermost first, and the first stop is the
+   one reported - so a script's temporary directory goes.
+8. **A default for a build constant (B10c).** `Profile := "dev"` at a module's top level, built with `-D Profile=prod`,
+   used to be B10's "is a build constant - choose another name"; a program configured by `-D` could not be built
+   without it (r15). Now an immutable global outside std whose type is one a `-D` value can have - `Bool`, `I32`, `I64`,
+   `U64`, `F64`, `String` - is a default: `-D` replaces its initializer, fitted to its declared type as a literal
+   written there would be (`-D Port=443` into `Port I64`), and a value that does not fit is an error naming the flag.
+   **Decided**: it is configuration whether or not `-D` names it - a condition reading one depends on the build, so S8a
+   no longer calls it dead and S8b decides it as conditional compilation. That **reverses a consequence the user
+   confirmed** when S8a was made ("`Verbose := false; if Verbose` in source is an error - configuration knobs belong in
+   -D"): the knob now has a default in source, which was the study's whole point; three S8a cases moved to a `U8`
+   global. `-D Name` still defines the build constant every module sees (B10), the declaration stays its module's
+   global, the two hold one value, and every such declaration of the name takes it (Go's `-ldflags -X` without the
+   package path, since the declaring module is the only one whose name it is). std's globals are never defaults - its
+   constants are its own - and a function, a type, a mutable global or one of another type is still B10's error (B10c
+   saying which). The token evaluator (B9a) reads -D's value for a default, typed as the declaration, and counts a
+   default as a build constant for S8b; `SemanticIsBuildConst` and S8a's `condIsConstant` do the same in the checker
+   and evaluator. **Diagnostics**: a condition naming a name nothing declares and nothing is near now says "unknown name
+   'Profile' - if it is a build constant, define it with '-D Profile=VALUE', or declare it with a default", at the top
+   level (B9c's report, which said only that the condition used "what exists only in the branches it decides") and in a
+   function. Eight check cases.
+9. **An empty comprehension had no storage (E27, the fuzzer's seed 3193).** A comprehension over an iterator that gave
+   nothing was `null` at run time and an empty array while compiling and under `-i`. **Decided**: rather than reserve
+   100 elements before every such loop, as the finding suggested, a comprehension that reserved nothing up front and
+   pushed nothing is given storage of its own after the loop - an allocation of nothing (8 bytes, O8a's minimum, E10's
+   "storage of its own") - which costs one compare per comprehension and nothing for one that keeps elements. A corpus
+   test compares the run time with a baked global and an assert decided while compiling.
