@@ -131,6 +131,26 @@ struct type;
     X(ERR_MISSING_TYPE_ARGS,            "G7",    "%n is generic - write its type arguments, as '%S<I32>'") \
     X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
     X(ERR_TYPE_ARGS_ON_NON_GENERIC,     "G7",    "%S is not generic, so it takes no type arguments") \
+    X(ERR_CONST_PARAM_TYPE,             "G20",   "a constant parameter is an integer, a Bool or an enum without payloads, found %t") \
+    X(ERR_CONST_ARG_IS_TYPE,            "G21",   "%S's parameter %S is a constant - write a value, as '%S<..., 3>'") \
+    X(ERR_TYPE_ARG_IS_VALUE,            "G21",   "%S's parameter %S is a type, and this is a value") \
+    X(ERR_CONST_ARG_NOT_COMPUTABLE,     "G21",   "a constant argument must be computable while compiling: %s") \
+    X(ERR_CONST_ARG_RANGE,              "G21",   "%l does not fit %t") \
+    X(ERR_CONST_ARG_KIND,               "G21",   "this constant argument is not a value of %t") \
+    X(ERR_CONST_VAR_UNKNOWN,            "G22",   "<%S> is no constant variable of this declaration") \
+    X(ERR_CONST_VAR_TYPE_AND_CONST,     "G22",   "<%S> is a type in one place and a constant in another") \
+    X(ERR_CONST_VAR_TWO_TYPES,          "G22",   "<%S> fills constant parameters of two types, %t and %t") \
+    X(ERR_CONST_VAR_CONSTRAINED,        "G22",   "a constant variable takes no constraint - <%S>'s type is its parameter's") \
+    X(ERR_CONST_VAR_AS_TYPE,            "G22",   "<%S> is a constant, not a type") \
+    X(ERR_TYPE_VAR_AS_VALUE,            "G23",   "<%S> is a type variable, not a value") \
+    X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable <%S> appears in no parameter's type as a whole argument, so no call can infer it") \
+    X(ERR_CONST_VAR_MISMATCH,           "G24",   "<%S> is %l by one argument and %l by another") \
+    X(ERR_CONST_VAR_NOT_IN_TYPE,        "G24, E32b", "%t's length is known only at run time - view it with 'x as Array<T, N>&'") \
+    X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
+    X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
+    X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
+    X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
+    X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a",   "an array inside an array or a struct is held by reference - write %t&") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \

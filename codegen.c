@@ -391,6 +391,7 @@ static void llvmTypeB(struct type t, struct cgBuf* b) {
         //a type variable never reaches codegen: monomorphization (G16) substitutes every one away before
         //a copy is emitted, so being asked to lower one means an instantiation was missed - a bug here
         case BASETYPE_TYPEVAR: ErrorBugFound(); return;
+        case BASETYPE_CONST: ErrorBugFound(); return; //G20: a constant argument is a type's, never a value's
         //T2a: same reasoning - "null" is retagged to the type it adapts to before anything lowers it, so
         //reaching here means one escaped an assignability context it should never have left
         case BASETYPE_NULL: ErrorBugFound(); return;
@@ -3831,6 +3832,19 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
         baseLen = MallocOrCrash(32);
         snprintf(baseLen, 32, "%lld", base->type.arrLen ? base->type.arrLen->intLiteralVal : 0);
     }
+    //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly: one compare, and the pointer alone
+    if (op->sliceExact) {
+        char* same = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", same, baseLen, hiVal);
+        int eid = ctx->lblCtr++;
+        char eBad[32], eOk[32];
+        snprintf(eBad, sizeof(eBad), "as.len.bad.%d", eid);
+        snprintf(eOk, sizeof(eOk), "as.len.ok.%d", eid);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", same, eOk, eBad);
+        ctx->terminated = true;
+        cgBoundsFailed(ctx, op, eOk, eBad);
+        return dataPtr;
+    }
     char* loNonNeg = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp sge i64 %s, 0\n", loNonNeg, loVal);
     char* loLeHi = cgNewTmp(ctx);
@@ -3983,10 +3997,24 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     }
     //a diagnostic tells apart what a rendering need not: a writable reference from a read-only one, at every level
     if (rdForDiag && t.structMAlloc && t.refMut) cgBufAdd(b, "mut ");
-    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - the length is no part of it
+    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - T7c: with its length if fixed
         cgBufAdd(b, "Array<");
         rdSpellTypeB(*t.arrElem, b);
+        if (t.arrLenArg) { cgBufAdd(b, ", "); rdSpellTypeB(*t.arrLenArg, b); }
+        else if (!t.arrMalloc && t.arrLen) cgBufAdd(b, ", %lld", t.arrLen->intLiteralVal);
         cgBufAdd(b, ">%s", mark);
+        return;
+    }
+    if (t.bType == BASETYPE_CONST) { //G25: a constant argument is its value, as it would be written
+        if (!t.constKnown) {
+            struct str src = SemanticConstPatternSource(t);
+            cgBufAdd(b, "%.*s", src.len, src.ptr);
+        } else if (t.constOf && t.constOf->bType == BASETYPE_CHOICE && t.constVal >= 0 && t.constVal < t.constOf->vars.len) {
+            struct var* c = ListGetIdx(&t.constOf->vars, (int)t.constVal);
+            cgBufAdd(b, "%.*s.%.*s", t.constOf->name.len, t.constOf->name.ptr, c->name.len, c->name.ptr);
+        } else if (t.constOf && t.constOf->bType == BASETYPE_BOOL) {
+            cgBufAdd(b, "%s", t.constVal ? "true" : "false");
+        } else cgBufAdd(b, "%lld", t.constVal);
         return;
     }
     if (t.bType == BASETYPE_FUNC) {

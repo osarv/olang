@@ -37,6 +37,9 @@ enum baseType {
                          //they do for a struct; the value itself is the two-word { itab, data } pair.
     BASETYPE_FUNC,
     BASETYPE_ERROR,
+    BASETYPE_CONST, //G20-G25: a constant argument - a value standing where a type argument would ("Array<F32, 3>",
+                    //"Matrix<F32, 784, 128>"): constOf is the value's type, constVal the value once known, constExpr
+                    //the expression of constant variables a pattern computes it by. Never the type of a value.
     BASETYPE_TYPEVAR, //a generic type variable ("<T>", §12.1 G1) - carries only its own name, and is
                        //replaced by a concrete type when the enclosing generic is instantiated (G16). No
                        //value ever has this type at run time; it exists purely between declaration and
@@ -175,6 +178,20 @@ struct type {
     //G19: BASETYPE_FUNC and a generic declared type - the constrained variables, one BASETYPE_TYPEVAR per
     //constrained name, each carrying its varConstraint
     struct list typeConstraints;
+    //G20: a generic struct type's or trait's parameters that are constants - index-aligned with typeParams, each the
+    //constant's type, or a BASETYPE_VOID entry for a type parameter. Empty when every parameter is a type
+    struct list constParams;
+    //G20-G25: BASETYPE_CONST - see the enum. Also on a BASETYPE_TYPEVAR that is a constant variable (isConstVar):
+    //constOf is its type (the parameter's it fills)
+    struct type* constOf;
+    long long constVal;
+    bool constKnown;
+    bool isConstVar;
+    struct syntax* constExpr;
+    struct semaModule* constMod;
+    //T7c: BASETYPE_ARRAY - a fixed-length array whose length is still a pattern (a constant variable, or an
+    //expression of them, as a BASETYPE_TYPEVAR or BASETYPE_CONST); arrLen is NULL until substitution knows it
+    struct type* arrLenArg;
     bool isExtern; //true for an "extern func" decl (§11) - never fallible (errors always empty), params/
                     //retType restricted to numeric primitives or arrays of them, codegen emits a bare C-ABI
                     //declare/call instead of the olang {code,payload} convention
@@ -606,6 +623,9 @@ struct operand {
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
+    bool sliceExact; //E32b: an OPERATION_SLICE standing for "x as Array<T, N>&" - the whole of x, whose length must be N
+                     //(args[2]); its type is the fixed-length reference
+    bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
     bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
@@ -687,6 +707,7 @@ struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whos
 //analysis does, since a method's symbol carries its receiver type.
 struct type* SemanticMethodReceiver(struct var* f);
 struct str typeShortName(struct type t); //a type as a symbol-safe name; used for built-in method receivers
+struct str SemanticConstPatternSource(struct type t); //G24: a constant argument still a pattern, as written
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed);
 
 struct semaImport {

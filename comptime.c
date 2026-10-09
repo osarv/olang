@@ -1512,7 +1512,8 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     if (base->kind == CT_NULL) return ctFail(st, op->tok, "it slices a null array");
     if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
     long long l = ctDeref(lo)->i, h = ctDeref(hi)->i;
-    if (!(l >= 0 && l <= h && h <= base->n)) {
+    //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly
+    if (op->sliceExact ? h != base->n : !(l >= 0 && l <= h && h <= base->n)) {
         if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
         if (ctRun) ctRunAbort("slice bounds out of range\n");
         return ctFail(st, op->tok, "it slices out of range, which aborts at run time");
