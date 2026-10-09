@@ -9616,3 +9616,168 @@ from their original form.
   `fn(n mut Node&&n)` - at run time and while compiling alike, since both use the one speller. It now renders as
   written; a corpus test pins both paths. And `t is T.C` with C no case of T said "after 'is' or 'as' comes one of its
   cases"; it says `T has no case 'C'` (T17) now, as a pattern does.
+- **`std/math`, `io.Lines`, and the C math library known to the compiler (X8, K1, 2026-10-09).** Two gaps in the
+  standard library a data or scripting program hits at once: no math functions, and no way to read a file line by line
+  without loading it whole (the std-gaps list from the usage study).
+  **The API shape.** Methods (`x.Sqrt()`) read best, but a method on a built-in type can only be declared by the prelude
+  (M19d), and putting forty math functions in every program's prelude to get that spelling was not this module's call
+  to make. So `std/math` offers free functions, `math.Sqrt(x)`, each generic over the four float types and dispatching
+  with `match <T>` - one name per function rather than `Sqrt`/`SqrtF32`/`SqrtF16`, and no cost, since a type match is
+  resolved per instantiation (G13). An integer argument is G15's "no case covers I32" at the instantiation: integers do
+  not flow into floats (T6b), so `math.Sqrt(2)` is written `math.Sqrt(2.0)`, as `F64(n)` is written for a variable. An
+  F64 or F32 goes to the C library's function for its type (`sqrt`, `sqrtf`); an F16 or BF16 widens to F32, calls the
+  F32 function and rounds once to its own type. For sqrt that is correctly rounded - double rounding is innocuous when
+  the wider format has at least 2p+2 bits, and F32's 24 cover F16's 11 and BF16's 8 - and for the other functions it is
+  as good as the F32 function is. Fma alone goes through F64, whose 53 bits hold an F16 or BF16 product exactly, so the
+  only rounding before the last one is the sum's - which can round a halfway case twice only when the product sits
+  exactly on a halfway point of the result's type and the addend is below 2^-53 of it, a corner recorded rather than
+  worked around.
+  **Domain errors are IEEE's.** `Sqrt(-1.0)` is NaN, `Log(0.0)` is -Inf, `Exp(1000.0)` is Inf. An error per call would
+  put `try` on every square root in a numeric kernel and a check on every element, the per-operation cost the language
+  refuses (principle 2); IEEE's answer is that a NaN or an infinity carries the failure through the rest of the
+  computation to the one place that asks, `IsNan`/`IsFinite`, which is also what NumPy, C, Go and Rust do. "Errors are
+  errors" is about absence and failure a caller must handle; a NaN is a value the type has.
+  **Min and Max** are IEEE 754-2019's minimum and maximum for floats: a NaN if either operand is one, and -0.0 below
+  0.0. NumPy's `minimum` and PyTorch's `min` propagate a NaN too; C's `fmin` drops it, which hides a failed computation
+  behind the other operand, and x86's `minsd` gives whichever operand is second, which makes `Min(a, b)` and `Min(b, a)`
+  differ. For any other type they are `<` (an integer, or a type declaring `Less`, E31), giving `a` on a tie. `Clamp(x,
+  lo, hi)` is `Min(Max(x, lo), hi)`, so hi when lo > hi - stated rather than checked, as C++'s `clamp` leaves it
+  undefined. `Round` rounds a half away from zero (C, Go and Rust's `round`), and `RoundEven` to even, IEEE's own and a
+  quantizer's (Python's `round` and NumPy's are the latter; offering both names says which is which). `Abs` takes
+  integers as well, and the most negative stays itself, as negation wraps (E6c).
+  **What the compiler lacked, and X8.** There was no way for std to reach an LLVM intrinsic: an `extern fn` is a plain
+  `declare` with no attributes, which LLVM's own library-call inference turns into C's default (-fmath-errno)
+  attributes, `memory(write)` - so `sqrt` stayed a call (with the instruction inlined behind an errno check) and never
+  vectorized, and every math call made the surrounding loads reload. And the evaluator refuses every extern (K1), so no
+  global using math could bake and no assert on math could be decided, against the standing rule that the evaluator
+  handles what it can. Adding syntax for either (an `intrinsic` declaration, a purity marker on `extern`) was weighed
+  and rejected for a table: the compiler knows the C math library's functions by name and prototype, as LLVM and every
+  C compiler do. An exact one - sqrt, fma, floor, ceil, trunc, round, roundeven, fabs, copysign, each correctly rounded
+  by IEEE 754 - is declared `memory(none) nounwind willreturn`: LLVM then lowers it to an instruction where the machine
+  has one (`sqrtsd`/`sqrtpd` here; floor and fma are libm calls on baseline x86-64, which set no errno - checked) and
+  vectorizes it. **The others are not `memory(none)`, and that is the one subtle part.** glibc sets errno in them (exp
+  past the range, log of a negative), and a `memory(none)` call may be moved - InstCombine sinks a call with no side
+  effects into the block using its result - so `x := math.Exp(y)` written before a failing `read` and used only in the
+  error branch could be sunk between the `read` and std/os's `__olang_err()`, which would then report ERANGE as the
+  read's failure. They are declared as C's default would be (`memory(write)`), which keeps them in program order. **And
+  they are `nobuiltin`**: LLVM otherwise rewrites `pow(x, 2.0)` into `x * x` and `pow(2.0, x)` into `exp2(x)` - checked
+  on this LLVM - and since glibc's pow is not correctly rounded, the rewritten program could differ in the last place
+  from the evaluator's `pow`, a disagreement between a baked global and the same expression at run time. With
+  `nobuiltin` the program calls exactly the function the evaluator called. The cost is that `Pow(x, 2.0)` stays a call;
+  `x * x` is the spelling for a square.
+  **The evaluator** calls an X8 function while compiling through the libffi path `-i` already had, so it is the
+  compiler process's libm - the same library the program links, since the target is the host. Each result is an
+  operation's NaN for E33a (its bits are not read while compiling). So `SqrtTwo F64 = math.Sqrt(2.0)` is
+  `global double 0x3FF6A09E667F3BCD`, an `F16` `Exp` bakes as `half 0xH3E98`, and an assert on a math function of
+  constants is decided while compiling; std/math's tests compare each baked global with the same call on a mutable
+  global's value at run time, and a checks fixture prints thirty-odd functions over all four types built, built `-d` and
+  interpreted - the three agree byte for byte.
+  **Measured** (4,000 passes over 50,000 F64s, interleaved medians on the shared machine): `b[i] = math.Sqrt(a[i])`
+  0.201s, C with -fno-math-errno 0.201s - the same `sqrtpd` loop - and C's default 0.396s, a scalar `sqrtsd` behind an
+  errno branch; `b[i] = math.Exp(a[i])` 0.38s against C's 0.42s and 0.34s with -fno-math-errno, all three calling libm's
+  exp, within the machine's noise.
+  **`io.Lines`.** `for line in try io.Lines(fd) { } catch io.IoError { }`: a struct holding the descriptor and a buffer,
+  whose `Next() String& ? IoError + Exhausted` is the iterator protocol with a real failure beside running out (S9a,
+  S9e). The one design question was what a line is, in memory. **A slice of the buffer** costs no copy and was rejected:
+  the next read reuses the buffer, so a line a caller kept would silently change, and nothing in the language can say
+  "valid until the next call". **Each line is new text built where its caller puts it** (a built result, O18a): in a
+  `for` loop the body's own scope, reclaimed as each turn ends - 5M lines read at a 2MB peak, in 185ms where C's
+  `getline` loop took 115-190ms - and kept with `kept.Push($line)`, which builds the copy in the list's scope, while
+  `kept.Push(line)` is O10c's error at the call. The buffer starts at 64KB (a constructor default, `io.Lines(fd, 4)` in
+  the tests to cross its edges) and doubles when one line fills it, so the memory is the longest line's; unread bytes
+  move to the front before each read. A line excludes its newline and one carriage return before it, or before the end
+  of the file (Go's `ScanLines`, so CRLF files read as LF ones); the last line needs no newline, "a\n" is one line and
+  an empty file none; a lone `\r` inside a line stays. A failed read fails `Next` with `IoError.FAILED` and leaves the
+  reader as it was, so calling again reads again; after the end every call is `Exhausted`. The tests read from a pipe
+  (`pipe` declared in std/io for them), which needs no file and exercises a reader that is not a regular file.
+- **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, O15, C11/D15,
+  2026-10-09).** The benchmarks against C (`bench/`) had diagnosed four gaps as the code generator's own; this work
+  closed them, each measured A/B - the previous compiler's binary against the new one's, interleaved medians on the
+  shared machine (load 1-6), with instruction counts from cachegrind where the timing was noisy.
+  **1. Closures were never devirtualized.** A function value was a pointer to an arena closure whose first word was its
+  code, so a call through one loaded the code pointer from memory; inside an inlined `Fold` that load sat in the loop
+  beside an unknown indirect call, which may write anything, so LLVM could neither forward the stored pointer nor hoist
+  it, the call stayed indirect, the iterator went back to memory every step, and nothing vectorized. The two candidate
+  fixes were (a) the function value as a `{code, environment}` pair and (b) `!invariant.group` on the closure's stores
+  and loads. **(a) was chosen.** (b) keeps 8 bytes, but its soundness is LLVM-semantic and fragile: an arena chunk
+  reused for a new closure at the same address needs `llvm.launder.invariant.group` at every construction, and any
+  comparison of two function values needs `llvm.strip.invariant.group` on both sides, or GVN's equality propagation
+  substitutes one pointer for the other and forwards a stale code pointer - the reason clang's `-fstrict-vtable-pointers`
+  is still off by default years after it was written; it also measured 0.33s against 0.19s for the invariant loads. (a)
+  needs no such argument: the code pointer is an SSA value, so once a helper taking a lambda is inlined the call is
+  direct, and the lambda inlines in turn. Its environment holds only the captures, written once where the lambda is
+  made and read only by its own prologue, so those accesses get a TBAA family of their own (`!18`/`!28`) and never
+  alias a program's fields or elements - the iterator's index stores no longer pin the capture loads. What the pair
+  touched: the LLVM type (`{ ptr, ptr }`, 16 bytes in TypeGetSize - a function value in a struct, an element or a
+  payload grows by 8), the zero value (`zeroinitializer`), calls through a local, a global and a computed callee
+  (`cgFnCode`), capturing lambdas (`cgClosure`, the environment now starting at field 0), named functions (their value
+  is `{@f.fvt, null}`, the linkonce_odr adapter that drops the environment - the static `@f.fv` objects are gone),
+  capture-free lambdas (`{@lambda, null}`), E31's `Call` adapters (adapter plus an environment `{instance, scope}`),
+  equality (both words - which is T21's identity: one value per named function or capture-free lambda, a new one per
+  evaluation of a capturing lambda or a `Call` conversion), `$` (it reads the first word, null exactly when the value
+  is), debug info (now undescribed, as other aggregates), and `cgIsBorrow`, which used to treat storing a `Call`
+  conversion as a pointer store. Spawn needed nothing: a task already carried the code and the environment as separate
+  arguments. The evaluator models function values abstractly and needed nothing; baked globals never held a function
+  value's address. The spec does not specify the representation (T21 says reference-shaped and identity), so it did
+  not change. Measured (100,000 elements x 8,000 passes): `Array.Iter().Fold` with a capturing lambda 1.63s -> 0.23s (C
+  0.22s, the hand loop 0.25s); `a.Iter().Count(fn(x) { return x > lim })` 1.57s -> 0.56s against its hand loop's 0.54s;
+  `List.Iter().Fold` 2.13s -> 0.93s - what remains is `ListIter.Next`'s per-element chunk test (std's).
+  **2. A fresh array stored into a reference was allocated twice.** `cgStoreInto`'s value-to-reference array branch
+  copied an `Array<T>(n)` it had just built in the same scope into a second allocation; `List.grow` paid it for every
+  chunk, `Map.grow` for every bucket array. `cgAdoptsFresh` decides adoption once, for every store site that pairs a
+  value with its store (`cgStoreOperand`): a reference target, or a value target holding nothing yet, takes the
+  descriptor of an array the expression made itself (`Array<T>(n)`, a comprehension, a rendering, a join), provided
+  `cgWhereBuilt` built it at the target's scope rather than where the checker landed it elsewhere. A value array already
+  holding a value is still written into (T11b). Then the zero fill: D13c clears every `Array<T>(n)`, and `Push`
+  overwrites it - a C copy of olang's `List` measured 0.26s with the memset and 0.17s without, and removing the memsets
+  from the emitted IR by hand took push from 0.27s to 0.15s. Skipping it is sound only for memory known to be zero,
+  and only the system's fresh pages are. A first design gave a large zeroed allocation a dedicated `mmap`ed chunk; it
+  was dropped before it landed, because such a chunk joins the pool when its scope closes and the next large
+  allocation would map again rather than reuse it, so a loop allocating a large array per iteration would grow the
+  pool without bound. The design kept: `__olang_new_chunk` maps any chunk of 128KB or more (where glibc's malloc turns
+  to mmap itself) and flags it fresh; the flag is cleared when the pool hands the chunk out again; and
+  `__olang_scope_alloc_zeroed` - which the zero-filled `Array<T>(n)` now calls - skips the memset of 4KB or more when the
+  scope's head chunk (the one the allocation came from) is fresh, since nothing at or above a fresh chunk's bump offset
+  has been handed out. Chunk acquisition is exactly as before; `__olang_pool_drain` unmaps a mapped chunk rather than
+  freeing it. A test allocates large arrays through fresh and recycled chunks and checks they read zero, and was
+  checked against a deliberately broken allocator that never clears: it fails. List push 20M: 0.51s -> 0.165s (C
+  0.167s).
+  **3. Allocation order, and the arena's fast path.** A constructor's arguments were evaluated before its instance was
+  allocated, so `Node(tree(d - 1), tree(d - 1))` laid a tree out in post-order and a walk from the root ran against
+  memory order. `cgPromote` now bumps the instance's slot first, for every promotion of a temporary into a reference
+  (an argument, a return, a declaration, an assignment, a literal's part); the destructor is still registered once the
+  constructor completes (O16), so the order destructors run in is unchanged - O15 said "reverse order the instances
+  were allocated", which was the same thing until now, and now says "constructed" (a test pins 4123 for a nested chain
+  and a second instance; registration in allocation order would give 4321). Measured: the layout makes the walk faster
+  (on a depth-14 tree built 2,000 times, walking 0.17s -> 0.11s) and the building slower (0.29s -> 0.32s): the slot's
+  pointer is live across both recursive calls, one more callee-saved register, about 8 instructions per node (the
+  benchmark's instruction count 607M with the fast path alone, 690M with both). On binary-trees itself the order wins,
+  6% over the fast path alone, more so as trees outgrow the cache; kept. The fast path: the allocator's success path
+  jumped into a block shared with the slow path, which reloaded the head and the cursor and rounded the cursor again;
+  it is now self-contained (one rounding, skipped altogether for an 8-aligned allocation, since every offset is a
+  multiple of 8), and a new chunk's first allocation is its first bytes. binary-trees 18: 0.51s -> 0.42s against the C
+  arena's 0.39s (ratio 1.32 -> 1.08); at depth 16, 780M -> 690M instructions (C arena 591M).
+  **4. T7b's copy of a returned local.** A function returning an array value copies a local it returns into the result
+  scope. The copy is now skipped when nothing could tell: the local is declared once in the body's own block (never in
+  a loop, so a call puts one array in the result scope, the one returned) from storage it makes itself, every return
+  returns it, nothing assigns it, every other use indexes it or takes its length, its elements are numbers (so no
+  reference into it can exist), the body has no `defer` or `join`, and the function cannot fail (a failed call would
+  leave the array in its caller's scope). Under those conditions no reference to it exists for deferred code, a task or
+  a destructor to write through after the result is computed, which is exactly what the copy protects. The analysis is
+  syntactic and conservative - a slice, a method call, a `for x in m`, a capture or a `$m` keeps the copy. matmul's
+  `matrix()` and the reproducer qualify; matmul measured 1.25s -> 1.22s, within noise, as the benchmarks predicted.
+  **Found on the way, all fixed.** A study of realistic programs (`/home/user/review/study`) handed three over: a
+  conditional of two literals into a target of another type (`v I64 = 7 if b else 9`, `return 200 if b else 0` from a
+  `U8` function) kept the literals' own type and emitted invalid IR - OperandFitsType's conditional branch now gives
+  the conditional the target's type, as the match branch below it did; `return wrap(e) if e != null else
+  Expr.Num(1.0)` (and its `match` form) crashed the code generator - the conditional's type came from the call arm, a
+  reference tagged with the callee's scope variable, and the temporary arm was promoted into that tag, which no frame
+  of the caller holds; a value made in an arm is now built where the checker landed it (here the borrowed result's
+  scope), and the test reads it back after an arena churn; and a module whose file name begins with a digit could not
+  build, since every symbol and type name begins with the module's prefix and an LLVM name may not begin with a digit
+  (`@2go_helper`) - B3b's prefix escapes a leading digit as `$3x`, which nothing else produces, so it stays injective.
+  Writing a destructor-order test found a fourth, older than any of this: `p := R(k)` for a type declaring a destructor
+  declared a value - in a local, a constructor field or a global - so the instance was never registered and its
+  destructor never ran (a file handle would never close), and C11's "reference-only" was bypassed because `:=` writes no
+  type-ref for C11 to check. `:=` now declares the reference `x R&` would (D15 says so); the instance is built where
+  the declaration lives and destructed when that scope closes.

@@ -65,6 +65,11 @@ void CtOrderGlobals(void);
 //forgets every global evaluated so far - a new analysis has new variables
 void CtReset(void);
 
+//X8: whether extern function f is one of the C math library's functions the language knows - by its name and exact
+//prototype - and if so whether IEEE 754 requires its correctly rounded result (sqrt, fma, floor ...)
+enum ctMathFn { CT_MATH_NONE, CT_MATH_EXACT, CT_MATH_INEXACT };
+enum ctMathFn CtMathFn(struct var* f);
+
 //T25d: op, reaching a place of type dst at a call or a return, is a static literal - the constant data itself, one
 //instance per site however often the site is reached (E10). The generated code and the evaluator both ask this
 bool CtIsStaticLiteral(struct operand* op, struct type dst);

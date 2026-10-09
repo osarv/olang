@@ -64,6 +64,45 @@ text 5M numbers.
 | parallel, 4 tasks | 0.724 | 0.798 | **0.91** | 1.08 | 0.712 | 0.781 | 0.91 |
 | text | 1.186 | 0.482 | **2.46** | 2.33 | 1.099 | 0.522 | 2.11 |
 
+### After the code generator fixes (2026-10-09)
+
+Items 1, 2, 7 and 8 below were fixed in the compiler (CLAUDE.md, "Code generator gaps from the benchmarks, closed").
+Before and after, each the previous compiler's binary against the new one's, interleaved medians in seconds (A/B runs
+of 5-11 repetitions under the lock, load 1-6):
+
+| benchmark | before | after | C | after/C |
+|---|---:|---:|---:|---:|
+| sum: Array.Iter().Fold (capturing lambda) | 1.627 | 0.228 | 0.217 | 1.05 |
+| `a.Iter().Count(f)`, f capturing (hand loop 0.543) | 1.566 | 0.556 | - | 1.02 of the hand loop |
+| sum: List.Iter().Fold | 2.125 | 0.929 | 0.195 | 4.76 |
+| List push | 0.510 | 0.165 | 0.167 | 0.98 |
+| binary-trees, C arena | 0.514 | 0.422 | 0.391 | 1.08 |
+| matmul F32 | 1.247 | 1.223 | 1.313 | 0.93 |
+
+And the whole suite after them, `bench/run.sh -r 7` (load 2-4):
+
+| benchmark | olang (s) | C (s) | olang/C |
+|---|---:|---:|---:|
+| nbody | 0.936 | 0.996 | 0.94 |
+| spectral-norm | 0.687 | 0.561 | 1.22 |
+| mandelbrot | 0.913 | 0.921 | 0.99 |
+| fannkuch-redux | 1.043 | 0.996 | 1.05 |
+| binary-trees | 0.442 | 2.574 | **0.17** |
+| binary-trees, C arena | 0.448 | 0.395 | **1.13** |
+| k-nucleotide | 1.127 | 0.766 | 1.47 |
+| matmul F32 | 1.135 | 1.437 | 0.79 |
+| List push | 0.166 | 0.172 | **0.96** |
+| sum: for x in List | 0.915 | 0.179 | 5.11 |
+| sum: List.Iter().Fold | 1.150 | 0.183 | **6.27** |
+| sum: for x in Array | 0.243 | 0.181 | 1.34 |
+| sum: Array.Iter().Fold | 0.195 | 0.183 | **1.07** |
+| parallel, 4 tasks | 0.778 | 0.805 | 0.97 |
+| text | 1.137 | 0.544 | 2.09 |
+
+`for x in Array` moved within the run's noise (it measured 0.245s before and after the fixes in the A/B runs); what is
+left of the `List` rows is `ListIter` (item 3), of k-nucleotide `Map`'s API (item 6), of text the renderer (item 4) -
+std's - and of spectral-norm the wrapping arithmetic (item 5).
+
 In short: **the code generator is at C's level wherever the program is loops over arrays and numbers** - nbody,
 mandelbrot, fannkuch, matmul, array loops and the parallel fan-out are level with C (within about 10% either way,
 which is this machine's noise), and allocation-heavy code is 5x faster than C with malloc/free. **The gaps are in the
@@ -77,35 +116,22 @@ Each finding was read off the whole-program optimized IR (`bench/ir.sh`), confir
 edited by hand, or the C side changed to do what olang does - and re-timed (single runs under the same lock, so
 ±10%), and has a minimal program in `repro/` whose header says what to look for. Ordered by size.
 
-1. **A capturing lambda is never inlined - `Iter().Fold(...)` 10-13x.** A function value is a pointer to a closure
-   object (code pointer, then captures) in the arena. Inlined into the caller, `Fold`'s loop loads the code pointer
-   from that object before every call and calls it indirectly - and since an unknown call may write any memory, LLVM
-   cannot forward the pointer stored when the closure was built, so the call is never devirtualized or inlined; the
-   captured value is reloaded through an untagged load each iteration, the iterator's fields go back to memory, and
-   nothing vectorizes. A lambda capturing nothing is a constant global and does inline - `a.Iter().Count(f)` with a
-   capture-free predicate runs at hand-loop speed, as recorded on 2026-10-07 - while the same `Count` whose predicate
-   reads one captured value takes 2.2x the equivalent hand loop (1.31s against 0.59s).
-   **Proof:** marking the two closure loads (code pointer, capture) `!invariant.load` by hand takes
-   `a.Iter().Fold` over an Array from 1.93s to 0.19s - the hand loop is 0.17s; `!invariant.group` on the code
-   pointer's store and loads gives 0.33s. **Fix:** a closure never changes after it is built (captures are frozen,
-   D16c), so its loads can say so - `!invariant.group` on the closure's stores and loads, with
-   `llvm.launder.invariant.group` where an arena chunk is reused (clang's treatment of vtable pointers under
-   `-fstrict-vtable-pointers`); or a function value as a `{code, env}` pair, so the code pointer is an SSA value that
-   becomes a constant once `Fold` is inlined. Either way the capture loads want a TBAA node of their own, so they never
-   alias `I64` fields. `repro/closure_call.olang`.
-2. **A fresh `Array<T>(n)` assigned into a reference field or element is allocated twice and copied - List `Push`
-   3.2-3.3x.** `l.chunks[k] = Array<T>(size)` (and `l.chunks = ...`, `m.buckets = ...`) builds and zero-fills the array
-   where it lands, then `cgStoreInto`'s value-to-reference array branch (codegen.c, "copy into fresh storage (E12
-   promotion)") calls `cgCopyRuntimeLengthArray`, allocating a second buffer of the same size and copying the first
-   into it; the first stays in the scope as garbage. The codegen review fixed exactly this for `a := Array<T>(n)`
-   only. `List.grow` pays it for every chunk (twice the memory, a memset and a copy of every element ever pushed) and
-   `Map.grow` for every bucket array. **Proof:** removing the copy by hand takes 20M pushes from 0.53s to 0.29s (C
-   0.16s). **Fix:** when the source is a fresh temporary (`cgIsFreshTemp`), already built in the target's scope, store
-   its descriptor - pass that fact into `cgStoreInto` from the assignment, field and element stores.
-   `repro/fresh_into_field.olang`. **The rest of the gap is zero-filling (D13c)**: each chunk is memset before `Push`
-   overwrites it; a C copy of olang's `List` measures 0.26s with the memset and 0.17s without. A cheap fix that keeps
-   "nothing uninitialized": a large `Array<T>(n)` that takes fresh memory from the system (mmap'd, hence already zero)
-   can skip the memset, as `calloc` does - only reused arena memory needs clearing.
+1. **FIXED (T21/D16c): a capturing lambda was never inlined - `Iter().Fold(...)` 10-13x.** A function value was a
+   pointer to a closure object (code pointer, then captures) in the arena, so `Fold`'s inlined loop loaded the code
+   pointer before every indirect call, and since an unknown call may write any memory, LLVM could not forward the
+   pointer stored when the closure was built: the call was never devirtualized or inlined, the captured value was
+   reloaded every iteration, and nothing vectorized. **Now a function value is the pair `{code, environment}`**, so the
+   code is an SSA value - a direct call once `Fold` is inlined, and inlined in turn - and the captures are read from the
+   environment under a TBAA node of their own. `a.Iter().Fold` with a capturing lambda 1.63s -> 0.23s (C 0.22s, the
+   hand loop 0.25s); `Count` with a capturing predicate 1.57s -> 0.56s against its hand loop's 0.54s.
+   (`!invariant.group` on the old closure, clang's vtable treatment, was the alternative; its soundness needs launders
+   at every construction and strips at every comparison, and it measured 0.33s.) `repro/closure_call.olang`.
+2. **FIXED (T7/E12c, D13c): a fresh `Array<T>(n)` assigned into a reference field or element was allocated twice and
+   copied - List `Push` 3.2-3.3x.** `l.chunks[k] = Array<T>(size)` built and zero-filled the array where it lands, then
+   copied it into a second allocation. **Now such a store adopts the array** (`cgAdoptsFresh`, for every store site),
+   and **a zero-filled array from a freshly mapped chunk is not cleared again**: a chunk of 128KB or more comes from
+   `mmap`, whose pages are zero, and is flagged fresh until it is recycled, so `Array<T>(n)` skips the memset there -
+   D13c's "nothing uninitialized" unchanged. 20M pushes 0.51s -> 0.165s (C 0.167s). `repro/fresh_into_field.olang`.
 3. **`for x in List` does not vectorize - 4.7-4.8x.** `ListIter.Next` hands out one element at a time with the chunk
    change folded into every step, so the loop has a data-dependent branch in its body and stays scalar; `ToArray()`
    then the same loop runs at C's speed. **Fix:** walk a List chunk-wise - an outer loop over chunks, an inner
@@ -134,19 +160,20 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    to a struct with a mutable `Value`, which olang can express), or a place protocol so `m[k] += 1` is one lookup.
    The rest is `String.Eq`'s byte loop against `memcmp`, a slice bounds check per key, and finding 2 in `Map.grow`.
    `repro/map_count.olang`.
-7. **binary-trees: 5x faster than malloc/free, 1.27-1.32x slower than a C arena.** Two causes. (a) **Allocation
-   order:** a constructor's arguments are evaluated before its instance is allocated, so `Node(tree(d - 1),
-   tree(d - 1))` lays a tree out in post-order, and `check`'s pre-order walk runs against memory order. The C arena
-   allocating children first measures 0.47s against its own 0.38s; olang written parent-first (mutable fields,
-   `n.left = tree(...)`) 0.43s against 0.49s. (b) **The arena's fast path** executes 44% more instructions in
-   `tree` than the C arena (cachegrind, depth 16: 615M against 427M): it rounds the cursor to 8 twice, and after the
-   room check jumps to the block shared with the slow path, which reloads and rounds again. **Fix:** (a) bump-allocate
-   a constructor's instance before evaluating its arguments when it is built into a reference - invisible, and an
-   argument that fails costs only the slot until the scope closes; (b) a self-contained fast path (a patched one cut
-   `tree`'s instructions 15%), ideally a cursor/end pair so a small allocation is a compare and an add.
-   `repro/alloc_order.olang` (both orders in olang; the C experiment is `c/binarytrees_arena.c` allocating `n` last).
-8. **Returning a local array copies it** (T7b) - `matmul`'s `matrix()` pays one extra allocation and copy per matrix,
-   though the local is dead at the return and could have been built in the result scope. Small here.
+7. **FIXED (E12c/O16, O8a): binary-trees was 1.27-1.32x a C arena.** Two causes, both addressed. (a) **Allocation
+   order:** a constructor's arguments were evaluated before its instance was allocated, so `Node(tree(d - 1),
+   tree(d - 1))` laid a tree out in post-order against `check`'s pre-order walk. **A promoted instance's slot is now
+   bumped before its arguments are built** (`cgPromote`); its destructor is still registered when its constructor
+   completes, so destructor order is unchanged. The walk gets faster and the build ~8 instructions per node slower (the
+   slot's pointer is live across the recursion); on binary-trees the order wins by 6% over (b) alone. (b) **The
+   arena's fast path** jumped after the room check into the block shared with the slow path, which reloaded and
+   rounded the cursor again; **it is now self-contained**, rounding once (not at all for an 8-aligned allocation). 0.51s
+   -> 0.42s against the C arena's 0.39s; instructions at depth 16 780M -> 690M (C arena 591M).
+   `repro/alloc_order.olang`.
+8. **FIXED (T7b): returning a local array copied it** - `matmul`'s `matrix()` paid one extra allocation and copy per
+   matrix. A local that is the function's result and nothing else (declared once in the body from storage it makes,
+   every return returning it, otherwise only indexed or measured, numeric elements, no `defer`/`join`, an infallible
+   function) is now built in the result scope; anything else keeps the copy. Within noise on matmul, as expected.
    `repro/return_local_array.olang`.
 9. **nbody under `-march=native`: C 1.33x faster.** C's body count is a compile-time constant, so its pair loops are
    fully unrolled and SLP-vectorized (`vsqrtpd`); olang's count is the array's run-time length, so LLVM loop-vectorizes

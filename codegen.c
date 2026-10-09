@@ -185,6 +185,9 @@ struct cgCtx {
     char* retSlot;
     char retSlotTy[256];
     bool retSlotUsed;
+    //T7b: the declaration of the local array that is this function's result and nothing else, built in the result
+    //scope from the start (cgResultLocal) - NULL when there is none
+    struct statement* resultLocal;
     //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
     //allocas), the scope its storage comes from, and its element type
     struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
@@ -223,13 +226,16 @@ struct cgCtx {
 //never collide
 //B3b: a module's identity as a symbol prefix, injectively - a letter or digit as itself, '/' as '_', and every other
 //byte as '$' and two hexadecimal digits - so "geom/rect" is geom_rect while "geom_rect" is geom$5Frect and "a.b" is
-//a$2Eb. Every prefix is therefore one identity's only (identities are paths, so the common ones read as before).
+//a$2Eb. Every prefix is therefore one identity's only (identities are paths, so the common ones read as before). A
+//leading digit is escaped too: every symbol and type name starts with the prefix, and an LLVM name may not begin with
+//a digit ("@2go_helper" is invalid IR - "2go.olang" could not be built), so "2go" is $32go.
 void mangleModPrefix(struct semaModule* mod, char* buf, size_t n) {
     struct str f = mod->identity;
     size_t w = 0;
     for (int i = 0; i < f.len && w + 1 < n; i++) {
         unsigned char c = (unsigned char)f.ptr[i];
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) buf[w++] = (char)c;
+        bool digit = c >= '0' && c <= '9';
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (digit && w > 0)) buf[w++] = (char)c;
         else if (c == '/') buf[w++] = '_';
         else {
             if (w + 4 > n) break;
@@ -402,7 +408,9 @@ static void llvmTypeB(struct type t, struct cgBuf* b) {
             return;
         case BASETYPE_INTERFACE: ErrorBugFound(); return; //T30: a trait is a constraint, never a value
         case BASETYPE_ERROR: cgBufAdd(b, "i32"); return;
-        case BASETYPE_FUNC: cgBufAdd(b, "ptr"); return;
+        //T21/D16: a function value is the pair (code, closure environment) - the code in a register, so a call through
+        //a value LLVM can see the origin of is direct (and inlinable) once the callee is inlined; see cgFnPair
+        case BASETYPE_FUNC: cgBufAdd(b, "{ ptr, ptr }"); return;
         //no real arena/runtime backing exists yet (see the report) - opaque pointer for now, same as any
         //other reference-shaped value; codegen never actually reads through it yet
         case BASETYPE_SCOPE: cgBufAdd(b, "ptr"); return;
@@ -738,8 +746,8 @@ static char* cgDbgSubprogram(struct cgCtx* ctx, struct str name, char* linkage, 
 
 //the debug type of a variable, or 0 where none is described yet (a by-value aggregate)
 static int cgDbgType(struct cgCtx* ctx, struct type t) {
-    if (t.structMAlloc || t.bType == BASETYPE_FUNC
-            || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
+    if (t.bType == BASETYPE_FUNC) return 0; //a (code, environment) pair, an aggregate - not described yet
+    if (t.structMAlloc || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
     const char* nm; int bits; const char* enc;
     const struct primInfo* p = PrimInfo(t.bType);
     if (t.bType == BASETYPE_BOOL) { nm = "Bool"; bits = 8; enc = "DW_ATE_boolean"; }
@@ -998,7 +1006,7 @@ struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name) {
 
 char* cgZeroValue(struct type t) {
     char* buf = MallocOrCrash(16);
-    bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_SCOPE) ||
+    bool isPtr = (t.bType == BASETYPE_SCOPE) ||
         ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc) ||
         (t.bType == BASETYPE_ARRAY && t.structMAlloc && !t.arrMalloc);
     strcpy(buf, isPtr ? "null" : "zeroinitializer");
@@ -1402,7 +1410,8 @@ static char* cgBorrowValue(struct cgCtx* ctx, struct type dstT, struct type srcT
 
 //true when op is an lvalue being taken as a reference: E12c borrows it rather than copying
 static bool cgIsBorrow(struct type dstT, struct type srcT, bool srcIsLvalue) {
-    return dstT.structMAlloc && !srcT.structMAlloc && srcIsLvalue
+    //a function value made from a Call instance (E31) holds its instance in its environment - never a borrow here
+    return dstT.structMAlloc && dstT.bType != BASETYPE_FUNC && !srcT.structMAlloc && srcIsLvalue
         && (srcT.bType == BASETYPE_STRUCT || srcT.bType == BASETYPE_ARRAY || srcT.bType == BASETYPE_CHOICE);
 }
 
@@ -1449,6 +1458,10 @@ static long long cgStackAlign(struct type t) {
 //aggregates, references, and anything reached through a CHOICE PAYLOAD stay untagged, which means "may
 //alias anything" and is always the safe answer. The payload is the one place olang could pun - two cases
 //can put different types in the same bytes - so it is excluded rather than reasoned about.
+//T36: a closure's environment (D16c) is a family of its own - written once where the closure is made, read only by the
+//code it is made for, so its loads never alias a program's fields or elements (see cgClosureType)
+static const char* cgCaptureTbaa = ", !tbaa !28";
+
 static const char* cgTbaa(struct type t, bool elem) {
     switch (t.bType) {
         case BASETYPE_BOOL: return elem ? ", !tbaa !31" : ", !tbaa !21";
@@ -1618,9 +1631,46 @@ static bool cgIsFreshTemp(struct operand* op) {
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
 
-//E31: a value whose type declares Call, given where a function value is wanted - a closure object holding the
-//adapter, the instance and the instance's scope; the adapter takes the object as any function value's code does
-//(then the function type's scope arguments and parameters) and calls the instance's Call with them
+//T21/D16: a function value's two halves - its code, and the closure environment that code takes as its hidden first
+//argument - out of the pair it is held as. The code is a value, never loaded from the environment, so a call through
+//a value whose origin LLVM can see (a lambda handed to a helper that is inlined) is a direct call, and inlines
+static char* cgFnCode(struct cgCtx* ctx, char* fv, char** envOut) {
+    char* code = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 0\n", code, fv);
+    *envOut = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", *envOut, fv);
+    return code;
+}
+
+//a function value made of its code and its environment: a constant when the environment is (a named function's, or a
+//lambda capturing nothing, has none)
+static char* cgFnPair(struct cgCtx* ctx, const char* code, const char* env) {
+    if (strcmp(env, "null") == 0) {
+        char* c = MallocOrCrash(strlen(code) + 32);
+        sprintf(c, "{ ptr %s, ptr null }", code);
+        return c;
+    }
+    char* half = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } { ptr %s, ptr undef }, ptr %s, 1\n", half, code, env);
+    return half;
+}
+
+//T7/E12c: an array the expression makes itself - "Array<T>(n)", a comprehension, a rendering or a join - is storage
+//nothing else holds, built where the target being stored into lands it (cgWhereBuilt falls through to the target's
+//scope: the checker placed it nowhere else). A reference target, or a value target holding nothing yet, ADOPTS that
+//storage - its descriptor is stored - rather than copying it into a second allocation of the same size in the same
+//scope. A value array already holding a value is written into instead (T11b), so it is never adopted.
+static bool cgAdoptsFresh(struct type dstT, struct operand* op, bool dstHoldsLiveValue) {
+    if (dstT.bType != BASETYPE_ARRAY || !dstT.arrMalloc || (dstHoldsLiveValue && !dstT.structMAlloc)) return false;
+    if (op->type.bType != BASETYPE_ARRAY || !op->type.arrMalloc || op->type.structMAlloc || op->type.scopeParam
+            || op->ctorLanded) return false;
+    return op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION
+           || op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT;
+}
+
+//E31: a value whose type declares Call, given where a function value is wanted - the adapter, paired with an
+//environment holding the instance and the instance's scope; the adapter takes the environment as any function value's
+//code does (then the function type's scope arguments and parameters) and calls the instance's Call with them
 static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym);
 static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     struct var* call = SemanticCallOf(op->type);
@@ -1644,8 +1694,8 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
             fprintf(ctx->out, ", %s %%arg%d", pty, k);
         }
         fputs(") {\nentry:\n", ctx->out);
-        fputs("  %ip = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 1\n  %inst = load ptr, ptr %ip\n"
-              "  %sp = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 2\n  %iscope = load ptr, ptr %sp\n", ctx->out);
+        fputs("  %inst = load ptr, ptr %closure, !tbaa !28\n"
+              "  %sp = getelementptr { ptr, ptr }, ptr %closure, i32 0, i32 1\n  %iscope = load ptr, ptr %sp, !tbaa !28\n", ctx->out);
         struct cgBuf args = {0};
         if (outFirst) cgBufAdd(&args, "ptr %%out");
         //the receiver's own scope comes first among Call's, where it has one (a reference receiver, O4b)
@@ -1694,13 +1744,14 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", obj, where);
-    char* p1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 16)\n", obj, where);
     char* p2 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", adapter, obj);
-    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s\n", p1, obj, inst, p1);
-    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 2\n  store ptr %s, ptr %s\n", p2, obj, instScope, p2);
-    return obj;
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", inst, obj, cgCaptureTbaa);
+    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s%s\n", p2, obj, instScope, p2,
+            cgCaptureTbaa);
+    char* adapterSym = MallocOrCrash(strlen(adapter) + 1);
+    strcpy(adapterSym, adapter);
+    return cgFnPair(ctx, adapterSym, obj);
 }
 
 char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
@@ -1721,6 +1772,55 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     char* v = cgValue(ctx, op);
     ctx->targetScopeOverride = prev;
     return v;
+}
+
+//E12c/O16: a temporary - a constructor's instance, a value a call returned, an enum value - promoted into a reference:
+//fresh storage in scopeVal, the value built and stored there. The storage is bumped BEFORE the value is built, so an
+//instance comes before whatever its own arguments build: "Node(tree(d - 1), tree(d - 1))" lays a tree out parent
+//first, in the order a walk from the root reads it, where building first put every subtree ahead of its root. Which
+//address an instance gets is not observable; its destructor is registered once its constructor has completed (O16),
+//exactly as before, so destructors still run in the order O15 gives. A value whose building fails leaves its slot to
+//the scope, reclaimed when that closes.
+static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
+    char storTy[256];
+    llvmType(op->type, storTy, sizeof(storTy));
+    char* heap = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
+    char* prev = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = scopeVal;
+    char* v = cgValue(ctx, op);
+    ctx->targetScopeOverride = prev;
+    if (cgViaMemory(op->type)) {
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
+                TypeGetSize(op->type));
+    } else {
+        char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
+        if (typeIsByRef(op->type)) {
+            loaded = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        }
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
+    }
+    cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
+    return heap;
+}
+
+//op's value stored into dstAddr, a slot of type dstT: cgValueForTarget then cgStoreInto, except where the value is new
+//storage the target simply takes - a fresh array adopted (cgAdoptsFresh), a temporary promoted into a reference
+//(cgPromote, its slot bumped before it is built)
+static void cgStoreOperand(struct cgCtx* ctx, struct type dstT, struct operand* op, char* dstAddr, char* scopeOverride,
+                           bool dstHoldsLiveValue, bool dstIsElem) {
+    if (typeNeedsMallocPromotion(dstT, op->type) && !cgIsBorrow(dstT, op->type, OperandIsLvalue(op))) {
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", cgPromote(ctx, op, scopeVal), dstAddr);
+        return;
+    }
+    char* val = cgValueForTarget(ctx, op, dstT, scopeOverride);
+    if (cgAdoptsFresh(dstT, op, dstHoldsLiveValue)) {
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s%s\n", val, dstAddr, dstHoldsLiveValue ? cgTbaa(dstT, dstIsElem) : "");
+        return;
+    }
+    cgStoreInto(ctx, dstT, op->type, val, dstAddr, scopeOverride, dstHoldsLiveValue, OperandIsLvalue(op), dstIsElem);
 }
 
 //true once this object has already written `sym`; records it otherwise. See cgCtx.emittedSyms.
@@ -1773,28 +1873,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         return loaded;
     }
     if (typeNeedsMallocPromotion(dstT, op->type)) {
-        char storTy[256];
-        llvmType(op->type, storTy, sizeof(storTy));
-        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
-        char* prev = ctx->targetScopeOverride;
-        ctx->targetScopeOverride = scopeVal;
-        char* v = cgValue(ctx, op);
-        ctx->targetScopeOverride = prev;
-        char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
-        char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
-        if (cgViaMemory(op->type)) {
-            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
-                    TypeGetSize(op->type));
-        } else {
-            if (typeIsByRef(op->type)) {
-                loaded = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
-            }
-            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
-        }
-        cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
-        return heap;
+        return cgPromote(ctx, op, scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth));
     }
     //E11a/E11b: rendered or joined text is a temporary built in the TARGET's scope - at a return, the result
     //type's; at an argument, the parameter's. Only stores and declarations did this, so "return $a $b"
@@ -2044,8 +2123,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             //promoted into (ctx->targetScopeOverride, threaded in by cgValueForTarget/cgBoundaryValue) -
             //an explicitly-tagged "&name" field ignores it and resolves its own named scope as usual
             char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
-            char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
-            cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
+            cgStoreOperand(ctx, fieldT, arg, fieldAddr, fieldScope, false, false);
         }
         return slot;
     }
@@ -2067,8 +2145,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             continue;
         }
         char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
-        char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
-        cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope, false, OperandIsLvalue(arg), true);
+        cgStoreOperand(ctx, elemT, arg, elemAddr, elemScope, false, true);
     }
     return slot;
 }
@@ -2106,8 +2183,7 @@ static char* cgChoiceValue(struct cgCtx* ctx, struct operand* op) {
             //C2d: a payload the checker never landed lives where the value is being built into, as a constructor's does
             char* fieldScope = fieldT.scopeParam && SemanticBindingIsLanding(op, fieldT.scopeParam) && ctx->targetScopeOverride
                                ? ctx->targetScopeOverride : cgResolveParamScopeOverride(ctx, NULL, op, fieldT);
-            char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
-            cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
+            cgStoreOperand(ctx, fieldT, arg, fieldAddr, fieldScope, false, false);
         }
     }
     char* loaded = cgNewTmp(ctx);
@@ -2577,7 +2653,22 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         return r;
     }
 
-    //scalar leaf, including func pointers and <>-indirect struct references (both spelled "ptr")
+    //T21: a function value is identity - the same code with the same environment (a named function's and a
+    //capture-free lambda's have none, so the code alone tells them apart)
+    if (t.bType == BASETYPE_FUNC) {
+        char* ea;
+        char* ca = cgFnCode(ctx, aVal, &ea);
+        char* eb;
+        char* cb = cgFnCode(ctx, bVal, &eb);
+        char* eqC = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqC, ca, cb);
+        char* eqE = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqE, ea, eb);
+        char* eq = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", eq, eqC, eqE);
+        return eq;
+    }
+    //scalar leaf, including <>-indirect struct references (spelled "ptr")
     char ty[256];
     llvmType(t, ty, sizeof(ty));
     bool isF = TypeIsFloat(t);
@@ -2711,55 +2802,46 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
 
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 
-//the target of a call written by name: the function's own symbol, or - for a local of function type - the code
-//its value's closure object starts with (D16), with *closureOut set to that object, passed as the hidden first
-//argument every function reached through a value takes
+//the target of a call written by name: the function's own symbol, or - for a local or a global of function type -
+//the code of the function value it holds (D16), with *closureOut set to that value's environment, passed as the
+//hidden first argument every function reached through a value takes
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
     struct cgLocal* local = cgFindLocal(ctx, func->name);
-    if (local) {
-        char* obj = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, local->llvmVal);
-        char* code = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
-        *closureOut = obj;
-        return code;
-    }
-    if (func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
+    if (local || func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
         char g[256];
-        mangleGlobal(func->owner, func->name, g, sizeof(g));
-        char* obj = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, g);
-        char* code = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
-        *closureOut = obj;
-        return code;
+        if (!local) mangleGlobal(func->owner, func->name, g, sizeof(g));
+        char* fv = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load { ptr, ptr }, ptr %s\n", fv, local ? local->llvmVal : g);
+        return cgFnCode(ctx, fv, closureOut);
     }
     char* sym = MallocOrCrash(256);
     mangleFuncSym(func, sym, 256);
     return sym;
 }
 
-//D16: a function named as a value is a pointer to a closure object whose first word is code taking the object
-//first. A named function's object is static and shared, so one function is one value however often it is
-//named, in any module: "@f.fv", reaching "@f" through an adapter that drops the object. A lambda's code
-//already takes it, so its object is just its code.
-//D16c: a capturing lambda's closure - its code, then each capture's value and, for a reference, its scope
+//D16: a function value is the pair (code, environment), the code taking the environment as its hidden first
+//argument. A named function's value is its adapter "@f.fvt", which drops the environment, with none - so one function
+//is one value however often it is named, in any module (the adapter is linkonce_odr). A lambda's code already takes
+//the environment; one capturing nothing has none either.
+//D16c: a capturing lambda's environment - each capture's value and, for a reference, its scope. It is written once,
+//where the lambda is made, and read only by the lambda's own prologue, so its accesses carry a TBAA family of their
+//own (cgCaptureTbaa) and never alias a program's fields or elements
 static char* cgClosureType(struct var* L) {
     struct cgBuf b = {0};
-    cgBufAdd(&b, "{ ptr");
+    cgBufAdd(&b, "{ ");
     for (int i = 0; i < L->lambdaCaptures.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         char cty[256];
         llvmType(in->type, cty, sizeof(cty));
-        cgBufAdd(&b, ", %s%s", cty, in->type.scopeParam ? ", ptr" : "");
+        cgBufAdd(&b, "%s%s%s", i ? ", " : "", cty, in->type.scopeParam ? ", ptr" : "");
     }
     cgBufAdd(&b, " }");
     return cgBufStr(&b);
 }
 
-//D16c: a capturing lambda's value, made here: its closure, built where the lambda lives - with the references it
-//captured, or where it lands - holding a copy of every capture
+//D16c: a capturing lambda's value, made here: its environment, built where the lambda lives - with the references
+//it captured, or where it lands - holding a copy of every capture, paired with the lambda's code
 static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     struct var* L = op->readVar;
     char* envTy = cgClosureType(L);
@@ -2767,8 +2849,7 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     char* obj = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
             obj, scope, envTy);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sym, obj);
-    int field = 1;
+    int field = 0;
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         struct operand* capOp = *(struct operand**)ListGetIdx(&op->args, i);
@@ -2784,43 +2865,39 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
             char* v = cgBoundaryValue(ctx, capOp, in->type, NULL);
             char* fp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
-            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, v, fp);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", cty, v, fp, cgCaptureTbaa);
         }
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
         char* sval = cgBoundScopeArg(ctx, op, sv);
         char* sp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, field++);
-        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sp);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", sval, sp, cgCaptureTbaa);
     }
-    return obj;
+    return cgFnPair(ctx, sym, obj);
 }
 
 void cgEmitParamList(FILE* out, struct var* func, bool named);
 static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym) {
     if (f->isLambda && f->lambdaCaptures.len) return NULL; //made by cgClosure instead
-    char* obj = MallocOrCrash(strlen(sym) + 8);
-    sprintf(obj, "%s.fv", sym);
+    if (f->isLambda) return cgFnPair(ctx, sym, "null"); //its code takes the (absent) environment already
+    char* code = MallocOrCrash(strlen(sym) + 8);
+    sprintf(code, "%s.fvt", sym);
     bool have = false;
     for (int i = 0; i < ctx->fnValues.len && !have; i++) have = *(struct var**)ListGetIdx(&ctx->fnValues, i) == f;
     if (!have) ListAdd(&ctx->fnValues, &f);
-    return obj;
+    return cgFnPair(ctx, code, "null");
 }
 
-//D16: the static closures and adapters of every function this object used as a value
+//D16: the adapters of every named function this object used as a value
 void cgEmitFuncValues(struct cgCtx* ctx) {
     for (int i = 0; i < ctx->fnValues.len; i++) {
         struct var* f = *(struct var**)ListGetIdx(&ctx->fnValues, i);
         char sym[256];
         mangleFuncSym(f, sym, sizeof(sym));
-        if (f->isLambda) { //internal, like the lambda
-            fprintf(ctx->out, "%s.fv = internal constant { ptr } { ptr %s }\n", sym, sym);
-            continue;
-        }
         char retTy[256];
         llvmFuncRetType(f->type, retTy, sizeof(retTy));
         bool outFirst = cgRetViaMemory(f->type); //its result's storage comes before the closure, as at every call
-        fprintf(ctx->out, "%s.fv = linkonce_odr constant { ptr } { ptr %s.fvt }\n", sym, sym);
         fprintf(ctx->out, "define linkonce_odr %s %s.fvt(%sptr %%closure", retTy, sym, outFirst ? "ptr %out, " : "");
         struct cgBuf params = {0};
         for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&params, ", ptr %%sarg%d", k);
@@ -2872,9 +2949,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
     char* target;
     if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
     if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
-        closure = cgValue(ctx, op->callee);
-        target = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, closure);
+        target = cgFnCode(ctx, cgValue(ctx, op->callee), &closure);
     } else target = cgNamedTarget(ctx, func, &closure);
     if (closure) cgArgAdd(args, "ptr", closure);
 
@@ -3331,7 +3406,11 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     //(E12c), otherwise in the block it is written in
     char* scopeVal = cgWhereBuilt(ctx, op);
     char* bytes = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
+    //D13c: zero-filled storage comes from the allocator's zeroed path, which skips the clearing for a large array the
+    //system has just handed over (__olang_scope_alloc_zeroed)
+    bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "", scopeVal,
+            byteSize);
     //D15b: a local "T[expr]" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
     //only at the local var-decl), since a field has no "= v" form to ask for a fill with.
@@ -3343,8 +3422,6 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         char* fillVal = typeNeedsMallocPromotion(elemT, fillOp->type) ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal)
                                                                       : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
-    } else if (!op->noZeroFill) {
-        fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
     }
 
     //register every one of this array's N slots for destruction up front, at allocation time - not
@@ -3357,6 +3434,15 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     char* agg2 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", agg2, agg1, bytes);
     return agg2;
+}
+
+//E28/S12b: where a conditional's or a match's value v is built when it has to be made into the result's reference type:
+//where the value as a whole is being built into, else where the checker landed v. Never the result type's own tag - a
+//reference taken from a call's result is tagged with the CALLEE's scope variable, which no frame here holds (resolving
+//it crashed the compiler: "return wrap(e) if e != null else Expr.Num(1.0)")
+static char* cgArmScope(struct cgCtx* ctx, struct operand* v, struct type resultT) {
+    if (ctx->targetScopeOverride || !typeNeedsMallocPromotion(resultT, v->type)) return ctx->targetScopeOverride;
+    return cgWhereBuilt(ctx, v);
 }
 
 //E28: "a if c else b" - the chosen value, converted to the conditional's type on its own path, through one slot.
@@ -3378,8 +3464,7 @@ char* cgCond(struct cgCtx* ctx, struct operand* op) {
     for (int b = 1; b <= 2; b++) {
         cgLabel(ctx, b == 1 ? thenLbl : elseLbl);
         struct operand* v = *(struct operand**)ListGetIdx(&op->args, b);
-        char* val = cgValueForTarget(ctx, v, op->type, ctx->targetScopeOverride);
-        cgStoreInto(ctx, op->type, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+        cgStoreOperand(ctx, op->type, v, slot, cgArmScope(ctx, v, op->type), false, false);
         cgBr(ctx, endLbl);
     }
     cgLabel(ctx, endLbl);
@@ -5139,18 +5224,15 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope name
     //of its own - a reference field's referent, a nested constructor call's - goes where the instance lands
     char* here = s->ctorField ? ctx->ctorHere : NULL;
+    //T7b: the function's result, built where it is returned to (cgResultLocal)
+    if (s == ctx->resultLocal) {
+        struct type rt = *ctx->curFunc->type.retType;
+        here = cgResolveScope(ctx, rt.scopeParam, rt.scopeDepth);
+    }
     char* prev = ctx->targetScopeOverride;
     if (here) ctx->targetScopeOverride = here;
     char* scope = here && !s->var.type.scopeParam ? here : NULL;
-    char* rhs = cgValueForTarget(ctx, s->op, s->var.type, scope);
-    //T7/E12c: an array the initializer makes itself - "Array<T>(n)", a comprehension - was just built in this
-    //declaration's own scope (cgValueForTarget lands it where the copy would go) and nothing else holds it, so the
-    //declaration adopts it rather than copying it into a second allocation of the same size
-    bool adopt = s->var.type.bType == BASETYPE_ARRAY && s->var.type.arrMalloc && s->op->type.bType == BASETYPE_ARRAY
-                 && s->op->type.arrMalloc && !s->op->type.scopeParam
-                 && (s->op->opType == OPERATION_SIZED_ARRAY_ALLOC || s->op->opType == OPERATION_COMPREHENSION);
-    if (adopt) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", rhs, slot);
-    else cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, scope, false, OperandIsLvalue(s->op), false);
+    cgStoreOperand(ctx, s->var.type, s->op, slot, scope, false, false);
     ctx->targetScopeOverride = prev;
 }
 
@@ -5181,10 +5263,10 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     char* addr = cgAddr(ctx, s->target);
     char* outerPlace = s->target->cgPlace;
     s->target->cgPlace = addr;
-    char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
+    //T7/E12c: a reference field or element given a fresh array ("l.chunks[k] = Array<T>(n)") repoints at it - built
+    //in the target's scope, it is not copied into another (cgStoreOperand)
+    cgStoreOperand(ctx, s->target->type, s->op, addr, scopeOverride, true, s->target->opType == OPERATION_INDEX);
     s->target->cgPlace = outerPlace;
-    cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride, true, OperandIsLvalue(s->op),
-                s->target->opType == OPERATION_INDEX);
 }
 
 void cgIf(struct cgCtx* ctx, struct statement* s) {
@@ -5329,8 +5411,7 @@ char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
 
 //one value case's value into the slot
 static void cgMatchStore(struct cgCtx* ctx, struct operand* v, char* slot, struct type resultT) {
-    char* val = cgValueForTarget(ctx, v, resultT, ctx->targetScopeOverride);
-    cgStoreInto(ctx, resultT, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+    cgStoreOperand(ctx, resultT, v, slot, cgArmScope(ctx, v, resultT), false, false);
 }
 
 static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT) {
@@ -5402,6 +5483,73 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
     cgPopScope(ctx);
 }
 
+//T7b: a function returning an array value copies a local it returns into the result scope (cgRet). The copy is
+//skipped for a local whose storage is built there from the start, which is safe exactly when nothing can tell: the
+//local is declared once (in the body's own block, outside every loop) from storage it makes itself, every return
+//returns it, nothing assigns it, and it is otherwise only indexed or measured - its elements numbers, which cannot be
+//borrowed - so no reference to it or into it exists for deferred code, a task or a destructor to write through after
+//the result is computed (and the body has none of the first two). An infallible function only: a call that failed
+//would leave the array in its caller's scope. Anything else keeps the copy.
+static bool cgReadsDecl(struct operand* op, struct statement* d) {
+    return op && op->opType == OPERATION_READ_VAR && op->readVar && StrCmp(op->readVar->name, d->var.name)
+           && op->readVar->tok.str.ptr == d->var.tok.str.ptr;
+}
+static bool cgStmtsLeaveDecl(struct list* stmts, struct statement* d);
+//every read of d's local within op is the array an index or a length reads
+static bool cgOpLeavesDecl(struct operand* op, struct statement* d) {
+    if (!op) return true;
+    if (cgReadsDecl(op, d)) return false;
+    bool indexed = (op->opType == OPERATION_INDEX || op->opType == OPERATION_LEN) && op->args.len > 0
+                   && cgReadsDecl(*(struct operand**)ListGetIdx(&op->args, 0), d);
+    for (int i = indexed ? 1 : 0; i < op->args.len; i++) if (!cgOpLeavesDecl(*(struct operand**)ListGetIdx(&op->args, i), d)) return false;
+    for (int i = 0; i < op->chainOperands.len; i++) if (!cgOpLeavesDecl(*(struct operand**)ListGetIdx(&op->chainOperands, i), d)) return false;
+    if (!cgOpLeavesDecl(op->callee, d) || !cgOpLeavesDecl(op->placeOf, d) || !cgStmtsLeaveDecl(&op->comprBody, d)) return false;
+    for (int c = 0; c < op->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        if (!cgStmtsLeaveDecl(&cc->block, d) || !cgOpLeavesDecl(cc->dflt, d)) return false;
+    }
+    return true;
+}
+static bool cgStmtLeavesDecl(struct statement* s, struct statement* d) {
+    if (s->sType == STATEMENT_DEFER || s->sType == STATEMENT_JOIN || s->sType == STATEMENT_SPAWN) return false;
+    if (s->sType == STATEMENT_RET) return cgReadsDecl(s->op, d);
+    if (s != d && !cgOpLeavesDecl(s->op, d)) return false;
+    if (!cgOpLeavesDecl(s->target, d) || !cgOpLeavesDecl(s->fillValue, d) || !cgOpLeavesDecl(s->forInit, d)) return false;
+    if (s->sType == STATEMENT_ASSIGN && cgReadsDecl(s->target, d)) return false;
+    if ((s->forPost && !cgStmtLeavesDecl(s->forPost, d)) || (s->elseStmnt && !cgStmtLeavesDecl(s->elseStmnt, d))) return false;
+    if (!cgStmtsLeaveDecl(&s->block, d) || !cgStmtsLeaveDecl(&s->nomatchBlock, d) || !cgStmtsLeaveDecl(&s->matchHold, d))
+        return false;
+    for (int i = 0; i < s->matchCases.len; i++) if (!cgStmtLeavesDecl(ListGetIdx(&s->matchCases, i), d)) return false;
+    if (!cgOpLeavesDecl(s->caseGuard, d) || !cgOpLeavesDecl(s->nomatchValue, d)) return false;
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        if (!cgOpLeavesDecl(a->test, d)) return false;
+        for (int b = 0; b < a->binds.len; b++) if (!cgOpLeavesDecl(((struct caseBind*)ListGetIdx(&a->binds, b))->from, d)) return false;
+    }
+    for (int c = 0; c < s->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+        if (!cgStmtsLeaveDecl(&cc->block, d)) return false;
+    }
+    return true;
+}
+static bool cgStmtsLeaveDecl(struct list* stmts, struct statement* d) {
+    for (int i = 0; i < stmts->len; i++) if (!cgStmtLeavesDecl(ListGetIdx(stmts, i), d)) return false;
+    return true;
+}
+static struct statement* cgResultLocal(struct var* func) {
+    if (func->type.errors.len || !func->type.hasRetType || !func->type.retType) return NULL;
+    struct type rt = *func->type.retType;
+    if (rt.bType != BASETYPE_ARRAY || !rt.arrMalloc || rt.structMAlloc || !rt.arrElem) return NULL;
+    if (!(TypeIsNumeric(*rt.arrElem) || rt.arrElem->bType == BASETYPE_BOOL)) return NULL;
+    for (int i = 0; i < func->codeBlock.len; i++) {
+        struct statement* d = ListGetIdx(&func->codeBlock, i);
+        if (d->sType != STATEMENT_VAR_DECL || !d->op || d->fillValue || !cgAdoptsFresh(d->var.type, d->op, false)) continue;
+        if (!TypeIsSame(d->var.type, rt) || !cgStmtsLeaveDecl(&func->codeBlock, d)) continue;
+        return d;
+    }
+    return NULL;
+}
+
 //T7b: whether cgBoundaryValue built op's array value in the result scope itself - fresh storage the expression made
 //there (on every path, for a conditional or a match), a literal copied there, or a call whose own result landed there
 static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type retT) {
@@ -5415,6 +5563,7 @@ static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type r
         return vs.len > 0;
     }
     if (cgIsFreshTemp(op) || typeNeedsRuntimeLengthPromotion(retT, op->type)) return true;
+    if (ctx->resultLocal && cgReadsDecl(op, ctx->resultLocal)) return true; //built there (cgResultLocal)
     if (op->opType == OPERATION_FUNCCALL && op->readVar && !op->type.structMAlloc && op->readVar->type.resultScope
             && retT.scopeParam) {
         struct var* bound = SemanticBoundScope(op, op->readVar->type.resultScope);
@@ -6073,7 +6222,14 @@ void emitExternDecls(FILE* out) {
                 else llvmType(param->type, pty, sizeof(pty));
                 fprintf(out, "%s%s", p > 0 ? ", " : "", pty);
             }
-            fputs(")\n", out);
+            //X8: the C math library's functions. An exact one touches no memory - the library sets errno for none of
+            //them but sqrt, which LLVM then always makes the instruction - so LLVM lowers each to an instruction where
+            //there is one and vectorizes it. Another one writes errno and nothing else the program can see, and is always
+            //the library's own call, never rewritten into another (pow(x, 2.0) into x * x): the compile-time evaluator
+            //calls this very function, so the two agree
+            enum ctMathFn m = CtMathFn(v);
+            fputs(m == CT_MATH_EXACT ? ") memory(none) nounwind willreturn\n"
+                  : m == CT_MATH_INEXACT ? ") nobuiltin nofree nosync nounwind willreturn memory(write)\n" : ")\n", out);
         }
     }
 }
@@ -6101,6 +6257,8 @@ void emitRuntimeDecls(FILE* out) {
         "declare ptr @malloc(i64)\n"
         "declare ptr @aligned_alloc(i64, i64)\n"
         "declare void @free(ptr)\n"
+        "declare ptr @mmap(ptr, i64, i32, i32, i32, i64)\n"
+        "declare i32 @munmap(ptr, i64)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i64 @llvm.ctlz.i64(i64, i1)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
@@ -6240,7 +6398,9 @@ void emitScopeRuntime(FILE* out) {
         //chunk is now allocated 64-aligned and its header padded to 64, which makes the data area 64-aligned
         //too; __olang_scope_alloc then aligns each allocation by its own size. 40 bytes per >=4096-byte
         //chunk is under 1%.
-        "%olang.chunk = type { ptr, i64, i64, [40 x i8] }\n"
+        //next, used, cap, the length mmap gave it (0 for one from aligned_alloc), whether it is fresh from the system and
+        //zero above "used" (__olang_scope_alloc_zeroed), then padding out to 64 bytes
+        "%olang.chunk = type { ptr, i64, i64, i64, i64, [24 x i8] }\n"
         "%olang.dtornode = type { ptr, ptr, ptr }\n"
         //P1: one node per task, bump-allocated from the join block's own scope - which is exactly the
         //lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
@@ -6271,6 +6431,8 @@ void emitScopeRuntime(FILE* out) {
         //private stand-in while a task runs, folded back at its join - so no two threads ever bump it at once
         "@__olang_prog_scope = linkonce_odr thread_local(initialexec) global ptr @__olang_global_scope\n"
         "\n"
+        "", out);
+    fputs(
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
         //larger, original capacity) or freshly malloc'd at max(4096, size) bytes
         "define linkonce_odr ptr @__olang_new_chunk(i64 %size) {\n"
@@ -6289,16 +6451,38 @@ void emitScopeRuntime(FILE* out) {
         "  store ptr %next, ptr @__olang_chunk_pool\n"
         "  %usedptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 1\n"
         "  store i64 0, ptr %usedptr.p\n"
+        //it has been used: what it holds is whatever its last scope left there
+        "  %freshptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 4\n"
+        "  store i64 0, ptr %freshptr.p\n"
         "  ret ptr %pool\n"
         "fresh:\n"
         "  %big = icmp ugt i64 %size, 4096\n"
         "  %reqsize = select i1 %big, i64 %size, i64 4096\n"
         "  %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64\n"
         "  %total0 = add i64 %hdrsize, %reqsize\n"
+        //D13c: a large chunk (128KB up, where glibc's malloc itself turns to mmap) is mapped here, in whole pages - mapped
+        //memory comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
+        "  %huge = icmp uge i64 %reqsize, 131072\n"
+        "  br i1 %huge, label %map, label %heap\n"
+        "map:\n"
+        "  %mt1 = add i64 %total0, 4095\n"
+        "  %mtotal = and i64 %mt1, -4096\n"
+        //PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS (Linux)
+        "  %m = call ptr @mmap(ptr null, i64 %mtotal, i32 3, i32 34, i32 -1, i64 0)\n"
+        "  %mfailed = icmp eq ptr %m, inttoptr (i64 -1 to ptr)\n"
+        "  %mchunk = select i1 %mfailed, ptr null, ptr %m\n"
+        "  br label %got\n"
+        "heap:\n"
         //aligned_alloc requires a size that is a multiple of the alignment
         "  %total1 = add i64 %total0, 63\n"
-        "  %total = and i64 %total1, -64\n"
-        "  %new = call ptr @aligned_alloc(i64 64, i64 %total)\n"
+        "  %htotal = and i64 %total1, -64\n"
+        "  %h = call ptr @aligned_alloc(i64 64, i64 %htotal)\n"
+        "  br label %got\n"
+        "got:\n"
+        "  %new = phi ptr [ %mchunk, %map ], [ %h, %heap ]\n"
+        "  %total = phi i64 [ %mtotal, %map ], [ %htotal, %heap ]\n"
+        "  %maplen = phi i64 [ %mtotal, %map ], [ 0, %heap ]\n"
+        "  %zeroed = phi i64 [ 1, %map ], [ 0, %heap ]\n"
         //the allocator declining is a broken guarantee, as a thread that will not start is (P1c): reported, never
         //written through - a null chunk used to be filled in as though it were one
         "  call void @__olang_alloc_check(ptr %new)\n"
@@ -6307,8 +6491,14 @@ void emitScopeRuntime(FILE* out) {
         "  %capptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 2\n"
         "  %realcap = sub i64 %total, %hdrsize\n"
         "  store i64 %realcap, ptr %capptr.n\n"
+        "  %mapptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 3\n"
+        "  store i64 %maplen, ptr %mapptr.n\n"
+        "  %freshptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 4\n"
+        "  store i64 %zeroed, ptr %freshptr.n\n"
         "  ret ptr %new\n"
         "}\n\n"
+        "", out);
+    fputs(
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
         //doesn't have room
         "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
@@ -6333,6 +6523,9 @@ void emitScopeRuntime(FILE* out) {
         "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
         "  %alnm1 = sub i64 %aln, 1\n"
         "  %alnmask = sub i64 0, %aln\n"
+        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - which is every one under
+        //32 bytes, decided while compiling where the size is known - takes the offset as it is
+        "  %round = icmp ugt i64 %aln, 8\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %headnull = icmp eq ptr %head, null\n"
@@ -6343,10 +6536,18 @@ void emitScopeRuntime(FILE* out) {
         "  %cscapptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 2\n"
         "  %cscap = load i64, ptr %cscapptr\n"
         "  %csup = add i64 %csused, %alnm1\n"
-        "  %csaligned = and i64 %csup, %alnmask\n"
+        "  %csrounded = and i64 %csup, %alnmask\n"
+        "  %csaligned = select i1 %round, i64 %csrounded, i64 %csused\n"
         "  %remaining = sub i64 %cscap, %csaligned\n"
         "  %fits = icmp uge i64 %remaining, %size\n"
-        "  br i1 %fits, label %alloc, label %needchunk\n"
+        "  br i1 %fits, label %bump, label %needchunk\n"
+        //the common case, complete in itself: the offset just computed, bumped
+        "bump:\n"
+        "  %dataptr = getelementptr %olang.chunk, ptr %head, i32 1\n"
+        "  %result = getelementptr i8, ptr %dataptr, i64 %csaligned\n"
+        "  %newused = add i64 %csaligned, %size\n"
+        "  store i64 %newused, ptr %csusedptr\n"
+        "  ret ptr %result\n"
         "needchunk:\n"
         "  %newchunk = call ptr @__olang_new_chunk(i64 %size)\n"
         "  %oldhead = load ptr, ptr %headptr\n"
@@ -6356,22 +6557,43 @@ void emitScopeRuntime(FILE* out) {
         //first chunk in this scope: it is the tail, and stays the tail for the scope's whole life, since
         //every later chunk is prepended ahead of it
         "  %wasempty = icmp eq ptr %oldhead, null\n"
-        "  br i1 %wasempty, label %settail, label %alloc\n"
+        "  br i1 %wasempty, label %settail, label %first\n"
         "settail:\n"
         "  %tailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
         "  store ptr %newchunk, ptr %tailptr\n"
-        "  br label %alloc\n"
-        "alloc:\n"
-        "  %curhead = load ptr, ptr %headptr\n"
-        "  %curusedptr = getelementptr %olang.chunk, ptr %curhead, i32 0, i32 1\n"
-        "  %curused0 = load i64, ptr %curusedptr\n"
-        "  %curup = add i64 %curused0, %alnm1\n"
-        "  %curused = and i64 %curup, %alnmask\n"
-        "  %dataptr = getelementptr %olang.chunk, ptr %curhead, i32 1\n"
-        "  %result = getelementptr i8, ptr %dataptr, i64 %curused\n"
-        "  %newused = add i64 %curused, %size\n"
-        "  store i64 %newused, ptr %curusedptr\n"
-        "  ret ptr %result\n"
+        "  br label %first\n"
+        //a chunk from __olang_new_chunk is empty (its offset 0) and its data area 64-aligned, so this allocation is its
+        //first bytes, whatever alignment it wants
+        "first:\n"
+        "  %ncusedptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 1\n"
+        "  store i64 %size, ptr %ncusedptr\n"
+        "  %ncdata = getelementptr %olang.chunk, ptr %newchunk, i32 1\n"
+        "  ret ptr %ncdata\n"
+        "}\n\n", out);
+    fputs(
+        //D13c: size bytes of ZEROS from scope - an "Array<T>(n)" with no fill. Bumped as any allocation is, then cleared -
+        //unless it came from a chunk the system has just handed over (__olang_new_chunk maps a large one, and mapped memory
+        //is zero) that no scope has used before: there, everything at or above the chunk's bump offset has never been
+        //handed out, so it is still zero and its pages are first touched by the program's own writes. A chunk that comes
+        //back through the pool is dirty and is cleared as any other.
+        "define linkonce_odr noalias ptr @__olang_scope_alloc_zeroed(ptr %scope, i64 %rawsize) {\n"
+        "entry:\n"
+        "  %p = call ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize)\n"
+        "  %big = icmp uge i64 %rawsize, 4096\n"
+        "  br i1 %big, label %check, label %clear\n"
+        "check:\n"
+        //the chunk p was bumped from is the scope's head: __olang_scope_alloc takes it from there or puts a new one there
+        "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
+        "  %head = load ptr, ptr %headptr\n"
+        "  %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4\n"
+        "  %fresh = load i64, ptr %freshptr\n"
+        "  %untouched = icmp ne i64 %fresh, 0\n"
+        "  br i1 %untouched, label %done, label %clear\n"
+        "clear:\n"
+        "  call void @llvm.memset.p0.i64(ptr %p, i8 0, i64 %rawsize, i1 false)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret ptr %p\n"
         "}\n\n", out);
     fputs(
         //P2a: returns this thread's whole chunk pool to the allocator. The pool is thread_local, so a task
@@ -6704,10 +6926,21 @@ void emitScopeRuntime(FILE* out) {
         "  %empty = icmp eq ptr %p0, null\n"
         "  br i1 %empty, label %done, label %walk\n"
         "walk:\n"
-        "  %cur = phi ptr [ %p0, %entry ], [ %next, %walk ]\n"
+        "  %cur = phi ptr [ %p0, %entry ], [ %next, %freed ]\n"
         "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
         "  %next = load ptr, ptr %nextptr\n"
+        //a chunk mmap gave (__olang_scope_alloc_zeroed) goes back the way it came
+        "  %mapptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 3\n"
+        "  %maplen = load i64, ptr %mapptr\n"
+        "  %ismapped = icmp ne i64 %maplen, 0\n"
+        "  br i1 %ismapped, label %unmap, label %release\n"
+        "unmap:\n"
+        "  %ur = call i32 @munmap(ptr %cur, i64 %maplen)\n"
+        "  br label %freed\n"
+        "release:\n"
         "  call void @free(ptr %cur)\n"
+        "  br label %freed\n"
+        "freed:\n"
         "  %atend = icmp eq ptr %next, null\n"
         "  br i1 %atend, label %done, label %walk\n"
         "done:\n"
@@ -7448,7 +7681,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     //D16c: a lambda's captures, and their scopes, as the closure carries them
     if (func->isLambda && func->lambdaCaptures.len) {
         char* envTy = cgClosureType(func);
-        int field = 1;
+        int field = 0;
         for (int i = 0; i < func->lambdaCaptures.len; i++) {
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&func->lambdaCaptures, i))->inner;
             char cty[256];
@@ -7462,14 +7695,14 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
                         TypeGetSize(in->type));
             } else {
                 char* fv = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", fv, cty, fp);
+                fprintf(ctx->fnOut, "  %s = load %s, ptr %s%s\n", fv, cty, fp, cgCaptureTbaa);
                 fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, fv, slot);
             }
             if (!in->type.scopeParam) continue;
             char* sp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, field++);
             char* sval = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", sval, sp);
+            fprintf(ctx->fnOut, "  %s = load ptr, ptr %s%s\n", sval, sp, cgCaptureTbaa);
             char* sslot = cgDeclareLocal(ctx, in->type.scopeParam->name, in->type.scopeParam->type);
             fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", sslot);
             fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
@@ -7523,6 +7756,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     cgPushOwnUnwind(ctx);
 
     ctx->defers.len = 0; //S19: the body's own deferred code - cgCloseOwnScope runs it on every way out
+    ctx->resultLocal = cgResultLocal(func);
     for (int i = 0; i < func->codeBlock.len; i++) {
         struct statement* s = ListGetIdx(&func->codeBlock, i);
         if (ctx->terminated) cgDeadLabel(ctx); //written after a return, a break or an error
@@ -7553,6 +7787,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     }
     ctx->retSlot = NULL;
     ctx->retSlotUsed = false;
+    ctx->resultLocal = NULL;
     fputs("}\n\n", ctx->fnOut);
     cgBodyEnd(ctx, &bb);
     ctx->curFunc = NULL;
@@ -7618,6 +7853,7 @@ void emitTbaaTypeTree(FILE* out) {
           "!15 = !{!\"float32\", !20, i64 0}\n"
           "!16 = !{!\"float64\", !20, i64 0}\n"
           "!17 = !{!\"arraydesc\", !20, i64 0}\n"
+          "!18 = !{!\"closure\", !20, i64 0}\n" //a closure's environment (cgCaptureTbaa)
           //the element family: same types, reached by indexing rather than as a field
           "!41 = !{!\"bool[]\", !20, i64 0}\n"
           "!42 = !{!\"byte[]\", !20, i64 0}\n"
@@ -7633,6 +7869,7 @@ void emitTbaaTypeTree(FILE* out) {
           "!25 = !{!15, !15, i64 0}\n"
           "!26 = !{!16, !16, i64 0}\n"
           "!27 = !{!17, !17, i64 0}\n"
+          "!28 = !{!18, !18, i64 0}\n"
           "!31 = !{!41, !41, i64 0}\n"
           "!32 = !{!42, !42, i64 0}\n"
           "!33 = !{!43, !43, i64 0}\n"

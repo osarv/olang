@@ -57,6 +57,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
 6. (asked 2026-10-09) scripting: printing needs `try io.Print(...)` and every main `? io.IoError`. Add a prelude
    `print`/`println` that aborts on a write failure (Rust's println! panics; Python's print raises)? Default: no.
    Rec: yes - a failed write to stdout is not something a script handles.
+7. (asked 2026-10-09) the linear algebra library in std (`std/linalg`, Tensor<T>) with oann a separate repo on top?
+   Default (being built): yes, in std. Rec: yes - AI/data is a first-class domain and the library exercises the
+   language's core; oann keeps the NN-specific parts.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
