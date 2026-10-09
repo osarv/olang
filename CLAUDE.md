@@ -3598,28 +3598,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   conditionals, `match` values with guards and nested patterns, structs, enums, arrays, Lists, loops, comprehensions,
   `$`, `Bits`/`FromBits`, lambdas, `defer`, membership, atomics, fallible helpers and recursion - each case computed
   three ways: an immutable global baked while compiling (K2), an assert decided while compiling (S18c), and the same
-  call at run time on mutable globals. `fuzz/fuzz.olang` builds each at `-d` and at `-b` and interprets it with `-i`;
-  a difference is a finding, its program and a one-case program kept in `build/fz/found/<seed>`. `make fuzz` (not in
-  verify; `SEED`/`COUNT`/`JOBS`/`CASES`), and two fixed seeds are a checks scenario. The last full run: 1,000 programs (29,880 cases, every global baked), besides several hundred in the runs that found the bugs below. **Found and fixed**,
-  reproducers in `fuzz/repro`: a local named like a method called the method through itself (a segfault); a conditional
-  of text literals was returned dangling (E28); a widening conditional emitted invalid IR (T6b) and `==` on a call's
-  `String` value crashed codegen (E10a) - both fixed on the main branch the same day too; `Array<T>(n, v)` with a
-  literal emitted invalid IR, and the evaluator copied a reference fill into every element (T8); three LLVM 18 bugs,
-  worked around - FastISel corrupts a `bfloat` live across a branch at `-O0` (`-d` selects without it, B2c),
-  InstCombine folds `fpext(sitofp to half)` past F16's overflow (an integer reaches F16 through a fenced double, T4),
-  and InstCombine takes a bitcast between `half` and `bfloat` for a no-op, converting F16 bits made into a BF16 as F16
-  (an empty asm keeps the two bitcasts apart, E33); and the evaluator hung on a loop with an empty body and exhausted
-  the machine's memory on one allocating each turn, before its step budget ended either (each turn is a step now, and
-  an evaluation has 256MB, K1) - and, found beside them, a global holding a 100M-element array took 50GB to evaluate
-  (an array too long for the budget is refused before it is made). **Decided (the coordinator's calls)**: an atomic operation is evaluated as the plain
-  operation on its place, refused only where a write of that place is - a global (K1/P9); `abort` and `unreachable`
-  stop an evaluation only where reached, so a `catch { unreachable }`, or the one S13a puts in a statement match
-  covering every case of an enum reference (for a null), no longer makes a function unevaluable (K1a), and
-  where a value is required reaching one is a compile-time error with a note at the place (K2, S18c); a join's tasks
-  run in sequence at the join, each to completion in spawn order, after the block's deferred code, so a parallel
-  computation bakes and decides asserts (K1) - `-i` still refuses tasks. **Decided (mine)**: a failing guaranteed
-  check (a slice out of range, an array length, a copy into fixed storage) is in the same abort class; a global
-  reached from another aborting one is reported once, at the first; the memory budget's size.
+  call at run time on mutable globals. `fuzz/fuzz.olang` builds each at `-d` and at `-b` and interprets it with `-i`; a
+  difference is a finding, its program and a one-case program kept in `build/fz/found/<seed>`. `make fuzz` (not in
+  verify; `SEED`/`COUNT`/`JOBS`/`CASES`), and two fixed seeds are a checks scenario. The last full run: 1,000 programs
+  (29,880 cases, every global baked), besides several hundred in the runs that found the bugs below. **Found and
+  fixed**, reproducers in `fuzz/repro`: a local named like a method called the method through itself (a segfault); a
+  conditional of text literals was returned dangling (E28); a widening conditional emitted invalid IR (T6b) and `==` on
+  a call's `String` value crashed codegen (E10a) - both fixed on the main branch the same day too; `Array<T>(n, v)` with
+  a literal emitted invalid IR, and the evaluator copied a reference fill into every element (T8); four LLVM 18 bugs,
+  worked around - FastISel corrupts a `bfloat` live across a branch at `-O0` (`-d` selects without it, B2c), InstCombine
+  narrows a widened BF16 straight to F16 under a narrowing to F16, losing bfloat's range (`F16(F32(b) / F32(b))` was NaN
+  for b = 2^-126; a BF16 widens by an integer shift now, T4), InstCombine folds `fpext(sitofp to half)` past F16's
+  overflow (an integer reaches F16 through a fenced double, T4), and InstCombine takes a bitcast between `half` and
+  `bfloat` for a no-op, converting F16 bits made into a BF16 as F16 (an empty asm keeps the two bitcasts apart, E33);
+  and the evaluator hung on a loop with an empty body and exhausted the machine's memory on one allocating each turn,
+  before its step budget ended either (each turn is a step now, and an evaluation has 256MB, K1) - and, found beside
+  them, a global holding a 100M-element array took 50GB to evaluate (an array too long for the budget is refused before
+  it is made). **Decided (the coordinator's calls)**: an atomic operation is evaluated as the plain operation on its
+  place, refused only where a write of that place is - a global (K1/P9); `abort` and `unreachable` stop an evaluation
+  only where reached, so a `catch { unreachable }`, or the one S13a puts in a statement match covering every case of an
+  enum reference (for a null), no longer makes a function unevaluable (K1a), and where a value is required reaching one
+  is a compile-time error with a note at the place (K2, S18c); a join's tasks run in sequence at the join, each to
+  completion in spawn order, after the block's deferred code, so a parallel computation bakes and decides asserts (K1) -
+  `-i` still refuses tasks. **Decided (mine)**: a failing guaranteed check (a slice out of range, an array length, a
+  copy into fixed storage) is in the same abort class; a global reached from another aborting one is reported once, at
+  the first; the memory budget's size.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

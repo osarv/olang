@@ -10115,42 +10115,42 @@ from their original form.
   the program prints what it printed before; report's `sum.biggest = s.item` stays a copy for a T25b reason (a `mut`
   field of reference type is a writable reference, and the item text is read-only).
 - **A differential fuzzer for the evaluator and the code generator (K1/K1a, K2, S18c, P1, P9, E33, T4/E26, T8, E28,
-  E10a, B2c, 2026-10-09).** The evaluator's review compared what it computes with what the run time computes by hand,
-  on programs someone thought of. A fuzzer compares them on programs nobody thought of: the coordinator's request, built
-  in a worktree beside the other batches.
-  **What it is.** `fuzz/gen.olang` is olang (the first program of its size written in the language for a tool): a
-  seeded generator writing programs whose every operation is defined, so any difference between two ways of running
-  one is a bug, never the program's. A divisor is a number in 1..8, a shift amount is masked into the width, a
-  conversion that could be out of range is under `try ... catch default`, a NaN's bits are never read, a literal always
-  fits what it meets (E4a, E6d), a local `if`'s condition reads a parameter (so S8a never calls it dead), and the
-  generator keeps its own table of the variables in scope with their types, mutability and whether they depend on a
-  parameter. Each program has thirty cases; a case is a function of a few parameters returning one value of a random
-  type, computed three ways: an immutable global initialized with it on literal arguments (K2 bakes it while
-  compiling), the same call at run time on mutable globals holding the same literals (so nothing folds it), and, in a
-  second build, an assert that the case renders as the first build printed it (S18c decides it while compiling).
-  Inside, a case uses every numeric type, wrapping arithmetic, comparison chains, `try (...) catch default`,
-  conditionals, `match` values (several values per case, guards, nested enum patterns), struct, enum, array and List
-  values, `for` over ranges, arrays and Lists, comprehensions, `$` renderings, `Bits`/`FromBits`, lambdas with
-  captures, `defer`, `x in c`, atomic operations on locals, statement `try`/`catch`, fallible helpers with error sets
-  of their own (a final `if` on a parameter raising one), and small recursion. `fuzz/fuzz.olang` (also olang, its
-  workers `spawn`ed over a `std/chan` queue, everything run under `nice`) builds each program at `-d`, runs it, checks
-  each line's baked value against its run-time value, then builds it with the asserts at `-b` (an assert decided false
-  is a finding, and is dropped to see the rest), runs that, interprets it with `-i`, and compares all three outputs. A
-  finding keeps the program, the outputs and a program of the one case in `build/fz/found/<seed>`. `make fuzz` runs it
-  (not part of `make verify`); two fixed seeds are a `checks/checks.olang` scenario, so the driver and the generator
-  keep compiling. The last full run checked 1,000 programs (seeds 2000-2999, 29,880 cases, every one of their globals baked
-  while compiling); the runs before it, while the generator grew, several hundred more.
-  **What it found.** Eight bugs, each a corpus test computing the value baked and at run time, and a reproducer in
+  E10a, B2c, 2026-10-09).** The evaluator's review compared what it computes with what the run time computes by hand, on
+  programs someone thought of. A fuzzer compares them on programs nobody thought of: the coordinator's request, built in
+  a worktree beside the other batches.
+  **What it is.** `fuzz/gen.olang` is olang (the first program of its size written in the language for a tool): a seeded
+  generator writing programs whose every operation is defined, so any difference between two ways of running one is a
+  bug, never the program's. A divisor is a number in 1..8, a shift amount is masked into the width, a conversion that
+  could be out of range is under `try ... catch default`, a NaN's bits are never read, a literal always fits what it
+  meets (E4a, E6d), a local `if`'s condition reads a parameter (so S8a never calls it dead), and the generator keeps its
+  own table of the variables in scope with their types, mutability and whether they depend on a parameter. Each program
+  has thirty cases; a case is a function of a few parameters returning one value of a random type, computed three ways:
+  an immutable global initialized with it on literal arguments (K2 bakes it while compiling), the same call at run time
+  on mutable globals holding the same literals (so nothing folds it), and, in a second build, an assert that the case
+  renders as the first build printed it (S18c decides it while compiling). Inside, a case uses every numeric type,
+  wrapping arithmetic, comparison chains, `try (...) catch default`, conditionals, `match` values (several values per
+  case, guards, nested enum patterns), struct, enum, array and List values, `for` over ranges, arrays and Lists,
+  comprehensions, `$` renderings, `Bits`/`FromBits`, lambdas with captures, `defer`, `x in c`, atomic operations on
+  locals, statement `try`/`catch`, fallible helpers with error sets of their own (a final `if` on a parameter raising
+  one), and small recursion. `fuzz/fuzz.olang` (also olang, its workers `spawn`ed over a `std/chan` queue, everything
+  run under `nice`) builds each program at `-d`, runs it, checks each line's baked value against its run-time value,
+  then builds it with the asserts at `-b` (an assert decided false is a finding, and is dropped to see the rest), runs
+  that, interprets it with `-i`, and compares all three outputs. A finding keeps the program, the outputs and a program
+  of the one case in `build/fz/found/<seed>`. `make fuzz` runs it (not part of `make verify`); two fixed seeds are a
+  `checks/checks.olang` scenario, so the driver and the generator keep compiling. The last full run checked 1,000
+  programs (seeds 2000-2999, 29,880 cases, every one of their globals baked while compiling); the runs before it, while
+  the generator grew, several hundred more.
+  **What it found.** Nine bugs, each a corpus test computing the value baked and at run time, and a reproducer in
   `fuzz/repro`. (1) A local named like a method and initialized by calling it (`lit := g.lit(k)`) called the method
   through the local, as though it held a function value: `cgNamedTarget` looked a plain function's name up among the
-  locals - a segfault. (2) A conditional of two text literals returned through a reference result (E28) was built in
-  the function's own scope and read after it closed. (3) A conditional whose values widen into the target (T6b) kept
-  its own type and stored a wider value into its slot: invalid IR. (4) `==` on a call's `String` value against a
-  reference (E10a) held the value in a local taking the callee's result scope, and crashed the code generator. (3) and
-  (4) were fixed on the main branch the same day, by the same changes, and the merge took those. (5) `Array<T>(n, v)`
-  with a literal `v` reaching a reference element stored the literal's fixed-length address (invalid IR), and the
-  evaluator copied `v` into every element where the run time has one instance in all of them (T8). Three were LLVM 18's,
-  each confirmed on a few lines of hand-written IR (kept beside the olang reproducer) and worked around: (6) at `-O0`
+  locals - a segfault. (2) A conditional of two text literals returned through a reference result (E28) was built in the
+  function's own scope and read after it closed. (3) A conditional whose values widen into the target (T6b) kept its own
+  type and stored a wider value into its slot: invalid IR. (4) `==` on a call's `String` value against a reference
+  (E10a) held the value in a local taking the callee's result scope, and crashed the code generator. (3) and (4) were
+  fixed on the main branch the same day, by the same changes, and the merge took those. (5) `Array<T>(n, v)` with a
+  literal `v` reaching a reference element stored the literal's fixed-length address (invalid IR), and the evaluator
+  copied `v` into every element where the run time has one instance in all of them (T8). Three were LLVM 18's, each
+  confirmed on a few lines of hand-written IR (kept beside the olang reproducer) and worked around: (6) at `-O0`
   FastISel carries a `bfloat` live across a branch unwidened, so a BF16 computed before a `match` read back as garbage
   under `-d` - `-d` now passes `-mllvm -fast-isel=false` (B2c); (7) InstCombine folds `fpext(sitofp i32 to half)` into
   `sitofp` to the wider type whenever the integer has few significant bits, losing F16's overflow - `F16(98 << 24)` was
@@ -10159,18 +10159,25 @@ from their original form.
   it with the conversion after it - `F16(x).Bits().BF16FromBits()` is two bitcasts through `i16` that it first merges
   into one from `half` to `bfloat`, and then `fpext`, `fptosi` and the rest read the bits as `half`: 5 where 2048 was
   meant, in both directions. A freeze between the bitcasts is pushed back through them, `llvm.ssa.copy` crashes the
-  backend, `llvm.arithmetic.fence.bf16` cannot be selected, so the integer passes through an empty `asm` on its way to
-  a 16-bit float: no instruction, and opaque to every fold (E33). The generator's own mistakes were fixed as they
-  surfaced - a literal beside a narrower operand (E6d meets it at its own type), a condition S8a calls dead, a `List`
-  pushed to while a loop walks it (which never ends, S9f - found by the evaluator running out of memory, below).
+  backend, `llvm.arithmetic.fence.bf16` cannot be selected, so the integer passes through an empty `asm` on its way to a
+  16-bit float: no instruction, and opaque to every fold (E33). (9), LLVM 18's too, was found by the last run on the
+  finished compiler: InstCombine shrinks `fptrunc (op (fpext x) ...) to half` into the operation done in `half` whenever
+  `x`'s type has no more precision than `half` - and `bfloat` has less, but float's range, so `F16(F32(b) / F32(b))`
+  with `b` = 2^-126 narrowed `b` to 0 and divided 0 by 0. A BF16 now widens by its bits (zero-extended and shifted into
+  the top of an F32, then `fpext` if an F64 is wanted), which is exact for every value and payload, is what LLVM lowers
+  `fpext bfloat` to on x86 anyway, and leaves InstCombine nothing to take for a narrower type. The other direction was
+  checked and is not affected (`half` has more precision than `bfloat`, so nothing is shrunk into it). The generator's
+  own mistakes were fixed as they surfaced - a literal beside a narrower operand (E6d meets it at its own type), a
+  condition S8a calls dead, a `List` pushed to while a loop walks it (which never ends, S9f - found by the evaluator
+  running out of memory, below).
   **The evaluator never ended some evaluations.** A loop with an empty body (`for x > 0 { }`) counted no steps, so a
   global initialized by one hung the compiler; a loop allocating each turn made values faster than the step budget
   counted them - a value is ~500 bytes and is never reclaimed during an evaluation (B3e) - and exhausted the machine's
   memory first (the fuzzer's compile was killed). Each turn of a loop is a step now, and an evaluation may take 256MB
   (`CT_MEM_BUDGET`), past which it is refused as one running too long is - the global then set at startup. The size is
   mine: big enough for every evaluation the corpus makes, small enough that a compile with several runaway evaluations
-  stays under a gigabyte or two. The same budget answers a hole found beside it: an evaluated value is ~500 bytes
-  per element, so a global holding `Array<F32>(100000000)` - 400MB in the running program, an ordinary size for model
+  stays under a gigabyte or two. The same budget answers a hole found beside it: an evaluated value is ~500 bytes per
+  element, so a global holding `Array<F32>(100000000)` - 400MB in the running program, an ordinary size for model
   weights - took 50GB to evaluate and the compiler ran out of memory; an array whose elements alone would pass the
   budget is now refused before any is made, and the global is set at startup. A check holds all three shapes (833MB).
   **Atomics while compiling (K1/P9).** They were refused outright. No task runs beside an evaluation, so an atomic
@@ -10178,26 +10185,26 @@ from their original form.
   `AtomicLoad` where a read would be (a mutable global). Under `-i` they were already performed.
   **`abort` and `unreachable` (K1/K1a), the coordinator's call.** K1a refused statically any function containing either,
   so a function with a `catch { unreachable }` - a guard for what cannot happen - was never evaluable, and nor was any
-  caller; since checker batch 2, every statement `match` covering every case of an enum reference holds one too (S13a:
-  a null reference matches no case), so no such function was evaluable and a `Str` written that way was an E11c error.
-  The synthesized ones now carry the match's (or the zero value's) token, so the note saying where an evaluation
-  stopped has a place, and a value match falling through every clause counts as reaching `unreachable`. They now stop an evaluation only where reached, like a failing assert. Where a value is required - a global's
-  initializer (K2, which runs at startup anyway) or an assert decided while compiling (S18c) - reaching one is a
-  compile-time error at the global or the assert, `this global's initializer aborts the program` / `this assertion
-  aborts the program`, with a note at the `unreachable`; where evaluation is only attempted (a local `if`'s condition,
-  S8b), the code is left to the run time. `done` and `fail` stay refused: they end a test or the process, which only a
-  running program has. **Mine**: a guaranteed check failing - a slice out of range (E16b), an array length out of range
-  (D14b), an array copied into fixed storage of another length (C2e) - is the same class, since each aborts the program
-  exactly as `abort` does; and a global whose initializer reaches another aborting global is not reported again, so one
-  abort is one error.
+  caller; since checker batch 2, every statement `match` covering every case of an enum reference holds one too (S13a: a
+  null reference matches no case), so no such function was evaluable and a `Str` written that way was an E11c error. The
+  synthesized ones now carry the match's (or the zero value's) token, so the note saying where an evaluation stopped has
+  a place, and a value match falling through every clause counts as reaching `unreachable`. They now stop an evaluation
+  only where reached, like a failing assert. Where a value is required - a global's initializer (K2, which runs at
+  startup anyway) or an assert decided while compiling (S18c) - reaching one is a compile-time error at the global or
+  the assert, `this global's initializer aborts the program` / `this assertion aborts the program`, with a note at the
+  `unreachable`; where evaluation is only attempted (a local `if`'s condition, S8b), the code is left to the run time.
+  `done` and `fail` stay refused: they end a test or the process, which only a running program has. **Mine**: a
+  guaranteed check failing - a slice out of range (E16b), an array length out of range (D14b), an array copied into
+  fixed storage of another length (C2e) - is the same class, since each aborts the program exactly as `abort` does; and
+  a global whose initializer reaches another aborting global is not reported again, so one abort is one error.
   **Tasks while compiling (K1/P1), the coordinator's call.** K1a refused any function whose call graph started a task,
   so a parallel matrix multiply was never evaluable, not even for 2x2. A `join` block's tasks now run in sequence: a
   `spawn` binds its call's arguments and takes its targets' places where it is written (`ctCallBind`, split out of the
   evaluator's call so that the binding and the running can happen apart), and when the block is left - by whichever way
   (P1b), after its deferred code (S19), with a `return`'s value or an error in flight waiting - each task runs to
   completion in spawn order, its result then stored (one target, or one per result, D8c). That is one of the orders the
-  running program may take, with every P8 edge holding in it, so a race-free program gets its run-time result; one
-  whose result depends on its tasks' order through atomics gets this order's. Nothing it models can deadlock: a lock or
-  a channel is an `extern`, refused already, and a task spinning on an atomic another would set runs out of the budget.
+  running program may take, with every P8 edge holding in it, so a race-free program gets its run-time result; one whose
+  result depends on its tasks' order through atomics gets this order's. Nothing it models can deadlock: a lock or a
+  channel is an `extern`, refused already, and a task spinning on an atomic another would set runs out of the budget.
   `-i` keeps refusing tasks - it performs `extern` calls, so a channel's mutex would be real and sequential tasks would
   deadlock on it; threads there are its stage 3.
