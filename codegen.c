@@ -8521,7 +8521,8 @@ void emitOsRuntime(FILE* out) {
         "declare ptr @opendir(ptr)\n"
         "declare ptr @readdir(ptr)\n"
         "declare i32 @closedir(ptr)\n"
-        "declare ptr @realpath(ptr, ptr)\n\n"
+        "declare ptr @realpath(ptr, ptr)\n"
+        "declare ptr @mkdtemp(ptr)\n\n"
         //up to cap bytes of the NUL-terminated s into buf, and s's whole length
         "define linkonce_odr i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap) {\n"
         "entry:\n"
@@ -8579,6 +8580,15 @@ void emitOsRuntime(FILE* out) {
         "  ret i64 %len\n"
         "fail:\n"
         "  ret i64 -1\n"
+        "}\n\n"
+        //S4: a new directory, named by the NUL-terminated template ending in six X's, which mkdtemp replaces with what
+        //makes the name unused - written over the template in place; 0, or -1 when it fails (errno says why)
+        "define linkonce_odr i32 @__olang_mkdtemp(ptr %template) {\n"
+        "entry:\n"
+        "  %r = call ptr @mkdtemp(ptr %template)\n"
+        "  %bad = icmp eq ptr %r, null\n"
+        "  %v = select i1 %bad, i32 -1, i32 0\n"
+        "  ret i32 %v\n"
         "}\n\n", out);
 
     //the class of the error the last failing call on this thread left in errno - the table -i reads too

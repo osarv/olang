@@ -2738,6 +2738,7 @@ static long long ctRtRealpath(const char* path, unsigned char* buf, long long ca
     free(r);
     return len;
 }
+static int ctRtMkdtemp(char* tmpl) { return mkdtemp(tmpl) ? 0 : -1; }
 extern char** environ;
 static int ctRtSpawn(const char* args, long long count, int in, int out, int err) {
     if (count < 1) { errno = EINVAL; return -1; }
@@ -2762,6 +2763,7 @@ static ctRtFn ctRuntimeSym(const char* name) {
         { "__olang_arg_count", (ctRtFn)ctRtArgCount }, { "__olang_arg", (ctRtFn)ctRtArg }, { "__olang_env", (ctRtFn)ctRtEnv },
         { "__olang_err", (ctRtFn)ctRtErr }, { "__olang_stat", (ctRtFn)ctRtStat }, { "__olang_dir", (ctRtFn)ctRtDir },
         { "__olang_realpath", (ctRtFn)ctRtRealpath }, { "__olang_spawn", (ctRtFn)ctRtSpawn },
+        { "__olang_mkdtemp", (ctRtFn)ctRtMkdtemp },
     };
     for (size_t i = 0; i < sizeof(syms) / sizeof(syms[0]); i++) if (!strcmp(syms[i].name, name)) return syms[i].fn;
     return NULL;

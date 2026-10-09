@@ -24,6 +24,7 @@ extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
 extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
+extern fn __olang_mkdtemp(template Array<U8>) I32
 extern fn waitpid(pid I32, status Array<I32>, options I32) I32
 extern fn memfd_create(name Array<U8>, flags U32) I32
 extern fn isatty(fd I32) I32
@@ -130,12 +131,14 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
 # runs the program args[0] with args as its command line - no shell between, so each argument reaches it as it is,
 # whatever it holds - and waits for it to end. Its standard input is "input" and then the end of the file; what it
 # writes to its standard output and error is gathered, in full, into what Exec gives back, built where the caller puts
-# it. args[0] is looked up through PATH unless it holds a '/'. A program that runs and fails is no error here: its
-# status says so. Exec fails, with the OsError naming why, only when the program cannot be started - NOT_FOUND (no
-# such program), DENIED (not executable) - or with FAILED when there is nothing to run, an argument holds a zero byte
-# (which no command line can carry), or the system refuses what Exec needs. Output is gathered in memory files the
-# program writes into as fast as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output.
-fn Exec(args Array<String&>&, input Array<U8>& = "") Output ? OsError {
+# it - or, with "capture" false, goes where this program's own do (a compiler or a test binary run for its output to
+# be seen), Stdout and Stderr then being empty. args[0] is looked up through PATH unless it holds a '/'. A program
+# that runs and fails is no error here: its status says so. Exec fails, with the OsError naming why, only when the
+# program cannot be started - NOT_FOUND (no such program), DENIED (not executable) - or with FAILED when there is
+# nothing to run, an argument holds a zero byte (which no command line can carry), or the system refuses what Exec
+# needs. Output is gathered in memory files the program writes into as fast as it likes, so it never waits on a
+# pipe, and Exec never deadlocks on a large output.
+fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true) Output ? OsError {
     if args.Len() == 0 { error OsError.FAILED }
     size I64 = 0
     for a in args {
@@ -157,16 +160,25 @@ fn Exec(args Array<String&>&, input Array<U8>& = "") Output ? OsError {
     defer close(feed)
     try io.Write(feed, input) catch io.IoError { error OsError.FAILED }
     lseek(feed, 0, 0)
-    out := try memFile()
-    defer close(out)
-    errs := try memFile()
-    defer close(errs)
+    out I32 = -1                                        # -1: this program's own, which the child inherits
+    errs I32 = -1
+    if capture {
+        out = try memFile()
+        errs = try memFile()
+    }
+    defer {
+        if capture {
+            close(out)
+            close(errs)
+        }
+    }
     pid := __olang_spawn(line, args.Len(), feed, out, errs)
     if pid < 0 { try raise(__olang_err()) }
     waited Array<I32, 1>
     if waitpid(pid, waited, 0) < 0 { try raise(__olang_err()) }
     status I32 = (waited[0] >> 8) & 0xFF
     if (waited[0] & 0x7F) != 0 { status = 128 + (waited[0] & 0x7F) }      # ended by a signal
+    if not capture { return Output(status, "", "") }
     return Output(status, try readBack(out), try readBack(errs))
 }
 
@@ -318,6 +330,54 @@ fn MkDirAll(path String&) ? OsError {
 # removes the file, the symbolic link or the empty directory at "path"
 fn Remove(path String&) ? OsError {
     try check(remove($path "\0"))
+}
+
+# removes what is at "path" and, when it is a directory, everything in it, depth first - as "rm -rf" does. A symbolic
+# link is removed, never followed: what it names stays. Nothing at "path" is no error (there is nothing left to
+# remove), and neither is "" (Go's RemoveAll's answers). A path whose last element is "." or ".." fails with FAILED
+# before anything is removed: it names a directory through itself, or its parent. Anything that cannot be removed
+# fails with the OsError naming why, what was removed before it staying removed
+fn RemoveAll(path String&) ? OsError {
+    e := path.Len()
+    for e > 1 and path[e - 1] == '/' { e -= 1 }      # "a/b/" names b
+    s := e
+    for s > 0 and path[s - 1] != '/' { s -= 1 }
+    name := path[s:e]
+    if name == "." or name == ".." { error OsError.FAILED }
+    try removeTree(path)
+}
+
+# "path" and what is under it, gone
+fn removeTree(path String&) ? OsError {
+    if path.Len() == 0 { return }
+    p := $path "\0"
+    if remove(p) == 0 { return }
+    code := __olang_err()
+    if code == 1 { return }                            # NOT_FOUND: nothing to remove
+    if code != 6 and code != 2 { try raise(code) }      # NOT_EMPTY, or EXISTS, which POSIX allows rmdir to say
+    for n in try ReadDir(path) { try removeTree($path "/" $n) }
+    try check(remove(p))
+}
+
+# a new, empty directory, made where no other directory or file is, and its path, built where the caller puts it: in
+# "dir", or where the environment's TMPDIR says when "dir" is "" (and in /tmp when that is not set or empty), named
+# "prefix" followed by six characters chosen to make the name unused. Only this user may read, write or enter it
+# (mode 0700). Removing it once done is the caller's - RemoveAll
+fn MkTemp(dir String& = "", prefix String& = "") String& ? OsError {
+    if prefix.Contains("/") { error OsError.FAILED }      # a name, never a path below "dir"
+    base := tempDir(dir)
+    sep := "" if base.EndsWith("/") else "/"
+    path String&return = $base $sep $prefix "XXXXXX\0"
+    if __olang_mkdtemp(path) != 0 { try raise(__olang_err()) }
+    return path[:path.Len() - 1]
+}
+
+# where MkTemp makes a directory: "dir", else TMPDIR, else /tmp
+fn tempDir(dir String&) String {
+    if dir.Len() > 0 { return $dir }
+    env := try Env("TMPDIR") catch default ""
+    if env.Len() > 0 { return $env }
+    return "/tmp"
 }
 
 # moves what is at "from" to "to", in one step, replacing a file already at "to"
@@ -637,4 +697,61 @@ test "what Exec gives back lives where it is put" {
     b := echoed(2)
     assert churn() > 0
     assert a.Stdout == "run 1\n" and b.Stdout == "run 2\n" and a.Status == 0
+}
+
+test "RemoveAll removes a tree, depth first, and never follows a link" {
+    assert Run("rm -rf build/os_files/ra && mkdir -p build/os_files/ra/t/a/b/c build/os_files/ra/keep") == 0
+    try WriteFile("build/os_files/ra/t/a/b/c/f", "x") catch { fail }
+    try WriteFile("build/os_files/ra/t/a/.hidden", "y") catch { fail }
+    try WriteFile("build/os_files/ra/keep/k", "kept") catch { fail }
+    assert Run("ln -s ../keep build/os_files/ra/t/a/b/link && ln -s nowhere build/os_files/ra/t/dangling") == 0
+    try RemoveAll("build/os_files/ra/t") catch { fail }
+    assert not Exists("build/os_files/ra/t") and (try ReadFile("build/os_files/ra/keep/k") catch default "") == "kept"
+    try RemoveAll("build/os_files/ra/t") catch { fail }            # nothing there: nothing to do
+    try RemoveAll("") catch { fail }
+    try RemoveAll("build/os_files/ra/keep/k") catch { fail }       # a file is removed as Remove would
+    assert not Exists("build/os_files/ra/keep/k") and IsDir("build/os_files/ra/keep")
+    for bad in String&["build/os_files/ra/keep/.", "build/os_files/ra/keep/..", ".", "..", "build/os_files/ra/keep/./"] {
+        refused := false
+        try RemoveAll(bad) catch OsError.FAILED { refused = true } catch { }
+        assert refused and IsDir("build/os_files/ra/keep")
+    }
+    try RemoveAll("build/os_files/ra/keep/") catch { fail }        # a trailing '/' names the directory
+    assert not Exists("build/os_files/ra/keep")
+}
+
+test "MkTemp makes a new directory only its user can enter, and names it" {
+    assert Run("rm -rf build/os_files/mt && mkdir -p build/os_files/mt") == 0
+    a := try MkTemp("build/os_files/mt", "run-") catch default ""
+    b := try MkTemp("build/os_files/mt/", "run-") catch default ""
+    assert a.StartsWith("build/os_files/mt/run-") and a.Len() == "build/os_files/mt/run-".Len() + 6
+    assert b.StartsWith("build/os_files/mt/run-") and not b.Contains("//") and a != b and IsDir(a) and IsDir(b)
+    assert (try ReadDir(a) catch default String&["x"]).Len() == 0
+    assert Run("test \"$(stat -c %a " $Quote(a) ")\" = 700") == 0
+    plain := try MkTemp("build/os_files/mt") catch default ""
+    assert plain.Len() == "build/os_files/mt/".Len() + 6 and IsDir(plain)
+    tmp := try MkTemp() catch default ""
+    assert tmp.StartsWith("/") and IsDir(tmp)
+    try RemoveAll(tmp) catch { fail }
+    missing := false
+    try MkTemp("build/os_files/mt/no/such") catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
+    slash := false
+    try MkTemp("build/os_files/mt", "a/b") catch OsError.FAILED { slash = true } catch { }
+    assert slash
+    try RemoveAll("build/os_files/mt") catch { fail }
+    assert not Exists(a)
+}
+
+# where a program's standard output goes: a memory file Exec reads back, or - not captured - this program's own
+test "Exec without capture leaves the program this one's output and error" {
+    own := try ReadLink("/proc/self/fd/1") catch default "none"
+    seen := try Exec(String&["sh", "-c", "readlink /proc/$$/fd/1"]) catch { fail }
+    assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $own "\n"
+    assert Run("mkdir -p build/os_files") == 0
+    free := try Exec(String&["sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4"], "", false) catch { fail }
+    assert free.Status == 4 and free.Stdout == "" and free.Stderr == ""
+    assert (try ReadFile("build/os_files/fd1") catch default "") == $own "\n"
+    fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false) catch { fail }
+    assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
 }
