@@ -444,6 +444,13 @@ of the elements. `Array<T>&` is a reference: `==` is identity and assignment rep
 — a length paired with storage elsewhere, or, for a literal or an inline field, the elements in place with
 their length known while compiling — is a difference in *representation* only and never in behaviour.
 
+**T11b (assigning a value in place).** Assigning to an array **value** that already holds one writes the new
+elements into the storage it has when the length is the same - whatever the new value is: another array, a literal,
+a call's result - so a borrow taken earlier (a slice, a reference, E12c) sees them. When the length differs the
+target is given new storage, and an earlier borrow goes on naming the old storage, unchanged; it stays valid until
+its scope closes. A struct or enum value is assigned in place the same way, field by field, so a reference to one of
+its fields sees the new value.
+
 **T11a.** A reference to an array takes its length from the array it points to, every time it is assigned
 (D15a): the length is held beside the pointer.
 
@@ -638,7 +645,10 @@ function type is usable as a variable's, field's, or parameter's declared type, 
 first-class value that can be passed and called through it. A value of function type is **reference-shaped**:
 it refers to the function together with whatever a lambda captured (D16c), so it is nullable (T2a) and §8's
 rules for references apply to it (D16d). `==` compares by identity: a named function is one value however
-often it is named, and each evaluation of a capturing lambda makes a new one.
+often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
+variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
+a `mut` one may be assigned another - a named function's value, or a lambda's capturing nothing, is made once for the
+whole program and so lives in the program's scope (O1b).
 
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type and `mut` in order, presence and identity of a return type, and their error lists - the
@@ -738,9 +748,11 @@ writable, and an array literal's elements take the target's permission when ever
 compiling - text, or an array of constants - that reaches one (a parameter without `mut`, a read-only field or
 element) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
 plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
-parameter or field - gets a copy of its own. Which happens is not observable except as speed. An element of a static
-literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives in the program's scope
-(§8 O1b) and may be stored anywhere.
+parameter or field - gets a copy of its own. Which happens is not observable except as speed, and as identity:
+each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
+site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data. An
+element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
+in the program's scope (§8 O1b) and may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
@@ -872,7 +884,7 @@ Like a literal (T29a) it is a temporary with no type worth defending, so it stil
 bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
-(E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
+(E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
 array type or a built-in one, of either length kind.
@@ -988,8 +1000,10 @@ itself:
 - **imports** — import alias names (§4.2).
 
 Declaring two entries with the same name in the same set, within the same module, is a compile-time
-error. This specification does not define behavior for reusing a name across two *different* sets
-in the same module (e.g. a type and a global variable sharing a name).
+error. So is a type sharing its name with a function, an external function or a global of the same module, or with
+the prelude's types (§4 M19d) or a built-in one (a primitive, `Bool`, `Array`): within a module a name means one
+thing, which is what lets what follows `is` be read as a type exactly when it names one (E10c). An import alias's
+name is reserved apart (§4.6 M20).
 
 **D3.** A local variable (a parameter, or a variable declared inside a function or test body, §3.5)
 occupies a nested scope, distinct from its module's own `vars` set. A local declaration must not
@@ -997,10 +1011,11 @@ reuse a name already declared by an *enclosing* local scope of the same function
 function's own parameters) — that is a compile-time error, not shadowing.
 
 **D3a.** There is **no shadowing** at all: a local declaration or a parameter may not reuse a name its
-module declares in its `vars` set (a global, a function or an external function), nor the name of a build
-constant (B10); either is a compile-time error. A module is what keeps a namespace small enough to manage,
+module declares in its `vars` set (a global, a function or an external function), the name of a build
+constant (B10), or the name of a type it sees - one its module declares, one of the prelude's (§4 M19d), or a built-in
+one (a primitive, `Bool`, `Array`); each is a compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
-scopes are known (S8b). Names another module declares are reached only through an import alias, so they
+scopes are known (S8b), and what follows `is` be told apart as a type or a value (E10c). Names another module declares are reached only through an import alias, so they
 never collide with a local.
 
 ### 3.3 Type and error declarations
@@ -1256,7 +1271,7 @@ handles: no `try` reaches it.
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
 returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
-`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic builtin that gives a value (P9)), a **field read**
+`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic method that gives a value (P9)), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
 (`t := a[i]` — the array's element type), a **slice** (E16a), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
@@ -1672,7 +1687,7 @@ operators groups left-to-right):
 | 5 | `^` |
 | 6 | `&` |
 | 7 | `==` `!=` |
-| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
+| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is` `is not` (E10c, E32) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
 | 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
@@ -1766,12 +1781,33 @@ the type, and a type may say it itself:
   on length first;
 - for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
   they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
-  is both: the same storage and the same length.
+  is both: the same storage, from the same element, and the same length - so `a[1:3]` is not `a[1:2]`. Storage is
+  made afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of
+  no elements, no fields) included, so two of them are never the same; a slice is part of its base's storage
+  (E16a); a static literal site is one instance (T25d). An array with **no storage** - an array value's zero
+  value, whose bits a null array reference has too - is the same as any other with none.
 - a function value: identity (T21).
 
-Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
-function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
-is (P9), and a compile-time error on anything else.
+Identity is always available, whatever `Eq` says: `a is b` (E10c).
+
+**E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
+same instance - for a reference to an array, the same storage and the same length - whatever `Eq` says, and
+`a is not b` is `not (a is b)`. Either side may be `null`, which adapts to the other's type as beside `==` (a null is
+the same instance as another null and nothing else); both may not, having no type between them. Any other operand -
+a value of any type, two references of different types - is a compile-time error: `==` is what compares values.
+`a` is evaluated before `b`. This is the value form of the one operator `is` (E32 gives its type form):
+
+```
+is-expr ::= operand "is" [ "not" ] ( type-ref | binary )
+```
+
+What follows `is` (and `not`) is read as a `type-ref` when it is one that names a type - a name declared as a type
+in this module or the one an alias chain reaches, the prelude's, a primitive, `Bool` or `Array`, or a name whose
+last-but-one word names one (a case, `Shape.Circle`), or a type that is no plain name (`<T>`, a function type,
+`mut T`). Anything else is a value: an expression at the ordering comparisons' precedence and tighter, so
+`a is b + c` is `a is (b + c)` and `a is b == c` is `(a is b) == c`. Since no local, parameter, function or global
+shares a type's name (D2, D3a), a name is never both. `not a is b`, `a is not b` and `not (a is b)` are one
+question (E7a).
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` - always capitalized, as `Str` is (E11c): equality
 belongs to the type, not to one module's view of it, so `==` in the declaring module and in a `Map` of another agree;
@@ -2150,6 +2186,9 @@ unchanged. Exactly one argument is required; anything else (zero, two or more, o
 argument) is a compile-time error. `TypeName` in this position is never shadowable by another
 declaration of the same name - a primitive type name is never otherwise a valid
 call target, so this introduces no ambiguity with an ordinary function or constructor call.
+An integer converted to a float type is **rounded once**, from its exact value, to the nearest value of that type
+(ties to even) - an infinity where it is beyond the type's range - never through a wider float first, which would
+round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
 conversion cannot itself produce an error (a narrowing conversion outside its target type's
 representable range - e.g. `U8(300)` - silently wraps, the same well-defined, unchecked behavior
@@ -2302,10 +2341,11 @@ error, as for any other non-numeric type.
 
 ### 5.16 `is` and `as`
 
-**E32.** `is-expr ::= operand "is" type-ref` (at the comparisons' precedence) and `as-expr ::= postfix "as" type-ref`
+**E32.** `is-expr ::= operand "is" [ "not" ] type-ref` (at the comparisons' precedence; E10c says when what follows
+`is` is a `type-ref`) and `as-expr ::= postfix "as" type-ref`
 (binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) - or a
 reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
-whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
+whatever its payload, and `x is not Shape.Circle` whether it is not; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
 received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
 (`is` is the question it asks). On anything else `is` and `as` are a compile-time error. What follows `is` or `as` is a
 `type-ref`, so an `&` touching it with a name after it is that type's reference marker (§2.9): `b as Box.Val & mask` is
@@ -2942,7 +2982,7 @@ state with a mutex is not flagged.
 It sees a program's synchronisation because it **intercepts the C library**: the same `pthread_create`
 and `pthread_join` §6.8 is implemented with, and whatever a program itself reaches through `extern fn`
 (§11) — a mutex taken that way is as visible as one the language provided. The one other source of
-ordering is P9's atomic builtins, which lower to LLVM atomic instructions that ThreadSanitizer instruments
+ordering is P9's atomic methods, which lower to LLVM atomic instructions that ThreadSanitizer instruments
 and treats as edges directly. Since those are the only ways an olang program can establish ordering at
 all, the picture is complete. **Any synchronisation primitive added later must preserve that**: an LLVM
 atomic operation is understood, and anything establishing ordering by other means — including a change
@@ -2958,24 +2998,31 @@ linker free to keep either copy. An instrumented object is therefore a distinct 
 to propagate to, since the join carries no value and the spawner is no longer at the call site. A spawned
 call's return value, if any, is discarded — `spawn` is a statement, never an expression.
 
-**P9.** Five **atomic builtins**, resolved by the compiler and shadowable by no declaration:
+**P9.** Every integer type has five **atomic methods**, called on a place `t` of that type:
 
 ```
-atomicLoad(t)              -> T      reads t
-atomicStore(t, v)                    writes v to t
-atomicAdd(t, v)            -> T      adds v to t, yielding the value t held BEFORE
-atomicSwap(t, v)           -> T      writes v to t, yielding the value it held before
-atomicCas(t, expected, v)  -> T      writes v to t only if t holds `expected`, yielding what it found
+t.AtomicLoad()                       -> T      reads t
+t.AtomicStore(v)                               writes v to t
+t.AtomicAdd(v)                       -> T      adds v to t, yielding the value t held BEFORE
+t.AtomicSwap(v)                      -> T      writes v to t, yielding the value it held before
+t.AtomicCompareSwap(expected, v)     -> T      writes v to t only if t holds `expected`, yielding what it found
 ```
 
-`t` must be an **lvalue of an integer type** — `U8`, `I32` or `I64` — and a **mutable** one for every builtin
-but `atomicLoad`, which only reads: a task reading a flag another task sets holds it through a read-only reference
-(T25b), and needs no permission to write it in order to read it. Atomicity is a property
-of a single machine word, so there is nothing it could mean for an aggregate, a reference or a float. Each
-value argument must already have `t`'s type, a numeric literal adapting by representability as anywhere
-else (§5.2 T6); the operation is one machine instruction, with no point at which a conversion could run.
+`t` must be a **place** — a variable, a field or an array element, never a computed value — of an integer type
+(`I8` to `I64`, `U8` to `U64`), and a **writable** one for every method but `AtomicLoad`, which only reads: a task
+reading a flag another task sets holds it through a read-only reference (T25b), and needs no permission to write it
+in order to read it. Atomicity is a property of the single machine word a place occupies, so there is nothing it
+could mean for an aggregate, a reference or a float, and nothing for a value that occupies no place. Each value
+argument fits `T` as any argument fits its parameter (§5.3 E12) - a literal adapting (T6), a narrower integer
+widening (T6b) - before the operation, which is one machine instruction.
 
-`atomicCas` returns **what it found**, not whether it succeeded: for a strong compare-exchange those are
+They are supplied by the compiler rather than declared, as `Len()` is (E23), since nothing else in the language
+reaches the memory word a place occupies; in every other respect they are methods (§4.4 M19), and a call names its
+cost where it is written. A declared type extending an integer type (T29f) has them as it has its base's other
+methods - `T` is then the declared type - and may not declare a method of any of their names (T29e); a declared type
+that does not extend its base has none of them.
+
+`AtomicCompareSwap` returns **what it found**, not whether it succeeded: for a strong compare-exchange those are
 the same fact, since it writes if and only if it found `expected`. That is what lets it report both
 outcomes through the one return value this language has.
 
@@ -2983,7 +3030,7 @@ Every one of them is **sequentially consistent**, and no ordering can be selecte
 among the easiest things in systems programming to get subtly wrong, and admitting one later is purely
 additive.
 
-Each is a valid statement (§6.1 S3) except `atomicLoad`, which only reads and so really is a computed
+Each is a valid statement (§6.1 S3) except `AtomicLoad`, which only reads and so really is a computed
 value discarded.
 
 **P9a.** An atomic operation is a synchronisation edge for P8: two atomic accesses to the same location are
@@ -3019,8 +3066,8 @@ worker runs which task is unspecified.
 takes on a wrong `extern` prototype and §5.9 E16e takes on an out-of-range index: the language does not
 define what such a program does, and no guarantee stated anywhere else applies to it.
 
-There is no exception for any type or size. olang has no atomic operations, so **no** access is atomic —
-not a `U8`, not an `I32`, not a pointer — and a concurrent read of something being written may observe
+There is no exception for any type or size. Only P9's atomic methods are atomic, so **no** other access is —
+not to a `U8`, not to an `I32`, not to a pointer — and a concurrent read of something being written may observe
 a value that was never stored. `-r` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
 
@@ -3299,9 +3346,11 @@ lives as long as the program; and what a call builds into a scope variable a glo
 result borrowed from it, O13) is built there too. So is a temporary a function assigns to a global, or into a field
 or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
 already living somewhere that is stored there must live there too: a global's, or something built there. Storing
-anything shorter-lived is a compile-time error. A global passed as an argument determines the callee's
-scope variable to be the program's scope (O25e): an element pushed into a global list is built there. Each task
-reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do not run at exit. `&g`, for a global `g`, names
+anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
+or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
+determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
+there. Each task reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do
+not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
@@ -4062,10 +4111,12 @@ out of range, reading through a null reference, dividing by zero, a shift or con
 interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
 tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
-same way. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
+X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build. The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
-implementation memory is not reclaimed while the program runs, so `-i` suits short runs.
+implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
+interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
 
 **B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -4116,11 +4167,18 @@ process with `code` as its status — of which the platform passes on the low 8 
 innermost thing that can end (S16a); a test that calls it ends the whole test run. It is an ordinary call, not a
 statement D10a counts as leaving: where a result is owed, `unreachable` follows it.
 
-**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs, each module's own
-in declaration order. Across modules the order is **imports first**: a module is initialized after every
+**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs. Within a module, a global's
+initializer runs **after the initializers of the globals it reads** - directly, or through a function it calls,
+at any depth; declaration order decides among globals with no such dependency between them. A call through a
+function value counts as a call of any function named as a value in what runs (or in the initializer of a global
+it reads that holds one), since that is what it may reach. Globals whose initializers read each other - a cycle,
+including one reading itself - are a compile-time error naming them, since none of them can be set first.
+Across modules the order is **imports first**: a module is initialized after every
 module it imports has been. Where imports form a cycle (§4.6 allows one), the relative order of the
 modules in that cycle is unspecified, so a global initializer that reads a global from another module in
-the same cycle has no defined value to read and must not be written.
+the same cycle has no defined value to read and must not be written. Compile-time evaluation (K2) reads a
+global's value as this order sets it, so whether a global is computed while compiling never changes what another
+reads.
 
 **B6.** `done` and `fail` (§6.6) exit the process immediately, from anywhere, with status `0` or `1`
 respectively, printing nothing, independent of §10.3's own `main`-return handling — except while a test
@@ -4545,7 +4603,11 @@ value it was taken from, a function value names the function, a slice shares its
 writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
-- read a mutable global, whose value is the running program's, or write any global;
+- read a mutable global, whose value is the running program's, or write any global or what one holds (its
+  fields, the elements of its arrays, what its references name) - skipping the computation at run time would skip
+  the write;
+- read an immutable global whose value reaches storage a writable reference can change (T25b) - a `mut` field's
+  referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
 - call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
@@ -4560,7 +4622,8 @@ error as they would at run time. It is **not** possible when evaluation would:
 - take a slice out of range without `try`, which aborts at run time (E16b);
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
-- run longer, or recurse deeper, than an implementation-defined budget.
+- run longer, or recurse deeper, than an implementation-defined budget - which is never a crash: evaluation that
+  would run out of the stack it runs on stops there, refused (under `-i`, with that message).
 
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused.
@@ -4586,8 +4649,12 @@ refused, since that function's scopes close.
 **K2b.** K2 reaches a global holding an **array** or a **reference** too: what it points at is written out
 as data beside it, so a table computed by a loop, a linked structure built by constructors, or a tree of enums
 holding each other by reference (T17d), costs nothing at startup - a reference in an enum's payload is written as the
-address of its referent's data. Two references to one instance remain one instance, and a structure referring to
-itself is written as such. The data lives as long as the program (O1b).
+address of its referent's data. Two references to one instance remain one instance - within one global, and across
+all of a module's globals (`B Node& = A` is `A`'s instance, a slice of a global's array is that very storage) - and a
+structure referring to itself is written as such. Data a writable reference reaches is written out writable; only
+what nothing can write is read-only. A global whose value reaches an instance another module's global holds, or one
+held by a global of its own module that is set at startup, is set at startup too, reading that instance as it is
+there. The data lives as long as the program (O1b).
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

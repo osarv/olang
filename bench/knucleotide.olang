@@ -1,0 +1,74 @@
+# k-nucleotide: how often each k-long run of letters occurs in a DNA sequence, counted in a Map keyed by text (after
+# the Benchmarks Game's k-nucleotide; the sequence is generated with fasta's random-number generator instead of being
+# read). The keys are slices of the sequence - no text is copied.
+import "std/io"
+import "std/os"
+import "std/map"
+
+# fasta's linear congruential generator
+type Random struct() {
+    last mut I64 = 42
+}
+
+fn (r mut Random&) Next(max F64) F64 {
+    r.last = (r.last * 3877 + 29573) % 139968
+    return max * F64(r.last) / 139968.0
+}
+
+# n letters, drawn with the frequencies of the human genome
+fn sequence(n I64) String {
+    letters := "acgt"
+    odds := F64[0.3029549426680, 0.1979883004921, 0.1975473066391, 0.3015094502008]
+    cumulative := Array<F64>(4)
+    total F64 = 0.0
+    for i, p in odds {
+        total += p
+        cumulative[i] = total
+    }
+    rng := Random()
+    s := String(Array<Char>(n))
+    for i in range n {
+        r := rng.Next(1.0)
+        k I64 = 0
+        for k < 3 and r >= cumulative[k] { k++ }
+        s[i] = letters[k]
+    }
+    return s
+}
+
+# every k-long run of seq and how often it occurs
+fn counts(seq String&, k I64) map.Map<String&, I64>&seq {
+    m map.Map<String&, I64>&seq = map.Map<String&, I64>()
+    for i in range seq.Len() - k + 1 {
+        key := seq[i:i + k]
+        m.Put(key, (try m.Get(key) catch default 0) + 1)
+    }
+    return m
+}
+
+# how often each run of length k occurs, in alphabetical order, for k = 1 and 2
+fn frequencies(seq String&, k I64) ? {
+    m := counts(seq, k)
+    if k == 1 {
+        for c in "acgt" { try io.Print($c " " $(try m.Get(String(Char[c])) catch default 0) "\n") }
+        return
+    }
+    for a in "acgt" {
+        for b in "acgt" { try io.Print($a $b " " $(try m.Get(String(Char[a, b])) catch default 0) "\n") }
+    }
+}
+
+fn occurrences(seq String&, run String&) ? {
+    m := counts(seq, run.Len())
+    try io.Print($(try m.Get(run) catch default 0) "\t" $run "\t(" $m.Len() " distinct)\n")
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 1000
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    seq := sequence(n)
+    try frequencies(seq, 1)
+    try frequencies(seq, 2)
+    for run in String&["ggt", "ggta", "ggtatt", "ggtattttaatt", "ggtattttaatttatagt"] { try occurrences(seq, run) }
+}

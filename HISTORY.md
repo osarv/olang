@@ -9222,6 +9222,263 @@ from their original form.
   **Found, not fixed (another agent's area)**: under `-i` an error leaving a bare-`?` function keeps its original name
   ("unhandled error: Err.Loud") where the built program reports the default error ("unhandled error") - the evaluator does
   not re-encode at the R17 boundary; and `-i` cannot call through a `Call` adapter.
+
+- **The evaluator and the run time agree, from a review (K1/K2b, B5a, E10, T11b, T25d, T21/O1b, T4/E26, E11a, S12b, C2e,
+  E30, B3e, 2026-10-09).** Review area (5) of the overnight plan read `comptime.c` (the evaluator, and so `-i`) against
+  the code generator: every reproducer printed a baked global beside the same computation done at run time from a
+  `mut` global's value, and ran the program under `-i` too. Twelve confirmed disagreements; all are fixed here, each with
+  a corpus test that compares a baked global or a decided assert with the run time, and a checks scenario
+  (`agree`) that builds a program, builds it at `-d`, interprets it, and requires the three outputs to be identical and
+  right.
+  **Globals holding writable storage (findings 1a-c).** An immutable global holding a `mut` reference was treated as
+  constant data three ways. The evaluator read its contents as constant, so `assert f() == 0` with `f` reading `G.a[0]`
+  was decided at compile time while `main` wrote `G.a[0] = 7` first - the built program contradicted its own assert,
+  `-i` failed it, `-d` segfaulted. It wrote through it, so `P I32 = poke()` (writing `G.a[0] = 5`) was baked, its write
+  happened only at compile time, and `Q = G.a[0]` was baked from the written value. And codegen wrote the referent as
+  `internal constant` because it held no reference itself (`CtIsPlainData`), so a write through the field faulted at
+  `-d` and was folded away at `-O3`. The coordinator's decision: such a global is not constant - the evaluator neither
+  reads its contents as constant nor writes through it - and its referents are emitted writable; baking it is still
+  fine, its own initializer having built what it holds. Built as two node sets keyed by address: `ctOwned` (every
+  aggregate a cached global value reaches, owned by the first global that reached it) and `ctWritable` (what a
+  reference whose static type has `refMut` reaches, with its by-value parts; a slice marks its base). A write whose
+  container is owned is refused (`CT_WHY_WRITES_GLOBAL`), a read of a global whose value reaches writable storage is
+  refused for every reader but its own bake, and codegen emits `constant` only for what is not writable - which also
+  makes a referent holding references read-only data when nothing can write it. The sets survive `CtReset`, since
+  B9c's `decidePendingConditions` resets the evaluator after the K2 pass whose values codegen writes out; a node is never
+  freed, so no later node can be mistaken for one of them. Function values matter here too: a closure capturing a
+  `mut` reference reaches what it names, so the writability walk follows captures.
+  **Aliasing lost in baking (finding 10).** `A Node& = mk(); B Node& = A` - `same(A, B)` was decided true and was false
+  at run time, because each global's private data was emitted with its own node map, and the bake loop evaluated each
+  initializer afresh rather than through the cache other evaluations used (so even the evaluator's own `B` was a
+  different node from the `A` it baked). And a slice baked beside its base was a separate copy. Now the bake loop reads
+  globals through the cache (`CtEvaluateGlobal`), one node map serves every global of the module, and a slice records
+  its base (`viewOf`/`viewOff`) and is written as a `getelementptr` into the base's data. Across modules a node is not
+  duplicated: a global reaching an instance another module's global holds is set at startup, reading it there, which
+  is also the answer for the sliced global of another module. Within a module the same holds for an instance a global
+  set at startup holds - set at startup, it is built anew there - to a fixed point. An empty array with storage is
+  written as one element's room, so it is an instance of its own.
+  **Init order (finding 15).** `Early mut I32 = Late + 1` before `Late I32 = Mut2 + 10`: 11 when `Late` was baked, 1 when
+  set at startup, 11 under `-i`, which initialized lazily. The coordinator decided dependency order with a cycle error.
+  Built in `comptime.c` beside the K1a scan (`CtOrderGlobals`): each global's initializer is walked, following direct
+  calls into bodies; functions named as values are collected and walked only if a call through a value is made
+  somewhere along the walk, and a global read whose type can hold a function value contributes the functions its
+  initializer names - so `G fn() I32 = fn() I32 { return G() }`, a recursive lambda in a global, is not a cycle while
+  `X I32 = apply(fn() { return Y })` does depend on `Y`. Kahn's order, smallest declaration index first; a cycle is
+  reported along the reads (`A -> B -> A`), a self-read in words of its own. Codegen's init function and `ctRunMain` both
+  read `mod->globalOrder`.
+  **Value arrays assigned in place (finding 14).** After `b = Array<I32>(3, k)` a slice of `b` saw the new elements
+  (the buffer was reused); after `a = I32[k, 8, 9]` the slice kept the old ones (the literal was promoted into fresh
+  storage); the evaluator always kept the old. CLAUDE.md had called the reuse "unobservable by construction". The
+  coordinator decided to specify the run time's behaviour (T11b) and apply it everywhere: the literal path now goes
+  through the same reuse-or-allocate copy (`cgCopyRuntimeLengthArray` over a borrowed `{N, literal}`), and the
+  evaluator's `ctAssign` writes an aggregate of the same shape part by part into the nodes it has - which also makes a
+  reference to a struct value's field see the struct's reassignment, as it does at run time.
+  **Static literal identity (finding 9).** Two `I32[1, 2]` literals compared identical at run time because the linker
+  merged `private unnamed_addr` constants; one literal site reached twice was the same at run time and two instances in
+  the evaluator. Decided: a site is one instance. `unnamed_addr` is gone from static literals, codegen keeps one
+  constant per site per object (deferred code is emitted once per way out, so one site can be written out several
+  times), and the evaluator keeps one node per site and module (`ctFitBoundary`, at the call and return boundaries
+  where `cgStaticLiteral` applies) - per module because a parameter's default is one operand spliced into every calling
+  module's code, each object with its own constant. `CtIsStaticLiteral` is the one predicate both ask.
+  **Array identity (finding 11).** `same(arr[1:3], arr[1:2])` was true at run time (only the pointer was compared) and
+  any two empty arrays were the same in the evaluator. Now both compare storage and length. That exposed the run
+  time's own nondeterminism: an allocation of zero bytes returned the bump cursor, so two `Array<I32>(0)` were the same
+  exactly when nothing was allocated between them - which no evaluator can model. The allocator's minimum is now 8
+  bytes (one compare and a select), and the evaluator gives an empty zero value no storage, which is what `{0, null}`
+  is - the same bits as a null array reference, so the two compare the same in both.
+  **Function-typed globals (finding 5).** `F mut fn(x I32) I32 = dbl` compiled to `define i32 @iglob_F(i32) { ret i32
+  zeroinitializer }`: every place that iterated a module's vars took "has a function type" for "is a function". A var
+  now records `isGlobalVar`, set where a global declaration is collected; codegen gives such a global storage, sets it
+  at startup (a function value has no constant form yet), and calls through it as through a local; the evaluator reads
+  it and calls through the value. `F = tri` was rejected under O1b although a named function's value is static:
+  `storageInProgram` now says so for a named function and a lambda capturing nothing.
+  **Integer to float (finding 12).** `F32(1152921573326323713)` baked `1568669696`, the run time `1568669697`: the
+  evaluator went through a double, rounding twice, and so did the checker's adaptation of an integer literal
+  (`Lit F32 = 1152921573326323713` was wrong in both). `IntRoundTo` (util.c) cuts the exact integer to the type's
+  significant bits with ties to even, leaving overflow to `FloatRoundTo` - the first version applied it itself and made
+  `half(70000)` an infinity, which the T6 fit check accepts as "already infinite"; the corpus's own check case caught it.
+  Comparing a program built, built at `-d` and interpreted then found the same bug in LLVM: `sitofp i64 ... to bfloat`
+  goes through a float at `-O0` (23936) and not at `-O3` (23937). Codegen now converts an integer to `BF16` with a
+  runtime function (`__olang_int_bf16`, a `ctlz` and integer rounding); F16 needed nothing, since any integer a float
+  holds inexactly overflows it anyway. 3,600 random conversions agree three ways.
+  **The rest.** `$` of `F64` `-0.0` printed `0` at run time (`fadd double %v, 0.0` is `+0`; now `-0.0`). A function
+  returning a value read out of a reference returned the reference in the evaluator, so `f(a) == b` compared
+  identities (`assert f(P(4)) == P(4)` was a false compile error, and a top-level `if` took the other branch); `return`
+  now lands its value in the declared result as every other place does (`ctFit`). A `match` used as a value built text
+  literals in the match block's own scope and returned them after it closed - `cgIsFreshTemp` now counts a literal
+  promoted into a conditional's or match's run-time-length type, so the result scope is the target. The evaluator did
+  not check a copy into an inline field's fixed storage (C2e). E30 cached a chain's shared operand on the operand node,
+  so the same chain re-evaluated inside its own `Less` read the outer chain's values; the cache is a stack in the
+  evaluator's state now, valid only for the call that pushed it. The evaluator's comprehension stack was a fixed 64.
+  `-i` recursion crashed the compiler near 70,000 calls - each interpreted call takes ~15KB of C stack at `-O0` - so a
+  guard reads the thread's stack bounds (`pthread_getattr_np`) and stops 8MB short of the end, with the existing
+  message; reducing the frames was considered (`struct type` passed by value makes them large) and left to the
+  refactor. A comprehension's up-front reservation of a huge range was not checked under `-i`. And the compiler's own
+  `++` and atomic add overflowed a signed `long long` at `I64`'s maximum (undefined behaviour in C), now unsigned.
+  `-i` refused an `extern` taking an array of `F16` or `BF16` ("a parameter type -i cannot pass"), though X3 hands over
+  only the elements' bytes; it now writes and reads them back by their bit patterns (E33's `FloatBits`), as it does
+  `F32`'s. A scalar `F16`/`BF16` parameter is still refused - libffi has no half-precision type.
+  **Found on the way, not fixed (not this batch's)**: `x := "abc" if c else "no"` is rejected - neither literal adapts to
+  the other's length (E28); writing `String(...)` around one works. Reading a global `List` or `Map` (`G.Len()`,
+  `1 in GM`) was rejected by O25e while this was written; the statements/scopes batch, merged first, fixed that. That
+  batch's D16a change - a lambda finalized against its target before anything asks where it lives - in turn made O1b's
+  check see `EvF = fn(x I32) I32 { return x + k }` as a lambda that "lives in a scope that closes first": a lambda
+  capturing only values is a temporary (D16d), built in the program's scope like any temporary stored into a global,
+  and the check now says so (verified: the closure is allocated from `@__olang_prog_scope`, and one capturing a local
+  reference is still rejected).
+  **After the merges.** The stack guard's 8MB spare assumed the compiler's own 1GB thread; where that cannot be made
+  (`ulimit -v 800000`, as the check of `-t` past a crash runs it) the compiler runs on the process's 256KB stack and
+  every evaluation stopped at once - every global and condition then "recursed too deep", so `-t`'s untouched files
+  failed. The spare is now a quarter of the stack when that is less. The type checker's review left two `-i`
+  disagreements to this batch, both small, both fixed: an error leaving a bare-`?` function kept its own name under
+  `-i` ("unhandled error: Err.LOUD") where the built program re-encodes it as the function's default error at the
+  boundary (R17) - the evaluator now does the same where a call returns, so the report reads "unhandled error"; and a
+  value whose type declares `Call`, given where a function value is wanted (E31), was refused ("a function value
+  compile-time evaluation does not model"). It is now a function value naming `Call` and holding a reference to the
+  instance - the very one where it has storage, a copy of a temporary, as the generated adapter holds it - so `-i`
+  calls through it and a global computed through one bakes; the writability walk follows the receiver's permission,
+  and B5a counts a `Call` method as named wherever a value of its type appears (conservatively: a wrong order would
+  be silent, a spurious cycle is not). Checked three ways in the `agree` fixture, and by a baked corpus global.
+  **Flaky, not fixed**: std/cancel's "a busy task stops when the token is cancelled" asserts the task counted at least
+  once in the 5ms before `Cancel()`; under three concurrent verifies the task can start after it, and the test failed
+  once in four full runs here (it passed three times alone).
+
+- **Benchmarks against C (2026-10-09).** Asked whether olang delivers its second principle, "C-like performance", I
+  wrote `bench/`: ten classic programs each written twice, as a good olang programmer would write them and as plain
+  C - nbody, spectral-norm, mandelbrot, fannkuch-redux, binary-trees (against malloc/free and against a hand-written
+  C arena), k-nucleotide (a `Map` keyed by slices of a generated sequence), an F32 matrix multiply, a `List` built by
+  `Push` and summed four ways, a four-task Collatz search (`join`/`spawn` against pthreads), and a text round trip
+  (`$n` into a `StringBuilder`, `Split`, `ParseInt` against snprintf and strtoll). Same algorithm and sizes, and the
+  outputs are compared byte for byte at the timed size - floats included, since the C side prints them with a copy of
+  util.c's `FloatShortest`, so a single differing bit fails the check. The C is built with exactly the flags
+  `addModeFlags` gives olang's output (`-O3 -flto`, default target); `run.sh -n` adds a `-march=native` column built
+  from olang's own IR, with `-ffp-contract=off` on the C side because clang would otherwise fuse multiply-adds into
+  FMAs and change the results (olang never contracts, and cannot ask for an FMA - a gap of its own on FMA hardware).
+  Timings are medians of interleaved repetitions under `/home/user/verify.lock`; the machine was shared with other
+  agents' builds throughout (load average 2-6), so two full runs were made and differences under ~10% are noise.
+  **The result: the code generator is at C's level for loops over arrays and numbers** (nbody, mandelbrot, fannkuch,
+  matmul, array sums and the parallel fan-out all within 10% either way, matmul ahead in both runs) **and ahead of it
+  for allocation** (binary-trees 5x faster than malloc/free, in 54% of the peak memory). The gaps are all in the
+  abstractions above that, and every one was read off the whole-program optimized IR (`bench/ir.sh` keeps LTO's
+  `save-temps` output), confirmed by editing that IR by hand or making the C do what olang does, and given a
+  reproducer in `bench/repro/`:
+  **Capturing lambdas (Fold 10-13x).** The deepest one. A function value is a pointer to a closure object whose first
+  word is the code. Once `Fold` is inlined, its loop loads that word before each indirect call - and because an
+  unknown call may write anything, LLVM can neither forward the store that built the closure nor hoist the capture,
+  so the call is never devirtualized, the iterator's fields go back to memory every step and nothing vectorizes. A
+  capture-free lambda is a constant global and inlines, which is why the 2026-10-07 "hand-loop speed" measurement of
+  `Count` did not see it; `Count` whose predicate reads one captured value is 2.2x its hand loop. Tagging the two
+  loads `!invariant.load` by hand took an Array's `Fold` from 1.93s to 0.19s (the hand loop is 0.17s), and
+  `!invariant.group` on the code pointer gave 0.33s - closures are immutable once built (D16c), so the fix is to say
+  so in the IR (invariant groups with a launder where arena memory is reused, as clang does for vtable pointers), or
+  to make a function value a `{code, env}` pair whose code pointer is an SSA value.
+  **A fresh array stored into a reference slot is built twice (List push 3.2x).** `l.chunks[k] = Array<T>(size)`
+  allocated and zero-filled the chunk where it landed, then `cgStoreInto`'s value-to-reference array branch copied it
+  into a second allocation - the bug the codegen review fixed for `:=` alone. `List.grow` and `Map.grow` pay it on
+  every growth. Removing the copy by hand: 20M pushes 0.53s to 0.29s (C 0.16s); the rest is D13c's zero-fill of each
+  chunk (a C copy of olang's List: 0.26s with the memset, 0.17s without), which a runtime that knows fresh mmap'd
+  memory is zero could skip without giving up "nothing uninitialized".
+  **`for x in List` (4.8x)** stays scalar because `ListIter.Next` checks for the next chunk on every element; the same
+  loop over `ToArray()` is at C's speed. A chunk-wise lowering (outer loop over chunks, counted inner loop) is the fix.
+  **Text (2.3-2.5x).** Every `$n` calls its rendering helper twice, measuring with a null buffer and then writing, so
+  two snprintf calls where C makes one (5M: 0.79s against 0.42s; C making two: 0.81s); `Split` runs `Find` twice over
+  the text and `Find` builds a bounds-checked slice and calls `Eq` at every position.
+  **Wrapping arithmetic (spectral-norm 1.37-1.44x)** is the one that is not a bug. E6c makes overflow defined, so
+  `(i + j) * (i + j + 1) / 2` carries no `nsw` and LLVM keeps the signed division as shift-add-shift; adding `nsw`
+  to the four operations by hand ran 0.54s against 0.83s (C 0.52s), and writing `>> 1` 0.57s. Rust and Go wrap and
+  pay the same; C and Zig's release mode make overflow undefined to avoid it. Whether olang should is a direction
+  question - recorded here, not decided. The same missing fact keeps `Find`'s per-position bounds check in its loop.
+  **Map (k-nucleotide 1.36-1.49x)** is an API gap: counting is `Get` then `Put`, two hashes and two chain walks; the C
+  rewritten the same way went from 0.83s to 1.03s, most of the distance to olang.
+  **binary-trees against a C arena (1.27-1.32x)** took three tries to explain. Arena chunk size (4KB against the C
+  arena's 64KB) measured as nothing in either direction. Cachegrind then showed `tree` executing 44% more
+  instructions than the C arena's (615M against 427M at depth 16) - the fast path rounds the cursor twice and jumps
+  into the block it shares with the slow path - but a hand-patched fast path that removed 15% of them changed the
+  time by nothing measurable. What did measure was layout: a constructor's arguments are evaluated before its instance
+  is allocated, so `Node(tree(d - 1), tree(d - 1))` lays the tree out in post-order and the pre-order `check` walks
+  against memory order. The C arena reordered to allocate children first went from 0.38s to 0.47s; olang written
+  parent-first went from 0.49s to 0.43s. Bump-allocating a constructor's instance before its arguments when it is
+  built into a reference would give the C layout invisibly.
+  **Where olang won, and why**: binary-trees against malloc/free is the arena doing what principle 1 promised; matmul
+  is ahead by 6-14% because the arena aligns a large array to 64 bytes (O8a) where glibc's mmap'd blocks get 16 (C
+  with `aligned_alloc(64)` caught up, in noisy measurements); nbody was level, LLVM fully unrolling olang's pair loop
+  where it SLP-vectorized C's - and under `-march=native` the same heuristics put C 1.33x ahead, C's body count being
+  a constant where olang's is an array length.
+  **Friction met writing the olang side** (README lists ten): a multi-line array literal cannot close with `]` on its
+  own line; there is no bare block to end a scope early (`if true` is rejected by S8a), so binary-trees drops its
+  stretch tree through a helper function; `x := a - b` is rejected, so nbody writes `F64` on ten temporaries;
+  `x I64 = 1 << s` shifts an `I32` (E8a - 256 for `s = 40`, silently) while `x I64 = 1 << 40` works, the opposite of
+  what adapting literals teach; `Map` lives in `std/map` while `List` is in the prelude; std has no clock, so the
+  runner is a shell script; and there is no fixed-precision float formatting, so the Benchmarks Game's `%.9f`
+  outputs cannot be produced. No compiler change was made - the fixes are for the agents working on the compiler.
+- **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
+  the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
+  both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day
+  earlier) and the five atomic builtins of P9 - each intercepted by name before the ordinary call lookup, so no
+  declaration could use their names and nothing about them read like the rest of the language.
+  **`a is b`.** `is` already asked a question about what a value is (E32: `x is Shape.Circle`); identity is the same
+  kind of question, and the one Python spells the same way. The rule the coordinator wrote down: when what follows `is`
+  names a case or a type, it is E32's test, reading through a reference; otherwise both sides must be references (or
+  function values) of one type, `null` allowed on either side, and the answer is identity. A case with no payload
+  (`e is Expr.Nil`) stays the case test. **How the two forms are told apart.** Three ways were possible: parse both
+  readings and let the checker choose, decide in the checker from a type-ref, or decide in the parser. The parser
+  already has exactly the predicate needed - the one that commits `Shape.Circle` to a choice value and `Pair<...>(` to
+  a generic constructor, asking whether a name (or everything before its last word) is a known type through any alias
+  chain - so the right side is first read as a `type-ref`, and kept as one when it names a type, a case of one, a
+  primitive, `Bool` or `Array`, or is no plain name at all (`<T>`, a function type, `mut T`); otherwise the parser
+  rewinds (cursor and any `>>` split) and reads an expression at precedence 9, as every comparison's right side is read.
+  So `a is b + c` is `a is (b + c)`, `a is b == c` is `(a is b) == c`, and `x is f()`, `x is a.next`, `x is null` are
+  all values. **What makes it sound** is that a name is never both: D3a forbade a local named like a global, not like a
+  type, and `Circle := 3` beside `type Circle` compiled. The coordinator extended D3a to types (the module's, the
+  prelude's, the built-in names), and I extended **D2** the same way one level up - its text said it "does not define
+  behavior for reusing a name across two different sets", and a global or function named like a type of its module
+  compiled too (checked: both did). Nothing in the corpus, std or the checks used either.
+  **`is not`.** `a is not b` and `x is not Shape.Circle`, mirroring `not in` (E29) and Python. The parser takes a `not`
+  right after `is` as part of the operator and builds `not (a is b)` - the very node `not a is b` already gives (E7a:
+  `not` binds looser than comparisons) - so the checker, the evaluator and codegen see nothing new. No ambiguity arises:
+  `a is (not b)` would need a `Bool` reference, which does not exist.
+  **The atomics.** `x.AtomicLoad()`, `AtomicStore(v)`, `AtomicAdd(v)`, `AtomicSwap(v)` and `AtomicCompareSwap(e, v)`,
+  supplied by the compiler on every integer type as `Len()` is on every array (E23) and `Bits()` on every float (E33):
+  methods in every respect but that no declaration exists, inherited by a type `extends`-ing an integer (T29f), never
+  redeclared (the supplied-method clash, extended), and on a declared type without `extends` an "inherited only with
+  extends" error as for its other base methods. The `Atomic` prefix is kept so the cost stays visible where it is
+  written, which was P9's reason for named operations rather than an `atomic` qualifier. **Decided while building:**
+  `AtomicCompareSwap` over `AtomicCas` - two words a reader can say against an abbreviation, the language's
+  natural-language principle; the receiver must be a **place** (a variable, a field, an element - atomicity is a
+  property of the memory word the place occupies), read-only allowed only for `AtomicLoad` as P9 already relaxed; and a
+  **value argument fits the receiver's type as any argument fits its parameter** (T6, T6b), where P9 required exactly
+  the target's type "since there is no point at which a conversion could run". That reason was about the target, which
+  is never converted; an argument is computed before the instruction, as every argument is, and a method whose
+  arguments did not widen where every other call's do would have been the one exception to T6b. All eight integer
+  types work (LLVM's atomics take `i8`/`i16`); P9's text still named only `U8`, `I32` and `I64`, from before the T4
+  rename. The operations themselves are unchanged - the same operand kinds, so S3 (the four that write may stand as a
+  statement), D15 (`v := n.AtomicLoad()`), S8c's write scan, codegen, K1 (refused while compiling) and `-i` (performed
+  as plain operations, since nothing runs beside it) all needed no change.
+  **Evaluator.** `is` lowers to the `==` of two references - what `same` lowered to - which compiles to a pointer
+  comparison and which the evaluator already answered as identity, so nothing changed there either; it is proven by a
+  corpus global (`IdBaked`, K2) counting seven groups of identity and case questions - equal-by-`Eq` nodes that are two instances,
+  a self-loop, nulls on either side, function values, an enum reference - asserted equal to the same call at run time,
+  and by the K2 fixture baking a self-loop's and a chain's identities to `i1 true` (built inside the initializer's call:
+  read through the globals `Ring` and `Chain`, whose fields are writable, it is set at startup instead, as the
+  evaluator's review decided for anything reaching writable storage). The `-i` fixture now prints
+  an atomic counter and two identities, compared byte for byte with the built program.
+  **Merging beside the type checker's review**: its check that an unknown alias in `d is nosuchalias.Dir.North` is one
+  "unknown namespace" now gets one "unknown name 'nosuchalias'" - a chain naming no type is read as a value (E10c),
+  and that is what an unknown name in an expression says; the check expects that now.
+  **Found on the way.** Making `same` and `atomicAdd` unknown names showed two cascades, both pre-existing: an unknown
+  method (`a.Foo()`) left an `int` literal behind, which as a statement added S3's "computes a value and then discards
+  it" (fixed the same way, in parallel, by the type checker's review - the two fixes merged as one); and an unknown
+  function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean" (the stand-in type
+  had been taught to meet operator requirements, not conditions). A condition no longer judges the stand-in.
+  **`std/cancel`'s tests were timing-dependent** (the coordinator saw "a busy task stops when the token is cancelled"
+  fail once under concurrent verifies). The spawner spun 5ms and cancelled, asserting the task had counted - but a task
+  need not have run by any particular time, and on a loaded machine it had not, so it saw the token already fired and
+  counted nothing. It now counts with `AtomicAdd` and the spawner cancels once `AtomicLoad` shows it has counted - the
+  test still shows a running task stopping, with no clock in it, and no race either (the count is read while the task
+  writes it, which is why it must be atomic). "a token with a deadline fires by itself" had the same flaw the other
+  way: it asserted a 20ms token had not fired right after making it, false if the test thread lost its core for 20ms;
+  it times from before the token now, asserting only what holds however long a preemption lasts. And P8b still said "olang has no atomic operations, so no access is
+  atomic", written before P9; it now says only P9's methods are atomic.
 - **Diagnostics remade: one row, the rule in brackets, `-e` for the rule (B11/B11a, 2026-10-09).** The user: "shorten
   down the error messages and keep them concise. They should preferably exist on one row. I am still split about keeping
   the rule number in there. I'd say keep it probably. It's better for agents later. You can also just remake the error

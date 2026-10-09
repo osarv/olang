@@ -1,0 +1,97 @@
+# n-body: a simulation of the Jovian planets (the Computer Language Benchmarks Game's algorithm) - F64 arithmetic
+# on an array of structs, written through in place
+import "std/io"
+import "std/os"
+
+extern fn sqrt(x F64) F64
+
+Pi F64 = 3.141592653589793
+SolarMass F64 = 4.0 * Pi * Pi
+DaysPerYear F64 = 365.24
+
+type Body struct(x F64, y F64, z F64, vx F64, vy F64, vz F64, mass F64) {
+    x, y, z mut
+    vx, vy, vz mut
+    mass
+}
+
+fn planets() Array<Body> {
+    return Body[
+        Body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, SolarMass),
+        Body(4.84143144246472090e+00, -1.16032004402742839e+00, -1.03622044471123109e-01,
+             1.66007664274403694e-03 * DaysPerYear, 7.69901118419740425e-03 * DaysPerYear,
+             -6.90460016972063023e-05 * DaysPerYear, 9.54791938424326609e-04 * SolarMass),
+        Body(8.34336671824457987e+00, 4.12479856412430479e+00, -4.03523417114321381e-01,
+             -2.76742510726862411e-03 * DaysPerYear, 4.99852801234917238e-03 * DaysPerYear,
+             2.30417297573763929e-05 * DaysPerYear, 2.85885980666130812e-04 * SolarMass),
+        Body(1.28943695621391310e+01, -1.51111514016986312e+01, -2.23307578892655734e-01,
+             2.96460137564761618e-03 * DaysPerYear, 2.37847173959480950e-03 * DaysPerYear,
+             -2.96589568540237556e-05 * DaysPerYear, 4.36624404335156298e-05 * SolarMass),
+        Body(1.53796971148509165e+01, -2.59193146099879641e+01, 1.79258772950371181e-01,
+             2.68067772490389322e-03 * DaysPerYear, 1.62824170038242295e-03 * DaysPerYear,
+             -9.51592254519715870e-05 * DaysPerYear, 5.15138902046611451e-05 * SolarMass)]
+}
+
+fn offsetMomentum(bodies mut Array<Body>&) {
+    px, py, pz F64
+    for b in bodies {
+        px += b.vx * b.mass
+        py += b.vy * b.mass
+        pz += b.vz * b.mass
+    }
+    bodies[0].vx = -px / SolarMass
+    bodies[0].vy = -py / SolarMass
+    bodies[0].vz = -pz / SolarMass
+}
+
+fn energy(bodies Array<Body>&) F64 {
+    e F64 = 0.0
+    for i, b in bodies {
+        e += 0.5 * b.mass * (b.vx * b.vx + b.vy * b.vy + b.vz * b.vz)
+        for j in range i + 1, bodies.Len() {
+            o := bodies[j]
+            dx F64 = b.x - o.x
+            dy F64 = b.y - o.y
+            dz F64 = b.z - o.z
+            e -= b.mass * o.mass / sqrt(dx * dx + dy * dy + dz * dz)
+        }
+    }
+    return e
+}
+
+fn advance(bodies mut Array<Body>&, dt F64) {
+    n := bodies.Len()
+    for i in range n {
+        for j in range i + 1, n {
+            dx F64 = bodies[i].x - bodies[j].x
+            dy F64 = bodies[i].y - bodies[j].y
+            dz F64 = bodies[i].z - bodies[j].z
+            d2 F64 = dx * dx + dy * dy + dz * dz
+            mag F64 = dt / (d2 * sqrt(d2))
+            mi F64 = bodies[i].mass * mag
+            mj F64 = bodies[j].mass * mag
+            bodies[i].vx -= dx * mj
+            bodies[i].vy -= dy * mj
+            bodies[i].vz -= dz * mj
+            bodies[j].vx += dx * mi
+            bodies[j].vy += dy * mi
+            bodies[j].vz += dz * mi
+        }
+    }
+    for i in range n {
+        bodies[i].x += dt * bodies[i].vx
+        bodies[i].y += dt * bodies[i].vy
+        bodies[i].z += dt * bodies[i].vz
+    }
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 1000
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    bodies := planets()
+    offsetMomentum(bodies)
+    try io.Print($energy(bodies) "\n")
+    for i in range n { advance(bodies, 0.01) }
+    try io.Print($energy(bodies) "\n")
+}

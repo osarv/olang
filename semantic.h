@@ -290,6 +290,8 @@ struct var {
     struct var* refsHome;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
+    bool isGlobalVar; //module-level only: declared as a global variable - storage, whatever its type, a function type
+                      //included (a function-typed global holds a function value; it is not a function)
     bool isFuncDecl; //module-level only: this name was declared by "func"/"extern func" rather than as a
                       //global variable. M21 lets several function declarations share a name (one method
                       //per receiver type) and nothing else share one, and pass 1 has no types resolved
@@ -463,8 +465,8 @@ enum operation {
     OPERATION_FUNCCALL,
     OPERATION_INDEX,
     OPERATION_MEMBER,
-    //P9: the atomic builtins. Each takes a mutable integer lvalue as its first argument and lowers to one
-    //LLVM atomic instruction, sequentially consistent. args[0] is the target; the rest are values.
+    //P9: the atomic methods. Each takes an integer place (its receiver) as its first argument and lowers to one
+    //LLVM atomic instruction, sequentially consistent. args[0] is the place; the rest are values.
     OPERATION_ATOMIC_LOAD,
     OPERATION_ATOMIC_STORE,
     OPERATION_ATOMIC_ADD,
@@ -609,7 +611,6 @@ struct operand {
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
                                 //the comparisons on either side of it
     char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand
-    void* ctCached;             //the evaluator's same (a struct ctVal*)
     struct operand* placeOf;    //S4: a compound assignment's read of its own target - the place the statement computed
                                 //once, before the value, and stores to after it
     char* cgPlace;              //S4: on an assignment's target, while its value is being computed: the place's address
@@ -707,6 +708,8 @@ struct semaModule {
     bool publicClosureComputed;
     bool computingPublicClosure;
     struct list publicClosure; //list of struct semaModule*, only valid once publicClosureComputed
+    struct list globalOrder; //B5a: struct var*, the globals with an initializer in the order they are set (CtOrderGlobals)
+    bool globalOrderSet;
 };
 
 long long TypeGetSize(struct type t);

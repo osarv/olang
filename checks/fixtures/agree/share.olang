@@ -1,0 +1,25 @@
+# K2b: what baked globals reach is written out once per module - two globals naming one instance, or a slice of a
+# global's array, name that very data - and what a writable reference reaches is not read-only
+type Node struct(v I32) {
+    v mut
+}
+fn mk(v I32) Node& {
+    n Node&return = Node(v)
+    return n
+}
+A Node& = mk(4)
+B Node& = A
+type Holder struct(a mut Array<I32>&) {
+    a
+}
+fn mkHolder() Holder {
+    arr Array<I32>&return = Array<I32>(2)
+    return Holder(arr)
+}
+H Holder = mkHolder()
+Arr Array<I32>& = I32[1, 2, 3, 4]
+Sl Array<I32>& = Arr[1:3]
+fn main() ? {
+    H.a[0] = 3
+    assert A is B and H.a[0] == 3 and Sl is Arr[1:3] and Sl[1] == 3
+}

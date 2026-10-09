@@ -1,0 +1,6 @@
+# check: fail computes a value and then discards it
+# P9/S3: AtomicLoad only reads, so standing alone it is a discarded value
+fn main() ? {
+    x I32 = 1
+    x.AtomicLoad()
+}

@@ -295,6 +295,26 @@ double FloatRoundTo(double v, enum floatKind k) {
     }
 }
 
+//T4: an integer's exact value (negative when neg, of magnitude mag) rounded ONCE to a float type - nearest, ties to
+//even - as the generated code's sitofp/uitofp rounds it. Going through a double first rounds twice: a 64-bit integer
+//is first rounded to 53 bits, and that result can sit exactly on a halfway point of the narrower type's grid when the
+//integer itself did not. So the integer is cut to the type's significant bits here, exactly, and the double that
+//holds the result needs no rounding of its own. Whether it overflows the type (F16's range is below 2^64) is left to
+//FloatRoundTo, which the caller applies - so an overflow can be told from a value that is already an infinity
+double IntRoundTo(bool neg, unsigned long long mag, enum floatKind k) {
+    int p = k == FLOAT_KIND_F32 ? 24 : k == FLOAT_KIND_F16 ? 11 : k == FLOAT_KIND_BF16 ? 8 : 53;
+    int bits = mag ? 64 - __builtin_clzll(mag) : 0;
+    double r;
+    if (bits <= p) r = (double)mag;
+    else {
+        int shift = bits - p;
+        unsigned long long q = mag >> shift, rem = mag & ((1ULL << shift) - 1), half = 1ULL << (shift - 1);
+        if (rem > half || (rem == half && (q & 1))) q++;
+        r = ldexp((double)q, shift);
+    }
+    return neg ? -r : r;
+}
+
 //the fewest significant digits p (1 to 17) for which v rounded to p digits reads back - parsed, then rounded to the
 //value's own type - as v itself; then laid out as "%.17g" lays a number out: positional where the decimal exponent x
 //is in [-4, 17), with the digits padded by zeros or split by the point, and "d.ddde+XX" otherwise. An infinity or a

@@ -28,13 +28,23 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
-**Decided 2026-10-09 (the user: "Yes, do both"), queued after the tfix/sfix merges (both touch buildIsAs and method
-resolution):** `same(a, b)` becomes `a is b` (identity when the right side names no case or type; a case/type on the
-right is the existing test, read through a reference); the five atomics become methods on the integer types
-(`n.AtomicAdd(1)`, `n.AtomicLoad()`...). With it, my call: D3a extended - a local or parameter may not reuse a
-type's name either (today `Circle := 3` beside `type Circle` compiles, which would make `x is Circle` ambiguous once
-`any Trait&` brings type tests back).
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+1. (asked 2026-10-09; the user wondered whether lowercase and uppercase Eq should differ, and asked for precedent)
+   one rule - the compiler only ever calls CAPITALIZED methods (drop E31's lowercase private operators, used only by
+   three tests), or keep private operators and make a lowercase eq/hash/str an error instead of silently ignored?
+   Default (in effect): private operators kept; lowercase eq/hash/str ordinary, ignored by ==/Map/$ (tfix's decision F).
+   Rec: drop them (Go's fmt, Rust impls and Python dunders are all type-global; no mainstream language has
+   module-private operators).
+2. (asked 2026-10-09, from the benchmarks) keep integer overflow wrapping (E6c)? It costs `nsw`: spectral-norm 1.4x
+   slower than C (`(i+j)*(i+j+1)/2` keeps a 3-instruction signed divide); `>> 1` or unsigned types avoid it. Default:
+   wrapping stays. Rec: keep - the alternative is C's undefined behaviour, which the evaluator could not reproduce
+   (K1) and the language has spent weeks removing; Rust (release) and Go pay the same cost.
+3. (asked 2026-10-09, from the benchmarks: nbody writes F64 on ten temporaries) relax D15 so `x := a - b` (any
+   expression whose type is determined; still not `null` or an untyped literal-only expression beyond today's rule)
+   declares with that type? Default: D15 as is. Rec: relax - the operands' types are visible and every mainstream
+   language infers here.
+**Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
+`AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
 expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
 T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default

@@ -1,0 +1,194 @@
+# bench - olang against C
+
+Does olang deliver "C-like performance" (PRINCIPLES.md, principle 2)? Ten classic programs, each written twice - as
+a good olang programmer would write it (`*.olang`) and as plain idiomatic C (`c/*.c`) - with the same algorithm, the
+same sizes and byte-identical output, timed against each other.
+
+```
+bench/run.sh                 # build both, check the outputs agree, time (median of 7, interleaved)
+bench/run.sh -n              # also -march=native for both
+bench/run.sh -q              # build and check only
+bench/run.sh -r 9 nbody text # 9 repetitions, only some rows
+BENCH_LOCK=/home/user/verify.lock bench/run.sh   # hold a lock while checking and timing, on a shared machine
+bench/ir.sh spectral         # whole-program optimized IR and disassembly of both versions, in build/lto/
+bench/repro/opt.sh NAME      # the same for one reproducer in repro/
+```
+
+Nothing here is part of `make verify` or `make test` - the makefile names the directories it tests, and `bench/` is
+not one of them.
+
+**Fairness.** The C versions are compiled with exactly the flags olang compiles and links its own output with
+(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization, for the
+default x86-64 target. The `-n` columns build olang's own emitted IR and the C source with `-march=native`; C there
+also gets `-ffp-contract=off`, because clang's default would fuse `a*b+c` into an FMA wherever the target has one and
+change the results - olang never contracts, and has no way to ask for an FMA either. Both versions print floats as
+olang's `$` does (the fewest digits that read back as the same value; `c/common.h` copies util.c's `FloatShortest`),
+so one differing bit in any result fails the check.
+
+| program | what it exercises |
+|---|---|
+| `nbody` | F64 arithmetic on an array of structs, written in place |
+| `spectral` | nested loops over F64 arrays, a small function called in the inner loop |
+| `mandelbrot` | an F64 escape loop, bits packed into bytes, a 1 MB binary write |
+| `fannkuch` | small I32 arrays: indexing, swapping, rotating (run 4 times) |
+| `binarytrees` | allocation: millions of small nodes built, walked, dropped - scopes against malloc/free, and against a hand-written C arena (`c/binarytrees_arena.c`) |
+| `knucleotide` | a `Map` keyed by text slices, counting k-mers of a generated DNA sequence |
+| `matmul` | F32 matrix multiply over flat arrays and row slices (vectorization) |
+| `sum` | a `List` built by `Push`, then summed with `for x in`, and with `Iter().Fold(...)` and a lambda, over the List and over an Array; C pushes onto a realloc'd array and loops |
+| `parallel` | longest Collatz chain, four tasks: `join`/`spawn` against pthreads |
+| `text` | `$n` renderings into a `StringBuilder`, `Split`, `ParseInt` against snprintf and strtoll |
+
+## Results
+
+Medians of interleaved runs, in seconds: run 1 (7 repetitions, with the `-march=native` columns, load average 2-4)
+and the ratio from run 2 (9 repetitions, load average 3-5) as a check on the noise. Ratios above 1 mean olang is
+slower. Sizes: nbody 10M steps, spectral-norm 3000, mandelbrot 3000, fannkuch-redux 10 (x4), binary-trees 18,
+k-nucleotide 2M bases, matmul 1536, List push 20M, the sums 100,000 elements x 8,000 passes (in cache), parallel 10M,
+text 5M numbers.
+
+| benchmark | olang (s) | C (s) | olang/C | olang/C, run 2 | olang -march=native | C -march=native | ratio |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| nbody | 0.885 | 0.954 | **0.93** | 1.00 | 0.881 | 0.661 | 1.33 |
+| spectral-norm | 0.677 | 0.493 | **1.37** | 1.44 | 0.631 | 0.670 | 0.94 |
+| mandelbrot | 0.913 | 0.928 | **0.98** | 0.99 | 0.897 | 0.898 | 1.00 |
+| fannkuch-redux | 0.931 | 1.022 | **0.91** | 1.02 | 1.092 | 1.072 | 1.02 |
+| binary-trees | 0.495 | 2.533 | **0.20** | 0.20 | 0.457 | 2.631 | 0.17 |
+| binary-trees, C arena | 0.491 | 0.386 | **1.27** | 1.32 | 0.479 | 0.381 | 1.26 |
+| k-nucleotide | 1.030 | 0.691 | **1.49** | 1.36 | 1.060 | 0.713 | 1.49 |
+| matmul F32 | 1.027 | 1.189 | **0.86** | 0.94 | 0.815 | 0.829 | 0.98 |
+| List push | 0.514 | 0.161 | **3.19** | 3.26 | 0.504 | 0.152 | 3.32 |
+| sum: for x in List | 0.869 | 0.180 | **4.82** | 4.70 | 0.559 | 0.115 | 4.88 |
+| sum: List.Iter().Fold | 2.234 | 0.184 | **12.12** | 13.43 | 2.449 | 0.112 | 21.95 |
+| sum: for x in Array | 0.199 | 0.192 | **1.04** | 0.94 | 0.126 | 0.129 | 0.97 |
+| sum: Array.Iter().Fold | 1.740 | 0.174 | **9.98** | 9.69 | 1.585 | 0.122 | 13.01 |
+| parallel, 4 tasks | 0.724 | 0.798 | **0.91** | 1.08 | 0.712 | 0.781 | 0.91 |
+| text | 1.186 | 0.482 | **2.46** | 2.33 | 1.099 | 0.522 | 2.11 |
+
+In short: **the code generator is at C's level wherever the program is loops over arrays and numbers** - nbody,
+mandelbrot, fannkuch, matmul, array loops and the parallel fan-out are level with C (within about 10% either way,
+which is this machine's noise), and allocation-heavy code is 5x faster than C with malloc/free. **The gaps are in the
+abstractions above that**: capturing lambdas, the `List` iterator and `Push`, `Map`'s API, text rendering - and one
+language-level trade-off, wrapping arithmetic (spectral-norm). Every gap but that one has a fix inside the compiler or
+std that keeps the language as it is.
+
+## Why olang is slower where it is
+
+Each finding was read off the whole-program optimized IR (`bench/ir.sh`), confirmed by an experiment - the IR
+edited by hand, or the C side changed to do what olang does - and re-timed (single runs under the same lock, so
+±10%), and has a minimal program in `repro/` whose header says what to look for. Ordered by size.
+
+1. **A capturing lambda is never inlined - `Iter().Fold(...)` 10-13x.** A function value is a pointer to a closure
+   object (code pointer, then captures) in the arena. Inlined into the caller, `Fold`'s loop loads the code pointer
+   from that object before every call and calls it indirectly - and since an unknown call may write any memory, LLVM
+   cannot forward the pointer stored when the closure was built, so the call is never devirtualized or inlined; the
+   captured value is reloaded through an untagged load each iteration, the iterator's fields go back to memory, and
+   nothing vectorizes. A lambda capturing nothing is a constant global and does inline - `a.Iter().Count(f)` with a
+   capture-free predicate runs at hand-loop speed, as recorded on 2026-10-07 - while the same `Count` whose predicate
+   reads one captured value takes 2.2x the equivalent hand loop (1.31s against 0.59s).
+   **Proof:** marking the two closure loads (code pointer, capture) `!invariant.load` by hand takes
+   `a.Iter().Fold` over an Array from 1.93s to 0.19s - the hand loop is 0.17s; `!invariant.group` on the code
+   pointer's store and loads gives 0.33s. **Fix:** a closure never changes after it is built (captures are frozen,
+   D16c), so its loads can say so - `!invariant.group` on the closure's stores and loads, with
+   `llvm.launder.invariant.group` where an arena chunk is reused (clang's treatment of vtable pointers under
+   `-fstrict-vtable-pointers`); or a function value as a `{code, env}` pair, so the code pointer is an SSA value that
+   becomes a constant once `Fold` is inlined. Either way the capture loads want a TBAA node of their own, so they never
+   alias `I64` fields. `repro/closure_call.olang`.
+2. **A fresh `Array<T>(n)` assigned into a reference field or element is allocated twice and copied - List `Push`
+   3.2-3.3x.** `l.chunks[k] = Array<T>(size)` (and `l.chunks = ...`, `m.buckets = ...`) builds and zero-fills the array
+   where it lands, then `cgStoreInto`'s value-to-reference array branch (codegen.c, "copy into fresh storage (E12
+   promotion)") calls `cgCopyRuntimeLengthArray`, allocating a second buffer of the same size and copying the first
+   into it; the first stays in the scope as garbage. The codegen review fixed exactly this for `a := Array<T>(n)`
+   only. `List.grow` pays it for every chunk (twice the memory, a memset and a copy of every element ever pushed) and
+   `Map.grow` for every bucket array. **Proof:** removing the copy by hand takes 20M pushes from 0.53s to 0.29s (C
+   0.16s). **Fix:** when the source is a fresh temporary (`cgIsFreshTemp`), already built in the target's scope, store
+   its descriptor - pass that fact into `cgStoreInto` from the assignment, field and element stores.
+   `repro/fresh_into_field.olang`. **The rest of the gap is zero-filling (D13c)**: each chunk is memset before `Push`
+   overwrites it; a C copy of olang's `List` measures 0.26s with the memset and 0.17s without. A cheap fix that keeps
+   "nothing uninitialized": a large `Array<T>(n)` that takes fresh memory from the system (mmap'd, hence already zero)
+   can skip the memset, as `calloc` does - only reused arena memory needs clearing.
+3. **`for x in List` does not vectorize - 4.7-4.8x.** `ListIter.Next` hands out one element at a time with the chunk
+   change folded into every step, so the loop has a data-dependent branch in its body and stays scalar; `ToArray()`
+   then the same loop runs at C's speed. **Fix:** walk a List chunk-wise - an outer loop over chunks, an inner
+   counted loop over each - e.g. a protocol for "contiguous pieces" that `for ... in` lowers to nested loops, or
+   `ListIter` overriding the iterator defaults (`Fold`, `Count`, ...) with chunk loops. `repro/list_sum.olang`.
+4. **Text: `$n` formats every integer twice - 2.3-2.5x.** A rendering calls its `olang.rd.<T>` helper once with a null
+   buffer to measure and once to write, so each `$n` is two `snprintf` calls (about 80ns each here) where C makes one;
+   5M renderings take 0.79s against 0.42s for one `snprintf` each (0.81s for two). And `Split` scans the text twice
+   (count, then fill), and `Find` builds a bounds-checked slice and calls `Eq` at every position - 0.48s for split
+   and parse against 0.05s for C's strtoll walk. **Fix:** render integers with a digit count and an itoa instead of
+   snprintf (measuring becomes a few compares); `Find` with a one-byte needle as `FindByte`, comparing in place
+   instead of slicing per position. `repro/render_int.olang`.
+5. **Wrapping arithmetic costs the optimizer the facts `nsw` gives C - spectral-norm 1.37-1.44x.** E6c defines integer
+   overflow to wrap, so `(i + j) * (i + j + 1) / 2` is emitted with plain `add`/`mul`; LLVM cannot prove the product
+   non-negative and keeps the signed division by two as three instructions (shift, add, shift) where C's
+   `mul nsw` lets it use one, and C's loop is unrolled twice besides. **Proof:** the same IR with `nsw` added by hand
+   to those four operations runs 0.54s against 0.83s (C 0.52s); writing `>> 1` in the source gives 0.57s. This is a
+   language trade-off rather than a bug - Rust and Go wrap and pay the same; C and Zig's release mode make overflow
+   undefined to get it - and the only general fix is a direction decision (overflow undefined outside `try`, or
+   poison-producing arithmetic). The same missing fact keeps the per-position bounds check in `Find`'s loop
+   (`a[i:i + sub.Len()]`) from being hoisted. `repro/wrapping_div.olang`.
+6. **A `Map` counts with two lookups - k-nucleotide 1.36-1.49x.** `Map` has no find-or-insert, so counting is
+   `m.Put(k, (try m.Get(k) catch default 0) + 1)`: two hashes and two chain walks per key. The same C rewritten to
+   look up then insert goes from 0.83s to 1.03s (olang 1.13s in that run), so most of the gap is the API. **Fix:** an
+   update in one lookup - `m.Update(k, init, fn(v) { return v + 1 })`, or a method handing out the slot (a reference
+   to a struct with a mutable `Value`, which olang can express), or a place protocol so `m[k] += 1` is one lookup.
+   The rest is `String.Eq`'s byte loop against `memcmp`, a slice bounds check per key, and finding 2 in `Map.grow`.
+   `repro/map_count.olang`.
+7. **binary-trees: 5x faster than malloc/free, 1.27-1.32x slower than a C arena.** Two causes. (a) **Allocation
+   order:** a constructor's arguments are evaluated before its instance is allocated, so `Node(tree(d - 1),
+   tree(d - 1))` lays a tree out in post-order, and `check`'s pre-order walk runs against memory order. The C arena
+   allocating children first measures 0.47s against its own 0.38s; olang written parent-first (mutable fields,
+   `n.left = tree(...)`) 0.43s against 0.49s. (b) **The arena's fast path** executes 44% more instructions in
+   `tree` than the C arena (cachegrind, depth 16: 615M against 427M): it rounds the cursor to 8 twice, and after the
+   room check jumps to the block shared with the slow path, which reloads and rounds again. **Fix:** (a) bump-allocate
+   a constructor's instance before evaluating its arguments when it is built into a reference - invisible, and an
+   argument that fails costs only the slot until the scope closes; (b) a self-contained fast path (a patched one cut
+   `tree`'s instructions 15%), ideally a cursor/end pair so a small allocation is a compare and an add.
+   `repro/alloc_order.olang` (both orders in olang; the C experiment is `c/binarytrees_arena.c` allocating `n` last).
+8. **Returning a local array copies it** (T7b) - `matmul`'s `matrix()` pays one extra allocation and copy per matrix,
+   though the local is dead at the return and could have been built in the result scope. Small here.
+   `repro/return_local_array.olang`.
+9. **nbody under `-march=native`: C 1.33x faster.** C's body count is a compile-time constant, so its pair loops are
+   fully unrolled and SLP-vectorized (`vsqrtpd`); olang's count is the array's run-time length, so LLVM loop-vectorizes
+   the inner loop instead. An optimizer heuristic, not diagnosed further; at the default target the two are level.
+
+## Where olang is as fast or faster
+
+- **binary-trees against malloc/free: 5x faster, and in less memory** (peak RSS at depth 18: olang 18.8 MB, C with
+  malloc 34.7 MB, the C arena 26.5 MB). A tree is dropped by its block closing - its chunks go back to a pool in one
+  step - where C frees node by node. This is principle 1 paying for itself.
+- **matmul F32, 6-14% faster at the default target** (both runs): both vectorize the same 4-wide loop, but olang's
+  arena aligns a large array to 64 bytes (O8a) while glibc gives a large (mmap'd) block 16-byte alignment; C with
+  `aligned_alloc(64)` closes the gap (in a noisy measurement). Level under `-march=native`.
+- **nbody, mandelbrot, fannkuch, parallel, `for x in Array`: level with C** (0.91-1.08 across the two runs). In
+  nbody LLVM fully unrolls olang's pair loop into straight scalar code while it SLP-vectorizes C's into 2-wide code
+  with shuffles, which costs C a little at the default target and wins under `-march=native` (item 9). The array
+  loop vectorizes exactly as C's (T36's TBAA tags); spawn/join costs nothing measurable against raw pthreads for a
+  4-task fan-out, and the results a task hands back (`spawn best[t], lens[t] = longest(...)`) need no struct.
+
+## Writing idiomatic olang: friction met
+
+1. A multi-line array literal cannot close with `]` on its own line - the line break ends the statement first.
+2. There is no bare block, so a scope cannot be ended early to drop memory: `if true { }` is rejected (S8a) and a
+   helper function is the only way (`binarytrees.built`).
+3. `x := a - b` is rejected (arithmetic does not name its type, D15), so numeric code writes `dx F64 = ...` on every
+   temporary (ten times in nbody's two functions).
+4. `x I64 = 1 << s` shifts an `I32` - the left literal does not take the target's type - so it is undefined for
+   `s >= 32` and silently gives 256 for `s = 40` here, while `x I64 = 1 << 40` works (E4a). binary-trees writes
+   `I64(1) << ...`; C programmers know to write `1L`, olang's adapting literals teach the opposite.
+5. Packing bits into a `U8` needs `U8(128) >> U8(x % 8)`: a compound assignment's result must fit the target, and the
+   literal meets the `I64` index.
+6. `Map` has no update-in-place (item 6 above), and it lives in `std/map` (`import`, `map.Map<...>`) while `List` is
+   in the prelude.
+7. A function whose `for { }` returns from inside still needs `unreachable` after the loop (D10a counts no loop).
+8. std has no clock, so a benchmark cannot time itself and this runner is a shell script.
+9. There is no fixed-precision float formatting (`%.9f`): `$` gives the shortest round-trip text only, so the
+   Benchmarks Game's output formats cannot be produced and the C side had to imitate olang's.
+10. `String.Find` answers "not found" with `-1` - a sentinel value, against "errors are errors".
+
+## Machine
+
+Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;
+Linux 6.18; Ubuntu clang 18.1.3; glibc 2.39; olang at master 3a821a1. The machine was shared with other agents'
+builds and tests (load average 2-5 during the runs); the checks and timings ran under `/home/user/verify.lock`, which
+keeps full test suites off it but not smaller jobs, so differences under ~10% are within the noise.
