@@ -4115,8 +4115,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   called where it is written (`fn(a I64) I64 { ... }(4)`) never worked - its call was built against the placeholder; it
   is checked first now (D16b). **T4/E33**: F32 -> BF16 was a call of `__truncsfbf2` per element (no inline lowering in
   LLVM 18 once B12c takes AVX512-BF16 away): it is integer arithmetic on the F32's bits now, inline and vectorized, the
-  same bits (all 2^32 F32 patterns compared with the previous compiler), and BF16 `+ - * /`, `++`, negation and F16 ->
-  BF16 go through it; F64 -> BF16 still calls `__truncdfbf2` (one rounding needs round-to-odd, not built). E33's empty asm
+  same bits (all 2^32 F32 patterns compared with the previous compiler), and BF16 `+ - * /`, `++`, negation, compares and
+  F16 -> BF16 go through it or the exact widening; F64 -> BF16 still calls `__truncdfbf2` (one rounding needs round-to-odd, not built). E33's empty asm
   sits on every F16 bitcast and no BF16 one (the InstCombine fold needs a half beside the i16), so `BF16FromBits`
   vectorizes. `BF16(x)` 10-20 -> 0.7-1.0 ns, a BF16 multiply-add 23-30 -> 0.5-1.4, linalg's BF16 product 1024 x 512 x 128
   4.9-7.5 -> 1.6-1.7 ms (F32 1.9-2.4). **D16**: a capturing lambda handed to `Map` from a large caller ran 25 ns an

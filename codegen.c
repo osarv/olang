@@ -2375,6 +2375,20 @@ static char* cgCheckedIntArith(struct cgCtx* ctx, struct operand* op, char* inst
 static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide);
 static char* cgBF16Arith(struct cgCtx* ctx, const char* instr, char* av, char* bv);
 
+//a float compare; a BF16's operands are widened to F32 first (a shift each, exact), so no bfloat value reaches LLVM's
+//selection - which, on a target without AVX512-BF16 (B12c), promotes the bfloat values feeding a compare to F32 and
+//can round one back through a call of __truncsfbf2. A constant operand ("0.0") is written as it is, an F32 constant
+static char* cgFcmp(struct cgCtx* ctx, const char* pred, const char* ty, char* a, char* b) {
+    if (!strcmp(ty, "bfloat")) {
+        a = cgWidenBF16(ctx, a, "float");
+        if (strcmp(b, "0.0")) b = cgWidenBF16(ctx, b, "float");
+        ty = "float";
+    }
+    char* r = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = fcmp %s %s %s, %s\n", r, pred, ty, a, b);
+    return r;
+}
+
 static char* cgIsFinite(struct cgCtx* ctx, char* ty, char* v) {
     if (!strcmp(ty, "bfloat")) { //T4: asked of the exact F32 widening - a BF16 operation would be a call (cgNarrowBF16)
         v = cgWidenBF16(ctx, v, "float");
@@ -2388,7 +2402,7 @@ static char* cgIsFinite(struct cgCtx* ctx, char* ty, char* v) {
 //R20: a float result - infinite from finite operands is OVERFLOW, NaN from non-NaN operands INVALID
 static void cgCheckFloatResult(struct cgCtx* ctx, struct operand* op, char* ty, char* av, char* bv, char* r) {
     char* rFin = cgIsFinite(ctx, ty, r);
-    char* rNan = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp uno %s %s, %s\n", rNan, ty, r, r);
+    char* rNan = cgFcmp(ctx, "uno", ty, r, r);
     char* aFin = cgIsFinite(ctx, ty, av);
     char* bFin = bv ? cgIsFinite(ctx, ty, bv) : "true";
     char* both = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", both, aFin, bFin);
@@ -2397,9 +2411,9 @@ static void cgCheckFloatResult(struct cgCtx* ctx, struct operand* op, char* ty, 
     char* inf = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", inf, rInf, notNan);
     char* ovf = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ovf, inf, both);
     cgFailIf(ctx, op, ovf, "OVERFLOW");
-    char* aOrd = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp ord %s %s, %s\n", aOrd, ty, av, av);
+    char* aOrd = cgFcmp(ctx, "ord", ty, av, av);
     char* bOrd = "true";
-    if (bv) { bOrd = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp ord %s %s, %s\n", bOrd, ty, bv, bv); }
+    if (bv) bOrd = cgFcmp(ctx, "ord", ty, bv, bv);
     char* ords = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ords, aOrd, bOrd);
     char* inv = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", inv, rNan, ords);
     cgFailIf(ctx, op, inv, "INVALID");
@@ -2873,9 +2887,9 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     //scalar leaf, including <>-indirect struct references (spelled "ptr")
     char ty[256];
     llvmType(t, ty, sizeof(ty));
-    bool isF = TypeIsFloat(t);
+    if (TypeIsFloat(t)) return cgFcmp(ctx, "oeq", ty, aVal, bVal);
     char* r = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = %s %s %s %s, %s\n", r, isF ? "fcmp" : "icmp", isF ? "oeq" : "eq", ty, aVal, bVal);
+    fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %s\n", r, ty, aVal, bVal);
     return r;
 }
 
@@ -2919,9 +2933,9 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
             return cgCheckedIntArith(ctx, op, op->opType == OPERATION_ADD ? "add" : op->opType == OPERATION_SUB ? "sub" : "mul",
                                      a->type, av, bv);
         if (op->opType == OPERATION_DIV || op->opType == OPERATION_MOD) {
-            char* z = cgNewTmp(ctx);
-            if (isF) fprintf(ctx->fnOut, "  %s = fcmp oeq %s %s, 0.0\n", z, aty, bv);
-            else fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv);
+            char* z;
+            if (isF) z = cgFcmp(ctx, "oeq", aty, bv, "0.0");
+            else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
             cgFailIf(ctx, op, z, "DIVIDE_BY_ZERO");
             if (!isF && !isU) { //the most negative value by -1: the true quotient is one past the maximum
                 char minv[32];
@@ -3003,7 +3017,8 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_GRE: pred = isF ? "oge" : (isU ? "uge" : "sge"); break;
         default: ErrorBugFound(); return NULL;
     }
-    fprintf(ctx->fnOut, "  %s = %s %s %s %s, %s\n", r, isF ? "fcmp" : "icmp", pred, aty, av, bv);
+    if (isF) return cgFcmp(ctx, pred, aty, av, bv);
+    fprintf(ctx->fnOut, "  %s = icmp %s %s %s, %s\n", r, pred, aty, av, bv);
     return r;
 }
 

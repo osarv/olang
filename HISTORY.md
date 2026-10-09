@@ -11861,10 +11861,14 @@ F32's bits, emitted inline (`cgNarrowBF16`): add `0x7FFF` plus the bit that will
 round to nearest, ties to even, through the subnormals and into infinity - and for a NaN the top 16 bits with the quiet
 bit set, which is what `__truncsfbf2` gives. BF16 `+ - * /`, `++`/`--`, and a `try`'s finiteness checks widen, compute in
 F32 and narrow through it (`cgBF16Arith`); negation flips the sign bit (`fneg bfloat` was promoted and narrowed too);
-F16 -> BF16 goes through it after the exact widening. F64 -> BF16 still calls `__truncdfbf2`: narrowing the F64 to F32
+F16 -> BF16 goes through it after the exact widening. A BF16 compare (`< <= > >= == !=`, a NaN or zero test) widens
+both sides too (`cgFcmp`): left as an `fcmp bfloat`, LLVM's instruction selection promoted the bfloat values feeding it
+and rounded one back through `__truncsfbf2` again - a call that survived in the exhaustive test's loop after everything
+else was inline. F64 -> BF16 still calls `__truncdfbf2`: narrowing the F64 to F32
 first would round twice, and doing it right (round to odd) was not needed by anything measured. **Same bits, checked
 exhaustively**: every one of the 2^32 F32 patterns narrowed, every F16 pattern converted, and every BF16 against ten
-others through `+ - * /` and negation, hashed, identical between the previous compiler and this one (NaN results
+others through `+ - * /` and negation, hashed, identical between the previous compiler and this one (8.5 s against
+43.8 s for the whole run; NaN results
 compared as NaNs only - an operation's NaN is unspecified, E33a); `-d` and `-i` agree with `-b` on the tie and
 subnormal cases, and the evaluator decides an assert over them and bakes a global from them (shared.olang). One
 difference that was already there and is within E33a: `-i` keeps a signalling NaN's quiet bit clear through a
