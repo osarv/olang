@@ -7237,6 +7237,28 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert condMax(3, n - 1) == CondMaxBaked
 }
 
+# E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
+# M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
+type CondColor enum {
+    Red
+    Blue(n I32)
+}
+fn (c CondColor) Name() String { return "red" if c == CondColor.Red else "blue" }
+fn condLits(k Bool) I64 {
+    a := I32[1] if k else I32[1, 2]
+    return a.Len()
+}
+fn condTexts(k I32) Bool {
+    names Bool = CondColor.Red.Name() == "red" and CondColor.Blue(k).Name() == "blue"
+    return names and condLits(true) + condLits(false) == 3 and CondColor.Red.Hash() != CondColor.Blue(k).Hash()
+}
+CondTextsBaked := condTexts(2)
+
+test "E28: written texts and array literals of different lengths, and an enum case as a receiver" {
+    assert condTexts(2)
+    assert CondTextsBaked
+}
+
 # S4c/D12b: parallel assignment - every value evaluated before any target is written - and several names
 # declared with one type, as locals, globals and constructor fields
 ParX, ParY mut I32 = 3, 4

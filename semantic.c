@@ -8725,7 +8725,24 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
     FinalizeLambda(b, &a->type);
     struct type t = a->type;
-    if (!TypeIsSame(a->type, b->type)) {
+    //T29c/E28: two pieces of written text are two Strings, whatever their lengths; two array literals of one element
+    //type are two arrays of it - the length is no part of an array's type (T7)
+    struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+    if (!TypeIsSame(a->type, b->type) && textT && OperandIsWrittenText(a) && OperandIsWrittenText(b)) {
+        struct type tv = *textT;
+        tv.structMAlloc = false;
+        a = OperandNominalConversion(tv, a, a->tok);
+        b = OperandNominalConversion(tv, b, b->tok);
+        t = tv;
+    } else if (!TypeIsSame(a->type, b->type) && a->isLiteral && b->isLiteral && a->type.bType == BASETYPE_ARRAY
+               && b->type.bType == BASETYPE_ARRAY && a->type.arrElem && b->type.arrElem
+               && TypeIsSame(*a->type.arrElem, *b->type.arrElem) && !a->type.structMAlloc && !b->type.structMAlloc) {
+        t = a->type;
+        t.arrMalloc = true;
+        t.arrLen = NULL;
+        reportTypeFit(OperandFitsType(ctx->func, a, t), a->tok);
+        reportTypeFit(OperandFitsType(ctx->func, b, t), b->tok);
+    } else if (!TypeIsSame(a->type, b->type)) {
         if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && operandIsLiteralLike(a) && operandIsLiteralLike(b)) {
             t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
             OperandFitsType(ctx->func, a, t);
@@ -10276,6 +10293,32 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 recvVar = g;
                 recvTok = gTok;
                 recvStart = i + 1;
+            }
+        }
+        //M12/M19: a case of an enum with no payload, written as the receiver - "Color.Red.Hash()", "lib.Dir.North.Hash()"
+        if (!recvVar && nameIdens.len >= 3) {
+            struct list head = ListInit(sizeof(struct token));
+            for (int k = 0; k + 1 < nameIdens.len; k++) ListAdd(&head, ListGetIdx(&nameIdens, k));
+            struct token caseTok = *(struct token*)ListGetIdx(&head, head.len - 1);
+            struct token typeTok = *(struct token*)ListGetIdx(&head, head.len - 2);
+            ErrMsgMuteStart();
+            struct semaModule* target = resolveAliasChain(ctx->mod, head, 2);
+            ErrMsgMuteEnd();
+            struct type* ct = !target ? NULL : target != ctx->mod ? TypeGetList(&target->types, strFromTok(typeTok))
+                                                                  : typeNamed(ctx->mod, strFromTok(typeTok));
+            if (ct) resolveTypeDecl(ct);
+            struct var* cv = ct && ct->bType == BASETYPE_CHOICE ? VarGetList(&ct->vars, strFromTok(caseTok)) : NULL;
+            if (cv && cv->type.vars.len == 0) {
+                if (ct->owner != ctx->mod && !isPublic(strFromTok(typeTok))) ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
+                else if (ct->owner != ctx->mod && !isPublic(strFromTok(caseTok))) ErrMsgSemantic(caseTok, CHOICE_CASE_IS_PRIVATE);
+                struct operand* recvOp = OperandChoiceValue(ctx, *ct, caseTok, NULL, ListInit(sizeof(struct syntax*)));
+                bool mReported = false;
+                struct operand* mc = buildMethodCall(ctx, recvOp, nameTok, firstPartOfType(callNode, SNTX_EXPR_ARGS),
+                                                     scopeArgNodes, &mReported);
+                if (mc) return mc;
+                if (!mReported) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
+                buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+                return unknownPlaceholder(nameTok);
             }
         }
         //the receiver may be a member-access CHAIN and not just a plain name: "a.b.f()" is "f(a.b)"

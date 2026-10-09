@@ -1511,7 +1511,9 @@ array literal construction (§5.6, §5.7).
 **M12.** An enum value (`Type.Case`, §5.8) is alias-qualified like any other cross-module name: the
 identifiers before the trailing case name are an alias chain (M8) followed by the enum type's own name, so
 `Lib.Dir.North` names a word of an imported type to any chain depth. Both the type and the word are subject
-to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public.
+to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public. A case
+with no payload written as a chain is a value like any other, so it may be a method call's receiver
+(`Color.Red.Hash()`, `lib.Dir.North.Hash()`, M19).
 A private word's *value* still crosses the boundary normally; only its name does not. The same holds wherever a case
 is named - after `is` or `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
 the very enum of the value (its module and name), so another module's same-named enum is a different one.
@@ -2184,7 +2186,9 @@ is `a if c else (b if d else e)`. An `if` with no `else` after its condition doe
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
 E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
+wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
+two arrays of it, whatever their lengths (T7: the length is no part of the type). Nothing else is converted. Wherever
+the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
 `:=` takes one when it would take each value on its own (D15).
 
