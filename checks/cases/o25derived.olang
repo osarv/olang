@@ -1,0 +1,14 @@
+# check: fail error[O25]: a reference never narrows
+# O25/O23a: a field written '&p' of a parameter lives at a derived scope - where the argument bound it - which a local
+# naming the parameter's own scope would narrow; ':=' takes the derived scope as it is
+type N struct(v I32, nx mut N&) {
+    v
+    next mut N& = nx
+}
+type Cur struct(of mut N&) { at mut N&of = of }
+fn fill(c mut Cur&) I32 {
+    y := c.at
+    x N&c = c.at
+    return x.v + y.v
+}
+fn main() ? { }

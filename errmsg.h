@@ -405,6 +405,8 @@ struct type;
     /* ---- the program as a whole ---- */ \
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
+    X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
+    X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
@@ -433,6 +435,10 @@ void ErrFatal(struct str file, enum diag d, ...);
 void ErrUsage(enum diag d, ...);
 //a note on the error just reported, about the token at
 void Note(struct token at, enum diag d, ...);
+//B11: between Start and End (a statement), only the first error about where something lives is reported; End takes
+//what Start returned, so groups nest
+int ErrMsgScopeGroupStart(void);
+void ErrMsgScopeGroupEnd(int saved);
 //B11a: prints rule's text from the specification; the process's exit status
 int ErrMsgExplain(char* rule);
 //code, a terminal colour, where diagnostics go to a terminal, and "" where they do not (a file, a pipe, an agent)

@@ -226,6 +226,12 @@ struct derivedScope {
     struct var* sv;       //the scope variable standing for it in this function
 };
 
+//a scope as the checker places one: a scope variable, or one of the function's own blocks (v NULL, at depth)
+struct scopeAt {
+    struct var* v;
+    int depth;
+};
+
 struct scopeBinding {
     struct var* typeParam;
     struct var* boundTo;
@@ -285,9 +291,13 @@ struct var {
     int valueHomeDepth;
     //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where
     //its references were put, which a reference field read through it finds its referent at; unlike valueHome, never
-    //where the local's own storage is (that is its block, which borrowing it hands over)
+    //where the local's own storage is (that is its block, which borrowing it hands over). O25h: also a value local
+    //copied from one whose references already live somewhere - a block (refsHome NULL, at refsHomeDepth), a scope
+    //variable, the program's (refsHomeUnnamed), or a scope not known here (SCOPE_AMBIGUOUS); and a value parameter's
     bool refsHomeSet;
     struct var* refsHome;
+    int refsHomeDepth;
+    bool refsHomeUnnamed;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
     bool isGlobalVar; //module-level only: declared as a global variable - storage, whatever its type, a function type
@@ -300,6 +310,7 @@ struct var {
     struct var* origin; //where the variable declaration is stored throughout the compilation process
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
+    struct operand* declInit; //a local's initializer, as checked - B11: what a scope diagnostic traces a value back to
     bool bodyUnparsed;        //its body did not parse (the error reported): declared by its signature, never checked
     bool bodyIncomplete;      //S8b: a branch in this body is still being decided (it was skipped unparsed),
                               //so its body is not yet the program's and must not be evaluated
@@ -633,6 +644,9 @@ struct operand {
     bool lambdaHomeSet;  //D16: a lambda capturing references lives where they do - this scope - and its args are
     struct var* lambdaHome; //its captures' values, read where it is made
     int lambdaHomeDepth;
+    //D16d: a lambda whose captured references live in several scopes, none known to outlive the others - each as a
+    //struct scopeAt, so that returned where it is made it can be built in the result scope, which each must outlive
+    struct list lambdaCapScopes;
     bool isDefaultArg; //this operand is the "default" keyword standing in an argument slot (E14a). Never
                         //survives past OperandFuncCall, which replaces it with the parameter's own
                         //declared default; every other consumer of an argument list rejects it.
