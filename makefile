@@ -80,12 +80,23 @@ race: build/out
 	-build/out -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
 	@echo "race: expect exactly one report, in shared.Tally.readOut (the intentional one)"
 
+# the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
+# -O0 and interpreted, each run compared. Not part of "verify" - it runs as long as it is asked to. "make fuzz
+# SEED=500 COUNT=1000" picks the seeds; findings land in build/fz/found and build/fz/findings.txt.
+SEED ?= 1
+COUNT ?= 100
+JOBS ?= 2
+CASES ?= 30
+fuzz: build/out
+	nice -n 19 build/out -b -d fuzz/fuzz.olang
+	nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
+
 all: clean build run
 
 clean:
 	rm -rf build
 
-.PHONY: all build run test usertest verify checkir race clean
+.PHONY: all build run test usertest verify checkir race fuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/codegen.o: codegen.c ..."), and the first explicit rule make reads becomes its default goal.

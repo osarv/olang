@@ -36,7 +36,11 @@ extern const char* CT_WHY_INCOMPLETE;
 //K2: the value of immutable global v, computed at compile time - the same value every other evaluation reading v sees,
 //so two globals sharing an instance share one node (K2b). Its own initializer may build an instance whose destructor
 //has an effect - the program's scope it lands in never closes, so that destructor never runs (K2c, O1b)
-bool CtEvaluateGlobal(struct var* v, struct ctVal** out);
+bool CtEvaluateGlobal(struct var* v, struct ctVal** out, struct token* whyTok, const char** why);
+
+//K1: whether why - what stopped an evaluation - is reaching what aborts the program (abort, unreachable, a failing
+//assert, a guaranteed check): where a value is required, that is a compile-time error rather than a run-time fallback
+bool CtWhyAborts(const char* why);
 
 //K2b: the global whose value first reached node - what it holds is that global's storage - or NULL
 struct var* CtNodeOwner(struct ctVal* node);

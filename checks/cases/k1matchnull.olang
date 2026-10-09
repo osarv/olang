@@ -1,0 +1,17 @@
+# check: fail error[K2]: this global's initializer aborts the program
+# also: k1matchnull.olang:10:5: note: here
+# K1/S13a: a statement match covering every case of an enum reference lets a null one through to an unreachable of its
+# own - which stops an evaluation only where reached (a null here), and is then reported at the match
+type E enum {
+    A
+    B(v I64)
+}
+fn name(e E&) String {
+    match e {
+        case E.A { return "a" }
+        case E.B(v) { return "b" $v }
+    }
+}
+N E& = null
+G String = name(N)
+fn main() ? { }
