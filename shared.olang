@@ -1260,6 +1260,27 @@ test "defaults on a constructor's parameter list" {
     assert c.port == 80
 }
 
+# E14/G9: a generic function or constructor leaves off a defaulted parameter too - inference reads the arguments
+# written, and the default then fits the instantiation like any argument
+fn padG(x <T>, n I32 = 3) <T> { return x }
+type ServerG<T> struct(host <T>, port I32 = 80) {
+    host
+    port
+}
+fn padGAll() I64 {
+    a := padG(I64(5))
+    b := padG(6, default)
+    c := ServerG<I32>(9)
+    d := ServerG(I64(9))
+    return a * 1000 + I64(b) * 100 + I64(c.port) + I64(d.port)
+}
+PadGBaked := padGAll()
+
+test "defaults on a generic function's and a generic constructor's parameter lists" {
+    assert padGAll() == 5760
+    assert PadGBaked == 5760
+}
+
 # a struct literal is a valid default - it is a literal expression (E4), with a value and nothing else
 fn offsetOf(p Point = Point(3, 4)) I32 {
     return p.x + p.y

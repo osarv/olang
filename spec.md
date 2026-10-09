@@ -1920,7 +1920,9 @@ storage for an array of a length decided at run time. Nothing else may be called
 (D8a) and at most its total parameter count; there are no variadic parameters. Arguments bind
 positionally, in order, and each must fit (E12) the corresponding parameter's declared type. Any
 parameter left without an argument takes its declared default, which is evaluated as the literal it is —
-one value per call, with no evaluation order to observe.
+one value per call, with no evaluation order to observe. The same holds for a generic function or constructor: its
+type arguments are inferred from the arguments written (G9), a `default` slot binding nothing, and each default then
+fits the instantiation's parameter.
 
 **E14a.** An argument may be the keyword `default`, which supplies that one parameter's declared default
 in place of a written value, letting a call reach a later parameter without restating the values before

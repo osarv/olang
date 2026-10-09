@@ -6725,7 +6725,11 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     if (func->type.typeParams.len != 0) {
         struct list bindings = ListInit(sizeof(struct typeBinding));
         struct list numBound = ListInit(sizeof(struct str)); //T6b: variables a numeric argument bound
-        bool ok = args.len == func->type.vars.len;
+        //E14: trailing parameters with defaults may be left off, and a "default" written in a slot binds nothing -
+        //the parameter's own default fits the instantiation like any argument
+        int requiredG = func->type.vars.len;
+        while (requiredG > 0 && (*(struct var*)ListGetIdx(&func->type.vars, requiredG -1)).defaultVal) requiredG--;
+        bool ok = args.len >= requiredG && args.len <= func->type.vars.len;
         //G9a: a numeric literal has no type worth defending (T6), so it binds nothing while any other
         //argument can: every non-literal is unified first, and a literal reaching an already-bound
         //variable is then left to adapt at the fit check like any other literal. A variable reached ONLY
@@ -6735,7 +6739,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
             struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
             if (operandOnlyNumericLiterals(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //E4a: one too
-            if (arg->pendingLambda) continue; //D16a: once the others have fixed what it can take
+            if (arg->pendingLambda || arg->isDefaultArg) continue; //D16a: once the others have fixed what it can take
             if (OperandIsWrittenText(arg) && paramT.bType == BASETYPE_TYPEVAR) continue; //G9a, below
             //G9b: a variable an earlier argument - a method's receiver, say - already bound is no longer
             //inferred from this one: the argument is checked against the bound type as in any call, so E12's
@@ -6819,8 +6823,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             if (!bindingGet(&bindings, *(struct str*)ListGetIdx(&func->type.typeParams, i))) ok = false;
         }
         if (!ok) {
-            struct operand* a0 = args.len ? *(struct operand**)ListGetIdx(&args, 0) : NULL;
-            if (args.len != func->type.vars.len && a0 && spreadSourceOf(a0)) reportArgCount(args, tok); //D8d
+            if (args.len < requiredG || args.len > func->type.vars.len) reportArgCount(args, tok); //D8d too
             else ErrMsgSemantic(tok, func->type.hasRetType && func->type.retType->ctorFunc == func
                                      ? CTOR_TYPE_ARGS_NOT_INFERABLE : TYPE_ARGS_NOT_INFERABLE);
             struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
