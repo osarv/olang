@@ -1,0 +1,15 @@
+# check: fail error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
+# P2/D16e: a lambda called where it is spawned is the spawned lambda with arguments - capturing a loop body's reference
+# it is refused exactly as "spawn fn() { ... }" is
+type Node struct(v I32) {
+    v
+}
+fn main() ? {
+    total mut Array<I32>& = Array<I32>(4)
+    join {
+        for i in range 4 {
+            n Node& = Node(I32(i))
+            spawn fn(k I32) { total[i] = n.v + k }(1)
+        }
+    }
+}

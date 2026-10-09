@@ -11549,6 +11549,9 @@ static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* call
 }
 static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* callee, struct list args, struct token tok,
                                           bool allowed) {
+    //D16b: a lambda called where it is written has no expected type - its signature and body say everything. Checked
+    //now, since the call needs its parameters and result (the placeholder has neither)
+    if (callee->pendingLambda) FinalizeLambda(callee, NULL);
     if (callee->type.unknown) return unknownPlaceholder(tok); //reported where it was written
     if (callee->type.bType != BASETYPE_FUNC) {
         //E31: "f(x)" on a value whose type declares Call
@@ -17549,32 +17552,53 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* call = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     ctx->allowFallibleCall = prevAllow;
     //D16e: "spawn fn() { ... }" - a task running the lambda's body. Its closure is held by a hidden local built
-    //in the JOIN block's scope, so it lasts as long as the task can run, and the task is a call through it
+    //in the JOIN block's scope, so it lasts as long as the task can run, and the task is a call through it.
+    //"spawn fn(...) { ... }(args)" - a lambda called where it is made - is the same task with arguments: its closure
+    //is made at the spawn and held there too, never in the block the spawn is written in, which closes first
     struct statement taskDecl = (struct statement){0};
     bool lambdaTask = false;
+    struct operand* lam = NULL; //the lambda the task runs
     if (call && call->pendingLambda) {
         FinalizeLambda(call, NULL);
         if (call->readVar && call->readVar->type.vars.len) Err(call->tok, ERR_SPAWN_LAMBDA_PARAMS);
-        if (ctx->joinHasSpawn && call->readVar) {
-            struct type dt = call->type;
-            if (call->lambdaHomeSet) {
-                dt.scopeParam = call->lambdaHome;
-                dt.scopeDepth = call->lambdaHomeDepth;
-            } else {
-                dt.scopeWritten = true;
-                dt.scopeDepth = ctx->joinDepth;
-            }
-            char nm[32];
-            snprintf(nm, sizeof(nm), "$task%d", ++lambdaCounter);
-            struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
-            taskDecl.sType = STATEMENT_VAR_DECL;
-            taskDecl.var = *tv;
-            taskDecl.op = call;
-            taskDecl.line = tok.lineNr;
-            if (tok.owner) taskDecl.file = TokenGetFileName(tok.owner);
-            call = OperandFuncCall(ctx, tv, ListInit(sizeof(struct operand*)), call->tok, ListInit(sizeof(struct syntax*)));
-            lambdaTask = true;
+        lam = call;
+    } else if (call && call->opType == OPERATION_FUNCCALL && call->callee && call->callee->opType == OPERATION_READ_VAR
+               && call->callee->readVar && call->callee->readVar->isLambda) {
+        lam = call->callee;
+    }
+    if (lam && ctx->joinHasSpawn && lam->readVar) {
+        struct type dt = lam->type;
+        //P2: a closure capturing references lives where they do (D16d) - unless they live in several scopes, where it
+        //would be the block it is made in; spawned, it is built in the join block instead whenever every scope it
+        //captured from lasts until the join, which is what a spawned lambda needs and no more
+        bool homeIsBlockMadeIn = lam->lambdaHomeSet && !lam->lambdaHome && lam->lambdaCapScopes.len;
+        for (int i = 0; homeIsBlockMadeIn && i < lam->lambdaCapScopes.len; i++) {
+            struct scopeAt* at = ListGetIdx(&lam->lambdaCapScopes, i);
+            if (!lastsUntilJoin(ctx, at->v, at->depth, false)) homeIsBlockMadeIn = false;
         }
+        if (homeIsBlockMadeIn) lam->lambdaHomeDepth = ctx->joinDepth;
+        if (lam->lambdaHomeSet) {
+            dt.scopeParam = lam->lambdaHome;
+            dt.scopeDepth = lam->lambdaHomeDepth;
+        } else {
+            dt.scopeWritten = true;
+            dt.scopeDepth = ctx->joinDepth;
+        }
+        char nm[32];
+        snprintf(nm, sizeof(nm), "$task%d", ++lambdaCounter);
+        struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
+        taskDecl.sType = STATEMENT_VAR_DECL;
+        taskDecl.var = *tv;
+        taskDecl.op = lam;
+        taskDecl.line = tok.lineNr;
+        if (tok.owner) taskDecl.file = TokenGetFileName(tok.owner);
+        if (lam == call) {
+            call = OperandFuncCall(ctx, tv, ListInit(sizeof(struct operand*)), call->tok, ListInit(sizeof(struct syntax*)));
+        } else { //the call already made, now through the hidden local - same type, same arguments and bindings
+            call->readVar = tv;
+            call->callee = NULL;
+        }
+        lambdaTask = true;
     }
     stmt.op = call;
 
@@ -17619,7 +17643,11 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct var* fv = call->readVar;
     if (fv && !fv->owner && fv->type.bType == BASETYPE_FUNC && !fv->type.scopeParam
             && normDepth(fv->type.scopeDepth) > ctx->joinDepth) {
-        Err(call->tok, lambdaTask ? ERR_SPAWN_CAPTURE_TOO_SHORT : ERR_SPAWN_FUNC_TOO_SHORT);
+        Err(lambdaTask ? lam->tok : call->tok, lambdaTask ? ERR_SPAWN_CAPTURE_TOO_SHORT : ERR_SPAWN_FUNC_TOO_SHORT);
+    } else if (call->callee && operandIsTemporary(ctx, call->callee) && !argBindingsLastUntilJoin(ctx, call->callee)) {
+        //E13b: a function value computed for the task ("spawn id(f)()") holds what it was made from, which must last
+        //until the join as an argument's does - a function value passed through a call is the very one passed
+        Err(call->callee->tok, ERR_SPAWN_FUNC_TOO_SHORT);
     }
     //P1g: the result is stored when the call returns, which is somewhere between the spawn and the join -
     //so the target has to still be there then, on exactly the terms an argument does. The store is a

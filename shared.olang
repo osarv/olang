@@ -9214,6 +9214,50 @@ test "D16e: a spawned lambda captures its loop's variables per task" {
     assert out[7].n == 21 and sums[5] == 30
 }
 
+# D16b/E13b: a lambda called where it is written has no expected type - its written signature says what the call takes
+# and gives (it was checked only after the call, against an empty placeholder: "expected 0 arguments", no result)
+fn lamCalledHere(k I64) I64 { return fn(a I64) I64 { return a * k }(3) }
+LamCalledHereBaked I64 = lamCalledHere(5)
+
+test "D16b: a lambda called where it is written" {
+    assert lamCalledHere(4 + I64(ctRuntimeZero)) == 12 and LamCalledHereBaked == 15
+    x := fn() I64 { return 7 }()
+    assert x == 7
+}
+
+# D16e/P2: a lambda called where it is spawned - "spawn fn(k I64) { ... }(10)" - is the spawned lambda with arguments:
+# its closure is made at the spawn and lasts until the join. It used to be built in the loop body, which closed - and
+# was reused by the next iteration - while the task ran. Capturing two parameters' references puts a lambda where
+# neither lives, the block it is made in, so the uncalled form was refused outright; spawned, it is the join block
+fn lamSpawnCalled(a Array<I64>&, c mut Array<I64>&, n I64) {
+    join {
+        for t in range n {
+            spawn fn(k I64) {
+                for i in range 16 { c[t * 16 + i] = a[t] * k }
+            }(10)
+            spawn fn() { c[n * 16 + t] = a[t] }
+            churnArena()                            # what the next iteration's closures would be built over
+        }
+    }
+}
+fn lamSpawnCalledSum(n I64) I64 {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i + 1 }
+    c := Array<I64>(17 * n)
+    lamSpawnCalled(a, c, n)
+    for t in range n {
+        for i in range 16 { assert c[t * 16 + i] == (t + 1) * 10 }
+    }
+    return c.Fold(I64(0), fn(acc, x) { return acc + x })
+}
+LamSpawnCalledBaked I64 = lamSpawnCalledSum(8)
+
+test "D16e: a lambda called where it is spawned keeps its captures until the join" {
+    for round in range 20 { assert lamSpawnCalledSum(8 + I64(ctRuntimeZero)) == 5796 }
+    assert LamSpawnCalledBaked == 5796
+    assert churnArena() == 2469000
+}
+
 # T29e/T29f: a declared array type extending its base inherits every array method - text counts, maps and searches
 # like any array
 type LamNums extends Array<I32>
