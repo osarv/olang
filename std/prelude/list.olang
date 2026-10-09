@@ -871,4 +871,175 @@ if TestBuild {
         assert (try listFind(m, "x") catch { unreachable }).n == 4
         assert (try listFindIter(m, "x") catch { unreachable }).n == 4
     }
+
+    # the elements of l, in order, as text - "[0 1 2]" - so a test compares a whole list in one assert
+    fn listShow(l List<I64>&) String& {
+        b := StringBuilder()
+        b.PushChar('[')
+        for i, x in l {
+            if i > 0 { b.PushChar(' ') }
+            b.Push($x)
+        }
+        b.PushChar(']')
+        return b.ToString()
+    }
+
+    # 0, 1, ... n - 1
+    fn listUpTo(n I64) List<I64>& {
+        l List<I64>&return = List<I64>()
+        for i in range n { l.Push(i) }
+        return l
+    }
+
+    test "Pop, First and Last, on both sides of every chunk boundary" {
+        l := listUpTo(57)                                   # chunks of 8, 16 and 32, the last holding 33
+        assert (try l.First() catch default -1) == 0 and (try l.Last() catch default -1) == 56
+        n I64 = 57
+        for n > 0 {
+            n--
+            assert (try l.Pop() catch default -1) == n
+            assert l.Len() == n
+            if n > 0 { assert (try l.Last() catch default -1) == n - 1 and (try l.First() catch default -1) == 0 }
+        }
+        assert (try l.Pop() catch default -1) == -1        # nothing left: Pop fails, as First and Last do
+        assert (try l.First() catch default -1) == -1 and (try l.Last() catch default -1) == -1
+        missed := false
+        try l.Pop() catch { missed = true }
+        assert missed
+        for i in range 30 { l.Push(i * 10) }                # the chunks Pop emptied are filled again
+        assert l.Len() == 30 and l[0] == 0 and l[7] == 70 and l[8] == 80 and l[29] == 290
+        assert listShow(l) == listShow(I64[x * 10 for x in range 30].ToList())
+    }
+
+    test "Pop and Push back and forth at a chunk boundary, and a work list" {
+        l := listUpTo(8)                                    # the first chunk exactly full
+        for k in range 5 {
+            l.Push(100)                                     # into the second chunk
+            assert (try l.Pop() catch default -1) == 100
+            assert (try l.Pop() catch default -1) == 7      # back into the first
+            l.Push(7)
+        }
+        assert listShow(l) == "[0 1 2 3 4 5 6 7]"
+        total I64 = 0
+        work := listUpTo(5)
+        for {
+            x := try work.Pop() catch { break }
+            total += x
+            if x == 4 { work.Push(10) }                     # a work list may grow while it is emptied
+        }
+        assert total == 20 and work.Len() == 0
+    }
+
+    test "Clear empties a list and keeps its chunks for the Pushes that follow" {
+        l := listUpTo(100)
+        l.Clear()
+        assert l.Len() == 0 and listShow(l) == "[]" and l.ToArray().Len() == 0
+        for x in l { unreachable }
+        assert (try l.Last() catch default -1) == -1
+        for i in range 40 { l.Push(i + 1000) }
+        assert l.Len() == 40 and l[0] == 1000 and l[8] == 1008 and l[24] == 1024 and l[39] == 1039
+        a := l.ToArray()
+        assert a.Len() == 40 and a[39] == 1039
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 40 * 1000 + 780
+        e := List<I32>()
+        e.Clear()                                           # an empty list, never grown, clears too
+        e.Push(1)
+        assert e.Len() == 1 and e[0] == 1
+    }
+
+    test "RemoveAt and Insert move the elements after the position, across chunk boundaries" {
+        l := listUpTo(60)
+        model := I64[x for x in range 60].ToList()
+        assert l.RemoveAt(7) == 7                           # the last of the first chunk
+        assert l.RemoveAt(7) == 8                           # what moved into its place, from the second
+        assert l.RemoveAt(0) == 0
+        assert l.RemoveAt(l.Len() - 1) == 59                # the last element: nothing moves
+        assert l.Len() == 56 and l[0] == 1 and l[6] == 9 and l[54] == 57 and l[55] == 58
+        l.Insert(0, -1)
+        l.Insert(8, -8)                                     # the first place of the second chunk
+        l.Insert(24, -24)                                   # the first place of the third
+        l.Insert(l.Len(), -100)                             # at the end: a Push
+        assert l.Len() == 60 and l[0] == -1 and l[1] == 1 and l[8] == -8 and l[24] == -24 and l[59] == -100
+        assert l[7] == 9 and l[9] == 10 and l[23] == 24 and l[25] == 25 and l[58] == 58
+        one := List<I32>()
+        one.Insert(0, 5)
+        assert one.RemoveAt(0) == 5 and one.Len() == 0
+        for i in range 20 { one.Insert(0, I32(i)) }         # inserting at the front reverses
+        assert one[0] == 19 and one[19] == 0 and one[8] == 11
+        assert model.Len() == 60
+    }
+
+    test "Reverse and Sort reorder a List in place" {
+        for n in I64[0, 1, 2, 8, 9, 24, 25, 57] {
+            l := listUpTo(n)
+            l.Reverse()
+            assert l.Len() == n
+            for i in range n { assert l[i] == n - 1 - i }
+            l.Sort(fn(a, b) { return a < b })
+            for i in range n { assert l[i] == i }
+        }
+        keys := List<I32>()
+        for i in range 300 { keys.Push(I32(i)) }
+        keys.Sort(fn(x, y) { return x % 3 < y % 3 })        # stable: equal keys keep their order
+        assert keys[0] == 0 and keys[1] == 3 and keys[99] == 297 and keys[100] == 1 and keys[299] == 299
+        words := "pear fig apple kiwi banana".Split(" ").ToList()
+        words.Sort(fn(a, b) { return a < b })
+        assert words.Join(" ") == "apple banana fig kiwi pear"
+        words.Reverse()
+        assert words.Join(",") == "pear,kiwi,fig,banana,apple"
+    }
+
+    test "an array, and an iterator, made into a List" {
+        a := I32[3, 1, 2].ToList()
+        assert a.Len() == 3 and a[0] == 3 and a[2] == 2
+        f := Array<I64>(100, 7).ToList()                    # n copies of one value
+        assert f.Len() == 100 and f[99] == 7 and f[8] == 7
+        assert Array<I32>(0).ToList().Len() == 0
+        m := I32[x * x for x in range 10].Iter().ToList()
+        assert m.Len() == 10 and m[9] == 81
+        evens := listUpTo(30).Iter().Filter(fn(x) { return x % 2 == 0 })
+        assert evens.Iter().ToList().Len() == 15
+    }
+
+    test "Join puts a separator between the texts of a List" {
+        more String& = "two three four five six seven eight nine ten"
+        l := List<String&>()
+        assert l.Join(", ") == ""
+        l.Push("one")
+        assert l.Join(", ") == "one"
+        for w in more.Split(" ") { l.Push(w) }
+        assert l.Join(", ") == "one, two, three, four, five, six, seven, eight, nine, ten"
+        assert l.Join("") == "onetwothreefourfivesixseveneightnineten"
+    }
+
+    # the same, while compiling (K2, S18c): Pop, RemoveAt, Insert, Reverse, Sort and Clear as the run time does them -
+    # the result a number, every element weighed by its place, so the global is baked as one
+    fn listReshaped() I64 {
+        l := listUpTo(30)
+        x := try l.Pop() catch { return -1 }
+        l.Insert(8, x)
+        r := l.RemoveAt(0)
+        l.Reverse()
+        l.Sort(fn(a, b) { return a % 10 < b % 10 })
+        h I64 = r
+        for i, y in l { h = h * 31 + y * (i + 1) }
+        l.Clear()
+        l.Push(5)
+        return h * 7 + (try l.Last() catch default -1)
+    }
+
+    listReshapedBaked := listReshaped()
+
+    test "reshaping a List, evaluated while compiling as at run time" {
+        assert listReshaped() == listReshapedBaked
+        l := listUpTo(30)
+        x := try l.Pop() catch { unreachable }
+        l.Insert(8, x)
+        assert l.RemoveAt(0) == 0
+        l.Reverse()
+        l.Sort(fn(a, b) { return a % 10 < b % 10 })
+        assert listShow(l) == "[20 10 21 11 1 22 12 2 23 13 3 24 14 4 25 15 5 26 16 6 27 17 7 28 18 8 19 9 29]"
+    }
 }
