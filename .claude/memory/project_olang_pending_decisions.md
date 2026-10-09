@@ -206,6 +206,13 @@ rule and where it is recorded; the morning report lists them all, then they move
    `x = E.Neg(x)` no longer builds a cycle; only where what is built can keep the borrow (payload, held ctor arg, array
    literal element, a call that can hand it back). Parallel assignment builds targets before values (n, e = 5, E.Lit(n)
    gave Lit(5)). O17 lend checks decided after the fixed point; P2 for any computed callee; `Call` follows T22.
+31. (wt-qc, the user's QC, details mine) a value holding `mut` references copied from a place reached read-only
+   (immutable global, through a read-only reference, a capture, another read-only copy) is read-only: not lent writably,
+   not written through, not stored where writable; `x T = G` is an error naming `G.Clone()`; for-in elements and match
+   bindings follow their source; a by-value parameter's need is read off the callee's body (fixed point) so readers
+   accept read-only copies; a function used as a value may not have a parameter that needs writable; std/linalg's
+   destination forms take `mut` (views keep read-only receivers). Left: a view of a read-only copy (`x.Block().Fill`)
+   still writes - views are a known hole of shallow permission, recorded.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
