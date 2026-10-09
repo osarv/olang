@@ -4207,10 +4207,15 @@ function's result is a built reference it is returned through (`fn f() Point& { 
 A **reference** local the function returns follows it too, where what it names is **built here**: one declared by `:=`
 or with a bare `&` (no scope written), whose initializer is a temporary - a call's built result, a constructor's
 instance, a case of an enum (T17d) - or `null`, lives in the result scope, as if written `&return`; so does what a later
-assignment to it builds there. "Returned" is read as for a value local, and also when the local is the value of an
-assignment to a returned local (`lhs = Bin(op, lhs, rhs)` in a loop, then `return lhs`). One initialized from existing
-storage (a parameter, a field read out of one, a borrowed result) keeps that storage's scope (O25a). So the
-recursive-descent and Pratt idioms are correct as written:
+assignment to it builds there. One initialized from existing storage (a parameter, a field read out of one, a borrowed
+result) keeps that storage's scope (O25a).
+
+For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
+returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
+or is a local declared from it that is, or is handed to a method called on such a local (`l.Push(x)` with `l`
+returned). The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
+such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
+returned local is not followed. So the recursive-descent and Pratt idioms are correct as written:
 
 ```
 fn (p mut Parser&) expr(minPrec I64) Expr& {

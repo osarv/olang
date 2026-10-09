@@ -483,6 +483,7 @@ struct type;
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
+    X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \

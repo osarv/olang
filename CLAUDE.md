@@ -4126,7 +4126,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   notes spelled with the generic's variables (`n mut Node<K, V>&c`) - a record that had to spell bindings two
   variables share yields to a later instantiation's. **Diagnostics** (#17-#27): a read-only reference returned as a
   built result names the borrowed form (`'Item&l'`, T25c/O14); O10c's note follows a result's references to the
-  argument they come from (`line mut String&s`) and never suggests a scope argument on an operator or method call; a
+  argument they come from (`line mut String&s`), never through a value copy to its source, and never suggests a scope
+  argument on an operator or method call; a
   for-in reusing a name says D3a first; T22a names the parameter a lambda keeps; type variables are spelled bare in
   messages (`Array<I16, N>&`); an unknown case gets the nearest case, an unknown import the std module of that name
   (`import "std/math"`), an unknown name never a method's; `nomatch => unreachable` and a line starting with `+` say
@@ -4137,7 +4138,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   every store path (Push/SetAt/Insert, writable lends, RunFrom reads, copies); the prelude's `Split` returns
   `Array<String&>&t` for this, or build the list where it is kept. (r06) a for-in copy of an element lent to a callee
   binds the callee's scope variable to the copy's storage (the loop body), and an obligation cannot tell the referent's
-  storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles.
+  storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles -
+  which the error's note now says.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

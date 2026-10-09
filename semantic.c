@@ -9075,12 +9075,13 @@ static struct var* madeAsLocal(struct checkCtx* ctx, struct operand* op) {
         if (ctx->func && varIsParamOf(v, ctx->func)) return NULL;
         struct operand* init = op->readVar->declInit ? op->readVar->declInit : v->declInit;
         if (!init) return v;
-        //a local copying or borrowing another, or holding a borrowed result, is where that one is made
+        //a local borrowing another, or holding a borrowed result, is where that one is made; a value local copying one
+        //is storage of its own, in its own block (O25h), so it is where it is declared
         bool follows = OperandIsLvalue(init) || init->opType == OPERATION_SLICE
                        || (init->opType == OPERATION_FUNCCALL && init->readVar && init->readVar->type.hasRetType
                            && init->readVar->type.retType->scopeParam
                            && init->readVar->type.retType->scopeParam != init->readVar->type.resultScope);
-        if (!follows) return v;
+        if (!follows || (!v->type.structMAlloc && init->opType != OPERATION_SLICE)) return v;
         struct var* deeper = madeAsLocal(ctx, init);
         return deeper ? deeper : v;
     }
@@ -9176,8 +9177,19 @@ static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, s
     if ((withName.len && withName.ptr[0] == '$') || (made->name.len && made->name.ptr[0] == '$')) return;
     struct operand* init = made->declInit;
     if (init && heldResult(init)) init = heldResult(init);
+    //a for-in's own variable (its element read from a hidden local, or its iterator's call) - there is no declaration
+    //written to put the marker on
+    if (init && (init->loopMade || (OperandIsLvalue(init) && lvalueRootVar(init) && lvalueRootVar(init)->name.len
+                                    && lvalueRootVar(init)->name.ptr[0] == '$'))) {
+        //...but a copy of an array's element can be the element itself, lent from the array's storage (r06)
+        struct var* hidden = init->opType == OPERATION_INDEX ? lvalueRootVar(init) : NULL;
+        struct operand* src = hidden ? hidden->declInit : NULL;
+        struct var* arr = src && OperandIsLvalue(src) ? lvalueRootVar(src) : NULL;
+        if (arr && arr->name.len && arr->name.ptr[0] != '$' && !made->type.structMAlloc && made->tok.owner)
+            Note(made->tok, NOTE_LOOP_COPY, made->name, arr->name, arr->name);
+        return;
+    }
     if (init && init->opType == OPERATION_FUNCCALL && init->readVar && !opIsCtorCall(init)) {
-        if (init->loopMade) return; //a loop's own call - there is nothing written to put the marker on
         //a result whose references come from an argument - the callee requires that argument to outlive its result
         //scope - is fixed where that argument is made: making the result elsewhere only moves the error into the callee
         struct var* f = canonicalVar(init->readVar);

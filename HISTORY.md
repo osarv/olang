@@ -11911,3 +11911,14 @@ every message (`Array<I16, N>&`, the D9a suggestion G22 then rejected); a case d
 unknown import that std has (`import "std/math"`); no method names among an unknown name's suggestions; `nomatch =>
 unreachable` says a leaving clause is a block; a line beginning with a binary operator says the line before ended its
 statement (L18).
+
+**After merging master (List and Map handles).** `MapKeyIter`/`MapValueIter` read the map's shared state (`of.s`) as
+`MapIter` now does. Two note fixes came out of re-running the cases: a value local *copying* another (a for-in's
+element, `t := a[i]`) is storage of its own block, so the "declared in a block that closes first" note no longer
+follows the copy to the array it came from (r06 had it name `parts`, declared beside `sum`, as the declaration to
+move); for a for-in's copy of an array element it now says to lend the element itself (`parts[i]` with a counted loop),
+which is r06's workaround. The suggested reference declaration is written `mut` where the value local it replaces was
+writable (`l mut List<I32>&m`), or the next write through it is the next error - three cases' expected notes updated.
+`o25enote`'s program is now accepted: `text := mk(n)` handed to `st.put(...)` with `st` returned flows into the result
+(O26a) and is built there - which is correct, not a hole: the slices then point into the result scope. The case keeps
+its purpose through a plain function, `put(st, ...)`, whose arguments the flow reading does not follow.
