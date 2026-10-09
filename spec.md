@@ -592,10 +592,11 @@ parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name a
 value, so it carries no reference marker. A constraint may be written on any occurrence
 of the variable in a declaration; two occurrences constraining one variable differently are an error.
 
-Where the variable is bound - by inference at a call (G9), by written type arguments (G7), or by a constructor's
-inferred ones (G10c) - its type must satisfy the constraint's trait, with every variable in the constraint
+Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
+inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
+asked for it - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
-missing. Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
+missing, and the instantiation's body is not checked. Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
 every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
 through `extends` (T29e).
 
@@ -4377,9 +4378,12 @@ match the declared `type-params` (G6). Omitting it is G10c.
 
 **G10c.** A generic struct type's constructor called with no type-argument list infers its type arguments from
 the constructor's arguments, exactly as a generic function's are inferred (G9, G9a, G9b): `Pair(1, s)` is
-`Pair<I32, String&>(1, s)`. A type parameter no constructor parameter mentions, or arguments that bind one
-inconsistently, cannot be inferred, and the call is then a compile-time error naming the written form. A type
-named anywhere other than a constructor call always writes its arguments (G6).
+`Pair<I32, String&>(1, s)`. A type parameter an array value reaches - written text, an array literal, an array
+variable - is bound to a reference to it, since a struct holds an array by reference (T7a, T7b): `Pair(1, "x")` is a
+`Pair<I32, String&>`, the text built where the pair lands and a variable's array borrowed. A type parameter no
+constructor parameter mentions, or arguments that bind one inconsistently, cannot be inferred, and the call is then a
+compile-time error naming the written form. A type named anywhere other than a constructor call always writes its
+arguments (G6).
 
 **G10b.** A generic struct type's constructor and destructor are monomorphized with it (G16): each
 instantiation gets its own, built from the generic's own field list and `destruct` block against that

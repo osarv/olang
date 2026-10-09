@@ -2038,7 +2038,10 @@ static struct list pendingInstances; //int: indices into instantiations whose bo
 //the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
 //further generics, so they queue here and drain alongside the function ones.
-struct pendingTypeInst { struct type* spec; struct list bindings; };
+struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; };
+//G16: where the instantiation being made was asked for - a call, or a written type - for a note on errors in its body
+static struct token instSite;
+
 static struct list pendingTypeInsts; //struct pendingTypeInst
 void buildTypeBodies(struct semaModule* mod, struct type* t);
 
@@ -2189,6 +2192,25 @@ struct str instantiationNameFor(struct str base, struct list* typeParams, struct
     return sbufTake(&b);
 }
 
+//"instantiated here, with T = I32, U = String" - the note an error inside an instantiation's body carries
+void RdSpellType(struct type t, char* buf, size_t n);
+static char* instantiationNote(struct list* typeParams, struct list* bindings) {
+    struct sbuf b = {0};
+    sbufStr(&b, "instantiated here");
+    for (int i = 0; i < typeParams->len; i++) {
+        struct str pn = *(struct str*)ListGetIdx(typeParams, i);
+        struct type* bt = bindingGet(bindings, pn);
+        if (!bt) continue;
+        char tn[200];
+        RdSpellType(*bt, tn, sizeof(tn));
+        sbufStr(&b, i ? ", " : ", with ");
+        sbufS(&b, pn);
+        sbufStr(&b, " = ");
+        sbufStr(&b, tn);
+    }
+    return sbufTake(&b).ptr;
+}
+
 struct str instantiationName(struct var* generic, struct list* bindings) {
     return instantiationNameFor(generic->name, &generic->type.typeParams, bindings);
 }
@@ -2270,6 +2292,7 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.generic = generic;
     inst.bindings = *bindings;
     inst.specialized = spec;
+    inst.site = instSite;
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
     if (!tooDeep) ListAdd(&pendingInstances, &idx); //G17: its body would only instantiate a deeper one
@@ -2463,12 +2486,29 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         self->type = *spec; //the copy's own layout, and the copy's own destructFunc - see the by-value
                             //snapshot in resolveStructCtorInto for why this identity matters
     }
-    if (spec->ctorFunc) {
+    //G19: a concrete instantiation's constraints, checked where it is first asked for - a call, a written type, or the
+    //signature a substitution reached it through. One not met is reported there and its body is not checked: the body
+    //would only repeat that one error inside the generic's own code. Nor is a pattern's (G16): its arguments are not
+    //known, and each instantiation of it is checked for its own
+    bool met = argsStillGeneric
+        || checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    if (spec->ctorFunc && !argsStillGeneric && met) {
         struct pendingTypeInst p = (struct pendingTypeInst){0};
         p.spec = spec;
         p.bindings = *bindings;
+        p.site = instSite;
         ListAdd(&pendingTypeInsts, &p);
     }
+    return spec;
+}
+
+//G19/G16: a generic type applied to written arguments - the instantiation made with that place as the one its
+//constraints are checked at and errors in its body point back to
+static struct type* instantiateTypeAt(struct type* found, struct list* bindings, struct token tok) {
+    struct token prevSite = instSite;
+    instSite = tok;
+    struct type* spec = instantiateType(found, bindings);
+    instSite = prevSite;
     return spec;
 }
 
@@ -2632,8 +2672,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         b.type = resolveTypeArg(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
         ListAdd(&bindings, &b);
     }
-    checkTypeConstraints(&found->typeConstraints, &bindings, firstTokAnywhere(argsNode)); //G19
-    return *instantiateType(found, &bindings);
+    return *instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
 }
 
 //applies the trailing "&"/"&name" marker (if present on refNode at all) to t, marking it heap-indirect
@@ -6947,10 +6986,26 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         }
         //G10c: a generic type's constructor called with no written type arguments infers them as a generic
         //function's are inferred, and the call targets that instantiation's own constructor (G10a)
+        struct token prevSite = instSite;
+        instSite = tok; //G16: errors in its body point back here
         if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
+            //G10c/T7b: a struct holds an array by reference - so a variable an array value reached is bound to a reference
+            //to it, and "Pair(1, "x")" is a Pair<I32, String&>, its text built where the Pair lands
+            for (int i = 0; i < bindings.len; i++) {
+                struct typeBinding* b = ListGetIdx(&bindings, i);
+                if (b->type.bType == BASETYPE_ARRAY && !b->type.structMAlloc) {
+                    b->type.arrMalloc = true; //T11a: a reference's type has no length
+                    b->type.arrLen = NULL;
+                    b->type.structMAlloc = true;
+                    b->type.refMut = false;
+                    b->type.scopeParam = NULL;
+                    b->type.scopeDepth = 0;
+                }
+            }
             struct type* spec = instantiateType(func->type.retType, &bindings);
             func = spec->ctorFunc;
         } else func = instantiateFunc(func, &bindings);
+        instSite = prevSite;
     }
     struct type ret = func->type.hasRetType ? *func->type.retType : TypeVanilla(BASETYPE_VOID);
     struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
@@ -9725,8 +9780,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
         b.type = resolveTypeArg(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams); //G11, as above
         ListAdd(&bindings, &b);
     }
-    checkTypeConstraints(&found->typeConstraints, &bindings, firstTokAnywhere(argsNode)); //G19
-    return instantiateType(found, &bindings);
+    return instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
 }
 
 //the by-value wrapper the two literal forms want: they hold a resolved base type, not the stable slot
@@ -14326,7 +14380,9 @@ void checkInstantiationBody(struct instantiation* inst) {
     spec->bodyState = 1;
     struct semaModule* savedScope = SemanticMethodScope;
     SemanticMethodScope = inst->generic->type.owner; //M22: the generic's code sees the generic's imports
+    ErrMsgPushContext(inst->site, instantiationNote(&inst->generic->type.typeParams, &inst->bindings)); //G16
     checkInstantiationBodyIn(inst, spec);
+    ErrMsgPopContext();
     SemanticMethodScope = savedScope;
     spec->bodyState = 2;
 }
@@ -14405,7 +14461,10 @@ void drainTypeInstantiations(void) {
             struct pendingTypeInst* p = ListGetIdx(&batch, i);
             struct list* saved = currentBindings;
             currentBindings = &p->bindings;
+            struct type* origin = p->spec->genericOrigin;
+            ErrMsgPushContext(p->site, origin ? instantiationNote(&origin->typeParams, &p->bindings) : NULL); //G16
             buildTypeBodies(p->spec->owner, p->spec);
+            ErrMsgPopContext();
             currentBindings = saved; //restored, not nulled: instantiations can nest
         }
     }

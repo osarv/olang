@@ -760,7 +760,8 @@ struct list* SemanticAllInstantiations(void);
 //list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
-struct instantiation { struct var* generic; struct list bindings; struct var* specialized; }; //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
+                       struct token site; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
 int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this

@@ -343,6 +343,9 @@ void ErrMsgUnexpectedToken(struct token found, char* expected);
 void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
 void ErrMsgSemantic(struct token tok, char* errMsg);
 void ErrMsgSemanticNote(struct token tok, char* msg);
+//every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
+void ErrMsgPushContext(struct token tok, char* msg);
+void ErrMsgPopContext(void);
 //K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
 void ErrMsgBufferStart(void);
 void ErrMsgBufferFlush(void);
