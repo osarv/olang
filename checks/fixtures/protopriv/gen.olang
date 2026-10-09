@@ -1,2 +1,2 @@
 # a generic of another module: its code does not see kk's private methods, wherever it is instantiated
-fn Equal2(a <T>, b <T>) Bool { return a == b }
+fn Equal2(a <T>, b T) Bool { return a == b }

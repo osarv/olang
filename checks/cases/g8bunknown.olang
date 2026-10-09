@@ -1,0 +1,5 @@
+# check: fail unknown type 'T'
+# G8b: a bare name no "<T>" introduced is a type's name - in a function that introduces none, an unknown type
+# also: compilation failed with 1 error
+fn plain(a I32) T { return a }
+fn main() ? { }

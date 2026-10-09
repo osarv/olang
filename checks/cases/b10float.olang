@@ -4,7 +4,7 @@
 # while compiling (the first assert, decided by the evaluator) and at run time (the second, on a mutable global)
 error E { X }
 fn width(v <T>) I32 {
-    match <T> {
+    match T {
         case F32 { return 32 }
         case F64 { return 64 }
     }

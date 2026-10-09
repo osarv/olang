@@ -1,0 +1,5 @@
+# check: fail error[G8b]: T was introduced already - write it 'T', not '<T>'
+# G8b: a type variable is introduced by its first "<T>" and written bare after it, in the rest of the signature too
+# also: compilation failed with 1 error
+fn pick(a <T>, b <T>) T { return a }
+fn main() ? { assert pick(1, 2) == 1 }

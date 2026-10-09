@@ -1,7 +1,7 @@
 # check: fail error[G17]: this generic's instantiations never end
 # G17: a generic type whose field instantiates it with a bigger argument
 type Grow<T> struct() {
-  next mut Grow<Array<<T>>&>& = null
+  next mut Grow<Array<T>&>& = null
 }
 fn main() ? {
   g := Grow<I32>()

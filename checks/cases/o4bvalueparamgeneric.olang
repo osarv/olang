@@ -6,7 +6,7 @@ type Node struct(v I32) {
 type Holder struct(n Node&) {
     n
 }
-fn id(x <T>) <T> { return x }
+fn id(x <T>) T { return x }
 fn main() ? {
     outer Node& = Node(1)
     keep Holder = Holder(outer)

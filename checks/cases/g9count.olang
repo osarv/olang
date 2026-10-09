@@ -1,6 +1,6 @@
 # check: fail error[E14]: expected 2 arguments, found 1
 # E14/G9: a generic call with too few arguments for its undefaulted parameters says so
-fn pad(x <T>, n I32) <T> { return x }
+fn pad(x <T>, n I32) T { return x }
 fn main() ? {
   a := pad(5)
 }

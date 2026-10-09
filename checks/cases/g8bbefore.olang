@@ -1,0 +1,6 @@
+# check: fail error[G8b]: 'T' is introduced later in this signature - its first use is written '<T>'
+# G8b: a signature is read left to right - receiver, parameters, results - and a bare T before its "<T>" names nothing
+# also: note: T is introduced here
+# also: compilation failed with 1 error
+fn second(a List<T>&, b <T>) T { return b }
+fn main() ? { }

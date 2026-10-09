@@ -10907,3 +10907,99 @@ tiled for a narrower width is the price, and it is visible, measurable and fixed
 width's price would be paid by every program on every AVX-512 machine. What would remove the choice altogether is a way
 to say the width per function or in a type - explicit SIMD vectors (`Vec<F32, 16>` lowering to `<16 x float>`) - which
 is a language feature and not built.
+
+### A generic's variable is written `<T>` once and `T` after (G8b, G1-G3, G6-G8, G11, G13, G19, G22, E19, E32, 2026-10-09)
+
+**The question.** The user, 2026-10-09: "can we make Ts appear as T after being given as generics with <T>?" Decided: a
+type variable is introduced by its first `<T>` - in a type declaration its parameter list (`type Vec<T> struct(...)`), in
+a function the first `<T>` read left to right through the receiver, the parameters and the results, with any
+constraint written there (`<T Shape>`) - and written bare `T` everywhere after it, in the rest of the signature and in
+the body. `<T>` again is an error saying to write `T`; a bare `T` before the introduction is an unknown type. It replaces
+G8b's "`<T>` everywhere, one set, not left to right", which had been the rule since the user's earlier call that one
+variable should have one spelling. Constant variables already followed the introduction rule (G22, the constant
+generics work earlier the same day), and the type-variable side had been built behind one switch, `bareTypeVars`.
+
+**The checker.** Flipping the switch was the start, not the work. What it took:
+- **The switch went, not just its value.** Its dead branch was G8b's old "type variable is written in angle brackets
+  everywhere" error, reachable only with the switch off; it and its message are gone, replaced by
+  `ERR_TYPE_VAR_WRITTEN_AGAIN` and `ERR_TYPE_VAR_BEFORE_INTRO` under rule G8b (the constant forms keep G22).
+- **One error per cause.** A body is checked once per instantiation, so the constants' "written again" check, made where
+  the body is checked, reported a `<N>` in a body once for every instantiation (three `twice(...)` calls, three
+  errors). Both kinds are now found by a walk over the declaration's own syntax, once, when its signature is resolved
+  (`writtenAgainIn`: a function's body against the variables its signature introduced; a type's whole declaration -
+  its parameter list's constraints included - against its parameters), and no check made inside an instantiation
+  reports one. A `<T Shape>` written again is one error, not one more for each variable in its constraint. A bare `T`
+  before its introduction gets a note at the `<T>` that introduces it.
+- **O25a read the spelling, not the variable.** "A local written as a bare type variable takes its initializer's scope"
+  (r13) was implemented by looking for a `SNTX_TYPE_VAR` node - `<U>` - in the declaration's type. Written `acc U =
+  init`, the prelude's `Fold` failed O25 with `T = String&` in the corpus. `typeExprIsBareTypeVar` now also takes a bare
+  name bound to a type variable in the instantiation. A first corpus run found it; nothing else in the checker asked
+  about the spelling, which is the point of the switch having been built.
+- **G1 without a second error.** `fn f(a <P>) P` with a declared type `P`: G1 reports `<P>` (a variable named after a
+  type) and the old resolution then took the bare `P` for the declared type - "returns P, found I32", a cascade. A
+  name the declaration introduced is now its variable wherever the declaration writes it, which G1 makes an error
+  anyway.
+- **A trait's method signature introduces nothing of the trait's.** `type Src<T> trait { Pair(a <T>) <T> }` collected
+  the method signature's own `<T>`s as introductions, and its second one was reported twice (by the signature and by the
+  type's walk). The signature's introductions now leave out the enclosing declaration's variables; a signature's
+  variables also stay visible beside a trait's, so a method writing a `<U>` of its own (T35's error) does not also
+  lose `T`.
+- **A type resolved from inside a signature saw that signature (found migrating oann).** A generic type in another
+  module is resolved the first time something names it, and when that is a signature - checkpoint.olang's `fn
+  paramsOf(g nn.Graph<<T>>&, ...)` - the type's fields were resolved while the signature's introductions
+  (`currentSigIntros`), its variable list, and an instantiation's bindings were still set. `bareVarAt` then compared the
+  field's `T` with the signature's `<T>` by address - two different files - and found the field "before" it: `'T' is
+  introduced later in this signature`, pointing at a different file, in a declaration that had no signature. Which
+  file's storage lay above the other's decided it, which is why the corpus never showed it. Before this change it was
+  latent for type variables and live for constants, and a non-generic type resolved there would even have read the
+  function's variables. `resolveTypeDecl` now resolves every declaration in a context of its own (bindings, constant
+  variables, type parameters and introductions all cleared). A checks scenario (`lazytype`) pads its root file until it
+  is stored above its import, the order that showed it; it fails on the compiler without the fix.
+
+**What reads a bare variable as a type.** Decided (mine): a type variable written bare stands wherever a type's name
+may, so `T[a, b]` is an array literal of `T`'s elements and `x is T` the type form of `is` (E32). The parser commits to
+those by asking whether a name is a known type; it now also asks whether the name is one the current item introduced
+(the `genericNames` it already kept for `match N`) and no local of it has (`localNames`, S8b's). The checker's literal
+element type reads the instantiation's binding. This closed a gap the protocol-privacy work had recorded: E19's grammar
+admitted `<T>[a, b]`, which never parsed in expression position. `return T` is now G23's "a type variable, not a value"
+(it was "unknown name"). `T(x)` - converting or constructing through a variable - stays unsupported, as `<T>(x)` was
+(it parsed as `<T>` the value, then a call): it would need deciding what `T(x)` means for each kind of binding.
+
+**The messages.** Those naming a type variable spelled it `<T>`; they spell it `T` now (G23's value error, G4's
+"appears in no parameter's type", G13's cases, G11's "held through", the unknown type variable).
+
+**The spec.** G8b is the introduction rule for both kinds of variable, with where a bare variable may stand; G1 says a
+`type-var` introduces; G3's examples are `fn max(a <T>, b T) T`; G6/G7 say a type's own declaration writes its
+parameters bare (`Vec<T>`'s example); G8 that type arguments write them as anywhere; G13 `match T`; G19 that a
+constraint goes where its variable is introduced (its "on any occurrence" no longer meant anything); G22 refers to G8b
+and lost its "until type variables follow it" paragraph; E19's `scalar-name` takes a type variable's name; E10c's
+list of what reads as a type after `is` includes it; L18's `none <T>` example went (a `<T>` ending a body's declaration
+is now written again). Examples in T22a, T25b, T30, T35a/b, M19d's `Pair` and `Map`, M19e, O14b, O25a, C2e and
+G20/G24/G27 are in the new spelling.
+
+**The migration** is a script, `tools/bare_typevars.py`, kept in the repository so it can be run again after a merge
+and on oann (whose agent was changing it at the time). It works on text, item by item: a top-level item starts with a
+word at the start of a line outside every block, bracket and parenthesis (a top-level `if`/`else` block's items
+included; `destruct` continues its type). In a `type` item every `<X ...>` naming one of the header's parameters becomes
+`X`, the header's own constraints included; in a function the first `<X ...>` of each name keeps its spelling and every
+later one becomes `X` (a constraint on a later one would move to the first - none existed). The one ambiguity is
+`a<T>` written with no space (G3's own old example, and five corpus functions): after a name, `<X>` is a type variable
+only when the name is a parameter's (after `(` or `,`), is no type's name, and `X` is no type the file declares, std
+declares or is built in - so `List<I32>` and, in code already migrated, `f(Box<T>(x))` are left alone, which makes the
+script idempotent (a second run finds nothing). It leaves comments and literals alone, keeps trailing comments' columns,
+and skips a checks case whose expected error is an introduction error (its `<X>` is the point). Over the repository: 859
+occurrences on 618 lines in 42 files - std/linalg 379 (8 of them in the per-target tiles merged from master while this
+was built, migrated by running the script again), shared.olang 115, the prelude's map 92, list 46, array 41 and
+iterator 29, std/math 81, std/chan 8, bench/gemm 6, and 33 checks cases and fixtures. By hand: the comments describing
+G8b in shared.olang, a check's probe text (`Probe() A`), four case headers whose expected message changed, and
+`g22againtype`, which keeps its `<K>` and loses its `<T>`, and the column the `protopriv` scenario expects in
+`gen.olang` (`b T` is two characters shorter than `b <T>`). oann (not committed here): 324 occurrences on 221 lines in 5
+files; its tests then report only the errors they already had at this base (its `kernels.olang` still writes C2e's
+superseded inline fields), once the leak above was fixed.
+
+**Checked**: the corpus and std at -t, every checks case, the bench programs built, the fuzzer (20 programs, 600 cases,
+no findings), and new cases - `<T>` again in a signature, in a body instantiated three times (one error), in a type's
+field and in its own constraint; a bare `T` before its introduction (with the note); a bare `T` nothing introduced (an
+unknown type) - plus a corpus test writing a struct's fields, a method's body, a callback type, `T[a, b, c]` and
+`match T` bare, with a generic global baked (`TrioBaked`, `constant i64 6` in the IR) and asserts decided while
+compiling.

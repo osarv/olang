@@ -1,5 +1,5 @@
 # check: fail error[G7]: type arguments for Box: expected 1, found 2
 # G7: a generic type given the wrong number of type arguments is one error - not also a mismatch where it is used
 # also: compilation failed with 1 error
-type Box<T> struct(v <T>) { v }
+type Box<T> struct(v T) { v }
 fn main() ? { b Box<I32, I64> = Box<I32>(1) }

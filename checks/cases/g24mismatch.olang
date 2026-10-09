@@ -1,8 +1,8 @@
 # check: fail error[G24]: N is 3 by one argument and 4 by another
 # G24: one constant variable bound to two values by two arguments is an error at the call, naming both values
-fn dot(a Array<<T>, <N>>&, b Array<<T>, <N>>&) <T> {
-    s <T> = 0
-    for i in range <N> { s = s + a[i] * b[i] }
+fn dot(a Array<<T>, <N>>&, b Array<T, N>&) T {
+    s T = 0
+    for i in range N { s = s + a[i] * b[i] }
     return s
 }
 fn main() ? {

@@ -3,7 +3,7 @@
 type CtShape trait {
     Area() I32
 }
-type CtHolder<T CtShape> struct(v <T>) {
+type CtHolder<T CtShape> struct(v T) {
     v
 }
 fn main() ? {
