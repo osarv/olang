@@ -23,5 +23,7 @@ void CodegenSetRoot(struct semaModule* root);
 //B12: the target - its LLVM triple, its architecture (TargetArch), and the attributes every generated function carries
 void CodegenSetTarget(const char* triple, const char* arch, const char* attrs);
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug);
+//S3: whether a module of the program declares the runtime's dynamic call, so the link takes libffi and libdl
+bool CodegenProgramUsesDyncall(void);
 
 #endif //CODEGEN_H

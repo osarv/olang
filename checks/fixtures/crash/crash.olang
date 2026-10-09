@@ -1,0 +1,41 @@
+# S1, S2: os.OnCrash's message written when the program crashes, and the process ended as the signal ends it - a stack
+# overflow on the main thread, on RunOnStack's thread and on a task's, and a failed check. The first argument says
+# which; "deep" is RunOnStack's own recursion, which on the main thread's 8MB ("shallow") overflows
+import "std/os"
+
+type Cell struct() {
+    v I64 = 0
+}
+
+# one frame per level, kept from becoming a loop by the call after it
+fn deep(n I64) I64 {
+    if n == 0 { return 0 }
+    r := deep(n - 1)
+    return r * 3 + (1 if os.IsTerminal(-1) else 0)
+}
+
+fn overflowTask() {
+    deep(100000000)
+}
+
+fn main() ? {
+    args := os.Args()
+    how := args[1] if args.Len() > 1 else ""
+    os.OnCrash("crash.olang crashed: " $how "\n")
+    c mut Cell& = Cell()
+    match how {
+        case "overflow" { c.v = deep(100000000) }
+        case "assert" { assert c.v == 1, "c.v is " $c.v }
+        case "small" { os.RunOnStack(65536, fn() { c.v = deep(100000000) }) }
+        case "task" {
+            join { spawn overflowTask() }
+        }
+        case "deep" {
+            n := try args[2].ParseInt() catch default 1000000 if args.Len() > 2 else 1000000
+            os.RunOnStack(1 << 30, fn() { c.v = deep(n) + n })
+            println("deep " $c.v)
+        }
+        case "shallow" { c.v = deep(1000000) }
+        nomatch { println("nothing") }
+    }
+}

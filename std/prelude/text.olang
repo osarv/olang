@@ -334,6 +334,52 @@ fn padNumber(digits String&, width I64, fill Char) String {
     return "-" $digits[1:].PadStart(width - 1, '0')
 }
 
+# ---- integers as text, in any base ----
+
+# the integer written in "base" - 2 to 36, the digits past 9 being the letters, lowercase: (255).Format(16) is "ff" -
+# with a '-' before a negative one's digits, and nothing else: no prefix, no padding ("n.Format(16).PadStart(8, '0')"),
+# no separators. It is what ParseInt and ParseUint read back in the same base: "x.Format(b).ParseInt(b)" is x for every
+# I64 x, and the unsigned types' for ParseUint - so U64(x).Format(16) is x's bits, two's complement. Base 10 is "$n".
+# Every integer type, U8 included, so a Char's is its code: 'A'.Format(16) is "41". A base outside 2 to 36 is a mistake
+# in the program, stopped as a failed assert is - 0 included, which ParseInt reads as an olang literal of any of three
+# forms, where writing one needs a choice
+fn (n I8) Format(base I64 = 10) String { return formatSigned(n, base) }
+fn (n I16) Format(base I64 = 10) String { return formatSigned(n, base) }
+fn (n I32) Format(base I64 = 10) String { return formatSigned(n, base) }
+fn (n I64) Format(base I64 = 10) String { return formatSigned(n, base) }
+fn (n U8) Format(base I64 = 10) String { return formatDigits(n, false, base) }
+fn (n U16) Format(base I64 = 10) String { return formatDigits(n, false, base) }
+fn (n U32) Format(base I64 = 10) String { return formatDigits(n, false, base) }
+fn (n U64) Format(base I64 = 10) String { return formatDigits(n, false, base) }
+
+# a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
+fn formatSigned(n I64, base I64) String {
+    if n < 0 { return formatDigits(U64(0) - U64(n), true, base) }
+    return formatDigits(U64(n), false, base)
+}
+
+# v's digits in base, last first into room for the longest (64 binary digits and a sign), behind a '-' when neg
+fn formatDigits(v U64, neg Bool, base I64) String {
+    assert base >= 2 and base <= 36, "a base is 2 to 36, found " $base
+    letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
+    room Array<Char, 65>
+    at I64 = 65
+    b := U64(base)
+    for {
+        at -= 1
+        room[at] = letters[I64(v % b)]
+        v = v / b
+        if v == 0 { break }
+    }
+    if neg {
+        at -= 1
+        room[at] = '-'
+    }
+    out := String(Array<Char>(65 - at))
+    for i in range out.Len() { out[i] = room[at + i] }
+    return out
+}
+
 # ---- integers from their text ----
 
 # the integer the text writes: an optional '-' or '+', then digits of "base" - 2 to 36, the digits past 9 being the
