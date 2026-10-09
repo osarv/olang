@@ -4017,6 +4017,28 @@ Go through this for every change to what olang means - a rule added, revised or 
   and fields removed, 336 locals given `mut`, six type-variable `mut`s and the fuzzer's generated puns by hand. The
   evaluator needed only D9b: it already treated every part of a writably reached aggregate as changeable (K1's ownership
   is by address).
+- **What the port needs from std and the runtime (S1-S6 of compiler/DESIGN.md; X2, X3, X6, K1, O8a, 2026-10-09; details
+  mine).** **`os.RunOnStack(bytes, f fn())`** calls f on a thread made with that stack and waits, so it is the call
+  `f()` on a bigger stack - no new scope rule; while a test runs, a failed check, `done` or `fail` inside f lands on a
+  recovery point of the thread's own and is passed on to the caller's test after the join (unwound on both sides), so f
+  behaves as called directly; while compiling and under `-i` it *is* the call `f()` (K1), the evaluator's depth guard
+  standing for the stack. **A function value reaches only the runtime (X2/X3, decided)**: `fn()` - no parameters,
+  result or errors - is admitted as a parameter of an `__olang_` function only, passed as code then environment; any
+  other extern taking one is X2's error, so every thread olang code runs on is one the runtime set up.
+  **`os.OnCrash(message)`**: the runtime's handler for SIGSEGV/SIGBUS/SIGFPE/SIGILL/SIGABRT writes the message with
+  `write()` and re-raises (status and core unchanged), on an alternate stack made for the calling thread and for every
+  thread the runtime starts afterwards (RunOnStack's, each task's), so a stack overflow is reported; under `-i` the
+  interpreter writes the program's message first. **`std/ffi`** (mine, a module of its own so only its importers link
+  `-lffi -ldl`): `ffi.Call(name, kinds, words, result) U64 ? FfiError` over the runtime's `__olang_dyncall`/`_check`
+  (dlsym + libffi, IR emitted only into a declaring module's object) - kinds a code per argument (X2's types, 0x80 for an
+  array), a number one word, an array its length then its packed elements, written back; a 16-bit float only in an array.
+  **`os.RemoveAll`** (never follows a link; a missing path and `""` are no error; a last element `.`/`..` fails),
+  **`os.MkTemp(dir = "", prefix = "")`** (mkdtemp through `__olang_mkdtemp`; TMPDIR else /tmp), **`os.Exec(..., capture =
+  false)`** (the child inherits stdout/stderr). **O8a revised**: a struct's or an enum's arena storage takes its own
+  alignment (at least 8), an array's keeps the size class - 40-byte nodes 0.53s/167MB -> 0.36s/105MB, 72-byte 0.96s/332MB
+  -> 0.62s/190MB, binary-trees unchanged. **`n.Format(base = 10)`** on every integer type, U8 included (a Char gives its
+  code), lowercase, `-` before a negative's digits, a base outside 2-36 aborts. ThreadSanitizer faults past ~260,000
+  nested calls (its own call record), so std/os's deep test recurses less under `RaceBuild`.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
