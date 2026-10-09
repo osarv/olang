@@ -4039,6 +4039,39 @@ Go through this for every change to what olang means - a rule added, revised or 
   -> 0.62s/190MB, binary-trees unchanged. **`n.Format(base = 10)`** on every integer type, U8 included (a Char gives its
   code), lowercase, `-` before a negative's digits, a base outside 2-36 aborts. ThreadSanitizer faults past ~260,000
   nested calls (its own call record), so std/os's deep test recurses less under `RaceBuild`.
+- **std/linalg for oann: batched causal products, a product with its epilogue, convolutions from the images (G9a,
+  2026-10-09; oann's DESIGN.md section 13, details mine).** **`ws.GemmBatch(c, a, transA, b, transB, alpha, beta,
+  triangular, diagonal, threads)`** runs a product per matrix of `Batch<T>`s - Groups x Members matrices of one shape in
+  one storage, two strides (`m.Heads(T, heads)` is every sequence's every head's column block, `p.Stacked(T, heads)` the
+  T x T weights stacked in rows, `b[g, m]` one matrix) - all six products of attention in one call each, tasks taking
+  runs of whole products. **`Triangular.Result`** computes only c's lower triangle (`j <= i + diagonal`) and does not
+  touch the rest, not even with beta (MKL's gemmt); **`Triangular.Left`** takes a as lower-triangular and never reads
+  above its diagonal (BLAS's trmm; upper with transA). **`ws.GemmAct(c, a, transA, b, transB, bias, act, alpha, beta,
+  threads, pre)`** is `act(alpha op(a) op(b) + beta c + bias)`, `pre` keeping what act is applied to; the epilogue runs
+  on each block of C's rows once it is summed, while in the cache, so the result is exactly Gemm, AddRow and Activate's.
+  **`Activation`** is Identity, Relu (a NaN stays one), Gelu in its tanh form (within 7e-7 / 3e-16 of the formula in
+  F32 / F64, the formula within 5e-4 of exact GELU), Tanh and Sigmoid; `Activate`, `ActivationSlope` and the matrix
+  forms `y.Activate(z, act)`, `dz.ActivationBackward(dy, z, act, beta)`; F16/BF16/F8 in F32, an integer only Identity
+  and Relu. **`ws.GemmPatches(c, Patches(x, C, H, W, K, stride, pad), w, true, bias, act)`** is a convolution of images
+  held as rows, channels last, the patch matrix (PyTorch's [C][K][K] column order) packed straight from the images and
+  never made; `p.Im2col(cols)` makes it. **Inside the core, also serving `Gemm`**: a tile one vector wide where the
+  result is narrower than two (thin), the transposed product computed where that covers the result 25% better
+  (exchanged, between two matrices only), the left operand read in place by rows where the result is one or two tiles
+  wide, panel widths constants per role. **Measured** (bench/fused.sh, shared machine): attention at T 64 forward
+  2.0 -> 0.8 ms, backward 5.2-5.7 -> 1.7-1.9 (a Gemm per head on master against causal GemmBatch); at T 256 15.3 ->
+  10.2 and 33-35 -> 24-28; the first convolution of oann's CNN 5.8-6.8 -> 3.4-3.6 ms, the second 12.7-13.2 -> 7.8-8.1;
+  its 16 x 9 weight gradient 5.2-6.2 -> 2.9-3.1; GemmAct level with the separate passes at oann's sizes (the passes run
+  in L2); plain Gemm F32 equal or faster (512: 72-83 -> 90-94 GFLOPS). **Decided (mine)**: the names and parameter
+  orders above; the `Triangular` enum plus a `diagonal` offset (decoding with a cache) rather than a causal flag;
+  Result leaves the upper part untouched rather than zeroing it; the epilogue per block of rows (applied tile by tile
+  in the accumulation type it was slower - 2.7 against 2.3 ms with GELU, 4.2 with pre - so narrow types round the
+  product before the bias, as AddRow would); ReLU's slope 0 at 0; the patch matrix only ever the left operand - the
+  weights' gradient from the images (`GemmByPatches`) was built, measured slower than Im2col plus Gemm, and dropped;
+  transposed causal products not exchanged (measured no faster: P is memory-bound to read). **Compiler fix (G9a)**:
+  `null` takes no part in inferring a type variable - `GemmAct(c, a, false, b, false, null, act)` was "cannot be
+  inferred"; a variable only null reaches still cannot be. **Recorded, not fixed**: the non-causal batched backward at
+  T 256 is slower than a Gemm per head (a head's P stays in L2 across its three products only when they run back to
+  back).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
