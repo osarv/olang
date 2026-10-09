@@ -912,14 +912,15 @@ between two such arrays as it does between a declared type and its base (`String
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
 literal's is `I32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
-bound to a type variable (G9a), and as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`).
+bound to a type variable (G9a), as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`), and as an
+operand of an operator a type declares (E31), so `"a" < s` calls `String`'s `Less` as `s > "a"` does.
 Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
 bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
 A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
-where the first occurrence starts, and fail with the default error (R15) when there is none - `try t.Find(sub) catch
+where the first occurrence starts (`t.FindLast(sub)` the last), and fail with the default error (R15) when there is none - `try t.Find(sub) catch
 default -1` writes a fallback - as an array's `FindIndex(keep)` does for an element `keep` holds for.
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
@@ -995,7 +996,9 @@ and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
-`it mut <I Iterator<<T>>>&` and its caller writes `.Iter()` (G9c infers `T`).
+`it mut <I Iterator<<T>>>&` and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
+`Iterator<T>` (M19e) are `Any`, `All`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
+left - `m.Keys().ToList()`.
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -1489,18 +1492,27 @@ Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, tw
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
 every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
 
-The prelude declares `type List<T>`, a growable sequence that is **append-only** and **never moves** what it
-stores: `Push(x)` and `PushAll(a)` (every element of an array, in order) add at the end, `Len()` counts,
-`ToArray()` copies the elements into one new array in the caller's scope, and `Has(x)` asks by `==` (E29). It
-indexes (E31): `l[i]` is `At(i)`, a copy of the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one -
-both unchecked, as an array index is (E16), with `try l[i]` and `try l[i] = x` checking `i` against `Len()` (E31a,
-derived). Every one of these costs the same whatever the length: storage is a run of chunks, each twice the size
-of the last, so a position's chunk is found by arithmetic rather than by a search, and nothing stored is moved by
-a later `Push`. `RunFrom(at)` gives the elements stored next to each other from position `at` - a read-only slice of
-the chunk holding it, to that chunk's end or the list's - and fails with `Exhausted` at `Len()`, so `for x in l` walks a
-`List` run by run (S9f), not through `At`. `Iter()` hands out a fresh position (S9c), a `ListIter<T>` whose iterator
-helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` - M19e overrides) walk the rest of the list run by run too,
-leaving it where `Next()` would.
+The prelude declares `type List<T>`, a growable sequence whose storage **never moves**: `Push(x)` and `PushAll(a)`
+(every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
+array in the caller's scope, and `Has(x)` asks by `==` (E29); an array's `ToList()` is the other way, a new `List` of
+its elements (`Array<I32>(n, v).ToList()` for `n` copies of one value). It indexes (E31): `l[i]` is `At(i)`, a copy of
+the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
+`try l[i]` and `try l[i] = x` checking `i` against `Len()` (E31a, derived). Every one of these costs the same whatever
+the length: storage is a run of chunks, each twice the size of the last, so a position's chunk is found by arithmetic
+rather than by a search, and nothing stored is moved by a later `Push`. `RunFrom(at)` gives the elements stored next
+to each other from position `at` - a read-only slice of the chunk holding it, to that chunk's end or the list's - and
+fails with `Exhausted` at `Len()`, so `for x in l` walks a `List` run by run (S9f), not through `At`. `Iter()` hands
+out a fresh position (S9c), a `ListIter<T>` whose iterator helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` -
+M19e overrides) walk the rest of the list run by run too, leaving it where `Next()` would.
+`First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with the default error (R15) when
+there is none; `Clear()` removes every element. Neither moves anything, and the chunks they empty are kept and
+filled again by the `Push`es that follow. `RemoveAt(i)` removes the element at `i` and gives it, and `Insert(i, x)`
+puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each moves the elements after `i` one place, so costs their
+number, and takes `i` from `0` to `Len() - 1` (`RemoveAt`) or `Len()` (`Insert`) - another is a mistake in the
+program, checked once per call, and stops it as an `assert` does. `Reverse()` reverses the elements in place, and
+`Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. A `List` of texts has
+`Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
+leaves which elements the rest of the walk gives unspecified.
 
 The prelude declares `type Map<K Hashable<<K>>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
@@ -1510,12 +1522,38 @@ and says whether it was there, and `Len()` counts. `Iter()` hands out a fresh po
 `MapEntry<K, V>` holding `Key` and `Value`, in no specified order; the entry just given may be removed while the walk
 goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
-put - so a map whose keys come and go stays the size of what it holds.
+put - so a map whose keys come and go stays the size of what it holds. `Keys()` and `Values()` hand out iterators over
+one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
+key, keeping the slots and buckets for the keys put next.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
 new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
 `b.Push($n)`.
+
+Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, counted from the start without overlapping
+(`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
+array with each of those occurrences of `old` replaced by `new` (an empty `old` puts `new` before every element and
+after the last); `Repeat(n)`, `n` copies of its elements one after another (none for `n` at most `0`); and
+`Reverse()`, which reverses them in place. A `String` has them as every array method (T29e), the new ones being
+`String`s. An array of texts, `Array<String&>`, has `Join(sep)`: its texts one after another with `sep` between each
+two, built once at its length - `$` writes such an array as source instead (E11a). Text has `TrimStart()` and
+`TrimEnd()`, borrows of it as `Trim()` is; `ToUpper()` and `ToLower()`, new text with the ASCII letters changed and
+every other byte as it was; `FindLast(sub)`, where the last occurrence starts, failing as `Find` does (an empty `sub`
+is found at `Len()`); `Lines()`, a `LineIter` giving each line as a borrow of the text - what comes before each
+newline, one carriage return just before it dropped, the last line needing no newline after it, so `"a\n"` is the one
+line `"a"` and the empty text has none; and `Less`, so `<` and the comparisons derived from it (E31) order two texts
+bytewise, as `Compare` does.
+
+Text has `t.ParseFloat() F64 ? ParseError`: the `F64` nearest the decimal number `t` writes, correctly rounded (a tie
+to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and `5.` are numbers, `.` is not), and an
+optional exponent, `e` or `E` with an optional sign and digits; or `inf`, `infinity` or `nan` in any case with an
+optional sign, so the text `$x` writes reads back as `x`. Nothing else is accepted: no surrounding space, no `_`, no
+hexadecimal. It fails with `EMPTY` for no text, `INVALID` for text that is not a number and `OVERFLOW` for a number
+beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() (U64, I64) ?`:
+the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no zero at `d`'s end that read back as
+`x` - of those, the closest to it - `0, 0` for a zero, failing with the default error for a NaN or an infinity. Both
+are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
