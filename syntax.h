@@ -97,6 +97,7 @@ enum syntaxType {
     SNTX_STMNT_MATCH,
     SNTX_STMNT_RET,
     SNTX_STMNT_JOIN,  //"join" followed by a block (P1)
+    SNTX_STMNT_BLOCK, //S1a: a block written as a statement - "{ ... }", a scope ending early
     SNTX_STMNT_SPAWN, //"spawn" followed by a call expression
     SNTX_STMNT_DEFER, //S19: "defer" followed by a block - "defer STATEMENT" arrives as a block holding it
     SNTX_STMNT_BREAK,

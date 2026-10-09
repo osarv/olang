@@ -9854,3 +9854,85 @@ from their original form.
   in the instance, where every call already holds that instance to the parameter's argument (spec C2d says so). (5)
   and (6) surfaced when a module importing `shared.olang` and `geom/rect` built `mapSlot<Tag&, I32>`'s constructor in a
   different order from every earlier build; the corpus pins the shape (`TagCount`) and a non-generic one.
+- **Checker batch 2: the usage study's checker and syntax findings (G8a, G10c, G19, S13a/S12b, L18a, S1a, D10a, E8b,
+  E11b, L9, C7, C2a, D3a, 2026-10-09).** A study wrote fifteen realistic programs (a widget tree, a JSON parser, an LRU
+  cache, workers, a vending machine ...) and reduced what it hit to reproducers; this batch took the checker's and the
+  parser's share, beside a batch for the scope rules. The syntax items were the coordinator's calls under the user's
+  delegation; the details below were mine.
+  **r03, fields after a generic self-reference (G8a).** `type Widget struct(id I32) { id; kids mut List<mut Widget&>&
+  = ...; tag mut I32 = 0 }` - `root.kids[0].id` worked and `.tag` was "has no member". `List<mut Widget&>` was
+  instantiated while `Widget` was still being resolved, so the instantiation's type argument was a snapshot of `Widget`
+  holding only `id`; `refreshStructSnapshots` refreshed a module's own types, and an instantiation only when it was
+  made (when `Widget` was still mid-resolution and skipped). `At` is instantiated from the receiver's type arguments
+  (G8a), so it returned the stale snapshot. Every instantiation's type arguments (in place, in the list its copies
+  share), fields and constructor parameters are now refreshed once every declaration is finished. A `for` over that
+  list still fails inside `ListIter.Next` - the recorded C2d limit for an element type with `mut` reference fields,
+  which is the scope batch's.
+  **r14, `Pair(k, x)` with a writable `k` (G10c).** `k String& = "abc"` is a writable reference (T25b), so `Pair(k,
+  I64(3))` inferred `Pair<mut String&, I64>`, which fits neither `List<Pair<String&, I64>>.Push` nor `p Pair<String&,
+  I64>`. Two changes. A generic constructor whose call is the whole of an expression a type is expected for - a
+  declaration's written type (now resolved before its initializer is built), a parameter's (a method's with its
+  receiver's bindings substituted, G9b), a plain assignment's target, a `return`'s result - takes that type's arguments
+  as if written (`buildExpecting` marks the node, `expectedCtorFor` swaps the constructor before its arguments are
+  built), so `l.Push(Pair(k, 3))` even adapts the `3`; mismatching arguments are reported at the argument. And with no
+  expected type a reference binds its read-only form, as an array value already bound a read-only reference - least
+  privilege, and the study's other shape (`q := Pair(k, 4); l.Push(q)`). The message the study saw named neither type;
+  the diagnostics remake had already made it name both.
+  **r16, one unknown type, six errors.** `fn (e Missing&) eval()` gave "I32 cannot be a reference" (the unknown
+  stand-in is an `I32`), "only the prelude declares methods of I32", and a false S8a "dead branch" on `if d == 0.0`
+  with `d := e.eval()`: the method had been registered on `I32`, the call resolved, and the unknown placeholder
+  read as the literal 0 by the evaluator. Now a reference marker on an unknown type adds nothing, a method with an
+  unknown receiver is skipped by the overload check, a call on an unknown receiver is an unknown placeholder, and the
+  placeholder is no literal. A generic applied to an unknown type (`List<Itm&>`) is unknown itself - its constructor,
+  its methods and a `for` over it said four more things.
+  **G19.** A type instantiation whose constraints failed already had its constructor unchecked; its methods were still
+  instantiated and checked, so `Map<K, I32>` with no `K.Hash` reported the constraint and then "K has no method
+  'Hash'" inside the Map. A function instantiated with a parameter reaching such an instantiation is now marked
+  checked-with-errors and never checked, on demand either (merged with the std batch's deferral of constraints met
+  while signatures were still being resolved: a deferred failure marks it too).
+  **S13a.** A clause covered a case only when it matched it whatever the payload held, so `case X.Service(true)`
+  plus `case X.Service(false)` was "not covered". Exhaustiveness is now Maranget's over the clauses' unguarded patterns,
+  read off their syntax (names and `_` match anything, a `Bool` literal one value, a case its payload's patterns,
+  anything else covers nothing): a constructor is expanded only where every constructor of its type is written at
+  that position, so a recursive enum is never unfolded past what the patterns say. A `Bool` subject covered by `true`
+  and `false` is exhaustive too, so a `Bool` match gives a value without `nomatch` (S12b's message now says so).
+  **Found on the way**: a statement match covering every case was counted as leaving by D10a, and a null reference -
+  which matches no case pattern - fell through it: `fn ev(e Expr&) I64 { match e { ... every case returns } }` called
+  with null **returned 0**, silently, the very thing D10a exists to prevent. A value match aborted there already; a
+  statement one now does too (a synthesized `nomatch { unreachable }`, so codegen, the evaluator and `-i` needed
+  nothing).
+  **L18a, brackets.** The tokenizer synthesized a statement end after any line-ending token, so an array literal could
+  not end with `]` on its own line and an argument list could not break before an argument. It now keeps a stack of
+  open brackets: inside `(` or `[` a newline ends nothing; a `{` (a lambda's body, a match value) holds statements
+  again; a `}` closes whatever was left open inside its block. A declaration keyword starting a line (`type`, `test`,
+  `import`, `extern`, `fn NAME`) outside every block clears the stack, so one missing `)` in a global's initializer is
+  one error rather than one per later declaration. Trailing commas: allowed before a closing bracket that begins its
+  own line (param lists, argument lists, array literals), an error on one line - one way per layout; the hint reports
+  `a comma before ']' ends a list only where ']' begins a line of its own`. With it a join may run over lines inside
+  parentheses, which the study had wanted (checks.olang had moved long commands into variables for this).
+  **S1a, bare blocks.** `{ ... }` as a statement, a scope ending early; built as the `if true` S8b's chosen branch
+  already is, which D10a and codegen treat as always running, so it leaves when its statements do and its arena and
+  destructors close at its `}`. `if true { }` stays an S8a error; the bare block is the spelling.
+  **D10a, `for { }`.** A loop with no condition and no `break` of its own counts as leaving. Each loop the checker
+  builds - the written ones and the lowered for-in, range and S9e ones - points `ctx->loopBreak` at a flag of its own,
+  which a `break` sets (a `break` in a value-position catch clause included, since it is built with the loop's ctx; a
+  lambda's body starts a fresh ctx, a `defer` clears it). Only `for { }` uses the flag; a lowered loop's breaks are its
+  own and never mark an outer one.
+  **E8b, a shift of a literal.** `x I64 = 1 << s` shifted an `I32` (256 for `s = 40` at `-O0`, and at `-O3` the
+  undefined shift turned an assert's abort into a segfault). Go's rule: the literal takes the type it would have
+  where the shift stands - the target's, or the other operand's beside a typed value, through arithmetic with literals
+  (`(1 << s) - 1`). `operandShiftOfLiteral` recognizes the shape, `adaptShiftOfLiteral` retypes its literals (never the
+  amount) when they all fit, in `OperandFitsType` and `OperandBinary`; with nothing adapting it the literal keeps its
+  own type. A shift amount of any integer type already worked - E8 always allowed it; the study's failing case was
+  `:=` (D15). The evaluator sees only the retyped operands, so compile time and run time agree (a baked global and
+  `-i` pinned).
+  **E28/D15**: `x := "abc" if c else "no"` was recorded as rejected by the evaluator's review; it compiled already on
+  this batch's base (each value names its type, `String`) - pinned by a corpus test.
+  **Diagnostics**: `io.Print(pretty(t) "\n")` said "expected ')'" and `"n=" n` the same; the parser's hint now finds
+  the operand beside the text (back through calls, indexing and member chains, or forward) and says `write
+  '$pretty(t)'`. Text on a line of its own says a join continues onto the next line only inside parentheses (S3, E11b).
+  A keyword where a name goes - `fn join(`, a field `done mut Bool` (where `done` ended the statement and `mut` was
+  the error), a parameter `(done I32)` - says it is a keyword (L9). `destruct` inside a constructor body says it follows
+  the body (C7). A field named like its constructor's parameter (`n I32 = n + 1`) said "declared twice"; it now says to
+  write it bare or name it apart, with a note at the parameter (C2a). A parameter named like a module function says so,
+  with a note at the function (D3a). New check cases pin each, and the counts where a cascade was cut.
