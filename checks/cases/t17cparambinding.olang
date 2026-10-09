@@ -1,0 +1,23 @@
+# check: fail this enum value holds a reference to existing storage in its payload
+# O4b/T17c: a by-value enum parameter's payload lives where its argument's references do - a scope of the parameter,
+# not the program's - so a binding read out of it cannot be pushed into a longer-lived list
+type Node struct(v I32) {
+    v mut
+}
+type Box enum {
+    Has(n Node&)
+    No
+}
+fn stash(b Box, l mut List<Node&>&) {
+    match b {
+        case Box.Has(n) { l.Push(n) }
+        nomatch { }
+    }
+}
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Box.Has(inner), l)
+    }
+}

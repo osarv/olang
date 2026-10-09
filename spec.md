@@ -731,7 +731,8 @@ outermost level only: inner levels (`Array<mut T&>` against `Array<T&>`) must ag
 them differ would let a read-only reference be stored where a writable one is later read back out.
 A value **borrowed** into a reference (E12c) gives a writable one only if the value may itself be written - a
 local, a `mut` global, a `mut` parameter's copy - and a read-only one otherwise. A slice (E16a) has its base's
-permission. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
+permission; a conditional or a match value (E28, S12b) is writable only when every value it can give is; `as` (E32)
+gives the payload's own permission, and a checked index (`try c[i]`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
@@ -740,7 +741,9 @@ element) is the constant data itself: no storage is allocated and nothing is cop
 plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
 parameter or field - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
-site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data.
+site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data. An
+element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
+in the program's scope (§8 O1b) and may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
@@ -2102,7 +2105,9 @@ Vec<I32>&x(4)
 
 `IDEN` names a local or parameter of the **calling** function, and binds the callee's result scope (§8 O13,
 O18) to where that variable lives (O4a); `return` binds it to the calling function's own result scope (O26). A variable living in the program's scope — a global, or a local
-holding a global's referent — is a compile-time error here: no function allocates into that scope (O25). On a constructor call it is where
+holding a global's referent — is a compile-time error here: a result reaches that scope by being put there,
+assigning it to a global or into something reached from one (O1b), not by a scope argument. So is a variable whose
+scope is not known (O12). On a constructor call it is where
 the instance lands (C2c). Without one, the result scope follows the result (O18a).
 
 The `&` must be **adjacent** to what precedes it and the `IDEN` adjacent to the `&` — no whitespace or
@@ -2175,7 +2180,9 @@ is `a if c else (b if d else e)`. An `if` with no `else` after its condition doe
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
 E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
+wider of their types. A reference and a **new value** of its referent type (a temporary, E12c: a call's
+value, a constructor call, an enum case, an array built here - not existing storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
+`n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
 `:=` takes one when it would take each value on its own (D15).
 
@@ -2247,7 +2254,8 @@ A type declaring only the checked form of an operation (`TryAt` and no `At`) has
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors are exactly the function type's (and a generic function type's variables are inferred from them):
-the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would, and
+the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would -
+passed, stored or returned (O14: a function's own instance is not a value it may hand back) - and
 state `Call` changes is visible through the instance afterwards. A temporary is built where the function value lands. The
 methods are ordinary methods otherwise, callable by name (`a.Plus(b)`), and M19's coherence rules apply, so the
 built-in types' operators stay the language's. A result may be any value; a built one follows the ordinary rules for
@@ -2618,7 +2626,10 @@ nothing is built into it (as through a borrowed field, C2d). A `case-alt` that d
 `case 1, 2, 3`, `case Shape.Circle, Shape.Square`. Alternatives that bind names all bind **the same names, each
 with the same type**, so the guard and the body read one set of locals whichever alternative matched -
 `case Shape.Circle(n), Shape.Square(n) { use(n) }`; a name one alternative binds and another does not is a
-compile-time error. Each alternative counts for S13a on its own.
+compile-time error. A reference bound by several alternatives **meets** them: it is writable only when every
+alternative's is (T25b), and lives where they all do - where they differ, where it lives is not known (§8 O12), so it
+may be read but not stored anywhere that asks for an exact scope or outlives one of them. Each alternative counts for
+S13a on its own.
 
 **S13d (nested patterns and literals).** A position of a payload holding an enum may hold a pattern of that enum,
 to any depth: `case Wrap.Two(Shape.Rect(w, h), Shape.Dot)`. A position may hold a literal, compared with the field by
@@ -2835,7 +2846,10 @@ free — an argument must live at least as long as the `join` block itself, whic
 block *inside* the join does not. Such a spawn is rejected. The same holds for a function value a task is a
 call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
 through it is rejected. A spawned lambda (D16e) is instead built to last until the join, and the references it
-captured must outlive the join block on the same terms as an argument. Each task gets its own scope, as any
+captured must outlive the join block on the same terms as an argument. The same holds for everything an argument
+**holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
+built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
+last until the join. Each task gets its own scope, as any
 function call does.
 
 A scope a task is handed as a scope variable (§8 O3) is **not** shared with the task that was handed it: the task
@@ -3127,7 +3141,9 @@ always what the clause to its left names.
 - Each default must fit its result's type (E12), with that type seen from the enclosing function: each of
   the callee's scope variables replaced by the scope the call bound it to (O17/O18). A result that is a
   reference follows the ordinary rules for putting a reference in a variable, and since a reference never
-  narrows (O25) that means its default must live in **exactly** the scope the result does — so both
+  narrows (O25) that means its default must live in **exactly** the scope the result does - the scope it **lands** in
+  (O18a), so the check is made once the statement has placed the result: `keep = try f() catch default d` asks `d` to
+  live where `keep` does, and `return try f() catch default d` asks it to live in the result scope — so both
   outcomes have one scope, and whatever receives the value treats it exactly as it would the call alone.
   `null` has no scope and always fits; a temporary has none of its own and is built in the result's scope
   (E12c). A by-value result that holds
@@ -3264,9 +3280,10 @@ result borrowed from it, O13) is built there too. So is a temporary a function a
 or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
 already living somewhere that is stored there must live there too: a global's, or something built there. Storing
 anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
-or is a lambda capturing nothing, being made once for the whole program (T21). Each task reaches the program's scope
-through a stand-in of its own
-(§6.8 P2). Destructors registered in it do not run at exit. `&g`, for a global `g`, names
+or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
+determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
+there. Each task reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do
+not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
@@ -3342,6 +3359,13 @@ references through the parameter; and any relation the body needs between it and
 obligation its callers discharge (O10b, O10c). A method's receiver is such a parameter. A parameter written
 `&x` has no scope variable of its own: it shares `x`'s, so the two arguments must agree (O17). The hidden
 scopes are passed in the parameters' order, the receiver's first.
+
+A parameter passed **by value** whose type holds references (T17c, C2d: a struct, enum or array value holding them,
+or a type variable bound to one) has a scope variable too, `&x` for parameter `x`: where the references it holds live,
+bound by the argument - an existing value's references' scope (O25h), or, for a temporary, wherever the call places
+it. A reference read out of the parameter - a field, an element, a payload bound by `match` or taken by `as` - lives
+there, never in the program's scope nor in the function's own. A by-value result handing such references back is
+O14c's obligation.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations (field access,
 indexing, calls) are valid; it only constrains where the value may be allocated (§8.3) and where a reference
@@ -3458,7 +3482,12 @@ safe; it can never turn an already-rejected program newly unsafe.
 branches that are merged back together, or (for a constructor field) forwarded from two different same-typed
 sibling arguments in a way that cannot be told apart — is treated as **definitely incompatible** with
 anything, rejected the same way an unverifiable tag is (O11) but for a distinct reason worth telling apart:
-this one was actually traced, and found to disagree, rather than simply never resolved at all.
+this one was actually traced, and found to disagree, rather than simply never resolved at all. Where such a
+reference is read rather than assigned - through alternatives of a `match` binding one name from different scopes
+(S13c), or through anything else whose scope was not traced - **where it lives is not known**: it may be read,
+walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
+through which something can be stored (O25g) or which a borrowed result names (the callee could build there), and a
+scope argument (E25) may not name it.
 
 **O20.** A bare reference slot reached **through** a reference-shaped container — a field or element of a
 value that is itself `&`-marked — lives in the **container's** scope (O5), not in the scope of the function
@@ -3490,13 +3519,17 @@ value where it dangles. Accordingly:
   (O10c).
 - **O25c.** Storing an existing reference into a reference-holding **slot** — a field, element or payload —
   requires the value's exact scope to be the slot's whenever something can be stored through it (O25g).
-  Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced.
+  Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced. An array's
+  elements are its slots and live where the array does, so an array literal or `Array<T>(n, v)` built here holding
+  existing references is checked where the array **lands** (O18a) - returned, assigned or passed on - not where it
+  is written.
 - **O25d.** A returned reference follows O14.
 - **O25e.** A scope variable determined by arguments (O17) is bound to their **exact** scope, and two
   arguments determining it must agree exactly — depth included. An argument living in the program's scope
-  (a global's referent) cannot determine a scope variable of a parameter through which something can be stored
-  (O25g), since the callee may allocate into that variable and store through it; what a callee builds into such
-  a variable otherwise - a result borrowed from it - is built in the program's scope.
+  (a global's referent) binds the variable to the program's scope (O1b): what the callee builds into it - an element
+  pushed into a global list, a result borrowed from it - is built there, and an obligation that something outlive or
+  equal it is met only by the program's scope. An argument whose scope is not known (O12) cannot determine a variable
+  the callee may build into.
 - **O25f.** A derived obligation (O22) recorded for a value through which something can be stored (O25g) is one
   of equality, discharged only by the same scope.
 - **O25g (what a narrowed scope can misplace).** Something **can be stored through** a reference when a write
@@ -3521,7 +3554,11 @@ stored through it: the program's scope is reached through a global or a call's b
 **O23.** Where a field's scope tag cannot be resolved through its container's bindings and the container is not a
 parameter of the function (O23a), the field reads at the **container's** scope. This is an underestimate and never a
 claim: every value that can reach the field was required to outlive the container (C2d, O20, O22), which in turn
-outlives wherever the container now sits.
+outlives wherever the container now sits. **Storing** into a field written `&p` therefore requires its binding: through
+a variable the instance was built into, or a parameter whose argument's binding is known (O23a). Through any other path
+- an element of an array, a field of another instance - only the underestimate is known, and a store could put the
+field somewhere every other reader of the instance believes it is not; it is unverifiable (O11) and a compile-time
+error, and so is a call whose callee makes such a store through a parameter given an instance reached that way.
 
 **O23a (derived scopes).** A **per-instance** binding - the scope a constructor-bearing value's field written `&p`, or
 a bare one, was bound to where the value was built (C2d) - is carried with the value: through a local initialized
@@ -3581,7 +3618,7 @@ returning a temporary, or by naming it: `&return` (O26).
 
 - for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
   result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
-  borrowed form (`T&p`) - but for a function value (O14a) and a result written as a type variable (O14b) - and so is
+  borrowed form (`T&p`) - but for a function value (O14a), a result written as a type variable (O14b) and a value holding references (O14c) - and so is
   one into the function's own storage, which closes at the return;
 - for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
@@ -3595,12 +3632,18 @@ result scope; it is an obligation of the function (O10b), and every call checks 
 where `y`'s closure lives in a block `keep` outlives.
 
 **O14b.** A built result whose type was written as a **type variable** (G1) - and became a reference, or a value
-holding references, by instantiation - is the other exception: there is no borrowed form to write for it (`<T>&p`
+holding references, by instantiation - is another exception: there is no borrowed form to write for it (`<T>&p`
 would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
 that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
 obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) <T> {
 return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
 `y`.
+
+**O14c.** A **by-value** built result holding references (T17c), returned from a by-value parameter holding them (O4b)
+or from storage reached through one, is the third exception: there is no borrowed form for a value. The parameter's
+scope must outlive the result scope - be exactly it where something can be stored through one of the references
+(O25g) - as an obligation of the function, checked at every call once the result has landed (O18a). `fn id(h Holder)
+Holder { return h }` is legal, and `keep = id(Holder(inner))` a compile-time error where `inner` dies before `keep`.
 
 **O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
 function (O13): `n Node&return = Node(1, null)` declares a local living where the result will be put, and
@@ -3671,11 +3714,15 @@ as a temporary is built where it lands (E12c):
 | `return f()` | the returning function's result scope, or `p`'s scope for a result borrowed from `p` |
 | an argument for a parameter of another call | that parameter's binding — and, where that is itself still landing, wherever the outer call's result lands |
 | a constructor's field or bare-pun parameter | the instance's scope (C2d) |
-| several targets of a destructuring (S4b) | their one scope, where they all agree; otherwise the caller's own block, where the call stands |
+| several targets of a destructuring (S4b) | their one scope, where they all agree (the program's, for globals); new locals, or targets that disagree: the caller's own block, where the call stands |
+| a field, an element, a slice or an `as` payload read out of the result | wherever the read is put, as the result itself would be |
 | anywhere else (an operand, an expression statement) | the caller's own block, where the call stands |
 
 A temporary argument for a reference parameter is placed by the same table, as the result of a call would be - except
-where O18b places it. The callee's obligations that involve the result scope (O10b) are discharged once the statement
+where O18b places it. What is built from the result lands with it: an array literal or fill holding temporaries
+(T7), a constructor call or enum case passed as an argument, a value a conditional or match gives, and a checked
+index (`try c[i]`) of the result - and each is checked where it lands for the existing storage it holds (C2d, T17c,
+O25c). The callee's obligations that involve the result scope (O10b) are discharged once the statement
 holding the call has been checked, against the scope the result landed in. Where several destructured targets disagree,
 the fallback to the caller's block makes any target outliving that block fail the ordinary check, so the
 disagreement is reported rather than resolved by guessing.
@@ -3684,8 +3731,9 @@ disagreement is reported rather than resolved by guessing.
 temporary (O17) - which the callee's obligations (O10b) require to outlive a scope this call does determine, is bound to
 that scope, and the temporary is built there: `l.Push(Node(i))` in a loop builds the node where `l` lives, since `Push`
 requires its element to outlive the list, and the loop body's own scope would close under it. A variable the result
-names follows the result (O18a) instead, and nothing is built this way into the program's scope (O1b) or into a derived
-scope (O23a).
+names follows the result (O18a) instead, and nothing is built this way into a derived scope (O23a); where the
+determined scope is the program's (a global argument, O25e), the temporary is built in the program's scope:
+`GL.Push(Leaf(i))` in a function, with `GL` a global list.
 
 **O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,

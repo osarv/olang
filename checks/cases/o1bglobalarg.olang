@@ -1,0 +1,14 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O1b/O25e: a global argument binds the callee's scope variable to the program's scope - what is stored into it must
+# live there too, which a loop body's local does not
+type Leaf struct(v I32) {
+    v
+}
+GL mut List<Leaf&>& = List<Leaf&>()
+fn put(l mut List<Leaf&>&, n Leaf&) { l.Push(n) }
+fn main() ? {
+    for i in range 2 {
+        inner Leaf& = Leaf(42)
+        put(GL, inner)
+    }
+}

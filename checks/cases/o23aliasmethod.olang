@@ -1,0 +1,20 @@
+# check: fail that is not known through this path
+# O23/O11: the same store made by a method called through the alias - the method's obligation reaches the call
+type N struct(v I32) {
+    v mut
+}
+type Cur struct(of mut N&) {
+    at mut N&of = of
+}
+fn (c mut Cur&) Set(x mut N&) { c.at = x }
+fn main() ? {
+    outer N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        x N& = N(42)
+        c := Cur(outer)
+        arr Array<mut Cur&> = Cur&[c]
+        arr[0].Set(x)
+        keep = c.at
+    }
+}

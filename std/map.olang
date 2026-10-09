@@ -308,3 +308,22 @@ test "O18c: a Map's entries, walked through a parameter, go into another map and
     assert total == 1225 and m2.Len() == 50
     assert (try m.Get(k) catch default -1) == (try k.ParseInt() catch default -2)
 }
+
+# T25d: constant text elements of a read-only array literal walked by for-in are the static data itself, so they may go
+# into a map anywhere; O1b/O25e: a global map read through read-only receivers binds their scope to the program's
+fn mapGlobalMade() Map<I32, I32>& {
+    m Map<I32, I32>&return = Map<I32, I32>()
+    m.Put(1, 2)
+    return m
+}
+MapGlobal Map<I32, I32>& = mapGlobalMade()
+
+test "T25d/O1b: constant text keys put from a for-in, and a global map read through read-only receivers" {
+    m := Map<String&, I64>()
+    if mapRuntime > 0 {
+        for nm in String&["ann", "bobby"] { m.Put(nm, nm.Len()) }
+    }
+    mapChurn()
+    assert (try m.Get("bobby") catch default -1) == 5 and m.Len() == 2
+    assert 1 in MapGlobal and (try MapGlobal.Get(1) catch default -1) == 2 and MapGlobal.Len() == 1
+}
