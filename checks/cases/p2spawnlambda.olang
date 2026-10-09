@@ -1,0 +1,15 @@
+# check: fail Declare the captured variable outside the join block
+# P2/D16e: a spawned lambda capturing a loop body's reference - the advice names the captured variable, not a reference
+# to the join's own storage
+type Node struct(v I32) {
+    v mut
+}
+fn main() ? {
+    total Array<I32>& = Array<I32>(4)
+    join {
+        for i in range 4 {
+            n Node& = Node(I32(i))
+            spawn fn() { total[i] = n.v }
+        }
+    }
+}

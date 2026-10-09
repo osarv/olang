@@ -1,0 +1,25 @@
+# check: fail a reference never narrows
+# also: not provably at least as long-lived
+# S13c/O12: alternatives binding one name from payloads in different scopes - x's scope is not known, so it cannot be
+# stored where either one's would go (it used to take the first alternative's, outer's, and keep pointed at inner)
+type Node struct(v I32) {
+    v mut
+}
+type Box enum {
+    Has(n Node&)
+    Two(a Node&, b Node&)
+}
+fn ro(n Node&) Node&n { return n }
+fn main() ? {
+    outer Node& = Node(1)
+    keep := ro(outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        b := Box.Has(inner)
+        if i == 0 { b = Box.Two(outer, inner) }
+        match b {
+            case Box.Two(x, _), Box.Has(x) { keep = x }
+            nomatch { }
+        }
+    }
+}
