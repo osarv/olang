@@ -1,0 +1,10 @@
+# check: fail a number flows implicitly only where nothing is lost
+# T29f/S4: "p += 10" is "p = p + 10" - on a declared number that does not extend its base the sum is its base's, which
+# does not flow back into it (and the constructor is not run past)
+type Pct I32(v mut I32) {
+  if v > 100 { v = 100 }
+}
+fn main() ? {
+  p Pct = Pct(95)
+  p += 10
+}

@@ -1,0 +1,13 @@
+# check: run
+# T27: two anonymous enums written alike are one type
+fn g(x enum {
+  A(n I32)
+  B
+}) I32 { return 2 }
+fn main() ? {
+  z enum {
+    A(m I32)
+    B
+  }
+  assert g(z) == 2
+}

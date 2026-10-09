@@ -1,0 +1,13 @@
+# check: fail F64 does not satisfy the constraint Hashable on K
+# G19: a constraint reached through a substitution is checked where the instantiation was asked for - one error, not
+# also errors inside the generic type's body for an instantiation that cannot be
+# also: compilation failed with 1 error
+type Keyed<K Hashable<<K>>> struct(k <K>) {
+  k
+  h I64 = k.Hash()
+}
+fn wrap(x <T>) Keyed<<T>> { return Keyed<<T>>(x) }
+fn main() ? {
+  a := wrap(5)
+  b := wrap(2.5)
+}

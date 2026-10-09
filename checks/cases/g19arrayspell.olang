@@ -1,0 +1,6 @@
+# check: fail Array<F64> does not satisfy the constraint Hashable on K
+# G19: an array type is spelled as it is written in a diagnostic
+import "std/map"
+fn main() ? {
+  m := map.Map<Array<F64>, I32>()
+}

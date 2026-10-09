@@ -1,0 +1,10 @@
+# check: build
+# E32: "x as T&" on an enum held by reference - the marker on the case named no variable and crashed the compiler
+type Shape enum {
+  Circle(r I32)
+  Sq
+}
+fn main() ? {
+  s Shape& = Shape.Circle(1)
+  r := s as Shape.Circle&
+}

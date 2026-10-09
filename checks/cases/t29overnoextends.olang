@@ -1,0 +1,8 @@
+# check: fail this type does not extend its base
+# T29/T29f: a type declared over a type that extends I32 does not extend anything itself
+type A extends I32
+type B A
+fn main() ? {
+  b B = B(5)
+  c B = b + b
+}

@@ -1,6 +1,5 @@
-# check: fail inherits every array method
-# T29e: an inherited array method is never overridden
-type Nums extends Array<I32>
-fn (n Nums&) Count() I32 { return 0 }
-error E { X }
-fn main() ? E { }
+# check: fail inherits every method of its base, and this one is already among them
+# T29e: any other inherited method is not overridden - for an array as for a number
+type Ints extends Array<I32>
+fn (a Ints&) Count(keep fn(x I32) Bool) I64 { return 9 }
+fn main() ? { }

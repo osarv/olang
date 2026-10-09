@@ -1260,6 +1260,27 @@ test "defaults on a constructor's parameter list" {
     assert c.port == 80
 }
 
+# E14/G9: a generic function or constructor leaves off a defaulted parameter too - inference reads the arguments
+# written, and the default then fits the instantiation like any argument
+fn padG(x <T>, n I32 = 3) <T> { return x }
+type ServerG<T> struct(host <T>, port I32 = 80) {
+    host
+    port
+}
+fn padGAll() I64 {
+    a := padG(I64(5))
+    b := padG(6, default)
+    c := ServerG<I32>(9)
+    d := ServerG(I64(9))
+    return a * 1000 + I64(b) * 100 + I64(c.port) + I64(d.port)
+}
+PadGBaked := padGAll()
+
+test "defaults on a generic function's and a generic constructor's parameter lists" {
+    assert padGAll() == 5760
+    assert PadGBaked == 5760
+}
+
 # a struct literal is a valid default - it is a literal expression (E4), with a value and nothing else
 fn offsetOf(p Point = Point(3, 4)) I32 {
     return p.x + p.y
@@ -2343,6 +2364,57 @@ test "G16a: and a generic function over both" {
     assert rb[3] == 9
 }
 
+# G16a: and every other difference between two types - two function types (they were all one name), a reference's
+# permission, a declared array type and the array it is declared over, a reference and a value holding one - and a
+# name of any length, written into symbols as its beginning and a hash of the whole
+fn G16Id(x <T>) <T> { return x }
+fn g16Dbl(n I32) I32 { return n * 2 }
+fn g16Half(n F64) F64 { return n / 2.0 }
+type G16Node struct(v I32) { v mut }
+type G16Nums Array<I32>
+type G16Box<T> struct(v <T>) { v }
+type G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<T> struct(v <T>) { v }
+G16Ro G16Node& = G16Node(1)
+fn g16Funcs(k I32) F64 {
+    f := G16Id(g16Dbl)
+    g := G16Id(g16Half)
+    return F64(f(21 + k)) + g(5.0)
+}
+G16FuncsBaked := g16Funcs(0)
+fn g16Kinds(k I32) I64 {
+    a := G16Id(G16Ro)
+    m G16Node& = G16Node(2 + k)
+    b := G16Id(m)
+    b.v = 7
+    n G16Nums = G16Nums(I32[1, 2])
+    arr Array<I32> = I32[3, 4, 5]
+    ro := List<G16Node&>()
+    ro.Push(G16Ro)
+    rw := List<mut G16Node&>()
+    rw.Push(m)
+    x := rw[0]
+    x.v = x.v + 1
+    return I64(a.v) * 1000 + I64(m.v) * 100 + G16Id(n).Len() * 10 + G16Id(arr).Len() + ro.Len() * 10000
+}
+G16KindsBaked := g16Kinds(0)
+fn g16Long(k I32) F64 {
+    a := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>(7 + k)))
+    b := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>(2.5)))
+    return F64(a.v.v.v) + b.v.v.v
+}
+G16LongBaked := g16Long(0)
+
+test "G16a: function types, permissions, declared array types and long names each make their own instantiation" {
+    k I32 = ctRuntimeZero
+    assert g16Funcs(k) == 44.5 and G16FuncsBaked == 44.5
+    assert g16Kinds(k) == 11823 and G16KindsBaked == 11823
+    assert g16Long(k) == 9.5 and G16LongBaked == 9.5
+    c := G16Box<G16Node&>(G16Ro)
+    d := G16Box<mut G16Node&>(G16Node(3))
+    d.v.v = 4
+    assert c.v.v == 1 and d.v.v == 4
+}
+
 # G8a: generics COMPOSE - a type variable may be written as a type argument, so one generic can be
 # expressed in terms of another. Before this, generics worked for leaf types (Chan<I32>) and for
 # functions over a bare <T>, but "Vec<T>" could not be written at all: the type-args resolver only looked
@@ -3290,6 +3362,28 @@ test "the default error: an untyped catch catches it" {
         result = -99
     }
     assert result == -99
+}
+
+# R17: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
+# "?" function as its own failure, as an uncaught "try" expression's does
+error R17Err {
+    Loud
+    Quiet
+}
+fn r17Fail(n I32) ? R17Err {
+    if n == 1 { error R17Err.Quiet }
+    error R17Err.Loud
+}
+fn r17Partial(n I32) I32 ? {
+    try r17Fail(n) catch R17Err.Quiet { return 1 }
+    return 2
+}
+fn r17Both() I32 { return (try r17Partial(1) catch default 7) * 10 + (try r17Partial(2) catch default 9) }
+R17Baked := r17Both()
+
+test "R17: a try statement catching part of what its call can fail with, in a bare '?' function" {
+    assert r17Both() == 19
+    assert R17Baked == 19
 }
 
 test "an undetermined scope variable binds to the caller's own scope" {
@@ -6140,6 +6234,26 @@ test "E13b: a call's result, an element or a parenthesized value is called direc
     assert ChainBakedE == 7
 }
 
+# E13b/M19: "x.f(args)" where f is a field holding a function calls the value the field holds, as "(x.f)(args)" does -
+# a method may not share a field's name, so the spelling has one meaning
+type FieldFnE struct(f fn(a I32) I32) { f }
+type FieldFnHolderE struct(b FieldFnE) { b }
+type FieldFnRiskyE struct(g fn(a I32) I32 ? DivError) { g }
+fn fieldFnsE(n I32) I32 {
+    b := FieldFnE(doubleO)
+    h := FieldFnHolderE(b)
+    r := FieldFnRiskyE(limiterE(5))
+    return b.f(n) + h.b.f(1) * 100 + (try r.g(9) catch default 7) * 1000
+}
+FieldFnsBakedE := fieldFnsE(21)
+FieldFnGlobalE FieldFnE = FieldFnE(doubleO)
+
+test "E13b: a field holding a function is called as x.f(args)" {
+    assert fieldFnsE(21) == 7242
+    assert FieldFnsBakedE == 7242
+    assert FieldFnGlobalE.f(5) == 10        # through a global, as through a local
+}
+
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
     y fn(a I32) I32 = doubleO
     (y)(2)
@@ -7123,6 +7237,28 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert condMax(3, n - 1) == CondMaxBaked
 }
 
+# E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
+# M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
+type CondColor enum {
+    Red
+    Blue(n I32)
+}
+fn (c CondColor) Name() String { return "red" if c == CondColor.Red else "blue" }
+fn condLits(k Bool) I64 {
+    a := I32[1] if k else I32[1, 2]
+    return a.Len()
+}
+fn condTexts(k I32) Bool {
+    names Bool = CondColor.Red.Name() == "red" and CondColor.Blue(k).Name() == "blue"
+    return names and condLits(true) + condLits(false) == 3 and CondColor.Red.Hash() != CondColor.Blue(k).Hash()
+}
+CondTextsBaked := condTexts(2)
+
+test "E28: written texts and array literals of different lengths, and an enum case as a receiver" {
+    assert condTexts(2)
+    assert CondTextsBaked
+}
+
 # S4c/D12b: parallel assignment - every value evaluated before any target is written - and several names
 # declared with one type, as locals, globals and constructor fields
 ParX, ParY mut I32 = 3, 4
@@ -7220,6 +7356,30 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert h2.v.Area() == 25
     assert I32[1, 2].Has(2)
     assert CnAreaBaked == 16
+}
+
+# G19/E23/E33: a method the compiler supplies meets a constraint as a declared one does - every array's Len(), a
+# declared array's included, and a float's Bits()
+type CnSized trait {
+    Len() I64
+}
+type CnHasBits trait {
+    Bits() U32
+}
+type CnText extends Array<Char>
+fn cnSize(x <T CnSized>&) I64 { return x.Len() }
+fn cnBits(x <T CnHasBits>) U32 { return x.Bits() }
+fn cnSupplied() I64 {
+    t CnText = CnText("abc")
+    s := "hello"
+    f F32 = 1.0
+    return cnSize(t) * 10 + cnSize(s) + I64(cnBits(f) - 1065353215)
+}
+CnSuppliedBaked := cnSupplied()
+
+test "G19: a supplied Len or Bits meets a constraint" {
+    assert cnSupplied() == 36
+    assert CnSuppliedBaked == 36
 }
 
 # E31: an operator calls a method named for it - Plus, Minus, Mul, Div, Rem, Neg, Less, MatMul, and At, SetAt and
@@ -7424,6 +7584,34 @@ test "E31: Call makes a value callable and passable as a function; try calls Try
     assert t.Len() == 1
     u := try opMaybeArray(5) catch default I32[4, 4, 4]
     assert u.Len() == 3
+}
+
+# T22/T25c: a Call is a function value when its parameters agree with the function type's, "mut" included; and one
+# writing its receiver is made from storage this place may write
+type OpMark struct() {
+    hits mut I32 = 0
+}
+type OpCell struct(v I32) { v mut }
+fn (m mut OpMark&) Call(c mut OpCell&) {
+    m.hits++
+    c.v = 99
+}
+fn opMarkAll(f fn(c mut OpCell&), a mut OpCell&, b mut OpCell&) {
+    f(a)
+    f(b)
+}
+fn opMarked() I32 {
+    m := OpMark()
+    a := OpCell(1)
+    b := OpCell(2)
+    opMarkAll(m, a, b)
+    return m.hits * 1000 + a.v + b.v
+}
+OpMarkedBaked := opMarked()
+
+test "E31: a Call writing its parameter and its receiver, passed where a matching function type is wanted" {
+    assert opMarked() == 2198
+    assert OpMarkedBaked == 2198
 }
 
 test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {
@@ -7895,6 +8083,28 @@ test "C2e: an inline field is borrowed as an ordinary array" {
     assert c2eTotal(x.m) == 1.5
 }
 
+# C2e: each instantiation of a generic type decides its own inline length - it may depend on the type's arguments
+fn c2eCap(a Array<<T>>&) I64 {
+    match <T> {
+        case I32 { return 2 }
+        nomatch { return 5 }
+    }
+}
+type C2eBuf<T> struct() {
+    data Array<<T>> = Array<<T>>(c2eCap(Array<<T>>(0)))
+}
+fn c2eGenLens() I64 {
+    b := C2eBuf<F64>()
+    a := C2eBuf<I32>()
+    return a.data.Len() * 10 + b.data.Len()
+}
+C2eGenBaked := c2eGenLens()
+
+test "C2e: each instantiation of a generic type has its own inline length" {
+    assert c2eGenLens() == 25
+    assert C2eGenBaked == 25
+}
+
 # T7/D15: an array a declaration holds has no length in its type - one initialized from a literal, either
 # way it is declared, may later be given an array of any length
 test "an array declared from a literal can later hold one of another length" {
@@ -8277,6 +8487,18 @@ test "T29d: a primitive type's constructor checks the way in, and arithmetic kee
     assert (try pctCheck(-5) catch default -1) == -1
 }
 
+# T29: a type declared over a declared number is a new name over the same representation - it takes none of the
+# other's constructor, "extends" or methods, so "Pct2(150)" is 150 and a literal enters it unchecked
+type Pct2 Pct
+Pct2Lit Pct2 = 170
+fn pct2Of(n I32) I32 { return I32(Pct2(n)) }
+
+test "T29: a type over a declared number does not take its constructor" {
+    k I32 = ctRuntimeZero
+    assert pct2Of(150 + k) == 150 and I32(Pct2Lit) == 170
+    assert pct2Of(150) == 150
+}
+
 # D15: ":=" takes a field read - the field's declared type, and where its referent lives (O25a) - which is how
 # a cursor starts
 fn oSumFrom(l OxN&) I32 {
@@ -8569,6 +8791,35 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
 
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
 # value is a value (E10); decided at compile time (the global above) and at run time alike
+# T29a: "String(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
+# b's does; a value declaration from it is a copy, and an inline field is lent as a slice of it
+type CtConvBox struct() {
+    buf mut Array<Char> = Array<Char>(3, 'q')
+}
+type CtConvHolder struct() {
+    s mut String& = null
+}
+fn ctConvWrite(s mut String&) { s[0] = 'Z' }
+fn ctConv(n I32) String& {
+    raw := Array<U8>(2, U8(104 + n))
+    copied := String(raw)
+    h := CtConvHolder()
+    h.s = String(raw)
+    ctConvWrite(String(raw))
+    raw[1] = 65
+    b := CtConvBox()
+    v := String(b.buf)
+    b.buf[1] = 'z'
+    return $copied " " $h.s " " $String(raw) " " $v
+}
+CtConvBaked := ctConv(1)
+
+test "T29a: a conversion names its argument's storage, at run time and while compiling" {
+    k I32 = ctRuntimeZero
+    assert ctConv(k + 1) == "ii ZA ZA qzq"
+    assert CtConvBaked == "ii ZA ZA qzq"
+}
+
 test "written text compares with a String value" {
     u String = "cm"
     k I32 = ctRuntimeZero

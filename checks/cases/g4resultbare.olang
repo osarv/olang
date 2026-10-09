@@ -1,0 +1,5 @@
+# check: fail this type variable appears only in the return type or the error list
+# G4: the same with the bare variable as the result - one error, not a second about what is returned
+# also: compilation failed with 1 error
+fn mk(n I32) <T> { return n }
+fn main() ? { }

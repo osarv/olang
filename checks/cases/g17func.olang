@@ -1,0 +1,10 @@
+# check: fail this generic's instantiation requires an ever-growing set of further instantiations
+# G17: a generic function instantiating itself with a bigger argument - once reported
+type Box<T> struct(v <T>) { v }
+fn deep(x <T>, n I32) I32 {
+  if n == 0 { return 0 }
+  return deep(Box<<T>>(x), n - 1)
+}
+fn main() ? {
+  r := deep(1, 3)
+}
