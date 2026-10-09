@@ -13232,85 +13232,87 @@ S3KeywordsBaked := s3Keywords()
 test "L9a: keywords as method names" {
     assert S3KeywordsBaked == 211
     assert s3Keywords() == S3KeywordsBaked
+}
+
 # ---- study 3's scope batch (2026-10-09): parsers' locals, lends the callee only reads, x[i]++ (O26a, O17, E31) ----
 
 # O26a: a reference local the function returns, built by its declaration or by a later assignment, lives in the result
 # scope with everything built into it - the recursive-descent and Pratt idioms ("lhs := p.primary()" then
 # "lhs = Bin(op, lhs, rhs)" in a loop) are correct as written, read back after the arena has been reused
-type s3Tok struct(kind Char, val I64) {
+type sc3Tok struct(kind Char, val I64) {
     kind
     val
 }
-type s3Expr enum {
+type sc3Expr enum {
     Num(v I64)
-    Bin(op Char, l s3Expr&, r s3Expr&)
-    Neg(x s3Expr&)
+    Bin(op Char, l sc3Expr&, r sc3Expr&)
+    Neg(x sc3Expr&)
 }
-type s3Parser struct(toks List<s3Tok>&) {
+type sc3Parser struct(toks List<sc3Tok>&) {
     toks
     at I64 = 0
 }
-fn s3Lex(src String&) List<s3Tok> {
-    out := List<s3Tok>()
+fn sc3Lex(src String&) List<sc3Tok> {
+    out := List<sc3Tok>()
     for c in src {
-        if c.IsDigit() { out.Push(s3Tok('n', I64(c - '0'))) }
-        else if c != ' ' { out.Push(s3Tok(c, 0)) }
+        if c.IsDigit() { out.Push(sc3Tok('n', I64(c - '0'))) }
+        else if c != ' ' { out.Push(sc3Tok(c, 0)) }
     }
-    out.Push(s3Tok('$', 0))
+    out.Push(sc3Tok('$', 0))
     return out
 }
-fn s3Prec(c Char) I64 {
+fn sc3Prec(c Char) I64 {
     return match c {
         case '+', '-' => 1
         case '*', '/' => 2
         nomatch => 0
     }
 }
-fn (p mut s3Parser&) peek() s3Tok { return p.toks[p.at] }
-fn (p mut s3Parser&) primary() s3Expr& {
+fn (p mut sc3Parser&) peek() sc3Tok { return p.toks[p.at] }
+fn (p mut sc3Parser&) primary() sc3Expr& {
     t := p.peek()
     p.at++
     if t.kind == '-' {
         inner := p.primary()
-        return s3Expr.Neg(inner)
+        return sc3Expr.Neg(inner)
     }
     if t.kind == '(' {
         e := p.expr(1)
         p.at++
         return e
     }
-    return s3Expr.Num(t.val)
+    return sc3Expr.Num(t.val)
 }
-fn (p mut s3Parser&) expr(minPrec I64) s3Expr& {
+fn (p mut sc3Parser&) expr(minPrec I64) sc3Expr& {
     lhs := p.primary()
     for {
         op := p.peek()
-        if s3Prec(op.kind) < minPrec { break }
+        if sc3Prec(op.kind) < minPrec { break }
         p.at++
-        rhs := p.expr(s3Prec(op.kind) + 1)
-        lhs = s3Expr.Bin(op.kind, lhs, rhs)
+        rhs := p.expr(sc3Prec(op.kind) + 1)
+        lhs = sc3Expr.Bin(op.kind, lhs, rhs)
     }
     return lhs
 }
-fn (p mut s3Parser&) exprTyped(minPrec I64) s3Expr& {
-    lhs mut s3Expr& = null
+fn (p mut sc3Parser&) exprTyped(minPrec I64) sc3Expr& {
+    lhs mut sc3Expr& = null
     lhs = p.primary()
-    for s3Prec(p.peek().kind) >= minPrec {
+    for sc3Prec(p.peek().kind) >= minPrec {
         op := p.peek()
         p.at++
-        rhs s3Expr& = p.exprTyped(s3Prec(op.kind) + 1)
-        lhs = s3Expr.Bin(op.kind, lhs, rhs)
+        rhs sc3Expr& = p.exprTyped(sc3Prec(op.kind) + 1)
+        lhs = sc3Expr.Bin(op.kind, lhs, rhs)
     }
     return lhs
 }
-fn s3Eval(e s3Expr&) I64 {
+fn sc3Eval(e sc3Expr&) I64 {
     return match e {
-        case s3Expr.Num(v) => v
-        case s3Expr.Neg(x) => 0 - s3Eval(x)
-        case s3Expr.Bin(op, l, r) => s3Apply(op, s3Eval(l), s3Eval(r))
+        case sc3Expr.Num(v) => v
+        case sc3Expr.Neg(x) => 0 - sc3Eval(x)
+        case sc3Expr.Bin(op, l, r) => sc3Apply(op, sc3Eval(l), sc3Eval(r))
     }
 }
-fn s3Apply(op Char, a I64, b I64) I64 {
+fn sc3Apply(op Char, a I64, b I64) I64 {
     return match op {
         case '+' => a + b
         case '-' => a - b
@@ -13318,84 +13320,84 @@ fn s3Apply(op Char, a I64, b I64) I64 {
         nomatch => a / b
     }
 }
-fn s3Parse(src String&) s3Expr& {
-    toks := s3Lex(src)
-    p := s3Parser(toks)
+fn sc3Parse(src String&) sc3Expr& {
+    toks := sc3Lex(src)
+    p := sc3Parser(toks)
     return p.expr(1)
 }
-fn s3ParseTyped(src String&) s3Expr& {
-    toks := s3Lex(src)
-    p := s3Parser(toks)
+fn sc3ParseTyped(src String&) sc3Expr& {
+    toks := sc3Lex(src)
+    p := sc3Parser(toks)
     return p.exprTyped(1)
 }
-S3PrattBaked I64 = s3Eval(s3Parse("1 + 2 * (3 - -4) - 6 / 2"))
+Sc3PrattBaked I64 = sc3Eval(sc3Parse("1 + 2 * (3 - -4) - 6 / 2"))
 test "O26a: a Pratt parser's reference locals, rebuilt in a loop and returned, outlive the call" {
     src := "1 + 2 * (3 - -4) - " $(sbRun * 6) " / 2"
-    e := s3Parse(src)
-    f := s3ParseTyped("2 * 3 + 4 - " $sbRun)
+    e := sc3Parse(src)
+    f := sc3ParseTyped("2 * 3 + 4 - " $sbRun)
     sbChurn()
-    assert s3Eval(e) == 12
-    assert s3Eval(f) == 9
-    assert S3PrattBaked == 12
-    assert s3Eval(s3Parse("2 * 3 + 4")) == 10
+    assert sc3Eval(e) == 12
+    assert sc3Eval(f) == 9
+    assert Sc3PrattBaked == 12
+    assert sc3Eval(sc3Parse("2 * 3 + 4")) == 10
 }
 
 # O17: a value local whose references live elsewhere than its storage may be lent to a callee that only reads it, or
 # writes into it without keeping anything built - decided by what the callee's body does, not by the type
-fn s3Split(line String&) List<String&> {
+fn sc3Split(line String&) List<String&> {
     toks := List<String&>()
     toks.Push(line[0:1])
     toks.Push(line[1:2])
     return toks
 }
-fn s3Count(line String&) I64 {
-    toks := s3Split(line)
+fn sc3Count(line String&) I64 {
+    toks := sc3Split(line)
     return toks.Len()
 }
-type s3Vals struct() {
+type sc3Vals struct() {
     values List<I32>
 }
-type s3Holder struct() {
-    age s3Vals
+type sc3Holder struct() {
+    age sc3Vals
 }
-fn s3BumpThrough(w mut s3Holder&, i I64) { w.age.values[i] += 1 }
-fn s3Bump(s mut s3Vals&, i I64) { s.values[i] += 1 }
-type s3Countdown struct(n I64) {
+fn sc3BumpThrough(w mut sc3Holder&, i I64) { w.age.values[i] += 1 }
+fn sc3Bump(s mut sc3Vals&, i I64) { s.values[i] += 1 }
+type sc3Countdown struct(n I64) {
     left List<I64>
     for i in range n { left.Push(n - i) }
 }
-fn (c mut s3Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
-fn s3CountdownSum(n I64) I64 {
-    c := s3Countdown(n)
+fn (c mut sc3Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
+fn sc3CountdownSum(n I64) I64 {
+    c := sc3Countdown(n)
     s I64 = 0
     for v in c { s += v }
     return s
 }
-S3LendBaked I64 = s3Count("ab") * 100 + s3CountdownSum(4)
+Sc3LendBaked I64 = sc3Count("ab") * 100 + sc3CountdownSum(4)
 test "O17: a value whose references live elsewhere, lent to callees that read it or write into it" {
-    w := s3Holder()
+    w := sc3Holder()
     w.age.values.Push(I32(sbRun))
-    s3BumpThrough(w, 0)
-    s3Bump(w.age, 0)
+    sc3BumpThrough(w, 0)
+    sc3Bump(w.age, 0)
     sbChurn()
     assert w.age.values[0] == 3
-    assert s3Count("x" $sbRun) == 2
-    assert s3CountdownSum(sbRun * 4) == 10
-    assert S3LendBaked == 210
+    assert sc3Count("x" $sbRun) == 2
+    assert sc3CountdownSum(sbRun * 4) == 10
+    assert Sc3LendBaked == 210
 }
 
 # E31/S3a: "x[i]++" and "x[i]--" on a type with At and SetAt are "x[i] += 1" - through a field and a parameter too, and
 # under "try" through the derived TryAt; and "h.v[1] += 3" through a value field keeps the write (it was lost)
-fn s3BumpField(s mut s3Vals&, i I64) { s.values[i]++ }
-type s3Quad struct() {
+fn sc3BumpField(s mut sc3Vals&, i I64) { s.values[i]++ }
+type sc3Quad struct() {
     d Array<I64, 4>
 }
-fn (v s3Quad&) At(i I64) I64 { return v.d[i] }
-fn (v mut s3Quad&) SetAt(i I64, x I64) { v.d[i] = x }
-type s3QuadHolder struct() {
-    v s3Quad
+fn (v sc3Quad&) At(i I64) I64 { return v.d[i] }
+fn (v mut sc3Quad&) SetAt(i I64, x I64) { v.d[i] = x }
+type sc3QuadHolder struct() {
+    v sc3Quad
 }
-fn s3Increments() I64 {
+fn sc3Increments() I64 {
     l := List<I32>()
     l.Push(1)
     l.Push(5)
@@ -13403,23 +13405,23 @@ fn s3Increments() I64 {
     l[1]--
     oob I64 = 0
     try l[7]++ catch BuiltinError { oob = 1 }
-    s := s3Vals()
+    s := sc3Vals()
     s.values.Push(10)
-    s3BumpField(s, 0)
+    sc3BumpField(s, 0)
     s.values[0]++
-    h := s3QuadHolder()
+    h := sc3QuadHolder()
     h.v[1] = 5
     h.v[1] += 3
     return I64(l[0]) * 1000 + I64(l[1]) * 100 + I64(s.values[0]) + h.v[1] * 10000 + oob * 100000
 }
-S3IncBaked I64 = s3Increments()
+Sc3IncBaked I64 = sc3Increments()
 test "E31: x[i]++ and a compound store through a value field's SetAt" {
-    assert s3Increments() == 182412
-    assert S3IncBaked == 182412
+    assert sc3Increments() == 182412
+    assert Sc3IncBaked == 182412
 }
 
 # O23a: a Map's Keys() and Values() iterators hold the map, so what they hand out lives where its entries do
-fn s3MapKeys(n I64) I64 {
+fn sc3MapKeys(n I64) I64 {
     m := Map<String&, I64>()
     for i in range n { m.Put($i, i) }
     l := List<String&>()
@@ -13434,46 +13436,46 @@ fn s3MapKeys(n I64) I64 {
     return t * 10 + vl.Len() + (1 if vl[0] == "a" $n else 0) * 100
 }
 test "O23a: Map.Keys and Map.Values hand out what lives where the map's entries do" {
-    assert s3MapKeys(sbRun * 4) == 161
+    assert sc3MapKeys(sbRun * 4) == 161
 }
 
 # C2d: a context struct holding a read-only reference to a local List beside a writable one to the caller's state - the
 # arguments live in different scopes, and nothing the constructor builds is kept in either
-type s3Diag struct() {
+type sc3Diag struct() {
     col I64 = 0
 }
-type s3Ctx struct(nums List<I64>&, diag mut s3Diag&) {
+type sc3Ctx struct(nums List<I64>&, diag mut sc3Diag&) {
     nums
     diag
 }
-fn s3Check(d mut s3Diag&, n I64) {
+fn sc3Check(d mut sc3Diag&, n I64) {
     nums := List<I64>()
     for i in range n { nums.Push(i) }
-    c := s3Ctx(nums, d)
+    c := sc3Ctx(nums, d)
     c.diag.col = c.nums.Len()
 }
 test "C2d: a context struct over a local List and the caller's sink" {
-    d := s3Diag()
-    s3Check(d, sbRun * 3)
+    d := sc3Diag()
+    sc3Check(d, sbRun * 3)
     sbChurn()
     assert d.col == 3
 }
 
 # T25d/C2d: an element of a static text literal walked by a for-in, kept by an instance that lands in a returned local
-type s3Room struct(name String&) {
+type sc3Room struct(name String&) {
     name
     exits Map<I32, String&>
 }
-type s3Game struct() {
-    rooms Map<String&, mut s3Room&>
+type sc3Game struct() {
+    rooms Map<String&, mut sc3Room&>
 }
-fn s3World() s3Game {
-    g := s3Game()
-    for name in String&["hall", "kitchen"] { g.rooms.Put(name, s3Room(name)) }
+fn sc3World() sc3Game {
+    g := sc3Game()
+    for name in String&["hall", "kitchen"] { g.rooms.Put(name, sc3Room(name)) }
     return g
 }
 test "T25d: static names kept by rooms in a returned game" {
-    g := s3World()
+    g := sc3World()
     sbChurn()
     assert g.rooms.Len() == 2
     k := try g.rooms.Get("kitchen") catch default null
@@ -13482,56 +13484,56 @@ test "T25d: static names kept by rooms in a returned game" {
 
 # G9a/T22: a lambda's written types bind a generic's variables before a literal does, and a lambda whose parameter is
 # read-only fits where a writable one is passed
-type s3Box struct(v I32) { v }
+type sc3Box struct(v I32) { v }
 test "G9a, T22: Fold's literal start and a read-only lambda parameter" {
     a := I32[1, 2, 3]
     total := a.Fold(0, fn(acc I64, x I32) I64 { return acc + x })
     assert total == 6
-    l := List<mut s3Box&>()
-    l.Push(s3Box(4))
-    l.Push(s3Box(I32(sbRun)))
-    s := l.Iter().Fold(0, fn(acc I32, b s3Box&) I32 { return acc + b.v })
+    l := List<mut sc3Box&>()
+    l.Push(sc3Box(4))
+    l.Push(sc3Box(I32(sbRun)))
+    s := l.Iter().Fold(0, fn(acc I32, b sc3Box&) I32 { return acc + b.v })
     assert s == 5
 }
 
 # R11: a by-value default holding references, when it builds all it holds - here an empty List, or a struct made of
 # written text - is built where the call's result is, and what is pushed into it later lives where the result's does
-error s3Bad { NO }
-type s3Bag struct(label String&) {
+error sc3Bad { NO }
+type sc3Bag struct(label String&) {
     label
     items List<String&>
 }
-fn s3Validate(text String&) List<String&> ? s3Bad {
-    if text.Len() == 0 { error s3Bad.NO }
+fn sc3Validate(text String&) List<String&> ? sc3Bad {
+    if text.Len() == 0 { error sc3Bad.NO }
     l := List<String&>()
     l.Push(text)
     return l
 }
-fn s3BagOf(text String&) s3Bag ? s3Bad {
-    if text.Len() == 0 { error s3Bad.NO }
-    b := s3Bag(text)
+fn sc3BagOf(text String&) sc3Bag ? sc3Bad {
+    if text.Len() == 0 { error sc3Bad.NO }
+    b := sc3Bag(text)
     b.items.Push(text)
     return b
 }
-fn s3Keep(text String&) List<String&> {
-    l := try s3Validate(text) catch default List<String&>()
+fn sc3Keep(text String&) List<String&> {
+    l := try sc3Validate(text) catch default List<String&>()
     for i in range 50 { l.Push("p" $i) }
     return l
 }
-fn s3Defaults(text String&) I64 {
-    n := (try s3Validate(text) catch default List<String&>()).Len()
-    b := try s3BagOf(text) catch default s3Bag("none")
-    return n * 100 + s3Keep(text).Len() + (1000 if b.label == "none" else 0)
+fn sc3Defaults(text String&) I64 {
+    n := (try sc3Validate(text) catch default List<String&>()).Len()
+    b := try sc3BagOf(text) catch default sc3Bag("none")
+    return n * 100 + sc3Keep(text).Len() + (1000 if b.label == "none" else 0)
 }
-S3DefaultsBaked I64 = s3Defaults("")
+Sc3DefaultsBaked I64 = sc3Defaults("")
 test "R11: a default List and a default struct of written text, filled afterwards" {
-    k := s3Keep("" if sbRun == 1 else "x")
-    b := try s3BagOf("" if sbRun == 1 else "x") catch default s3Bag("none")
+    k := sc3Keep("" if sbRun == 1 else "x")
+    b := try sc3BagOf("" if sbRun == 1 else "x") catch default sc3Bag("none")
     sbChurn()
     assert k.Len() == 50 and k[49] == "p49"
     assert b.label == "none" and b.items.Len() == 0
-    assert s3Defaults("ab") == 151
-    assert S3DefaultsBaked == 1050
+    assert sc3Defaults("ab") == 151
+    assert Sc3DefaultsBaked == 1050
 }
 
 # E31: a method named for an operator is the operator only in the operator's shape - with other parameters it is an

@@ -14938,15 +14938,18 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             //returned whole, or read where what is built from it can be what is handed back (exprReadsName - not by a
             //call that cannot keep it, "return p.parse()")
             struct type t = (struct type){0};
+            bool known = true;
             if (StrCmp(name, fs->root)) t = fs->rootType;
             else {
                 struct var* v = scopeFindLocalByCtx(fs->ctx, name);
                 if (v) t = v->type;
+                else known = false; //declared later in the block, its type not known yet: as a whole value only
             }
             for (int i = 0; i < n->parts.len; i++) {
                 struct syntaxPart* p = ListGetIdx(&n->parts, i);
                 if (p->isToken || p->sntx->type != SNTX_EXPR) continue;
-                if (exprGivesName(p->sntx, name) || exprReadsName(fs->ctx, p->sntx, name, t)) return true;
+                if (exprGivesName(p->sntx, name)) return true;
+                if (known ? exprReadsName(fs->ctx, p->sntx, name, t) : syntaxMentionsName(p->sntx, name, false)) return true;
             }
             return false;
         }
