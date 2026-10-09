@@ -826,8 +826,8 @@ fn schubfach(q I64, c U64, dk I64) (U64, I64) {
 # the fewest decimal digits that read back as x, and where the point goes: d and e with |x| = d * 10^e and no zero at
 # d's end - of those, the closest to x. 0 and 0 for a zero: x's sign is its own ("x < 0", or "x.Bits() >> 63" for a
 # negative zero). Fails with the default error for a NaN or an infinity, which no digits write. The digits are those of
-# Python's repr and JavaScript's toString - for numbers laid out as "$x" lays them out, see std/json's Encode - and are
-# worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
+# Python's repr and JavaScript's toString, and those "$x" writes (E11a: the runtime and the evaluator compute them by the
+# same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
 fn (x F64) ShortestDecimal() (U64, I64) ? {
     b := x.Bits()
     if ((b >> 52) & 0x7FF) == 0x7FF { error }

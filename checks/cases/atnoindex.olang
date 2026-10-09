@@ -1,0 +1,9 @@
+# check: fail error[E31]: At's parameters besides its receiver: expected at least 1, found 0
+# E31: At takes one index or several, never none
+type Box struct() {
+    n I64 = 0
+}
+fn (b Box&) At() I64 { return b.n }
+fn main() ? {
+    b := Box()
+}

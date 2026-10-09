@@ -127,13 +127,18 @@ saturated or wrapped - and so is a hexadecimal or binary one needing more than 6
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
-denotes a **bit pattern**, so the full width of `I64` is writable: `0xFFFFFFFFFFFFFFFF` is `-1`.
+denotes a **bit pattern** of at most 64 bits. Adapting to an unsigned type (T6) it is worth those bits read unsigned, so
+it fits any unsigned type wide enough to hold the pattern - `x U64 = 0x9E3779B97F4A7C15`, `0xFFFFFFFFFFFFFFFF` as
+`U64`'s maximum; everywhere else it is worth its `I64` reading, so the full width of `I64` is writable:
+`0xFFFFFFFFFFFFFFFF` is `-1` in an `I64` and does not fit an `I32`. A literal-only expression (E4a) built from such
+literals is computed from the same reading: `u U64 = 0xFF00000000000000 | 0xFF` holds the unsigned value, `i I64 = ...`
+the signed one.
 
 A leading `0` on a decimal literal is **not** an octal prefix — `07` is seven. C's bare-`0` octal is
 widely held to be a mistake, and there is no octal syntax at all.
 
 **L10c.** `bin-int ::= ( "0b" | "0B" ) bin-digit { digit-sep bin-digit }`, where `bin-digit` is `0` or
-`1`. At least one digit is required.
+`1`. At least one digit is required. A binary literal is a bit pattern exactly as a hexadecimal one is (L10a).
 
 A character that is a digit or a letter immediately after a `0x` or `0b` literal's digits is an error,
 rather than the start of the next token: `0b12` is a mistake in the literal, not a binary `1` beside a
@@ -415,7 +420,7 @@ own type (E6d).
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
 `I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
-hexadecimal or binary literal is a bit pattern, read as an `I64`, L10a), `F64` for a float literal,
+hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned type, L10a), `F64` for a float literal,
 `Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it - a type variable only
 literals reach (G9a), a `-D` build constant (B10). It follows that an
@@ -1162,6 +1167,12 @@ This applies to the array itself, not its elements: `Array<Handle&>` is an array
 value and is rejected; `Array<Handle&>&` is a reference to it and is accepted. It does not apply to an `extern-param`
 (§11 X3), which marshals to a raw pointer and so never copies anything to begin with.
 
+**D9b.** Nor does it apply to a generic's by-value parameter (`x <T>`, `x mut <T>`) instantiated with an array: the
+declaration does not say array, and its meaning is the by-value parameter's, as for a struct. Without `mut` the callee
+reads the caller's array itself - storage that outlives the call, so it may be borrowed like any value the callee holds
+(passed to a `T&` parameter, compared by `Eq`); with `mut` the callee gets its own copy of the elements, which it may
+write without the caller seeing it. The compile-time evaluator (K1) gives both the same meaning.
+
 **D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
 a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
 parameter's type rather than modifying it: for a value parameter it makes the callee's own copy
@@ -1720,7 +1731,8 @@ primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
+`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { "," expr } "]"` (several indices only
+for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" [ arg { "," arg } [ "," ] ] ")"` calls the function value everything to its left gives (E13b).
 A trailing `","` in any of these lists is allowed only where the closing bracket begins a line of its own (L18a).
@@ -1960,9 +1972,13 @@ its type: the value written the way it would be in source:
 - an integer type (`I8` ... `I64`, `U8` ... `U64`) — decimal, with a leading `-` for a negative value; an unsigned
   type's value as unsigned.
 - a float type — the **shortest** decimal text reading back as the same value of the value's own type: the fewest
-  significant digits `p` (1 to 17) for which the value rounded to `p` decimal digits, read as an `F64` and rounded to
-  the value's type, is the value again - so `0.1` renders `0.1` whether it is an `F64`, `F32`, `F16` or `BF16`, and
-  `F64(F32(0.1))` renders `0.10000000149011612`. With `x` its decimal exponent, the digits are written positionally
+  significant digits (1 to 17) of a decimal that, read and rounded to the value's type (nearest, ties to even), is the
+  value again; of the decimals that short, the one closest to the value (where two are as close, the one ending in an
+  even digit) - so `0.1` renders `0.1` whether it is an `F64`, `F32`, `F16` or `BF16`, and `F64(F32(0.1))` renders
+  `0.10000000149011612`. These are the digits the prelude's `F64.ShortestDecimal` gives, and Python's `repr` and
+  JavaScript's `toString` write. At a power of two the values below lie closer than those above, so the shortest
+  decimal may not be the nearest of its length: `2^-1017` renders `7.120236347223045e-307`, the one 16-digit decimal
+  reading back, though `7.120236347223044e-307` is nearer. With `x` its decimal exponent, the digits are written positionally
   when `-4 <= x < 17` - padded with zeros (`100`, `10000000000000000`) or split by a `.` (`123.456`, `0.0001`) - and
   otherwise as `d.ddde+XX`, the exponent signed and at least two digits (`1e+17`, `1e-05`, `1.5e-07`), with a leading
   `-` for a negative value (`-0` for negative zero). An infinity renders `inf` or `-inf`, and every NaN `nan`, whatever its sign and payload
@@ -2393,8 +2409,8 @@ type declares one:
 | `a @ b` | `MatMul` | one operand, a result |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
-| `x[i]` | `At` | one operand, a result |
-| `x[i] = v` | `SetAt` | two operands, no result |
+| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
+| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value; no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
 | `~a` | `BitNot` | none, a result |
@@ -2414,11 +2430,12 @@ errors it fails with** (one declaring none is an error). The lowercase spelling 
 is what the operator calls; the checked form is what it calls **where `try` checks it** (E15a, R21, S9e). Where a
 type declares no checked form:
 
-- `TryAt` is **derived** from `At` and `Len`: the position is checked against `[0, x.Len())`, failing with
+- `TryAt` is **derived** from a one-index `At` and `Len`: the position is checked against `[0, x.Len())`, failing with
   `BuiltinError.OUT_OF_BOUNDS` (R20), and `At` is called - so `try x[i]` on such a type checks exactly as it does on
   an array. `TrySlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and `TrySetAt`
   from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or stored into
-  under `try` - a compile-time error.
+  under `try` - a compile-time error - and neither can one indexed by several indices (`try m[i, j]`) that does not
+  declare `TryAt` (or `TrySetAt`) itself, since `Len` checks one position.
 - every other operation is its plain form, which the `try` then does not check.
 
 A type declaring only the checked form of an operation (`TryAt` and no `At`) has that operation only under `try`:
@@ -2439,7 +2456,10 @@ built-in operation, which for `@` does not exist (an error), and for indexing an
 `a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` - `Less` looked up on the type of the operand
 that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
 
-`x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. An `At`
+`x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. Several
+indices are passed in the order written, after `x` and before `v`: `m[i, j] = v` is `m.SetAt(i, j, v)`, and
+`m[i, j] += v` evaluates `m`, `i` and `j` once each. A built-in array takes one index; several on one are a
+compile-time error. An `At`
 returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element; with an `At`
 returning a value, `x[i].f = v` is a compile-time error, since it would write only a copy - as is any write into a
 value a call returned. In `x[lo:hi]`
@@ -2662,7 +2682,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   is asked for when the last is done - so an element added at the end while the loop runs is walked too. `break`
   leaves the whole loop. A type with `RunFrom` and `Iter()` must give the same elements in the same order by both; the
   loop uses `RunFrom` (a `List` has both, S9f) - except under `try` (S9e), where it uses `Iter()`.
-- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
+- an **indexable** value (S9d): one whose type has a one-index `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
@@ -2887,11 +2907,13 @@ statements a checker ever *requires*.
 
 ### 6.7 `assert`
 
-**S17.** `assert-stmnt ::= "assert" expr STMNT_END`. `expr` must be `Bool`. `assert` is a statement,
-not a function call — `assert cond` and `assert(cond)` are both valid and identical, the latter
+**S17.** `assert-stmnt ::= "assert" expr [ "," expr ] STMNT_END`. The first `expr` must be `Bool`. `assert` is a
+statement, not a function call — `assert cond` and `assert(cond)` are both valid and identical, the latter
 simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in any function, test,
 constructor, or destructor body (§9), not
-only inside `test { }` blocks.
+only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
+or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
+are paid only then: `assert n < cap, "n is " $n ", cap " $cap`.
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -2902,11 +2924,16 @@ only inside `test { }` blocks.
   broken guarantee from the orderly `fail` (S16b).
 
 **S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and an array length out of range (§3.5
-D14b) each print a message naming what failed, to standard error.
+D14b) each print a message naming what failed - to standard error, or while a test is running to standard output,
+before the test's `FAIL` line. A failed `assert`, `abort` (S16c) or `unreachable` (S16d), and a value `match` no
+clause selects (S12b), also say **where** it is written, as `FILE:LINE: assertion failed`, `FILE:LINE: aborted` and
+`FILE:LINE: reached unreachable code`; an assert's message (S17) follows, after `: `. A program run with `-i` (B3e)
+prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
-values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, as is one
-whose evaluation reaches what aborts the program (K1), and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
+values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, which
+carries its message (S17) when that can be computed while compiling too, as is one whose evaluation reaches what aborts
+the program (K1), and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
@@ -4467,7 +4494,7 @@ Every diagnostic is written to standard output. Colour is used only when standar
 **B11a.** `-e RULE` prints the text of rule `RULE` of this specification - from its definition to the next rule or
 heading, under the heading of the section holding it - and compiles nothing. The rule is the one an error's brackets
 name; a first letter written in lowercase is read as uppercase (`-e t6b` is T6b). The specification is found as the
-standard library is (M23): `../spec.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
+standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
 error.
 
 ## 11. External Functions

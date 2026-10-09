@@ -442,6 +442,9 @@ struct statement {
     //other declaration. When both this and `op` are set, `op` is the T[expr] allocation and this is
     //the value written into each of its slots.
     struct operand* fillValue;
+    //ASSERT only (S18a): the text "assert cond, message" prints after its location when it fails - evaluated only
+    //then. NULL when none was written
+    struct operand* assertMsg;
     //VAR_DECL only: the local a constructor field declares (C2a). Its unnamed-scope references are built
     //in the scope the instance lands in (C2d), which the constructor receives as a hidden parameter
     bool ctorField;
@@ -586,6 +589,8 @@ struct operand {
     bool isLiteral;
     struct var* readVar; //valid for OPERATION_READ_VAR and as the lvalue base for INC/DEC
     long long intLiteralVal;
+    bool bitPattern; //L10a: a hexadecimal or binary literal - a bit pattern, whose value is unsigned where it adapts to
+                     //an unsigned type (0xFFFFFFFFFFFFFFFF a U64's maximum) and its I64 reading otherwise (-1)
     double floatLiteralVal; //valid for float literals only
     struct str memberName; //valid for OPERATION_MEMBER
     bool memberMut;        //valid for OPERATION_MEMBER: the FIELD's own mutability (C3), separate from

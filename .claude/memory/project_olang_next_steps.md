@@ -250,6 +250,20 @@ because what it finds about structure feeds the refactor.
   listzero (D13c: a struct whose ctor reads through a reference parameter cannot be a List element), ctordefault (a
   constructor default naming a global: "expected Mode, found ?", twice); kept as designed: operatornames (E31 reserves
   Mul/MatMul for every method), joinparen (`$alpha (" x")` is a call, E13b). at2/hexu64/failloc are in wt-smallfix.
+- 13:10: the user answered the last open questions (ledger): oann's projection is normalized, alpha 1e-3 by default
+  (oann 89c8585, pushed). Started wt-native (native CPU by default, `-a TARGET`, target build constants, per-target
+  GEMM tiles + math.Fma). Told constgen: constants introduced by `<N>` once, bare `N` after. QUEUED after langb and
+  constgen merge, in this order: (a) type variables bare after their introducing `<T>` - switch the resolver constgen
+  prepared and migrate corpus/std/oann; (b) the permissions batch (ledger Q4/Q5, my design: `mut` only before a
+  reference type, bindings never `mut` except globals, fields assignable through a writable instance).
+- 15:20 CEST: smallfix merged (ef939ae, pushed): method/local miscompile, immutable globals `constant` (GEMM with
+  named tiles 7.0 -> 16.6-17.2 GFLOPS), hex/binary top bit into unsigned (L10a), D9b by-value array params copied,
+  `x[i, j]` -> At/SetAt(i, j), `assert c, "msg"` + FILE:LINE on failed checks, Schubfach `$` floats (170x), missing-`}`
+  cascades. oann phase 3 (transformers) started in /home/user/oann with compiler /home/user/wt/oannc2 @ ef939ae.
+  Times in CEST from here on (user_timezone.md).
+- QUEUED small fix: D13c's "no zero value" error for `List<Ticket>` (a constructor with an effect) is reported inside
+  std/prelude/list.olang with the user's line only as a note - report it at the user's `List<Ticket>` (the type
+  argument) naming `List<Ticket&>` as the fix. Goes with the next checker batch.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

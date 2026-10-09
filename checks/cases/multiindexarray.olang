@@ -1,0 +1,6 @@
+# check: fail error[E31]: Array<I64> takes one index
+# E31: several indices are passed to a type's At - a built-in array has one position per element
+fn main() ? {
+    a := I64[1, 2, 3]
+    x := a[0, 1]
+}
