@@ -1,0 +1,22 @@
+# check: fail error[O17a]: this value's references live where its own storage does not, so it is not held by reference
+# O17a: b is a copy of a field, its storage in this block and its references where src's are; a reference to it would
+# take the node reached through it to live in the block, so "br.head.next = Node()" would build there and hang the node
+# off src's (a use-after-free that printed garbage). Written through b itself it is built where b's references live
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) { b }
+fn bump(src mut W&) {
+    b := src.b
+    br mut Box& = b
+    br.head.next = Node()
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    println($w.b.head.v)
+}

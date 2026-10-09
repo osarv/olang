@@ -1,0 +1,9 @@
+# check: fail error[T6]: '300' does not fit U8
+# E4a/E28: a conditional of literals adapts to its target as one literal does - every value or none - so the value that
+# does not fit is the error, pointed at itself (it used to read "'if' does not fit U8")
+C mut Bool = true
+
+fn main() ? {
+    b U8 = 300 if C else 1
+    println($b)
+}

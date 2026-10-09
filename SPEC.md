@@ -1994,6 +1994,13 @@ or a build constant included - does not, nor does a conversion, a call, or an ex
 is a checked computation in its literals' own types. With nothing adapting it, a literal-only expression is an
 ordinary expression of its literals' own types (T6a).
 
+A **conditional of literals** - `a if c else b` (E28), or a `match` used as a value (S12b), every value of which is a
+numeric literal, a literal-only expression or itself such, as `1.0 if x > 0.0 else 0.0` - adapts wherever a literal
+does, as a literal-only expression does: beside the values of a conditional or match it stands in (E28, S12b), beside
+a typed operand (E6d), to a target, in an inference (G9a). Every value it can give adapts, or - one of them not
+fitting - none does, and the error is that value's. Its condition still runs, so it is no constant; only its type is
+its literals'. With nothing adapting it, its type is its values', the widest of them (E28).
+
 ### 5.2 Operators
 
 **E5.** Binary operators, loosest to tightest (all left-associative — a chain of same-precedence
@@ -2048,8 +2055,8 @@ Wrapping is deliberate, not a gap: it is the one defined result that costs nothi
 would be a cost the code does not show. Division is the exception, by E6a.
 
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
-(T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value - does not adapt;
-the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
+(T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value, or a conditional of
+literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
 float) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
 type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
 `I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
@@ -2607,8 +2614,9 @@ expression's value. It binds looser than every binary operator and groups to the
 is `a if c else (b if d else e)`. An `if` with no `else` after its condition does not begin one.
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
-E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
+E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c) - a conditional or match of
+numeric literals counting as one (E4a), so `(1.0 if x > 0.0 else 0.0) if c else f` with `f` an `F32` is an `F32`;
+two numeric literals take the wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
 two arrays of it, whatever their lengths (T7: the length is no part of the type). A reference and a **new value** of its
 referent type (a temporary, E12c: a call's value, a constructor call, an enum case, an array built here - not existing
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
@@ -3051,8 +3059,9 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
 error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
-written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
-the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
+written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
+counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
+values that are all numeric literals (or such) take the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
@@ -4101,8 +4110,9 @@ value where it dangles. Accordingly:
 - **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
   its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
-  or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), the program's scope for a
-  copy of a global's - while the local's own storage is its block. That is a claim, as a reference local's scope is:
+  or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), where the referent is for a
+  copy out of a reference (`d Box = r`, O20), the program's scope for a copy of a global's - while the local's own
+  storage is its block, and such a value is not held by reference (O17a). That is a claim, as a reference local's scope is:
   assigning such a value from one that already lives somewhere requires the source's references to outlive the
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
   one of them (O25g), which between two of the function's scope variables is an equality its callers show (O10c:
@@ -4360,6 +4370,20 @@ count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local i
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
+
+**O17a.** *A split value is not held by reference.* A value whose references live where its own storage does not - a
+copy of existing storage (O25h, a copy out of a reference included: its references are where the referent is, O20), a
+by-value parameter (O4b), a value built where a scope argument says (O25a), a copy in an inner block of an outer one's
+value - is borrowed into a reference only as a call's argument, which O17 judges by the callee's body. Anywhere else - a
+reference local's initializer (`br mut Box& = b`), an assignment to a reference (`r = b`, `a[0] = b`), a constructor's
+reference parameter (whose instance keeps it, which counts as handing the region out, O17) - it is a compile-time error
+where something can be stored through what the value holds (O25g, by its type), read-only or not: a reference to a value
+takes everything reached through it to live where the value does (O20), so building through `br.head.next` would build
+in the copy's block and hang the result off the source's node. The value itself is written through instead
+(`b.head.next = Node()` builds where `b`'s references live, O25h). `for x in b.items` over such a value walks it through a
+reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
+judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
+lives where the value's references do.
 
 **O18.** *Supplying the result scope.* A scope argument (E25) binds the callee's result scope to where a
 variable of the caller lives. Without one, the result scope **follows the result** (O18a).

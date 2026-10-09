@@ -12241,3 +12241,51 @@ the defer is now set before either is made and closes whichever exist.
 
 **Not changed**: `bad == I64[0, 0, 0, 0]` with `bad` an `Array<I64>&` is "takes operands of one type" - a literal
 adapts to an array value, not to an array reference, in `==`. Left as it is; the test compares elements.
+
+**A conditional of literals adapts as a literal does (E4a, E28, S12b, E6d, G9a; oann's `condliteral`).** std/linalg's
+`ActivationSlope` gives `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside `geluSlope(x)`, an `F32` for an `F32`
+x: the conditional was an `F64` (its literals' own type) and S12b's "one type for all values, a literal adapting" did
+not count it as a literal, so `ActivationSlope` and `ActivationBackward` did not compile at `F32` at all (linalg's tests
+used `F64`); `(1.0 if c2 else 0.0) if c else x` was E28's error the same way. A target already adapted one - `return
+1.0 if x > 0.0 else 0.0` from an `F32` function fits each value on its own - but siblings and operators did not.
+**Decided (mine)**: a conditional, or a match used as a value, every value of which is a numeric literal, a literal-only
+expression or itself such, counts as a literal wherever a type is chosen - beside the other values of a conditional or
+match, beside an operator's typed operand (`f32 * (2.0 if c else 0.5)` is an `F32` product, as `f32 * 2.0` is; a value
+the other cannot hold meets at the conditional's own type, E6d - `u8 + (1 if c else 300)` is an `I32`), in an inference
+(`big(f32, 1.0 if c else 3.0)` at `F32`, G9a), a range's type, a case value. It adapts every value or none: a non-mutating
+fit check first (`condOfLiteralsWouldFit`), then each value adapted (`operandAdaptLiteral` learned the form). It is no
+constant - its condition runs - so the places that skip a hidden local for a literal (`x in c`, chains, `==`'s Eq call)
+still hold it. The evaluator needs nothing: the values are rewritten in place, so it reads `F32` literals; a corpus
+global bakes a function using every form and the run time agrees. linalg gained a test running `ActivationSlope` at
+`F32` (and through it at `F16`) against `F64`, and `ActivationBackward` on `F32` matrices with and without beta.
+**Found on the way**: a value of a conditional or match not fitting its target was reported at the `if` - "'if' does not
+fit U8" - and is now reported at the value that does not (`'300' does not fit U8`).
+
+**A split value is not held by reference (O17a; a second review's finding 4, `/home/user/review/tonight2`).** The first
+review's #2 made a temporary stored through a by-value parameter's reference build where that parameter's references
+live. The declaration side was still open: a value whose references live where its own storage does not - `b :=
+src.b`, a by-value parameter - borrowed into a reference took everything reached through it to live where the value's
+storage is (O20: a reference field lives where its container does). `br mut Box& = b; br.head.next = Node()` built the
+node in the block and hung it off src's; so did `for x in b.items { x.next = Node() }` through the loop's own borrow,
+and - found by trying every place a borrow is made - an assignment to a reference, a store into an array of references,
+a constructor keeping its reference parameter (`H(b)` then `h.r.head.next`), and a read-only reference whose writable
+field was read out and built through. All printed -7 (the churned arena) under `-b`/`-d` and 42 under `-i`.
+**Decided (mine)**: the reference cannot carry two scopes (its referent's storage, and where the referent's references
+are) without a second scope following it through every store, argument and return, so such a value is **not held by
+reference where something can be stored through what it holds** (by the type, as the first review's #2 decided for
+building into a by-value parameter), read-only or not - except as a call's argument, which O17 already judges by the
+callee's body. The error says to use the value itself, which builds right since #2. The check is one place, the borrow
+of E12c (`borrowLifetimeFits`), with call arguments excluded around their fit. A constructor keeping a parameter's
+reference in its instance now hands that region to its caller as a return does (`noteRegionHandOut` for each field), so
+O17 refuses `H(b)`. **The for-in is made correct rather than refused** - walking a by-value `List` parameter is common:
+its borrow is used only to read elements out and for its own `At`/`Len`/`RunFrom` calls, so it is exempt, each element
+it hands the body is given the value's references' scope (`forInElemSplitHome`, as S9f's `forInElemRefsHome` gives a
+run's), and its own calls are judged as O17 judges a call lent the value - by whether the callee stores into what it is
+handed (not by what it hands back, which only the loop reads). An iterator walked by value was already refused by O17 at
+its `Next` and is unchanged.
+**Found on the way, pre-existing**: a value copied out of a reference (`d Ix = src` with `src` an `Ix&`, E12's copy out)
+recorded nothing about where its references live, so it read as its block's and `d.nodes[1].next = Node()` built there -
+the same use-after-free from the copy side. O25h now covers it: such a copy's references are where the referent is
+(O20), in a declaration and as the assignment check's source (`copiedRefsScope`). Corpus: a global baked from a walk of
+a copied field, a by-value parameter's `List` and value elements holding references, and a copy out of a reference, read
+back after a churn at run time; cases for the local, the read-only borrow, the constructor and the copy-out assignment.

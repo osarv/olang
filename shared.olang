@@ -13900,3 +13900,73 @@ test "D11a: a local's mut before a bare type variable is the reference's, and no
     rvBump(q)
     assert p.v == 2
 }
+
+# E4a/E28/S12b: a conditional, or a match used as a value, of literals adapts as one literal does - to its target, to
+# the values beside it and to an operator's other operand ("1.0 if x > 0.0 else 0.0" beside an F32 is an F32)
+fn rvBig(a <T>, b T) T { return a if a > b else b }
+fn rvLitCond(k I64) I64 {
+    on Bool = k % 2 == 0
+    u U8 = 200
+    w := u + (1 if on else 300)                      # E6d: 300 does not fit U8, so they meet at I32
+    wi I32 = w
+    f F32 = 1.5
+    g := f * (2.0 if on else 0.5)                    # an F32 product
+    gf F32 = g
+    m F32 = (match k { case 0 => 1.0 nomatch => 2.0 }) if on else f
+    z F32 = 0.5 if on else (match k { case 1 => 1.25 nomatch => 0.75 if on else 0.25 })
+    y := rvBig(f, 1.0 if on else 3.0)                # rvBig at F32
+    yf F32 = y
+    s F32 = match k {
+        case 0 => 1.0
+        case 1 => 1.0 if f > 0.0 else 0.0
+        nomatch => f * 2.0
+    }
+    return I64(wi) * 1000 + I64(gf * 4.0) * 100 + I64(m * 4.0) * 10 + I64(z * 4.0) + I64(yf * 2.0) * 10000 +
+           I64(s * 2.0) * 100000
+}
+RvLitCondBaked := rvLitCond(0) * 1000000000 + rvLitCond(1)
+test "E4a/E28: a conditional or match of literals adapts as a literal does, while compiling and at run time" {
+    assert RvLitCondBaked == 432242 * 1000000000 + 760365
+    k := I64(ctRuntimeZero)
+    assert rvLitCond(k) * 1000000000 + rvLitCond(k + 1) == RvLitCondBaked
+}
+
+# O17a/O25h: a value whose references live elsewhere than its storage - a copy of a field, a by-value parameter, a copy
+# out of a reference - walked by for-in hands the body elements living where those references do, so building through
+# one builds there (it built in the copy's block and hung the node off the source's); and a copy out of a reference
+# keeps its references where the referent is. Read back after the arena churns
+type rvHold struct() {
+    items Array<mut rvN&, 2>
+    pairs Array<rvBox, 2>
+}
+type rvHW struct(h rvHold) { h }
+fn rvWalkCopy(src mut rvHW&) {
+    h := src.h
+    for x in h.items { x.next = rvN(x.v + 20) }
+    for p in h.pairs { p.n.next = rvN(p.n.v + 30) }
+}
+fn rvWalkParam(l List<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
+fn rvCopyOut(src rvHold&) {
+    d rvHold = src
+    d.items[0].next.next = rvN(50)
+}
+fn rvSplitWalk(k I64, churn fn() I64) I64 {
+    w := rvHW(rvHold())
+    w.h.items[0] = rvN(1 + k)
+    w.h.items[1] = rvN(2)
+    w.h.pairs[0] = rvBox(rvN(3))
+    w.h.pairs[1] = rvBox(rvN(4))
+    rvWalkCopy(w)
+    l := List<mut rvN&>()
+    l.Push(rvN(5))
+    rvWalkParam(l)
+    rvCopyOut(w.h)
+    churn()
+    return w.h.items[0].next.v * 100000000 + w.h.items[1].next.v * 1000000 + w.h.pairs[0].n.next.v * 10000 +
+           w.h.pairs[1].n.next.v * 100 + l[0].next.v + w.h.items[0].next.next.v * 10000000000
+}
+RvSplitWalkBaked := rvSplitWalk(0, fn() I64 { return 0 })
+test "O17a: a for-in over a split value, and a copy out of a reference, build where the references live" {
+    assert RvSplitWalkBaked == 50 * 10000000000 + 21 * 100000000 + 22 * 1000000 + 33 * 10000 + 34 * 100 + 45
+    assert rvSplitWalk(ctRuntimeZero, sbChurn) == RvSplitWalkBaked
+}
