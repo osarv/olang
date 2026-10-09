@@ -3352,6 +3352,17 @@ Go through this for every change to what olang means - a rule added, revised or 
   (the unknown method's "discards a value" was fixed alongside by the type checker's review); P8b still said olang has
   no atomic operations; and two `std/cancel` tests assumed a task or the test itself would run within milliseconds
   (flaky under concurrent verifies) - the busy-task test now cancels once the task has counted, atomically.
+- **`checks/checks.olang` runs its checks side by side (2026-10-09).** Every case and every scenario runs in a directory
+  of its own (`build/checks/cases/<case>`, `build/checks/<scenario>`), four at a time: a global (`Outcomes`) runs them all
+  before the first test - workers taking check numbers from a `std/chan` queue - and the tests report the outcomes in
+  their written order, one for the cases and one per scenario, so the output is what it was. A scenario is a function
+  reporting into a `report` (`try r.expect(ok, what, dir)`, ending at the first failure with its message): an `assert`
+  on a task thread aborts the process (P6), which would lose which test failed. The cases start from the prelude's
+  objects, built once (`build/checks/prelude`) and copied in, as they did when they shared one directory - which they
+  cannot now, since every build writes an `olang_build` module of its own into `build/`. **Decided (mine)**: four
+  workers, the machine's cores; the peak is ~0.4GB above the sequential run's, which is `agree`'s `-i bfrand.olang`
+  (3.5GB). Measured on the shared machine: `checks.olang` 233s -> 106-129s, `make verify` 366s -> 186s, total CPU
+  unchanged.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
