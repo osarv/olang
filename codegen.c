@@ -1495,10 +1495,31 @@ static long long cgStackAlign(struct type t) {
 //an Array<U8, 64000000> local had overflowed the stack at its first touch. Defined where it is made, which comes before
 //every use, as a declaration does; a helper with no arena keeps its frame
 #define CG_FRAME_LIMIT 65536
+
+//O8a: the alignment storage for a value of type t asks the arena for - 0 for an array's own elements, which take the
+//size class an array of their size gets, ready for vector loads; any other value's own alignment, at least the 8 every
+//allocation has. A struct or an enum is never vector-loaded whole, and the size class made a 40-byte one take 64
+static long long cgAllocAlign(struct type t) {
+    if (t.bType == BASETYPE_ARRAY && !t.structMAlloc && !t.arrMalloc) return 0;
+    long long a = TypeGetAlign(t);
+    return a > 8 ? a : 8;
+}
+
+//dst = storage of "size" bytes (an LLVM i64 expression) from the scope "scope", aligned as align says (cgAllocAlign)
+static void cgArenaAlloc(struct cgCtx* ctx, const char* dst, const char* scope, const char* size, long long align) {
+    if (align) fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc_a(ptr %s, i64 %s, i64 %lld)\n", dst, scope, size, align);
+    else fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", dst, scope, size);
+}
+
+//dst = storage for one value of type t, from the scope "scope"
+static void cgArenaAllocFor(struct cgCtx* ctx, const char* dst, const char* scope, struct type t) {
+    char size[32];
+    snprintf(size, sizeof(size), "%lld", TypeGetSize(t));
+    cgArenaAlloc(ctx, dst, scope, size, cgAllocAlign(t));
+}
 static void cgValueSlotAs(struct cgCtx* ctx, char* slot, struct type t, const char* ty) {
     if (TypeGetSize(t) > CG_FRAME_LIMIT && ctx->ownScopeSlot) {
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, cgScopeSlotAt(ctx, ctx->blockDepth),
-                TypeGetSize(t));
+        cgArenaAllocFor(ctx, slot, cgScopeSlotAt(ctx, ctx->blockDepth), t);
         return;
     }
     fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(t));
@@ -1593,7 +1614,7 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         llvmType(srcT, storTy, sizeof(storTy));
         char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
         char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
+        cgArenaAllocFor(ctx, heap, scopeVal, srcT);
         char* loaded = src; //an enum is already the value (T17d); anything else is the address of one
         if (cgViaMemory(srcT)) {
             fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, src,
@@ -1813,13 +1834,13 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         char ty[256];
         llvmType(op->type, ty, sizeof(ty));
         inst = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", inst, where, TypeGetSize(op->type));
+        cgArenaAllocFor(ctx, inst, where, op->type);
         char* v = cgValue(ctx, op);
         cgStoreInto(ctx, op->type, op->type, v, inst, where, false, false, false);
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 16)\n", obj, where);
+    cgArenaAlloc(ctx, obj, where, "16", 8);
     char* p2 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", inst, obj, cgCaptureTbaa);
     fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s%s\n", p2, obj, instScope, p2,
@@ -1860,7 +1881,7 @@ static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
     char storTy[256];
     llvmType(op->type, storTy, sizeof(storTy));
     char* heap = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
+    cgArenaAllocFor(ctx, heap, scopeVal, op->type);
     char* prev = ctx->targetScopeOverride;
     ctx->targetScopeOverride = scopeVal;
     char* v = cgValue(ctx, op);
@@ -2934,8 +2955,7 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     if (op->cgEnvOnStack) fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align 8\n", obj, envTy); //made for one call
     else {
         char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-                obj, scope, envTy);
+        cgArenaAlloc(ctx, obj, scope, StrFmt("ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64)", envTy), 8);
     }
     int field = 0;
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
@@ -3017,7 +3037,7 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
     struct cgScopeMerge m;
     m.parent = parent;
     m.sub = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", m.sub, cgScopeSlotAt(ctx, ctx->joinDepth));
+    cgArenaAlloc(ctx, m.sub, cgScopeSlotAt(ctx, ctx->joinDepth), "24", 8);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", m.sub);
     ListAdd(merges, &m);
     return m.sub;
@@ -3084,8 +3104,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                 llvmType(paramT, ty, sizeof(ty));
                 copy = cgNewTmp(ctx);
                 if (spawnMerges)
-                    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", copy,
-                            cgScopeSlotAt(ctx, ctx->joinDepth), TypeGetSize(paramT));
+                    cgArenaAllocFor(ctx, copy, cgScopeSlotAt(ctx, ctx->joinDepth), paramT);
                 else cgValueSlotAs(ctx, copy, paramT, ty);
                 fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", copy, src,
                         TypeGetSize(paramT));
@@ -5090,8 +5109,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     char* envTy = cgBufStr(&envB);
 
     char* env = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-            env, joinScope, envTy);
+    cgArenaAlloc(ctx, env, joinScope, StrFmt("ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64)", envTy), 8);
     char* fnSlot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", fnSlot, envTy, env);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", target, fnSlot);
@@ -5105,13 +5123,13 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     //P1: the task node lives in the join block's arena and carries the thread handle plus whatever
     //sub-scopes have to be folded back. Pushed onto the join's list, which the block walks at its end.
     char* node = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", node, joinScope);
+    cgArenaAlloc(ctx, node, joinScope, "24", 8);
     char* mergeHead = MallocOrCrash(8);
     strcpy(mergeHead, "null");
     for (int i = 0; i < merges->len; i++) {
         struct cgScopeMerge* m = ListGetIdx(merges, i);
         char* mn = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", mn, joinScope);
+        cgArenaAlloc(ctx, mn, joinScope, "24", 8);
         char* slot0 = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %%olang.merge, ptr %s, i32 0, i32 0\n", slot0, mn);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", mergeHead, slot0);
@@ -5385,12 +5403,10 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char* resultHere = NULL;
     if (s->var.storeInResult && ctx->curFunc && ctx->curFunc->type.resultScope) {
         resultHere = cgResolveScope(ctx, ctx->curFunc->type.resultScope, 0);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, resultHere,
-                TypeGetSize(s->var.type));
+        cgArenaAllocFor(ctx, slot, resultHere, s->var.type);
     } else if (s->ctorField && ctx->ctorHere && !cgIsReference(s->var.type) && canonicalVar(&s->var)->slotBorrowed) {
         //C2d: a field a reference was taken to is stored where the instance lands, as what it refers to is
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, ctx->ctorHere,
-                TypeGetSize(s->var.type));
+        cgArenaAllocFor(ctx, slot, ctx->ctorHere, s->var.type);
     } else cgValueSlotAs(ctx, slot, s->var.type, ty);
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
     //D15c: "x T[N] = v" / "x T[expr] = v" - every element gets v
@@ -7292,9 +7308,24 @@ void emitScopeRuntime(FILE* out) {
         "  ret i64 %%limit\n"
         "}\n\n", (int)_SC_PHYS_PAGES, (int)_SC_PAGESIZE);
     fputs(
-        //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
-        //doesn't have room
-        "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
+        //O8a: an array's storage, or anything else that is not one aggregate - aligned by its own size, so a large array
+        //is ready for the widest vector loads: 8 bytes below 32, 32 below 64, and 64 from 64 up. Two selects, no
+        //branch; with the size known while compiling, as it mostly is, they fold away
+        "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) alwaysinline {\n"
+        "entry:\n"
+        "  %sizeup = add i64 %rawsize, 7\n"
+        "  %size8 = and i64 %sizeup, -8\n"
+        "  %a32 = icmp uge i64 %size8, 32\n"
+        "  %a64 = icmp uge i64 %size8, 64\n"
+        "  %alnA = select i1 %a32, i64 32, i64 8\n"
+        "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
+        "  %p = call ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln)\n"
+        "  ret ptr %p\n"
+        "}\n\n"
+        //bump-allocates size bytes from scope, aligned to aln (a power of two, at least 8), growing (linking on one more
+        //chunk) if the current one doesn't have room. O8a: a struct's or an enum's storage takes its own alignment
+        //(cgAllocAlign) - the size class an array's takes would leave a 40-byte struct 64 bytes apart from the next
+        "define linkonce_odr noalias ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) {\n"
         "entry:\n"
         //every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
         //raw byte sum, so without this a 12-byte "int32[3]" left the following allocation at offset 12 -
@@ -7308,16 +7339,10 @@ void emitScopeRuntime(FILE* out) {
         //made twice, a struct with no fields built twice) - a zero size bumped nothing, and handed both the same address
         "  %size0 = icmp eq i64 %size8, 0\n"
         "  %size = select i1 %size0, i64 8, i64 %size8\n"
-        //the alignment this allocation gets, from its own size: enough for SSE at 32 bytes and for AVX-512
-        //or a cache line at 64. Two selects, no branch, and small allocations are unaffected.
-        "  %a32 = icmp uge i64 %size, 32\n"
-        "  %a64 = icmp uge i64 %size, 64\n"
-        "  %alnA = select i1 %a32, i64 32, i64 8\n"
-        "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
         "  %alnm1 = sub i64 %aln, 1\n"
         "  %alnmask = sub i64 0, %aln\n"
-        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - which is every one under
-        //32 bytes, decided while compiling where the size is known - takes the offset as it is
+        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - every aggregate, and every
+        //array under 32 bytes, decided while compiling where the size is known - takes the offset as it is
         "  %round = icmp ugt i64 %aln, 8\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
@@ -7914,7 +7939,7 @@ void emitScopeRuntime(FILE* out) {
         //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
         "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
-        "  %node = call ptr @__olang_scope_alloc(ptr %scope, i64 24)\n"
+        "  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 24, i64 8)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %oldhead = load ptr, ptr %dheadptr\n"
         "  %nextptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 0\n"

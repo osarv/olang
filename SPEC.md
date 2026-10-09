@@ -3822,10 +3822,12 @@ implementation may set aside in the local's block's scope (unobservably, since i
 guarantee when or by what underlying storage is reused: it is valid until the owning scope closes, and invalid
 after.
 
-**O8a (allocation alignment).** Storage a scope hands out is aligned by its own size: 8 bytes below 32,
-32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
+**O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
+below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
 SIMD unit loads, and for a cache line, so an array large enough to be worth vectorising is always aligned
-for it without anything being written at the declaration.
+for it without anything being written at the declaration. Storage for any other value - a struct or an enum an
+instance of which is made in a scope, a lambda's captures, a value too large for a frame - is aligned as its type is
+(§3.2), and to 8 bytes at least, so instances of one type made one after another lie their size apart.
 
 Alignment beyond 64 bytes is not expressible (see also §11 X3a, which states the same ceiling for a
 foreign type reached through an array).
