@@ -3202,6 +3202,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   text in its own closed scope - the next scope to take a chunk wrote over it; stack overflows from import strings or
   root paths longer than `PATH_MAX`. **Skipped**: T7a errors of `Pair(1, "x")` reported inside the prelude (the types
   agent's "instantiated from" note covers it).
+- **`-t` builds each listed file in a process of its own (B3a, 2026-10-09).** A build frees nothing, so the one
+  process that built every listed file in turn held them all: the full suite's compiler peaked at 11.1GiB (12.3GiB with
+  what it ran) and was OOM-killed beside other work. The driver now forks per file once the arguments are read; the
+  child builds, links and runs that file's tests and exits, the parent waits and goes on. Peak 3.1GiB (the largest file,
+  runner.olang, 3.0GiB), wall 257s -> 241s. A fatal error or a crash of the compiler on one file now ends that file
+  alone (a check crashes it mid-list; the old compiler stopped there). **Decided (mine)**: children run one at a time,
+  not N side by side - memory, not cores, bounds parallel work on the shared machine, and the suite's time is mostly
+  `checks/checks.olang` (156s, one file), so two at a time would save ~45s (estimated from per-file times) for ~5.7GiB;
+  it would also need buffered output and atomic object writes (two files importing one module build one object path).
+  `-b`/`-c`/`-i` build one program; what they accumulate is within it (B9c's attempts are never freed).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
