@@ -125,6 +125,12 @@ because what it finds about structure feeds the refactor.
   arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
   notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
   characters, ~470 call sites, no arguments. The user approved this plan ("Yes do that", 2026-10-09).
+- 07:15 (plan upgraded; the user: "add more agents, we wanna speed things up"): six agents. Fixing: tfix, efix
+  (resumed), sfix. New: wt-isatom (`a is b` + atomic methods + D3a for type names), wt-tfork (-t runs each file in a
+  forked child, so the suite's peak RSS is one file's - unblocks parallel verifies), wt-lexport (self-hosting spike:
+  token.c ported to selfhost/token.olang, `make tokcheck` diffs tokens with the C lexer over the repo, plus a friction
+  list from writing real olang - started early because it touches nothing else). Error-message remake waits for tfix
+  (it is adding an "instantiated from" note to errmsg.c).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
