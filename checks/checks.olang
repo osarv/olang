@@ -536,6 +536,11 @@ fn interp(r mut report&) ? Failed {
                  "ends did not abort", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ended unlike the built program", dir)
+    # X6: os.Exec runs a program through __olang_spawn, which -i provides itself; std/json the same either way
+    try r.expect(sh(dir, "\"$OLANG\" -b exec.olang > out.txt 2>&1 && ./build/exec > want.txt 2>&1") == 0, "exec build", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i exec.olang > out.txt 2>&1") == 0, "-i exec.olang failed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran exec.olang unlike the built program", dir)
+    try r.expect(outOf(dir).Contains("4 [fed in] [err") and outOf(dir).Contains("missing yes"), "-i exec.olang output", dir)
 }
 
 # B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -

@@ -1,0 +1,14 @@
+{
+  "name": "olang",
+  "version": 0.9,
+  "released": false,
+  "license": null,
+  "tags": ["fast", "safe", "small"],
+  "authors": [
+    {"name": "Ada", "commits": 1205, "email": "ada@example.com"},
+    {"name": "Grace", "commits": 37, "email": null}
+  ],
+  "limits": {"depth": 1000, "ratio": 0.1, "tiny": 5e-324, "huge": 1.7976931348623157e308, "neg": -0.0},
+  "text": "line one\nline \"two\"\ttabbed é 中 😀 \\ \/",
+  "empty": {"array": [], "object": {}, "string": ""}
+}

@@ -1,0 +1,18 @@
+# check: fail error[O26]: this value refers to this function's own storage
+# O13a: a loop body runs again after itself, so a return in it sees what the loop assigns the local later - here text
+# made in this function's own block. It used to be judged by the first iteration's binding alone, and returned freed storage
+type H struct(r String&) {
+    r
+}
+fn mk(n I64, s String&) H {
+    e := H(s)
+    for i in range 3 {
+        if i == 2 { return e }
+        e = H($n $n)
+    }
+    return H(s)
+}
+fn main() ? {
+    w := mk(12, "x")
+    assert w.r.Len() > 0
+}
