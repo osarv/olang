@@ -37,6 +37,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include "comptime.h"
+#include "errmsg.h"
 #include "util.h"
 
 struct var* canonicalVar(struct var* v);
@@ -51,6 +52,9 @@ void RdSpellSig(struct type f, char* buf, size_t n);
 //B3e: how deep an interpreted program may recurse - its stack (CtRunProgram's thread) is sized for it
 #define CT_RUN_DEPTH_BUDGET 100000
 #define CT_RUN_STACK ((size_t)1 << 30)
+//how much of a thread's stack is kept spare: an evaluation that finds less left stops with a message rather than run off
+//the end of it - an interpreted call's own frames take a few KB, so the budgets above can outlast the stack (B3e)
+#define CT_STACK_SPARE ((uintptr_t)8 << 20)
 
 //B3e: a whole program is running ("-i"), so the effects K1 refuses are performed
 static bool ctRun;
@@ -58,6 +62,11 @@ static bool ctRun;
 enum ctFlow { CF_NORMAL, CF_RETURN, CF_BREAK, CF_CONTINUE, CF_ERROR, CF_FAIL };
 
 struct ctLocal { struct str name; struct ctVal* node; };
+
+//E30: a comparison chain's shared operand, computed once and read by the next comparison - kept here, per evaluation,
+//and only for the call it was made in: on the operand itself, a chain re-evaluated inside its own Less (a recursion
+//through the method) read the outer chain's values as its own
+struct ctChainVal { struct operand* op; struct ctVal* v; int depth; };
 
 struct ctState {
     long long steps;
@@ -78,13 +87,17 @@ struct ctState {
     CtLocalFixer fixer;          //S8b: fixes the condition's own function's locals - only at depth 0
     void* fixerCtx;
     struct var* func;            //the function whose body is running, NULL at the top
+    struct semaModule* mod;      //the module whose code is running - a function's, or a global initializer's
     //K2c: evaluating a global's initializer. Everything its own frame builds lands in the program's scope,
     //which never closes (O1b), so a destructor there would never run at all - building one is no effect
     bool globalInit;
-    //E27: the comprehensions being built, innermost last, each with how many elements its storage has room for
-    struct ctVal* compr[64];
-    int comprCap[64];
-    int comprDepth;
+    //E27: the comprehensions being built, innermost last, each with how many elements its storage has room for -
+    //as deep as the program nests them, a recursion through one included
+    struct ctVal** compr;
+    int* comprCap;
+    int comprDepth, comprAlloc;
+    struct ctChainVal* chain; //E30, innermost last
+    int chainLen, chainAlloc;
 };
 
 bool SemanticIsBuildConst(struct var* v);
@@ -92,8 +105,9 @@ bool SemanticIsBuildConst(struct var* v);
 //why a function with a branch still being decided (S8b) is not evaluated: its body is not yet the program's
 const char* CT_WHY_INCOMPLETE = "it calls a function one of whose branches is still being decided";
 
-//immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang)
-struct ctGlobal { struct var* v; struct ctVal* val; bool busy; bool usedBuild; };
+//immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang). writable: its value reaches
+//storage a writable reference can change while the program runs (K1)
+struct ctGlobal { struct var* v; struct ctVal* val; bool busy; bool usedBuild; bool writable; };
 static struct list ctGlobals;
 static bool ctGlobalsReady;
 
@@ -193,11 +207,19 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
         //a capturing lambda is a new closure each time it is made, as it is at run time (D16c)
         return x->kind == y->kind && canonicalVar(x->fn) == canonicalVar(y->fn) && x->elems == y->elems;
     }
-    if (x->kind == CT_NULL || y->kind == CT_NULL) return x->kind == y->kind; //a null is the same only as a null
     struct ctVal* a = x->kind == CT_REF ? x->target : NULL;
     struct ctVal* b = y->kind == CT_REF ? y->target : NULL;
-    if (a && b && a != b && a->kind == CT_AGG && b->kind == CT_AGG && a->type.bType == BASETYPE_ARRAY
-        && b->type.bType == BASETYPE_ARRAY) return a->n == b->n && (a->n == 0 || a->elems == b->elems);
+    //an array is its storage and its length: no storage and no length is what a null array reference is too, bit for
+    //bit ({ 0, null }) - the zero value of an array has no storage yet
+    bool arrA = x->kind == CT_NULL ? x->type.bType == BASETYPE_ARRAY : a && a->kind == CT_AGG && a->type.bType == BASETYPE_ARRAY;
+    bool arrB = y->kind == CT_NULL ? y->type.bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type.bType == BASETYPE_ARRAY;
+    if (arrA && arrB) {
+        int na = a ? a->n : 0, nb = b ? b->n : 0;
+        struct ctVal** ea = a ? a->elems : NULL;
+        struct ctVal** eb = b ? b->elems : NULL;
+        return a == b || (na == nb && ea == eb);
+    }
+    if (x->kind == CT_NULL || y->kind == CT_NULL) return x->kind == y->kind; //a null is the same only as a null
     return a == b;
 }
 
@@ -206,15 +228,27 @@ static struct ctVal* ctCopy(struct ctVal* v) {
     struct ctVal* c = ctNew(v->kind, v->type);
     *c = *v;
     if (v->kind == CT_AGG) {
+        c->viewOf = NULL; //a copy is storage of its own
+        c->viewOff = 0;
         c->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(v->n ? v->n : 1));
         for (int i = 0; i < v->n; i++) c->elems[i] = ctCopy(v->elems[i]);
     }
     return c;
 }
 
-//writes a value into an existing node, so every reference to that node sees it
+//writes a value into an existing node, so every reference to that node sees it. T7: an aggregate of the same shape is
+//written into the storage it already has - each part into its own node, so a reference to a part (a field, an
+//element, a slice of a value array) sees the new value as it does at run time - and only an array whose length
+//changes gets new storage, which an earlier borrow of the old one goes on naming
 static void ctAssign(struct ctVal* node, struct ctVal* v) {
     if (v->kind != CT_AGG) { *node = *v; return; } //ctCopy of anything else is this same struct copy
+    bool sameShape = node->kind == CT_AGG && node->n == v->n && node->type.bType == v->type.bType
+                     && (v->type.bType != BASETYPE_CHOICE || node->i == v->i);
+    if (sameShape) {
+        node->i = v->i;
+        for (int i = 0; i < v->n; i++) ctAssign(node->elems[i], v->elems[i]);
+        return;
+    }
     struct ctVal* c = ctCopy(v);
     *node = *c;
 }
@@ -240,7 +274,8 @@ static struct ctVal* ctZero(struct type t) {
     if (t.bType == BASETYPE_ARRAY) {
         struct ctVal* a = ctNew(CT_AGG, t);
         a->n = (!t.arrMalloc && t.arrLen) ? (int)t.arrLen->intLiteralVal : 0;
-        a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
+        //E10: an empty zero value has no storage ({ 0, null }), so it is the same as any other such array
+        a->elems = a->n ? MallocOrCrash(sizeof(struct ctVal*) * (size_t)a->n) : NULL;
         for (int i = 0; i < a->n; i++) a->elems[i] = ctZero(*t.arrElem);
         return a;
     }
@@ -286,11 +321,38 @@ static struct ctVal* ctDeref(struct ctVal* v) {
 
 static double ctAsF(struct ctVal* v) { return v->kind == CT_FLOAT ? v->f : (double)ctExact(v); }
 
+//T4: v as float type t holds it - an integer rounded once, straight to t, as the generated code's sitofp/uitofp rounds
+//it: through a double (ctAsF) a 64-bit integer was rounded twice, and an F32 or BF16 came out one step off
+static double ctToFloat(struct ctVal* v, struct type t) {
+    if (v->kind == CT_FLOAT) return v->f;
+    ctWide x = ctExact(v);
+    return IntRoundTo(x < 0, (unsigned long long)(x < 0 ? -x : x), ctFloatKind(t));
+}
+
 static struct ctVal* ctEval(struct ctState* st, struct operand* op);
 static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type dst);
+static struct ctVal* ctFitBoundary(struct ctState* st, struct operand* op, struct type dst);
 static void ctExec(struct ctState* st, struct statement* s);
 static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** out, struct type want);
 static void ctExecBlock(struct ctState* st, struct list* block);
+
+//B3e: whether this thread's stack is nearly used up - its lowest address found once, from the thread's own attributes
+static _Thread_local uintptr_t ctStackLow; //0: not looked up yet, 1: not known
+static bool ctStackNearEnd(void) {
+    if (!ctStackLow) {
+        pthread_attr_t a;
+        void* addr = NULL;
+        size_t size = 0;
+        if (pthread_getattr_np(pthread_self(), &a) == 0) {
+            if (pthread_attr_getstack(&a, &addr, &size) == 0) ctStackLow = (uintptr_t)addr;
+            pthread_attr_destroy(&a);
+        }
+        if (!ctStackLow) ctStackLow = 1;
+    }
+    char probe;
+    uintptr_t at = (uintptr_t)&probe;
+    return ctStackLow > 1 && at > ctStackLow && at - ctStackLow < CT_STACK_SPARE;
+}
 
 static bool ctStep(struct ctState* st, struct token tok) {
     if (ctRun) return true; //B3e: a program runs as long as it runs
@@ -315,13 +377,129 @@ static void ctDeclare(struct ctState* st, struct str name, struct ctVal* v) {
 
 // ---- globals ----
 
+//K1/K2b: what globals hold. Every aggregate a global's value reaches is that global's storage (owned): compile-time
+//evaluation never writes it - skipping the computation at run time would skip the write - and codegen writes it out
+//once, as the global's data, with two references to it one instance. What a writable reference reaches from a
+//global's value can be changed while the program runs: such a global's contents are not a compile-time value, and
+//what it reaches is not written out read-only. Both are sets of nodes, keyed by address.
+struct ctNodeEntry { struct ctVal* node; struct var* g; };
+struct ctNodeSet { struct ctNodeEntry* tab; size_t cap, len; };
+static struct ctNodeSet ctOwned, ctWritable;
+
+static size_t ctHashPtr(const void* p) {
+    unsigned long long x = (unsigned long long)(uintptr_t)p;
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    return (size_t)x;
+}
+static struct ctNodeEntry* ctNodeFind(struct ctNodeSet* s, const struct ctVal* n) {
+    if (!s->cap) return NULL;
+    for (size_t i = ctHashPtr(n) & (s->cap - 1);; i = (i + 1) & (s->cap - 1)) {
+        if (s->tab[i].node == n) return &s->tab[i];
+        if (!s->tab[i].node) return NULL;
+    }
+}
+static bool ctNodeAdd(struct ctNodeSet* s, struct ctVal* n, struct var* g) { //false when n was in it already
+    if (ctNodeFind(s, n)) return false;
+    if ((s->len + 1) * 2 > s->cap) {
+        struct ctNodeSet bigger = { calloc(s->cap ? s->cap * 2 : 64, sizeof(struct ctNodeEntry)), s->cap ? s->cap * 2 : 64, 0 };
+        for (size_t i = 0; i < s->cap; i++) if (s->tab[i].node) ctNodeAdd(&bigger, s->tab[i].node, s->tab[i].g);
+        free(s->tab);
+        *s = bigger;
+    }
+    size_t i = ctHashPtr(n) & (s->cap - 1);
+    while (s->tab[i].node) i = (i + 1) & (s->cap - 1);
+    s->tab[i] = (struct ctNodeEntry){ n, g };
+    s->len++;
+    return true;
+}
+static void ctNodeSetClear(struct ctNodeSet* s) { free(s->tab); *s = (struct ctNodeSet){0}; }
+
+struct var* CtNodeOwner(struct ctVal* node) { struct ctNodeEntry* e = ctNodeFind(&ctOwned, node); return e ? e->g : NULL; }
+bool CtNodeWritable(struct ctVal* node) { return ctNodeFind(&ctWritable, node) != NULL; }
+
+static void ctReach(struct ctVal* v, struct ctNodeSet* seen, struct list* out) {
+    if (!v) return;
+    if (v->kind == CT_REF) { ctReach(v->target, seen, out); return; }
+    if (v->kind != CT_AGG && v->kind != CT_FUNC) return;
+    if (!ctNodeAdd(seen, v, NULL)) return;
+    ListAdd(out, &v);
+    if (v->viewOf) ctReach(v->viewOf, seen, out);
+    for (int i = 0; i < v->n && v->elems; i++) ctReach(v->elems[i], seen, out);
+}
+void CtReachableNodes(struct ctVal* v, struct list* out) {
+    struct ctNodeSet seen = (struct ctNodeSet){0};
+    ctReach(v, &seen, out);
+    ctNodeSetClear(&seen);
+}
+
+//every aggregate v reaches - through its parts, the references it holds and a closure's captures - is g's storage
+static void ctOwn(struct ctVal* v, struct var* g) {
+    if (!v) return;
+    if (v->kind == CT_REF) { ctOwn(v->target, g); return; }
+    if (v->kind != CT_AGG && v->kind != CT_FUNC) return;
+    if (!ctNodeAdd(&ctOwned, v, g)) return;
+    if (v->viewOf) ctOwn(v->viewOf, g);
+    for (int i = 0; i < v->n && v->elems; i++) ctOwn(v->elems[i], g);
+}
+
+static bool ctTypeHoldsFunc(struct type t, int depth);
+//whether a value of type t can hold a reference or a function value anywhere - nothing else leads to other storage
+static bool ctTypeLeads(struct type t) { return t.structMAlloc || TypeHoldsReferences(t) || ctTypeHoldsFunc(t, 0); }
+
+//the nodes v reaches that a writable reference makes changeable, v being of static type t and itself changeable when w
+//- its by-value parts are its own storage, and a reference's permission is in its type (T25b). Returns whether any was
+static bool ctMarkWritable(struct ctVal* v, struct type t, bool w, int depth) {
+    if (!v) return false;
+    if (depth > 100000) { //a chain deeper than this walk's frames afford: everything past here is taken as changeable
+        struct list rest = ListInit(sizeof(struct ctVal*));
+        CtReachableNodes(v, &rest);
+        for (int i = 0; i < rest.len; i++) ctNodeAdd(&ctWritable, *(struct ctVal**)ListGetIdx(&rest, i), NULL);
+        ListDestroy(rest);
+        return true;
+    }
+    if (v->kind == CT_REF) {
+        struct type rt = t;
+        rt.structMAlloc = false;
+        return ctMarkWritable(v->target, rt, t.refMut, depth + 1);
+    }
+    if (v->kind == CT_FUNC) { //a closure: what its captures may write
+        bool any = false;
+        for (int i = 0; v->fn && i < v->n && i < v->fn->lambdaCaptures.len; i++) {
+            struct var* in = ((struct lambdaCapture*)ListGetIdx(&v->fn->lambdaCaptures, i))->inner;
+            any = ctMarkWritable(v->elems[i], in->type, false, depth + 1) || any;
+        }
+        return any;
+    }
+    if (v->kind != CT_AGG) return false;
+    bool any = false;
+    if (w) {
+        if (!ctNodeAdd(&ctWritable, v, NULL)) return true; //seen as changeable already, with all it reaches
+        if (v->viewOf) ctNodeAdd(&ctWritable, v->viewOf, NULL); //a slice's elements are its base's
+        any = true;
+    }
+    if (t.bType == BASETYPE_ARRAY && t.arrElem) {
+        if (!ctTypeLeads(*t.arrElem)) return any;
+        for (int i = 0; i < v->n; i++) any = ctMarkWritable(v->elems[i], *t.arrElem, w, depth + 1) || any;
+    } else if (t.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < v->n && i < t.vars.len; i++)
+            any = ctMarkWritable(v->elems[i], ((struct var*)ListGetIdx(&t.vars, i))->type, w, depth + 1) || any;
+    } else if (t.bType == BASETYPE_CHOICE && ChoiceHasPayload(t) && v->i >= 0 && v->i < t.vars.len) {
+        struct type c = ((struct var*)ListGetIdx(&t.vars, (int)v->i))->type;
+        for (int i = 0; i < v->n && i < c.vars.len; i++)
+            any = ctMarkWritable(v->elems[i], ((struct var*)ListGetIdx(&c.vars, i))->type, w, depth + 1) || any;
+    }
+    return any;
+}
+
 static struct ctGlobal* ctGlobalEntry(struct var* v) {
     if (!ctGlobalsReady) { ctGlobals = ListInit(sizeof(struct ctGlobal)); ctGlobalsReady = true; }
     for (int i = 0; i < ctGlobals.len; i++) {
         struct ctGlobal* g = ListGetIdx(&ctGlobals, i);
         if (g->v == v) return g;
     }
-    struct ctGlobal g = { v, NULL, false, false };
+    struct ctGlobal g = { v, NULL, false, false, false };
     ListAdd(&ctGlobals, &g);
     return ListGetIdx(&ctGlobals, ctGlobals.len - 1);
 }
@@ -333,7 +511,11 @@ static struct ctVal* ctRunGlobal(struct var* v) {
     return g->val;
 }
 
-static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct var* v) {
+static const char* CT_WHY_CHANGEABLE = "it reads a global holding storage a writable reference reaches, which the running program can change";
+
+//own: v's value is wanted for v itself (K2) - its own initializer built what it holds, so reaching changeable storage
+//is no reason to refuse it there, only to every other reader
+static struct ctVal* ctReadGlobalAs(struct ctState* st, struct operand* op, struct var* v, bool own) {
     if (v->mut && ctRun && !v->isFuncDecl) return ctRunGlobal(v);
     if (v->mut) return ctFail(st, op->tok, "it reads a mutable global, whose value is the running program's");
     if (v->isFuncDecl) { //a function as a value - a lambda's carrying the captures it made (D16c)
@@ -354,14 +536,19 @@ static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct
     if (SemanticIsBuildConst(v)) st->usedBuild = true;
     if (!v->initExpr) return ctZero(v->type); //D15a: no initializer is the zero value
     struct ctGlobal* g = ctGlobalEntry(v);
-    if (g->val) { st->usedBuild = st->usedBuild || g->usedBuild; return g->val; }
+    if (g->val) {
+        st->usedBuild = st->usedBuild || g->usedBuild;
+        if (g->writable && !own && !ctRun) return ctFail(st, op->tok, CT_WHY_CHANGEABLE);
+        return g->val;
+    }
     if (g->busy) return ctFail(st, op->tok, "these globals are defined in terms of each other");
     g->busy = true;
     struct ctState inner = (struct ctState){0};
     struct list locals = ListInit(sizeof(struct ctLocal));
     inner.locals = &locals;
     inner.steps = st->steps;
-    inner.globalInit = ctRun; //B3e/K2c: a running program builds it in its own scope, which never closes
+    inner.globalInit = true; //K2c: what its own frame builds lands in the program's scope, which never closes
+    inner.mod = v->owner;
     struct ctVal* val = ctFit(&inner, v->initExpr, v->type);
     st->steps = inner.steps;
     g = ctGlobalEntry(v); //the list may have grown
@@ -371,10 +558,20 @@ static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct
     g->val = val;
     g->usedBuild = inner.usedBuild;
     st->usedBuild = st->usedBuild || inner.usedBuild;
+    if (ctRun) return val;
+    ctOwn(val, v);
+    g->writable = ctMarkWritable(val, v->type, false, 0);
+    if (g->writable && !own) return ctFail(st, op->tok, CT_WHY_CHANGEABLE);
     return val;
 }
 
+static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct var* v) {
+    return ctReadGlobalAs(st, op, v, false);
+}
+
 // ---- lvalues: the node an operand names ----
+
+static const char* CT_WHY_WRITES_GLOBAL = "it writes a global or what one holds, which the running program would then not see written";
 
 static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWrite) {
     if (op->placeOf && op->placeOf->ctPlace) return op->placeOf->ctPlace; //S4: the place its statement computed
@@ -395,7 +592,7 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
                 return node;
             }
             if (forWrite && ctRun) return ctRunGlobal(canonicalVar(op->readVar)); //B3e
-            if (forWrite) return ctFail(st, op->tok, "it writes a global, which the running program would then not see written");
+            if (forWrite) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             return ctReadGlobal(st, op, canonicalVar(op->readVar));
         }
         case OPERATION_MEMBER: {
@@ -405,6 +602,7 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
                                  : ctDeref(ctLvalue(st, baseOp, forWrite));
             if (baseOp->isSpreadSource && op->spreadIndex == 0) baseOp->spreadVal = base;
             if (!base) return NULL;
+            if (forWrite && !ctRun && CtNodeOwner(base)) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it reads through a null reference");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
             for (int i = 0; i < base->type.vars.len && i < base->n; i++) {
@@ -422,6 +620,7 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
                 if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
                 return NULL;
             }
+            if (forWrite && !ctRun && CtNodeOwner(base)) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it indexes a null array");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
             if (idx->i < 0 || idx->i >= base->n) {
@@ -602,13 +801,13 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
             if (!(v->f >= lo && v->f < hi)) return ctCheckFail(st, op, "OVERFLOW");
         } else if (ctIsFloat(t)) { //into a float: a finite value becoming infinite
             double x = ctAsF(v);
-            if (isfinite(x) && isinf(ctRound(t, x))) return ctCheckFail(st, op, "OVERFLOW");
+            if (isfinite(x) && isinf(ctRound(t, ctToFloat(v, t)))) return ctCheckFail(st, op, "OVERFLOW");
         } else if (v->kind != CT_FLOAT && ctIsInt(t)) {
             if (!ctFits(t, ctExact(v))) return ctCheckFail(st, op, "OVERFLOW");
         }
     }
     if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type.bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
-    if (ctIsFloat(t)) return ctFloat(t, ctAsF(v));
+    if (ctIsFloat(t)) return ctFloat(t, ctToFloat(v, t));
     if (ctIsInt(t)) {
         if (v->kind == CT_FLOAT) {
             //E26a: a float the target cannot represent is undefined at run time
@@ -739,7 +938,8 @@ static struct var* ctRootVar(struct operand* op) {
     return op && op->opType == OPERATION_READ_VAR ? op->readVar : NULL;
 }
 
-static bool ctIsGlobal(struct var* v) { return v && v->owner && v->type.bType != BASETYPE_FUNC; }
+//a global variable - storage, a function-typed one included - as against a function
+static bool ctIsGlobal(struct var* v) { return v && v->owner && (v->type.bType != BASETYPE_FUNC || v->isGlobalVar); }
 
 static void ctScanWrite(struct ctScan* sc, struct operand* target) {
     struct var* root = ctRootVar(target);
@@ -763,8 +963,15 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
             if (!f || f->type.isExtern) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
             //a call through a function value is evaluable exactly when the function it reaches is - which only
-            //the evaluation knows, so it is decided there (ctCall), not here
-            bool throughValue = !f->owner && !op->isCtorCall;
+            //the evaluation knows, so it is decided there (ctCall), not here. A function-typed global's is read first
+            bool throughValue = (!f->owner || f->isGlobalVar) && !op->isCtorCall;
+            if (f->isGlobalVar && !op->callee) {
+                struct var* g = canonicalVar(f);
+                if (g->mut) { ctScanFail(sc, op->tok, "it reads a mutable global, whose value is the running program's"); return; }
+                struct token t;
+                const char* why = ctGlobalWhy(g, &t);
+                if (why) { ctScanFail(sc, t, why); return; }
+            }
             for (int i = 0; i < op->args.len && !sc->why; i++) {
                 struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
                 //a global bound to a "mut &" parameter may be written through it
@@ -899,6 +1106,239 @@ const char* CtWhyNotEvaluable(struct var* func, struct token* where) {
     return why;
 }
 
+// ---- B5a: the order a module's globals are initialized in ----
+//
+//A global's initializer runs after the initializers of the globals it reads - directly, or through a function it
+//calls - with declaration order breaking ties, and a cycle among them is an error. A call through a function value
+//reaches whichever function the value names, so the functions named as values in what runs - and in the initializer
+//of a global it reads that holds one - count as called wherever any call through a value is made.
+
+struct ctDeps {
+    struct semaModule* mod;
+    struct list funcs;   //struct var*: functions already walked
+    struct list named;   //struct var*: functions named as values, which a call through a value may reach
+    struct list found;   //struct var*: this module's globals read
+    struct list holders; //struct var*: globals holding function values whose initializers were searched for names
+    bool throughValue;   //a call through a function value was seen
+    bool namesOnly;      //searching a global's initializer for the functions it names, nothing else
+};
+
+static void ctDepOp(struct ctDeps* d, struct operand* op);
+static void ctDepBlock(struct ctDeps* d, struct list* block);
+
+static bool ctListHas(struct list* l, void* p) {
+    for (int i = 0; i < l->len; i++) if (*(void**)ListGetIdx(l, i) == p) return true;
+    return false;
+}
+
+static bool ctTypeHoldsFunc(struct type t, int depth) {
+    if (t.bType == BASETYPE_FUNC) return true;
+    if (depth > 8) return false;
+    if (t.bType == BASETYPE_ARRAY && t.arrElem) return ctTypeHoldsFunc(*t.arrElem, depth + 1);
+    if (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < t.vars.len; i++) if (ctTypeHoldsFunc(((struct var*)ListGetIdx(&t.vars, i))->type, depth + 1)) return true;
+    }
+    return false;
+}
+
+static void ctDepFunc(struct ctDeps* d, struct var* f) {
+    if (!f || ctListHas(&d->funcs, f)) return;
+    ListAdd(&d->funcs, &f);
+    bool names = d->namesOnly;
+    d->namesOnly = false; //a function walked runs - what it reads counts
+    ctDepBlock(d, &f->codeBlock);
+    d->namesOnly = names;
+}
+
+static void ctDepGlobal(struct ctDeps* d, struct var* g) {
+    if (d->namesOnly) return;
+    if (g->owner == d->mod && !ctListHas(&d->found, g)) ListAdd(&d->found, &g);
+    //what it holds may be called: the functions its initializer names
+    if (ctTypeHoldsFunc(g->type, 0) && g->initExpr && !ctListHas(&d->holders, g)) {
+        ListAdd(&d->holders, &g);
+        d->namesOnly = true;
+        ctDepOp(d, g->initExpr);
+        d->namesOnly = false;
+    }
+}
+
+//the functions "$" calls rendering a value of type t - its Str, or its parts' (E11c)
+static void ctDepStr(struct ctDeps* d, struct type t, int depth) {
+    if (depth > 8) return;
+    struct var* m = SemanticStrOf(t);
+    if (m) { ctDepFunc(d, m); return; }
+    if (t.bType == BASETYPE_ARRAY && t.arrElem) ctDepStr(d, *t.arrElem, depth + 1);
+    if (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < t.vars.len; i++) ctDepStr(d, ((struct var*)ListGetIdx(&t.vars, i))->type, depth + 1);
+    }
+}
+
+static void ctDepStmt(struct ctDeps* d, struct statement* s) {
+    ctDepOp(d, s->target);
+    ctDepOp(d, s->op);
+    ctDepOp(d, s->fillValue);
+    ctDepOp(d, s->forInit);
+    if (s->forPost) ctDepStmt(d, s->forPost);
+    ctDepBlock(d, &s->block);
+    if (s->elseStmnt) {
+        if (s->elseIsBlock) ctDepBlock(d, &s->elseStmnt->block);
+        else ctDepStmt(d, s->elseStmnt);
+    }
+    for (int c = 0; c < s->catchClauses.len; c++) ctDepBlock(d, &((struct catchClause*)ListGetIdx(&s->catchClauses, c))->block);
+    if (s->sType == STATEMENT_MATCH) {
+        ctDepBlock(d, &s->matchHold);
+        for (int i = 0; i < s->matchCases.len; i++) {
+            struct statement* c = ListGetIdx(&s->matchCases, i);
+            for (int a = 0; a < c->caseAlts.len; a++) {
+                struct caseAlt* alt = ListGetIdx(&c->caseAlts, a);
+                ctDepOp(d, alt->test);
+                for (int b = 0; b < alt->binds.len; b++) ctDepOp(d, ((struct caseBind*)ListGetIdx(&alt->binds, b))->from);
+            }
+            ctDepOp(d, c->caseGuard);
+            ctDepOp(d, c->op);
+            ctDepBlock(d, &c->block);
+        }
+        ctDepBlock(d, &s->nomatchBlock);
+        ctDepOp(d, s->nomatchValue);
+    }
+}
+
+static void ctDepBlock(struct ctDeps* d, struct list* block) {
+    for (int i = 0; i < block->len; i++) ctDepStmt(d, ListGetIdx(block, i));
+}
+
+static void ctDepOp(struct ctDeps* d, struct operand* op) {
+    if (!op) return;
+    switch (op->opType) {
+        case OPERATION_READ_VAR: {
+            struct var* v = canonicalVar(op->readVar);
+            if (!v) break;
+            if (v->isFuncDecl) { if (!ctListHas(&d->named, v)) ListAdd(&d->named, &v); }
+            else if (ctIsGlobal(v)) ctDepGlobal(d, v);
+            break;
+        }
+        case OPERATION_FUNCCALL: {
+            struct var* f = op->readVar;
+            if (!f || d->namesOnly) break;
+            if (op->callee) d->throughValue = true;
+            else if (f->isGlobalVar) { ctDepGlobal(d, canonicalVar(f)); d->throughValue = true; }
+            else if (!f->owner && !op->isCtorCall) d->throughValue = true;
+            else if (!f->type.isExtern) ctDepFunc(d, f);
+            break;
+        }
+        case OPERATION_STR_OF:
+            if (!d->namesOnly && op->args.len) ctDepStr(d, (*(struct operand**)ListGetIdx(&op->args, 0))->type, 0);
+            break;
+        default: break;
+    }
+    ctDepOp(d, op->callee);
+    ctDepBlock(d, &op->comprBody);
+    for (int i = 0; i < op->args.len; i++) ctDepOp(d, *(struct operand**)ListGetIdx(&op->args, i));
+    for (int c = 0; c < op->catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        ctDepBlock(d, &cc->block);
+        ctDepOp(d, cc->dflt);
+    }
+}
+
+//this module's globals g's initializer reads, directly or through what it calls
+static struct list ctGlobalDeps(struct semaModule* mod, struct var* g) {
+    struct ctDeps d = (struct ctDeps){0};
+    d.mod = mod;
+    d.funcs = ListInit(sizeof(struct var*));
+    d.named = ListInit(sizeof(struct var*));
+    d.found = ListInit(sizeof(struct var*));
+    d.holders = ListInit(sizeof(struct var*));
+    ctDepOp(&d, g->initExpr);
+    //a call through a function value may reach any function named as one - walked until nothing new is named
+    for (int i = 0; d.throughValue && i < d.named.len; i++) ctDepFunc(&d, *(struct var**)ListGetIdx(&d.named, i));
+    ListDestroy(d.funcs);
+    ListDestroy(d.named);
+    ListDestroy(d.holders);
+    return d.found;
+}
+
+//a module's global that is set when the program starts - one with an initializer
+static bool ctNeedsInit(struct var* v) {
+    return v->initExpr && !v->isFuncDecl && !v->isMethod && (v->type.bType != BASETYPE_FUNC || v->isGlobalVar);
+}
+
+void CtOrderGlobals(void) {
+    struct list* all = SemanticAllModules();
+    for (int m = 0; m < all->len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, m);
+        struct list gs = ListInit(sizeof(struct var*));
+        for (int i = 0; i < mod->vars.len; i++) {
+            struct var* v = ListGetIdx(&mod->vars, i);
+            if (ctNeedsInit(v)) ListAdd(&gs, &v);
+        }
+        int n = gs.len;
+        struct list* deps = MallocOrCrash(sizeof(struct list) * (size_t)(n ? n : 1));
+        for (int k = 0; k < n; k++) deps[k] = ctGlobalDeps(mod, *(struct var**)ListGetIdx(&gs, k));
+        bool* placed = calloc((size_t)(n ? n : 1), sizeof(bool));
+        mod->globalOrder = ListInit(sizeof(struct var*));
+        mod->globalOrderSet = true;
+        for (int done = 0; done < n; ) {
+            int pick = -1;
+            for (int k = 0; k < n && pick < 0; k++) { //the first, in declaration order, whose every dependency is set
+                if (placed[k]) continue;
+                bool ready = true;
+                for (int j = 0; j < deps[k].len && ready; j++) {
+                    struct var* dv = *(struct var**)ListGetIdx(&deps[k], j);
+                    for (int q = 0; q < n; q++) {
+                        if (*(struct var**)ListGetIdx(&gs, q) == dv && !placed[q]) { ready = false; break; }
+                    }
+                }
+                if (ready) pick = k;
+            }
+            if (pick < 0) {
+                //a cycle: reported once, from the first global left, along the reads back to a global already on it
+                int at = 0;
+                while (placed[at]) at++;
+                int path[64], len = 0;
+                for (int cur = at; len < 64; ) {
+                    int seen = -1;
+                    for (int p = 0; p < len; p++) if (path[p] == cur) seen = p;
+                    if (seen >= 0) {
+                        char buf[1200];
+                        int w = snprintf(buf, sizeof(buf), "%s:", seen == len - 1 ? GLOBAL_INIT_READS_ITSELF : GLOBALS_INIT_CYCLE);
+                        for (int p = seen; p <= len && w < (int)sizeof(buf); p++) {
+                            struct var* gv = *(struct var**)ListGetIdx(&gs, p < len ? path[p] : path[seen]);
+                            w += snprintf(buf + w, sizeof(buf) - (size_t)w, "%s %.*s", p > seen ? " ->" : "", gv->name.len, gv->name.ptr);
+                        }
+                        char* msg = MallocOrCrash(strlen(buf) + 1);
+                        strcpy(msg, buf);
+                        ErrMsgSemantic((*(struct var**)ListGetIdx(&gs, path[seen]))->tok, msg);
+                        //its members are set in declaration order, and the rest ordered on - another cycle is its own error
+                        for (int p = seen; p < len; p++) { placed[path[p]] = true; ListAdd(&mod->globalOrder, ListGetIdx(&gs, path[p])); done++; }
+                        len = -1;
+                        break;
+                    }
+                    path[len++] = cur;
+                    int next = -1;
+                    for (int j = 0; j < deps[cur].len && next < 0; j++) {
+                        struct var* dv = *(struct var**)ListGetIdx(&deps[cur], j);
+                        for (int q = 0; q < n; q++) if (*(struct var**)ListGetIdx(&gs, q) == dv && !placed[q]) { next = q; break; }
+                    }
+                    if (next < 0) break;
+                    cur = next;
+                }
+                if (len >= 0) { //no cycle found (it cannot happen): the rest in declaration order
+                    for (int k = 0; k < n; k++) if (!placed[k]) { placed[k] = true; ListAdd(&mod->globalOrder, ListGetIdx(&gs, k)); done++; }
+                }
+                continue;
+            }
+            placed[pick] = true;
+            ListAdd(&mod->globalOrder, ListGetIdx(&gs, pick));
+            done++;
+        }
+        for (int k = 0; k < n; k++) ListDestroy(deps[k]);
+        free(deps);
+        free(placed);
+        ListDestroy(gs);
+    }
+}
+
 // ---- calls ----
 
 static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func);
@@ -914,10 +1354,12 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     if (func && func->type.isExtern && ctRun) return ctExtern(st, op, func); //B3e
     if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
     struct ctVal* through = NULL;
-    if (!func->owner && !op->isCtorCall) {
-        //a call through a function value: the function it names, decided now (K1a)
-        struct ctVal* fv = op->callee ? ctEval(st, op->callee) : ctFindLocal(st, func->name); //E13b: computed
-        if (!fv && op->callee) return NULL;
+    if ((!func->owner || func->isGlobalVar) && !op->isCtorCall) {
+        //a call through a function value: the function it names, decided now (K1a) - computed (E13b), a local's, or
+        //the one a function-typed global holds
+        struct ctVal* fv = op->callee ? ctEval(st, op->callee)
+                           : func->isGlobalVar ? ctReadGlobal(st, op, canonicalVar(func)) : ctFindLocal(st, func->name);
+        if (!fv && (op->callee || func->isGlobalVar)) return NULL;
         if (fv) fv = ctDeref(fv);
         if (!fv || fv->kind == CT_NULL) return ctFail(st, op->tok, "it calls through a null function value");
         if (fv->kind != CT_FUNC) return ctFail(st, op->tok, "it calls through a function value compile-time evaluation does not model");
@@ -933,14 +1375,14 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         if (why) return ctFail(st, whyTok, why);
     }
     if (func->codeBlock.len == 0 && func->type.hasRetType) return ctFail(st, op->tok, "it calls a function whose body is not available");
-    if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET))
+    if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd())
         return ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
 
     struct list locals = ListInit(sizeof(struct ctLocal));
     for (int i = 0; i < func->type.vars.len && i < op->args.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-        struct ctVal* v = ctFit(st, a, p->type);
+        struct ctVal* v = ctFitBoundary(st, a, p->type);
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
             if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
@@ -963,13 +1405,16 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     }
     struct list* saved = st->locals;
     struct var* savedFunc = st->func;
+    struct semaModule* savedMod = st->mod;
     st->locals = &locals;
     st->func = func;
+    st->mod = func->owner ? func->owner : st->mod;
     st->depth++;
     ctExecBlock(st, &func->codeBlock);
     st->depth--;
     st->locals = saved;
     st->func = savedFunc;
+    st->mod = savedMod;
     //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
     if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
     if (st->flow == CF_RETURN) {
@@ -1013,8 +1458,9 @@ static struct ctVal* ctIncDec(struct ctState* st, struct operand* op, bool prefi
     struct ctVal* node = ctDeref(ctLvalue(st, target, true));
     if (!node) return NULL;
     struct ctVal* old = ctCopy(node);
+    //E6c: wraps, computed unsigned - the compiler's own arithmetic has no overflow of its own
     struct ctVal* nv = ctIsFloat(node->type) ? ctFloat(node->type, node->f + (inc ? 1 : -1))
-                                            : ctInt(node->type, node->i + (inc ? 1 : -1));
+                                            : ctInt(node->type, (long long)((unsigned long long)node->i + (inc ? 1ULL : ~0ULL)));
     ctAssign(node, nv);
     return prefix ? ctCopy(node) : old;
 }
@@ -1042,7 +1488,9 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     vt.structMAlloc = false;
     struct ctVal* view = ctNew(CT_AGG, vt);
     view->n = (int)(h - l);
-    view->elems = base->elems + l;
+    view->elems = base->elems ? base->elems + l : NULL;
+    view->viewOf = base->viewOf ? base->viewOf : base; //E16a: part of its base's storage, wherever that is written out
+    view->viewOff = (int)l + (base->viewOf ? base->viewOff : 0);
     struct ctVal* ref = ctNew(CT_REF, op->type);
     ref->target = view;
     return ref;
@@ -1166,7 +1614,10 @@ static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, str
     struct token whyTok;
     const char* why = ctFuncWhy(m, &whyTok);
     if (why) { ctFail(st, whyTok, why); return false; }
-    if (st->depth >= CT_DEPTH_BUDGET) { ctFail(st, tok, "the computation recurses deeper than compile-time evaluation allows"); return false; }
+    if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
+        ctFail(st, tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        return false;
+    }
     struct var* p = ListGetIdx(&m->type.vars, 0);
     struct ctVal* node = ctNew(CT_INT, p->type);
     if (ctIsRef(p->type)) {
@@ -1262,7 +1713,8 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
 
 //R20: a tried expression whose own check failed runs its clauses; an error from anywhere else passes through
 static struct ctVal* ctEval(struct ctState* st, struct operand* op) {
-    if (op->ctCached) return op->ctCached; //E30: a chain's shared operand, evaluated once
+    //E30: a chain's shared operand, evaluated once - looked for among this call's own only
+    for (int i = st->chainLen - 1; i >= 0 && st->chain[i].depth == st->depth; i--) if (st->chain[i].op == op) return st->chain[i].v;
     struct ctVal* r = ctEvalOp(st, op);
     if (!r && op->isTried && st->flow == CF_ERROR && st->errCheckRoot == op)
         return ctHandleTry(st, op);
@@ -1349,11 +1801,14 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 if (!lv) return NULL;
                 struct ctVal* rv = ctEval(st, r);
                 if (!rv) return NULL;
-                l->ctCached = lv;
-                r->ctCached = rv;
+                if (st->chainLen + 2 > st->chainAlloc) {
+                    st->chainAlloc = st->chainAlloc ? st->chainAlloc * 2 : 8;
+                    st->chain = ReallocOrCrash(st->chain, sizeof(struct ctChainVal) * (size_t)st->chainAlloc);
+                }
+                st->chain[st->chainLen++] = (struct ctChainVal){ l, lv, st->depth };
+                st->chain[st->chainLen++] = (struct ctChainVal){ r, rv, st->depth };
                 struct ctVal* res = ctEval(st, cmp);
-                l->ctCached = NULL;
-                r->ctCached = NULL;
+                st->chainLen -= 2;
                 if (!res) return NULL;
                 all = ctDeref(res)->i != 0;
                 prev = rv;
@@ -1367,7 +1822,11 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
         }
         case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended
-            if (st->comprDepth >= 64) return ctFail(st, op->tok, "comprehensions nest deeper than compile-time evaluation allows");
+            if (st->comprDepth == st->comprAlloc) {
+                st->comprAlloc = st->comprAlloc ? st->comprAlloc * 2 : 8;
+                st->compr = ReallocOrCrash(st->compr, sizeof(struct ctVal*) * (size_t)st->comprAlloc);
+                st->comprCap = ReallocOrCrash(st->comprCap, sizeof(int) * (size_t)st->comprAlloc);
+            }
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = 0;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * 8);
@@ -1378,7 +1837,16 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             st->comprDepth--;
             return st->flow == CF_NORMAL ? a : NULL;
         }
-        case OPERATION_COMPR_RESERVE: return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+        case OPERATION_COMPR_RESERVE: { //E27/D14b: room for more elements than an array of them can have aborts
+            struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+            if (!n) return NULL;
+            struct type elem = *st->compr[st->comprDepth - 1]->type.arrElem;
+            if ((unsigned long long)n->i > (unsigned long long)ArrayLengthLimit(TypeGetSize(elem))) {
+                if (ctRun) ctRunAbort("array length out of range\n");
+                return ctFail(st, op->tok, "it makes an array of a length out of range");
+            }
+            return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+        }
         case OPERATION_COMPR_PUSH: {
             struct ctVal* a = st->compr[st->comprDepth - 1];
             struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type.arrElem);
@@ -1452,7 +1920,9 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             switch (op->opType) {
                 case OPERATION_ATOMIC_LOAD: return old;
                 case OPERATION_ATOMIC_STORE: node->i = ctWrap(node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
-                case OPERATION_ATOMIC_ADD: node->i = ctWrap(node->type, node->i + ctDeref(a)->i); return old;
+                case OPERATION_ATOMIC_ADD: //wraps (E6c), computed unsigned
+                    node->i = ctWrap(node->type, (long long)((unsigned long long)node->i + (unsigned long long)ctDeref(a)->i));
+                    return old;
                 case OPERATION_ATOMIC_SWAP: node->i = ctWrap(node->type, ctDeref(a)->i); return old;
                 default: if (node->i == ctDeref(a)->i) node->i = ctWrap(node->type, ctDeref(b)->i); return old;
             }
@@ -1512,13 +1982,66 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     struct ctVal* v = ctEval(st, op);
     if (!v) return NULL;
     v = ctDeref(v);
+    //C2e: fixed storage (an inline field) takes an array of exactly its length - checked once per copy, and a mismatch
+    //aborts, as the generated code checks it
+    if (dst.bType == BASETYPE_ARRAY && !dst.arrMalloc && dst.arrLen && v->kind == CT_AGG
+            && v->type.bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
+        if (ctRun) ctRunAbort("array length does not match its fixed storage\n");
+        return ctFail(st, op->tok, "it copies an array of another length into fixed storage, which aborts at run time");
+    }
     //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
     if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type.bType == dst.bType) return ctMoveFloat(v, dst); //E33
-    if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctAsF(v));
+    if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctToFloat(v, dst));
     v = ctCopy(v);
     if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = dst;
     return v;
+}
+
+bool CtIsStaticLiteral(struct operand* op, struct type dst) {
+    if (!(dst.bType == BASETYPE_ARRAY && dst.arrMalloc && dst.structMAlloc && !dst.refMut)) return false;
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len) op = *(struct operand**)ListGetIdx(&op->args, 0);
+    if (!op->isLiteral || op->opType != OPERATION_NONE || op->type.bType != BASETYPE_ARRAY || op->type.arrMalloc
+            || !op->type.arrLen) return false;
+    if (op->tok.type == TOK_STR_LIT) return true;
+    struct type et = *op->type.arrElem;
+    bool scalar = (TypeIsNumeric(et) && !et.owner) || et.bType == BASETYPE_BOOL;
+    if (!scalar || op->args.len != op->type.arrLen->intLiteralVal) return false;
+    for (int i = 0; i < op->args.len; i++) { //every element constant, or the literal is built as usual
+        struct operand* e = *(struct operand**)ListGetIdx(&op->args, i);
+        if (!e->isLiteral || e->opType != OPERATION_NONE) return false;
+    }
+    return true;
+}
+
+//T25d/E10: a static literal at a call or a return - the one instance its site is, made the first time the site is
+//reached by the code of one module (each module's object has its own constant for a site its code reaches - a
+//parameter's default, written once, is reached from every calling module's code)
+struct ctStaticLit { struct operand* op; struct semaModule* mod; struct ctVal* node; };
+static struct list ctStaticLits;
+static bool ctStaticLitsReady;
+
+static struct ctVal* ctFitBoundary(struct ctState* st, struct operand* op, struct type dst) {
+    if (!CtIsStaticLiteral(op, dst)) return ctFit(st, op, dst);
+    if (!ctStaticLitsReady) { ctStaticLits = ListInit(sizeof(struct ctStaticLit)); ctStaticLitsReady = true; }
+    struct operand* site = op->opType == OPERATION_NOMINAL_CONVERT ? *(struct operand**)ListGetIdx(&op->args, 0) : op;
+    struct ctVal* node = NULL;
+    for (int i = 0; i < ctStaticLits.len && !node; i++) {
+        struct ctStaticLit* l = ListGetIdx(&ctStaticLits, i);
+        //an evaluation not inside any module's code (an assert's condition, say) is in the module it is written in, which
+        //is the module of whatever code of that site it meets
+        if (l->op == site && (l->mod == st->mod || !l->mod || !st->mod)) node = l->node;
+    }
+    if (!node) {
+        struct ctVal* r = ctFit(st, op, dst);
+        if (!r) return NULL;
+        node = r->target;
+        struct ctStaticLit l = { site, st->mod, node };
+        ListAdd(&ctStaticLits, &l);
+    }
+    struct ctVal* r = ctNew(CT_REF, dst);
+    r->target = node;
+    return r;
 }
 
 // ---- statements ----
@@ -1703,18 +2226,15 @@ static void ctExec(struct ctState* st, struct statement* s) {
         case STATEMENT_MATCH: ctRunMatch(st, s, NULL, (struct type){0}); return;
         case STATEMENT_RET:
             if (s->op) {
-                struct ctVal* v = ctEval(st, s->op);
-                if (!v) return;
-                st->ret = ctIsRef(s->op->type) ? v : ctCopy(v);
-                //a value built in the return itself - a join, a constructor call - returned through a reference result
-                //is that reference to it, as the run time builds it where the result lands: left bare, a caller's
-                //"== null" (inside every comparison through Eq) read the value as no reference at all
+                //the value lands in the declared result as anything lands in a place of its type (E12): a reference
+                //read out into a value result is a copy of what it names - returned as the reference itself, a caller
+                //comparing it compared identities where the run time compares values - and a value built in the return
+                //itself (a join, a constructor call) returned through a reference result is a reference to it, as the
+                //run time builds it where the result lands
                 struct type* rt = st->func && st->func->type.hasRetType ? st->func->type.retType : NULL;
-                if (rt && ctIsRef(*rt) && !ctIsRef(s->op->type) && v->kind != CT_REF && v->kind != CT_NULL) {
-                    struct ctVal* r = ctNew(CT_REF, *rt);
-                    r->target = st->ret;
-                    st->ret = r;
-                }
+                struct ctVal* v = rt ? ctFitBoundary(st, s->op, *rt) : ctEval(st, s->op);
+                if (!v) return;
+                st->ret = rt || ctIsRef(s->op->type) ? v : ctCopy(v);
             }
             st->flow = CF_RETURN;
             return;
@@ -1774,8 +2294,18 @@ bool CtEvaluate(struct operand* op, struct type want, struct ctVal** out, struct
     return ctEvaluateTop(op, want, out, whyTok, why, usedBuild, NULL, NULL, false);
 }
 
-bool CtEvaluateGlobalInit(struct operand* op, struct type want, struct ctVal** out) {
-    return ctEvaluateTop(op, want, out, NULL, NULL, NULL, NULL, NULL, true);
+bool CtEvaluateGlobal(struct var* v, struct ctVal** out) {
+    struct ctState st = (struct ctState){0};
+    struct list locals = ListInit(sizeof(struct ctLocal));
+    st.locals = &locals;
+    st.mod = v->owner;
+    struct operand at = (struct operand){0};
+    at.tok = v->tok;
+    struct ctVal* val = ctReadGlobalAs(&st, &at, canonicalVar(v), true);
+    ListDestroy(locals);
+    if (!val || st.flow != CF_NORMAL) return false;
+    *out = val;
+    return true;
 }
 
 bool CtEvaluateIn(struct operand* op, struct type want, struct ctVal** out, struct token* whyTok, const char** why,
@@ -1807,6 +2337,10 @@ static bool ctEvaluateTop(struct operand* op, struct type want, struct ctVal** o
 void CtReset(void) {
     ctGlobals = ListInit(sizeof(struct ctGlobal));
     ctGlobalsReady = true;
+    ctStaticLits = ListInit(sizeof(struct ctStaticLit));
+    ctStaticLitsReady = true;
+    //what globals hold (ctOwned, ctWritable) is kept: the values a K2 pass baked are written out after later evaluations
+    //started over, and a node is never freed, so no later node can be mistaken for one of them
     ctFactList = ListInit(sizeof(struct ctFacts));
     ctFactsReady = true;
 }
@@ -1933,16 +2467,14 @@ static ffi_type* ctFfiType(enum baseType b) {
 //a number's bytes at `at`, as a value of primitive b lays them out
 static void ctPutNum(unsigned char* at, enum baseType b, struct ctVal* v) {
     const struct primInfo* p = PrimInfo(b);
-    if (p->kind == 'f' && p->bits == 32) { uint32_t u = (uint32_t)FloatBits(ctAsF(v), b); memcpy(at, &u, 4); return; } //E33
-    if (p->kind == 'f') { double d = ctAsF(v); memcpy(at, &d, 8); return; }
+    if (p->kind == 'f') { unsigned long long u = FloatBits(ctAsF(v), b); memcpy(at, &u, (size_t)(p->bits / 8)); return; } //E33
     long long i = v->kind == CT_FLOAT ? (long long)v->f : v->i;
     memcpy(at, &i, (size_t)(p->bits / 8)); //little-endian: the low bytes are the narrower value
 }
 
 static void ctGetNum(const unsigned char* at, enum baseType b, struct ctVal* into) {
     const struct primInfo* p = PrimInfo(b);
-    if (p->kind == 'f' && p->bits == 32) { uint32_t u; memcpy(&u, at, 4); into->f = FloatFromBits(u, b); return; } //E33
-    if (p->kind == 'f') { double d; memcpy(&d, at, 8); into->f = d; return; }
+    if (p->kind == 'f') { unsigned long long u = 0; memcpy(&u, at, (size_t)(p->bits / 8)); into->f = FloatFromBits(u, b); return; } //E33
     long long i = 0;
     memcpy(&i, at, (size_t)(p->bits / 8));
     into->i = ctWrap(into->type, i);
@@ -1969,7 +2501,7 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
     for (int i = 0; i < n; i++) {
         struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
         at[i] = pt.bType == BASETYPE_ARRAY ? &ffi_type_pointer : ctFfiType(pt.bType);
-        if (pt.bType == BASETYPE_ARRAY && !ctFfiType(pt.arrElem->bType)) at[i] = NULL;
+        if (pt.bType == BASETYPE_ARRAY && !PrimInfo(pt.arrElem->bType)) at[i] = NULL; //X3: any number's bytes, F16 too
         if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type -i cannot pass"); return NULL; }
     }
     ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
@@ -2080,9 +2612,10 @@ static int ctRunMain(struct var* mainFunc) {
     struct list order = SemanticInitOrder();
     for (int m = 0; m < order.len; m++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(&order, m);
-        for (int i = 0; i < mod->vars.len; i++) {
-            struct var* v = ListGetIdx(&mod->vars, i);
-            if (v->type.bType == BASETYPE_FUNC || v->isFuncDecl || !v->initExpr) continue;
+        int count = mod->globalOrderSet ? mod->globalOrder.len : mod->vars.len; //B5a: each after what it reads
+        for (int i = 0; i < count; i++) {
+            struct var* v = mod->globalOrderSet ? *(struct var**)ListGetIdx(&mod->globalOrder, i) : (struct var*)ListGetIdx(&mod->vars, i);
+            if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || v->isFuncDecl || !v->initExpr) continue;
             if (v->mut) {
                 struct ctVal* node = ctRunGlobal(v);
                 st.globalInit = true; //K2c: what its own frame builds lands in the program's scope, never closed

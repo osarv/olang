@@ -442,6 +442,13 @@ of the elements. `Array<T>&` is a reference: `==` is identity and assignment rep
 — a length paired with storage elsewhere, or, for a literal or an inline field, the elements in place with
 their length known while compiling — is a difference in *representation* only and never in behaviour.
 
+**T11b (assigning a value in place).** Assigning to an array **value** that already holds one writes the new
+elements into the storage it has when the length is the same - whatever the new value is: another array, a literal,
+a call's result - so a borrow taken earlier (a slice, a reference, E12c) sees them. When the length differs the
+target is given new storage, and an earlier borrow goes on naming the old storage, unchanged; it stays valid until
+its scope closes. A struct or enum value is assigned in place the same way, field by field, so a reference to one of
+its fields sees the new value.
+
 **T11a.** A reference to an array takes its length from the array it points to, every time it is assigned
 (D15a): the length is held beside the pointer.
 
@@ -629,7 +636,10 @@ function type is usable as a variable's, field's, or parameter's declared type, 
 first-class value that can be passed and called through it. A value of function type is **reference-shaped**:
 it refers to the function together with whatever a lambda captured (D16c), so it is nullable (T2a) and §8's
 rules for references apply to it (D16d). `==` compares by identity: a named function is one value however
-often it is named, and each evaluation of a capturing lambda makes a new one.
+often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
+variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
+a `mut` one may be assigned another - a named function's value, or a lambda's capturing nothing, is made once for the
+whole program and so lives in the program's scope (O1b).
 
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type and `mut` in order, presence and identity of a return type, and their error lists - the
@@ -728,7 +738,9 @@ writable, and an array literal's elements take the target's permission when ever
 compiling - text, or an array of constants - that reaches one (a parameter without `mut`, a read-only field or
 element) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
 plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
-parameter or field - gets a copy of its own. Which happens is not observable except as speed.
+parameter or field - gets a copy of its own. Which happens is not observable except as speed, and as identity:
+each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
+site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
@@ -1731,7 +1743,11 @@ the type, and a type may say it itself:
   on length first;
 - for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
   they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
-  is both: the same storage and the same length.
+  is both: the same storage, from the same element, and the same length - so `a[1:3]` is not `a[1:2]`. Storage is
+  made afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of
+  no elements, no fields) included, so two of them are never the same; a slice is part of its base's storage
+  (E16a); a static literal site is one instance (T25d). An array with **no storage** - an array value's zero
+  value, whose bits a null array reference has too - is the same as any other with none.
 - a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
@@ -2108,6 +2124,9 @@ unchanged. Exactly one argument is required; anything else (zero, two or more, o
 argument) is a compile-time error. `TypeName` in this position is never shadowable by another
 declaration of the same name - a primitive type name is never otherwise a valid
 call target, so this introduces no ambiguity with an ordinary function or constructor call.
+An integer converted to a float type is **rounded once**, from its exact value, to the nearest value of that type
+(ties to even) - an infinity where it is beyond the type's range - never through a wider float first, which would
+round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
 conversion cannot itself produce an error (a narrowing conversion outside its target type's
 representable range - e.g. `U8(300)` - silently wraps, the same well-defined, unchecked behavior
@@ -3244,7 +3263,9 @@ lives as long as the program; and what a call builds into a scope variable a glo
 result borrowed from it, O13) is built there too. So is a temporary a function assigns to a global, or into a field
 or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
 already living somewhere that is stored there must live there too: a global's, or something built there. Storing
-anything shorter-lived is a compile-time error. Each task reaches the program's scope through a stand-in of its own
+anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
+or is a lambda capturing nothing, being made once for the whole program (T21). Each task reaches the program's scope
+through a stand-in of its own
 (§6.8 P2). Destructors registered in it do not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
@@ -3971,10 +3992,12 @@ out of range, reading through a null reference, dividing by zero, a shift or con
 interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
 tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
-same way. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
+X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build. The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
-implementation memory is not reclaimed while the program runs, so `-i` suits short runs.
+implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
+interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
 
 **B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -4025,11 +4048,18 @@ process with `code` as its status — of which the platform passes on the low 8 
 innermost thing that can end (S16a); a test that calls it ends the whole test run. It is an ordinary call, not a
 statement D10a counts as leaving: where a result is owed, `unreachable` follows it.
 
-**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs, each module's own
-in declaration order. Across modules the order is **imports first**: a module is initialized after every
+**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs. Within a module, a global's
+initializer runs **after the initializers of the globals it reads** - directly, or through a function it calls,
+at any depth; declaration order decides among globals with no such dependency between them. A call through a
+function value counts as a call of any function named as a value in what runs (or in the initializer of a global
+it reads that holds one), since that is what it may reach. Globals whose initializers read each other - a cycle,
+including one reading itself - are a compile-time error naming them, since none of them can be set first.
+Across modules the order is **imports first**: a module is initialized after every
 module it imports has been. Where imports form a cycle (§4.6 allows one), the relative order of the
 modules in that cycle is unspecified, so a global initializer that reads a global from another module in
-the same cycle has no defined value to read and must not be written.
+the same cycle has no defined value to read and must not be written. Compile-time evaluation (K2) reads a
+global's value as this order sets it, so whether a global is computed while compiling never changes what another
+reads.
 
 **B6.** `done` and `fail` (§6.6) exit the process immediately, from anywhere, with status `0` or `1`
 respectively, printing nothing, independent of §10.3's own `main`-return handling — except while a test
@@ -4427,7 +4457,11 @@ value it was taken from, a function value names the function, a slice shares its
 writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
-- read a mutable global, whose value is the running program's, or write any global;
+- read a mutable global, whose value is the running program's, or write any global or what one holds (its
+  fields, the elements of its arrays, what its references name) - skipping the computation at run time would skip
+  the write;
+- read an immutable global whose value reaches storage a writable reference can change (T25b) - a `mut` field's
+  referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
 - call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
@@ -4442,7 +4476,8 @@ error as they would at run time. It is **not** possible when evaluation would:
 - take a slice out of range without `try`, which aborts at run time (E16b);
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
-- run longer, or recurse deeper, than an implementation-defined budget.
+- run longer, or recurse deeper, than an implementation-defined budget - which is never a crash: evaluation that
+  would run out of the stack it runs on stops there, refused (under `-i`, with that message).
 
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused.
@@ -4468,8 +4503,12 @@ refused, since that function's scopes close.
 **K2b.** K2 reaches a global holding an **array** or a **reference** too: what it points at is written out
 as data beside it, so a table computed by a loop, a linked structure built by constructors, or a tree of enums
 holding each other by reference (T17d), costs nothing at startup - a reference in an enum's payload is written as the
-address of its referent's data. Two references to one instance remain one instance, and a structure referring to
-itself is written as such. The data lives as long as the program (O1b).
+address of its referent's data. Two references to one instance remain one instance - within one global, and across
+all of a module's globals (`B Node& = A` is `A`'s instance, a slice of a global's array is that very storage) - and a
+structure referring to itself is written as such. Data a writable reference reaches is written out writable; only
+what nothing can write is read-only. A global whose value reaches an instance another module's global holds, or one
+held by a global of its own module that is set at startup, is set at startup too, reading that instance as it is
+there. The data lives as long as the program (O1b).
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

@@ -259,6 +259,8 @@ nothing here establishes that - pass an argument that lives at least as long as 
 into, or one from the same scope (O10c)"
 #define SPAWN_RESULTS_DISAGREE "these targets live in different scopes, and the task's results are built in one - give them targets that live in the same block, or spawn into locals there and copy (P1g)"
 #define VALUE_REFS_OUTLIVED "this value holds references to what was built with it, which lives in a scope the target outlives - a copy would keep pointing there after it closes. Copy it only into a place that lives no longer, or build the value where the target is (O25h)"
+#define GLOBAL_INIT_READS_ITSELF "this global's initializer reads the global itself, which is not set until the initializer is done - write its value without it (B5a)"
+#define GLOBALS_INIT_CYCLE "these globals' initializers read each other, so none of them can be set first - make one of them not depend on the others (B5a)"
 #define GLOBAL_HOLDS_SHORTER "a global lives as long as the program, and so does everything it holds - this lives in a scope that closes first. Store something built here, which is then built in the program's scope, or something another global holds (O1b)"
 #define OWN_CANNOT_OUTLIVE "a value in this function's own scope cannot satisfy a longer-lived scope: this function's scope closes first and no caller can change that, so no argument would make this work"
 #define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \

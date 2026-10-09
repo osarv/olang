@@ -1,0 +1,6 @@
+# check: fail this global's initializer reads the global itself
+# B5a: a global whose initializer reads the global itself reads it before it is set
+C I32 = C + 1
+fn main() ? {
+    assert C > 0
+}

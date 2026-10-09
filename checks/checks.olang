@@ -389,6 +389,7 @@ test "a literal reaching a read-only reference is static data" {
     assert sh(dir, "grep -q 'constant .3 x i32. .i32 3, i32 4, i32 5.'" $ll) == 0
     assert sh(dir, "grep -q 'lit_total(ptr %[a-z0-9.]*, { i64, ptr } { i64 3, ptr @.arr'" $ll) == 0
     assert sh(dir, "grep -q 'lit_lenOf(ptr %[a-z0-9.]*, { i64, ptr } { i64 11, ptr @.str'" $ll) == 0
+    assert sh(dir, "grep -q '^@.str.[0-9]* = private constant .11 x i8.'" $ll) == 0   # E10: its site's address, unmerged
 }
 
 # K2: a global computed at compile time is written out as data; one reading a mutable global is set at startup
@@ -548,4 +549,26 @@ test "the code generator's review fixes, as whole builds" {
     assert sh(dir, "\"$OLANG\" -b tuples.olang > out.txt 2>&1 && " $names " > first.txt") == 0 or failed("tuples", dir)
     assert sh(dir, "rm -rf build && \"$OLANG\" -b tuples.olang > out.txt 2>&1 && " $names " | cmp -s first.txt -") == 0
     assert sh(dir, "./build/tuples > out.txt") == 0 and outOf(dir) == "(1, \"x\") (2, 3, 0.5)\n" or failed("tuples output", dir)
+}
+
+# K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at
+# -O0, and -i must agree on - each program printed once by each, all three the same and right - and the data baked
+# globals are written out as: one instance where two globals name one, a slice as a place in its base's data, and what a
+# writable reference reaches never read-only
+test "the evaluator, the run time and -i agree" {
+    dir := fresh("agree")
+    os.Run("cp checks/fixtures/agree/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b agree.olang > out.txt 2>&1 && ./build/agree > b.txt 2>&1") == 0 or failed("agree", dir)
+    assert sh(dir, "\"$OLANG\" -b -d agree.olang > out.txt 2>&1 && ./build/agree.debug > d.txt 2>&1") == 0 or failed("agree -d", dir)
+    assert sh(dir, "\"$OLANG\" -i agree.olang > i.txt 2>&1") == 0 or failed("agree -i", dir)
+    assert sh(dir, "cmp -s agree.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0 or failed("agree output", dir)
+    assert sh(dir, "\"$OLANG\" -b bfrand.olang > out.txt 2>&1 && ./build/bfrand > b.txt 2>&1") == 0 or failed("bfrand", dir)
+    assert sh(dir, "\"$OLANG\" -b -d bfrand.olang > out.txt 2>&1 && ./build/bfrand.debug > d.txt 2>&1") == 0 or failed("bfrand -d", dir)
+    assert sh(dir, "\"$OLANG\" -i bfrand.olang > i.txt 2>&1") == 0 or failed("bfrand -i", dir)
+    assert sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0 or failed("bfrand output", dir)
+    assert sh(dir, "\"$OLANG\" -b share.olang > out.txt 2>&1 && ./build/share") == 0 or failed("share", dir)
+    ll String& = " build/share.main.ll"
+    assert sh(dir, "grep -q '^@share_B = global ptr @share_A.k[0-9]*$'" $ll) == 0
+    assert sh(dir, "grep -q '^@share_H.k[0-9]* = internal global .2 x i32.'" $ll) == 0
+    assert sh(dir, "grep -q '^@share_Sl = global { i64, ptr } { i64 2, ptr getelementptr inbounds (.4 x i32., ptr @share_Arr.k[0-9]*, i64 0, i64 1) }'" $ll) == 0
 }

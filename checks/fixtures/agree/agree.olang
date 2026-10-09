@@ -1,0 +1,115 @@
+# compile-time evaluation and the run time agree (K1) - and -i, which is the evaluator running a whole program: each
+# line is printed by the built program, by its -d build, and under -i, and the three must be the same
+import "std/io"
+
+run mut I64 = 1
+
+fn neg(x F64) F64 { return -x }
+fn f32Bits(n I64) U32 { return F32(n).Bits() }
+fn bf16Bits(n I64) U16 { return BF16(n).Bits() }
+
+fn identity(n I64) String {
+    arr := I32[1, 2, 3, 4, 5]
+    a Array<I32>& = arr[1:3]
+    b Array<I32>& = arr[1:n]
+    e Array<I32>& = Array<I32>(n - 2)
+    f Array<I32>& = Array<I32>(n - 2)
+    x Array<I32>
+    y Array<I32>
+    return $same(a, b) " " $(a == b) " " $same(e, f) " " $same(x[:], y[:])
+}
+
+type P struct(v I64) {
+    v
+}
+fn copyOut(p P&) P { return p }
+
+fn classify(n I64) String {
+    return match n {
+        case 1, 2, 3 => "small"
+        case 7 => "seven"
+        nomatch => "other"
+    }
+}
+
+fn two(a String&, b String&) Bool { return same(a, b) }
+fn sites(n I64) String {
+    l := List<String&>()
+    for i in range n { l.Push("hello") }
+    return $two(l[0], l[1]) " " $two("hey", "hey")
+}
+
+fn inPlace(k I64) String {
+    a := I64[1, 2, 3]
+    s := a[0:2]
+    a = I64[k, 8, 9]
+    d := Array<I64>(2, 1)
+    e := d[:]
+    d = I64[4, 5, 6]
+    return $s " " $e
+}
+
+type N struct(v I32) {
+    v
+}
+fn (a N) Less(b N) Bool {
+    if a.v < 50 { return a.v < b.v and chain(a.v + 100) }
+    return a.v < b.v
+}
+fn chain(base I32) Bool { return N(base) < N(base + 10) < N(base + 20) }
+fn comprDeep(n I64) I64 {
+    if n == 0 { return 0 }
+    a := I64[comprDeep(n - 1) + x for x in range 1]
+    return a[0] + 1
+}
+
+fn dbl(x I32) I32 { return x * 2 }
+fn tri(x I32) I32 { return x * 3 }
+F mut fn(x I32) I32 = dbl
+G fn(x I32) I32 = tri
+
+Early mut I64 = Late + 1
+Late I64 = seed + 10
+seed mut I64 = 5
+
+type Holder struct(a mut Array<I64>&) {
+    a
+}
+fn mkHolder() Holder {
+    arr Array<I64>&return = Array<I64>(3)
+    return Holder(arr)
+}
+Hold Holder = mkHolder()
+fn poke() I64 {
+    x := Hold.a
+    x[1] = 5
+    return 1
+}
+Poked I64 = poke()
+After I64 = Hold.a[1]
+
+extern fn memcpy(d Array<BF16>, s Array<BF16>, n I64) I64
+extern fn memset(p Array<F16>, c I32, n I64) I64
+
+fn main() ? io.IoError {
+    z := neg(F64(run - 1))
+    try io.Print($z " " $F32(z) " " $F16(z) " " $BF16(z) "\n")
+    try io.Print($f32Bits(1152921573326323712 + run) " " $bf16Bits(1157425104234217472 + run) "\n")
+    try io.Print($identity(run + 1) "\n")
+    try io.Print($(copyOut(P(run)) == P(run)) "\n")
+    a := classify(run + 6)
+    b := classify(run)
+    try io.Print($a " " $b "\n")
+    try io.Print($sites(run + 1) "\n")
+    try io.Print($inPlace(run + 6) "\n")
+    try io.Print($chain(I32(run) - 1) " " $comprDeep(run + 99) "\n")
+    try io.Print($F(4) " " $G(4) "\n")
+    F = tri
+    try io.Print($F(4) " " $Early " " $Late "\n")
+    Hold.a[0] = 9
+    try io.Print($Poked " " $After " " $Hold.a[0] " " $Hold.a[1] "\n")
+    h := F16[1.5, 2.5, 3.5]
+    k := Array<BF16>(3)
+    m I64 = memset(h, 0, 2) + memcpy(k, BF16[0.5, 1.5, 2.5], 4)
+    try io.Print($h " " $k "\n")
+}
