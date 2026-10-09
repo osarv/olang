@@ -1,0 +1,7 @@
+# check: fail a number flows implicitly only where nothing is lost
+# P9: a value argument fits the receiver's type as any argument does - an I64 does not fit an I32
+fn main() ? {
+    x I32 = 1
+    y I64 = 2
+    x.AtomicAdd(y)
+}

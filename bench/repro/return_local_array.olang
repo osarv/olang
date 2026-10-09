@@ -1,0 +1,21 @@
+# Returning a local array copies it (T7b: a returned array that already lives somewhere is copied into the result
+# scope before the function's scopes close) - one extra allocation and an element copy per call, even though the
+# local is dead at the return and could have been built in the result scope to begin with. matmul's matrix() pays
+# it once per matrix; a function building a large result this way pays the copy every call.
+# See it: build, then  awk '/^define.*_filled\(/,/^}/' build/return_local_array.main.ll
+# (two allocations and an arrcopy loop)
+import "std/io"
+import "std/os"
+
+fn filled(n I64) Array<F32> {
+    m := Array<F32>(n)
+    for i in range n { m[i] = F32(i) }
+    return m
+}
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    a := filled(n)
+    try io.Print($a[n - 1] "\n")
+}

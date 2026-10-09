@@ -1,0 +1,5 @@
+# check: fail a type and a function or global may not share one
+# D2: the function declared first, the type after it
+fn Circle() I32 { return 3 }
+type Circle struct(r I32) { r }
+fn main() ? { }

@@ -515,8 +515,7 @@ fn stale(r mut report&) ? Failed {
                  "reading the first build's objects", dir)
     try r.expect(sh(dir, "sleep 1 && \"$OLANG\" -b -D Level=5 -D Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0,
                  "second build", dir)
-    try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0,
-                 "plain's object was rebuilt", dir) # plain's object untouched
+    try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0, "plain's object was rebuilt", dir)
     try r.expect(sh(dir, "test $(ls build/uses.*.d*.main.o | wc -l) -gt $(cat first.txt)") == 0,
                  "uses was not rebuilt", dir)
 }
@@ -529,8 +528,7 @@ fn interp(r mut report&) ? Failed {
     dir := fresh("interp")
     os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b prog.olang > out.txt 2>&1") == 0, "interp build", dir)
-    try r.expect(sh(dir, "./build/prog > want.txt 2>&1") == 1,
-                 "prog did not end in Oops.BAD", dir) # main ends in Oops.BAD
+    try r.expect(sh(dir, "./build/prog > want.txt 2>&1") == 1, "prog did not end in Oops.BAD", dir)     # main ends in Oops.BAD
     try r.expect(sh(dir, "\"$OLANG\" -i prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.BAD", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i printed what the built program did not", dir)
     try r.expect(outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1"),
@@ -626,15 +624,17 @@ fn k2(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0,
                  "ct_Ring.k0", dir)
     try r.expect(sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0, "ct_Chain", dir)
-    try r.expect(sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0,
-                 "ct_Kept", dir) # K2c: never destructs, so baked
-    try r.expect(sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0,
-                 "ct_Dropped", dir) # its temporary's destructor runs
+    # E10c: identity
+    try r.expect(sh(dir, "grep -q '@ct_Looped = global i1 true'" $ll) == 0, "ct_Looped", dir)
+    # K2c: never destructs, so baked
+    try r.expect(sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0, "ct_Kept", dir)
+    # its temporary's destructor runs
+    try r.expect(sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0, "ct_Dropped", dir)
     try r.expect(sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0,
                  "ct_P", dir)
     try r.expect(sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0, "ct_Later", dir)
-    try r.expect(sh(dir, "grep -q '@ct_Deferred = global i32 7'" $ll) == 0,
-                 "ct_Deferred", dir) # S19: deferred code run while compiling
+    # S19: deferred code run while compiling
+    try r.expect(sh(dir, "grep -q '@ct_Deferred = global i32 7'" $ll) == 0, "ct_Deferred", dir)
 }
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
@@ -829,7 +829,7 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "matchother", "this is not that enum")
     try oneError(r, dir, "isprivate", "this enum case is private")
     try oneError(r, dir, "matchprivate", "this enum case is private")
-    try oneError(r, dir, "isnoalias", "unknown namespace")
+    try oneError(r, dir, "isnoalias", "unknown name 'nosuchalias'")    # E10c: naming no type, it is a value
     try oneError(r, dir, "privcase", "this enum case is private")
     try oneError(r, dir, "privword", "this error word is private")
     try oneError(r, dir, "privmethod", "this method is private")

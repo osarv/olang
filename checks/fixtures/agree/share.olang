@@ -21,5 +21,5 @@ Arr Array<I32>& = I32[1, 2, 3, 4]
 Sl Array<I32>& = Arr[1:3]
 fn main() ? {
     H.a[0] = 3
-    assert same(A, B) and H.a[0] == 3 and same(Sl, Arr[1:3]) and Sl[1] == 3
+    assert A is B and H.a[0] == 3 and Sl is Arr[1:3] and Sl[1] == 3
 }

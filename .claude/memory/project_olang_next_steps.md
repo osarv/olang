@@ -150,6 +150,30 @@ because what it finds about structure feeds the refactor.
 - 08:45: efix merged (d08eefb) - every batch from the three reviews is on master. Left over: `x := "abc" if c else "no"`
   still rejected by E28/D15 (checker); std/cancel "a busy task stops..." seen flaky once (handed to isatom). Running:
   isatom, bench, checksfan, errmsg (phase 2 after isatom merges).
+- 09:05: benchmarks merged (85bdb0e; bench/README.md). Plain loops at C speed, allocation 5x faster than malloc; gaps
+  in abstractions. Running fixes: wt-perfcg (closure devirtualization - Fold 10-13x; fresh arrays copied into fields;
+  constructor allocation order; arena fast path; T7b return copy) and wt-perfstd (List walking, Map.Update, Map into
+  the prelude, integer `$` without snprintf, Find/Split, Find failing on a miss, std/time, x.Fixed(n)). Queued after
+  errmsg phase 2 (they touch semantic.c/syntax.c), all my calls unless the user objects: a multi-line array literal
+  may end with `]` on its own line; bare `{ }` blocks (scope ends early - no expression starts with `{`); a `for { }`
+  with no break targeting it leaves (D10a), so no trailing `unreachable`; a shift amount may be any integer type;
+  in `a << b` a literal `a` adapts to the target (`x I64 = 1 << s` silently shifted an I32 - a trap); `x := "abc" if c
+  else "no"` (E28/D15); the evaluator performs atomics while compiling (K1 refuses them with no real reason - keep
+  run-time coverage in the P9 tests through mut-global inputs). Fuzzer (wt-fuzz ready) once CPU allows. 09:15: isatom
+  merged (b7e5fa4); errmsg resumed for phase 2.
+- 09:25: usage study (15 realistic programs, /home/user/review/study, repro/r01-r18): no use-after-free found; 11
+  bugs + 6 over-rejections. Handed: perfcg <- r01 COND literal invalid IR, r02 segfault on a borrowed conditional,
+  r18 digit file names; perfstd <- r04/r05 ListIter in the prelude, r12 Map of Lists iteration, r15 Bool.Hash, r17 Map
+  slot reuse. QUEUED as "checker batch 2" after errmsg phase 2 (semantic.c): r03 fields after a generic
+  self-reference unknown (refreshStructSnapshots through type args), r06 O25h copy of a reference-holding element
+  (swap/Sort/argmin unusable), r07 a catch block disabling := landing (O18c), r09 an I32 read from a List carrying a
+  scope, r16 cascades from one unknown type, G19 bodies still checked after a constraint error, `v := e; return v`
+  losing O13c bindings; over-rejections r08 List of Lists element as receiver/loop source, r10 compose(f, g), r11
+  rebuilding an enum field from its own payload, r13 Fold with a reference accumulator (O25a+D15 leave no spelling),
+  r14 Pair inference taking `mut`; Bool-payload match exhaustiveness; diagnostics: name the declaration to change
+  ("declare text where st lives"), text-join pieces ("write $x"), keyword field names, misplaced destruct. Then a
+  std-gaps agent: ParseFloat, Join, ToUpper/Replace/Repeat, a line reader, List Pop/Clear/Remove/Sort/List(n, fill),
+  a math module, Map Keys/Values/Clear.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

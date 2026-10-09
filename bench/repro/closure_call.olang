@@ -1,0 +1,24 @@
+# A lambda that captures a value is called through its closure object on every element: Fold's loop reloads the
+# code pointer from the closure (arena memory) before each indirect call, and since an unknown call may write
+# anything, LLVM can neither forward the pointer stored when the closure was built nor hoist the captured value -
+# so the call is never devirtualized or inlined, and the loop never vectorizes. The same loop with a lambda that
+# captures nothing (a static closure object in a constant global) is inlined and vectorized. Measured (100,000
+# I64 x 8,000 passes): a.Iter().Fold with a capturing lambda 1.9s, the hand loop 0.17s; marking the two closure
+# loads (code pointer, capture) !invariant.load by hand: 0.19s.
+# See it: repro/opt.sh closure_call, then  grep -n "call i64 %" build/closure_call.opt.ll
+# (the indirect call, once per element)
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    passes := try args[2].ParseInt()
+    a := Array<I64>(n)
+    for i in range n { a[i] = i * 7 }
+    total I64 = 0
+    for p in range passes {
+        total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })        # captures p: indirect call
+    }
+    try io.Print($total "\n")
+}

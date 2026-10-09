@@ -45,7 +45,7 @@ fn After(ms I64) Token& {
 
 # fires the token: every Cancelled() from now on is true, and every wait given it gives up
 fn (t mut Token&) Cancel() {
-    atomicStore(t.flag, 1)
+    t.flag.AtomicStore(1)
 }
 
 # true once the token was cancelled or its deadline has passed
@@ -55,7 +55,7 @@ fn (t Token&) Cancelled() Bool {
 
 # 0 while the token has not fired; otherwise 1 when it was cancelled, 2 when its deadline passed
 fn (t Token&) Why() I32 {
-    if atomicLoad(t.flag) != 0 { return 1 }
+    if t.flag.AtomicLoad() != 0 { return 1 }
     if t.deadline != 0 and NowNs() >= t.deadline { return 2 }
     return 0
 }
@@ -89,34 +89,39 @@ test "a token fires on Cancel, and not before" {
     try t.Reason() catch Stopped.CANCELLED { done } catch { fail }
 }
 
+# timed from before the token is made, so the bounds hold however long this thread is kept off a core: it has not
+# fired unless its whole 20ms has passed, and once it fires they have
 test "a token with a deadline fires by itself" {
-    t := After(20)
-    assert not t.Cancelled()
     start := NowNs()
+    t := After(20)
+    assert not t.Cancelled() or NowNs() - start >= 20000000
     for not t.Cancelled() { }
-    assert NowNs() - start >= 15000000
+    assert NowNs() - start >= 20000000
     try t.Reason() catch Stopped.TIMED_OUT { done } catch { fail }
 }
 
-# a task doing work checks the token itself, at points where stopping is safe
+# a task doing work checks the token itself, at points where stopping is safe. It counts atomically, so the spawner
+# may watch the count while it runs (P9a)
 fn spin(t Token&, n mut spinCount&) {
-    for not t.Cancelled() { n.v++ }
+    for not t.Cancelled() { n.v.AtomicAdd(1) }
 }
 
 type spinCount struct() {
     v mut I64 = 0
 }
 
+# the Cancel waits until the task has done some work: a task need not have started by any particular time, and one
+# cancelled before its first look at the token rightly does nothing - which, waited for only by a clock, made this
+# test fail whenever the machine was busy enough to keep the task off a core for those milliseconds
 test "a busy task stops when the token is cancelled" {
     t Token& = Token()
     n spinCount& = spinCount()
     join {
         spawn spin(t, n)
-        start := NowNs()
-        for NowNs() - start < 5000000 { }
+        for n.v.AtomicLoad() < 1000 { }
         t.Cancel()
     }
-    assert n.v > 0
+    assert n.v >= 1000
 }
 
 # S19a: a join block's deferred code runs as its last statements, before the block's end waits for its tasks - so a

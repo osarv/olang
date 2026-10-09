@@ -1358,7 +1358,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   it would make the compiler able to fail because a C **header** is missing, which nothing in it can do
   today. Held in reserve for the day a foreign struct's *fields* are needed, which is real translation and
   which neither approach helps with.
-  **7. ATOMICS DONE (P9/P9a); cancellation and timeout still open.** Five builtins - `atomicLoad`,
+  **7. ATOMICS DONE (P9/P9a); cancellation and timeout still open.** (Methods since 2026-10-09 - `x.AtomicAdd(v)`,
+  E10c entry below.) Five builtins - `atomicLoad`,
   `atomicStore`, `atomicAdd`, `atomicSwap`, `atomicCas` - named and resolved exactly as `len` is, each
   lowering to **one** LLVM atomic instruction.
   **Explicit operations, not an `atomic` type qualifier.** A qualifier looks tidier and is a trap: with
@@ -2702,7 +2703,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   compared by it **at every depth** - as itself, as a field, an element, an enum payload, behind a reference - and
   `match`, `x in c` and `Map` keys all go through `==`. A reference to such a type compares its referents (a null equals
   only a null; `Eq` never sees one); a reference to a type with no `Eq` is still identity. **`same(a, b)`** is identity
-  whatever `Eq` says (my spelling, flagged), a builtin like `atomicLoad`. `String` declares `Eq`, so `s == "cm"`
+  whatever `Eq` says (my spelling, flagged), a builtin like `atomicLoad` (both replaced 2026-10-09: `a is b`, E10c). `String` declares `Eq`, so `s == "cm"`
   compares text. The prelude's `Equatable` and the primitives' `Eq` methods went; `Hashable` keeps only `Hash`.
   **`Str`** (no parameters, a `String`, always capitalized - a rendering belongs to the type, not to one module's
   view of it) takes over `$` for its type wherever the value sits, and **must be K1a-evaluable**: `$` calls it as often
@@ -3308,6 +3309,49 @@ Go through this for every change to what olang means - a rule added, revised or 
   its own 1GB thread evaluated nothing. Corpus: a section comparing each
   baked global with the run time, a checks scenario comparing a program built, built `-d` and interpreted, and the
   cycle errors as cases.
+- **Benchmarks against C (2026-10-09).** `bench/`: ten programs written twice - idiomatic olang and idiomatic C, same
+  algorithm, byte-identical output - built with the flags olang builds its own output with (`clang -O3 -flto`) and timed
+  interleaved by `bench/run.sh` (not part of `make verify`/`make test`; `-n` adds `-march=native`). olang/C, medians of
+  two runs: nbody 0.93-1.00, spectral-norm 1.37-1.44, mandelbrot 0.98-0.99, fannkuch 0.91-1.02, binary-trees 0.20
+  against malloc/free and 1.27-1.32 against a hand-written C arena, k-nucleotide 1.36-1.49, matmul F32 0.86-0.94,
+  `List` push 3.2-3.3, `for x in List` 4.7-4.8, `for x in Array` 0.94-1.04, `Iter().Fold` with a capturing lambda
+  10-13, parallel (4 tasks) 0.91-1.08, text (`$n`, `Split`, `ParseInt`) 2.3-2.5. **Principle 2 holds for loops over
+  arrays and numbers and for allocation; the gaps are in the abstractions above them**, each diagnosed from the
+  optimized IR, confirmed by an experiment and given a reproducer in `bench/repro/` (bench/README.md has the detail):
+  (1) a capturing lambda's code pointer is reloaded from its arena closure before every indirect call, which may write
+  anything, so the call is never devirtualized or inlined - `!invariant.load` on the two closure loads by hand brings
+  Fold to the hand loop (1.93s to 0.19s); (2) a fresh `Array<T>(n)` stored into a reference field or element is
+  allocated twice and copied (`cgStoreInto`'s value-to-reference array branch; `List.grow`, `Map.grow`), and D13c
+  zero-fills every List chunk before `Push` overwrites it; (3) `ListIter.Next` folds the chunk change into every step,
+  so `for x in l` never vectorizes; (4) `$n` calls snprintf twice (measure, then write) and `Find` builds a checked
+  slice per position; (5) E6c's wrapping arithmetic emits no `nsw`, so `/ 2` of a product stays a signed divide -
+  `nsw` by hand puts spectral-norm at C's speed; a language trade-off (Rust and Go pay it too), not a bug; (6) `Map`
+  counts with `Get` then `Put`, two lookups; (7) constructor arguments are allocated before the instance, laying
+  trees out in post-order against a pre-order walk, and the arena's fast path runs 44% more instructions than a C bump
+  allocator. Where olang wins it is the arena: binary-trees 5x faster than malloc/free in 54% of the memory, and
+  matmul's arrays 64-byte aligned (O8a) where glibc gives 16. Found on the way: `x I64 = 1 << s` shifts an `I32`
+  (E8a; 256 for `s = 40`) though `x I64 = 1 << 40` works. No compiler change was made.
+- **`is` replaces `same`, and the atomic builtins are methods (E10c, E32, P9, D2, D3a, 2026-10-09; the user: "I don't
+  like built-ins very much", then "Yes, do both").** `a is b` is identity - true when two references (or two function
+  values) of one type name one instance, whatever `Eq` says - and `a is not b` its negation, as `x is not Shape.Circle`
+  is the case test's; `same(a, b)` is gone, an ordinary unknown name. One operator, two forms, told apart by what
+  follows `is`: a `type-ref` that names a type - declared, the prelude's, a primitive, `Bool`, `Array`, a case of one
+  (`Shape.Circle`, `Expr.Nil`), or a type that is no plain name - is E32's test; anything else is a value, an
+  expression at the comparisons' precedence (`a is b + c` is `a is (b + c)`). The parser decides with the known-type
+  predicate choice values already use, and `is not` is built as `not (a is b)`. So that a name is never both, **D3a
+  now covers types** (no local or parameter named like a type it sees, the coordinator's call) and **D2 defines what it
+  left open**: a type and a function or global of one module may not share a name (my extension - the same hazard one
+  level up; the corpus had none). **Atomics** are `t.AtomicLoad()`, `AtomicStore(v)`, `AtomicAdd(v)`, `AtomicSwap(v)`
+  and `AtomicCompareSwap(expected, v)` on any integer **place**, supplied by the compiler as `Len()` is, inherited
+  through `extends`, never redeclared; `atomicLoad` and the rest are gone. My calls: `AtomicCompareSwap` (words, not
+  `Cas`); a value argument **fits as any argument does** (T6b: an `I32` into an `I64` receiver), where P9 said "exactly
+  the target's type"; all eight integer types (P9 still said `U8`/`I32`/`I64`, from before T4); `null is null` is an
+  error (no type between them). Lowering is unchanged - `is` is the `==` of two references, the atomics the same
+  operations - so codegen, the evaluator and `-i` needed nothing; K1 still refuses an atomic while compiling. Found on
+  the way: an unknown function in an `assert`/`if`/`for` condition added "operand must be a boolean" - one error now
+  (the unknown method's "discards a value" was fixed alongside by the type checker's review); P8b still said olang has
+  no atomic operations; and two `std/cancel` tests assumed a task or the test itself would run within milliseconds
+  (flaky under concurrent verifies) - the busy-task test now cancels once the task has counted, atomically.
 - **`checks/checks.olang` runs its checks side by side (2026-10-09).** Every case and every scenario runs in a directory
   of its own (`build/checks/cases/<case>`, `build/checks/<scenario>`), four at a time: a global (`Outcomes`) runs them all
   before the first test - workers taking check numbers from a `std/chan` queue - and the tests report the outcomes in

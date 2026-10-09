@@ -1,0 +1,4 @@
+# check: fail this name is a type's
+# D3a: nor may a parameter - a built-in type's name included
+fn f(I32 I32) I32 { return 1 }
+fn main() ? { }
