@@ -130,6 +130,15 @@ because what it finds about structure feeds the refactor.
   forked child, so the suite's peak RSS is one file's - unblocks parallel verifies). A lexer-port spike was started
   and stopped at once (the user: "Don't do the self hosting yet ... finish the bug fixes and refactor first"). Error-message remake waits for tfix
   (it is adding an "instantiated from" note to errmsg.c).
+- **Decided 2026-10-09 (the user: "Yes keep it modest. Also give the C compiler its own directory. From now on we just
+  bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current compiler binary is lost."):**
+  the refactor is MODEST (move the C compiler into its own directory `bootstrap/`, split the huge files, dead code and
+  stale comments, -t memory, the error-message remake - no deep restructuring, since the port is a redesign). After the
+  port the C compiler is frozen as stage 0 and new compiler work happens in olang. Re-bootstrap (my design): no
+  committed binaries; `make bootstrap` builds the C stage 0, uses it to build the olang compiler, which rebuilds
+  itself (stage 2 == stage 3 checked). The olang compiler's own source stays compilable by stage 0; when it needs a
+  feature stage 0 lacks, the last commit stage 0 can build is recorded in `bootstrap/CHAIN` and `make bootstrap` walks
+  that chain (Go's and Rust's approach), so a lost binary is always rebuildable from C plus the repo.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
