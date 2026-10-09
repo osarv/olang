@@ -1,0 +1,17 @@
+# os.Exec and std/json, built and interpreted: the same output from both - the program run without a shell, its
+# output gathered, read as JSON and written back
+import "std/os"
+import "std/io"
+import "std/json"
+
+fn main() ? os.OsError + io.IoError + json.JsonError {
+    r := try os.Exec(String&["printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9"])
+    doc := try json.Parse(r.Stdout)
+    try io.Print($r.Status " " $json.Encode(doc) "\n")
+    try io.Print($json.Encode(doc, "  ") "\n")
+    e := try os.Exec(String&["sh", "-c", "cat; echo err >&2; exit 4"], "fed in")
+    try io.Print($e.Status " [" $e.Stdout "] [" $e.Stderr "]\n")
+    missing := "no"
+    try os.Exec(String&["olang-no-such-program"]) catch os.OsError.NOT_FOUND { missing = "yes" }
+    try io.Print("missing " $missing "\n")
+}
