@@ -414,6 +414,11 @@ because what it finds about structure feeds the refactor.
   OOM-killed (shared.olang) beside 5 agents + oann tests: /home/user/vlock is TWO slots now.
   NEXT for oann: one agent moves oannc2 to master, runs tools/perm_mut.py on oann, deletes fixed repros, adopts
   GemmBatch in attention and GemmPatches in conv, re-measures.
+- 21:45 CEST: s3std merged and pushed (List/Map handles + Clone, == on array references by contents, FILE:LINE on
+  guaranteed checks, case _, keyword method names L9a, r02 IR fix). oann settle4 pushed (87cad06). Started wt-oann-up
+  (oann onto master 472373d: perm migration, repro hygiene, GemmBatch attention, GemmPatches conv) - it predates the
+  List/Map handle change; move oann's compiler again after. Found, not fixed: `type Nest Array<Nest&>` accepted but
+  unbuildable ("expected Nest&, found Nest&") - for the next checker batch.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
