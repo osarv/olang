@@ -4336,7 +4336,8 @@ It is valid only inside a function that has a result scope; anywhere else — a 
 borrowed result, a test — it names nothing and is a compile-time error.
 
 **O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
-scope** - its own storage, and everything built into it - with nothing written: `&return` is implied. A local is
+scope** - its own storage, and everything built into it - with nothing written: `&return` is implied, and `&l` of such
+a local `l` (a scope argument, E25, or a marker, O25a) names the result scope, where it lives. A local is
 returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built

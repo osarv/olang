@@ -1,0 +1,26 @@
+# check: run
+# B11/O17b: the fix the note for checks/cases/b11notehandle.olang names - the text built where the map lives - read back
+# from the lists after the arena has been churned
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn main() ? {
+    m := Map<I64, List<String&>>()
+    m.Put(0, List<String&>())
+    m.Put(1, List<String&>())
+    for i in range 40 {
+        l := try m.Get(i % 2)
+        t mut String&m = "x" $i
+        l.Push(t)
+    }
+    assert churn() > 0
+    a := try m.Get(0)
+    b := try m.Get(1)
+    assert a.Len() == 20 and b.Len() == 20
+    assert a[0] == "x0" and a[19] == "x38" and b[0] == "x1" and b[19] == "x39"
+}

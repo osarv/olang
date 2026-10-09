@@ -9939,10 +9939,49 @@ static struct var* livesWithVar(struct operand* op) {
 //B11: what to change where an argument lives too briefly for another one it must live with (O25e) or outlive (O10c): it is
 //made in a block of this function that closes first, so say where it is made and how to make it where the other lives
 static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, struct var* with, struct str withName);
+static void noteMakeWhereScope(struct checkCtx* ctx, struct operand* shortArg, struct var* dst);
+//...a variable a value was made from, read whole in its initializer, whose storage is the block at depth d
+static struct var* nameLivingAt(struct operand* op, int d, int depth) {
+    if (!op || depth > 8) return NULL;
+    if (op->opType == OPERATION_READ_VAR) {
+        struct var* r = op->readVar;
+        if (!r || r->owner || r->isFuncDecl || !r->name.len || r->name.ptr[0] == '$') return NULL;
+        bool isGlobal = false;
+        int sd = 0;
+        struct var* sv = lvalueStorageScope(op, &isGlobal, &sd);
+        return !isGlobal && !sv && sd == d ? r : NULL;
+    }
+    for (int i = 0; i < op->args.len; i++) {
+        struct var* r = nameLivingAt(*(struct operand**)ListGetIdx(&op->args, i), d, depth + 1);
+        if (r) return r;
+    }
+    return NULL;
+}
 static void noteMakeWhere(struct checkCtx* ctx, struct operand* shortArg, struct operand* longArg) {
     if (!ctx || !ctx->hasOwnScope || !shortArg || !longArg) return;
     struct var* with = livesWithVar(longArg);
-    if (with) noteMakeWhereNamed(ctx, shortArg, with, canonicalVar(with)->name);
+    if (!with) return;
+    //a value whose references live where its own storage does not - a handle lent as its reference (O17b), a split value
+    //(O17a) - is not where "&with" says: name where its references are, or say nothing a declaration could not follow
+    struct var* hv = NULL;
+    int hd = 0;
+    bool hu = false;
+    if (!longArg->type.structMAlloc && (longArg->handleLent ? valueRefsScope(ctx, longArg, &hv, &hd, &hu)
+                                                             : splitValueHome(longArg, &hv, &hd, &hu))) {
+        if (hu || hv == SCOPE_AMBIGUOUS) return;
+        if (!hv) { //a block of this function: a variable it was made from that lives there ("l := try m.Get(k)": m)
+            struct var* n = nameLivingAt(canonicalVar(with)->declInit, hd, 0);
+            if (n) noteMakeWhereNamed(ctx, shortArg, n, n->name);
+            return;
+        }
+        hv = canonicalVar(hv);
+        if (hv->isImplicitScope || (ctx->func && ctx->func->type.resultScope && hv == canonicalVar(ctx->func->type.resultScope)))
+            noteMakeWhereScope(ctx, shortArg, hv);
+        else if (hv->name.len && hv->name.ptr[0] != '$' && !hv->owner && !hv->isFuncDecl)
+            noteMakeWhereNamed(ctx, shortArg, hv, hv->name);
+        return;
+    }
+    noteMakeWhereNamed(ctx, shortArg, with, canonicalVar(with)->name);
 }
 //B11/C2d: the same, where what the argument must live with is where a scope lands - a parameter's (its implicit scope
 //"&p"), or the result's ("return")
