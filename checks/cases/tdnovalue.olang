@@ -1,4 +1,4 @@
-# check: fail R9a
+# check: fail error[R11]: this call returns no value, so there is nothing for a default to stand in for
 error E { X }
 fn two() (I32, I32) ? E { return 1, 2 }
 fn none() ? E { }

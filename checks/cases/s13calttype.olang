@@ -1,4 +1,4 @@
-# check: fail is bound with another type by an earlier alternative
+# check: fail error[S13c]: 'x' is bound as I32 by an earlier alternative
 # S13c: a name bound by several alternatives has one type
 type S enum {
     A(x I32)

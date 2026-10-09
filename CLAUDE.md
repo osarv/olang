@@ -3376,12 +3376,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   on a terminal (never under `NO_COLOR` or `TERM=dumb`). **Decided (mine)**: no rule is invented - an error no rule
   states has no brackets (a parse error, `expected X, found Y`), several are `error[T17, T19, C2]`; a command-line
   mistake is `olang: error[B1]: ...` and ends with no "compilation failed" line; `-e` reads a lowercase first letter as
-  uppercase; the summary says `N errors` (was `error(s)`). **Phase 1** converted the lexer, parser, driver and errmsg
-  itself; the checker, code generator and evaluator still pass whole messages through a compatibility layer that moves a
-  trailing `(RULE)` into the brackets, until phase 2 converts them. **Found on the way**: a lexical error reported after
-  the lexer had passed a newline (a string or character literal not closed on its line) named the next line; and a
-  token type a diagnostic named was `int literal`, `identifier`, `end of statement` - now `an integer literal`, `a name`,
-  `end of line`, as the error reads.
+  uppercase; the summary says `N errors` (was `error(s)`); a `%t` names a scope only inside a signature and shows
+  `mut` on inner levels (`expected Array<mut P&>&, found Array<P&>&`), the top level's permission being T25c's to say
+  in words; where the compile-time evaluator stops elsewhere than the error, a `note: here` row points at it; two
+  same-named types are told apart by the path written (`found 'lib.Other.Dir'`). Every call site names an entry (about
+  370); the old whole-message strings and their compatibility layer are gone. **Found on the way**: a lexical error
+  reported after the lexer had passed a newline (a string or character literal not closed on its line) named the next
+  line; a token type a diagnostic named was `int literal`, `identifier`, `end of statement` - now `an integer
+  literal`, `a name`, `end of line`, as the error reads; and `$` rendered a function's reference parameters with their
+  hidden scope names - `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a` - now
+  as written, at run time and while compiling.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

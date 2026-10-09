@@ -1,4 +1,4 @@
-# check: fail can never run
+# check: fail error[R11a]: an earlier clause already takes every error this one names
 error E {
     A
     B

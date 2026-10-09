@@ -1,4 +1,4 @@
-# check: fail try requires something that can fail
+# check: fail error[R20]: 'try' needs something that can fail
 # R20: try needs something that can fail - a fallible call, or an operation it can check
 fn f(a I32) I32 {
     r I32 = try (a == 1) catch default 0

@@ -1,4 +1,4 @@
-# check: fail references of two different types never do
+# check: fail error[E10c]: P& and Q& are different types, so they never name one instance
 # E10c: "a is b" between references of two different types
 type P struct(v I32) { v }
 type Q struct(v I32) { v }

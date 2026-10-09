@@ -1,4 +1,4 @@
-# check: fail must declare every error
+# check: fail error[R9]: BuiltinError can escape here, and this function does not declare it
 # R20: a checked division can fail with DIVIDE_BY_ZERO and OVERFLOW, so catching one word is not complete
 fn div(a I32, b I32) I32 {
     r I32 = try (a / b) catch BuiltinError.OVERFLOW default 0

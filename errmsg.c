@@ -11,7 +11,7 @@
 #include "token.h"
 #include "semantic.h"
 
-void RdSpellType(struct type t, char* buf, size_t n);
+void DiagSpellType(struct type t, char* buf, size_t n);
 
 //each diagnostic's rule and message, by id (errmsg.h)
 static const struct { const char* rule; const char* fmt; } diags[DIAG_COUNT] = {
@@ -260,13 +260,13 @@ static void putMessage(FILE* f, const char* fmt, va_list ap) {
     for (const char* p = fmt; *p; p++) {
         if (*p != '%') { fputc(*p, f); continue; }
         switch (*++p) {
-            case 's': fputs(va_arg(ap, char*), f); break;
+            case 's': { const char* s = va_arg(ap, char*); fputs(s ? s : "", f); break; }
             case 'S': { struct str s = va_arg(ap, struct str); fwrite(s.ptr, 1, (size_t)s.len, f); break; }
             case 'n': putToken(f, va_arg(ap, struct token)); break;
             case 't': {
                 struct type* t = va_arg(ap, struct type*);
                 char buf[512];
-                if (t) RdSpellType(*t, buf, sizeof(buf));
+                if (t) DiagSpellType(*t, buf, sizeof(buf));
                 fputs(t ? buf : "no type", f);
                 break;
             }
@@ -586,61 +586,3 @@ int ErrMsgExplain(char* rule) {
     return 0;
 }
 
-// ---- until every call site names a diagnostic ----
-
-//"... (D8c/D8d)" - a message written out whole, ending in its rules: they are taken off the text and written in the
-//brackets ("D8c, D8d"), and the text is what is left. Where it ends in no rule, it is all text
-static char* splitRule(const char* msg, char* rule, size_t n) {
-    rule[0] = '\0';
-    size_t len = strlen(msg);
-    while (len && msg[len - 1] == ' ') len--;
-    if (!len || msg[len - 1] != ')') return strndup(msg, len);
-    size_t open = len - 1;
-    while (open > 0 && msg[open] != '(') open--;
-    if (msg[open] != '(') return strndup(msg, len);
-    size_t w = 0;
-    for (size_t i = open + 1; i < len - 1; ) {
-        while (i < len - 1 && (msg[i] == ',' || msg[i] == '/' || msg[i] == ' ')) i++;
-        if (i >= len - 1) break;
-        size_t s = i;
-        if (!isupper((unsigned char)msg[i++])) { rule[0] = '\0'; return strndup(msg, len); }
-        if (i >= len - 1 || !isdigit((unsigned char)msg[i])) { rule[0] = '\0'; return strndup(msg, len); }
-        while (i < len - 1 && isdigit((unsigned char)msg[i])) i++;
-        while (i < len - 1 && islower((unsigned char)msg[i])) i++;
-        if (i < len - 1 && msg[i] != ',' && msg[i] != '/' && msg[i] != ' ') { rule[0] = '\0'; return strndup(msg, len); }
-        if (w + (i - s) + 3 >= n) break;
-        if (w) { rule[w++] = ','; rule[w++] = ' '; }
-        memcpy(rule + w, msg + s, i - s);
-        w += i - s;
-        rule[w] = '\0';
-    }
-    if (!w) return strndup(msg, len);
-    size_t end = open;
-    while (end && (msg[end - 1] == ' ' || msg[end - 1] == '-')) end--;
-    return strndup(msg, end);
-}
-
-static void oldError(struct where w, bool syntax, const char* msg) {
-    if (!countError(syntax)) return;
-    char rule[64];
-    char* text = splitRule(msg, rule, sizeof(rule));
-    FILE* f = startError(w, rule);
-    fputs(text, f);
-    free(text);
-    endError(f, w);
-}
-
-void ErrMsgSemantic(struct token tok, char* errMsg) { oldError(whereOf(tok), false, errMsg); }
-void ErrMsgFile(struct str fileName, char* errMsg) { oldError((struct where){ .file = fileName }, false, errMsg); }
-void ErrMsgSemanticNote(struct token tok, char* msg) { noteText(whereOf(tok), msg); }
-
-void ErrMsgFatal(char* errMsg) {
-    fatalStart();
-    char rule[64];
-    char* text = splitRule(errMsg, rule, sizeof(rule));
-    printf("%solang: %serror", ErrMsgColor(SGR_BOLD), ErrMsgColor(SGR_ERROR));
-    if (*rule) printf("[%s]", rule);
-    printf(":%s %s\n", ErrMsgColor(SGR_RESET), text);
-    free(text);
-    ErrMsgFinishCompilation();
-}

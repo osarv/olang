@@ -1,4 +1,4 @@
-# check: fail this reference is read-only, and this place wants a writable one
+# check: fail error[T25c]: a read-only reference cannot become writable
 # T25b: a "mut" trait method needs a writable receiver - in generic code too, judged where it is instantiated
 type Writer trait { mut Put(n I32) }
 type Box struct() {

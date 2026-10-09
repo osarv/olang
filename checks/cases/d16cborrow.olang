@@ -1,4 +1,4 @@
-# check: fail what a lambda captures from a value is read-only
+# check: fail error[D16c]: a lambda's captures are read-only
 # D16c: a captured value array is borrowed read-only
 error E { X }
 fn main() ? E {

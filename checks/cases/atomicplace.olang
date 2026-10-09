@@ -1,4 +1,4 @@
-# check: fail it is called on a place
+# check: fail error[P9]: an atomic operation acts on a place
 # P9: an atomic operation acts on one storage location, so a computed value has none
 fn main() ? {
     x I32 = 1

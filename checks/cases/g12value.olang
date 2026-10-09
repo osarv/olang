@@ -1,4 +1,4 @@
-# check: fail an uninstantiated generic function is not a value
+# check: fail error[G12]: generic function 'id' is not a value
 # G12: a generic function names a family - passed or stored where a function value is wanted, that is the one error
 # also: compilation failed with 2 errors
 fn id(x <T>) <T> { return x }

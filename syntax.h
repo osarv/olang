@@ -227,7 +227,7 @@ enum condDecisionKind { COND_VALUE, COND_RUNTIME, COND_DEAD, COND_ERROR };
 void SyntaxDecideLocalCondition(struct str file, int at, enum condDecisionKind kind, bool value);
 void SyntaxResetConditionDecisions(void);
 //records a decision (err NULL) or why none could be made (err set) for the condition at file/at
-void SyntaxDecideCondition(struct str file, int at, bool value, char* err);
+void SyntaxDecideCondition(struct str file, int at, bool value, enum diag err, char* reason);
 struct list* SyntaxPendingConditions(void); //struct pendingCond
 void SyntaxClearPendingConditions(void);
 struct pendingCond* SyntaxPendingFor(struct syntax* cond); //the one met for this parsed condition, or NULL

@@ -1,4 +1,4 @@
-# check: fail which keeps that storage's own scope, so the instance may live shorter than it, never longer
+# check: fail error[C2d]: this instance would outlive what its '&p' field refers to
 # C2d: a field written "&p" keeps its argument's scope, so the instance may refer into longer-lived storage but must not
 # outlive what it refers to - bi outlives the loop, inner dies with each iteration
 type Node struct(v I64) {

@@ -313,7 +313,7 @@ fn remote(r mut report&) ? Failed {
     # new head (so remote.olang's assert fails while compiling) - and leaves v1, which has not moved, as it was
     try r.expect(sh(dir, "cp olang.lock before.lock && touch remote.olang && " $env "\"$OLANG\" -u -b remote.olang > out.txt 2>&1") != 0,
                  "-u: the program built", dir)
-    try r.expect(outOf(dir).Contains("it is false"), "-u: expected 'it is false'", dir)
+    try r.expect(outOf(dir).Contains("this assertion is false"), "-u: expected 'this assertion is false'", dir)
     try r.expect(outOf(dir).Contains("updated example.com/me/tools to") and outOf(dir).Contains("example.com/me/tools@v1 is already at"),
                  "-u: what it updated", dir)
     try r.expect(sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0,
@@ -327,7 +327,7 @@ fn remote(r mut report&) ? Failed {
     try r.expect(sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") != 0,
                  "a deleted line: the program built", dir)
     # it now adds 1000: remote.olang's assert says so
-    try r.expect(outOf(dir).Contains("it is false"), "a deleted line: expected 'it is false'", dir)
+    try r.expect(outOf(dir).Contains("this assertion is false"), "a deleted line: expected 'this assertion is false'", dir)
     try r.expect(sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0,
                  "a deleted line was not updated", dir)
     try r.expect(sh(dir, "cp before.lock olang.lock && rm -rf remote && touch remote.olang") == 0,
@@ -825,16 +825,16 @@ fn typereview(r mut report&) ? Failed {
     os.Run("cp -r checks/fixtures/cases/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "14 1 3 true 4\n", "good output", dir)
-    try oneError(r, dir, "isother", "after 'is' or 'as' on an enum value comes one of its cases")
-    try oneError(r, dir, "matchother", "this is not that enum")
-    try oneError(r, dir, "isprivate", "this enum case is private")
-    try oneError(r, dir, "matchprivate", "this enum case is private")
+    try oneError(r, dir, "isother", "after 'is' or 'as' comes a case of")
+    try oneError(r, dir, "matchother", "a pattern here names a case of")
+    try oneError(r, dir, "isprivate", "error[M6a]: case")
+    try oneError(r, dir, "matchprivate", "error[M6a]: case")
     try oneError(r, dir, "isnoalias", "unknown name 'nosuchalias'")    # E10c: naming no type, it is a value
-    try oneError(r, dir, "privcase", "this enum case is private")
-    try oneError(r, dir, "privword", "this error word is private")
-    try oneError(r, dir, "privmethod", "this method is private")
-    try oneError(r, dir, "privtype", "this type is private")
-    try oneError(r, dir, "lambdaalias", "this name is already an import alias")
+    try oneError(r, dir, "privcase", "error[M6a]: case")
+    try oneError(r, dir, "privword", "error[M6a]: error word")
+    try oneError(r, dir, "privmethod", "error[M6]: method")
+    try oneError(r, dir, "privtype", "error[M6]: type")
+    try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
 }
 
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at

@@ -1,4 +1,4 @@
-# check: fail only a type declared over a number or an array extends it
+# check: fail error[T29f]: only a type over a number or an array extends its base
 # T29f: a struct has no base to inherit from
 type P extends struct(x I32) {
     x

@@ -1,4 +1,4 @@
-# check: fail this reference is read-only, and this place wants a writable one
+# check: fail error[T25c]: a read-only reference cannot become writable
 # T25c/E31: a Call writing its receiver, reached through a read-only reference, is no function value - calling it
 # would write the instance through a reference that may not
 type Counter struct() {

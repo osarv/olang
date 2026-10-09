@@ -1,4 +1,4 @@
-# check: fail this type has no constructor to call
+# check: fail error: type 'Color' has no constructor
 # an enum is no function: its values are its cases - said so, rather than "did you mean" the name itself
 type Color enum {
   Red

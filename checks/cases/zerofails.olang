@@ -1,4 +1,4 @@
-# check: fail this type has no zero value
+# check: fail error[D13c]: NonZero has no zero value, so this needs one
 # D13c: the zero value is the constructor run on zeros - one that rejects zero leaves the type with none
 error RangeError {
     ZERO

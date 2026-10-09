@@ -1,4 +1,4 @@
-# check: fail '=>' gives a case its value, which only a match used as a value has
+# check: fail error[S12b]: '=>' gives a value, which only a match used as a value takes
 # S12b: a match statement's cases run blocks
 fn main() ? {
     n I32 = 1

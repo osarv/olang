@@ -9587,3 +9587,32 @@ from their original form.
   each lexical error now locates its own bytes, and points at the literal from its opening quote. An excerpt shows a
   control byte as `?`, so a terminal never acts on one, and a compiler-made token whose text lies outside its file is
   located by its line alone rather than read past the file's end.
+  **Phase 2** converted every remaining call site - about 410 in the checker, and the evaluator's global-order cycle,
+  the code generator's identity clash, the build-condition decision - and removed the compatibility layer and the 330
+  old strings. Each message was rewritten for the site that raises it rather than mapped one to one, so one old string
+  often became several (`OPERATION_REQUIRES_BOOL` is `a condition is a Bool, found I32` at an `if`, `'and' takes a
+  Bool, found I32` at an operator) and a message now carries what it is about: `I64 does not flow into I32 - convert it,
+  as I32(x)` where it said "a number flows implicitly only where nothing is lost (T6b)", `case A of S is not covered -
+  add it, or 'nomatch { }'` where it said the match "does not cover every case", `type arguments for Box: expected 1,
+  found 2`. The messages that were built at run time from a reason - a constraint not met, a default or a zero value or
+  a literal's constructor the evaluator cannot run, an undecidable top-level condition, an unknown name with a
+  suggestion - take that reason as a `%s`, and where the evaluator stopped somewhere else, a `note: here` row points at
+  it instead of a `(file:line)` in the text. The condition decision carries a diagnostic id and its reason, as decided
+  with the coordinator, since it is reported in a later attempt than the one that decides it.
+  **The type speller needed a diagnostic mode.** `%t` first used the rendering speller `$` uses, which showed the
+  implicit scope variables (`Node&&n`), dropped permission (`expected Array<P&>&, found Array<P&>&` for a `mut` element
+  against a read-only one) and spelled an anonymous enum `?`. A diagnostic now shows `mut` on inner levels (the top
+  level's permission is T25c's message), names a scope only inside a function type's signature, where it is part of the
+  type, and spells an anonymous enum by its cases (`enum { A(n I32) B }`). Two same-named types from different modules
+  are told apart by the path written: `after 'is' or 'as' comes a case of Dir, found 'lib.Other.Dir'`.
+  **Expectations** of 236 `checks/cases` and eleven `checks.olang` greps moved to the new text, each to the error's rule
+  and its first clause (`error[O10d]: this value lives in this function's own scope, which closes first`), so a later
+  rewording of the fix part leaves them standing. Every case still fails with the diagnostic it was written for; the
+  mapping from old string to new id was checked per case, and the 19 that had several errors were picked by hand.
+  **Decided (mine)**: an unknown name carries no rule (`unknown name 'x'`); a note carries no rule; `-i`'s run-time
+  stop (`olang -i: FILE:LINE: why`) is unchanged, since it reports the program being run rather than a compile error.
+  **Found on the way, fixed**: `$` of a function rendered each reference parameter with its hidden scope variable -
+  `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a`, and a function value
+  `fn(n mut Node&&n)` - at run time and while compiling alike, since both use the one speller. It now renders as
+  written; a corpus test pins both paths. And `t is T.C` with C no case of T said "after 'is' or 'as' comes one of its
+  cases"; it says `T has no case 'C'` (T17) now, as a pattern does.

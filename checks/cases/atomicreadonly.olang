@@ -1,4 +1,4 @@
-# check: fail writes the place it is called on, so the place must be writable
+# check: fail error[P9]: this atomic operation writes its place, which must be writable
 # P9: only AtomicLoad reads a read-only place
 type C struct(n I32) { n }
 fn bump(c C&) { c.n.AtomicAdd(1) }

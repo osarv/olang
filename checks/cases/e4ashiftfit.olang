@@ -1,4 +1,4 @@
-# check: fail this expression is built only from literals
+# check: fail error[E4a]: this literal expression's value does not fit I32
 # E4a: a literal-only shift is computed exactly, so "1 << 31" is 2147483648 - which an I32 cannot hold - rather than an
 # I32 shift wrapping to -2147483648 (E6c)
 fn main() ? {

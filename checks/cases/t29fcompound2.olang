@@ -1,4 +1,4 @@
-# check: fail this type does not extend its base
+# check: fail error[T29f]: Pct does not extend its base, so it takes no '+='
 # T29f/S4: and two of it in a compound assignment have no built-in operator, as in "p = p + q"
 type Pct I32
 fn main() ? {

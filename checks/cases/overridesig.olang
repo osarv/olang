@@ -1,4 +1,4 @@
-# check: fail does not have the default's signature
+# check: fail error[M19e]: Twice does not have the signature of the default it overrides
 # M19e: a same-named method with another signature than a default of a trait the type satisfies is an error
 type Shape trait {
     Area() I32

@@ -1,4 +1,4 @@
-# check: fail does not outlive the enclosing 'join' block
+# check: fail error[P2, D16e]: this function value closes before the join does
 # P2: a lambda made inside the join block lives in the block it was made in - a task calling through it could
 # outlive it
 type Slot struct() { v mut I32 = 0 }

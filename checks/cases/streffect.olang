@@ -1,4 +1,4 @@
-# check: fail Str must have no effect a program could observe
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect
 # E11c: "$" calls Str as often as building the text needs, so one that writes a global is rejected
 Shown mut I32 = 0
 type Pt struct(n I32) {

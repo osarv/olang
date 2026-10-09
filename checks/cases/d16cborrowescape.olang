@@ -1,4 +1,4 @@
-# check: fail own scope cannot satisfy
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
 # D16d: a lambda borrowing a local array lives no longer than that array
 fn leak() fn(x I32) I32 {
     a := I32[1, 2, 3]

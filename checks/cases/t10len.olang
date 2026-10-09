@@ -1,4 +1,4 @@
-# check: fail a number flows implicitly only where nothing is lost
+# check: fail error[T6b]: I64 does not flow into I32
 # T10: an array's length is an I64, and an I64 never narrows implicitly (T6b) - I32(a.Len()) says so
 test "never runs" {
     a := Array<I32>(3)

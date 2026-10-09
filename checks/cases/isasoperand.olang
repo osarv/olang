@@ -1,4 +1,4 @@
-# check: fail ask which case an enum value is - this is not an enum value
+# check: fail error[E32]: 'is' and 'as' ask which case an enum value is, and this is I32
 # E32: is on a plain value
 fn main() ? {
     x := 5

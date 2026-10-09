@@ -1262,7 +1262,7 @@ struct syntax* parseStmntExpr(SyntaxCtx sc) {
 //condition fixed WITHOUT a build constant is left to the checker, which rejects it as dead code (S8a).
 static void skipBraceBody(TokenCtx tc);
 static bool evalLocalCond(SyntaxCtx sc, bool* value, bool* deferrable);
-struct condDecision { struct str file; int at; bool value; char* err; enum condDecisionKind kind; };
+struct condDecision { struct str file; int at; bool value; enum diag err; char* reason; enum condDecisionKind kind; };
 static struct condDecision* condDecisionFor(TokenCtx tc, int at);
 static struct token firstTokAnywhereSyntax(struct syntax* s);
 static void condTablesInit(void);
@@ -3383,12 +3383,12 @@ void SyntaxResetConditionDecisions(void) {
     condTablesInit();
 }
 
-void SyntaxDecideCondition(struct str file, int at, bool value, char* err) {
-    condDecisionAdd((struct condDecision){ file, at, value, err, err ? COND_ERROR : COND_VALUE });
+void SyntaxDecideCondition(struct str file, int at, bool value, enum diag err, char* reason) {
+    condDecisionAdd((struct condDecision){ file, at, value, err, reason, err ? COND_ERROR : COND_VALUE });
 }
 
 void SyntaxDecideLocalCondition(struct str file, int at, enum condDecisionKind kind, bool value) {
-    condDecisionAdd((struct condDecision){ file, at, value, NULL, kind });
+    condDecisionAdd((struct condDecision){ file, at, value, DIAG_NONE, NULL, kind });
 }
 
 //the conditions met undecided are also found by their parsed node - the checker looks one up for every local if
@@ -4349,7 +4349,8 @@ static bool parseTopIf(SyntaxCtx sc, struct list* out) {
             //B9c: left to compile-time evaluation - decided by an earlier attempt, or queued for this one
             struct condDecision* d = condDecisionFor(sc->tc, condStart);
             if (d && d->err) {
-                ErrMsgSemantic(firstTokAnywhereSyntax(cond), d->err);
+                if (d->reason) Err(firstTokAnywhereSyntax(cond), d->err, d->reason);
+                else Err(firstTokAnywhereSyntax(cond), d->err);
             } else if (d) {
                 ok = true;
                 value = d->value;

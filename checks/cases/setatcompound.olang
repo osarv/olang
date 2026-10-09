@@ -1,4 +1,4 @@
-# check: fail but not At, which reading 'x[i]' calls
+# check: fail error[E31]: Box& declares SetAt but not At, which reading x[i] calls
 # also: compilation failed with 1 error
 # E31: "b[0] += 1" reads b[0] first, through At - with only SetAt declared that crashed the checker
 type Box struct() {

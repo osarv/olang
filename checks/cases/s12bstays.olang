@@ -1,4 +1,4 @@
-# check: fail this block can finish without giving one
+# check: fail error[S12b]: this block can finish without leaving
 # S12b: in a match used as a value, a case's block must leave (R9b's rule for a catch clause in value position)
 fn f(n I32) I32 {
     v I32 = match n {
