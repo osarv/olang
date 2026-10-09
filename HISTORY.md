@@ -9616,3 +9616,94 @@ from their original form.
   `fn(n mut Node&&n)` - at run time and while compiling alike, since both use the one speller. It now renders as
   written; a corpus test pins both paths. And `t is T.C` with C no case of T said "after 'is' or 'as' comes one of its
   cases"; it says `T has no case 'C'` (T17) now, as a pattern does.
+- **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, O15, C11/D15,
+  2026-10-09).** The benchmarks against C (`bench/`) had diagnosed four gaps as the code generator's own; this work
+  closed them, each measured A/B - the previous compiler's binary against the new one's, interleaved medians on the
+  shared machine (load 1-6), with instruction counts from cachegrind where the timing was noisy.
+  **1. Closures were never devirtualized.** A function value was a pointer to an arena closure whose first word was its
+  code, so a call through one loaded the code pointer from memory; inside an inlined `Fold` that load sat in the loop
+  beside an unknown indirect call, which may write anything, so LLVM could neither forward the stored pointer nor hoist
+  it, the call stayed indirect, the iterator went back to memory every step, and nothing vectorized. The two candidate
+  fixes were (a) the function value as a `{code, environment}` pair and (b) `!invariant.group` on the closure's stores
+  and loads. **(a) was chosen.** (b) keeps 8 bytes, but its soundness is LLVM-semantic and fragile: an arena chunk
+  reused for a new closure at the same address needs `llvm.launder.invariant.group` at every construction, and any
+  comparison of two function values needs `llvm.strip.invariant.group` on both sides, or GVN's equality propagation
+  substitutes one pointer for the other and forwards a stale code pointer - the reason clang's `-fstrict-vtable-pointers`
+  is still off by default years after it was written; it also measured 0.33s against 0.19s for the invariant loads. (a)
+  needs no such argument: the code pointer is an SSA value, so once a helper taking a lambda is inlined the call is
+  direct, and the lambda inlines in turn. Its environment holds only the captures, written once where the lambda is
+  made and read only by its own prologue, so those accesses get a TBAA family of their own (`!18`/`!28`) and never
+  alias a program's fields or elements - the iterator's index stores no longer pin the capture loads. What the pair
+  touched: the LLVM type (`{ ptr, ptr }`, 16 bytes in TypeGetSize - a function value in a struct, an element or a
+  payload grows by 8), the zero value (`zeroinitializer`), calls through a local, a global and a computed callee
+  (`cgFnCode`), capturing lambdas (`cgClosure`, the environment now starting at field 0), named functions (their value
+  is `{@f.fvt, null}`, the linkonce_odr adapter that drops the environment - the static `@f.fv` objects are gone),
+  capture-free lambdas (`{@lambda, null}`), E31's `Call` adapters (adapter plus an environment `{instance, scope}`),
+  equality (both words - which is T21's identity: one value per named function or capture-free lambda, a new one per
+  evaluation of a capturing lambda or a `Call` conversion), `$` (it reads the first word, null exactly when the value
+  is), debug info (now undescribed, as other aggregates), and `cgIsBorrow`, which used to treat storing a `Call`
+  conversion as a pointer store. Spawn needed nothing: a task already carried the code and the environment as separate
+  arguments. The evaluator models function values abstractly and needed nothing; baked globals never held a function
+  value's address. The spec does not specify the representation (T21 says reference-shaped and identity), so it did
+  not change. Measured (100,000 elements x 8,000 passes): `Array.Iter().Fold` with a capturing lambda 1.63s -> 0.23s (C
+  0.22s, the hand loop 0.25s); `a.Iter().Count(fn(x) { return x > lim })` 1.57s -> 0.56s against its hand loop's 0.54s;
+  `List.Iter().Fold` 2.13s -> 0.93s - what remains is `ListIter.Next`'s per-element chunk test (std's).
+  **2. A fresh array stored into a reference was allocated twice.** `cgStoreInto`'s value-to-reference array branch
+  copied an `Array<T>(n)` it had just built in the same scope into a second allocation; `List.grow` paid it for every
+  chunk, `Map.grow` for every bucket array. `cgAdoptsFresh` decides adoption once, for every store site that pairs a
+  value with its store (`cgStoreOperand`): a reference target, or a value target holding nothing yet, takes the
+  descriptor of an array the expression made itself (`Array<T>(n)`, a comprehension, a rendering, a join), provided
+  `cgWhereBuilt` built it at the target's scope rather than where the checker landed it elsewhere. A value array already
+  holding a value is still written into (T11b). Then the zero fill: D13c clears every `Array<T>(n)`, and `Push`
+  overwrites it - a C copy of olang's `List` measured 0.26s with the memset and 0.17s without, and removing the memsets
+  from the emitted IR by hand took push from 0.27s to 0.15s. Skipping it is sound only for memory known to be zero,
+  and only the system's fresh pages are. A first design gave a large zeroed allocation a dedicated `mmap`ed chunk; it
+  was dropped before it landed, because such a chunk joins the pool when its scope closes and the next large
+  allocation would map again rather than reuse it, so a loop allocating a large array per iteration would grow the
+  pool without bound. The design kept: `__olang_new_chunk` maps any chunk of 128KB or more (where glibc's malloc turns
+  to mmap itself) and flags it fresh; the flag is cleared when the pool hands the chunk out again; and
+  `__olang_scope_alloc_zeroed` - which the zero-filled `Array<T>(n)` now calls - skips the memset of 4KB or more when the
+  scope's head chunk (the one the allocation came from) is fresh, since nothing at or above a fresh chunk's bump offset
+  has been handed out. Chunk acquisition is exactly as before; `__olang_pool_drain` unmaps a mapped chunk rather than
+  freeing it. A test allocates large arrays through fresh and recycled chunks and checks they read zero, and was
+  checked against a deliberately broken allocator that never clears: it fails. List push 20M: 0.51s -> 0.165s (C
+  0.167s).
+  **3. Allocation order, and the arena's fast path.** A constructor's arguments were evaluated before its instance was
+  allocated, so `Node(tree(d - 1), tree(d - 1))` laid a tree out in post-order and a walk from the root ran against
+  memory order. `cgPromote` now bumps the instance's slot first, for every promotion of a temporary into a reference
+  (an argument, a return, a declaration, an assignment, a literal's part); the destructor is still registered once the
+  constructor completes (O16), so the order destructors run in is unchanged - O15 said "reverse order the instances
+  were allocated", which was the same thing until now, and now says "constructed" (a test pins 4123 for a nested chain
+  and a second instance; registration in allocation order would give 4321). Measured: the layout makes the walk faster
+  (on a depth-14 tree built 2,000 times, walking 0.17s -> 0.11s) and the building slower (0.29s -> 0.32s): the slot's
+  pointer is live across both recursive calls, one more callee-saved register, about 8 instructions per node (the
+  benchmark's instruction count 607M with the fast path alone, 690M with both). On binary-trees itself the order wins,
+  6% over the fast path alone, more so as trees outgrow the cache; kept. The fast path: the allocator's success path
+  jumped into a block shared with the slow path, which reloaded the head and the cursor and rounded the cursor again;
+  it is now self-contained (one rounding, skipped altogether for an 8-aligned allocation, since every offset is a
+  multiple of 8), and a new chunk's first allocation is its first bytes. binary-trees 18: 0.51s -> 0.42s against the C
+  arena's 0.39s (ratio 1.32 -> 1.08); at depth 16, 780M -> 690M instructions (C arena 591M).
+  **4. T7b's copy of a returned local.** A function returning an array value copies a local it returns into the result
+  scope. The copy is now skipped when nothing could tell: the local is declared once in the body's own block (never in
+  a loop, so a call puts one array in the result scope, the one returned) from storage it makes itself, every return
+  returns it, nothing assigns it, every other use indexes it or takes its length, its elements are numbers (so no
+  reference into it can exist), the body has no `defer` or `join`, and the function cannot fail (a failed call would
+  leave the array in its caller's scope). Under those conditions no reference to it exists for deferred code, a task or
+  a destructor to write through after the result is computed, which is exactly what the copy protects. The analysis is
+  syntactic and conservative - a slice, a method call, a `for x in m`, a capture or a `$m` keeps the copy. matmul's
+  `matrix()` and the reproducer qualify; matmul measured 1.25s -> 1.22s, within noise, as the benchmarks predicted.
+  **Found on the way, all fixed.** A study of realistic programs (`/home/user/review/study`) handed three over: a
+  conditional of two literals into a target of another type (`v I64 = 7 if b else 9`, `return 200 if b else 0` from a
+  `U8` function) kept the literals' own type and emitted invalid IR - OperandFitsType's conditional branch now gives
+  the conditional the target's type, as the match branch below it did; `return wrap(e) if e != null else
+  Expr.Num(1.0)` (and its `match` form) crashed the code generator - the conditional's type came from the call arm, a
+  reference tagged with the callee's scope variable, and the temporary arm was promoted into that tag, which no frame
+  of the caller holds; a value made in an arm is now built where the checker landed it (here the borrowed result's
+  scope), and the test reads it back after an arena churn; and a module whose file name begins with a digit could not
+  build, since every symbol and type name begins with the module's prefix and an LLVM name may not begin with a digit
+  (`@2go_helper`) - B3b's prefix escapes a leading digit as `$3x`, which nothing else produces, so it stays injective.
+  Writing a destructor-order test found a fourth, older than any of this: `p := R(k)` for a type declaring a destructor
+  declared a value - in a local, a constructor field or a global - so the instance was never registered and its
+  destructor never ran (a file handle would never close), and C11's "reference-only" was bypassed because `:=` writes no
+  type-ref for C11 to check. `:=` now declares the reference `x R&` would (D15 says so); the instance is built where
+  the declaration lives and destructed when that scope closes.
