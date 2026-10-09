@@ -1,12 +1,12 @@
 # check: fail error[O26]: this value refers to this function's own storage
 # never: error[C2d]
 # a constructor parameter whose reference names no scope stores its argument in the instance, so an
-# instance returned into the caller's scope may not hold a reference to this function's own local - one error for the
-# one cause (B11), the instance's binding (O13a) found first
+# instance returned into the caller's scope may not hold a reference to this function's own storage - here a by-value
+# parameter, the function's own copy - one error for the one cause (B11), the instance's binding (O13a) found first.
+# (A local built here and handed to the returned instance lives in the result scope instead, O26a.)
 type P struct(x I32) { x }
 type NB struct(inner P&) { inner }
-fn bad(x I32) NB& {
-    q P& = P(x)
-    return NB(q)
+fn bad(p P) NB& {
+    return NB(p)
 }
-test "never runs" { assert bad(1).inner.x == 1 }
+test "never runs" { assert bad(P(1)).inner.x == 1 }

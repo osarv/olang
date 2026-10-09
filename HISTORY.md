@@ -11813,6 +11813,86 @@ numeric literal or written text already is; a variable only `null` reaches still
 **The evaluator** needed nothing new: `assert causalSmall(1.0) == 2020.0` - a small causal `GemmBatch`, Result then Left,
 through the packed micro-kernels and FMA - is decided while compiling (a wrong value is S18c's compile error), and the
 same call on a mutable global runs at run time and gives the same value.
+
+
+### A method is an operator only in its shape; a generic constructor; a value built from a local the return reads (E31, M6b, E10a, E10b, E11c, G10d, O26a, D13c, B11, 2026-10-09)
+
+A batch from oann's `repro/` and the usage studies, each reproduced first.
+
+**E31, revisited under the revisit rule.** E31 (2026-10-07) said a method named for an operator, in either spelling,
+must have the operator's shape, and M6b extended that to every method the compiler calls by itself. oann's graph
+builder hit it at once: a node for a product is naturally `g.MatMul(a, b, transA, transB)` and an element-wise one
+`g.Mul(a, b)`, and both were errors (`MatMul's parameters besides its receiver: expected 1, found 4`) - oann renamed
+them `Product` and `Multiply` and recorded `repro/operatornames`, which was first kept as designed. It is the kind of
+rule the revisit rule is for: it reserved a name for every method of every type, whatever the method means, to protect
+an operator nobody was using on that type. Now a method takes a role only in the role's **number of parameters** -
+binary operators one, unary ones none, `At` and `SetAt` one or more, `Slice` two, `Call` any, and among the methods the
+compiler calls for other operations `Eq`, `Has`, `Contains` and `RunFrom` one, `Str`, `Hash`, `Next`, `Iter` and `Len`
+none, the Try forms as their plain forms. Of the role's number it is held to the rest of the shape (result, no
+errors), as before; of another it is an **ordinary method**, called by name, and an ordinary `Plus(b, c)` may sit beside
+a private operator `plus(b)` (M6b's "never both spellings" counts only the role's methods). The error moved to where it
+helps: using the operator on such a type says why it does not apply - `Graph's MatMul takes 4 parameters besides its
+receiver - an ordinary method, not the one '@' calls, which takes one`, with a note at the method - for `@`, binary and
+unary operators, `x[i]`, `x[i] = v`, slices, `in`, `for ... in` and `++`. `==` and `$` fall back to the language's
+(an ordinary `Eq(a, b)` leaves `==` structural); an ordinary `Hash(seed)` holds the name, so the compiler supplies none
+(E10b), and a constraint asking for `Hash` notes the method of another signature. Considered and not done: telling the
+roles apart by parameter *types* too - the number is what a reader sees at a glance, and a wrong type in the right
+number is still a shape error worth reporting. Five cases written for the old rule became cases of the new one
+(`oparity`, `atnoindex` and `strshape` now show the ordinary method working and the operator's use failing).
+
+**G10d, a generic constructor (the coordinator's decision).** oann's `repro/genericctor`: a non-generic struct whose
+constructor takes `g mut Graph<<T>>&` was accepted at its declaration and every call then failed, printing `<<T>>`
+(the stale G8a spelling). The use is real - a layer holds only graph handles (numbers), so it has no reason to carry
+`T` in its type, and a model is a `List` of layers over graphs of several element types. So the constructor is generic
+when its parameters introduce a variable, and is instantiated per call as a generic function is. **How**: each
+distinct binding set makes a *twin* of the type - same owner and name, so T13/T25a's identity (owner and name) makes
+every twin the same type - whose constructor is the generic one substituted, its body checked on demand with the
+bindings (so C2d's held-arguments analysis and its errors point back at the call, G16) and emitted by the root object as
+instantiations are (B3d), declared in the others. Fields are the type's own and the destructor is shared. **Decided
+(mine)**: a field whose type names such a variable is an error naming the fix (`type D<T>`) - the variable would make
+the type's layout depend on the call; a `:=` field likewise (its type would be read off each instantiation's body);
+`D<I64>(...)` stays G7's error (the type takes no arguments; the constructor's are inferred); a call binding nothing
+(`D(null)`) is an error; the type has no zero value (D13c: no zero binds the variables); and a *generic* type's
+constructor introduces none of its own - a variable not in the type's list is an error at its introduction. The
+evaluator needed nothing: a twin's constructor is an ordinary function to it, and a global built through one bakes.
+
+**O26a, extended.** `return Node.Many(l.ToArray())`, with `l` a local `List<Node&>` the nodes were pushed onto, was
+O26: `l` lived in its block, and since a type argument's references live in the container's scope (G11), so did every
+node in the array returned. The manual fix was `l := List<Node&>&return()`. O26a (the same day) moved a local into the
+result scope only when the return *gives* it; it now also moves one holding references when a returned value **reads**
+it where what is built from it can be what is handed back. "Can" is decided per call, before the statement using the
+local is checked, from what is already known: a method of the local, or a function or constructor the local is passed
+to, can keep it when its result is borrowed from that parameter, when its body (checked first, as calls already do,
+O10c) has an obligation holding that parameter's scope to outlive its result scope, when it is a constructor whose
+instance holds the parameter (C2d's held analysis), or when it is generic or its body is not known yet. A rendering
+(`$l`) never keeps anything, nor does a field holding no reference, a result holding none (`l.Len()`), or anything
+else. The first version moved a local on any read in a return, which broke two things at once: a corpus test
+(`return $copied " " $h.s ...` - text rendered from a holder of a borrowed array, then storing that array into the
+holder failed O20), and - worse, found by trying it - the most ordinary front-end shape, `p := Parser(src); return
+p.parse()` with `src` text made in the block: the parser moved to the result scope and could no longer hold `src`
+(C2d). With the per-call test both are as before, and a case pins the parser shape. **Where the result is put** also
+covers a borrowed result: for `fn (p mut Parser&) many() Node&p` it is the scope `p`'s referent lives in, which the
+function builds into (O4b), so `many` building its `List` there works too. Consequences: the five must-fail cases that
+kept O26/O17 for a local returned *inside another value* (`return W(e)`, a slice, an element, a lend to a `mut` method)
+now run - the local lives where the result does, and each reads its text back after an arena churn - and three new
+cases keep the errors where the value returned is a *copy* (`b := a`), which O25h leaves where the original's references
+are. The cost is O26a's own: memory lives as long as the result.
+
+**D13c located at the program's type argument.** `List<Ticket>` no longer needs a zero value (langb), so the shape is
+reproduced with `chan.Chan<Ticket>(4)` and `a.Repeat(2)`, where `Ticket`'s constructor writes a global: the error was
+reported inside `std/chan.olang` with the program's line as a note. It is now reported at the type argument the program
+wrote (`Chan<Ticket>`'s `Ticket`), with the library's line as a note and a second note naming the fix
+(`'Chan<Ticket&>' holds it by reference, whose zero value is null`); where no type argument names it (`a.Repeat(2)`),
+the note says to hold the type as `Ticket&` where the use names it. Recorded per written application while types
+resolve (`writtenApplies`), so the lookup is exact rather than a search of the line.
+
+**Confirmed gone**: oann's `ctorpush` (prints `after a new array: 6` three times), `ctorunstored` (compiles and runs)
+and `capturedfn` (captured 0.52-0.53 ns an element against 0.55-0.58 direct) no longer reproduce on this compiler.
+
+**Found on the way, fixed**: diagnostics named prelude files as `.../build/../std/prelude/...` (the path is normalized
+now); a diagnostic spelled a type variable `<T>`, the pre-G8b spelling, where the program writes `T`; a type's name met
+where a value is wanted (`Res&(3)`) said `unknown name 'Res' - did you mean 'Res'?` and now says `'Res' is a type, not a
+value`.
 ### What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11, 2026-10-09)
 
 Study 3 wrote realistic programs against the newest rules (permissions, constant generics, bare type variables) and
@@ -11922,3 +12002,19 @@ writable (`l mut List<I32>&m`), or the next write through it is the next error -
 `o25enote`'s program is now accepted: `text := mk(n)` handed to `st.put(...)` with `st` returned flows into the result
 (O26a) and is built there - which is correct, not a hole: the slices then point into the result scope. The case keeps
 its purpose through a plain function, `put(st, ...)`, whose arguments the flow reading does not follow.
+
+**Merged with chk4's O26a (a value a returned value reads).** chk4 extended O26a the other way at the same time: a value
+local holding references is returned also when a returned value reads it through a call that can keep it
+(`return Node.Many(l.ToArray())`), judged per callee (`calleeMayKeepArg`), and "where the result goes" became
+`resultHome` - the result scope, or for a borrowed result `T&p` the scope `p`'s referent is in. The two compose: a local
+is in the result home when chk4's reading says so or when the flow reading here does, and this batch's reference locals
+and flow use `resultHome` too, so a reference local of a function with a borrowed result is built where `p`'s referent
+is. The flow's return test now asks chk4's question rather than "is it mentioned": `return p.parse()` does not move a
+parser whose result is new. And one thing chk4's cases showed the flow must not do: follow a **plain copy** of a value
+local (`f := e`, `b := a`, `x = y` with a value target). A copy keeps its references where its source's are (O25h) - the
+guard for copies of existing storage the coordinator asked to keep - so moving the source because its copy is
+returned would make `o13acopywrap` and `o14ccopyslice` compile (soundly, but against that decision); a reference target
+(`n Node& = v`) borrows, and still flows. Five older must-fail cases had built their "own storage" from a reference local
+built here and returned (`q P& = P(x); return NB(q)`, `c mut Counter& = Counter(41); return c`, a try default `n`), which
+now lives in the result scope - correct, and pinned as `o26areflocal` (a run case, under `-b`, `-d` and `-i`); the
+cases keep their purpose with a by-value parameter, the function's own copy, which cannot move.
