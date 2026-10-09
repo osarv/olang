@@ -120,6 +120,13 @@ repository or its code. Not legal advice; told the user so.
 21. (asked 2026-10-09) an opt-in fast-math mode (libmvec vector math, contraction) that gives up evaluator/run-time
    agreement? Default: no (the matrix library ships FastExp/FastTanh/FastSigmoid approximations instead). Rec: only as
    an explicit flag, if ever.
+**Answered 2026-10-09 (the user, numbering my list 1-13):** Q1 protocol methods follow privacy: "call private ones if
+in private and public if in public, if calling a private in public it can't be found and is an error. One may not declare
+both public and private" (being built, wt-langb). Q2 keep wrapping. Q3 `:=` infers (wt-langb). Q6 print/println: yes
+(wt-langb) - and the user floated "methods with errors called without try abort on errors?"; I advised against
+(explained). Q13 (Array<T,N>& carries its length): yes. Q20 assert message: yes ("sure"). Asked back / explained:
+Q4 ("aren't locals always mutable?"), Q5 ("talk to me more"), Q11 normalization ("probably shouldn't normalize?"),
+Q12 Dynamic, Q14 <N> vs N, Q19 native target/FMA, Q21 fast-math - explanations given, answers pending.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
