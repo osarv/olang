@@ -992,7 +992,8 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
     lockSet(key, head);
     if (updateLocks) {
         lockUpdatedNow(key, true);
-        if (was && was[0] && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
+        if (was && !was[0]) fprintf(stderr, "olang: updated %s to %.12s\n", key, head); //its line named no commit
+        else if (was && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
         else if (was) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
     }
     return dir;
