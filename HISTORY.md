@@ -10433,6 +10433,187 @@ from their original form.
   Measured beside: a cold hello-world build unchanged within noise (the float table is not written without a float
   rendered).
 
+- **Constant parameters and `Array<T, N>`, designed (G20-G28, G16b, T7c/T7d, E32b, 2026-10-09; not yet built).** The
+  user: "we should make the language generics take constants (and comp time expressions) as parameters. This is a
+  natural fit. Expand it across arrays too to make them more natural with Array<T, size>." The motivation is the
+  matrix library the user had just decided on (2-D `Matrix`, not a tensor): weights are `Matrix<F32, 784, 128>`,
+  checked and specialized while compiling, while the batch dimension is known only at run time. Designed spec-first on
+  a branch, the rules marked in SPEC.md's Status until the implementation lands; the compiler's generics were being
+  changed by two other agents at the time.
+  **Precedent, and what was taken from each.** *C++ non-type template parameters*: values of structural types, used by
+  bare name, deduced only from a whole argument (an expression `N + 1` is a non-deduced context) - taken: deduction by
+  value only, and parenthesizing `>` inside an argument list. *Eigen* `Matrix<float, Dynamic, 784>`: one type whose
+  dimensions are each a constant or a sentinel meaning "stored in the object" - taken as a *library* pattern, not a
+  language one (below). *Rust const generics*: `const N: usize`, restricted to integers, `bool` and `char`, because a
+  type's identity must be decidable by comparing values and a float's equality is no equivalence; arithmetic in a
+  generic signature (`{N + 1}`) is still unstable in Rust because Rust checks a generic once, at its definition, and
+  must prove such an expression well-formed for every `N` - taken: the type restriction and its reason. olang checks
+  each instantiation (G16/G18), as C++, Zig and D do, so `<N> + <M>` in a result type is simply computed per
+  instantiation and needs no proof. *Zig*: comptime parameters are ordinary values and a comptime `if` analyses only
+  the branch taken - taken: any compile-time-computable argument (the user's "comp time expressions", K1), and the
+  per-instantiation `if` (G26). *D*: template value parameters and `static if` - the same per-instantiation decision,
+  which olang gets from its ordinary `if` with no new keyword, as S8b already does for build constants. *Go*: `[N]T`
+  arrays are values whose length is in the type, `==`-comparable, distinct from slices, and Go 1.17's `(*[4]T)(s)`
+  converts a slice to an array pointer with a run-time length check - taken: `Array<T, N>` as a value type beside
+  `Array<T>`, and `x as Array<T, N>&` as that conversion. Go has no constant type parameters at all (its proposal was
+  declined), which is what makes its arrays awkward in generic code.
+  **Decisions (mine, under the user's delegation of details).** (1) A constant parameter is declared `R I64` in the
+  type's list - olang's name-then-type, and unambiguous beside G19's `K Hashable<<K>>` because a trait and a value type
+  are never the same thing. (2) Integers, `Bool`, declared types over them and payload-free enums only, none declaring
+  `Eq`; text, structs and payload enums are additive later if wanted. (3) **A constant variable is `<N>` everywhere,
+  in expressions too** (`for i in range <N>`). The alternative, bare `N` in a body, reads better and is what every
+  other language does - but they all have declaration lists; olang's functions introduce generic parameters by
+  writing `<X>`, and the user's G8b decision was precisely that one variable has one spelling. `<N>` also keeps
+  constant variables out of the value namespace and shows the reader that a bound is the instantiation's constant.
+  The cost: `i < <N>` needs its space (`<<` is always a shift in an expression). Flagged to the user. (4) `<N>` does
+  not adapt like a literal - it is a value of its parameter's type (`I32(<N>)` narrows), or `x U8 = <N>` would compile
+  for some instantiations and not others. (5) Inference binds by value and never solves; a constant no parameter
+  carries is G4's error, and a value of such a type comes from its constructor (G10a, or G10c's expected type). No
+  explicit arguments at a function call were added (a turbofish would be the first written generic argument outside a
+  type). (6) G17 gains a chain bound (1,000), since a constant can grow without its type's nesting growing. (7) G26:
+  an `if`/conditional/`match` reading a constant is decided per instantiation, the untaken branch parsed but not
+  checked, as G14 does for a type match - needed both to write code valid only for some sizes (`if <N> > 0 { a[0] }`)
+  and to end recursion on a constant, and exempt from S8a because it is configuration. (8) Value constraints are
+  `assert`s, decided per instantiation by S18c - in a constructor body for every instantiation of the type; a
+  where-clause would be a second syntax for what an assert already says. G16b states the instantiation-origin note the
+  type checker's review had added (so a failed assert inside a library names the user's line).
+  **Arrays.** `Array<T, N>` is the representation the compiler already had for literals and C2e's inline fields - a
+  length known while compiling, elements in place - made nameable. Being a value of fixed size it may sit in fields,
+  elements and payloads by value, which generalizes T7a's one exception and **supersedes C2e**: an inline field is
+  written `m Array<F32, 16>`, so whether a field is inline is decided by its type, never by whether its size happened to
+  be computable (C2e's re-check loop stays useful for constant arguments that need a call). Nested fixed arrays
+  (`Array<Array<F32, 4>, 4>`) are allowed as plain composition - the user's removal of 2-D arrays was of a syntax and of
+  jagged run-time rows, and nothing is added for this (no `[i, j]`, no 2-D literal). `Array<T, N>&` is one pointer,
+  which revisits T11a ("make the size in the type irrelevant"): then a reference always carried its length at run time
+  and a size in its type said nothing; now the size is compile-time knowledge (unrolling, inference, a shape checked
+  while compiling), and D9a makes every array parameter a reference, so a function over fixed arrays needs it. The
+  alternative - fixed arrays passed by value - is the item the user put on hold. Conversions: fixed to run-time is
+  implicit (nothing lost); run-time to fixed is a copy checked once per copy (C2e's existing rule, per construction) or
+  the view `as` (an abort, or `OUT_OF_BOUNDS` under `try` - the word every length check uses, though an enum `as`
+  fails with `INVALID`). Rejected along the way: a slice with constant bounds getting a fixed type (it would change what
+  `x := s[0:3]` declares and break reassigning it, D15a); `Array<T, N>(v)` as a fill (`Array<I64, 4>(4)` beside
+  `Array<I64>(4)` reads as a length) - `Array<T, N>()` is the zero value and nothing else; and `:=` from a literal
+  declaring a fixed array (it would break `y := I32[1, 2]` then `y = Array<I32>(7)`) - a literal adapts to `Array<T, k>`
+  where one is wanted and is an `Array<T>` otherwise.
+  **Run-time-known dimensions** (the matrix's batch dimension). Two routes were weighed. A language-level "this
+  argument is known at run time" (`Matrix<F32, _, 784>`) would make every constant parameter two-mode: the instance
+  would carry hidden storage for the value, a function binding `<K>` from two arguments would need a hidden run-time
+  check that they agree, and a constructor would need a hidden way to receive it - the hidden costs principle 2 rules
+  out, for one library's need. The library route needs nothing new: `std/linalg` declares a sentinel (`Dynamic I64 =
+  -1`), a `Matrix` always stores its rows and columns, and `Rows()` is `<R>` or the field, decided per instantiation
+  (G26). Ordinary inference then does the work: `Matrix<F32, Dynamic, 784>` times `Matrix<F32, 784, 128>` binds `K` to
+  784 from both (checked while compiling) and gives `Matrix<F32, Dynamic, 128>`; the gradient `xT x dY` contracts over
+  `Dynamic` on both sides and checks that one at run time, once per product. Mixing a fixed and a `Dynamic` size of
+  the same dimension takes a conversion the library writes. Recommended; put to the user as a direction question.
+- **Constant parameters and `Array<T, N>`, built (G20-G28, T7c/T7d, E32b, G17; 2026-10-09).** Implemented on the same
+  branch as the design. Of the three direction questions the user confirmed one - an `Array<T, N>&` parameter, D9a
+  kept, carrying its length in its type; the other two (run-time dimensions in the library, `<N>` in expressions)
+  stand at their recommended defaults while they are still being explained.
+  **Representation.** A constant argument is a type of its own kind, `BASETYPE_CONST`: the constant's type and its
+  value, or - while a constant variable it reads is unbound - a *pattern* holding the expression and its module. A
+  constant variable is an ordinary type variable flagged `isConstVar`, bound in the same binding lists as type
+  variables. That one choice is what made the rest small: substitution computes a pattern once its variables are
+  bound, unification binds a constant variable by value from a type argument or from an array's length, identity
+  compares values (`TypeIsSame`), and an instantiation's name spells the value (`K-I64-3-k`), so `Ring<I32, 4>` and
+  `Ring<I32, 2 + 2>` are one instantiation with no parallel machinery. A fixed length is the representation literals
+  and C2e's inline fields already had (`arrMalloc` false, the length an operand); a length still a pattern rides on
+  the array (`arrLenArg`) until substitution fixes it. A generic struct's fields are substituted, not re-resolved, so
+  `data Array<<T>, <R> * <C>>` is a pattern in the generic and twelve elements in `Matrix<F32, 3, 4>`.
+  **Arguments** are folded on their syntax while types resolve - literals, operators, `<N>`, immutable globals
+  (following their initializers, with their declared types' ranges), `-D` constants, enum cases. One needing
+  evaluation proper - a call, a global computed by one - is deferred: the program is checked with it undecided (an
+  unknown type, which reports nothing), computed by K1 once the program has checked, and checked again - C2e's loop,
+  keyed now by file, line, the argument's text and the instantiation's bindings. C2e itself is gone: an inline field
+  is spelled `Array<T, N>`, and four corpus fields and five checks were migrated. A call that reads an unbound
+  constant variable (`twice(<N>)` in a signature) is a pattern, computed per instantiation.
+  **`<N>` as a value** is a literal of its parameter's type wrapped in a conversion to that same type: it emits
+  nothing and evaluates as itself, but it is no literal, so it never adapts (`x U8 = <N>` is T6b's error), and it is
+  flagged so S8a reads a condition on it as configuration. A bare `N` in a body, and `i <<N>`, are diagnosed with the
+  spelling to write.
+  **G26.** An `if` or conditional with `<N>` written in its condition is built, evaluated, and replaced by the chosen branch
+  (an always-true `if`, as a selected type-match arm is); `match <N>` is the type-match form with values in its cases.
+  Narrower than the design said, by decision: a general value `match` on a constant expression, and guards, are not
+  decided per instantiation - `match <N>` covers the use, and a guard there would decide nothing at run time. A local
+  condition in a generic with constant parameters is never decided by S8b (once, at the parse every instantiation
+  shares): `n := <N>; if n > 3` used to be judged by whichever instantiation was checked last and reported as S8a's
+  dead code. It is an ordinary condition; a condition with `<N>` written in it is decided per instantiation instead.
+  **G17** gained the chain bound the design called for: an instantiation records how many instantiations, each
+  requiring the next, led to it, and a chain past 1,000 is reported once with the last three instantiations as notes
+  (`grow` at `<N>` asking for `grow` at `<N> + 1` used to run forever). **G27** needed the instantiation note kept with
+  the assert, since S18c judges asserts after the program has checked, outside the instantiation: the error contexts
+  open when an assert is recorded are saved and reopened when it is reported.
+  **Arrays.** `Array<T, N>()` and a declaration with no initializer are zero values; where the element's zero value is
+  a constructor's (every struct) the zero is one value copied into each element, with D13c's "holds references" check -
+  no allocation, unlike `Array<T>(n)`. Fixed arrays may be fields, elements, payloads (D9a's payload exception) and
+  literal elements (`Array<I32, 2>[I32[1, 2], I32[3, 4]]`). `x as Array<T, N>&` is a slice of the whole of `x` whose
+  check is "the length is N" and whose value is the bare pointer, so every rule about slices - scope, permission,
+  borrow - applies to it unchanged. Beside an `Array<T>` in `==`, a fixed array is viewed as one (the length beside
+  its own storage) - which also fixed comparing a run-time array with a literal, rejected until now with the
+  self-contradicting "found Array<I32> and Array<I32>". The evaluator reads a fixed array's `Len()` off its type
+  where reading what holds it does nothing, as K1 states.
+  **Decided while building.** A mismatching copy into fixed storage aborts and `try` does not catch it - the design
+  said R21 would; a program wanting the error views first, `try (r as Array<T, N>&)`, which needed nothing new. M19's
+  "a receiver with a length takes precedence" was dropped from the spec: only the prelude declares array methods and it
+  declares none with a length. Diagnostics now spell a literal's type with its length (`found Array<Char, 3>`), which
+  is what it is where a length is wanted (T7d); two checks were updated.
+  **Found and fixed on the way, pre-existing.** A variable named only inside a constraint (`<V Shaped<<R>>>`) was not
+  collected as the signature's, so G19's "inferred through it" never applied to one written nowhere else. An extern
+  handed a fixed-length value a copy, so what the foreign function wrote was lost - harmless while only literals were
+  fixed, fatal for `ts Array<I64, 2>` passed to `clock_gettime`: an array is now always handed over as its own storage.
+  Codegen still left a declared-size local array uninitialized (D15b's old rule, contradicting D13's "nothing is
+  uninitialized" and dead until fixed arrays could be declared); a large one is cleared with a memset, since LLVM
+  handles a huge aggregate store badly. A method called on a value of unknown type added "'x' is no import here" -
+  which also stopped a deferred constant argument from ever being decided. `List<List<I32>>= ...` was briefly broken
+  by the constant-argument fallback and is covered by an existing check.
+  **Observed, not changed**: a trait method returning `T&` (built) is not satisfied by a method returning `T&p`
+  (borrowed from its receiver) - O13's two contracts genuinely differ, so G28's example uses a by-value result.
+- **A generic's variable is introduced once and written bare after (G22/G23/G26, 2026-10-09).** The user, asked to
+  choose between `<N>` everywhere and bare `N` in bodies (my question 14), asked instead "can we make Ts appear as T
+  after being given as generics with <T>?" - and the coordinator turned that into the rule: a variable is introduced by
+  its first `<X>` - in a type by its parameter list, in a function by the first `<X>` reading left to right (receiver,
+  parameters, results), carrying any constraint or type written there - and written `X` everywhere after it, in the
+  rest of the signature and in the body; `<X>` again is an error, a bare `X` before it names nothing. Applied to
+  constants now; type variables keep G8b's `<T>` everywhere until a follow-up flips them and migrates the corpus. The
+  user also confirmed the library's `Dynamic` ("Do dynamic the way you want it") and, earlier, `Array<T, N>&` carrying
+  its length, so all three direction questions of the design are answered.
+  **What it replaced, and why it reads better.** The first build had `<N>` everywhere - `for i in range <N>`,
+  `i < <N>` with its space, `match <N>` - one spelling per variable, which is G8b's argument. Introduce-then-bare is the
+  declaration-list languages' reading recovered without a list: the signature says where the variable comes from once,
+  and the body reads as any code does. It also dropped two diagnostics written for the old form (a bare `N` "write
+  `<N>`", and `i <<N>` read as a shift).
+  **How it is resolved.** A signature's introductions are collected before it is resolved - for each name the first
+  `<X>` by source position, which is left to right whatever order the parser stores the receiver in - and every use
+  asks one predicate: a bare name is a variable when the instantiation binds it, when it is the type's own constant
+  parameter, or when its introduction precedes it; `<X>` is written again unless it is that introduction. A function
+  type inside a signature and a lambda's signature introduce nothing (G3a). In a pattern evaluated later per
+  instantiation (`Array<<T>, N + M>`), a bare name is a variable when the bindings name it or it names nothing in the
+  module - sound because D3a, now extended to constant variables (below), keeps the two namespaces apart; a pattern's
+  text spells a variable by its name, so `<N> + 1` and `N + 1` are one pattern. In a body a bare `N` is the bound
+  value (`OperandConstValue`, as `<N>` was), also as a method's receiver (`N.Hash()`, through the call path's own
+  receiver probe) and as `match N`, whose cases the parser reads as a `match <T>`'s when the subject is a name the item
+  introduced. The parser also uses those names to keep a local `if` reading one from S8b's single decision (G26's
+  per-instantiation decision needs it), which it used to recognize by the `<N>` spelling.
+  **`<N I64>`** - a type at the introduction - is new: a function's constant variable took its type from the slot it
+  filled, so one introduced inside an expression had none. Written, it must agree with every slot (G22's two-types
+  error) and is never a trait.
+  **The switch.** `bareTypeVars` in semantic.c makes type variables follow the same rule: `<T>` after its introduction is
+  the same error, a bare `T` resolves to the variable (the type's own list introducing its parameters), and `match T`
+  is a type match. Tried before committing: with the switch on and a mechanical migration of a copy of std (keep each
+  item's first `<X>`, write the rest bare; in a type, every listed name bare after the header), the prelude's tests,
+  std/linalg, std/chan and std/io all pass, and `fn biggest(a <T>, b T) T` and `type Box<T> struct(v mut T)` compile.
+  Two pre-existing crashes on error paths surfaced on the way and are fixed: `x[i] = v` where the `At` call had failed,
+  and a constructor assembling a field whose declaration had failed.
+  **G22's name rule, built.** The design said a constant variable's name may not be a global's, a function's, a build
+  constant's, a parameter's or a local's (D3a); it was not enforced until now - and with bare `N` it matters, since a
+  global `N` would otherwise be what `N` read. A type's constant parameter and a signature's introduction are checked
+  against the module's globals, functions and build constants (a type's name is G1's); a parameter or local named like
+  a constant variable is an error wherever D3a is checked, per instantiation, which reports it once per instantiation as
+  D3a's other errors are.
+  **Migrated**: the corpus's constant-parameter section, nine checks (and five new: written again in a signature, in a
+  body and in a type, before the introduction, a written type that disagrees), and fuzz/gen.olang's twelve inline
+  arrays, which the merge from master had brought in still written in C2e's superseded form. T7a's message names the
+  fixed form now (`write Array<I32>&, or a length, Array<T, N>, to hold it in place`).
+
 ### The specification is `SPEC.md` (2026-10-09)
 
 Renamed from `spec.md` at the user's request ("Capitalize it"), after they asked why the project's Markdown files were

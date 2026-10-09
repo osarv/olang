@@ -80,11 +80,11 @@ type Gen struct(seed U64) {
     # whether a case may use an atomic method on a local (K1 performs them while compiling)
     atomics mut Bool = true
     # the variables in scope, from base to nv: a variable k is named x<k>
-    vt mut Array<I32> = Array<I32>(4096)
-    vlen mut Array<I64> = Array<I64>(4096)          # an array's length, -1 when it is not known
-    vmut mut Array<Bool> = Array<Bool>(4096)        # whether it may be assigned
-    vdep mut Array<Bool> = Array<Bool>(4096)        # whether it depends on a parameter (S8a)
-    vwalk mut Array<Bool> = Array<Bool>(4096)       # a List a loop is walking: pushing to it would never end (S9f)
+    vt mut Array<I32, 4096>
+    vlen mut Array<I64, 4096>          # an array's length, -1 when it is not known
+    vmut mut Array<Bool, 4096>        # whether it may be assigned
+    vdep mut Array<Bool, 4096>        # whether it depends on a parameter (S8a)
+    vwalk mut Array<Bool, 4096>       # a List a loop is walking: pushing to it would never end (S9f)
     base mut I64 = 0
     nv mut I64 = 0
     np mut I64 = 0                                  # the current function's parameters, from base
@@ -94,17 +94,17 @@ type Gen struct(seed U64) {
     hdepth mut I64 = 0                              # helpers being made inside each other
     # this case's struct types: a field count and up to 4 field types each
     ns mut I64 = 0
-    sn mut Array<I32> = Array<I32>(4)
-    sf mut Array<I32> = Array<I32>(16)
+    sn mut Array<I32, 4>
+    sf mut Array<I32, 16>
     # this case's enum types: a case count (up to 4), a payload count per case (up to 2) and the payloads' types
     ne mut I64 = 0
-    en mut Array<I32> = Array<I32>(4)
-    epn mut Array<I32> = Array<I32>(16)
-    ept mut Array<I32> = Array<I32>(32)
+    en mut Array<I32, 4>
+    epn mut Array<I32, 16>
+    ept mut Array<I32, 32>
     # this case's function types: a parameter type and a result type each
     nl mut I64 = 0
-    lp mut Array<I32> = Array<I32>(64)
-    lr mut Array<I32> = Array<I32>(64)
+    lp mut Array<I32, 64>
+    lr mut Array<I32, 64>
     errs mut Bool = false                           # this case has declared its error type, Err<i>
     fallible mut Bool = false                       # the function being made declares it (so a try may pass it on)
     inLambda mut Bool = false                       # a lambda's body is being made: a List, holding references, is not

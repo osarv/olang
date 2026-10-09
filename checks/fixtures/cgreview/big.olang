@@ -3,7 +3,7 @@
 import "std/io"
 
 type M struct() {
-    data mut Array<F32> = Array<F32>(16384)
+    data mut Array<F32, 16384>
 }
 
 fn sum(m M) F64 {

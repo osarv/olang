@@ -1,0 +1,5 @@
+# check: fail error[T8]: Array<T, N>() takes no arguments
+# T8: a fixed-length array's elements take their zero value; a fill is a copy into one
+fn main() ? {
+    b := Array<F32, 3>(1.0)
+}

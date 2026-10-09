@@ -1,4 +1,4 @@
-# check: fail error[S12b]: every value of this match is I32, found Array<Char>
+# check: fail error[S12b]: every value of this match is I32, found Array<Char, 3>
 # S12b: as both values of "a if c else b" (E28)
 fn f(n I32) I32 {
     return match n { case 1 => 1 nomatch => "one" }

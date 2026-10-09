@@ -392,6 +392,7 @@ static void llvmTypeB(struct type t, struct cgBuf* b) {
         //a type variable never reaches codegen: monomorphization (G16) substitutes every one away before
         //a copy is emitted, so being asked to lower one means an instantiation was missed - a bug here
         case BASETYPE_TYPEVAR: ErrorBugFound(); return;
+        case BASETYPE_CONST: ErrorBugFound(); return; //G20: a constant argument is a type's, never a value's
         //T2a: same reasoning - "null" is retagged to the type it adapts to before anything lowers it, so
         //reaching here means one escaped an assignability context it should never have left
         case BASETYPE_NULL: ErrorBugFound(); return;
@@ -3143,6 +3144,12 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        //X3/T7c: an Array<T, N> is handed over as its own storage - a value's address, a reference's pointer - never
+        //copied first, so what the foreign function writes there is in the array afterwards
+        if (paramT.bType == BASETYPE_ARRAY && argOp->type.bType == BASETYPE_ARRAY && !argOp->type.arrMalloc) {
+            cgArgAdd(&args, "ptr", cgValue(ctx, argOp));
+            continue;
+        }
         char* boundary = cgBoundaryValue(ctx, argOp, paramT, ctx->ownScopeSlot);
         if (paramT.bType == BASETYPE_ARRAY) {
             char* ptr;
@@ -3876,6 +3883,19 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
         baseLen = MallocOrCrash(32);
         snprintf(baseLen, 32, "%lld", base->type.arrLen ? base->type.arrLen->intLiteralVal : 0);
     }
+    //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly: one compare, and the pointer alone
+    if (op->sliceExact) {
+        char* same = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", same, baseLen, hiVal);
+        int eid = ctx->lblCtr++;
+        char eBad[32], eOk[32];
+        snprintf(eBad, sizeof(eBad), "as.len.bad.%d", eid);
+        snprintf(eOk, sizeof(eOk), "as.len.ok.%d", eid);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", same, eOk, eBad);
+        ctx->terminated = true;
+        cgBoundsFailed(ctx, op, eOk, eBad);
+        return dataPtr;
+    }
     char* loNonNeg = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp sge i64 %s, 0\n", loNonNeg, loVal);
     char* loLeHi = cgNewTmp(ctx);
@@ -4028,10 +4048,24 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     }
     //a diagnostic tells apart what a rendering need not: a writable reference from a read-only one, at every level
     if (rdForDiag && t.structMAlloc && t.refMut) cgBufAdd(b, "mut ");
-    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - the length is no part of it
+    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - T7c: with its length if fixed
         cgBufAdd(b, "Array<");
         rdSpellTypeB(*t.arrElem, b);
+        if (t.arrLenArg) { cgBufAdd(b, ", "); rdSpellTypeB(*t.arrLenArg, b); }
+        else if (!t.arrMalloc && t.arrLen) cgBufAdd(b, ", %lld", t.arrLen->intLiteralVal);
         cgBufAdd(b, ">%s", mark);
+        return;
+    }
+    if (t.bType == BASETYPE_CONST) { //G25: a constant argument is its value, as it would be written
+        if (!t.constKnown) {
+            struct str src = SemanticConstPatternSource(t);
+            cgBufAdd(b, "%.*s", src.len, src.ptr);
+        } else if (t.constOf && t.constOf->bType == BASETYPE_CHOICE && t.constVal >= 0 && t.constVal < t.constOf->vars.len) {
+            struct var* c = ListGetIdx(&t.constOf->vars, (int)t.constVal);
+            cgBufAdd(b, "%.*s.%.*s", t.constOf->name.len, t.constOf->name.ptr, c->name.len, c->name.ptr);
+        } else if (t.constOf && t.constOf->bType == BASETYPE_BOOL) {
+            cgBufAdd(b, "%s", t.constVal ? "true" : "false");
+        } else cgBufAdd(b, "%lld", t.constVal);
         return;
     }
     if (t.bType == BASETYPE_FUNC) {
@@ -4834,7 +4868,18 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             if (!typeIsByRef(op->type)) return "zeroinitializer";
             char* slot = cgNewTmp(ctx);
             fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
-            fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+            if (cgViaMemory(op->type)) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(op->type));
+            else fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+            //T7c: an Array<T, N> whose elements' zero value a constructor gives - each element that value, unless it was
+            //found to be zero bits while compiling
+            struct operand* fill = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+            if (fill && !fill->zeroBits && op->type.bType == BASETYPE_ARRAY && op->type.arrLen) {
+                struct type elemT = *op->type.arrElem;
+                char* fv = cgValueForTarget(ctx, fill, elemT, NULL);
+                char count[32];
+                snprintf(count, sizeof(count), "%lld", op->type.arrLen->intLiteralVal);
+                cgFillLoop(ctx, elemT, slot, count, fv);
+            }
             return slot;
         }
         case OPERATION_COMPREHENSION: return cgComprehension(ctx, op);
@@ -5259,15 +5304,12 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         return;
     }
     if (!s->op) {
-        //D15b: a declared-size array ("T[N]" here - "T[expr]" always carries its allocation in s->op) is
-        //left uninitialized, which is the reason for writing a size and no value at all. Everything else
-        //is its zero value, null included (D15a/T2a).
-        //...but only when the declaration really reserves the array's own storage. A REFERENCE to a
-        //declared-size array ("T[N]&") is one pointer, so D15b's reason for skipping - that zeroing costs
-        //time proportional to the length - does not apply, and skipping left a wild pointer that "== null"
-        //reported as non-null and that faulted on the first write through it. Its zero value is null
-        //(T2a), and storing it is one instruction.
-        if (s->var.type.bType == BASETYPE_ARRAY && !s->var.type.arrMalloc && !s->var.type.structMAlloc && !s->zeroFill) return;
+        //D13: no initializer is the zero value, null included (T2a) - an Array<T, N>'s elements too (T7c): nothing in
+        //the language is left uninitialized. A large one is cleared as memory - LLVM handles a huge aggregate store badly
+        if (cgViaMemory(s->var.type)) {
+            fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(s->var.type));
+            return;
+        }
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, cgZeroValue(s->var.type), slot);
         return;
     }

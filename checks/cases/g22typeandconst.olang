@@ -1,0 +1,4 @@
+# check: fail error[G22]: N is a type in one place and a constant in another
+# G22: a name is a type variable or a constant variable, never both
+fn both(a Array<<N>, <N>>&) { }
+fn main() ? { }

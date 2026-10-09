@@ -1,0 +1,4 @@
+# check: fail error[G22]: N was introduced already - write it 'N', not '<N>'
+# G22: in a body the signature has introduced every variable, so "<N>" there is written again - a value is "N"
+fn count(a Array<I32, <N>>&) I64 { return <N> }
+fn main() ? { assert count(I32[1]) == 1 }
