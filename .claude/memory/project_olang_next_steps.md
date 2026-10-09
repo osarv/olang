@@ -447,6 +447,16 @@ because what it finds about structure feeds the refactor.
   item 12; spawn h.f() field closure not held to P2), x[i]++ index evaluated twice, a T22 over-rejection, a G4
   cascade, `x = E.Neg(x)` self-cycle. Started wt-rv2fix for all but the rvfix twin. LESSON: every O-rule relaxation
   gets a soundness review before it is merged - three agents' relaxations tonight each opened a UAF.
+- 23:50 CEST: study4 done (/home/user/review/study4, 25 repros): two bugs - O26a keeps a loop's temporaries when a
+  NUMBER computed from them reaches a returned struct (unbounded memory), and a null read the optimizer can see
+  miscompiles (falls off main) instead of trapping (T2b). Started wt-s4cg (null_pointer_is_valid -> T2b traps, OnCrash
+  under TSan hang, StringBuilder.Clear, io.Lines follows, chan.Close, os.Exec dir/cancel + os.Start, -i runs joins and
+  deferred code, -D overrides a top-level default). QUEUED as s4sem AFTER rvfix/rv2fix/qc merge (semantic.c scope code):
+  #1 O26a follows only references, #3/#4/#9 notes only propose what compiles and `&x` of an O26a-moved local means its
+  scope, rec 4 "a handle is lent as its reference" (#5 Map-of-Lists grouping, #6 DFS over a map, #8 C2d receiver map,
+  #10 nested for-in copies), #7 O26a through ctors for assigned text, #12 match values of differing array lengths, #13
+  error type as a value type rejected, diagnostics #14-#21, L9a for field names (`done`). Questions QD (`x := 0` I64)
+  and QE (spawned functions failing) in the ledger.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
