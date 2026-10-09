@@ -5139,14 +5139,18 @@ bool SemanticCallMatches(struct type t, struct type fnType) {
     struct var* m = SemanticCallOf(t);
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.typeParams.len) return false;
     if (m->type.vars.len != fnType.vars.len + 1) return false;
+    //T22/T25b: compared as two function types are - each parameter's "mut" and its permission included, so a Call
+    //writing through a parameter never stands for a function type promising to only read it
     for (int i = 0; i < fnType.vars.len; i++) {
-        if (!TypeIsSame((*(struct var*)ListGetIdx(&m->type.vars, i + 1)).type, (*(struct var*)ListGetIdx(&fnType.vars, i)).type)) return false;
+        struct var* pm = ListGetIdx(&m->type.vars, i + 1);
+        struct var* pf = ListGetIdx(&fnType.vars, i);
+        if (pm->mut != pf->mut || !TypeIsSameStrict(pm->type, pf->type)) return false;
     }
     if (m->type.hasRetType != fnType.hasRetType) return false;
-    if (m->type.hasRetType && !TypeIsSame(*m->type.retType, *fnType.retType)) return false;
+    if (m->type.hasRetType && !TypeIsSameStrict(*m->type.retType, *fnType.retType)) return false;
     if (m->type.errors.len != fnType.errors.len) return false;
     for (int i = 0; i < fnType.errors.len; i++) {
-        if (*(struct type**)ListGetIdx(&m->type.errors, i) != *(struct type**)ListGetIdx(&fnType.errors, i)) return false;
+        if (!TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, i), **(struct type**)ListGetIdx(&fnType.errors, i))) return false;
     }
     return true;
 }
@@ -5453,6 +5457,9 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //E31: a value whose type declares a Call matching a function type fits it - a function value calling that very
     //instance's Call, so the instance must outlive the target as a reference to it would
     if (target.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, target)) {
+        //T25c: a Call writing its receiver writes the instance the function value holds - only one this place may write
+        struct var* recv = ListGetIdx(&SemanticCallOf(op->type)->type.vars, 0);
+        if (recv->mut && !OperandGivesWritable(op)) return TYPE_FIT_READ_ONLY;
         if (!op->type.structMAlloc && !OperandIsLvalue(op)) return TYPE_FIT_OK; //a temporary: built where it lands
         struct type asRef = op->type;
         asRef.structMAlloc = true;

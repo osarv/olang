@@ -7426,6 +7426,34 @@ test "E31: Call makes a value callable and passable as a function; try calls Try
     assert u.Len() == 3
 }
 
+# T22/T25c: a Call is a function value when its parameters agree with the function type's, "mut" included; and one
+# writing its receiver is made from storage this place may write
+type OpMark struct() {
+    hits mut I32 = 0
+}
+type OpCell struct(v I32) { v mut }
+fn (m mut OpMark&) Call(c mut OpCell&) {
+    m.hits++
+    c.v = 99
+}
+fn opMarkAll(f fn(c mut OpCell&), a mut OpCell&, b mut OpCell&) {
+    f(a)
+    f(b)
+}
+fn opMarked() I32 {
+    m := OpMark()
+    a := OpCell(1)
+    b := OpCell(2)
+    opMarkAll(m, a, b)
+    return m.hits * 1000 + a.v + b.v
+}
+OpMarkedBaked := opMarked()
+
+test "E31: a Call writing its parameter and its receiver, passed where a matching function type is wanted" {
+    assert opMarked() == 2198
+    assert OpMarkedBaked == 2198
+}
+
 test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {
     g OpGrid& = OpGrid(2, 3)
     g[4] = 7
