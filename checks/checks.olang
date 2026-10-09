@@ -749,7 +749,7 @@ fn protopriv(r mut report&) ? Failed {
         try r.expect(outOf(dir).Contains(what), "bad.olang: expected " $what, dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" -b badgen.olang > out.txt 2>&1") != 0, "badgen.olang compiled", dir)
-    try r.expect(outOf(dir).Contains("gen.olang:2:41: error[M6b]: '==' needs Mine's eq"), "badgen.olang: the error", dir)
+    try r.expect(outOf(dir).Contains("gen.olang:2:39: error[M6b]: '==' needs Mine's eq"), "badgen.olang: the error", dir)
 }
 
 # T17: an enum's payload is whole words, so copying one is word moves, not one byte at a time - which is what let

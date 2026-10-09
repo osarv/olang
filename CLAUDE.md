@@ -3877,7 +3877,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   b]` is an array literal of its elements (the `<T>[...]` E19 admitted never parsed) and `x is T` is `is`'s type form,
   the parser reading the item's introduced names minus its locals; `return T` is G23's error. `T(x)` - converting or
   constructing through a variable - stays unsupported, as `<T>(x)` was. **Migration** by `tools/bare_typevars.py`,
-  kept and re-runnable (for oann, and after merges): 851 occurrences on 615 lines in 42 files - std (linalg 371, map 92,
+  kept and re-runnable (for oann, and after merges): 859 occurrences on 618 lines in 42 files - std (linalg 379, map 92,
   math 81, list 46, array 41, iterator 29), shared.olang, checks, bench - trailing comments' columns kept, cases whose
   point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
   on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`

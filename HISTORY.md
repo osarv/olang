@@ -10987,11 +10987,13 @@ later one becomes `X` (a constraint on a later one would move to the first - non
 only when the name is a parameter's (after `(` or `,`), is no type's name, and `X` is no type the file declares, std
 declares or is built in - so `List<I32>` and, in code already migrated, `f(Box<T>(x))` are left alone, which makes the
 script idempotent (a second run finds nothing). It leaves comments and literals alone, keeps trailing comments' columns,
-and skips a checks case whose expected error is an introduction error (its `<X>` is the point). Over the repository: 851
-occurrences on 615 lines in 42 files - std/linalg 371, shared.olang 115, the prelude's map 92, list 46, array 41 and
+and skips a checks case whose expected error is an introduction error (its `<X>` is the point). Over the repository: 859
+occurrences on 618 lines in 42 files - std/linalg 379 (8 of them in the per-target tiles merged from master while this
+was built, migrated by running the script again), shared.olang 115, the prelude's map 92, list 46, array 41 and
 iterator 29, std/math 81, std/chan 8, bench/gemm 6, and 33 checks cases and fixtures. By hand: the comments describing
 G8b in shared.olang, a check's probe text (`Probe() A`), four case headers whose expected message changed, and
-`g22againtype`, which keeps its `<K>` and loses its `<T>`. oann (not committed here): 324 occurrences on 221 lines in 5
+`g22againtype`, which keeps its `<K>` and loses its `<T>`, and the column the `protopriv` scenario expects in
+`gen.olang` (`b T` is two characters shorter than `b <T>`). oann (not committed here): 324 occurrences on 221 lines in 5
 files; its tests then report only the errors they already had at this base (its `kernels.olang` still writes C2e's
 superseded inline fields), once the leak above was fixed.
 
