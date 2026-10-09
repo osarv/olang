@@ -1,0 +1,11 @@
+# fuzz - the differential fuzzer (K1): runs gen's programs built (-b), built at -O0 (-d) and interpreted (-i)
+import "std/io"
+import "std/os"
+import "gen"
+
+fn main() ? {
+    args := os.Args()
+    seed := try args[2].ParseInt() catch default 1
+    n := try args[3].ParseInt() catch default 3
+    try io.Print(gen.Program(U64(seed), n, -1, true, Array<String&>(0), Array<Bool>(0))) catch { }
+}

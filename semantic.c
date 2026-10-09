@@ -5642,7 +5642,10 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
-        return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+        if (r == TYPE_FIT_OK) r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+        //its values adapted, or widened (T6b) - so the conditional is of the target's type too, as a match is below
+        if (r == TYPE_FIT_OK && TypeIsNumeric(target) && TypeIsNumeric(op->type)) op->type = target;
+        return r;
     }
     if (heldResult(op)) { //what hidden locals ahead of a value lead to is that value, judged as it is
         enum typeFit r = OperandFitsType(func, heldResult(op), target);

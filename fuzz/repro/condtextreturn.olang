@@ -1,0 +1,16 @@
+import "std/io"
+fn lit(k I64) String& { return "true" if k == 0 else "false" }
+fn churn(n I64) String& {
+    b := StringBuilder()
+    for i in range n { b.Push("x" $i) }
+    return b.ToString()
+}
+fn wrap(k I64) String& {
+    c String&return = lit(k)
+    j := churn(50)
+    return "(" $c " != " $j.Len() ")"
+}
+run mut I64 = 1
+fn main() ? io.IoError {
+    try io.Print($wrap(run) "\n")
+}

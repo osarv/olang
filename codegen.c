@@ -1613,6 +1613,10 @@ static bool cgIsFreshTemp(struct operand* op) {
         for (int i = 0; i < vs.len; i++) if (cgValueIsFresh(*(struct operand**)ListGetIdx(&vs, i), op->type)) return true;
         return false;
     }
+    //T29a/T29c: a conversion names its argument's storage, so it is fresh exactly when its argument is - text written in
+    //place, a literal made a String by being one of a conditional's values ("return "yes" if c else "no""), included
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1)
+        return cgValueIsFresh(*(struct operand**)ListGetIdx(&op->args, 0), op->type);
     return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
@@ -2715,7 +2719,9 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 //argument every function reached through a value takes
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
-    struct cgLocal* local = cgFindLocal(ctx, func->name);
+    //only a local or parameter holding a function value is called through the local of its name: a declared function
+    //or method shares no namespace with locals (a method has its own, M19), so "lit := g.lit(t)" calls the method
+    struct cgLocal* local = func->owner ? NULL : cgFindLocal(ctx, func->name);
     if (local) {
         char* obj = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, local->llvmVal);
