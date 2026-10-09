@@ -10544,8 +10544,18 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         //does - "Meters(n)" is the way into a nominal type, and without it nominality would be a prison
         //you could leave (int32(m) already worked, since Meters IS numeric) but never enter.
         struct type* namedConv = NULL;
-        if (nameIdens.len == 1) {
-            struct type* cand = typeNamed(ctx->mod, strFromTok(nameTok));
+        //...written bare, or through an import alias ("units.Meters(n)") as a constructor call is - M20 keeps the alias
+        //reading apart from a value's: a name an import uses is never a local's or a global's
+        struct semaModule* convMod = nameIdens.len == 1 ? ctx->mod : NULL;
+        if (nameIdens.len >= 2 && findImport(ctx->mod, strFromTok(*(struct token*)ListGetIdx(&nameIdens, 0)))) {
+            ErrMsgMuteStart();
+            convMod = resolveAliasChain(ctx->mod, nameIdens, 1);
+            ErrMsgMuteEnd();
+        }
+        if (convMod) {
+            struct type* cand = convMod == ctx->mod ? typeNamed(ctx->mod, strFromTok(nameTok))
+                                                    : TypeGetList(&convMod->types, strFromTok(nameTok));
+            if (cand && convMod != ctx->mod && !isPublic(strFromTok(nameTok))) ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE);
             //numeric goes through the numeric path (it may genuinely change width); anything else with a
             //shared representation is a pure retype
             if (cand && ((isTypeVanilla(cand->bType) && TypeIsNumeric(*cand))
