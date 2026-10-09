@@ -39,6 +39,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_no_claude_attribution.md
 @.claude/memory/feedback_no_runtime_checks.md
 @.claude/memory/feedback_numbered_questions.md
+@.claude/memory/feedback_port_clean_design.md
 @.claude/memory/feedback_record_flagged_decisions.md
 @.claude/memory/feedback_style_form_conciseness.md
 @.claude/memory/feedback_surface_and_fix_bugs.md

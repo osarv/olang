@@ -138,7 +138,7 @@ because what it finds about structure feeds the refactor.
   (interfaces, scope names, O10e...); unify hand-kept duplicate walkers (structContainsBareScopeField). One agent per
   file at a time; the makefile gets the new files.
 Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
-Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
+Then the port (a redesign, see feedback_port_clean_design.md): C compiler frozen as stage 0, module by module, acceptance = the test suite plus per-stage diffs where cheap (was: identical normalized IR),
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
