@@ -8945,6 +8945,37 @@ test "D16c: a lambda captures values by copy and references by reference" {
     assert none == null and ($none).Eq("null")
 }
 
+# T21: a function value is one value wherever it is held - a field, an element, a copy of its container - and two are
+# the same exactly when they have the same code and the same captures' instance
+type LamSlot struct(f fn(x I32) I32) {
+    f mut
+}
+fn lamHeld(n I32) I32 {
+    add := lamAdder(n + 2)
+    s := LamSlot(add)
+    t LamSlot = s                                   # copied with its container: still the same value
+    assert t.f == add and same(t.f, s.f) and t.f(1) == n + 3
+    t.f = lamDoubler()
+    assert t.f(5) == 10 and s.f(5) == n + 7 and t.f != s.f
+    fs := Array<fn(x I32) I32>(3)
+    fs[0] = add
+    fs[1] = lamDoubler()
+    fs[2] = lamAdder(n + 2)                         # the same code, its own captures: another value
+    assert fs[0] == add and fs[2] != add and fs[1] == lamDoubler() and fs[1] == t.f
+    return fs[0](1) + fs[1](1) + fs[2](1)
+}
+LamHeldBaked I32 = lamHeld(1)
+
+test "T21: a function value is one value in fields, elements and copies, and compares by code and captures" {
+    k I32 = ctRuntimeZero
+    assert lamHeld(k + 1) == 10 and LamHeldBaked == 10
+    c LamCounter& = LamCounter()
+    by fn(x I32) I32 = fn(x) { return x + c.n }    # captures a reference: sees the instance's later writes
+    held := LamSlot(by)
+    c.n = 5
+    assert held.f(1) == 6 and held.f == by
+}
+
 # D16e: "spawn fn() { ... }" - a task running a lambda's body, each one handed its own copies of what it captured
 test "D16e: a spawned lambda captures its loop's variables per task" {
     out Array<mut LamCounter&>& = Array<mut LamCounter&>(8)

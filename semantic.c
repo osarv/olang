@@ -182,7 +182,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_ARRAY: return getArraySize(t);
         case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_CHOICE: return t.structMAlloc ? PTR_SIZE : ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
-        case BASETYPE_FUNC: return PTR_SIZE;
+        case BASETYPE_FUNC: return 2 * PTR_SIZE; //T21: the (code, closure environment) pair codegen holds
         case BASETYPE_INTERFACE: return 2 * PTR_SIZE; //T33: the (concrete type, instance) pair
         case BASETYPE_ERROR: return ERROR_SIZE;
         case BASETYPE_SCOPE: return PTR_SIZE;

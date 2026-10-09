@@ -401,7 +401,9 @@ static void llvmTypeB(struct type t, struct cgBuf* b) {
             return;
         case BASETYPE_INTERFACE: ErrorBugFound(); return; //T30: a trait is a constraint, never a value
         case BASETYPE_ERROR: cgBufAdd(b, "i32"); return;
-        case BASETYPE_FUNC: cgBufAdd(b, "ptr"); return;
+        //T21/D16: a function value is the pair (code, closure environment) - the code in a register, so a call through
+        //a value LLVM can see the origin of is direct (and inlinable) once the callee is inlined; see cgFnPair
+        case BASETYPE_FUNC: cgBufAdd(b, "{ ptr, ptr }"); return;
         //no real arena/runtime backing exists yet (see the report) - opaque pointer for now, same as any
         //other reference-shaped value; codegen never actually reads through it yet
         case BASETYPE_SCOPE: cgBufAdd(b, "ptr"); return;
@@ -737,8 +739,8 @@ static char* cgDbgSubprogram(struct cgCtx* ctx, struct str name, char* linkage, 
 
 //the debug type of a variable, or 0 where none is described yet (a by-value aggregate)
 static int cgDbgType(struct cgCtx* ctx, struct type t) {
-    if (t.structMAlloc || t.bType == BASETYPE_FUNC
-            || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
+    if (t.bType == BASETYPE_FUNC) return 0; //a (code, environment) pair, an aggregate - not described yet
+    if (t.structMAlloc || (t.bType == BASETYPE_ARRAY && t.arrMalloc)) return ctx->dbgPtrType;
     const char* nm; int bits; const char* enc;
     const struct primInfo* p = PrimInfo(t.bType);
     if (t.bType == BASETYPE_BOOL) { nm = "Bool"; bits = 8; enc = "DW_ATE_boolean"; }
@@ -997,7 +999,7 @@ struct cgLocal* cgFindLocal(struct cgCtx* ctx, struct str name) {
 
 char* cgZeroValue(struct type t) {
     char* buf = MallocOrCrash(16);
-    bool isPtr = (t.bType == BASETYPE_FUNC) || (t.bType == BASETYPE_SCOPE) ||
+    bool isPtr = (t.bType == BASETYPE_SCOPE) ||
         ((t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) && t.structMAlloc) ||
         (t.bType == BASETYPE_ARRAY && t.structMAlloc && !t.arrMalloc);
     strcpy(buf, isPtr ? "null" : "zeroinitializer");
@@ -1401,7 +1403,8 @@ static char* cgBorrowValue(struct cgCtx* ctx, struct type dstT, struct type srcT
 
 //true when op is an lvalue being taken as a reference: E12c borrows it rather than copying
 static bool cgIsBorrow(struct type dstT, struct type srcT, bool srcIsLvalue) {
-    return dstT.structMAlloc && !srcT.structMAlloc && srcIsLvalue
+    //a function value made from a Call instance (E31) holds its instance in its environment - never a borrow here
+    return dstT.structMAlloc && dstT.bType != BASETYPE_FUNC && !srcT.structMAlloc && srcIsLvalue
         && (srcT.bType == BASETYPE_STRUCT || srcT.bType == BASETYPE_ARRAY || srcT.bType == BASETYPE_CHOICE);
 }
 
@@ -1448,6 +1451,10 @@ static long long cgStackAlign(struct type t) {
 //aggregates, references, and anything reached through a CHOICE PAYLOAD stay untagged, which means "may
 //alias anything" and is always the safe answer. The payload is the one place olang could pun - two cases
 //can put different types in the same bytes - so it is excluded rather than reasoned about.
+//T36: a closure's environment (D16c) is a family of its own - written once where the closure is made, read only by the
+//code it is made for, so its loads never alias a program's fields or elements (see cgClosureType)
+static const char* cgCaptureTbaa = ", !tbaa !28";
+
 static const char* cgTbaa(struct type t, bool elem) {
     switch (t.bType) {
         case BASETYPE_BOOL: return elem ? ", !tbaa !31" : ", !tbaa !21";
@@ -1617,9 +1624,33 @@ static bool cgIsFreshTemp(struct operand* op) {
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
 
-//E31: a value whose type declares Call, given where a function value is wanted - a closure object holding the
-//adapter, the instance and the instance's scope; the adapter takes the object as any function value's code does
-//(then the function type's scope arguments and parameters) and calls the instance's Call with them
+//T21/D16: a function value's two halves - its code, and the closure environment that code takes as its hidden first
+//argument - out of the pair it is held as. The code is a value, never loaded from the environment, so a call through
+//a value whose origin LLVM can see (a lambda handed to a helper that is inlined) is a direct call, and inlines
+static char* cgFnCode(struct cgCtx* ctx, char* fv, char** envOut) {
+    char* code = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 0\n", code, fv);
+    *envOut = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { ptr, ptr } %s, 1\n", *envOut, fv);
+    return code;
+}
+
+//a function value made of its code and its environment: a constant when the environment is (a named function's, or a
+//lambda capturing nothing, has none)
+static char* cgFnPair(struct cgCtx* ctx, const char* code, const char* env) {
+    if (strcmp(env, "null") == 0) {
+        char* c = MallocOrCrash(strlen(code) + 32);
+        sprintf(c, "{ ptr %s, ptr null }", code);
+        return c;
+    }
+    char* half = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } { ptr %s, ptr undef }, ptr %s, 1\n", half, code, env);
+    return half;
+}
+
+//E31: a value whose type declares Call, given where a function value is wanted - the adapter, paired with an
+//environment holding the instance and the instance's scope; the adapter takes the environment as any function value's
+//code does (then the function type's scope arguments and parameters) and calls the instance's Call with them
 static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym);
 static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
     struct var* call = SemanticCallOf(op->type);
@@ -1643,8 +1674,8 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
             fprintf(ctx->out, ", %s %%arg%d", pty, k);
         }
         fputs(") {\nentry:\n", ctx->out);
-        fputs("  %ip = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 1\n  %inst = load ptr, ptr %ip\n"
-              "  %sp = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 2\n  %iscope = load ptr, ptr %sp\n", ctx->out);
+        fputs("  %inst = load ptr, ptr %closure, !tbaa !28\n"
+              "  %sp = getelementptr { ptr, ptr }, ptr %closure, i32 0, i32 1\n  %iscope = load ptr, ptr %sp, !tbaa !28\n", ctx->out);
         struct cgBuf args = {0};
         if (outFirst) cgBufAdd(&args, "ptr %%out");
         //the receiver's own scope comes first among Call's, where it has one (a reference receiver, O4b)
@@ -1693,13 +1724,14 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", obj, where);
-    char* p1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 16)\n", obj, where);
     char* p2 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", adapter, obj);
-    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s\n", p1, obj, inst, p1);
-    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr, ptr }, ptr %s, i32 0, i32 2\n  store ptr %s, ptr %s\n", p2, obj, instScope, p2);
-    return obj;
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", inst, obj, cgCaptureTbaa);
+    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s%s\n", p2, obj, instScope, p2,
+            cgCaptureTbaa);
+    char* adapterSym = MallocOrCrash(strlen(adapter) + 1);
+    strcpy(adapterSym, adapter);
+    return cgFnPair(ctx, adapterSym, obj);
 }
 
 char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
@@ -2576,7 +2608,22 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         return r;
     }
 
-    //scalar leaf, including func pointers and <>-indirect struct references (both spelled "ptr")
+    //T21: a function value is identity - the same code with the same environment (a named function's and a
+    //capture-free lambda's have none, so the code alone tells them apart)
+    if (t.bType == BASETYPE_FUNC) {
+        char* ea;
+        char* ca = cgFnCode(ctx, aVal, &ea);
+        char* eb;
+        char* cb = cgFnCode(ctx, bVal, &eb);
+        char* eqC = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqC, ca, cb);
+        char* eqE = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqE, ea, eb);
+        char* eq = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", eq, eqC, eqE);
+        return eq;
+    }
+    //scalar leaf, including <>-indirect struct references (spelled "ptr")
     char ty[256];
     llvmType(t, ty, sizeof(ty));
     bool isF = TypeIsFloat(t);
@@ -2710,55 +2757,46 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
 
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 
-//the target of a call written by name: the function's own symbol, or - for a local of function type - the code
-//its value's closure object starts with (D16), with *closureOut set to that object, passed as the hidden first
-//argument every function reached through a value takes
+//the target of a call written by name: the function's own symbol, or - for a local or a global of function type -
+//the code of the function value it holds (D16), with *closureOut set to that value's environment, passed as the
+//hidden first argument every function reached through a value takes
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
     struct cgLocal* local = cgFindLocal(ctx, func->name);
-    if (local) {
-        char* obj = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, local->llvmVal);
-        char* code = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
-        *closureOut = obj;
-        return code;
-    }
-    if (func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
+    if (local || func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
         char g[256];
-        mangleGlobal(func->owner, func->name, g, sizeof(g));
-        char* obj = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", obj, g);
-        char* code = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", code, obj);
-        *closureOut = obj;
-        return code;
+        if (!local) mangleGlobal(func->owner, func->name, g, sizeof(g));
+        char* fv = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load { ptr, ptr }, ptr %s\n", fv, local ? local->llvmVal : g);
+        return cgFnCode(ctx, fv, closureOut);
     }
     char* sym = MallocOrCrash(256);
     mangleFuncSym(func, sym, 256);
     return sym;
 }
 
-//D16: a function named as a value is a pointer to a closure object whose first word is code taking the object
-//first. A named function's object is static and shared, so one function is one value however often it is
-//named, in any module: "@f.fv", reaching "@f" through an adapter that drops the object. A lambda's code
-//already takes it, so its object is just its code.
-//D16c: a capturing lambda's closure - its code, then each capture's value and, for a reference, its scope
+//D16: a function value is the pair (code, environment), the code taking the environment as its hidden first
+//argument. A named function's value is its adapter "@f.fvt", which drops the environment, with none - so one function
+//is one value however often it is named, in any module (the adapter is linkonce_odr). A lambda's code already takes
+//the environment; one capturing nothing has none either.
+//D16c: a capturing lambda's environment - each capture's value and, for a reference, its scope. It is written once,
+//where the lambda is made, and read only by the lambda's own prologue, so its accesses carry a TBAA family of their
+//own (cgCaptureTbaa) and never alias a program's fields or elements
 static char* cgClosureType(struct var* L) {
     struct cgBuf b = {0};
-    cgBufAdd(&b, "{ ptr");
+    cgBufAdd(&b, "{ ");
     for (int i = 0; i < L->lambdaCaptures.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         char cty[256];
         llvmType(in->type, cty, sizeof(cty));
-        cgBufAdd(&b, ", %s%s", cty, in->type.scopeParam ? ", ptr" : "");
+        cgBufAdd(&b, "%s%s%s", i ? ", " : "", cty, in->type.scopeParam ? ", ptr" : "");
     }
     cgBufAdd(&b, " }");
     return cgBufStr(&b);
 }
 
-//D16c: a capturing lambda's value, made here: its closure, built where the lambda lives - with the references it
-//captured, or where it lands - holding a copy of every capture
+//D16c: a capturing lambda's value, made here: its environment, built where the lambda lives - with the references
+//it captured, or where it lands - holding a copy of every capture, paired with the lambda's code
 static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     struct var* L = op->readVar;
     char* envTy = cgClosureType(L);
@@ -2766,8 +2804,7 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     char* obj = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
             obj, scope, envTy);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sym, obj);
-    int field = 1;
+    int field = 0;
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         struct operand* capOp = *(struct operand**)ListGetIdx(&op->args, i);
@@ -2783,43 +2820,39 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
             char* v = cgBoundaryValue(ctx, capOp, in->type, NULL);
             char* fp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
-            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, v, fp);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", cty, v, fp, cgCaptureTbaa);
         }
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
         char* sval = cgBoundScopeArg(ctx, op, sv);
         char* sp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, field++);
-        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sp);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", sval, sp, cgCaptureTbaa);
     }
-    return obj;
+    return cgFnPair(ctx, sym, obj);
 }
 
 void cgEmitParamList(FILE* out, struct var* func, bool named);
 static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym) {
     if (f->isLambda && f->lambdaCaptures.len) return NULL; //made by cgClosure instead
-    char* obj = MallocOrCrash(strlen(sym) + 8);
-    sprintf(obj, "%s.fv", sym);
+    if (f->isLambda) return cgFnPair(ctx, sym, "null"); //its code takes the (absent) environment already
+    char* code = MallocOrCrash(strlen(sym) + 8);
+    sprintf(code, "%s.fvt", sym);
     bool have = false;
     for (int i = 0; i < ctx->fnValues.len && !have; i++) have = *(struct var**)ListGetIdx(&ctx->fnValues, i) == f;
     if (!have) ListAdd(&ctx->fnValues, &f);
-    return obj;
+    return cgFnPair(ctx, code, "null");
 }
 
-//D16: the static closures and adapters of every function this object used as a value
+//D16: the adapters of every named function this object used as a value
 void cgEmitFuncValues(struct cgCtx* ctx) {
     for (int i = 0; i < ctx->fnValues.len; i++) {
         struct var* f = *(struct var**)ListGetIdx(&ctx->fnValues, i);
         char sym[256];
         mangleFuncSym(f, sym, sizeof(sym));
-        if (f->isLambda) { //internal, like the lambda
-            fprintf(ctx->out, "%s.fv = internal constant { ptr } { ptr %s }\n", sym, sym);
-            continue;
-        }
         char retTy[256];
         llvmFuncRetType(f->type, retTy, sizeof(retTy));
         bool outFirst = cgRetViaMemory(f->type); //its result's storage comes before the closure, as at every call
-        fprintf(ctx->out, "%s.fv = linkonce_odr constant { ptr } { ptr %s.fvt }\n", sym, sym);
         fprintf(ctx->out, "define linkonce_odr %s %s.fvt(%sptr %%closure", retTy, sym, outFirst ? "ptr %out, " : "");
         struct cgBuf params = {0};
         for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&params, ", ptr %%sarg%d", k);
@@ -2871,9 +2904,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
     char* target;
     if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
     if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
-        closure = cgValue(ctx, op->callee);
-        target = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, closure);
+        target = cgFnCode(ctx, cgValue(ctx, op->callee), &closure);
     } else target = cgNamedTarget(ctx, func, &closure);
     if (closure) cgArgAdd(args, "ptr", closure);
 
@@ -7327,7 +7358,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     //D16c: a lambda's captures, and their scopes, as the closure carries them
     if (func->isLambda && func->lambdaCaptures.len) {
         char* envTy = cgClosureType(func);
-        int field = 1;
+        int field = 0;
         for (int i = 0; i < func->lambdaCaptures.len; i++) {
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&func->lambdaCaptures, i))->inner;
             char cty[256];
@@ -7341,14 +7372,14 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
                         TypeGetSize(in->type));
             } else {
                 char* fv = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", fv, cty, fp);
+                fprintf(ctx->fnOut, "  %s = load %s, ptr %s%s\n", fv, cty, fp, cgCaptureTbaa);
                 fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, fv, slot);
             }
             if (!in->type.scopeParam) continue;
             char* sp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, field++);
             char* sval = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", sval, sp);
+            fprintf(ctx->fnOut, "  %s = load ptr, ptr %s%s\n", sval, sp, cgCaptureTbaa);
             char* sslot = cgDeclareLocal(ctx, in->type.scopeParam->name, in->type.scopeParam->type);
             fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", sslot);
             fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
@@ -7497,6 +7528,7 @@ void emitTbaaTypeTree(FILE* out) {
           "!15 = !{!\"float32\", !20, i64 0}\n"
           "!16 = !{!\"float64\", !20, i64 0}\n"
           "!17 = !{!\"arraydesc\", !20, i64 0}\n"
+          "!18 = !{!\"closure\", !20, i64 0}\n" //a closure's environment (cgCaptureTbaa)
           //the element family: same types, reached by indexing rather than as a field
           "!41 = !{!\"bool[]\", !20, i64 0}\n"
           "!42 = !{!\"byte[]\", !20, i64 0}\n"
@@ -7512,6 +7544,7 @@ void emitTbaaTypeTree(FILE* out) {
           "!25 = !{!15, !15, i64 0}\n"
           "!26 = !{!16, !16, i64 0}\n"
           "!27 = !{!17, !17, i64 0}\n"
+          "!28 = !{!18, !18, i64 0}\n"
           "!31 = !{!41, !41, i64 0}\n"
           "!32 = !{!42, !42, i64 0}\n"
           "!33 = !{!43, !43, i64 0}\n"
