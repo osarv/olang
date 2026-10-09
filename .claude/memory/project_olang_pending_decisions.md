@@ -115,6 +115,11 @@ rule and where it is recorded; the morning report lists them all, then they move
    faster everywhere measured (GEMM 57-71 vs 41-46 GFLOPS) but a kernel tiled for another width can fall off a cliff;
    AVX512-BF16 conversions switched off (they flush subnormals, breaking evaluator agreement); cross-architecture
    builds are -c only.
+7. (mine, from study2 r02) a value local holding references that a function returns lives (its references) in the
+   result scope - Go's escape analysis made static: `fn mk() List<I64> { l := List<I64>(); ...; return l }` works;
+   O26's hole for generic containers is closed under it. Being built in wt-chk3.
+8. (mine, from study2 grammar point 7) outside brackets, a line beginning with `if` always begins a statement - it
+   never continues a conditional expression (`a if c else b` keeps `if` on its line or inside parentheses).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

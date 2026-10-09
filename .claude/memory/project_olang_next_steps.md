@@ -308,6 +308,17 @@ because what it finds about structure feeds the refactor.
   kernel is 3x SLOWER native (SLP groups accumulators across rows at 512 bits) - moving oann's compiler to master
   must replace kernels.olang by linalg.GemmWorkspace in the same step (scratch test: MNIST epoch 0.55 s).
   Cross-arch is -c only; aarch64 refused by clang 18's bfloat selection.
+- 17:15 CEST: study2 (port rehearsal) done - /home/user/review/study2 (README, repro/r01-r15): an olang front end in olang
+  (scanner matching the C tokenizer token for token on all files, precedence-climbing parser over recursive-enum ASTs
+  parsing all 49 corpus/std files, a resolver): scan 72-90 MB/s, scan+parse 4.6 MB in ~0.2 s vs the C parser's 5 s.
+  FOR THE PORT DESIGN (keep): 13 grammar points where one token is not enough (type-name knowledge for `T<..>(`,
+  `T[`, `x is T`; statement-start declarations; `a, b =` lists; `for k, v in`; ctor bare fields; `f&x(` scope args;
+  `if` at line start after a `}`-ending expression; join pieces; mixed type/const args; `<<`/`>>` splitting; L20a needs
+  line breaks; build-decided branches need lazy parsing; patterns parsed as expressions) - each a decision before the
+  port. Findings r01-r15 -> checker batch 3 (started 17:20 CEST, wt-chk3). std pieces for the port (buffered writer,
+  path helpers, padded formatting, isatty, radix/unsigned ParseInt) -> a std batch after tbare. `-i` cannot run the
+  parser (3 GB on 30 KB): -i stage 2 matters for the port's testing. Clean builds of a 25k-line port would take
+  minutes (22 IR lines per source line; clang 2.8 s per 1.5 MB IR).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
