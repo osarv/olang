@@ -168,6 +168,8 @@ void ErrMsgFatal(char* errMsg) {
 void pErrChar(char c) {
     if (c == '\t') fputs("\\t", eo());
     else if (c == '\n') fputs("\\n", eo());
+    else if (c == '\r') fputs("\\r", eo());
+    else if (c == '\0') fputs("\\0", eo());
     else fputc(c, eo());
 }
 
@@ -261,18 +263,27 @@ void ErrMsgSyntax(struct token tok, char* errMsg) {
     ErrMsgSemantic(tok, errMsg);
 }
 
+//a token named as it reads - a statement end is synthesized at a line's end (L18) and has no text of its own
 void ErrMsgUnexpectedToken(struct token found, char* expected) {
     nSyntaxErrors++;
     struct str fileName = TokenGetFileName(found.owner);
-    char buf[found.str.len + (int)strlen(expected) + 64];
-    buf[0] = '\0';
-    strcat(buf, "unexpected token '");
-    strncat(buf, found.str.ptr, found.str.len);
-    strcat(buf, "' expected '");
-    strcat(buf, expected);
-    strcat(buf, "'");
+    char* buf = NULL;
+    size_t size = 0;
+    FILE* f = open_memstream(&buf, &size);
+    if (found.type == TOK_STMNT_END) fputs("unexpected end of line", f);
+    else if (found.type == TOK_NONE) fputs("unexpected end of file", f);
+    else fprintf(f, "unexpected token '%.*s'", found.str.len, found.str.ptr);
+    fprintf(f, ", expected '%s'", expected);
+    fclose(f);
     struct str err = StrFromCStr(buf);
     syntaxErrorHeader(found.lineNr, fileName, err);
-    if (found.type == TOK_NONE) return;
+    free(buf);
+    if (found.type == TOK_NONE || !found.owner) return;
+    if (found.type == TOK_STMNT_END) {
+        //nothing to underline: the place just past the line's last token
+        int at = TokenGetStrStart(found);
+        printErrorLine(found.owner, at, at);
+        return;
+    }
     printTokErrorLineOneTok(found);
 }

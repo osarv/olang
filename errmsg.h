@@ -13,9 +13,15 @@
 
 // ---- tokenizer ----
 
-#define UNKNOWN_SYMBOL "unknown symbol"
+#define NESTING_TOO_DEEP "this nests too deeply - more than 20000 levels of parentheses, blocks and operators applied one to another; split it, through locals or functions of its own"
+#define UNKNOWN_SYMBOL "unknown symbol - this character begins no token (L16); olang source is ASCII (L1)"
+#define CARRIAGE_RETURN "carriage return - save the file with LF line endings: only a newline ends a line (L3, L5)"
+#define NUL_BYTE "a NUL byte outside a string or character literal - is this a text file? (L1)"
+#define UNTERMINATED_STRING_LITERAL "this string literal is never closed - the file ends first (L14)"
+#define UNTERMINATED_CHAR_LITERAL "this character literal is never closed - the file ends first (L13)"
 #define INVALID_ESCAPE_CHAR "invalid escape character"
 #define NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL "newline before closing of character literal"
+#define NEWLINE_IN_STRING_LITERAL "a string literal closes on its own line - write \\n for a newline in the text (L14)"
 #define UNTERMINATED_BLOCK_COMMENT "a block comment opened with ## is never closed - another ## ends it (L4a)"
 #define EMPTY_CHAR_LITERAL "empty character literal"
 #define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
@@ -110,6 +116,7 @@
 #define BUILD_COND_GLOBAL_INIT "a global a top-level condition uses must itself be computed from literals, build constants and such globals - a call cannot be evaluated before the module's declarations are settled (B9a)"
 #define BUILD_COND_CYCLE "these globals are defined in terms of each other, so a top-level condition cannot evaluate them (B9a)"
 #define BUILD_COND_TYPES "these values cannot be combined this way in a top-level condition (B9)"
+#define BUILD_COND_NO_MEET "these numbers' types do not meet (T6b): an integer of a type of its own never meets a float, and two integers meet only where one's type flows into the other's - convert one, as in F64(x) or I64(n)"
 #define BUILD_COND_NOT_BOOL "a top-level condition must be true or false (B9)"
 #define BUILD_COND_SHAPE "a top-level condition supports literals, build constants, parentheses, unary -, * / % + -, the comparisons, not, and, or - and whatever compile-time evaluation can decide (B9, B9c)"
 #define BUILD_CONST_REDECLARED "this name is a build constant (-D or built in), visible in every module, so it cannot be declared again (B10)"

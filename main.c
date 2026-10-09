@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <sys/utsname.h>
 #include <ctype.h>
+#include <pthread.h>
 #include "syntax.h"
 #include "semantic.h"
 #include "codegen.h"
@@ -315,8 +316,9 @@ static void defineFromArg(char* arg) {
     char* eq = strchr(arg, '=');
     if (!eq) { fprintf(stderr, "olang: -D takes Name=value, got '%s'\n", arg); exit(EXIT_FAILURE); }
     *eq = '\0';
-    if (!SyntaxDefineBuildConst(arg, eq + 1, false)) {
-        fprintf(stderr, "olang: -D %s: not an identifier, defined twice, or an integer beyond 64 bits (B10)\n", arg);
+    char* err = SyntaxDefineBuildConst(arg, eq + 1, false);
+    if (err) {
+        fprintf(stderr, "olang: -D %s=%s: %s (B10)\n", arg, eq + 1, err);
         exit(EXIT_FAILURE);
     }
 }
@@ -341,7 +343,32 @@ static void defineBuiltinConsts(bool testBuild) {
     SyntaxDefineBuildConst("TestBuild", testBuild ? "true" : "false", true);
 }
 
+static int compilerMain(int argc, char** argv);
+
+//every pass recurses over the program's nesting - a parenthesis, a block, one link of a long "a + b + ..." chain is a
+//few frames each - so the compiler runs on a thread whose stack is sized for that, reserved and touched only as it is
+//used. The parser bounds the nesting it accepts (MAX_NESTING) well inside it, with a diagnostic, never a crash.
+#define COMPILER_STACK ((size_t)1 << 30)
+struct compilerJob { int argc; char** argv; int status; };
+static void* compilerThread(void* p) {
+    struct compilerJob* j = p;
+    j->status = compilerMain(j->argc, j->argv);
+    return NULL;
+}
+
 int main(int argc, char** argv) {
+    struct compilerJob job = { argc, argv, 1 };
+    pthread_attr_t attr;
+    pthread_t t;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, COMPILER_STACK);
+    if (pthread_create(&t, &attr, compilerThread, &job) != 0) compilerThread(&job);
+    else pthread_join(t, NULL);
+    pthread_attr_destroy(&attr);
+    return job.status;
+}
+
+static int compilerMain(int argc, char** argv) {
     //"-r", "-d", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
     //stripped out before the mode dispatch below reads argv positionally - up to the file "-i" interprets: what
     //follows it is that program's command line (B3f), passed on as written, flags included

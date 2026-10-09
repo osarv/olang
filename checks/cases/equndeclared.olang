@@ -1,0 +1,9 @@
+# check: fail unknown name 'a'
+# also: compilation failed with 2 error(s)
+# "==" on a String beside an undeclared name crashed the checker - its Eq call could not be built
+fn main() ? {
+    b := String(Array<U8>(5, 'x'))
+    assert a == b
+    c String& = "x"
+    assert c == null or missing == c
+}

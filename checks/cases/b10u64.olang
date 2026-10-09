@@ -1,0 +1,21 @@
+# check: run
+# flags: -D X=18446744073709551615
+# B10/L10: a -D integer is typed as its literal would be - a decimal one above I64's maximum is a U64 - and a condition
+# reading one, or a U64 literal, is decided by compile-time evaluation (B9c), the token evaluator's arithmetic being I64's
+if 18446744073709551615 > 5 {
+    fn top() I32 { return 1 }
+} else {
+    fn top() I32 { return 2 }
+}
+fn loc() I32 {
+    if X == 18446744073709551615 {
+        return 1
+    }
+    return 2
+}
+fn main() ? {
+    assert top() == 1 and loc() == 1
+    big U64 = X
+    assert big == 18446744073709551615
+    assert $X == "18446744073709551615"
+}

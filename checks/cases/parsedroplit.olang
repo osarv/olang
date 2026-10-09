@@ -1,0 +1,6 @@
+# check: fail unexpected token ')', expected ']'
+# an array literal that does not close leaves what it read - "f(I32[)" was "f()"
+fn f() I32 { return 7 }
+fn main() ? {
+    assert f(I32[) == 7
+}

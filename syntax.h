@@ -197,11 +197,13 @@ struct buildConst {
     enum buildConstKind kind;
     long long i;       //BUILD_INT, and BUILD_BOOL as 0/1
     double f;          //BUILD_FLOAT
-    struct str text;   //BUILD_INT/BUILD_FLOAT: the literal as written; BUILD_STR: the text itself
+    struct str text;   //BUILD_INT: its value in decimal; BUILD_FLOAT: the literal as written; BUILD_STR: the text itself
     bool builtin;      //defined by the compiler rather than by -D
+    bool u64;          //BUILD_INT above I64's maximum: a U64, its bits in i (L10, T6a)
 };
-//false for a name that is not an identifier, or that is already defined
-bool SyntaxDefineBuildConst(char* name, char* value, bool builtin);
+//NULL once defined; otherwise what is wrong - a name that is not an identifier or is already defined, or a value that is
+//a malformed or out-of-range number (B10)
+char* SyntaxDefineBuildConst(char* name, char* value, bool builtin);
 struct list* SyntaxBuildConsts(void);
 void SyntaxResetBuildConsts(void);
 //B9c: a top-level condition only compile-time evaluation can decide, met by this attempt at compiling
@@ -225,6 +227,7 @@ void SyntaxResetConditionDecisions(void);
 void SyntaxDecideCondition(struct str file, int at, bool value, char* err);
 struct list* SyntaxPendingConditions(void); //struct pendingCond
 void SyntaxClearPendingConditions(void);
+struct pendingCond* SyntaxPendingFor(struct syntax* cond); //the one met for this parsed condition, or NULL
 
 //B9b: the token streams (TokenCtx) of every file of the module about to be scanned and parsed
 void SyntaxSetConditionFiles(struct list* tcs);

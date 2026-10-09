@@ -3139,6 +3139,41 @@ Go through this for every change to what olang means - a rule added, revised or 
   of such a value out of its block checked instead (O25h) - so keeping one past its block means building it where it
   is kept. Also fixed: a stack-use-after-return in the checker (a pending discharge kept a pointer into
   `buildMatchCore`'s frame); ASan is clean on worker, runner and shared.
+- **The lexer and parser hardened from a review (L1/L3/L4/L12/L18/L21, B9a/B9c/B10, T17/T30, E32, 2026-10-09).** A
+  review of token.c and syntax.c reproduced seventeen defects; all are fixed, each with a check. **Lexer**: a file ending
+  inside a comment, string or character literal read past its buffer (an internal error) - the end of the file now ends
+  a comment and leaves a literal unterminated, a diagnosed error; a NUL byte silently ended the module, and an unknown
+  character was a TOK_NONE token - the end-of-stream marker - so the parser stopped there and every later line failed
+  too: a byte that begins no token is one error per run, then dropped (L1), a carriage return once per file with "save
+  with LF" (L3); `7.Hash()` was a lex error (a `.` before a letter is a member access, L12); a synthesized statement end
+  sits at the end of the line it ends and reads "end of line" (L18). **Parser**: statement forms that begin with an
+  expression each re-read it, so lambdas or catch blocks nested in expression statements took 3^depth parses (depth 12
+  ran out of memory) - `parseExprPostfix` and `parseBlock` are memoized by position (invalidated when the parser splits
+  a `>>`, which a failed type-argument list now undoes); a failed parse leaves the cursor where it found it (`f(-)`
+  compiled as `f()`), and statement forms are tried through `attempt`, which also forgets the locals a failed reading
+  recorded (S8b); `a, b = b, a` in a constructor body was a "separator comma"; a chosen local `if` could not skip `else
+  if match x { ... } { ... }`; enum and trait entries needed no separator (T17/T30); `b as Box.Val & mask` names its fix
+  (E32). **B9a, my design within the user's decision**: the token evaluator decides only what it decides exactly -
+  every number keeps its type (a literal's adapts, a `-D` constant's is its literal's, a global's is declared or its
+  initializer's), every result must fit that type, two that do not meet are an error as in the program (T6b), and
+  anything width-dependent - wrapping, a zero divisor, MIN / -1, a narrower float global, a declared numeric type -
+  is left to B9c; `and`/`or` short-circuit (E7), the skipped side checked only for values that cannot combine;
+  integers computed with overflow builtins, so the compiler has no undefined behaviour (MIN / -1 killed it). B9c's
+  pre-scan reaches a branch's `{` whatever the evaluator read, so a branch it decides declares its types and imports.
+  **B10**: a `-D` value is a number only when it is one whole literal (`1.2.3` is text), a `0x`/`0b` one or an
+  out-of-range one is an error naming the flag, and the constant's operand is built from its value - `-D X=-0x10` had
+  two. Merged with the codegen review's L10 rule (a decimal literal above `I64`'s maximum is a `U64`): `-D
+  X=18446744073709551615` is a `U64` constant, a negative one stops at `I64`'s minimum, and a condition reading a `U64`
+  literal or constant is left to B9c, which the token evaluator's 64-bit signed arithmetic cannot stand in for. **Compile time**: many local ifs were quadratic - the globals a condition reads are indexed per file, decisions
+  and pending conditions hashed, the body walk for fixed locals cached (a 16,000-if function: 1.8s front end); nesting
+  is bounded at 20,000 levels (L21) on a compiler stack of 1GB (reserved), so a deep program is one diagnostic, never a
+  crash. **Checker recovery**: an unknown name's or function's placeholder is of the unknown stand-in type (one error,
+  where an index of it crashed, an assignment to it added two more, and a call of it "discarded a value"); `==`'s Eq
+  call, and `b[0] += 1` with no `At`, crashed.
+  **Found on the way**: a local condition that did not type-check was decided from its value anyway (B9c checks it
+  muted), so `if X > 0.5` with X an I32 build constant compiled - it stays a runtime if now and the error is reported.
+  **Not fixed**: compile time grows faster than linearly in a module's number of functions (each declaration looks the
+  module's names up in a list); not per-if, and not the parser's.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

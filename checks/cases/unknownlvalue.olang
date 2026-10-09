@@ -1,0 +1,10 @@
+# check: fail unknown name 'nope'
+# also: compilation failed with 4 error(s)
+# an undeclared name is one error wherever it is written - indexed, assigned, incremented, a member read - and nothing
+# after it fails again for it (an index of it crashed the checker)
+fn main() ? {
+    nope[0] = 1
+    nope2 = 1
+    nope3++
+    nope4.x = 4
+}

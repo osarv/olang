@@ -1,0 +1,12 @@
+# check: fail parenthesize: '(x as T) & mask'
+# also: compilation failed with 1 error
+# E32: the type after "as" takes "&mask" as its reference marker - said as such, with the fix
+type Box enum {
+    Val(v I32)
+    None
+}
+fn main() ? {
+    mask I32 = 6
+    b := Box.Val(7)
+    x I32 = b as Box.Val & mask
+}
