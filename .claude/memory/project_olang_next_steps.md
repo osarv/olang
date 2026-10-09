@@ -85,6 +85,15 @@ because what it finds about structure feeds the refactor.
   the rest was already there: `-t` builds every listed file in one process and frees nothing between them. Each file
   is an independent build, so releasing a file's state before the next (or an arena per build) is the real fix - put
   it in the refactor.
+- 06:10 (2026-10-09): reviews (2) types/generics, (3) statements/scopes and (5) evaluator/driver/std started at 05:37
+  against /home/user/wt/review @ 9a6c8c9 (reproducers /home/user/review/{types,scopes,eval}). (2) reported 21
+  confirmed findings (enum auto-Hash abort, read-only refs written through Call adapters and nominal conversions,
+  self-holding inline arrays crashing, non-injective/truncated instantiation names, G4/G1 unenforced, alias-blind case
+  names, extends types never meeting traits...); being fixed in /home/user/wt/tfix (wt-tfix). Decided for it: a
+  declared type over a struct/enum/generic instantiation is an error (over a declared number/array it inherits no
+  ctor/extends/generic identity); Eq/Hash/Str may be declared on an extending type, replacing the inherited ones;
+  anonymous enums are the same type iff same cases, order and payloads. Full verifies serialize on
+  `flock /home/user/verify.lock`.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
