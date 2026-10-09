@@ -71,3 +71,8 @@ the agents' memory cgroup is ~14.3GB, so `/home/user/vlock CMD` (a script outsid
 is new: three flock slots, the first being /home/user/verify.lock) allows three full verifies at once. Only for branches
 that include fc1ddcc; checks/checks.olang alone is 156s of the ~240s suite (fanning its builds out with join/spawn is
 the next lever).
+
+**Environment (2026-10-09):** `make race` needs clang's sanitizer runtimes, which the container image lacks -
+`apt-get update && apt-get install -y libclang-rt-18-dev` fixes it for a session (verified: the suite under -r reports
+exactly the one intentional race, shared.readOut). The user was asked to add that line to the environment's setup
+script so new sessions have it; if a new session lacks it, install it again.

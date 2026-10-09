@@ -141,6 +141,12 @@ because what it finds about structure feeds the refactor.
   itself (stage 2 == stage 3 checked). The olang compiler's own source stays compilable by stage 0; when it needs a
   feature stage 0 lacks, the last commit stage 0 can build is recorded in `bootstrap/CHAIN` and `make bootstrap` walks
   that chain (Go's and Rust's approach), so a lost binary is always rebuildable from C plus the repo.
+- 08:25: merged on master - dfix (driver/security/std), sfix (scope holes), tfork (-t per file: verify peak 3.2GB,
+  /home/user/vlock = three verify slots), tfix (types/generics; 71b78ee). Running: efix, isatom, bench (benchmarks vs
+  C, read-only), checksfan (checks.olang fanned out with join/spawn), errmsg (phase 1: new one-row diagnostics +
+  `-e RULE`, converting token/syntax/main; phase 2 - semantic.c's ~460 sites - only after isatom and efix merge, then
+  resume it with SendMessage). Left by tfix for the evaluator: -i keeps an error's name past an R17 bare-? boundary;
+  -i cannot call through a Call adapter (handed to efix).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
