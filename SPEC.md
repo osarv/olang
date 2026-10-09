@@ -116,10 +116,18 @@ extern    default
 `true` and `false` are not keywords; they are the two spellings of `BOOL_LIT` (L11). `null` is not a
 keyword either, for the same reason: it is `NULL_LIT` (L11a).
 
-**L9a (a method's name).** A method is reached only through its receiver (M19), so where a method's name is written -
-after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and any of the
-words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`. Anywhere else,
-a field's name included (a constructor's fields are its locals, C2a), they stay reserved.
+**L9a (a method's or a field's name).** A method is reached only through its receiver (M19), so where a method's name is
+written - after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and
+any of the words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`.
+
+A field may be named by a word above that is a whole statement by itself - `done`, `fail`, `break`, `continue`,
+`abort`, `unreachable`, after which nothing can follow on its line - or that begins no statement and no value: `in`,
+`is`, `as`, `and`, `or`, `xor`, `range`, `case`, `nomatch`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
+`test`, `extern`, `default`. It is declared with its type or `:=` (`done I64 = 0`, `in Bool`, `type := Kind.A`), never
+as a pun, and is reached only after `.` (`s.done`, `s.done++`) - a word after `.` is always a member's name, and a line
+ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
+and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
+C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
 ### 1.5 Literals
 

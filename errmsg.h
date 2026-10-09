@@ -81,6 +81,7 @@ struct type;
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
+    X(ERR_KEYWORD_FIELD_READ,           "L9a",   "%n is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") \
     X(ERR_DESTRUCT_IN_BODY,             "C7",    "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") \
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
     X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
