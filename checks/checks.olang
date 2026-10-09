@@ -1258,4 +1258,22 @@ fn crashes(r mut report&) ? Failed {
     f := crashRun(dir, $os.Quote(olang) " -i foreign.olang")
     try r.expect(f.Status == 139 and f.Stderr.StartsWith("foreign.olang crashed\nolang: internal compiler error")
                  and f.Stderr.Contains("while interpreting"), "OnCrash -i: status " $f.Status ", " $f.Stderr, dir)
+    # T2b: a read through null traps where it is written, optimized (where the optimizer can see the null) and not;
+    # -i stops there, naming it
+    for flags in String&["", "-d"] {
+        try r.expect(sh(dir, "\"$OLANG\" -b " $flags " nullpeek.olang > out.txt 2>&1") == 0, "nullpeek did not build", dir)
+        bin := "./build/nullpeek" $(".debug" if flags == "-d" else "")
+        n := crashRun(dir, bin)
+        try r.expect(n.Status == 139 and n.Stdout == "start\nafter a push: 4\n" and n.Stderr == "nullpeek crashed\n",
+                     "nullpeek " $flags ": status " $n.Status ", " $n.Stdout $n.Stderr, dir)
+    }
+    ni := crashRun(dir, $os.Quote(olang) " -i nullpeek.olang")
+    try r.expect(ni.Status == 1 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.Contains("reads through a null"),
+                 "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
+    # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
+    # so no sanitizer runtime is needed to check it
+    try r.expect(sh(dir, "\"$OLANG\" -c -r nullpeek.olang > out.txt 2>&1") == 0, "nullpeek -c -r did not build", dir)
+    ll := try os.ReadFile($dir "/build/nullpeek.race.ll") catch default ""
+    try r.expect(ll.Contains("@__olang_crash_handler(i32 %sig) #1 {") and ll.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread")
+                 and ll.Contains("attributes #1 = { null_pointer_is_valid \"target-cpu\""), "crash handler instrumented under -r", dir)
 }

@@ -356,11 +356,16 @@ reference equals only a null), so `p == null` needs no operator of its own - for
 null only when it has no storage, and so differs from an empty array that has.
 
 **T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
-Reading a field or element through a null reference, or calling through a null function value, is
-**undefined behaviour** — in practice a deterministic trap, address zero being unmapped, which is why null
-is the all-zero representation rather than merely a convention. This is the cost of `null`: §8 continues to
-guarantee that a reference never outlives what it points at, and no longer guarantees that it points at
-anything.
+Reading or writing a field or element through a null reference, or calling through a null function value,
+**traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
+writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
+per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
+faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
+moves code on that assumption. A field further into a struct than the unmapped range reaches (64KB on Linux) is
+not covered, and reading it through null is undefined as an index out of range is (E16e); an element of a null
+array is out of range already, its length being 0. While compiling (K1) and under `-i` (§10 B3e), a read through
+null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
+never outlives what it points at, and no longer guarantees that it points at anything.
 
 **T3.** An anonymous struct or enum shape (written inline rather than through a `type` declaration)
 is a valid type, but has no name and so can never be the target of struct-literal or enum-value
@@ -2409,8 +2414,8 @@ cover it. This is the mirror of E16c, which opts a *slice* out of its abort — 
 the failure as an error I handle". An index written without `try` is unchecked and costs nothing.
 
 **E16e (memory safety).** An out-of-range index written without `try` is, with `extern fn` (§11 X1a) and
-a null dereference (T2b), one of the places where memory safety rests on something the compiler does not
-check. This is deliberate: the check E16 used to make cost about 50% on indexing whose bounds the optimizer
+a data race (§6.8 P8b), one of the places where memory safety rests on something the compiler does not
+check (a null dereference is not: it traps, T2b). This is deliberate: the check E16 used to make cost about 50% on indexing whose bounds the optimizer
 cannot establish, and nothing at all where it can. Every other guarantee in this specification — §8's scope
 containment above all — is stated as holding for programs that do not index out of range. What remains
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
@@ -3439,6 +3444,12 @@ and another reuses is ordered for the detector exactly as it is for the program.
 `linkonce_odr` into every object: mixing an instrumented object with an uninstrumented one would leave the
 linker free to keep either copy. An instrumented object is therefore a distinct artifact from a clean one
 (§10 B4) and is named accordingly.
+
+Two limits are the detector's own. The handler `os.OnCrash` installs is never instrumented, since it may run while
+ThreadSanitizer's own state is inconsistent - a fault inside its bookkeeping - so a crash still ends the process with
+its signal. And ThreadSanitizer records each thread's calls on a stack of fixed size that it does not check, so a call
+chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
+crash, abort, or hang inside the detector, and only a build without `-r` runs it as written.
 
 **P4.** A spawned function may not declare an error set (§7): an error raised on another thread has nowhere
 to propagate to, since the join carries no value and the spawner is no longer at the call site. A spawned
@@ -4716,8 +4727,8 @@ the interpreting process, `done` and `fail` end it with status 0 and 1, an error
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
-out of range, reading through a null reference, dividing by zero, a shift or conversion out of range - the
-interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
+out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
+reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
 tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
 same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
@@ -4973,9 +4984,9 @@ resolved by the platform's linker at build time. Unlike an ordinary `func-decl` 
 `error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
 ordinary function's body would otherwise begin.
 
-**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a null
-dereference (§2.1 T2b), one of the places in the language where memory safety rests on something the
-compiler does not check. A declaration states a prototype, and the compiler takes it at its
+**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a data race
+(§6.8 P8b), one of the places in the language where memory safety rests on something the compiler does not
+check. A declaration states a prototype, and the compiler takes it at its
 word: it verifies nothing about the function that actually links, its real signature, its calling
 convention, or what it does with the pointer an array parameter marshals to (X3). A wrong prototype is
 undefined behaviour, and a wrong *size* for a foreign type reached through a reserved array — a

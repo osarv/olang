@@ -209,7 +209,7 @@ struct cgCtx {
     struct statement* resultLocal;
     //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
     //allocas), the scope its storage comes from, and its element type
-    struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
+    struct { char* buf; char* len; char* cap; char* scope; struct type elem; bool reserved; } compr[64];
     int comprDepth;
     //a failed check under "try" (an index, a slice, checked arithmetic): the one error it can produce, known
     //statically, which cgCatchDispatch matches clauses against when it is given no run-time code
@@ -3865,6 +3865,7 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
     int d = ctx->comprDepth++;
     ctx->compr[d].elem = *op->type.arrElem;
     ctx->compr[d].scope = scopeVal;
+    ctx->compr[d].reserved = false;
     ctx->compr[d].buf = cgNewTmp(ctx);
     ctx->compr[d].len = cgNewTmp(ctx);
     ctx->compr[d].cap = cgNewTmp(ctx);
@@ -3877,6 +3878,27 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
     ctx->targetScopeOverride = NULL;
     cgBlock(ctx, &op->comprBody);
     ctx->targetScopeOverride = prevOverride;
+    //E27: storage of its own even when nothing was pushed (T2a: an empty array is not a null one, and the evaluator's
+    //empty result is not) - a loop over a source of unknown length holds no buffer until its first element, so one
+    //that ran no times is given an empty one here; a reserve before the loop has already made one, of any size
+    if (!ctx->compr[d].reserved) {
+        int id = ctx->lblCtr++;
+        char* b0 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", b0, ctx->compr[d].buf);
+        char* none = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", none, b0);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%compr.empty.%d, label %%compr.done.%d\n", none, id, id);
+        ctx->terminated = true;
+        char lbl[40];
+        snprintf(lbl, sizeof(lbl), "compr.empty.%d", id);
+        cgLabel(ctx, lbl);
+        char* nb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 0)\n", nb, ctx->compr[d].scope);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", nb, ctx->compr[d].buf);
+        snprintf(lbl, sizeof(lbl), "compr.done.%d", id);
+        cgBr(ctx, lbl);
+        cgLabel(ctx, lbl);
+    }
     ctx->comprDepth--;
     char* n = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n, ctx->compr[d].len);
@@ -3925,6 +3947,7 @@ void cgComprReserve(struct cgCtx* ctx, struct operand* op) {
     int d = ctx->comprDepth - 1;
     char* n = cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
     cgComprRealloc(ctx, d, n);
+    ctx->compr[d].reserved = true;
 }
 
 //E27: the element appended, the buffer first grown if it is full - to 100 from nothing, then doubling
@@ -10235,8 +10258,12 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
         if (lineLen > 7 && !strncmp(&buf[i], "define ", 7) && buf[i + lineLen -1] == '{') {
             char* dbg = memmem(&buf[i], lineLen, " !dbg ", 6);
             size_t cut = dbg ? (size_t)(dbg - &buf[i]) : lineLen -1;
+            //S2: the crash handler is never instrumented - it can run while ThreadSanitizer's own state is
+            //inconsistent (a fault inside its bookkeeping, holding its locks), and an instrumented load there waited
+            //for a lock its own thread held, forever
+            bool plain = memmem(&buf[i], cut, "@__olang_crash_handler(", 23) != NULL;
             fwrite(&buf[i], 1, cut, dst);
-            fputs(dbg ? " #0" : "#0 {", dst);
+            fputs(plain ? (dbg ? " #1" : "#1 {") : (dbg ? " #0" : "#0 {"), dst);
             if (dbg) fwrite(dbg, 1, lineLen - cut, dst);
         } else {
             fwrite(&buf[i], 1, lineLen, dst);
@@ -10244,7 +10271,12 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
         if (end < len) fputc('\n', dst);
         i = end +1;
     }
-    fprintf(dst, "\nattributes #0 = { %s%s }\n", race ? "sanitize_thread " : "", cgTargetAttrs);
+    //T2b: null_pointer_is_valid - the kernel's -fno-delete-null-pointer-checks - takes from the optimizer its licence
+    //to assume a pointer it sees dereferenced is not null. Without it, a read through a null it could prove (a field
+    //defaulted to null, read after inlining) was undefined behaviour it acted on: the rest of the function, its return
+    //included, was deleted, and control fell into whatever code came next. With it the load stays a load and faults
+    fprintf(dst, "\nattributes #0 = { null_pointer_is_valid %s%s }\n", race ? "sanitize_thread " : "", cgTargetAttrs);
+    fprintf(dst, "attributes #1 = { null_pointer_is_valid %s }\n", cgTargetAttrs);
 }
 
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug) {
