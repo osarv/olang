@@ -35,6 +35,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   a declared-name oracle (D2/D3a make it exact). My recommendation: no for now; revisit when tooling is built.
 - QB. Should C compiler feature work pause, fixes only, while the port builds its checker (DESIGN.md M5-M12), so no
   feature is built twice? In effect: features keep landing in C and are ported. My recommendation: yes, fixes only.
+**Asked 2026-10-09 22:30 CEST (from the review of tonight's merges, /home/user/review/tonight #4):**
+- QC. Shallow permission lets a read-only `List`/`Map` (or any value holding a `mut` reference field) be changed by
+  copying it into a writable local: `x := G; x.Push(1)` with G an immutable global changes G (it did before the handles
+  too - the copy shared storage). Close it? My recommendation: yes, by one rule - a value whose type holds `mut`
+  references, copied out of a place reached read-only, is read-only itself (it cannot be lent writably or written
+  through); typed `x List<T> = G` from read-only is an error naming `Clone()`. Alternative: deep permission (you chose
+  shallow 2026-10-07), or List/Map as reference-only types. In effect: shallow, stated in SPEC T25b (wt-rvfix).
 **Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
 - Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
   public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).

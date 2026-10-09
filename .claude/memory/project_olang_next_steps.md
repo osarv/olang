@@ -423,6 +423,11 @@ because what it finds about structure feeds the refactor.
   repros fixed (oann-up deletes them). Started at 21:50: a read-only review of tonight's merges (/home/user/review/tonight)
   and wt-fuzz2 (fuzzer extended to tonight's features). Running: s3scope, cgfix3, oann-up, review, fuzz2.
   After s3scope and cgfix3 merge: the bootstrap/ move + modest refactor (no other compiler agent then).
+- 22:30 CEST: review of tonight's merges done (/home/user/review/tonight: 8 confirmed - RunOnStack in a task races
+  the program scope (heap corruption), by-value param building through ref fields UAF (old), cgDeepEq infinite on a
+  self-referential struct, read-only List/Map writable through a copy (QC), evaluator copying an unwritten by-value
+  array, ListIter after Clear endless, RunOnStack small stacks in -d (TLS, no comdat on linkonce_odr globals), `x mut T`
+  local in a generic). Started wt-rvfix for all of them + Nest + Exec fd leak + SPEC T25b note.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
