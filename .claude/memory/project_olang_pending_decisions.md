@@ -28,7 +28,14 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+**Asked 2026-10-09 23:50 CEST (from usage study 4, /home/user/review/study4):**
+- QD. Should an integer literal's own type be `I64` (so `x := 0` is an I64), as float literals became `F64` (T6a)?
+  Every length, count and position is `I64`, and `x := 0; x += a.Len()` fails today. Typed targets are unaffected (a
+  literal adapts). In effect: I32. My recommendation: yes - Go's `int`, and it matches the F64 decision.
+- QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
+  through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
+  `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
   tooling (formatter, editor support) is built.

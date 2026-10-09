@@ -1,0 +1,27 @@
+# A comprehension over an iterator that gives nothing has no storage at run time, so a reference to it is null
+# (E27: "otherwise grows: room for 100 elements, then double whenever full"; E10c: storage is made afresh by every
+# comprehension, an empty one included - an empty array that was built is not null).
+#     expected: "U16[] false | U16[] false" on every line (as for "U16[2 for x in range 0]", reserved up front)
+#     actual:   -d and -b print "null true | null true"; the baked global (K2), asserts decided while compiling (S18c)
+#               and -i print "U16[] false | U16[] false", which is what the spec says
+# Found by the generator (seed 3193: a comprehension over an empty Map's Values() borrowed and rendered).
+# Cause (codegen.c, cgComprehension ~3749, the lowering, not the runtime IR): the buffer starts as "ptr null" with
+# capacity 0 and is allocated by the first push (cgComprRealloc) unless the source's length is reserved up front
+# (OPERATION_COMPR_RESERVE); with no push it stays null. Fix: reserve the 100 elements before the loop when nothing
+# else reserves (or have the evaluator model the lazy buffer and change the spec). Not fixed here: the lowering is
+# outside this batch's files.
+fn cc(n I32) String {
+    m := Map<I8, U32>()
+    a Array<U16> = U16[1 for x in m.Values()]
+    ra Array<U16>&a = a
+    l := List<U16>()
+    e Array<U16> = U16[3 for x in l]
+    re Array<U16>&e = e
+    return $ra " " $(ra == null) " | " $re " " $(re == null)
+}
+K String = cc(3)
+v mut I32 = 3
+fn main() ? {
+    println($K)
+    println($cc(v))
+}

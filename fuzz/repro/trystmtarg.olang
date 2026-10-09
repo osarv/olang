@@ -1,0 +1,25 @@
+# A "try ... catch" statement's clauses took an error raised by its call's own arguments (R10: the statement evaluates
+# the call; an argument's "try g()" is R9's expression form, which ends the enclosing function).
+#     expected: "1 | 1" - g's error leaves f through the argument's try, so c's default gives 1
+#     actual:   "7 | 1" - the baked global (K2) said 7, and so did an assert decided while compiling (S18c) and -i:
+#               the statement's "catch E.A" ran; -d and -b gave 1
+# Found by the generator (seed 3296: a fallible helper's result as an argument of a tried call in a statement).
+# Cause (comptime.c): the evaluator lets an argument's error bypass a call's clauses only when the call is marked
+# isTried, which the checker sets on a try-expr's call and never on a try statement's; the statement now marks its
+# call for the evaluation (ctTried), the computed-callee path too. Fixed.
+error E {
+    A
+    B
+}
+fn g(x I32) I32 ? E { error E.A }
+fn h(x I32) I32 ? E { return x }
+fn f(n I32) I32 ? E {
+    try h(try g(n)) catch E.A { return 7 }
+    return 9
+}
+fn c(n I32) I32 { return try f(n) catch default 1 }
+K I32 = c(3)
+v mut I32 = 3
+fn main() ? {
+    println($K " | " $c(v))
+}
