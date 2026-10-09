@@ -1,5 +1,5 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's
-# also: note: 'c' is declared here, in a block that closes first - declare it where 'ok' lives: 'c Counter&ok = ...'
+# also: note: 'c' is declared here, in a block that closes first - declare it where 'ok' lives: 'c mut Counter&ok = ...'
 # B11: an obligation an argument from a loop body cannot meet - the note names the declaration to change
 type Counter struct() {
     n I64 = 0

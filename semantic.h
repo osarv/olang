@@ -134,6 +134,8 @@ struct type {
 
     //BASETYPE_FUNC
     bool hasRetType;
+    bool sigUninferable; //G4: a variable the result names that no parameter's type does - reported at the declaration,
+                         //whose body is then never checked (one error, not one per use of the variable)
     struct type* retType; //heap-allocated, valid when hasRetType
     struct list errors; //list of struct type*: error types declared in the signature's error list
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
@@ -322,6 +324,11 @@ struct var {
     bool paramWritten; //D9b: a signature parameter its body writes, or makes a writable reference to - a by-value array
                        //it is bound to is then the callee's own copy
     bool permByType;   //B11: a local whose written reference type, without "mut", made it read-only (T25b)
+    //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
+    //reached through it something not read out of that region (built, or handed in), itself or through a callee
+    //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
+    bool regionStored;
+    bool regionHandedOut;
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program

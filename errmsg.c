@@ -63,6 +63,7 @@ struct errRecord {
     int fileRank;
     char* text;
     size_t size;
+    bool dropped; //G16b: given way to the same error from another instantiation, which could spell the generic's types
 };
 static struct errRecord** recs;
 static int nRecs, capRecs;
@@ -108,10 +109,23 @@ static int recCmp(const void* a, const void* b) {
     return x->seq - y->seq;
 }
 
+//G16b/B11: an error about where something lives, met in a generic's body checked for one instantiation, is the same
+//error for every instantiation, so it is written once - by the record of the first instantiation, unless its notes had
+//to spell that instantiation's types (weak, ErrMsgWeakSpelling) and a later one could spell the generic's own
+struct seenErr { struct str file; int line, col, metLine, metCol, d, rec; bool weak; };
+static struct seenErr* seen;
+static int nSeen, capSeen;
+static int curSeen = -1;
+void ErrMsgWeakSpelling(void) { if (curSeen >= 0 && curSeen < nSeen) seen[curSeen].weak = true; }
+
 static void freeRecords(int from) {
     closeCur();
     for (int i = from; i < nRecs; i++) { free(recs[i]->text); free(recs[i]); }
     nRecs = from;
+    int k = 0;
+    for (int i = 0; i < nSeen; i++) if (seen[i].rec < from) seen[k++] = seen[i];
+    nSeen = k;
+    curSeen = -1;
 }
 
 void ErrMsgFlush(void) {
@@ -122,7 +136,7 @@ void ErrMsgFlush(void) {
         for (int j = 0; j < i; j++) if (StrCmp(recs[j]->file, recs[i]->file)) { recs[i]->fileRank = recs[j]->fileRank; break; }
     }
     qsort(recs, nRecs, sizeof(*recs), recCmp);
-    for (int i = 0; i < nRecs; i++) fwrite(recs[i]->text, 1, recs[i]->size, stdout);
+    for (int i = 0; i < nRecs; i++) if (!recs[i]->dropped) fwrite(recs[i]->text, 1, recs[i]->size, stdout);
     fflush(stdout);
     freeRecords(0);
 }
@@ -524,14 +538,41 @@ static bool isScopeRule(const char* rule) {
 
 static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
     lastDropped = false;
+    curSeen = -1;
     if (scopeGroupOn && !muteDepth && isScopeRule(diags[d].rule)) {
         if (scopeGroupSeen) { lastDropped = true; return; }
         scopeGroupSeen = true;
     }
-    if (!countError(syntax)) return;
     int use = programUse(w);
     struct where met = w;
     if (use >= 0) w = whereOf(errContexts[use].tok);
+    if (errContextDepth > 0 && !muteDepth && isScopeRule(diags[d].rule)) { //G16b: once for every instantiation
+        int col = columnOf(w), metCol = columnOf(met);
+        int i = 0;
+        while (i < nSeen && !(seen[i].d == (int)d && seen[i].line == w.line && seen[i].col == col
+                              && seen[i].metLine == met.line && seen[i].metCol == metCol
+                              && StrCmp(seen[i].file, w.file))) i++;
+        if (i < nSeen) {
+            if (!seen[i].weak || seen[i].rec >= nRecs) { lastDropped = true; return; }
+            closeCur();
+            recs[seen[i].rec]->dropped = true; //this one is written instead, and counted already
+            seen[i].rec = nRecs;
+            seen[i].weak = false;
+            curSeen = i;
+            FILE* f = startError(w, diags[d].rule);
+            putMessage(f, diags[d].fmt, ap);
+            endError(f, w, use, met);
+            return;
+        }
+        if (nSeen == capSeen) {
+            capSeen = capSeen ? capSeen * 2 : 16;
+            seen = ReallocOrCrash(seen, sizeof(*seen) * capSeen);
+        }
+        seen[nSeen] = (struct seenErr){ .file = w.file, .line = w.line, .col = col, .metLine = met.line, .metCol = metCol,
+                                        .d = (int)d, .rec = nRecs };
+        curSeen = nSeen++;
+    }
+    if (!countError(syntax)) return;
     FILE* f = startError(w, diags[d].rule);
     putMessage(f, diags[d].fmt, ap);
     endError(f, w, use, met);
