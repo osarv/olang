@@ -12134,6 +12134,88 @@ built here and returned (`q P& = P(x); return NB(q)`, `c mut Counter& = Counter(
 now lives in the result scope - correct, and pinned as `o26areflocal` (a run case, under `-b`, `-d` and `-i`); the
 cases keep their purpose with a by-value parameter, the function's own copy, which cannot move.
 
+### The fuzzer covers the day's later features, and what it found (K1, K2/K2b, S18c, R10, E10, E11a, E27, T8, E10a-c, E11c, S13f, T7c/T7d, E32b, G20-G26, T25b, O25, O17, E16, X8, 2026-10-09)
+
+The fuzzer was built before most of the day's later work landed, so its generator never wrote a `List` copy, a `Map`
+walk, a fixed-length array, a constant generic parameter, `case _`, a reference local or a std/math call. The
+coordinator asked for it to be extended to them and run. **What the generator now writes**, all defined by
+construction (the generator's header comment lists it):
+- **Lists and Maps as handles (T8)**: a second name for a collection (`x5 List<I32> = x3`), `Clone()`, `Push`, `PushAll`,
+  `Insert` at a position in `0..Len()`, `RemoveAt` and `l[i]` only under `if l.Len() > 0` (or a conditional saying so),
+  `Pop`/`First`/`Last` under `try ... catch default`, `try l[i] = v catch { }`, `Reverse`, `Clear`, `Sort` with a
+  comparator (usually its two elements compared, else any Bool of them), bulk loops of 9-48 pushes or puts (so chunks
+  and buckets grow and removed slots are reused), a walk run by run written out (`RunFrom`, S9f's own lowering) and
+  `for x in l`; Maps keyed by numbers, Bool, the case's structs (a supplied Hash, E10b, or a declared `Eq`/`Hash`
+  comparing only the first field, E10a) and its enums, with `Put`, `Remove` (statement and value), `Update` with a
+  lambda, `Clear`, `Get` under `try`, `Has`/`in`/`not in`, walks of entries, keys and values, and `Keys()`/`Values()`
+  rendered. A group number per variable makes every name of one collection share its "a loop is walking it" mark, so
+  nothing is pushed to a collection being walked (the walk would never end), and helpers take a collection of the
+  caller's by reference (`mut List<T>&` when the caller's may be changed, else read-only).
+- **References (T25b, O25)**: array and struct reference locals, writable or read-only by their written type - made
+  new, borrowed from a local (`x7 mut Array<I32>&x2 = x2`, writes through it the local's), sliced, given a second name
+  (`:=` keeps the permission) and repointed - only to what lives in exactly the same block, which the generator tracks
+  per variable; `==` by contents and `is`/`is not` by identity (E10, E10c); a struct copied out of a reference; whole
+  arrays and structs assigned, a value array keeping its storage when its length is the same so a borrow sees the new
+  elements (T11b).
+- **Fixed-length arrays (T7c/T7d/E32b)**: locals (a literal of their length, their zero value, a copy, a checked copy
+  of a run-time array known to have their length), inline struct fields and enum payloads, element reads and writes,
+  `==` with run-time arrays, `as Array<T, N>&` views (checked under `try` where the length is not known), and
+  fixed-length reference locals (a borrow, or a view of a run-time array).
+- **Constant generics (G20-G26)**: functions over `Array<T, <N>>&` whose body reads `N` as a value and decides an
+  `if N > c`, a conditional and a `match N` per instantiation - the chosen branch reading elements up to `c`, which the
+  other instantiations never check - recursions on `N` ended by `if N == 0` (`a[1:] as Array<T, N - 1>&`), and a generic
+  struct `G<i><T, N I64>` with methods (`put`, `sum`, `at`), copied (its array with it) and compared.
+- `case _` with and without guards in value and statement matches (S13f); structs declaring `Str` (E11c); std/math's
+  functions of the four floats and the integer ones (X8: the evaluator calls libm through libffi) - not `SignBit` or
+  `CopySign`, which read a NaN's sign, which an operation leaves unspecified (E33a); `(e).Format(base)` read back with
+  `ParseInt(base)`/`ParseUint(base)`, `x.Fixed(n)` for n in -3..24; array `Map`/`Filter`/`Fold`/`Count`/`FindIndex`/
+  `Repeat`/`Replace`/`Contains`/`CountOf`/`Sort`/`Reverse` and the iterator helpers with lambdas, which may now capture
+  references and fixed-length arrays; a deferred `Push`.
+- A case's result may be a struct, an enum, a fixed-length or run-time array or a `G<i>` value, so globals of those
+  types are baked (K2b) too; and a text result renders some of the case's locals, collections included, so what its
+  statements left in them is compared as well.
+
+**What it was run on.** Two runs of 300 programs on the finished generator (30 cases each, two jobs - the machine was
+shared), 17,940 cases, every global but seven baked while compiling; about 180 programs more while it was being
+extended (seeds 101-160, 201-260, 301-348, 1001-1010), and the checks scenario's two fixed seeds. The runs' findings,
+after what turned out to be the generator's own (a counter pushed as the wrong type; a machine-wide out-of-memory kill
+during another worktree's verify, not a finding):
+
+1. **A try statement's clauses took an error raised by its call's arguments (R10, `comptime.c`).** `try h(try
+   g(n)) catch E.A { return 7 }`: the argument's `try` is R9's expression form, which ends the enclosing function, and
+   the program does that - but the evaluator ran the statement's clause, so a baked global, an assert decided while
+   compiling and `-i` all said 7 where `-d` and `-b` said 1 (seed 3296). The same bug was found and fixed on master the
+   same evening from seed 551 (`stmtTried`, above); this branch's fix was the same and the merge keeps master's, adding
+   the one path both had missed: a computed callee whose own expression fails (`try pick(try g(n))(3) catch ...`)
+   bypasses the call's clauses too, in either form (`ctTried`). `fuzz/repro/trystmtarg.olang`; a corpus test computes
+   both three ways.
+2. **`$` on a reference to an array with no storage (E10/E11a, fixed in `comptime.c`).** A borrow of an array value's
+   zero value is a null reference, bit for bit, and the run time renders it `null`; the evaluator rendered the empty
+   array it holds (`U16[]`), while agreeing that `== null` was true - it decided null-ness for `==` (`ctArrayRefNull`)
+   and not for `$` (seed 3193). `fuzz/repro/nullarrayrender.olang`; a corpus test.
+3. **A comprehension over an iterator that gives nothing has no storage at run time (E27/E10c, NOT fixed: the code
+   generator's lowering).** `U16[1 for x in m.Values()]` over an empty Map, or over an empty `List`, borrowed and
+   compared with `null` or rendered: `-d` and `-b` say `null`/`true`, the evaluator and `-i` an empty array that is not
+   null - which is what the spec says (E27: "room for 100 elements, then double"; E10c: storage is made afresh by every
+   comprehension, an empty one included). `cgComprehension` (codegen.c) starts the buffer at `ptr null` with no
+   capacity and allocates it at the first push unless the source's length is reserved up front, so with nothing pushed
+   it stays null; reserving the 100 before the loop when nothing else reserves is the fix, and it is the lowering's,
+   which this batch did not touch (seed 3193's remaining difference). `fuzz/repro/emptycompr.olang`.
+4. **A List or Map copied into an inner block, or taken by value, can have no method called on it (O17, NOT fixed:
+   semantic.c).** Found while extending the generator, before T8's handles had settled: `x12 List<I64> = x9` inside a
+   loop over the List's own block, then `x12.Len()`, `x12[0]`, `x12.Push(3)`, and `fn byValue(l List<I64>, m Map<I32,
+   I32>)` calling `l.Push`/`m.Put` - seven O17 errors where `mut List<T>&` compiles. A copy's one field is a reference
+   to the shared state record, so its own slot is where the copy is while the record is where the original was made,
+   and O17's lend check ("the callee could keep what it builds in the value's own slots") refuses the call - though no
+   List or Map method stores into a copy's own slot, and a read-only receiver cannot. `fuzz/repro/listalias.olang`;
+   the generator makes second names only in the collection's own block and passes collections by reference.
+5. **A constant index under `try` into an array of known length is E16's compile-time error (E16/E16d, NOT fixed:
+   semantic.c, and a question for the rule).** `try a[2] catch default -1` in `fn third(a Array<I32, <N>>&)`
+   instantiated at N = 2, or `try z[5]` on an `Array<I32, 2>`: "index 2 is outside the array's 2 elements", though try
+   asked for the bounds check and the failure is defined (`OUT_OF_BOUNDS`); in a generic it means "element 2 if there
+   is one" can only be written with G26's `if N > 2`. `fuzz/repro/trygenericindex.olang`; the generator writes a
+   non-literal index there.
+
 ### A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision QC)
 
 **The hole.** The review of tonight's merges (#4) found that shallow permission (T25b, the user's call of 2026-10-07)

@@ -28,20 +28,22 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): QA and QB below.
-**Asked 2026-10-09 18:35 CEST (from the port's design, compiler/DESIGN.md):**
-- QA. Should `Name<` open type arguments only when the `<` touches the name (`<` whitespace-significant - a language
-  change, zero corpus sites change)? It lets any file be parsed alone (formatters, editors, tree-sitter). In effect:
-  a declared-name oracle (D2/D3a make it exact). My recommendation: no for now; revisit when tooling is built.
-- QB. Should C compiler feature work pause, fixes only, while the port builds its checker (DESIGN.md M5-M12), so no
-  feature is built twice? In effect: features keep landing in C and are ported. My recommendation: yes, fixes only.
-**Asked 2026-10-09 22:30 CEST (from the review of tonight's merges, /home/user/review/tonight #4):**
-- QC. Shallow permission lets a read-only `List`/`Map` (or any value holding a `mut` reference field) be changed by
-  copying it into a writable local: `x := G; x.Push(1)` with G an immutable global changes G (it did before the handles
-  too - the copy shared storage). Close it? My recommendation: yes, by one rule - a value whose type holds `mut`
-  references, copied out of a place reached read-only, is read-only itself (it cannot be lent writably or written
-  through); typed `x List<T> = G` from read-only is an error naming `Clone()`. Alternative: deep permission (you chose
-  shallow 2026-10-07), or List/Map as reference-only types. In effect: shallow, stated in SPEC T25b (wt-rvfix).
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+**Asked 2026-10-09 23:50 CEST (from usage study 4, /home/user/review/study4):**
+- QD. Should an integer literal's own type be `I64` (so `x := 0` is an I64), as float literals became `F64` (T6a)?
+  Every length, count and position is `I64`, and `x := 0; x += a.Len()` fails today. Typed targets are unaffected (a
+  literal adapts). In effect: I32. My recommendation: yes - Go's `int`, and it matches the F64 decision.
+- QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
+  through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
+  `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
+**Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
+- QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
+  tooling (formatter, editor support) is built.
+- QB (pause C compiler feature work while the port builds its checker, DESIGN.md M5-M12): YES - from the start of the
+  port the C compiler takes fixes only; features are built once, in olang. Soundness fixes and the decided QC count as fixes.
+- QC (a copy of a read-only List/Map was writable through its `mut` reference fields): CLOSE IT - a value whose type
+  holds `mut` references, copied out of a place reached read-only, is read-only itself; a typed copy from read-only is
+  an error naming Clone() or a read-only borrow. Permission otherwise stays shallow. Being built: wt-qc (started 23:05).
 **Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
 - Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
   public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).

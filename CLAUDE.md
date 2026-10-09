@@ -3699,6 +3699,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   so a parallel computation bakes and decides asserts (K1) - `-i` still refuses tasks. **Decided (mine)**: a failing
   guaranteed check (a slice out of range, an array length, a copy into fixed storage) is in the same abort class; a
   global reached from another aborting one is reported once, at the first; the memory budget's size.
+  **Extended the same day** to the later features (List/Map handles, array references, `case _`, `Array<T, N>`, constant
+  generics, permissions, `Format`/`Fixed`, std/math) and run on 600 programs (17,940 cases): the evaluator rendered a
+  reference to a storage-less array as the empty array (E10) and let a try statement's clauses take an error from its
+  call's arguments (R10, found on master too; this run added a computed callee's) - fixed in `comptime.c`; recorded, not
+  fixed: an empty iterator-sourced comprehension has no storage at run time (E27, `cgComprehension`), O17 refusing
+  every call on a List/Map copy, E16 rejecting a known out-of-range index under `try` (`fuzz/repro`).
 - **Small fixes: methods named like locals, constant globals, hex patterns, multi-index, located asserts, fast `$` on
   floats (M19, K2, L10a, D9b, E31, S17/S18a/S18c, E11a, 2026-10-09).** **A local named like a method** (or another
   module's function) made `x.f()` call the local as a function value - garbage or a segfault; the fuzzer batch found
