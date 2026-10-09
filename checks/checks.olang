@@ -45,12 +45,13 @@ Seed String& = "prelude"
 # passed, and what went wrong for one that did not
 Outcomes Array<String&>& = runAll()
 
-# runs every check, Workers at a time: each worker takes the number of the next check from a queue, until it takes -1.
-# The scenarios are queued first, and the cases once the prelude's objects they start from are built (Seed).
+# runs every check, Workers at a time: each worker takes the number of the next check from a queue, until the queue is
+# closed and empty. The scenarios are queued first, and the cases once the prelude's objects they start from are built
+# (Seed).
 fn runAll() Array<String&>& {
     n I64 = Scenarios.Len() + Cases.Len()
     outcomes mut Array<String&>&return = Array<String&>(n)
-    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(n) + Workers)
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(n))
     chan.Init(queue)
     for k in range Scenarios.Len() { chan.Send(queue, k) }
     join {
@@ -59,17 +60,13 @@ fn runAll() Array<String&>& {
         try os.WriteFile($seed "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, "\"$OLANG\" -b seed.olang > out.txt 2>&1")
         for k in range Scenarios.Len(), n { chan.Send(queue, k) }
-        for w in range Workers { chan.Send(queue, -1) }
+        chan.Close(queue)
     }
     return outcomes
 }
 
 fn worker(queue mut chan.Chan<I64>&, outcomes mut Array<String&>&) {
-    for {
-        k := chan.Recv(queue)
-        if k < 0 { return }
-        outcomes[k] = runCheck(k)
-    }
+    for k in queue { outcomes[k] = runCheck(k) }
 }
 
 # check number k: a scenario, or a case after them
@@ -1270,6 +1267,11 @@ fn crashes(r mut report&) ? Failed {
     ni := crashRun(dir, $os.Quote(olang) " -i nullpeek.olang")
     try r.expect(ni.Status == 1 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.Contains("reads through a null"),
                  "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
+    # std/chan: a Send on a closed channel stops the program, naming it
+    try r.expect(sh(dir, "\"$OLANG\" -b chanclosed.olang > out.txt 2>&1") == 0, "chanclosed did not build", dir)
+    cc := crashRun(dir, "./build/chanclosed")
+    try r.expect(cc.Status == 134 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("send on a closed channel"),
+                 "chanclosed: status " $cc.Status ", " $cc.Stdout $cc.Stderr, dir)
     # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
     # so no sanitizer runtime is needed to check it
     try r.expect(sh(dir, "\"$OLANG\" -c -r nullpeek.olang > out.txt 2>&1") == 0, "nullpeek -c -r did not build", dir)

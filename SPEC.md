@@ -3919,6 +3919,13 @@ implementation may set aside in the local's block's scope (unobservably, since i
 guarantee when or by what underlying storage is reused: it is valid until the owning scope closes, and invalid
 after.
 
+**O8c (nothing earlier).** Nothing a scope holds is reclaimed before the scope closes - not when no reference to it
+is left. So what a loop puts into a scope that outlives the loop stays until that scope closes, however many times the
+loop runs: a field of a struct declared outside it replaced each turn (the old value's storage stays where the struct
+lives), text sent through a channel that outlives it (built where the channel lives, std/chan), an element a List
+removed (`Pop`, `RemoveAt`). A loop meant to run indefinitely builds what one turn needs in its own body, reclaimed each
+turn (O2b), and reuses what it keeps: `List.Clear` and `StringBuilder.Clear` empty a container and keep its storage.
+
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
 SIMD unit loads, and for a cache line, so an array large enough to be worth vectorising is always aligned

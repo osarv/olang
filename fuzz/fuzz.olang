@@ -47,10 +47,10 @@ fn main() ? {
     if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
     if args.Len() > 5 { Cases = try args[5].ParseInt() catch default 30 }
     os.Run("mkdir -p " $os.Quote($Root "/build/fz/found"))
-    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(count + jobs))
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(count))
     chan.Init(queue)
     for i in range count { chan.Send(queue, start + i) }
-    for w in range jobs { chan.Send(queue, -1) }
+    chan.Close(queue)
     join {
         for w in range jobs { spawn worker(queue, w) }
     }
@@ -67,9 +67,7 @@ fn usage() {
 fn worker(queue mut chan.Chan<I64>&, w I64) {
     dir String& = $Root "/build/fz/w" $w
     os.Run("mkdir -p " $os.Quote(dir))
-    for {
-        seed := chan.Recv(queue)
-        if seed < 0 { return }
+    for seed in queue {
         runSeed(seed, dir)
         Ran.AtomicAdd(1)
     }

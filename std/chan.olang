@@ -41,6 +41,17 @@ extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 # one-slot ring whose sender then waits for that one value to be taken - values are taken in the order they were
 # placed, so a sender knows its own by counting (sent, taken). A negative capacity is out of range, as an array's
 # length is (D14b).
+#
+# Close says no more values will be sent: what is buffered is still received, in order, and after that Recv and
+# RecvUntil fail with ChanError.CLOSED, and "for v in c" ends. The side that sends is the side that closes - after its
+# last Send, or after joining every task that sends - so a Send on a closed channel, or one still blocked when the
+# channel closes, is a mistake in the program: it stops it, as a slice out of range does (List.RemoveAt's rule), rather
+# than making every Send of every program something to try. Closing twice changes nothing.
+#
+# What is sent lives where the channel does, being stored in it (O6): a value holding references - text, say - sent
+# through a channel that outlives the loop sending it stays there until the channel's scope closes (O8c), however
+# long ago it was received. A program streaming text indefinitely sends something that holds none (an index, a number)
+# or gives each batch a channel of its own, in a block that ends.
 type Chan<T> struct(cap I32) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
@@ -51,6 +62,7 @@ type Chan<T> struct(cap I32) {
     rendezvous Bool = cap == 0
     sent I64 = 0
     taken I64 = 0
+    closed Bool = false
     lock Array<I64, MutexWords>                    # in the channel itself (T7c): its length is its type's
     notEmpty Array<I64, CondWords>
     notFull Array<I64, CondWords>
@@ -84,34 +96,86 @@ fn take(c mut Chan<<T>>&) T {
     return v
 }
 
+# the failure of a Recv on a closed channel with nothing left in it
+error ChanError {
+    CLOSED
+}
+
+# no more values will be sent: what is buffered is still received, then Recv fails with ChanError.CLOSED. Wakes every
+# task waiting on the channel. Closing a closed channel changes nothing.
+fn Close(c mut Chan<<T>>&) {
+    pthread_mutex_lock(c.lock)
+    c.closed = true
+    pthread_cond_broadcast(c.notEmpty)
+    pthread_cond_broadcast(c.notFull)
+    pthread_mutex_unlock(c.lock)
+}
+
+# whether Close has been called. A channel open now may be closed by the time the answer is used - a receiver learns
+# that it has ended from Recv's error, never from this
+fn IsClosed(c mut Chan<<T>>&) Bool {
+    pthread_mutex_lock(c.lock)
+    closed := c.closed
+    pthread_mutex_unlock(c.lock)
+    return closed
+}
+
+# a Send, the lock held: stops the program if the channel is closed - the lock let go first, so a test that ends this
+# way leaves the channel usable
+fn sendOpen(c mut Chan<<T>>&) {
+    closed := c.closed
+    if closed { pthread_mutex_unlock(c.lock) }
+    assert not closed, "send on a closed channel"
+}
+
+# a rendezvous Send whose value is still in the slot when the channel closes withdraws it - the slot holds only that
+# value, as values leave in order and none was placed after it while the slot was full - and so never completed
+fn withdraw(c mut Chan<<T>>&) {
+    c.tail = 0
+    c.count = 0
+    c.sent = c.sent - 1
+    pthread_cond_broadcast(c.notFull)
+}
+
 # blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
-# taken. "while" is spelled as a do-loop guarded by a re-check, since a condition variable may wake spuriously and the
-# count must be re-read under the lock either way.
+# taken. A condition variable may wake spuriously, so each wait is in a loop re-reading the count under the lock.
 fn Send(c mut Chan<<T>>&, v T) {
     pthread_mutex_lock(c.lock)
-    do {
-        if c.count == c.data.Len() {
-            pthread_cond_wait(c.notFull, c.lock)
-        }
-    } for c.count == c.data.Len()
-    ticket := place(c, v)
-    for c.rendezvous and c.taken <= ticket {
+    for c.count == c.data.Len() and not c.closed {
         pthread_cond_wait(c.notFull, c.lock)
+    }
+    sendOpen(c)
+    ticket := place(c, v)
+    for c.rendezvous and c.taken <= ticket and not c.closed {
+        pthread_cond_wait(c.notFull, c.lock)
+    }
+    if c.rendezvous and c.taken <= ticket {
+        withdraw(c)
+        sendOpen(c)
     }
     pthread_mutex_unlock(c.lock)
 }
 
-# blocks while the channel is empty, then takes the oldest value
-fn Recv(c mut Chan<<T>>&) T {
+# blocks while the channel is empty and open, then takes the oldest value; fails with ChanError.CLOSED once the
+# channel is closed and everything sent before has been taken
+fn Recv(c mut Chan<<T>>&) T ? ChanError {
     pthread_mutex_lock(c.lock)
-    do {
-        if c.count == 0 {
-            pthread_cond_wait(c.notEmpty, c.lock)
-        }
-    } for c.count == 0
+    for c.count == 0 and not c.closed {
+        pthread_cond_wait(c.notEmpty, c.lock)
+    }
+    if c.count == 0 {
+        pthread_mutex_unlock(c.lock)
+        error ChanError.CLOSED
+    }
     v := take(c)
     pthread_mutex_unlock(c.lock)
     return v
+}
+
+# a channel is its own iterator (S9a): "for v in c" receives until the channel is closed and drained - Recv, with the
+# end of a closed channel as the end of the walk
+fn (c mut Chan<<T>>&) Next() T ? Exhausted {
+    return try Recv(c) catch ChanError { error Exhausted.END }
 }
 
 # Send, giving up - with the token's reason - once the token fires while the channel is still full, or, on a
@@ -121,7 +185,7 @@ fn Recv(c mut Chan<<T>>&) T {
 fn SendUntil(c mut Chan<<T>>&, v T, tok cancel.Token&) ? cancel.Stopped {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
-    for c.count == c.data.Len() {
+    for c.count == c.data.Len() and not c.closed {
         if tok.Cancelled() {
             pthread_mutex_unlock(c.lock)
             try tok.Reason()
@@ -129,34 +193,40 @@ fn SendUntil(c mut Chan<<T>>&, v T, tok cancel.Token&) ? cancel.Stopped {
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notFull, c.lock, ts)
     }
+    sendOpen(c)
     ticket := place(c, v)
-    for c.rendezvous and c.taken <= ticket {
+    for c.rendezvous and c.taken <= ticket and not c.closed {
         if tok.Cancelled() {
-            # still in the one slot - values leave in order, and none was placed after it while the slot was full
-            c.tail = 0
-            c.count = 0
-            c.sent = c.sent - 1
-            pthread_cond_broadcast(c.notFull)
+            withdraw(c)
             pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notFull, c.lock, ts)
+    }
+    if c.rendezvous and c.taken <= ticket {
+        withdraw(c)
+        sendOpen(c)
     }
     pthread_mutex_unlock(c.lock)
 }
 
-# Recv, giving up - with the token's reason - once the token fires while the channel is still empty
-fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) T ? cancel.Stopped {
+# Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
+# with ChanError.CLOSED once it is closed and drained
+fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) T ? cancel.Stopped + ChanError {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
-    for c.count == 0 {
+    for c.count == 0 and not c.closed {
         if tok.Cancelled() {
             pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notEmpty, c.lock, ts)
+    }
+    if c.count == 0 {
+        pthread_mutex_unlock(c.lock)
+        error ChanError.CLOSED
     }
     v := take(c)
     pthread_mutex_unlock(c.lock)
@@ -174,7 +244,7 @@ fn produce(c mut Chan<I32>&, n I32) {
 
 fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
     for i in range n {
-        total.v = total.v + Recv(c)
+        total.v = total.v + (try Recv(c) catch { fail })
     }
 }
 
@@ -252,7 +322,7 @@ fn sendReadings(c mut Chan<reading>&, n I32) {
 
 fn sumReadings(c mut Chan<reading>&, n I32, total mut sumBox&) {
     for i in range n {
-        r := Recv(c)
+        r := try Recv(c) catch { fail }
         total.v = total.v + r.sensor
     }
 }
@@ -270,12 +340,12 @@ test "a channel carries any element type" {
     Init(f)
     Send(f, 1.5)
     Send(f, 2.25)
-    assert Recv(f) + Recv(f) == 3.75
+    assert (try Recv(f) catch { fail }) + (try Recv(f) catch { fail }) == 3.75
     t mut Chan<String&>& = Chan<String&>(2)
     Init(t)
     Send(t, "one")
     Send(t, $(1 + 1))
-    assert Recv(t) == "one" and Recv(t) == "2"
+    assert (try Recv(t) catch { fail }) == "one" and (try Recv(t) catch { fail }) == "2"
 }
 
 # capacity 0: each Send returns only once its value has been received, so the sender is never more than one value
@@ -301,4 +371,78 @@ test "a channel of capacity 0 is a rendezvous" {
     assert c.count == 0
     tok2 := cancel.After(20)
     assert (try RecvUntil(c, tok2) catch cancel.Stopped.TIMED_OUT default -1 catch default -2) == -1
+}
+
+# Close: what was buffered before it is still received, in order, then Recv fails with CLOSED - again on every call
+test "a closed channel gives what it holds, then fails with CLOSED" {
+    c mut Chan<I32>& = Chan<I32>(4)
+    Init(c)
+    Send(c, 1)
+    Send(c, 2)
+    Send(c, 3)
+    assert not IsClosed(c)
+    Close(c)
+    Close(c)                                 # again: nothing changes
+    assert IsClosed(c)
+    assert (try Recv(c) catch default -1) == 1
+    tok := cancel.After(1000)
+    assert (try RecvUntil(c, tok) catch default -1) == 2
+    sum := 0
+    for v in c { sum += v }                  # the rest, then the loop ends
+    assert sum == 3
+    assert (try Recv(c) catch ChanError.CLOSED default -7) == -7
+    assert (try RecvUntil(c, tok) catch ChanError.CLOSED default -8 catch cancel.Stopped default -9) == -8
+}
+
+# "for v in c" ends at the close: a producer sends and closes, the consumer walks the channel - buffered and rendezvous
+fn sendThenClose(c mut Chan<I32>&, n I32) {
+    for i in range n { Send(c, i) }
+    Close(c)
+}
+
+fn walkSum(c mut Chan<I32>&, total mut sumBox&) {
+    for v in c { total.v = total.v + v }
+}
+
+test "for v in c receives until the channel is closed and drained" {
+    for cap in I32[3, 0] {
+        c mut Chan<I32>& = Chan<I32>(cap)
+        Init(c)
+        total mut sumBox& = sumBox(0)
+        join {
+            spawn sendThenClose(c, 100)
+            spawn walkSum(c, total)
+        }
+        assert total.v == 4950
+    }
+}
+
+# several receivers blocked on an empty channel are all woken by the close, each ending its loop
+fn walkCount(c mut Chan<I32>&, seen mut sumBox&) {
+    for v in c { seen.v.AtomicAdd(1) }
+}
+
+test "Close wakes every task waiting to receive, and RecvUntil sees it before its deadline" {
+    c mut Chan<I32>& = Chan<I32>(2)
+    Init(c)
+    seen mut sumBox& = sumBox(0)
+    got mut sumBox& = sumBox(0)
+    tok := cancel.After(60000)
+    start := cancel.NowNs()
+    join {
+        for w in range 3 { spawn walkCount(c, seen) }
+        spawn waitClosed(c, tok, seen, got)
+        for i in range 10 { Send(c, i) }
+        Close(c)
+    }
+    assert seen.v.AtomicLoad() == 10 and got.v == 1
+    assert cancel.NowNs() - start < 30000000000
+}
+
+fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sumBox&) {
+    for {
+        v := try RecvUntil(c, tok) catch ChanError.CLOSED { break } catch cancel.Stopped { return }
+        seen.v.AtomicAdd(1)
+    }
+    got.v = 1
 }

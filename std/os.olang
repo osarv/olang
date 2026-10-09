@@ -532,6 +532,30 @@ test "Create writes through a descriptor, a piece at a time" {
     assert closed
 }
 
+# io.Lines never remembers the end of a file: after Exhausted, Next reads again, so a reader follows a file being
+# appended to (tail -f) - a line given whole, and one the writer ended the file in the middle of given as it stands
+test "io.Lines follows a file another descriptor is still writing" {
+    assert Run("mkdir -p build/os_files") == 0
+    w := try Create("build/os_files/follow") catch default -1
+    assert w >= 0
+    try io.Write(w, "first\n") catch { fail }
+    r := try Open("build/os_files/follow") catch default -1
+    lines := io.Lines(r, 4)
+    assert (try lines.Next() catch default "?") == "first"
+    assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
+    assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
+    try io.Write(w, "second line\nthi") catch { fail }
+    assert (try lines.Next() catch default "?") == "second line"
+    assert (try lines.Next() catch default "?") == "thi"
+    assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
+    try io.Write(w, "rd\n\n") catch { fail }
+    assert (try lines.Next() catch default "?") == "rd"
+    assert (try lines.Next() catch default "?") == ""
+    assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
+    try Close(w) catch { fail }
+    try Close(r) catch { fail }
+}
+
 test "Stat gives the kind, the size, and the modification time to the nanosecond" {
     assert Run("mkdir -p build/os_files && printf 12345 > build/os_files/s.txt") == 0
     assert Run("touch -d @1700000000.123456789 build/os_files/s.txt") == 0
