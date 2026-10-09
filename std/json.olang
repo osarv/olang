@@ -3,7 +3,7 @@
 #
 #     doc := try json.Parse(text)
 #     name := try (try doc["users"][0]["name"]).AsStr()
-#     io.Print(json.Encode(doc, "  "))
+#     try io.Print(json.Encode(doc, "  "))
 #
 # A value is a Json, an enum held by reference (T17d): a tree whose arrays and objects hold their parts by reference,
 # matched with nested patterns (case Json.Arr(items)). A tree never changes once built - every payload is read-only -
@@ -47,7 +47,7 @@ type Json enum {
 
 # an object: its members' names and values, in the order they were written. Names need not be unique; asking for a
 # name gives the LAST member by it, as most readers of JSON do. Built from the two arrays, which must be as long as
-# each other: Json.Obj(json.Object(String&["a", "b"], Json&[Json.Num(1.0), Json.Null])). Objects with more than
+# each other: Json.Obj(Object(String&["a", "b"], Json&[Json.Num(1.0), Json.Null])). Objects with more than
 # eight members are indexed by a hash of their names when built, so asking costs the same whatever their size.
 type Object struct(Keys Array<String&>&, Values Array<Json&>&) {
     Keys
@@ -289,6 +289,7 @@ fn (a Json&) Eq(b Json&) Bool {
                 nomatch { return false }
             }
         }
+        nomatch { return false }
     }
 }
 
@@ -312,6 +313,7 @@ fn (j Json&) Hash() I64 {
             for i in range o.Len() { h = h + (nameHash(o.Keys[i]) ^ o.Values[i].Hash()) * 1099511628211 }
             return h
         }
+        nomatch { return 0 }
     }
 }
 
@@ -1315,6 +1317,7 @@ fn (w mut writer&) value(j Json&, depth I64) {
             w.newline(depth)
             w.out.PushChar('}')
         }
+        nomatch { w.out.Push("null") }              # a null reference - and nomatch keeps Str evaluable (see Eq)
     }
 }
 

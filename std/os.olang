@@ -1,4 +1,5 @@
-# Os - the program's command line and environment, running commands, and files and directories. Ordinary olang on
+# Os - the program's command line and environment, running programs (Run through a shell, Exec without one), and files
+# and directories. Ordinary olang on
 # top of "extern fn" (§11), like std/io: the C library's own functions where they take and give numbers, and the
 # runtime's (X6) where C would hand back a pointer, a structure or errno. A path is text; the C library wants it
 # NUL-terminated, so each call here passes "$path "\0"".
