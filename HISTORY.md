@@ -12133,3 +12133,84 @@ returned would make `o13acopywrap` and `o14ccopyslice` compile (soundly, but aga
 built here and returned (`q P& = P(x); return NB(q)`, `c mut Counter& = Counter(41); return c`, a try default `n`), which
 now lives in the result scope - correct, and pinned as `o26areflocal` (a run case, under `-b`, `-d` and `-i`); the
 cases keep their purpose with a by-value parameter, the function's own copy, which cannot move.
+
+### A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision QC)
+
+**The hole.** The review of tonight's merges (#4) found that shallow permission (T25b, the user's call of 2026-10-07)
+let anything read-only be changed through a copy of it, wherever its type held a `mut` reference: `x := G; x.Push(1)`
+with `G` an immutable global `List` changed `G`'s list. It did so before List and Map became handles too - the copy
+shared the chunks then - and it reached every value holding a `mut` reference field: a `Matrix` copied out of a
+read-only parameter could be filled. `G.Push(1)` itself was refused (an immutable global is lent read-only); the copy
+was a writable local, so lending it to `Push`'s `mut` receiver was allowed, and `Push` wrote through the reference the
+copy shared with `G`. The options put to the user: deep permission (reversing their shallow call), List and Map as
+reference-only types (every List field and local would carry `&`), or one rule about copies. They chose the rule.
+
+**The rule.** A value whose type holds writable references - a `mut` reference among its fields, its payloads, or the
+elements of its fixed arrays held by value, never looked for through a reference (O25g's walk, `TypeHoldsWritableRefs`)
+- copied out of a place reached read-only is read-only itself. It is not lent writably (a `mut` receiver, a `mut &`
+parameter, a borrow into a `mut T&`), nothing is written through its `mut` references (an assignment through one, or
+one passed on or kept where it may be written through), and it is not stored where it can be written: assigned into
+writable storage held by value, made an array literal's element, a fill or an enum case's payload, or returned as a
+by-value result (its caller holds that writably). A written type declares a writable value, so `x List<I64> = G` is
+an error naming `G.Clone()` - or "from its parts" for a type with no `Clone` - and `x := G` is the read-only copy. Its
+own plain parts remain its own storage, and the local may be assigned anew.
+
+**What was settled while building it (mine, within the user's decision).**
+1. *Places reached read-only*: an immutable global; what a read-only reference names, and any field, element, slice or
+   payload reached through one; a captured value (D16c); a read-only copy and what it holds by value. The place itself
+   stays shallow: its references keep their types' permission, so `EvHold.a[0] = 9` through an immutable global's `mut`
+   field - a corpus test of K1 - stands. The asymmetry is deliberate: a copy is where the place's read-only-ness was being
+   lost, since its own storage is writable and could be lent, and a copy that wrote through what it shares would be a
+   writable alias of the place under another name.
+2. *Copies*: a `:=` local takes its initializer's read-only-ness (`roInherit`), as do the hidden locals the language
+   makes (a membership test's, a parallel assignment's); a for-in element is read-only exactly when the collection it
+   walks is reached read-only, whichever way the loop walks it - an index, `At`, `RunFrom`, an iterator (`roFrom` points
+   at the collection, not at the walk's own temporaries); a match binding exactly when the place matched is, and a later
+   alternative reading a read-only place makes it so (`roCopy`).
+3. *By-value parameters*: a parameter is the callee's own copy (D9), so whether its argument may be a read-only copy is
+   read off the body - a parameter whose copy the body writes through, lends writably or stores, or passes to a callee
+   that does, needs a writable argument (`roNeedsWritable`). A use whose read-only-ness depends on a parameter marks it
+   rather than erroring, and the marks are settled by a fixed point once every body is checked (a call may be checked
+   before its callee, and a callee's need may come from its own callee - `settleReadOnlyArgs`); then each call passing a
+   read-only copy to a parameter that needs a writable one is the error, with a note at the parameter. A body never
+   checked is assumed to need it; an extern needs nothing. This keeps by-value readers (`fn total(l List<I64>) I64`)
+   usable with read-only arguments, where "a by-value parameter of such a type takes only writable arguments" would have
+   refused them.
+4. *Function values*: a call through a function value cannot see whose body it reaches, so a function made a value - a
+   named function, a lambda, a type's `Call` (E31) - may have no parameter needing a writable argument. The other way,
+   treating every call through a function value as one that writes, would have refused `Map`, `Filter`, `Fold` and
+   `Sort` over arrays of handles (`Array<Matrix<F32>>`), which pass their elements by value to the callback.
+5. *Catch defaults* needed nothing: R11 admits a by-value default holding references only when it builds everything it
+   holds, so a read-only copy cannot be one.
+6. *Diagnostics*: one row each, in T25c's words, naming the fix; a note at the local the copy was made as (`'x' copies
+   'G', reached read-only, so it is read-only - 'x := G.Clone()' would be one of its own`). B11's note "'p' is declared
+   read-only here - declare it 'p mut T&'" now reaches parameters and receivers (the parameter's written type, recorded
+   as `permByType`) and the arms of a conditional or a match, which is what lets `tools/perm_mut.py` migrate code using
+   linalg's destination forms.
+
+**std/linalg.** A `Matrix` is a handle (`Data mut Array<T>&`), so it is exactly such a type - and its destination forms
+had read-only receivers and parameters, writing the elements through `Data` shallowly. With them read-only the rule
+protected nothing: `x := G; x.Fill(0)` lent the read-only copy read-only to `Fill`, which wrote `G`'s elements. They take
+`mut` now - `Set`, `Fill`, `SetIdentity`, `Copy`, `Add`, `Sub`, `Scale`, `AddScaled`, `AddRow`, `AddOuterDifference`,
+`Clamp`, `AddScaledMasked`, `NormalizeRows`, the random fills, `Map`/`Map2`/`Map3`'s destination, `RowSoftmax`, `Convert`,
+`Activate`'s `y`, `ActivationBackward`'s `dz`, every product's `c` (and `GemmAct`'s `pre`), `Im2col`'s `cols`, `Ger`'s `a`,
+the column reductions' `out` - which is also what D9 asks: a signature says what a call writes. The **views** (`Row`,
+`RowRange`, `ColRange`, `Block`, `Reshape`, `Heads`, `Stacked`, `Batch.At`, `T()`) keep read-only receivers and hand out
+writable views, shallowly. With no permission polymorphism the alternative - `mut` receivers - would have made a
+read-only view of a read-only matrix inexpressible (oann reads rows and blocks of read-only inputs everywhere), so
+`x := G; x.Block(0, 0, 1, 1).Fill(0)` still writes `G`'s elements: a recorded limit of shallow permission, the library's
+choice. (A first version gave `Row` a `mut` receiver; it went back, for consistency with the other views.)
+
+**oann** (read only; its sources copied and migrated in a scratch directory): every module compiled with no error on the
+previous compiler and 1-337 errors on this one, nearly all the same few in `ops.olang` and `conv.olang` repeated through
+their importers - oann's functions take `y linalg.Matrix<T>&` read-only and call linalg's destination forms on it.
+`tools/perm_mut.py` with this compiler migrates it in three rounds, adding 54 `mut`s (46, then 8), after which every
+module compiles. (Measured below.)
+
+**The evaluator** needed nothing: this is permission in the type checker, changing no value. A corpus global
+(`QcBaked`) is baked through read-only copies - a `:=` copy, a for-in over a read-only parameter, a by-value reader,
+`Clone()` then pushes - and asserted equal to the same computation at run time.
+
+**Found on the way, left as is**: pushing to a for-in copy of a `List` element (`for l in ls { l.Push(1) }`) is O17's
+error whatever the collection's permission - the recorded r06 limit (an obligation cannot tell a copy's storage from its
+contents) - so the corpus test writes through a writable collection's `Box` elements instead.

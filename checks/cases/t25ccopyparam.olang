@@ -1,0 +1,14 @@
+# check: fail error[T25c]: this copies a read-only Box, and a written type declares a writable one
+# T25c: a value copied out of a read-only reference parameter is read-only
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn f(r Box&) {
+    x Box = r
+    x.P[0] = 1
+}
+fn main() ? {
+    f(GB)
+}

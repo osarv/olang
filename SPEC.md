@@ -843,7 +843,8 @@ fn grab(l mut List&) mut Node&l    a writable one
 ```
 
 It is **shallow**: a reference stored inside a referent keeps the permission its own type gives, whichever
-reference it was reached through.
+reference it was reached through. A **copy** of a value holding such references, made out of a place reached
+read-only, is read-only itself (T25c) - the place's own references stay as their types say.
 
 **`mut` speaks only about what a reference reaches**, in every position: a type argument or element, a field, a
 local, a parameter, a receiver, a result. Whether a **binding** may be assigned is never written: a local (D11) and a
@@ -873,6 +874,41 @@ a read-only one otherwise. A slice (E16a) has its base's
 permission; a conditional or a match value (E28, S12b) is writable only when every value it can give is; `as` (E32)
 gives the payload's own permission, and a checked index (`try c[i]`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
+
+**Read-only copies.** A value whose type **holds writable references** - a `mut` reference among its fields, its enum
+payloads or the elements of its fixed arrays held by value, never looked for through a reference (O25g's walk) - shares
+those references with every copy of it. So a copy made out of a place reached **read-only** is **read-only** itself:
+otherwise copying a read-only `List` (whose state is reached through a writable reference) and pushing to the copy
+would change the list the read-only place holds. A place is reached read-only when it is an immutable global; what a
+read-only reference names, and any field, element, slice or payload reached through one; a captured value (D16c); or a
+read-only copy, and what is held in it by value. The copy is read-only whichever way it is made: a `:=` local
+(`x := G`), a local the language makes for its own use, a for-in element (exactly when the collection walked is reached
+read-only), a match binding (exactly when the matched place is, any alternative reading one making it so), a by-value
+parameter (below). A read-only copy:
+
+- is not **lent writably**: not as a `mut` receiver, not to a `mut &` parameter, not borrowed into a `mut T&` (E12c);
+- **writes nothing through** its writable references - no assignment through one, and none passed on or kept where it
+  may be written through. Its own plain parts are its own storage and may be assigned, and the local itself may be
+  assigned anew;
+- is not **stored where it can be written**: assigned into writable storage held by value, made an array literal's
+  element, an array's fill or an enum case's payload, or returned as a by-value result (which its caller holds
+  writably).
+
+A **written type declares a writable value**, so `x List<I64> = G` from a read-only `G` is an error: `x := G` is the
+read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type (`G.Clone()`) or from
+its parts. A fresh value - a call's result, a literal, an instance - is writable as always, and so is a copy of
+anything reached writably.
+
+A **by-value parameter** is the callee's own copy (D9), and whether that copy must be writable is read off the
+callee's **body**: a parameter whose copy the body writes through, lends writably or stores - or passes to a callee
+that does, settled over every call once every body is checked - takes only a writable argument, and passing a
+read-only copy to it is an error at the call; any other accepts either. A function used as a **value** - a named
+function, a lambda (D16), a type's `Call` (E31) - may have no such parameter, since a call through a function value
+cannot see whose body it reaches. A constructor is a callee like any other: a field punning a parameter keeps it, so
+the argument must be writable.
+
+This is permission in the type checker only: it changes no value and no run time, and the evaluator (K1) is
+unaffected by it.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
 compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element)
@@ -1282,9 +1318,10 @@ the call. The compile-time evaluator (K1) gives both the same meaning.
 without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
 reference parameter names - the **caller's own instance** - may be written only when its type is a writable
 reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
-parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing. Whether
-a call writes to the caller's value is therefore readable from the signature alone: `&` says whose instance it is,
-`mut` says whether it may be written, and the two are independent. A parameter's reference marker may
+parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
+where it holds writable references and the body writes through them, lends it writably or keeps it, the argument
+may not be a read-only copy (T25c). Whether a call writes to the caller's value is therefore readable from the
+signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. A parameter's reference marker may
 name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:

@@ -1,0 +1,12 @@
+# check: fail error[T25c]: a copy of a read-only List<I64> cannot be returned as a writable value
+# also: made with 'G.Clone()', or a read-only reference
+# T25c: a by-value result is writable to its caller, so a copy of a read-only place cannot be returned as one
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn get() List<I64> { return G }
+fn main() ? {
+    get().Push(1)
+}

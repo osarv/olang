@@ -4197,6 +4197,30 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   binds the callee's scope variable to the copy's storage (the loop body), and an obligation cannot tell the referent's
   storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles -
   which the error's note now says.
+- **A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision
+  QC, recommended by the coordinator).** Shallow permission let a read-only `List`/`Map` - any value holding a `mut`
+  reference - be changed through a copy: `x := G; x.Push(1)` changed an immutable global's list (the review of tonight's
+  merges, #4). Now a value whose type holds writable references (O25g's walk: fields, payloads, fixed-array elements by
+  value, never through a reference) copied out of a place reached read-only - an immutable global, what a read-only
+  reference names and anything reached through one, a capture, a read-only copy - is read-only itself: it is not lent
+  writably, nothing is written through its `mut` references, and it is not stored where it can be written (assigned,
+  an array literal's element or fill, a payload, a by-value result); `x T = G` is an error naming `G.Clone()` (or "from
+  its parts"), `x := G` the read-only copy. Permission stays shallow: the place's own references keep their types'
+  permission (`EvHold.a[0] = 9` through an immutable global's `mut` field stands). **Decided (mine)**: for-in elements and
+  match bindings are read-only exactly when the collection walked / place matched is (any alternative reading one making
+  a binding so); a **by-value parameter's** need is read off the callee's body (written through, lent writably, stored, or
+  passed to a callee that does - a fixed point once every body is checked; an unchecked body is assumed to need it), so
+  readers take read-only copies and only writers refuse them, at the call; a function made a **value** (named, lambda,
+  `Call`) may have no such parameter, since its callers cannot see its body - treating every call through a function
+  value as writing would have refused `Map`/`Filter`/`Fold` over arrays of handles; R11 already keeps a read-only copy
+  out of a `catch default`. **std/linalg**: destination forms (`Set`, `Fill`, `Map`, `Gemm`'s `c`, `Activate`'s `y` ...)
+  take `mut` - a signature shows what a call writes (D9), and a read-only receiver writing through `Data` would have let a
+  read-only copy be filled - while views (`Row`, `RowRange`, `Block`, `Reshape`, `T()` ...) keep read-only receivers
+  and hand out writable views, shallowly: with no permission polymorphism a read-only view of a read-only matrix would
+  otherwise be inexpressible, so `x := G; x.Block(...).Fill(0)` still writes G's elements (recorded limit). **B11**: the
+  "declare it 'p mut T&'" note now reaches parameters and receivers and the arms of a conditional or match, so
+  `tools/perm_mut.py` migrates code using linalg's destinations (oann: 54 `mut`s, below). Compile-time only: the evaluator
+  needed nothing, shown by a global it bakes through read-only copies beside the same computation at run time.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
