@@ -1760,8 +1760,9 @@ Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly w
 function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
 is (P9), and a compile-time error on anything else.
 
-**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` (or `eq`, private to its module as every
-operator method is, E31): one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
+**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` - always capitalized, as `Str` is (E11c): equality
+belongs to the type, not to one module's view of it, so `==` in the declaring module and in a `Map` of another agree;
+an `eq` is an ordinary method. It takes one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
 no errors, and neither the receiver nor the parameter `mut`. Any other method named `Eq` is a compile-time error.
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
 values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A

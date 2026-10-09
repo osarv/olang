@@ -1741,7 +1741,7 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
             b.name = *(struct str*)ListGetIdx(&t.genericOrigin->typeParams, i);
             struct type before = *(struct type*)ListGetIdx(&t.typeArgs, i);
             b.type = TypeSubstitute(before, bindings);
-            if (!TypeIsSame(before, b.type)) changed = true;
+            if (!TypeIsSameStrict(before, b.type)) changed = true; //T25b: a permission is part of an argument too
             ListAdd(&inner, &b);
         }
         if (!changed) return t;
@@ -4125,7 +4125,10 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         char c = a->name.ptr[0];
         bool pub = c == sh->name[0], priv = c == sh->name[0] - 'A' + 'a';
         if (!pub && !priv) continue;
-        if (priv && !strcmp(sh->name, "Str")) continue; //E11c: only "Str" renders; a "str" is an ordinary method
+        //E11c/E10a: only "Str" renders and only "Eq" compares - a "str" or an "eq" is an ordinary method. Equality and a
+        //rendering belong to the type, not to one module's view of it: a private "eq" would make "==" in the declaring
+        //module and in a Map from another disagree about the same two values
+        if (priv && (!strcmp(sh->name, "Str") || !strcmp(sh->name, "Eq"))) continue;
         if (a->type.vars.len != sh->operands + 1) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
         else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
@@ -5224,8 +5227,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     //with that Eq (E10b)
     struct type* fr = SemanticMethodReceiver(f);
     if (fr && receiverIsBuiltin(*fr) && isDeclaredArray(concrete)) {
-        if (StrCmp(m->name, StrFromCStr("Hash")) && (VarGetMethod(concrete.owner, StrFromCStr("Eq"), concrete)
-                || VarGetMethod(concrete.owner, StrFromCStr("eq"), concrete))) return NULL;
+        if (StrCmp(m->name, StrFromCStr("Hash")) && VarGetMethod(concrete.owner, StrFromCStr("Eq"), concrete)) return NULL;
         concrete = underlyingArray(concrete);
         concrete.extendsBase = false;
     }
@@ -8279,8 +8281,9 @@ static const char* operatorMethodName(struct checkCtx* ctx, struct type t, const
 
 //E10a: the Eq "==" on t calls, if t declares one of the right shape
 static const char* eqMethodName(struct checkCtx* ctx, struct type t) {
-    const char* n = operatorMethodName(ctx, t, "Eq");
-    return n && eqWellShaped(methodNamedOn(t, n)) ? n : NULL;
+    (void)ctx;
+    struct var* m = methodNamedOn(t, "Eq"); //always capitalized, as Str is (E11c)
+    return m && eqWellShaped(m) ? "Eq" : NULL;
 }
 
 static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
@@ -8550,7 +8553,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
 }
 
 //E10b: whether a type's == comes from an Eq it declares - then only a Hash it declares can agree with it
-static bool typeDeclaresEq(struct type v) { return methodNamedOn(v, "Eq") || methodNamedOn(v, "eq"); }
+static bool typeDeclaresEq(struct type v) { return methodNamedOn(v, "Eq") != NULL; }
 
 static struct type typeBare(struct type t) {
     t.structMAlloc = false;
