@@ -188,3 +188,102 @@ test "ParseFloat and ShortestDecimal, evaluated while compiling as at run time" 
     assert floatsRead() == floatsReadBaked
     assert floatsMutable == 1 and float("1e23") == 1e23
 }
+
+# what ParseInt makes of t in base, or the word it fails with
+fn intIn(t String&, base I64) String {
+    v := try t.ParseInt(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    return $v
+}
+
+# what ParseUint makes of t in base, or the word it fails with
+fn uintIn(t String&, base I64) String {
+    v := try t.ParseUint(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    return $v
+}
+
+test "ParseInt and ParseUint read the digits of any base from 2 to 36" {
+    assert intIn("ff", 16) == "255" and intIn("FF", 16) == "255" and intIn("-7f", 16) == "-127" and intIn("+10", 16) == "16"
+    assert intIn("1010", 2) == "10" and intIn("777", 8) == "511" and intIn("z", 36) == "35" and intIn("Zz", 36) == "1295"
+    assert intIn("7fffffffffffffff", 16) == "9223372036854775807" and intIn("-8000000000000000", 16) == "-9223372036854775808"
+    assert intIn("8000000000000000", 16) == "OVERFLOW" and intIn("-8000000000000001", 16) == "OVERFLOW"
+    assert intIn("2", 2) == "INVALID" and intIn("8", 8) == "INVALID" and intIn("g", 16) == "INVALID"
+    assert intIn("0x10", 16) == "INVALID" and intIn("1_000", 10) == "INVALID"     # no prefix, no separators
+    assert uintIn("ffffffffffffffff", 16) == "18446744073709551615" and uintIn("10000000000000000", 16) == "OVERFLOW"
+    assert uintIn("18446744073709551615", 10) == "18446744073709551615" and uintIn("18446744073709551616", 10) == "OVERFLOW"
+    assert uintIn("1" $"0".Repeat(64), 2) == "OVERFLOW" and uintIn("1".Repeat(64), 2) == "18446744073709551615"
+    assert uintIn("+7", 10) == "7" and uintIn("-7", 10) == "INVALID" and uintIn("-0", 10) == "INVALID"
+    assert uintIn("", 10) == "EMPTY" and uintIn("+", 10) == "INVALID" and intIn("-", 16) == "INVALID"
+    assert uintIn("42", 10) == "42" and (try "42".ParseUint() catch default 0) == 42      # base 10 unless another is given
+}
+
+test "base 0 reads an integer as olang writes its literal (L10)" {
+    assert intIn("0", 0) == "0" and intIn("007", 0) == "7" and intIn("1_000_000", 0) == "1000000"   # 0 is no octal prefix
+    assert intIn("0xFF_FF", 0) == "65535" and intIn("0XfF", 0) == "255" and intIn("0b1010_1010", 0) == "170"
+    assert intIn("0B11", 0) == "3" and intIn("-0x10", 0) == "-16" and intIn("+0b1", 0) == "1"
+    assert intIn("0xFFFFFFFFFFFFFFFF", 0) == "-1"                # a bit pattern, read as an I64 (L10a)
+    assert intIn("0x8000000000000000", 0) == "-9223372036854775808" and intIn("-0x1", 0) == "-1"
+    assert intIn("9223372036854775807", 0) == "9223372036854775807" and intIn("9223372036854775808", 0) == "OVERFLOW"
+    assert intIn("-9223372036854775808", 0) == "-9223372036854775808"
+    assert uintIn("18446744073709551615", 0) == "18446744073709551615" and uintIn("18_446_744_073_709_551_616", 0) == "OVERFLOW"
+    assert uintIn("0xFFFF_FFFF_FFFF_FFFF", 0) == "18446744073709551615" and uintIn("0x1_0000_0000_0000_0000", 0) == "OVERFLOW"
+    assert uintIn("0b" $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" $"0".Repeat(64), 0) == "OVERFLOW"
+    # a '_' stands between two digits (L10b), and a prefix needs digits of its own base after it
+    for bad in String&["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1",
+                       "0x-1", "--1", "0_x1"] {
+        assert intIn(bad, 0) == "INVALID" and uintIn(bad, 0) == "INVALID"
+    }
+    assert intIn("", 0) == "EMPTY" and uintIn("-1", 0) == "INVALID"
+}
+
+# every reading above, as one text - computed while compiling (K2) into parsedBaked, and at run time where its argument
+# is a mutable global, which the evaluator may not read
+fn parsedAll(rounds I64) String {
+    b := StringBuilder()
+    for r in range rounds {
+        for t in String&["0", "-17", "ff", "0xFF_FF", "0b1_0", "-0x10", "1_000", "18446744073709551615", "zz", "", "0x"] {
+            for base in I64[0, 2, 10, 16, 36] {
+                b.Push(intIn(t, base))
+                b.PushChar(' ')
+                b.Push(uintIn(t, base))
+                b.PushChar(';')
+            }
+        }
+    }
+    return b.ToString()
+}
+parsedBaked := parsedAll(1)
+parsedRounds mut I64 = 1
+
+test "ParseInt and ParseUint, evaluated while compiling as at run time" {
+    assert parsedAll(parsedRounds) == parsedBaked
+    assert parsedBaked.StartsWith("0 0;0 0;0 0;0 0;0 0;-17 INVALID;")
+}
+
+test "PadStart and PadEnd make text a column wide" {
+    assert "7".PadStart(3) == "  7" and "7".PadEnd(3) == "7  " and "ab".PadEnd(4, '.') == "ab.." and "ab".PadStart(4, '*') == "**ab"
+    assert "abc".PadStart(3) == "abc" and "abcd".PadStart(2) == "abcd" and "abcd".PadEnd(0) == "abcd"    # never cut
+    assert "".PadStart(2) == "  " and "".PadEnd(0) == "" and "x".PadStart(-5) == "x"
+    assert ("-7").PadStart(4, '0') == "00-7"                     # text has no sign: padded as it is
+    s String& = "kept"
+    p := s.PadStart(6)
+    p[0] = '>'
+    assert s == "kept" and p == "> kept"                          # new text: the receiver is unchanged
+}
+
+test "the integers pad as numbers, zeros after a sign" {
+    n I64 = -7
+    assert n.PadStart(4, '0') == "-007" and n.PadStart(4) == "  -7" and n.PadEnd(4) == "-7  " and n.PadStart(1, '0') == "-7"
+    assert (42).PadStart(5) == "   42" and (42).PadStart(5, '0') == "00042" and (42).PadEnd(5, '.') == "42..."
+    b I8 = -128
+    h I16 = 300
+    u U16 = 65535
+    w U32 = 4000000000
+    q U64 = 18446744073709551615
+    assert b.PadStart(6, '0') == "-00128" and h.PadStart(4) == " 300" and u.PadEnd(6) == "65535 "
+    assert w.PadStart(11, '0') == "04000000000" and q.PadStart(21) == " 18446744073709551615" and q.PadEnd(3) == $q
+    line I32 = 7
+    caret := $line.PadStart(4) " | " $" ".Repeat(5) "^"
+    assert caret == "   7 |      ^"
+}
