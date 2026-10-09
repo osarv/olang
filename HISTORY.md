@@ -12216,6 +12216,162 @@ during another worktree's verify, not a finding):
    is one" can only be written with G26's `if N > 2`. `fuzz/repro/trygenericindex.olang`; the generator writes a
    non-literal index there.
 
+### A review of tonight's merges, fixed (O1b/P2, O4b/D9, E10/K1, D9b, S9c, B3, D11a, T29, X6, 2026-10-09)
+
+A read-only review of the evening's merges (`/home/user/review/tonight`, reproducers in `repro/`) reproduced eight bugs
+and traced three more. All are fixed here, each with a test, except its finding 4 - a copy of a `List` or `Map` taken
+out of a read-only reference, or out of an immutable global, writes the state every copy shares - which the user
+decided to close rather than document, in a batch of its own.
+
+**RunOnStack and the program's scope (O1b, P2).** Each task reaches the program's scope through a private stand-in,
+folded back at its join, so the scope needs no lock (P2). A thread `os.RunOnStack` makes started with
+`@__olang_prog_scope` at its initial value - the real `@__olang_global_scope` - since nothing in `__olang_stack_main` set
+it. From the main thread that happened to be right (the main thread is blocked in `pthread_join` meanwhile); from a task
+it was not: f's on two tasks, or one task's f and the main thread inside the join block, bumped one arena with no lock.
+The review saw corrupted elements one run in three and `-r` reported the race. `%olang.stackrun` now carries the
+caller's `@__olang_prog_scope` and the thread stores it before calling f - the caller is blocked, so its stand-in is free
+for the thread. std/os's test of it - four tasks, each a RunOnStack thread building into a global array's elements -
+crashes under `-r` with the store taken out (TSan's "nested bug" abort after a SEGV in the arena), and passes, silent,
+with it.
+
+**A temporary stored through a by-value parameter's reference (O4b; the review's P1 with it).** `fn grow(b Box) {
+b.n.next = N(9) }`, `Box` holding `n mut N&`: the checker reads `b.n`'s referent at b's scope variable (O4b's
+`valueRefsHome`), but codegen's `cgResolveEffectiveScope` only followed `valueHome` (O25a/O25h) down a chain of value
+members, never a parameter's `refsHome` - so N(9) was allocated from grow's own scope, closed at its return, and stored
+into the caller's node. Pre-existing (the review reproduced it on the compiler before the permissions batch). Codegen now
+asks the checker (`SemanticValueRefsHome`) where the references a value holds live, so the two agree by construction -
+including a local whose references live in the program's scope (O1b), which had the same fall-through. Building through
+the element of a **generic's array taken by value** (`fn growFirst(x <T>) { x[0].next = N(8) }` with `T` an
+`Array<mut N&>`) had the same use-after-free one step further back: O4b says such a parameter has a scope variable for
+the references it holds, and the code gave one only to a struct or enum - an array (D9a admits one by value only in a
+generic) now has one too, and `RefExactScope` keeps reading the array's own storage as the call's (its D9b copy, or the
+caller's array) rather than at that variable.
+**P1, which had to be fixed with it**: whether a callee may build into a by-value parameter's scope variable was
+`paramWritten` - set where the body writes the parameter itself (D9b's analysis, decision 7 of the permissions batch).
+`b.n.next = ...` writes through `b.n`, a reference, and never marks `b`; masked while the build went to the wrong scope
+anyway, it would have let a caller pass a value whose references live where it cannot say. **Decided (mine)**: a callee
+may build into it wherever what the parameter holds can be stored through (O25g) - by the type, as a reference
+parameter's is by its permission - rather than chasing every path a body can build through (a write through a field, a
+reference passed on to a `mut` parameter, a method receiver, a constructor holding it). For a struct or enum the by-value
+branch of the binding already judged by type; the change reaches a generic's by-value array, and a case shows the
+error it now gives (`o4bbyvaluebuild`, an array read through a `&p` field passed for one).
+
+**`==` on a struct that comes round to its own type (E10, K1).** Study 3's batch made `==` through an array reference
+compare contents. `cgDeepEq` expanded a struct value's comparison inline, field by field; for `type S struct(xs
+Array<S>&)` the field's array comparison loops over elements and compares each S inline again - without end, a stack
+overflow in the compiler. An enum's payload was already compared by a function per type (`cgChoiceEqFn`), registered
+before its body is emitted so the body can call it. A struct whose comparison walks back into its own type - through
+value fields and array elements, held by value or by reference, stopping at a struct or enum reference (identity) and at
+an enum (its own function) - is now compared by `@olang.structeq.<type>` the same way; any other struct is still
+inline, so no existing comparison's code changed. Two types reaching each other, a generic one and one inside an enum
+payload are pinned by a corpus test, baked (K2) and decided (S18c) as at run time.
+**Data that holds itself** (`xs[0] = s`) is then compared without end at run time, as any unbounded recursion runs - E10
+says so now. The evaluator segfaulted on it, in `-i` and while compiling: its comparison had no depth guard. **Decided
+(mine)**: each level `==` descends - a part of an aggregate, the array a reference names - counts as one call against
+the evaluator's depth limit (2,000 while compiling, 100,000 under `-i`) on top of the calls already open, and against its
+stack guard - since at run time each level of a type that comes round to itself is a call of that function. While
+compiling that is a refusal (the global is set at startup, the assert checked at run time); under `-i` it stops with
+"the comparison recurses deeper than -i allows", which the interp scenario checks.
+
+**D9b in the evaluator.** A generic's by-value array parameter the body never writes is the caller's `{length,
+storage}` pair at run time, whatever the argument is. `ctCallBind` shared it only for a value lvalue and copied a
+reference's or a slice's (`ctFitBoundary`), so `see(a, r, r)`, writing through `r` and reading `x`, gave 5 while
+compiling and 70 built. It now shares whenever the generated code would: a value lvalue, or what a reference or a slice
+names (a null reference giving the empty array its `{0, null}` pair is). A corpus global bakes all four kinds and two
+asserts check the run time and the evaluator agree.
+
+**ListIter after the list shrinks (S9c).** `Next` and `enter` tested `at == count`; after `Clear()`, or `Pop()` below the
+iterator's position, the count was never met again and it indexed `chunks[k]` past the chunks made (`-b`: 1001 elements
+and counting; `-d`: a segfault; `-i`: "it indexes a null array"). Pre-existing. They end at `at >= count`, as `RunFrom`
+already did; MapIter's bucket test and LineIter's end test are `>=` too (neither could overrun as things stand - a
+Map's buckets never shrink, a text's length never changes - but the pattern is the one that broke). SPEC's List section
+now says what such a walk does: unspecified elements, but only ones the list holds or held, and it ends. A test bakes a
+walk across a Clear, a Pop and a regrowth past the position.
+
+**RunOnStack's least stack, and comdats (B3).** Under `-d` RunOnStack refused any size of 20000 bytes or less ("could not
+start a thread with that stack"), so std/os's own `RunOnStack(0, ...)` failed under `-t -d`. glibc's `pthread_create`
+needs guard + static TLS + 2KB inside the stack; the floor was `max(sysconf(_SC_THREAD_STACK_MIN), 16384)`, and a
+non-LTO link's static TLS was 0x4680 bytes against 0x448 with LTO. Why: the runtime's `linkonce_odr` globals -
+`@__olang_pool` alone is 1KB of TLS - carried no comdat, so a link that is not LTO's resolved each symbol to one copy but
+kept every object's storage (16 objects in the repro; the plain `.bss` likewise). Every `linkonce_odr` global and
+constant line now goes in a comdat of its own name, added where the finished text is written (`cgWriteWithAttributes`,
+where the attribute groups are), as clang emits an inline variable: `-d` TLS 0x4680 -> 0x470 and `.bss` 21264 -> 1344
+bytes, `-r` TLS 0x2ab8 -> 0xc60; `-b` unchanged but for the program scope's two globals RunOnStack now reads. And the
+floor is glibc's own answer, `__pthread_get_minstack(attr)` - its page, its static TLS and PTHREAD_STACK_MIN - looked up
+with `dlsym` at the call, as Rust's std does, since it is a private symbol nothing should link against; where it is
+missing the old floor stands. **Decided (mine)**: functions stay out of comdats (they cost only code size outside LTO);
+every program links `-ldl` now (an empty library since glibc 2.34; the runtime's `dlsym` declaration moved from the
+dyncall part to the base, which X7's owned-symbol reading picks up). A case builds with `-d` and runs RunOnStack at 20000,
+16384, 4096 and 0 bytes - for which the checks harness learned to run a `-d` (or `-r`) case's binary by its suffix.
+
+**`x mut T = v` (D11a, T2).** `mut` before a bare type variable means "writable when bound to a reference" (T2), and
+`declTypePermission` (parameters, fields) skipped D11a's error for it; a local checked the instantiated type, so `keep(3)`
+reported "a local is always writable - 'mut' is for a reference, and I32 is none". `localPermission` now reads the written
+type (`typeExprIsBareTypeVar`), as the declaration's own `bareVar` already did.
+
+**`type Nest Array<Nest&>` (T29).** Study 3's batch found it accepted and unbuildable. A struct naming itself finishes
+with its fields' snapshots refreshed (`refreshStructSnapshots`); a type over an array finished with its element the
+placeholder snapshot taken while it was being declared, so `Nest(Array<Nest&>(0))` was "representations differ" (and
+two types over arrays of each other the same). Making it buildable would mean an element that is the type itself - a
+cycle through `arrElem` that every walker of elements (refreshing, identity, naming, layout) would have to learn to stop
+at. **Decided (mine)**: it is an error at the declaration, naming the struct that does what it means (`type Nest
+struct(items Array<Nest&>&)`), reported once - at the type whose element is still a placeholder - and the type then
+fits anything, so its uses add nothing. Two cases pin the self and the mutual form.
+
+**os.Exec** deferred closing both memory files after making both, so a second `memFile()` failing leaked the first;
+the defer is now set before either is made and closes whichever exist.
+
+**Not changed**: `bad == I64[0, 0, 0, 0]` with `bad` an `Array<I64>&` is "takes operands of one type" - a literal
+adapts to an array value, not to an array reference, in `==`. Left as it is; the test compares elements.
+
+**A conditional of literals adapts as a literal does (E4a, E28, S12b, E6d, G9a; oann's `condliteral`).** std/linalg's
+`ActivationSlope` gives `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside `geluSlope(x)`, an `F32` for an `F32`
+x: the conditional was an `F64` (its literals' own type) and S12b's "one type for all values, a literal adapting" did
+not count it as a literal, so `ActivationSlope` and `ActivationBackward` did not compile at `F32` at all (linalg's tests
+used `F64`); `(1.0 if c2 else 0.0) if c else x` was E28's error the same way. A target already adapted one - `return
+1.0 if x > 0.0 else 0.0` from an `F32` function fits each value on its own - but siblings and operators did not.
+**Decided (mine)**: a conditional, or a match used as a value, every value of which is a numeric literal, a literal-only
+expression or itself such, counts as a literal wherever a type is chosen - beside the other values of a conditional or
+match, beside an operator's typed operand (`f32 * (2.0 if c else 0.5)` is an `F32` product, as `f32 * 2.0` is; a value
+the other cannot hold meets at the conditional's own type, E6d - `u8 + (1 if c else 300)` is an `I32`), in an inference
+(`big(f32, 1.0 if c else 3.0)` at `F32`, G9a), a range's type, a case value. It adapts every value or none: a non-mutating
+fit check first (`condOfLiteralsWouldFit`), then each value adapted (`operandAdaptLiteral` learned the form). It is no
+constant - its condition runs - so the places that skip a hidden local for a literal (`x in c`, chains, `==`'s Eq call)
+still hold it. The evaluator needs nothing: the values are rewritten in place, so it reads `F32` literals; a corpus
+global bakes a function using every form and the run time agrees. linalg gained a test running `ActivationSlope` at
+`F32` (and through it at `F16`) against `F64`, and `ActivationBackward` on `F32` matrices with and without beta.
+**Found on the way**: a value of a conditional or match not fitting its target was reported at the `if` - "'if' does not
+fit U8" - and is now reported at the value that does not (`'300' does not fit U8`).
+
+**A split value is not held by reference (O17a; a second review's finding 4, `/home/user/review/tonight2`).** The first
+review's #2 made a temporary stored through a by-value parameter's reference build where that parameter's references
+live. The declaration side was still open: a value whose references live where its own storage does not - `b :=
+src.b`, a by-value parameter - borrowed into a reference took everything reached through it to live where the value's
+storage is (O20: a reference field lives where its container does). `br mut Box& = b; br.head.next = Node()` built the
+node in the block and hung it off src's; so did `for x in b.items { x.next = Node() }` through the loop's own borrow,
+and - found by trying every place a borrow is made - an assignment to a reference, a store into an array of references,
+a constructor keeping its reference parameter (`H(b)` then `h.r.head.next`), and a read-only reference whose writable
+field was read out and built through. All printed -7 (the churned arena) under `-b`/`-d` and 42 under `-i`.
+**Decided (mine)**: the reference cannot carry two scopes (its referent's storage, and where the referent's references
+are) without a second scope following it through every store, argument and return, so such a value is **not held by
+reference where something can be stored through what it holds** (by the type, as the first review's #2 decided for
+building into a by-value parameter), read-only or not - except as a call's argument, which O17 already judges by the
+callee's body. The error says to use the value itself, which builds right since #2. The check is one place, the borrow
+of E12c (`borrowLifetimeFits`), with call arguments excluded around their fit. A constructor keeping a parameter's
+reference in its instance now hands that region to its caller as a return does (`noteRegionHandOut` for each field), so
+O17 refuses `H(b)`. **The for-in is made correct rather than refused** - walking a by-value `List` parameter is common:
+its borrow is used only to read elements out and for its own `At`/`Len`/`RunFrom` calls, so it is exempt, each element
+it hands the body is given the value's references' scope (`forInElemSplitHome`, as S9f's `forInElemRefsHome` gives a
+run's), and its own calls are judged as O17 judges a call lent the value - by whether the callee stores into what it is
+handed (not by what it hands back, which only the loop reads). An iterator walked by value was already refused by O17 at
+its `Next` and is unchanged.
+**Found on the way, pre-existing**: a value copied out of a reference (`d Ix = src` with `src` an `Ix&`, E12's copy out)
+recorded nothing about where its references live, so it read as its block's and `d.nodes[1].next = Node()` built there -
+the same use-after-free from the copy side. O25h now covers it: such a copy's references are where the referent is
+(O20), in a declaration and as the assignment check's source (`copiedRefsScope`). Corpus: a global baked from a walk of
+a copied field, a by-value parameter's `List` and value elements holding references, and a copy out of a reference, read
+back after a churn at run time; cases for the local, the read-only borrow, the constructor and the copy-out assignment.
+
 ### A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision QC)
 
 **The hole.** The review of tonight's merges (#4) found that shallow permission (T25b, the user's call of 2026-10-07)

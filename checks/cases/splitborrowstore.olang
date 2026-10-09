@@ -1,0 +1,22 @@
+# check: fail error[O17a]: this value's references live where its own storage does not, so it is not held by reference
+# O17a: a read-only reference too - what is read through it (a writable "mut Node&" field) is taken to live where the
+# copy does, so a node built through it would be built in the copy's block
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) { b }
+fn readOnly(src mut W&) {
+    b := src.b
+    br Box& = b
+    n := br.head
+    n.next = Node()
+}
+fn main() ? {
+    w := W(Box())
+    readOnly(w)
+    println($w.b.head.v)
+}

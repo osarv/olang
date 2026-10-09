@@ -847,6 +847,7 @@ bool TypeHoldsReferences(struct type t);
 bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth);
 bool SemanticLandedInProgram(struct operand* callOp);
 bool SemanticReferentScope(struct var* func, struct operand* op, struct var** to, int* depth);
+bool SemanticValueRefsHome(struct operand* op, struct var** to, int* depth, bool* unnamed);
 bool varIsOwnParam(struct var* scopeVar, struct var* func);
 int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDepth);
 struct var* SemanticRuntimeScope(struct var* sv, int* depth); //O23a: a derived scope's run-time stand-in
