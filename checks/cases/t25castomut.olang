@@ -1,0 +1,17 @@
+# check: fail this reference is read-only, and this place wants a writable one
+# T25c: 'as' on a read-only payload cannot be passed for a writable parameter
+type Node struct(v I32) {
+    v mut
+}
+type Box enum {
+    R(n Node&)
+    No
+}
+fn bump(n mut Node&) { n.v = 55 }
+fn viaAs(q Node&) {
+    bump(Box.R(q) as Box.R)
+}
+fn main() ? {
+    a Node& = Node(1)
+    viaAs(a)
+}

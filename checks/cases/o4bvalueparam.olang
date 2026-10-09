@@ -1,0 +1,19 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O4b/O14c: a by-value parameter holding references has a scope for them, and returning it is an obligation that the
+# result lands no further out than the argument's references - keep outlives inner, so the call is rejected
+type Node struct(v I32) {
+    v mut
+}
+type Holder struct(n Node&) {
+    n
+}
+fn idh(x Holder) Holder { return x }
+fn main() ? {
+    outer Node& = Node(1)
+    keep Holder = Holder(outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        h2 := Holder(inner)
+        keep = idh(h2)
+    }
+}

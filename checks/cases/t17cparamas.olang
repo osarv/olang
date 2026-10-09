@@ -1,0 +1,19 @@
+# check: fail this enum value holds a reference to existing storage in its payload
+# O4b/T17c: the same, read out with 'as'
+type Node struct(v I32) {
+    v mut
+}
+type Box enum {
+    Has(n Node&)
+    No
+}
+fn stash(b Box, l mut List<Node&>&) {
+    if b is Box.Has { l.Push(b as Box.Has) }
+}
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Box.Has(inner), l)
+    }
+}

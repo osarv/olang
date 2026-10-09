@@ -1,0 +1,18 @@
+# check: fail a reference default must live in exactly the scope the call's result does
+# R9a: a default is judged where the call's result lands - here the outer variable keep - not where the try is
+# written; inner dies with the loop body, so keep would be left pointing into a reclaimed arena
+type Node struct(v I32) {
+    v mut
+}
+fn mk(k I64) Node& ? {
+    if k > -5 { error }
+    return Node(7)
+}
+fn main() ? {
+    outer Node& = Node(1)
+    keep Node& = outer
+    for i in range 2 {
+        inner Node& = Node(42)
+        keep = try mk(i) catch default inner
+    }
+}
