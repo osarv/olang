@@ -12216,7 +12216,7 @@ during another worktree's verify, not a finding):
    is one" can only be written with G26's `if N > 2`. `fuzz/repro/trygenericindex.olang`; the generator writes a
    non-literal index there.
 
-### A soundness review of the evening's merges, fixed (O17, P1g, P2, S4/S5/E31, T22, E31, G4, S4c, S4d, 2026-10-09)
+### A soundness review of the evening's merges, fixed (O17, P1g, P2, S4/S5/E31, T22, G4, S4c, S4d, 2026-10-09)
 
 A read-only review of the three merges of the evening (chk4, cgfix3, s3scope) reproduced eight problems, each with a
 program whose built binary (`-b`, `-d`) disagreed with `-i` after an arena churn. All are fixed here, with must-fail cases
