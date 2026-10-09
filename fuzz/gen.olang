@@ -12,10 +12,23 @@
 # under try, a shift's amount is masked into range or under try, a float becomes an integer only under try, an index
 # is in range or under try, a NaN's bits are never read, and a literal always fits the type it meets. A local if's
 # condition always reads a parameter, so no branch is dead (S8a).
+#
+# Besides numbers, a case holds Lists and Maps - handles: a copy names the same collection (T8), Clone makes another,
+# and nothing changes one a loop is walking - with Pop/First/Last/RemoveAt/Insert/Reverse/Sort/Clear, l[i], walks run
+# by run (S9f) and Map Update/Remove/Keys/Values, keyed by numbers, structs (a supplied or declared Hash, E10b) or enums;
+# array and struct references, writable or read-only by their written type (T25b), borrowed, aliased and repointed
+# only to what lives exactly where they do (O25), compared by contents with == and by identity with is (E10, E10c);
+# fixed-length arrays held in place in locals, fields and payloads (T7c), viewed with as (E32b) and through
+# fixed-length references; functions generic over a constant N whose if, conditional and match on N are decided per
+# instantiation (G26), and a generic struct G<i><T, N I64>; structs declaring Eq/Hash/Str (E10a, E11c); case _ (S13f);
+# std/math (X8, called through libm while compiling); n.Format(base) read back by ParseInt/ParseUint, and x.Fixed(n).
+# A case's result may be a struct, an enum, an array or a G<i> value, so such globals are baked (K2b) too.
 
 # the primitive types by code: 0-7 the integers, 8-11 the floats, 12 Bool, 13 String. A case's own struct types are
 # 100 + k, its enum types 200 + k, Array<T> of a primitive T is 300 + T, the case's k-th function type (a lambda's)
-# 400 + k, and List<T> of a primitive T 500 + T
+# 400 + k, List<T> of a primitive T 500 + T, Map<K, V> 1000 + 16K + V (K an integer or Bool), Array<T, N> 2000 + 16T + N
+# (N 15: a generic's own N, not known), Array<T>& 3000 + T and mut Array<T>& 3100 + T, mut S& of the case's struct k
+# 4000 + k and S& 4100 + k
 Prims := String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
 Widths := I32[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
 TBool I32 = 12
@@ -31,6 +44,43 @@ IntAssigns := String&["+=", "-=", "*=", "&=", "|=", "^="]
 FloatAssigns := String&["+=", "-=", "*=", "/="]
 
 fn isInt(t I32) Bool { return 0 <= t <= 7 }
+fn isList(t I32) Bool { return 500 <= t < 600 }
+fn isMap(t I32) Bool { return 1000 <= t < 1500 }
+fn isFixed(t I32) Bool { return 2000 <= t < 2300 }
+fn isARef(t I32) Bool { return 3000 <= t < 3200 }
+fn isSRef(t I32) Bool { return 4000 <= t < 4200 }
+# an array of any kind: a value, a fixed-length value, a reference
+# Array<T, N>& 2300 + 16T + N and mut Array<T, N>& 2600 + 16T + N: a fixed-length reference (T7d, E32b)
+fn isFRef(t I32) Bool { return 2300 <= t < 2900 }
+fn frefN(t I32) I64 { return I64((t - 2300) % 300 % 16) }
+# an array reference of either kind
+fn isRefArr(t I32) Bool { return isARef(t) or isFRef(t) }
+fn isArr(t I32) Bool { return 300 <= t < 400 or isFixed(t) or isRefArr(t) }
+# the element type of an array of any kind, or of a List
+fn elemOf(t I32) I32 {
+    if 300 <= t < 400 { return t - 300 }
+    if isList(t) { return t - 500 }
+    if isFixed(t) { return (t - 2000) / 16 }
+    if isFRef(t) { return (t - 2300) % 300 / 16 }
+    return t % 100
+}
+# keyed by a primitive 1000 + 16K + V, by the case's struct k 1300 + 16k + V, by its enum k 1400 + 16k + V
+fn mapK(t I32) I32 {
+    if t >= 1400 { return I32(200 + (t - 1400) / 16) }
+    if t >= 1300 { return I32(100 + (t - 1300) / 16) }
+    return (t - 1000) / 16
+}
+fn mapV(t I32) I32 {
+    if t >= 1400 { return (t - 1400) % 16 }
+    if t >= 1300 { return (t - 1300) % 16 }
+    return (t - 1000) % 16
+}
+# the case's generic struct G<i><T, N> over a number type T and a length N (6000 + 16T + N)
+fn isGen(t I32) Bool { return 6000 <= t < 6200 }
+fn fixN(t I32) I64 { return I64((t - 2000) % 16) }
+# the struct k of a struct value or reference
+fn structOf(t I32) I32 { return t % 100 }
+fn isStruct(t I32) Bool { return 100 <= t < 200 or isSRef(t) }
 fn isFloat(t I32) Bool { return 8 <= t <= 11 }
 fn isNum(t I32) Bool { return 0 <= t <= 11 }
 fn isSigned(t I32) Bool { return 0 <= t <= 3 }
@@ -84,7 +134,15 @@ type Gen struct(seed U64) {
     vlen Array<I64, 4096>              # an array's length, -1 when it is not known
     vmut Array<Bool, 4096>            # whether it may be assigned
     vdep Array<Bool, 4096>            # whether it depends on a parameter (S8a)
-    vwalk Array<Bool, 4096>           # a List a loop is walking: pushing to it would never end (S9f)
+    vwalk Array<Bool, 4096>           # a List or Map a loop is walking, by its group: changing it is left out
+    vgrp Array<I64, 4096>             # a List's or Map's group: the variable whose collection it names (a copy of a
+                                      # List or Map value is the same collection)
+    vblk Array<I64, 4096>             # the block a variable is declared in
+    vref Array<Bool, 4096>            # a List or Map parameter: a reference to the caller's collection
+    vhome Array<I64, 4096>            # a reference's: the block its referent lives in (O25 - a local reference's scope
+                                      # is exact, so it is repointed only to what lives there too)
+    curBlock I64 = 0
+    nblock I64 = 0
     base I64 = 0
     nv I64 = 0
     np I64 = 0                                      # the current function's parameters, from base
@@ -96,6 +154,11 @@ type Gen struct(seed U64) {
     ns I64 = 0
     sn Array<I32, 4>
     sf Array<I32, 16>
+    shash Array<Bool, 4>                            # whether struct k has a Hash, declared or supplied (E10b)
+    ehash Array<Bool, 4>                            # whether enum k has a supplied Hash (no float in a payload)
+    hasG Bool = false                               # this case's generic struct G<i><T, N I64> is declared
+    srcT I32 = 0                                    # what source() found: its element type
+    srcV I64 = -1                                   # and its variable
     # this case's enum types: a case count (up to 4), a payload count per case (up to 2) and the payloads' types
     ne I64 = 0
     en Array<I32, 4>
@@ -109,6 +172,8 @@ type Gen struct(seed U64) {
     fallible Bool = false                           # the function being made declares it (so a try may pass it on)
     inLambda Bool = false                           # a lambda's body is being made: a List, holding references, is not
                                                     # captured (D16c)
+    constN Bool = false                             # a function generic over a constant N is being made
+    ng I64 = 0                                      # this case's functions generic over a constant
     # what one case adds, read by Program
     decls mut String& = ""                          # its types and helpers, then the case itself
     lits mut String& = ""                           # its literal arguments
@@ -133,7 +198,21 @@ fn (g Gen&) tn(t I32) String& {
     if t < 300 { return "E" $g.ci "_" $(t - 200) }
     if t < 400 { return "Array<" $Prims[t - 300] ">" }
     if t < 500 { return "fn(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
-    return "List<" $Prims[t - 500] ">"
+    if t < 600 { return "List<" $Prims[t - 500] ">" }
+    if isMap(t) { return "Map<" $g.tn(mapK(t)) ", " $Prims[mapV(t)] ">" }
+    if isGen(t) { return "G" $g.ci "<" $Prims[(t - 6000) / 16] ", " $((t - 6000) % 16) ">" }
+    if isFixed(t) {
+        if fixN(t) == 15 { return "Array<" $Prims[elemOf(t)] ", N>" }
+        return "Array<" $Prims[elemOf(t)] ", " $fixN(t) ">"
+    }
+    if isFRef(t) {
+        m String& = "mut " if t >= 2600 else ""
+        return $m "Array<" $Prims[elemOf(t)] ", " $frefN(t) ">&"
+    }
+    if t >= 3100 and t < 3200 { return "mut Array<" $Prims[t - 3100] ">&" }
+    if isARef(t) { return "Array<" $Prims[t - 3000] ">&" }
+    if t < 4100 { return "mut S" $g.ci "_" $(t - 4000) "&" }
+    return "S" $g.ci "_" $(t - 4100) "&"
 }
 
 fn (g mut Gen&) intT() I32 { return I32(g.r(8)) }
@@ -149,9 +228,25 @@ fn (g mut Gen&) push(t I32, len I64, m Bool, d Bool) I64 {
     g.vlen[k] = len
     g.vmut[k] = m
     g.vdep[k] = d
+    g.vgrp[k] = k
+    g.vwalk[k] = false
+    g.vblk[k] = g.curBlock
+    g.vhome[k] = g.curBlock
+    g.vref[k] = false
     g.nv += 1
     return k
 }
+
+# enters a new block, giving the one to come back to
+fn (g mut Gen&) enter() I64 {
+    sb := g.curBlock
+    g.nblock += 1
+    g.curBlock = g.nblock
+    return sb
+}
+
+# whether the List or Map variable k names a collection a loop is walking
+fn (g Gen&) walked(k I64) Bool { return g.vwalk[g.vgrp[k]] }
 
 # a slot for a variable whose initializer is still to be made, so names its initializer binds come after it
 fn (g mut Gen&) reserve() I64 { return g.push(-1, -1, true, true) }
@@ -170,27 +265,46 @@ fn (g mut Gen&) use(k I64) String& {
 # whether variable k is what "mode" asks for, given "want"
 fn (g Gen&) matches(k I64, want I32, mode I32) Bool {
     t := g.vt[k]
-    if t < 0 or (g.inLambda and t >= 500) { return false }
+    if t < 0 or (g.inLambda and (isList(t) or isMap(t))) { return false }
     match mode {
         case 0 { return t == want }                                         # exactly that type
         case 1 { return isInt(t) }                                          # any integer
         case 2 { return isFloat(t) }
-        case 3 { return 100 <= t < 200 }                                    # a struct
+        case 3 { return isStruct(t) }                                       # a struct, or a reference to one
         case 4 { return 200 <= t < 300 }                                    # an enum
-        case 5 { return 300 <= t < 400 }                                    # an array
+        case 5 { return isArr(t) }                                          # an array of any kind
         case 6 { return t == want and g.vmut[k] }                           # assignable, of that type
         case 7 { return isNum(t) and g.vmut[k] }                            # an assignable number
-        case 8 { return t == 300 + want and g.vlen[k] > 0 }                 # an array of that element, its length known
-        case 9 { return t == 300 + want }                                   # an array of that element
+        case 8 { return isArr(t) and elemOf(t) == want and g.vlen[k] > 0 }  # an array of that element, its length known
+        case 9 { return isArr(t) and elemOf(t) == want }                   # an array of that element
         case 10 { return isInt(t) and g.vmut[k] }                           # an assignable integer
         case 11 { return g.vdep[k] and (isNum(t) or t == TBool) }           # a parameter-dependent number or Bool
-        case 12 { return 300 <= t < 400 and g.vlen[k] > 0 and g.vmut[k] }  # an assignable array, length known
-        case 13 { return 100 <= t < 200 and g.vmut[k] }
+        case 12 { return g.writable(k) and g.vlen[k] > 0 }                # an array whose elements may be written,
+                                                                            # its length known
+        case 13 { return (100 <= t < 200 and g.vmut[k]) or 4000 <= t < 4100 }   # a struct whose fields may be written
         case 14 { return 400 <= t < 500 and g.lr[t - 400] == want }        # a function value giving that type
         case 15 { return t == 500 + want }                                  # a List of that element
-        case 16 { return 500 <= t < 600 }                                   # any List
+        case 16 { return isList(t) }                                        # any List
+        case 17 { return isMap(t) }                                         # any Map
+        case 18 { return isMap(t) and not g.walked(k) and g.vmut[k] }      # a Map that may be changed
+        case 19 { return isList(t) and not g.walked(k) and g.vmut[k] }     # a List that may be changed
+        case 20 { return isFixed(t) and fixN(t) != 15 }                    # a fixed-length array, its length known
+        case 21 { return isFixed(t) and elemOf(t) == want }                # a fixed-length array of that element
+        case 22 { return isARef(t) }                                        # an array reference
+        case 23 { return isSRef(t) }                                        # a struct reference
+        case 24 { return 300 <= t < 400 and elemOf(t) == want }             # a run-time-length array value
+        case 25 { return isList(t) and isNum(t - 500) and not g.walked(k) and g.vmut[k] }  # a List of numbers to change
+        case 26 { return g.writable(k) }                                    # an array whose elements may be written
+        case 27 { return isFRef(t) }                                        # a fixed-length reference
         nomatch { return false }
     }
+}
+
+# whether variable k is an array whose elements may be written: a local value (a generic's own parameter is not), or a
+# writable reference
+fn (g Gen&) writable(k I64) Bool {
+    t := g.vt[k]
+    return 300 <= t < 400 or (isFixed(t) and g.vmut[k] and fixN(t) != 15) or 3100 <= t < 3200 or 2600 <= t < 2900
 }
 
 # a random variable in scope that "mode" accepts, or -1
@@ -279,6 +393,12 @@ fn (g mut Gen&) floatBody(t I32) String& {
 
 # an expression of exactly type t, at most d operators deep
 fn (g mut Gen&) ex(t I32, d I64) String& {
+    if isFixed(t) { return g.fixedVal(t, d) }
+    if 100 <= t < 300 {
+        k := g.pick(t, 0)
+        if k >= 0 and g.chance(40) { return g.use(k) }
+        return g.construct(t, d)
+    }
     if d <= 0 or g.chance(20) { return g.leaf(t) }
     if isInt(t) { return g.exInt(t, d) }
     if isFloat(t) { return g.exFloat(t, d) }
@@ -342,9 +462,11 @@ fn (g mut Gen&) leaf(t I32) String& {
         if k >= 0 { return g.element(k, 1) }
         s := g.pick(0, 3)
         if s >= 0 {
-            st I32 = g.vt[s] - 100
+            st I32 = structOf(g.vt[s])
             for f in range g.sn[st] {
-                if g.sf[st * 4 + f] == t { return $g.use(s) ".f" $f }
+                ft := g.sf[st * 4 + f]
+                if ft == t { return $g.use(s) ".f" $f }
+                if isFixed(ft) and elemOf(ft) == t { return $g.use(s) ".f" $f "[" $g.r(fixN(ft)) "]" }
             }
         }
     }
@@ -373,7 +495,7 @@ fn (g mut Gen&) bin(t I32, d I64, op String&) String& {
 }
 
 fn (g mut Gen&) exInt(t I32, d I64) String& {
-    k := g.r(22)
+    k := g.r(30)
     w := Widths[t]
     if k < 4 { return g.bin(t, d, Arith[g.r(3)]) }
     if k < 6 { return g.bin(t, d, Bits[g.r(3)]) }
@@ -409,7 +531,11 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
     if k == 16 { return g.recur(t, d) }
     if k == 17 {
         a := g.pick(t, 9)
-        if a >= 0 { return "(try " $g.use(a) "[" $g.ex(g.intT(), d - 1) "] catch default " $g.lit(t) ")" }
+        if a >= 0 {
+            # an index known while compiling into a length known while compiling is checked there, try or not (E16)
+            i := g.solid(g.intT(), d - 1) if isFixed(g.vt[a]) else g.ex(g.intT(), d - 1)
+            return "(try " $g.use(a) "[" $i "] catch default " $g.lit(t) ")"
+        }
         if t == 3 {
             a2 := g.pick(0, 5)
             if a2 < 0 or g.chance(50) { a2 = g.pick(0, 16) }
@@ -435,6 +561,12 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         if m.Len() > 0 { return m }
     }
     if k == 19 { return g.fallibleCall(t, d) }
+    if k == 22 or (k == 27 and not g.constN) { return g.collVal(t, d) }
+    if k == 23 and g.chance(40) { return g.mathInt(t, d) }
+    if k == 24 and g.chance(30) { return g.formatBack(t, d) }
+    if k == 25 and g.chance(50) { return g.constCall(t, d) }
+    if k == 26 { return g.viewElement(t, d) }
+    if (k == 27 or k == 28) and g.constN { return g.constVal(t, d) }
     return g.leaf(t)
 }
 
@@ -466,7 +598,7 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
 }
 
 fn (g mut Gen&) exFloat(t I32, d I64) String& {
-    k := g.r(17)
+    k := g.r(23)
     if k < 4 {
         ops := String&["+", "-", "*", "/"]
         return g.bin(t, d, ops[k])
@@ -500,6 +632,12 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         if m.Len() > 0 { return m }
     }
     if k == 15 { return g.fallibleCall(t, d) }
+    if k == 17 { return g.collVal(t, d) }
+    if k == 18 and g.chance(60) { return g.mathFloat(t, d) }
+    if k == 19 { return g.collVal(t, d) }
+    if k == 20 and g.chance(50) { return g.constCall(t, d) }
+    if k == 21 { return g.viewElement(t, d) }
+    if k == 22 and g.constN { return g.constVal(t, d) }
     return g.leaf(t)
 }
 
@@ -514,7 +652,7 @@ fn (g mut Gen&) fromBits(t I32, d I64) String& {
 }
 
 fn (g mut Gen&) exBool(d I64) String& {
-    k := g.r(14)
+    k := g.r(18)
     if k < 3 {
         s := g.numT()
         b := g.ex(s, d - 1)
@@ -551,7 +689,7 @@ fn (g mut Gen&) exBool(d I64) String& {
     }
     if k == 7 {                                     # membership
         a := g.pick(0, 5)
-        if a >= 0 { return "(" $g.ex(g.vt[a] - 300, d - 1) " in " $g.use(a) ")" }
+        if a >= 0 { return "(" $g.ex(elemOf(g.vt[a]), d - 1) " in " $g.use(a) ")" }
     }
     if k == 8 {
         e := g.pick(0, 4)
@@ -583,6 +721,7 @@ fn (g mut Gen&) exBool(d I64) String& {
         x := g.solid(s, d - 1)
         return "(" $x " != " $x ")"
     }
+    if k >= 14 and k <= 16 { return g.collBool(d) }
     return g.leaf(TBool)
 }
 
@@ -598,7 +737,8 @@ fn (g mut Gen&) exStr(d I64) String& {
 }
 
 fn (g mut Gen&) piece(d I64) String& {
-    p := g.r(10)
+    p := g.r(13)
+    if p >= 10 { return g.newPiece(d) }
     if p < 4 { return "$(" $g.ex(g.primT(), d) ")" }
     if p == 4 {
         k := g.pick(0, 3)
@@ -699,6 +839,7 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
         b.Push("match " $g.use(e) " { ")
         all := true
         for c in range g.en[et] {
+            if g.chance(12) { b.Push("case _ if " $g.ex(TBool, d - 1) " => " $g.typed(t, d - 1) " ") }   # S13f
             if g.chance(20) {
                 all = false
             } else {
@@ -712,7 +853,8 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
                         if g.chance(30) {
                             b.Push("_")
                         } else {
-                            x := g.push(g.ept[(et * 4 + c) * 2 + f], -1, false, true)
+                            pt := g.ept[(et * 4 + c) * 2 + f]
+                            x := g.push(pt, fixN(pt) if isFixed(pt) else -1, false, true)
                             b.Push("x" $x)
                         }
                     }
@@ -726,7 +868,7 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
                 g.nv = save
             }
         }
-        if not all { b.Push("nomatch => " $g.typed(t, d - 1) " ") }
+        if not all { b.Push($g.catchAll() " => " $g.typed(t, d - 1) " ") }
         b.Push("}")
         return "(" $b.ToString() ")"
     }
@@ -749,8 +891,9 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
         }
         if g.chance(20) { b.Push(" if " $g.ex(TBool, d - 1)) }
         b.Push(" => " $g.typed(t, d - 1) " ")
+        if g.chance(15) { b.Push("case _ if " $g.ex(TBool, d - 1) " => " $g.typed(t, d - 1) " ") }
     }
-    b.Push("nomatch => " $g.typed(t, d - 1) " }")
+    b.Push($g.catchAll() " => " $g.typed(t, d - 1) " }")
     return "(" $b.ToString() ")"
 }
 
@@ -798,16 +941,31 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     g.nh += 1
     pts := Array<I32>(3)
     np I64 = 1 + g.r(3)
+    # a List or Map of the caller's, by reference (a by-value one is refused every call, O17 - fuzz/repro/listalias):
+    # writable when the caller's may be changed, else read-only
+    coll I64 = -1
+    collW := false
+    if g.chance(35) and not g.inLambda {
+        coll = g.pick(0, 19)
+        if coll < 0 { coll = g.pick(0, 18) }
+        collW = coll >= 0
+        if coll < 0 { coll = g.pick(0, 16) }
+        if coll < 0 { coll = g.pick(0, 17) }
+    }
+    collT I32 = g.vt[coll] if coll >= 0 else 0
     sbase := g.base
     snv := g.nv
     sdep := g.dep
     snp := g.np
     sfal := g.fallible
     slam := g.inLambda
+    scn := g.constN
+    sb := g.enter()
     g.base = g.nv
     g.np = np
     g.fallible = fallible
     g.inLambda = false
+    g.constN = false
     b := StringBuilder()
     b.Push("fn " $name "(")
     for i in range np {
@@ -815,6 +973,12 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
         x := g.push(pts[i], -1, false, true)
         if i > 0 { b.Push(", ") }
         b.Push("x" $x " " $Prims[pts[i]])
+    }
+    if coll >= 0 {
+        x := g.push(collT, -1, collW, true)
+        g.vref[x] = true
+        m String& = "mut " if collW else ""
+        b.Push(", x" $x " " $m $g.tn(collT) "&")
     }
     b.Push(") " $Prims[t] $errs " {\n")
     g.hdepth += 1
@@ -829,12 +993,15 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     g.np = snp
     g.fallible = sfal
     g.inLambda = slam
+    g.constN = scn
+    g.curBlock = sb
     c := StringBuilder()
     c.Push($name "(")
     for i in range np {
         if i > 0 { c.Push(", ") }
         c.Push(g.fit(pts[i], d - 1))
     }
+    if coll >= 0 { c.Push(", " $g.use(coll)) }
     c.Push(")")
     return c.ToString()
 }
@@ -849,9 +1016,11 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
     sdep := g.dep
     snp := g.np
     sfal := g.fallible
+    scn := g.constN
     g.base = g.nv
     g.np = 2
     g.fallible = false
+    g.constN = false
     n := g.push(2, -1, false, true)
     a := g.push(t, -1, false, true)
     g.hdepth += 1
@@ -864,6 +1033,7 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
     g.dep = sdep
     g.np = snp
     g.fallible = sfal
+    g.constN = scn
     return $name "(I32(" $g.solid(g.intT(), d - 1) " & 7), " $g.fit(t, d - 1) ")"
 }
 
@@ -871,7 +1041,9 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
 
 fn (g mut Gen&) block(n I64, d I64, ind String&) String& {
     save := g.nv
+    sb := g.enter()
     b mut String&return = g.stmts(n, d, ind)
+    g.curBlock = sb
     g.nv = save
     return b
 }
@@ -893,7 +1065,13 @@ fn (g mut Gen&) depCond(d I64) String& {
 }
 
 fn (g mut Gen&) stmt(d I64, ind String&) String& {
-    k := g.r(27)
+    if g.chance(25) {                               # a collection or a reference in scope is used more than made
+        if g.chance(40) and g.pick(0, 19) >= 0 { return g.listStmt(d, ind) }
+        if g.chance(50) and g.pick(0, 18) >= 0 { return g.mapStmt(d, ind) }
+        if g.pick(0, 22) >= 0 or g.pick(0, 23) >= 0 { return g.refStmt(ind) }
+        if g.hasG and g.chance(50) { return g.genStmt(ind) }
+    }
+    k := g.r(38)
     in2 := $ind "    "
     if k == 4 {
         v := g.pick(0, 7)
@@ -966,14 +1144,18 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
     }
     if k == 13 {
         a := g.pick(0, 12)
-        if a >= 0 { return $ind $g.use(a) "[" $g.r(g.vlen[a]) "] = " $g.fit(g.vt[a] - 300, 3) "\n" }
+        if a >= 0 { return $ind $g.use(a) "[" $g.r(g.vlen[a]) "] = " $g.fit(elemOf(g.vt[a]), 3) "\n" }
     }
     if k == 14 {
         s := g.pick(0, 13)
         if s >= 0 {
-            st I32 = g.vt[s] - 100
+            st I32 = structOf(g.vt[s])
             f := g.r(I64(g.sn[st]))
-            return $ind $g.use(s) ".f" $f " = " $g.fit(g.sf[st * 4 + f], 3) "\n"
+            ft := g.sf[st * 4 + f]
+            if isFixed(ft) and g.chance(60) {           # an element of an array held in place (T7c)
+                return $ind $g.use(s) ".f" $f "[" $g.r(fixN(ft)) "] = " $g.fit(elemOf(ft), 3) "\n"
+            }
+            return $ind $g.use(s) ".f" $f " = " $g.fit(ft, 3) "\n"
         }
     }
     if k == 15 and d > 0 {
@@ -982,13 +1164,12 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         if a >= 0 {
             arr := g.use(a)
             save := g.nv
-            et I32 = g.vt[a] - 300
-            if et >= 200 { et = et - 200 }
-            x := g.push(et, -1, false, true)
-            walked := g.vwalk[a]
-            g.vwalk[a] = true
+            x := g.push(elemOf(g.vt[a]), -1, false, true)
+            r := g.vgrp[a]
+            walked := g.vwalk[r]
+            g.vwalk[r] = true
             body := g.block(1 + g.r(3), d - 1, in2)
-            g.vwalk[a] = walked
+            g.vwalk[r] = walked
             g.nv = save
             return $ind "for x" $x " in " $arr " {\n" $body $ind "}\n"
         }
@@ -1047,6 +1228,14 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         return $ind "x" $x " fn(x" $a " " $Prims[pt] ") " $Prims[rt] " = fn(x" $a ") { return " $body " }\n"
     }
     if k == 21 {                                    # deferred code: run at its block's way out (S19)
+        l := g.pick(0, 19)
+        if l >= 0 and g.chance(30) {
+            sfal := g.fallible
+            g.fallible = false
+            e := g.fit(g.vt[l] - 500, 2)
+            g.fallible = sfal
+            return $ind "defer " $g.use(l) ".Push(" $e ")\n"
+        }
         v := g.pick(0, 7)
         if v >= 0 {
             t := g.vt[v]
@@ -1065,8 +1254,8 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         return $ind "x" $x " List<" $Prims[t] "> = List<" $Prims[t] ">()\n"
     }
     if k == 23 {
-        l := g.pick(0, 16)
-        if l >= 0 and not g.vwalk[l] {
+        l := g.pick(0, 19)
+        if l >= 0 and not g.walked(l) {
             et I32 = g.vt[l] - 500
             a := g.pick(et, 9)
             if a >= 0 and g.chance(30) { return $ind $g.use(l) ".PushAll(" $g.use(a) ")\n" }
@@ -1083,16 +1272,23 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         b := g.block(1, d - 1, $ind "    ")
         return $ind "try " $call " catch Err" $g.ci ".A {\n" $a $ind "} catch {\n" $b $ind "}\n"
     }
-    if k == 26 and d > 0 {                          # a two-name loop over an array, or a stepped range
-        a := g.pick(0, 5)
+    if k == 26 and d > 0 {                          # a two-name loop over a collection, or a stepped range
         save := g.nv
-        if a >= 0 and g.chance(50) {
-            arr := g.use(a)
+        src := g.source()
+        if src.Len() > 0 and g.chance(50) {
             i := g.push(3, -1, false, true)
-            x := g.push(g.vt[a] - 300, -1, false, true)
+            x := g.push(g.srcT, -1, false, true)
+            r I64 = -1
+            walked := false
+            if isList(g.vt[g.srcV]) or isMap(g.vt[g.srcV]) {
+                r = g.vgrp[g.srcV]
+                walked = g.vwalk[r]
+                g.vwalk[r] = true
+            }
             body := g.block(1 + g.r(2), d - 1, in2)
+            if r >= 0 { g.vwalk[r] = walked }
             g.nv = save
-            return $ind "for x" $i ", x" $x " in " $arr " {\n" $body $ind "}\n"
+            return $ind "for x" $i ", x" $x " in " $src " {\n" $body $ind "}\n"
         }
         lo I64 = g.r(5) - 2
         x := g.push(2, -1, false, true)
@@ -1107,6 +1303,20 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         e := g.exStr(2)
         g.declare(x, TStr, -1, true)
         return $ind "x" $x " String = " $e "\n"
+    }
+    if k == 27 or k == 28 { return g.listStmt(d, ind) }
+    if k == 29 or k == 30 { return g.mapStmt(d, ind) }
+    if k == 31 or k == 32 { return g.refStmt(ind) }
+    if k == 33 { return g.fixedDecl(ind) }
+    if k == 35 or k == 36 { return g.assignStmt(ind) }
+    if k == 37 { return g.genStmt(ind) }
+    if k == 34 {                                    # an array sorted or reversed in place
+        a := g.pick(0, 26)
+        if a >= 0 {
+            et := elemOf(g.vt[a])
+            if et != TBool and g.chance(60) { return $ind $g.use(a) ".Sort(" $g.comparator(et) ")\n" }
+            return $ind $g.use(a) ".Reverse()\n"
+        }
     }
     t := g.primT()
     g.dep = false
@@ -1137,11 +1347,19 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
         b.Push(")")
     } else if p == 2 or p == 3 {
         save := g.nv
-        src := g.pick(0, 5)
-        if src >= 0 and p == 3 {
-            n = g.vlen[src]
-            srcName := g.use(src)
-            y := g.push(g.vt[src] - 300, -1, false, true)
+        srcName := g.source()
+        # the element and the filter run while the source is walked: a helper they call is never handed it to change
+        r I64 = -1
+        walked := false
+        if srcName.Len() > 0 and p == 3 {
+            sv := g.srcV
+            n = g.vlen[sv] if isArr(g.vt[sv]) else -1
+            y := g.push(g.srcT, -1, false, true)
+            if isList(g.vt[sv]) or isMap(g.vt[sv]) {
+                r = g.vgrp[sv]
+                walked = g.vwalk[r]
+                g.vwalk[r] = true
+            }
             b.Push($Prims[t] "[" $g.fit(t, 3) " for x" $y " in " $srcName)
         } else {
             n = g.r(7)
@@ -1152,6 +1370,7 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
             n = -1
             b.Push(" if " $g.ex(TBool, 2))
         }
+        if r >= 0 { g.vwalk[r] = walked }
         b.Push("]")
         g.nv = save
     } else {
@@ -1160,6 +1379,12 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
     }
     g.declare(x, I32(300 + t), n, true)
     return $ind "x" $x " Array<" $Prims[t] "> = " $b.ToString() "\n"
+}
+
+# the clause taking every value left: nomatch, or an unguarded "case _" (S13f)
+fn (g mut Gen&) catchAll() String& {
+    if g.chance(50) { return "nomatch" }
+    return "case _"
 }
 
 # a match statement on an integer
@@ -1181,9 +1406,982 @@ fn (g mut Gen&) matchStmt(d I64, ind String&) String& {
         }
         if g.chance(20) { b.Push(" if " $g.ex(TBool, 2)) }
         b.Push(" {\n" $g.block(1 + g.r(2), d - 1, $in2 "    ") $in2 "}\n")
+        if g.chance(15) { b.Push($in2 "case _ if " $g.ex(TBool, 2) " {\n" $g.block(1 + g.r(2), d - 1, $in2 "    ") $in2 "}\n") }
     }
-    b.Push($in2 "nomatch {\n" $g.block(1 + g.r(2), d - 1, $in2 "    ") $in2 "}\n")
+    if g.chance(80) { b.Push($in2 $g.catchAll() " {\n" $g.block(1 + g.r(2), d - 1, $in2 "    ") $in2 "}\n") }
     b.Push($ind "}\n")
+    return b.ToString()
+}
+
+# ---- lambdas ----
+
+# a lambda for a parameter of a function type: fn(x<a>[, x<b>]) { return e }, its parameters' types left to the type
+# it meets (D16a), its body an expression written as type rt that reads them and what it captures - copies, read-only
+# (D16c)
+fn (g mut Gen&) lambda(p1 I32, p2 I32, rt I32, d I64) String& {
+    save := g.nv
+    sfal := g.fallible
+    slam := g.inLambda
+    g.fallible = false
+    g.inLambda = true
+    a := g.push(p1, -1, false, true)
+    ps String& = "x" $a
+    if p2 >= 0 {
+        b := g.push(p2, -1, false, true)
+        ps = $ps ", x" $b
+    }
+    body := g.typed(rt, d)
+    g.nv = save
+    g.fallible = sfal
+    g.inLambda = slam
+    return "fn(" $ps ") { return " $body " }"
+}
+
+# an order for Sort: usually its two elements compared, else any Bool of them - an inconsistent one sorts some way too,
+# the same way at run time and while compiling
+fn (g mut Gen&) comparator(et I32) String& {
+    if g.chance(60) {
+        a := g.push(et, -1, false, true)
+        b := g.push(et, -1, false, true)
+        g.nv = a
+        return "fn(x" $a ", x" $b ") { return x" $a " " $Orders[g.r(4)] " x" $b " }"
+    }
+    return g.lambda(et, et, TBool, 2)
+}
+
+# ---- Lists and Maps: a copy of the value names the same collection (T8) ----
+
+fn (g mut Gen&) mapT() I32 {
+    k I32 = I32(g.r(9))
+    if k == 8 { k = TBool }
+    if g.ns > 0 and g.chance(30) {                  # keyed by a struct: its own Hash and Eq, or supplied (E10b)
+        st := g.r(g.ns)
+        if g.shash[st] { return I32(1300 + st * 16 + g.r(13)) }
+    }
+    if g.ne > 0 and g.chance(20) {                  # keyed by an enum: its supplied Hash (E10b)
+        et := g.r(g.ne)
+        if g.ehash[et] { return I32(1400 + et * 16 + g.r(13)) }
+    }
+    return I32(1000 + k * 16 + g.r(13))
+}
+
+# an index type: an integer that flows into I64
+fn (g mut Gen&) idxT() I32 { return I32(g.r(7)) }
+
+# a new name for list or map l's own collection, or a copy of it with storage of its own
+fn (g mut Gen&) sameOrClone(l I64, ind String&) String& {
+    t := g.vt[l]
+    x := g.use(l)
+    k := g.reserve()
+    g.declare(k, t, -1, true)
+    # a second name only in l's own block: one in a block inside it is refused every call (O17 - fuzz/repro/listalias)
+    if g.vblk[l] == g.curBlock and not g.vref[l] and g.chance(50) {
+        g.vgrp[k] = g.vgrp[l]
+        return $ind "x" $k " " $g.tn(t) " = " $x "\n"
+    }
+    return $ind "x" $k " " $g.tn(t) " = " $x ".Clone()\n"
+}
+
+# a statement making a List, or changing one no loop is walking, or walking one run by run
+fn (g mut Gen&) listStmt(d I64, ind String&) String& {
+    p := g.r(16)
+    l := g.pick(0, 19)
+    if l < 0 or p == 0 {
+        t := g.primT()
+        a := g.pick(t, 9)
+        init String& = "List<" $Prims[t] ">()"
+        if a >= 0 and g.chance(40) { init = $g.use(a) ".ToList()" }
+        x := g.reserve()
+        g.declare(x, I32(500 + t), -1, true)
+        return $ind "x" $x " List<" $Prims[t] "> = " $init "\n"
+    }
+    t := g.vt[l]
+    et I32 = t - 500
+    x := g.use(l)
+    # a List a helper is handed never shrinks there: the helper may run in the middle of a caller's expression that has
+    # tested the List's length (an index "% Len()", an Insert position)
+    if g.vref[l] and (p == 5 or p == 6 or p == 8) { p = 2 }
+    if p == 1 { return g.sameOrClone(l, ind) }
+    if p == 2 or p == 3 { return $ind $x ".Push(" $g.fit(et, 2) ")\n" }
+    if p == 4 { return $ind $x ".Insert(I64(" $g.solid(g.intT(), 2) " & 7) % (" $x ".Len() + 1), " $g.fit(et, 2) ")\n" }
+    if p == 5 {
+        at String& = $g.plainIdx() " % " $x ".Len()"
+        v := g.pick(et, 6)
+        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".RemoveAt(" $at ") }\n" }
+        return $ind "if " $x ".Len() > 0 { " $x ".RemoveAt(" $at ") }\n"
+    }
+    if p == 6 {
+        k := g.reserve()
+        g.declare(k, et, -1, true)
+        return $ind "x" $k " " $Prims[et] " = try " $x ".Pop() catch default " $g.lit(et) "\n"
+    }
+    if p == 7 { return $ind $x ".Reverse()\n" }
+    if p == 8 and g.chance(30) { return $ind $x ".Clear()\n" }
+    if p == 9 and et != TBool { return $ind $x ".Sort(" $g.comparator(et) ")\n" }
+    if p == 10 { return $ind "try " $x "[" $g.ex(g.idxT(), 2) "] = " $g.fit(et, 2) " catch { }\n" }
+    if p == 11 { return $ind "if " $x ".Len() > 0 { " $x "[" $g.plainIdx() " % " $x ".Len()] = " $g.fit(et, 2) " }\n" }
+    if p == 12 and d > 0 { return g.runWalk(l, d, ind) }
+    if p == 13 {
+        a := g.pick(et, 9)
+        if a >= 0 { return $ind $x ".PushAll(" $g.use(a) ")\n" }
+    }
+    if p == 14 { return g.bulk(x, et, -1, ind) }       # across chunk boundaries (8, 16, 32, ...)
+    return $ind $x ".Push(" $g.fit(et, 2) ")\n"
+}
+
+# many elements at once: a loop pushing to List x of element type et - or, with vt not negative, putting into (or
+# removing from) Map x keyed by et - a value of the counter, so keys repeat and slots are reused
+fn (g mut Gen&) bulk(x String&, et I32, vty I32, ind String&) String& {
+    save := g.nv
+    i := g.push(2, -1, false, true)                # "range n" counts in its literal's I32
+    n I64 = 9 + g.r(40)
+    m I64 = 1 + g.r(5)
+    v String& = $Prims[et] "(x" $i " * " $m ")" if isNum(et) else "(x" $i " % " $(1 + g.r(3)) " == 0)"
+    if et >= 100 { v = g.construct(et, 2) }
+    e String& = ""
+    if vty < 0 {
+        e = $x ".Push(" $v ")"
+    } else if g.chance(25) {
+        e = $x ".Remove(" $v ")"
+    } else {
+        e = $x ".Put(" $v ", " $g.fit(vty, 1) ")"
+    }
+    g.nv = save
+    return $ind "for x" $i " in range " $n " { " $e " }\n"
+}
+
+# a collection a loop or a comprehension may walk - an array, a List, or a Map's keys or values - as written; g.srcT is
+# its element type and g.srcV its variable. "" when there is none
+fn (g mut Gen&) source() String& {
+    p := g.r(4)
+    if p == 1 {
+        l := g.pick(0, 16)
+        if l >= 0 {
+            g.srcV = l
+            g.srcT = g.vt[l] - 500
+            return g.use(l)
+        }
+    }
+    if p == 2 {
+        m := g.pick(0, 17)
+        if m >= 0 {
+            g.srcV = m
+            if g.chance(50) {
+                g.srcT = mapK(g.vt[m])
+                return $g.use(m) ".Keys()"
+            }
+            g.srcT = mapV(g.vt[m])
+            return $g.use(m) ".Values()"
+        }
+    }
+    a := g.pick(0, 5)
+    if a < 0 { return "" }
+    g.srcV = a
+    g.srcT = elemOf(g.vt[a])
+    return g.use(a)
+}
+
+# an index in 0..7 that calls nothing - a variable or a literal - so between a List's length being tested and read,
+# no helper given that List can empty it (a "% Len()" by zero is undefined)
+fn (g mut Gen&) plainIdx() String& {
+    k := g.pick(0, 1)
+    if k >= 0 and g.chance(70) { return "I64(" $g.use(k) " & 7)" }
+    return $g.r(8)
+}
+
+# a walk over list l's runs, S9f's own lowering written out: each run an array borrowed from the list
+fn (g mut Gen&) runWalk(l I64, d I64, ind String&) String& {
+    x := g.use(l)
+    et I32 = g.vt[l] - 500
+    in2 := $ind "    "
+    in3 := $in2 "    "
+    at := g.push(3, -1, false, true)                # stays declared after the walk, in the enclosing block
+    save := g.nv
+    r := g.vgrp[l]
+    walked := g.vwalk[r]
+    g.vwalk[r] = true
+    sb := g.enter()
+    run := g.push(I32(3000 + et), -1, false, true)
+    g.vhome[run] = -1 - run                         # where the list lives: nothing else is known to live there
+    v := g.push(et, -1, false, true)
+    body := g.block(1 + g.r(3), d - 1, in3)
+    g.curBlock = sb
+    g.vwalk[r] = walked
+    g.nv = save
+    b := StringBuilder()
+    b.Push($ind "x" $at " I64 = 0\n")
+    b.Push($ind "for {\n")
+    b.Push($in2 "x" $run " := try " $x ".RunFrom(x" $at ") catch Exhausted { break }\n")
+    b.Push($in2 "for x" $v " in x" $run " {\n" $body $in2 "}\n")
+    b.Push($in2 "x" $at " += x" $run ".Len()\n")
+    b.Push($ind "}\n")
+    return b.ToString()
+}
+
+# a statement making a Map, changing one no loop is walking, or walking one
+fn (g mut Gen&) mapStmt(d I64, ind String&) String& {
+    p := g.r(14)
+    if p >= 11 and d > 0 {
+        w := g.pick(0, 17)
+        if w >= 0 { return g.mapWalk(w, p - 11, d, ind) }
+    }
+    m := g.pick(0, 18)
+    if m < 0 or p == 0 {
+        t := g.mapT()
+        x := g.reserve()
+        g.declare(x, t, -1, true)
+        return $ind "x" $x " " $g.tn(t) " = " $g.tn(t) "()\n"
+    }
+    t := g.vt[m]
+    kt := mapK(t)
+    vty := mapV(t)
+    x := g.use(m)
+    if p == 1 { return g.sameOrClone(m, ind) }
+    if p < 6 { return $ind $x ".Put(" $g.fit(kt, 2) ", " $g.fit(vty, 2) ")\n" }
+    if p == 6 { return $ind $x ".Remove(" $g.fit(kt, 2) ")\n" }
+    if p == 7 {
+        k := g.reserve()
+        key := g.fit(kt, 2)
+        g.declare(k, TBool, -1, true)
+        return $ind "x" $k " Bool = " $x ".Remove(" $key ")\n"
+    }
+    if p == 8 or p == 9 { return $ind $x ".Update(" $g.fit(kt, 2) ", " $g.fit(vty, 2) ", " $g.lambda(vty, -1, vty, 2) ")\n" }
+    if p == 10 and g.chance(30) { return $ind $x ".Clear()\n" }
+    if p == 10 { return g.bulk(x, kt, vty, ind) }
+    return $ind $x ".Put(" $g.fit(kt, 2) ", " $g.fit(vty, 2) ")\n"
+}
+
+# a walk over map m: its entries (how 0), its keys (1) or its values (2), in the map's own order
+fn (g mut Gen&) mapWalk(m I64, how I64, d I64, ind String&) String& {
+    t := g.vt[m]
+    x := g.use(m)
+    in2 := $ind "    "
+    save := g.nv
+    r := g.vgrp[m]
+    walked := g.vwalk[r]
+    g.vwalk[r] = true
+    sb := g.enter()
+    b := StringBuilder()
+    if how == 0 {
+        e := g.push(-2, -1, false, true)
+        k := g.push(mapK(t), -1, true, true)
+        v := g.push(mapV(t), -1, true, true)
+        b.Push($ind "for x" $e " in " $x " {\n")
+        b.Push($in2 "x" $k " " $g.tn(mapK(t)) " = x" $e ".Key\n" $in2 "x" $v " " $Prims[mapV(t)] " = x" $e ".Value\n")
+    } else if how == 1 {
+        k := g.push(mapK(t), -1, false, true)
+        b.Push($ind "for x" $k " in " $x ".Keys() {\n")
+    } else {
+        v := g.push(mapV(t), -1, false, true)
+        b.Push($ind "for x" $v " in " $x ".Values() {\n")
+    }
+    b.Push(g.stmts(1 + g.r(3), d - 1, in2))
+    b.Push($ind "}\n")
+    g.curBlock = sb
+    g.vwalk[r] = walked
+    g.nv = save
+    return b.ToString()
+}
+
+# ---- references (T25b: "mut" before a reference type makes what it reaches writable) ----
+
+# a reference whose referent may be repointed to from src: of one type but for permission, src writable where it is,
+# living exactly where it does (O25) and, for an array, of the same known length
+fn (g Gen&) repointable(dst I64, src I64) Bool {
+    if src == dst or g.vhome[src] != g.vhome[dst] { return false }
+    a := g.vt[dst]
+    b := g.vt[src]
+    if isARef(a) {
+        if not isARef(b) or elemOf(a) != elemOf(b) or g.vlen[dst] != g.vlen[src] { return false }
+        return a < 3100 or b >= 3100
+    }
+    if isFRef(a) {
+        if not isFRef(b) or (a - 2300) % 300 != (b - 2300) % 300 { return false }
+        return a < 2600 or b >= 2600
+    }
+    if not isSRef(b) or structOf(a) != structOf(b) { return false }
+    return a >= 4100 or b < 4100
+}
+
+# another reference of dst's kind that "is" may compare it with: any permission, the same element or struct
+fn (g mut Gen&) kin(dst I64) I64 {
+    a := g.vt[dst]
+    n I64 = 0
+    for k in range g.base, g.nv {
+        b := g.vt[k]
+        if k != dst and (g.matches(k, 0, 5) or g.matches(k, 0, 3)) {
+            if (isRefArr(a) and isRefArr(b) and elemOf(a) == elemOf(b)) or (isSRef(a) and isSRef(b) and structOf(a) == structOf(b)) { n += 1 }
+        }
+    }
+    if n == 0 { return -1 }
+    w := g.r(n)
+    for k in range g.base, g.nv {
+        b := g.vt[k]
+        if k != dst and (g.matches(k, 0, 5) or g.matches(k, 0, 3)) {
+            if (isRefArr(a) and isRefArr(b) and elemOf(a) == elemOf(b)) or (isSRef(a) and isSRef(b) and structOf(a) == structOf(b)) {
+                if w == 0 { return k }
+                w -= 1
+            }
+        }
+    }
+    return -1
+}
+
+# a reference local: a new array or struct, a borrow of a local value (writes through it are the local's), a slice, a
+# second name for what another names (":=" keeps its permission), a repoint, or a struct copied out of one
+fn (g mut Gen&) refStmt(ind String&) String& {
+    p := g.r(11)
+    if p < 2 and g.ns > 0 {                         # a struct reference, new or borrowed
+        st := g.r(g.ns)
+        w := g.chance(70)
+        t I32 = I32(4000 + st) if w else I32(4100 + st)
+        src := g.pick(I32(100 + st), 0)
+        if p == 1 and src >= 0 {
+            x := g.use(src)
+            k := g.reserve()
+            g.declare(k, t, -1, true)
+            g.vhome[k] = g.vblk[src]
+            return $ind "x" $k " " $g.tn(t) $x " = " $x "\n"
+        }
+        k := g.reserve()
+        e := g.construct(I32(100 + st), 3)
+        g.declare(k, t, -1, true)
+        return $ind "x" $k " " $g.tn(t) " = " $e "\n"
+    }
+    if p == 2 {                                     # a new array: made, or a literal - read-only, a static one (T25d)
+        et := g.primT()
+        n I64 = 1 + g.r(4)
+        w := g.chance(60)
+        t I32 = I32(3100 + et) if w else I32(3000 + et)
+        k := g.reserve()
+        b := StringBuilder()
+        if g.chance(50) {
+            b.Push("Array<" $Prims[et] ">(" $n ", " $g.fit(et, 2) ")")
+        } else {
+            b.Push($Prims[et] "[")
+            for i in range n {
+                if i > 0 { b.Push(", ") }
+                b.Push(g.fit(et, 2))
+            }
+            b.Push("]")
+        }
+        g.declare(k, t, n, true)
+        return $ind "x" $k " " $g.tn(t) " = " $b.ToString() "\n"
+    }
+    if p == 3 or p == 4 {                           # a borrow of a local array, whole or a slice of it
+        src := g.pick(0, 5)
+        if src >= 0 and g.vt[src] != I32(2000 + elemOf(g.vt[src]) * 16 + 15) {
+            s := g.vt[src]
+            et := elemOf(s)
+            canWrite := g.writable(src)
+            w := canWrite and g.chance(60)
+            t I32 = I32(3100 + et) if w else I32(3000 + et)
+            x := g.use(src)
+            home I64 = g.vblk[src]
+            if isRefArr(s) { home = g.vhome[src] }
+            init String& = x
+            n := g.vlen[src]
+            if p == 4 and n >= 0 {
+                lo := g.r(n + 1)
+                hi I64 = lo + g.r(n - lo + 1)
+                init = $x "[" $lo ":" $hi "]"
+                n = hi - lo
+            }
+            k := g.reserve()
+            g.declare(k, t, n, true)
+            g.vhome[k] = home
+            return $ind "x" $k " " $g.tn(t) $x " = " $init "\n"
+        }
+    }
+    if p == 10 {                                    # a fixed-length reference: a borrow, or a view of a run-time array
+        return g.frefDecl(ind)
+    }
+    if p == 5 or p == 6 {                           # a second name for a reference's referent
+        src := g.pick(0, 22)
+        if src < 0 { src = g.pick(0, 27) }
+        if src < 0 { src = g.pick(0, 23) }
+        if src >= 0 {
+            s := g.vt[src]
+            x := g.use(src)
+            t I32 = s
+            text mut String&return = $ind "x" $g.nv " := " $x "\n"
+            if g.chance(40) {
+                t = I32(3000 + elemOf(s)) if isRefArr(s) else I32(4100 + structOf(s))
+                text = $ind "x" $g.nv " " $g.tn(t) $x " = " $x "\n"
+            }
+            k := g.reserve()
+            g.declare(k, t, g.vlen[src], true)
+            g.vhome[k] = g.vhome[src]
+            return text
+        }
+    }
+    if p == 7 or p == 8 {                           # a repoint (S4a)
+        dst := g.pick(0, 22)
+        if dst < 0 or g.chance(40) { dst = g.pick(0, 23) }
+        if dst < 0 or g.chance(30) { dst = g.pick(0, 27) }
+        if dst >= 0 {
+            for k in range g.base, g.nv {
+                if g.repointable(dst, k) { return $ind $g.use(dst) " = " $g.use(k) "\n" }
+            }
+        }
+    }
+    if p == 9 {                                     # a struct copied out of a reference
+        src := g.pick(0, 23)
+        if src >= 0 {
+            t I32 = I32(100 + structOf(g.vt[src]))
+            x := g.use(src)
+            k := g.reserve()
+            g.declare(k, t, -1, true)
+            return $ind "x" $k " " $g.tn(t) " = " $x "\n"
+        }
+    }
+    return g.fixedDecl(ind)
+}
+
+# a whole array or struct assigned: a value one keeps its storage when the length is the same (T11b), so a reference
+# borrowed from it sees the new elements; a reference is repointed to a new one living where it does (S4a, O25). An
+# array is assigned only what has its known length, which unchecked indexing relies on
+fn (g mut Gen&) assignStmt(ind String&) String& {
+    p := g.r(4)
+    if p == 0 {
+        a := g.pick(0, 26)
+        if a >= 0 and not isARef(g.vt[a]) {
+            t := g.vt[a]
+            for k in range g.base, g.nv {
+                b := g.vt[k]
+                if k != a and g.matches(k, 0, 5) and not isARef(b) and elemOf(b) == elemOf(t) and g.vlen[k] == g.vlen[a] and g.chance(50) {
+                    if isFixed(t) and fixN(b) == 15 { continue }
+                    return $ind $g.use(a) " = " $g.use(k) "\n"
+                }
+            }
+            if g.vlen[a] >= 0 and not isFixed(t) {
+                return $ind $g.use(a) " = Array<" $Prims[elemOf(t)] ">(" $g.vlen[a] ", " $g.fit(elemOf(t), 2) ")\n"
+            }
+        }
+    }
+    if p == 1 {
+        s := g.pick(0, 3)
+        if s >= 0 and g.vt[s] < 200 {
+            o := g.pick(g.vt[s], 0)
+            if o >= 0 and o != s and g.chance(50) { return $ind $g.use(s) " = " $g.use(o) "\n" }
+            return $ind $g.use(s) " = " $g.construct(g.vt[s], 3) "\n"
+        }
+    }
+    if p == 2 {
+        r := g.pick(0, 23)
+        if r >= 0 { return $ind $g.use(r) " = " $g.construct(I32(100 + structOf(g.vt[r])), 3) "\n" }
+    }
+    r := g.pick(0, 22)
+    if r >= 0 and g.vlen[r] >= 0 {
+        et := elemOf(g.vt[r])
+        return $ind $g.use(r) " = Array<" $Prims[et] ">(" $g.vlen[r] ", " $g.fit(et, 2) ")\n"
+    }
+    return g.refStmt(ind)
+}
+
+# a fixed-length reference local: a borrow of a fixed-length array, or a view of a run-time one whose length is known
+# (E32b) - writable where its source is, so writes through it are the source's
+fn (g mut Gen&) frefDecl(ind String&) String& {
+    src I64 = -1
+    for k in range g.base, g.nv {
+        t := g.vt[k]
+        if g.matches(k, 0, 5) and not isFRef(t) and 0 <= g.vlen[k] < 15 and not (isFixed(t) and fixN(t) == 15) and g.chance(50) { src = k }
+    }
+    if src < 0 { return g.fixedDecl(ind) }
+    s := g.vt[src]
+    n := g.vlen[src]
+    et := elemOf(s)
+    w := g.writable(src) and g.chance(60)
+    t I32 = I32(2600 + et * 16 + n) if w else I32(2300 + et * 16 + n)
+    x := g.use(src)
+    init String& = x
+    if not isFixed(s) { init = $x " as Array<" $Prims[et] ", " $n ">&" }
+    k := g.reserve()
+    g.declare(k, t, n, true)
+    g.vhome[k] = g.vhome[src] if isRefArr(s) else g.vblk[src]
+    return $ind "x" $k " " $g.tn(t) $x " = " $init "\n"
+}
+
+# ---- fixed-length arrays (T7c/T7d) and functions generic over a constant (G20-G28) ----
+
+# a value of fixed-length array type t: a variable of it, its zero value or a literal of its length (T7d: it adapts)
+fn (g mut Gen&) fixedVal(t I32, d I64) String& {
+    k := g.pick(t, 0)
+    if k >= 0 and g.chance(50) { return g.use(k) }
+    et := elemOf(t)
+    n := fixN(t)
+    if n == 0 or g.chance(15) { return $g.tn(t) "()" }
+    b := StringBuilder()
+    b.Push($Prims[et] "[")
+    for i in range n {
+        if i > 0 { b.Push(", ") }
+        b.Push(g.fit(et, d - 1))
+    }
+    b.Push("]")
+    return b.ToString()
+}
+
+# a fixed-length array local: a literal of its length, its zero value, a copy of another of its type, or a checked copy
+# of a run-time array whose length is known to be its own
+fn (g mut Gen&) fixedDecl(ind String&) String& {
+    et := g.primT()
+    n I64 = g.r(6)
+    p := g.r(5)
+    src := g.pick(et, 24)
+    k := g.reserve()
+    init String& = ""
+    if p == 0 and src >= 0 and 0 <= g.vlen[src] < 15 {
+        n = g.vlen[src]
+        init = " = " $g.use(src)
+    }
+    t I32 = I32(2000 + et * 16 + n)
+    if p == 1 {
+        init = " = " $g.tn(t) "()"
+    } else if p == 2 {
+        init = " = " $g.fixedVal(t, 3)
+    } else if p == 3 and g.chance(50) {
+        init = ""
+    } else if init.Len() == 0 {
+        init = " = " $g.fixedVal(t, 3)
+    }
+    g.declare(k, t, n, true)
+    return $ind "x" $k " " $g.tn(t) $init "\n"
+}
+
+# an element of a run-time array viewed as a fixed-length one (E32b): checked under try, the default where the length
+# is not N
+fn (g mut Gen&) viewElement(t I32, d I64) String& {
+    a := g.pick(t, 24)
+    if a < 0 or g.chance(40) {
+        for k in range g.base, g.nv {
+            if g.matches(k, 0, 22) and elemOf(g.vt[k]) == t and g.chance(50) { a = k }
+        }
+    }
+    if a < 0 { return g.leaf(t) }
+    n I64 = 1 + g.r(5)
+    if g.vlen[a] > 0 and g.chance(50) { n = g.vlen[a] }
+    v String& = "(" $g.use(a) " as Array<" $Prims[t] ", " $n ">&)"
+    if n == g.vlen[a] and g.chance(60) { return $v "[" $g.r(n) "]" }
+    return "(try (" $v "[" $g.solid(g.idxT(), d - 1) "]) catch default " $g.lit(t) ")"
+}
+
+# whether a value of type s may be converted to t without undefined behaviour (a float becomes an integer only under try)
+fn convertible(s I32, t I32) Bool {
+    if s == TBool or t == TBool { return s == t }
+    return not (isFloat(s) and isInt(t))
+}
+
+# a call of a new function generic over a constant N - its array parameter's length - whose body decides an if, a
+# conditional and a match on N per instantiation, the branch not chosen never checked (G26): it may index past N. Or a
+# recursion on N, ended by such an if
+fn (g mut Gen&) constCall(t I32, d I64) String& {
+    if g.hdepth >= 2 or g.ng >= 3 or g.constN or t == TStr or t == TBool { return g.leaf(t) }
+    et := g.numT()
+    if g.chance(30) { et = t }
+    name String& = "g" $g.ci "_" $g.ng
+    g.ng += 1
+    recursive := et == t and g.chance(35)
+    sbase := g.base
+    snv := g.nv
+    sdep := g.dep
+    snp := g.np
+    sfal := g.fallible
+    slam := g.inLambda
+    sb := g.enter()
+    g.base = g.nv
+    g.fallible = false
+    g.inLambda = false
+    g.constN = true
+    b := StringBuilder()
+    pt := g.intT()
+    if recursive {
+        a := g.push(I32(2000 + et * 16 + 15), -1, false, true)
+        g.np = 0
+        ops := String&["+", "-", "*", "^", "&", "|"]
+        op := ops[g.r(6) if isInt(et) else g.r(3)]
+        b.Push("fn " $name "(x" $a " Array<" $Prims[et] ", <N>>&) " $Prims[t] " {\n")
+        b.Push("    if N == 0 { return " $g.lit(t) " } else { return x" $a "[0] " $op " " $name "(x" $a "[1:] as Array<" $Prims[et] ", N - 1>&) }\n}\n")
+    } else {
+        p := g.push(pt, -1, false, true)
+        a := g.push(I32(2000 + et * 16 + 15), -1, false, true)
+        g.np = 1
+        b.Push("fn " $name "(x" $p " " $Prims[pt] ", x" $a " Array<" $Prims[et] ", <N>>&) " $Prims[t] " {\n")
+        g.hdepth += 1
+        b.Push(g.stmts(1 + g.r(3), 1, "    "))
+        b.Push(g.constIf(a, 1, "    "))
+        b.Push("    return " $g.fit(t, 2) "\n}\n")
+        g.hdepth -= 1
+    }
+    g.decls = $g.decls $b.ToString()
+    g.base = sbase
+    g.nv = snv
+    g.dep = sdep
+    g.np = snp
+    g.fallible = sfal
+    g.inLambda = slam
+    g.constN = false
+    g.curBlock = sb
+    arg String& = ""
+    f := g.pick(et, 21)
+    if f >= 0 and fixN(g.vt[f]) != 15 and g.chance(60) {
+        arg = g.use(f)
+    } else {
+        n I64 = g.r(6)
+        arg = g.fixedVal(I32(2000 + et * 16 + n), d - 1)
+    }
+    if recursive { return $name "(" $arg ")" }
+    return $name "(" $g.fit(pt, d - 1) ", " $arg ")"
+}
+
+# an if on N: in the branch where N > c the array a is known to hold c + 1 elements at least, which an instantiation
+# whose N is not above c never checks
+fn (g mut Gen&) constIf(a I64, d I64, ind String&) String& {
+    c I64 = g.r(4)
+    in2 := $ind "    "
+    g.vlen[a] = c + 1
+    t := g.block(1 + g.r(2), d, in2)
+    g.vlen[a] = -1
+    e := g.block(1 + g.r(2), d, in2)
+    return $ind "if N > " $c " {\n" $t $ind "} else {\n" $e $ind "}\n"
+}
+
+# a value of type t in a function generic over N: N itself, a conditional on N reading an element only where N says
+# there is one, or a match on N
+fn (g mut Gen&) constVal(t I32, d I64) String& {
+    a I64 = -1
+    for k in range g.base, g.nv {
+        if g.matches(k, 0, 5) and isFixed(g.vt[k]) and fixN(g.vt[k]) == 15 { a = k }
+    }
+    if a < 0 { return g.leaf(t) }
+    et := elemOf(g.vt[a])
+    p := g.r(3)
+    if p == 0 and isInt(t) { return $Prims[t] "(N)" }
+    if p == 1 and convertible(et, t) {
+        c I64 = g.r(4)
+        return "(" $Prims[t] "(" $g.use(a) "[" $c "]) if N > " $c " else " $Prims[t] "(" $g.ex(t, d - 1) "))"
+    }
+    b := StringBuilder()
+    b.Push("(match N { ")
+    n I64 = 1 + g.r(3)
+    for c in range n {
+        b.Push("case " $c " => ")
+        if c > 0 and convertible(et, t) and g.chance(60) {
+            b.Push($Prims[t] "(" $g.use(a) "[" $(c - 1) "]) ")
+        } else {
+            b.Push($g.typed(t, d - 1) " ")
+        }
+    }
+    b.Push("case _ => " $g.typed(t, d - 1) " })")
+    return b.ToString()
+}
+
+# ---- a generic struct over a type and a constant (G20-G26), per case ----
+
+fn (g mut Gen&) gDecl() {
+    if g.hasG { return }
+    g.hasG = true
+    n String& = "G" $g.ci
+    b := StringBuilder()
+    b.Push("type " $n "<T, N I64> struct(v T) {\n    v\n    a Array<T, N>\n}\n")
+    b.Push("fn (b mut " $n "<<T>, <N>>&) put(i I64, x T) {\n    if N > 0 { b.a[(i & 7) % N] = x }\n}\n")
+    b.Push("fn (b " $n "<<T>, <N>>&) sum() T {\n    s T = b.v\n    for x in b.a { s = s + x }\n    return s\n}\n")
+    b.Push("fn (b " $n "<<T>, <N>>&) at(i I64) T { return b.a[(i & 7) % N] if N > 0 else b.v }\n")
+    g.decls = $g.decls $b.ToString()
+}
+
+# a statement making a G<i><T, N> value, copying one (its array is copied with it, T7c), or putting into one
+fn (g mut Gen&) genStmt(ind String&) String& {
+    k I64 = -1
+    for v in range g.base, g.nv {
+        if isGen(g.vt[v]) and g.chance(60) { k = v }
+    }
+    if k >= 0 and g.chance(65) {
+        t := g.vt[k]
+        if g.chance(30) {
+            x := g.reserve()
+            g.declare(x, t, -1, true)
+            return $ind "x" $x " " $g.tn(t) " = " $g.use(k) "\n"
+        }
+        return $ind $g.use(k) ".put(" $g.ex(g.idxT(), 2) ", " $g.fit((t - 6000) / 16, 2) ")\n"
+    }
+    g.gDecl()
+    et := g.numT()
+    t I32 = I32(6000 + et * 16 + g.r(6))
+    x := g.reserve()
+    e := g.fit(et, 2)
+    g.declare(x, t, -1, true)
+    return $ind "x" $x " " $g.tn(t) " = " $g.tn(t) "(" $e ")\n"
+}
+
+# ---- std: math, Format and ParseInt, Fixed ----
+
+Unary := String&["Sqrt", "Cbrt", "Exp", "Exp2", "Expm1", "Log", "Log2", "Log10", "Log1p", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Sinh", "Cosh", "Tanh", "Erf", "Erfc", "Floor", "Ceil", "Trunc", "Round", "RoundEven", "Abs"]
+Binary := String&["Pow", "Hypot", "Atan2", "Min", "Max"]
+
+# a std/math function of a float of type t - the first argument never a literal, so it fixes T (G9b)
+fn (g mut Gen&) mathFloat(t I32, d I64) String& {
+    p := g.r(10)
+    if p < 6 { return "math." $Unary[g.r(Unary.Len())] "(" $g.solid(t, d - 1) ")" }
+    if p < 9 { return "math." $Binary[g.r(Binary.Len())] "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ")" }
+    f String& = "Fma" if g.chance(50) else "Clamp"
+    return "math." $f "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")"
+}
+
+fn (g mut Gen&) mathInt(t I32, d I64) String& {
+    p := g.r(4)
+    if p == 0 { return "math.Abs(" $g.solid(t, d - 1) ")" }
+    if p == 3 { return "math.Clamp(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")" }
+    f String& = "Min" if p == 1 else "Max"
+    return "math." $f "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ")"
+}
+
+# an integer of type t through its text in a base and back
+fn (g mut Gen&) formatBack(t I32, d I64) String& {
+    b I64 = 2 + g.r(35)
+    s := g.intT()
+    x := "(" $g.ex(s, d - 1) ").Format(" $b ")"
+    if t == 7 { return "(try " $x ".ParseUint(" $b ") catch default " $g.lit(t) ")" }
+    if t == 3 { return "(try " $x ".ParseInt(" $b ") catch default " $g.lit(t) ")" }
+    return $Prims[t] "((try " $x ".ParseInt(" $b ") catch default " $g.lit(3) "))"
+}
+
+# a collection's value of type t: an element of a List or a Map's value, a fold over one, or - for I64 - a count
+fn (g mut Gen&) collVal(t I32, d I64) String& {
+    p := g.r(6)
+    if g.hasG and isNum(t) and g.chance(30) { p = 3 }
+    if p == 0 {
+        l := g.pick(t, 15)
+        if l >= 0 {
+            x := g.use(l)
+            if g.chance(35) {                       # l[i], unchecked: only where the conditional says there is one
+                return "(" $x "[" $g.plainIdx() " % " $x ".Len()] if " $x ".Len() > 0 else " $g.typed(t, d - 1) ")"
+            }
+            f String& = "First" if g.chance(50) else "Last"
+            return "(try " $x "." $f "() catch default " $g.lit(t) ")"
+        }
+    }
+    if p == 1 {
+        for k in range g.base, g.nv {
+            m := g.vt[k]
+            if isMap(m) and mapV(m) == t and not g.inLambda and g.chance(60) {
+                return "(try " $g.use(k) ".Get(" $g.fit(mapK(m), d - 1) ") catch default " $g.lit(t) ")"
+            }
+        }
+    }
+    if p == 3 and isNum(t) {
+        for v in range g.base, g.nv {
+            if isGen(g.vt[v]) and (g.vt[v] - 6000) / 16 == t {
+                if g.chance(50) { return $g.use(v) ".sum()" }
+                return $g.use(v) ".at(" $g.ex(g.idxT(), d - 1) ")"
+            }
+        }
+    }
+    if p == 2 and isNum(t) {                         # a fold
+        l := g.pick(0, 16)
+        a := g.pick(0, 5)
+        if l >= 0 or a >= 0 {
+            src String& = ""
+            et I32 = 0
+            m := g.pick(0, 17)
+            if m >= 0 and g.chance(30) {
+                src = $g.use(m) ".Values()"
+                et = mapV(g.vt[m])
+            } else if l >= 0 and (a < 0 or g.chance(50)) {
+                src = $g.use(l) ".Iter()"
+                et = g.vt[l] - 500
+            } else {
+                src = g.use(a)
+                et = elemOf(g.vt[a])
+            }
+            return $src ".Fold(" $Prims[t] "(" $g.lit(t) "), " $g.lambda(t, et, t, 2) ")"
+        }
+    }
+    if t == 3 {
+        q := g.r(5)
+        l := g.pick(0, 16)
+        a := g.pick(0, 5)
+        if q == 0 and l >= 0 { return $g.use(l) ".Iter().Count(" $g.lambda(g.vt[l] - 500, -1, TBool, 2) ")" }
+        if q == 1 and a >= 0 { return $g.use(a) ".Count(" $g.lambda(elemOf(g.vt[a]), -1, TBool, 2) ")" }
+        if q == 2 and a >= 0 { return "(try " $g.use(a) ".FindIndex(" $g.lambda(elemOf(g.vt[a]), -1, TBool, 2) ") catch default -1)" }
+        m := g.pick(0, 17)
+        if q == 3 and m >= 0 { return $g.use(m) ".Len()" }
+        if q == 4 and a >= 0 {
+            b := g.pick(elemOf(g.vt[a]), 9)
+            if b >= 0 { return $g.use(a) ".CountOf(" $g.use(b) ")" }
+        }
+    }
+    return g.leaf(t)
+}
+
+# a Bool about collections and references
+fn (g mut Gen&) collBool(d I64) String& {
+    p := g.r(9)
+    if p == 0 {
+        for k in range g.base, g.nv {
+            m := g.vt[k]
+            if isMap(m) and not g.inLambda and g.chance(50) {
+                x := g.use(k)
+                q := g.r(3)
+                key := g.fit(mapK(m), d - 1)
+                if q == 0 { return $x ".Has(" $key ")" }
+                if q == 1 { return "(" $key " in " $x ")" }
+                return "(" $key " not in " $x ")"
+            }
+        }
+    }
+    if p == 1 {
+        l := g.pick(0, 16)
+        a := g.pick(0, 5)
+        if l >= 0 and (a < 0 or g.chance(50)) {
+            f String& = "Any" if g.chance(50) else "All"
+            return $g.use(l) ".Iter()." $f "(" $g.lambda(g.vt[l] - 500, -1, TBool, 2) ")"
+        }
+        if a >= 0 {
+            f String& = "Any" if g.chance(50) else "All"
+            return $g.use(a) "." $f "(" $g.lambda(elemOf(g.vt[a]), -1, TBool, 2) ")"
+        }
+    }
+    if p == 2 or p == 3 {                           # identity (E10c)
+        a := g.pick(0, 22)
+        if a < 0 or g.chance(50) { a = g.pick(0, 23) }
+        if a >= 0 {
+            b := g.kin(a)
+            if b >= 0 {
+                op String& = " is " if g.chance(60) else " is not "
+                return "(" $g.use(a) $op $g.use(b) ")"
+            }
+        }
+    }
+    if p == 7 {
+        for v in range g.base, g.nv {
+            if isGen(g.vt[v]) and g.chance(50) {
+                o := g.pick(g.vt[v], 0)
+                op String& = "==" if g.chance(50) else "!="
+                return "(" $g.use(v) " " $op " " $g.use(o) ")"
+            }
+        }
+    }
+    if p == 4 {                                     # two Lists, or Maps, of one type: one collection or not
+        l := g.pick(0, 16)
+        if l < 0 { l = g.pick(0, 17) }
+        if l >= 0 {
+            o := g.pick(g.vt[l], 0)
+            op String& = "==" if g.chance(50) else "!="
+            if isList(g.vt[l]) and (g.vref[l] != g.vref[o] or g.chance(50)) {
+                return "(" $g.use(l) ".ToArray() " $op " " $g.use(o) ".ToArray())"
+            }
+            if g.vref[l] == g.vref[o] { return "(" $g.use(l) " " $op " " $g.use(o) ")" }
+        }
+    }
+    if p == 5 {                                     # arrays by their elements, however held (E10)
+        a := g.pick(0, 5)
+        if a >= 0 {
+            s := g.vt[a]
+            et := elemOf(s)
+            n I64 = 0
+            for k in range g.base, g.nv {
+                b := g.vt[k]
+                if g.matches(k, 0, 5) and elemOf(b) == et and isRefArr(b) == isRefArr(s) { n += 1 }
+            }
+            w := g.r(n)
+            for k in range g.base, g.nv {
+                b := g.vt[k]
+                if g.matches(k, 0, 5) and elemOf(b) == et and isRefArr(b) == isRefArr(s) {
+                    if w == 0 {
+                        op String& = "==" if g.chance(50) else "!="
+                        if g.chance(25) { return $g.use(a) ".Contains(" $g.use(k) ")" }
+                        return "(" $g.use(a) " " $op " " $g.use(k) ")"
+                    }
+                    w -= 1
+                }
+            }
+        }
+    }
+    if p == 6 {
+        f String& = "IsNan"
+        q := g.r(3)
+        if q == 1 { f = "IsInf" }
+        if q == 2 { f = "IsFinite" }
+        return "math." $f "(" $g.solid(g.floatT(), d - 1) ")"
+    }
+    return g.leaf(TBool)
+}
+
+# a piece of text from tonight's operations: a number in a base, a float with n digits, a Map's keys or values in its
+# order, an array mapped, filtered, repeated or with a part replaced
+fn (g mut Gen&) newPiece(d I64) String& {
+    p := g.r(7)
+    if p == 0 and g.chance(50) { return "$((" $g.ex(g.intT(), d - 1) ").Format(" $(2 + g.r(35)) "))" }
+    if p == 1 { return "$((" $g.ex(g.floatT(), d - 1) ").Fixed(" $(g.r(28) - 3) "))" }
+    if p == 2 {
+        m := g.pick(0, 17)
+        if m >= 0 {
+            f String& = "Keys" if g.chance(50) else "Values"
+            return "$(" $g.use(m) "." $f "().ToList().ToArray())"
+        }
+    }
+    a := g.pick(0, 5)
+    if a < 0 { return "$(" $g.ex(g.primT(), d) ")" }
+    x := g.use(a)
+    et := elemOf(g.vt[a])
+    if p == 3 { return "$(" $x ".Map(" $g.lambda(et, -1, g.primT(), 2) "))" }
+    if p == 4 { return "$(" $x ".Filter(" $g.lambda(et, -1, TBool, 2) "))" }
+    if p == 5 { return "$(" $x ".Repeat(" $(g.r(4) - 1) "))" }
+    b := g.pick(et, 9)
+    c := g.pick(et, 9)
+    if b >= 0 and c >= 0 { return "$(" $x ".Replace(" $g.use(b) ", " $g.use(c) "))" }
+    return "$(" $x ")"
+}
+
+# a composite result type for a case: a struct or an enum of its own, a fixed-length or a run-time-length array, or its
+# generic struct - so a global holding one is baked (K2b) or set at startup, and compared as rendered
+fn (g mut Gen&) compositeT() I32 {
+    q := g.r(5)
+    if q == 0 and g.ns > 0 { return I32(100 + g.r(g.ns)) }
+    if q == 1 and g.ne > 0 { return I32(200 + g.r(g.ne)) }
+    if q == 2 { return I32(2000 + g.primT() * 16 + g.r(5)) }
+    if q == 3 { return I32(300 + g.primT()) }
+    g.gDecl()
+    return I32(6000 + g.numT() * 16 + g.r(5))
+}
+
+# the value a case of composite type rt returns: one of its locals of that type, or one made
+fn (g mut Gen&) retVal(rt I32) String& {
+    k := g.pick(rt, 0)
+    if k >= 0 and g.chance(60) { return g.use(k) }
+    if 300 <= rt < 400 {
+        et := elemOf(rt)
+        n := g.r(5)
+        if n == 0 { return "Array<" $Prims[et] ">(0)" }
+        b := StringBuilder()
+        b.Push($Prims[et] "[")
+        for i in range n {
+            if i > 0 { b.Push(", ") }
+            b.Push(g.fit(et, 2))
+        }
+        b.Push("]")
+        return b.ToString()
+    }
+    if isGen(rt) { return $g.tn(rt) "(" $g.fit((rt - 6000) / 16, 2) ")" }
+    return g.ex(rt, 3)
+}
+
+# the case's locals rendered, some of them - so what its statements left in them is compared too
+fn (g mut Gen&) digest() String& {
+    b := StringBuilder()
+    for k in range g.base, g.nv {
+        t := g.vt[k]
+        if t >= 0 and g.chance(35) {
+            x := g.use(k)
+            if isList(t) {
+                b.Push(" \" \" $(" $x ".ToArray())")
+            } else if isMap(t) {
+                b.Push(" \" \" $(" $x ".Keys().ToList().ToArray()) $(" $x ".Values().ToList().ToArray())")
+            } else {
+                b.Push(" \" \" $(" $x ")")
+            }
+        }
+    }
     return b.ToString()
 }
 
@@ -1197,13 +2395,43 @@ fn (g mut Gen&) newStruct() String& {
     b := StringBuilder()
     b.Push("type S" $g.ci "_" $k " struct(")
     for f in range n {
-        g.sf[k * 4 + f] = g.primT()
+        t := g.primT()
+        if g.chance(20) { t = I32(2000 + g.primT() * 16 + 1 + g.r(4)) }     # held in place (T7c)
+        g.sf[k * 4 + f] = t
         if f > 0 { b.Push(", ") }
-        b.Push("f" $f " " $Prims[g.sf[k * 4 + f]])
+        if isFixed(t) {
+            b.Push("p" $f " " $g.tn(t) "&")                                 # an array parameter is a reference (D9a)
+        } else {
+            b.Push("f" $f " " $Prims[t])
+        }
     }
     b.Push(") {\n")
-    for f in range n { b.Push("    f" $f "\n") }
+    for f in range n {
+        t := g.sf[k * 4 + f]
+        if isFixed(t) {
+            b.Push("    f" $f " " $g.tn(t) " = p" $f "\n")
+        } else {
+            b.Push("    f" $f "\n")
+        }
+    }
     b.Push("}\n")
+    # E10b: supplied Hash when every field hashes (no float, element or field); or E10a: its own Eq, comparing only
+    # the first field, with a Hash agreeing; and E11c: its own Str
+    sn := "S" $g.ci "_" $k
+    hashes := true
+    for f in range n {
+        t := g.sf[k * 4 + f]
+        if isFloat(t) or (isFixed(t) and isFloat(elemOf(t))) { hashes = false }
+    }
+    f0 := g.sf[k * 4]
+    if (isInt(f0) or f0 == TBool) and g.chance(25) {
+        h String& = "I64(a.f0)" if isInt(f0) else "(I64(7) if a.f0 else I64(3))"
+        b.Push("fn (a " $sn "&) Eq(o " $sn "&) Bool { return a.f0 == o.f0 }\n")
+        b.Push("fn (a " $sn "&) Hash() I64 { return " $h " }\n")
+        hashes = true
+    }
+    g.shash[k] = hashes
+    if g.chance(20) { b.Push("fn (a " $sn "&) Str() String { return \"<\" $a.f0 \">\" }\n") }
     return b.ToString()
 }
 
@@ -1214,6 +2442,7 @@ fn (g mut Gen&) newEnum() String& {
     g.en[k] = I32(n)
     b := StringBuilder()
     b.Push("type E" $g.ci "_" $k " enum {\n")
+    hashes := true
     for c in range n {
         np := g.r(3)
         g.epn[k * 4 + c] = I32(np)
@@ -1221,15 +2450,19 @@ fn (g mut Gen&) newEnum() String& {
         if np > 0 {
             b.Push("(")
             for f in range np {
-                g.ept[(k * 4 + c) * 2 + f] = g.primT()
+                t := g.primT()
+                if g.chance(12) { t = I32(2000 + g.primT() * 16 + 1 + g.r(3)) }      # held in the payload (T7c)
+                g.ept[(k * 4 + c) * 2 + f] = t
+                if isFloat(t) or (isFixed(t) and isFloat(elemOf(t))) { hashes = false }
                 if f > 0 { b.Push(", ") }
-                b.Push("f" $f " " $Prims[g.ept[(k * 4 + c) * 2 + f]])
+                b.Push("f" $f " " $g.tn(t))
             }
             b.Push(")")
         }
         b.Push("\n")
     }
     b.Push("}\n")
+    g.ehash[k] = hashes
     return b.ToString()
 }
 
@@ -1245,6 +2478,11 @@ fn (g mut Gen&) genCase(ci I64) I32 {
     g.base = 0
     g.nv = 0
     g.hdepth = 0
+    g.ng = 0
+    g.hasG = false
+    g.constN = false
+    g.inLambda = false
+    g.enter()
     g.decls = ""
     for i in range g.r(3) { g.decls = $g.decls $g.newStruct() }
     for i in range g.r(3) { g.decls = $g.decls $g.newEnum() }
@@ -1271,16 +2509,23 @@ fn (g mut Gen&) genCase(ci I64) I32 {
         resets.Push("        v" $ci "_" $i " = " $z "\n")
     }
     rt I32 = TStr
-    if g.chance(60) { rt = g.primT() }
+    p := g.r(100)
+    if p < 50 {
+        rt = g.primT()
+    } else if p < 62 {
+        rt = g.compositeT()
+    }
     g.np = np
     body := g.stmts(2 + g.r(6), 2, "    ")
     ret String& = ""
     if rt == TStr {
-        ret = g.exStr(3)
-    } else {
+        ret = $g.exStr(3) $g.digest()
+    } else if rt < 100 {
         ret = g.fit(rt, 3)
+    } else {
+        ret = g.retVal(rt)
     }
-    g.decls = $g.decls "fn c" $ci "(" $sig.ToString() ") " $Prims[rt] " {\n" $body "    return " $ret "\n}\n" "K" $ci " " $Prims[rt] " = c" $ci "(" $lits.ToString() ")\n" $inputs.ToString()
+    g.decls = $g.decls "fn c" $ci "(" $sig.ToString() ") " $g.tn(rt) " {\n" $body "    return " $ret "\n}\n" "K" $ci " " $g.tn(rt) " = c" $ci "(" $lits.ToString() ")\n" $inputs.ToString()
     g.lits = lits.ToString()
     g.vars = vars.ToString()
     g.resets = resets.ToString()
@@ -1293,7 +2538,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     g := Gen(seed)
     g.atomics = atomics
     b := StringBuilder()
-    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\n")
+    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\nimport \"std/math\"\n")
     prints := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {

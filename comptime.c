@@ -85,6 +85,8 @@ struct ctState {
     bool errBypass;              //CF_ERROR raised while evaluating a tried operation's OWN operands (an
                                  //argument's "try g()"): it leaves the enclosing function, and the
                                  //operation's clauses must not see it - until it crosses a function boundary
+    struct operand* tryStmtCall; //R10: the call a "try ... catch" statement is evaluating - tried as a try-expr's
+                                 //call is, though the checker marks only the expression form's (isTried)
     struct list* locals;         //struct ctLocal, the current call's, innermost last
     const char* why;             //CF_FAIL: what could not be done at compile time
     struct token whyTok;
@@ -1506,6 +1508,10 @@ static struct ctVal* ctRunOnStack(struct ctState* st, struct operand* op) {
     return r;
 }
 
+//R9/R10: whether a call is tried - a try-expr's (isTried) or the one a try statement is evaluating - so that an error
+//from its own operands (an argument's "try g()", a callee computed by one) leaves the function its clauses are in
+static bool ctTried(struct ctState* st, struct operand* op) { return op && (op->isTried || op == st->tryStmtCall); }
+
 //the call itself: parameters bound, body run. A reference parameter is bound to the argument's own node, so
 //writing through a "mut &" parameter writes the caller's value - exactly E12c's borrow.
 static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
@@ -1536,7 +1542,10 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         //the one a function-typed global holds
         struct ctVal* fv = op->callee ? ctEval(st, op->callee)
                            : func->isGlobalVar ? ctReadGlobal(st, op, canonicalVar(func)) : ctFindLocal(st, func->name);
-        if (!fv && (op->callee || func->isGlobalVar)) return false;
+        if (!fv && (op->callee || func->isGlobalVar)) {
+            if (st->flow == CF_ERROR && ctTried(st, op) && st->errCheckRoot != op) st->errBypass = true; //not this call's
+            return false;
+        }
         if (fv) fv = ctDeref(fv);
         if (!fv || fv->kind == CT_NULL) { ctFail(st, op->tok, "it calls through a null function value"); return false; }
         if (fv->kind != CT_FUNC) { ctFail(st, op->tok, "it calls through a function value compile-time evaluation does not model"); return false; }
@@ -1580,7 +1589,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         if (v && shareArr) v = ctDeref(v);
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
-            if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
+            if (st->flow == CF_ERROR && ctTried(st, op) && st->errCheckRoot != op) st->errBypass = true;
             return false;
         }
         //a parameter is a node of its own: a value one holds a copy, a reference one points where the
@@ -1760,6 +1769,8 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
     bool marked = t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
     if (marked) {
         if (!v || v->kind == CT_NULL) { ctTextStr(b, "null"); return true; }
+        //E10: a reference to an array with no storage - an array value's zero value - is a null reference, bit for bit
+        if (t.bType == BASETYPE_ARRAY && v->kind == CT_REF && ctArrayRefNull(v)) { ctTextStr(b, "null"); return true; }
         if (depth >= 8) { ctTextStr(b, "..."); return true; }
         struct type referent = t;
         referent.structMAlloc = false;
@@ -2544,7 +2555,10 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = s->op->intLiteralVal;
             return;
         case STATEMENT_TRY_CATCH: {
+            struct operand* prevTryStmt = st->tryStmtCall;
+            st->tryStmtCall = s->op;
             ctCall(st, s->op);
+            st->tryStmtCall = prevTryStmt;
             if (st->flow != CF_ERROR || st->errBypass) return;
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);

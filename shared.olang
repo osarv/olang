@@ -11444,6 +11444,56 @@ test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agre
     assert fzTasks(fzRun + 3) == FzTasksBaked
 }
 
+# R10/R9: an error raised by a try statement's call's own arguments ("try h(try g(n)) catch E.A") leaves the function,
+# as an argument's try says - the evaluator ran the statement's clause for it, so a baked global, an assert decided while
+# compiling and -i gave 7 where the program gave 1 (fuzz/repro/trystmtarg.olang)
+error fzTryErr {
+    A
+    B
+}
+fn fzFailA(x I64) I64 ? fzTryErr { error fzTryErr.A }
+fn fzPass(x I64) I64 ? fzTryErr { return x }
+fn fzBigB(x I64) I64 ? fzTryErr {
+    if x > 100 { error fzTryErr.B }
+    return x
+}
+fn fzPickB(x I64) fn(y I64) I64 ? fzTryErr { return fzBigB }
+fn fzStmtArg(n I64) I64 ? fzTryErr {
+    try fzPass(try fzFailA(n)) catch fzTryErr.A { return 7 }
+    return 9
+}
+fn fzStmtCallee(n I64) I64 ? fzTryErr {
+    try fzPickB(try fzFailA(n))(3) catch fzTryErr.A { return 7 }
+    return 9
+}
+fn fzStmtOwn(n I64) I64 ? fzTryErr {
+    try fzPickB(n)(200) catch fzTryErr.B { return 4 }
+    return 9
+}
+fn fzTryStmts(n I64) I64 {
+    return (try fzStmtArg(n) catch default 1) * 100 + (try fzStmtCallee(n) catch default 1) * 10 + (try fzStmtOwn(n) catch default 2)
+}
+FzTryStmtsBaked I64 = fzTryStmts(3)
+test "R10: a try statement's clauses do not take an error raised by its call's arguments" {
+    assert FzTryStmtsBaked == 114 and fzTryStmts(3) == 114
+    assert fzTryStmts(fzRun + 2) == 114
+}
+
+# E10/E11a: "$" on a reference to an array value's zero value - an array with no storage, a null reference's bits - is
+# "null" as at run time; the evaluator rendered the empty array it holds (fuzz/repro/nullarrayrender.olang)
+fn fzNullArr(n I64) String {
+    d Array<U16>
+    rd Array<U16>&d = d
+    e Array<U16> = Array<U16>(n - n)
+    re Array<U16>&e = e
+    return $rd " " $(rd == null) " " $re " " $(re == null)
+}
+FzNullArrBaked String = fzNullArr(3)
+test "E10: a reference to an array with no storage renders as null" {
+    assert FzNullArrBaked == "null true U16[] false" and fzNullArr(3) == FzNullArrBaked
+    assert fzNullArr(fzRun + 2) == FzNullArrBaked
+}
+
 # ---- checker batch 2 (2026-10-09): what the usage study found, and the syntax it asked for ----
 
 # G8a: a field declared after one whose type is an instantiation naming this very type ("List<mut Widget&>") is seen
