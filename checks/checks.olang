@@ -1022,5 +1022,6 @@ fn fuzz(r mut report&) ? Failed {
     dir := fresh("fuzz")
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
-    try r.expect(sh(dir, "./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
+    # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
 }
