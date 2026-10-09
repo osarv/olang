@@ -6436,6 +6436,9 @@ void emitScopeRuntime(FILE* out) {
         "@__olang_pool = linkonce_odr thread_local(initialexec) global [128 x ptr] zeroinitializer\n"
         //bit k set when class k holds a chunk
         "@__olang_pool_mask = linkonce_odr thread_local(initialexec) global i128 0\n"
+        //one 4KB chunk kept beside the classes, outside their bookkeeping: what a block scope allocating a little on
+        //every pass of a loop takes and gives back, each time
+        "@__olang_pool_spare = linkonce_odr thread_local(initialexec) global ptr null\n"
         //what the pool holds, in bytes of whole chunks, and the bound on it - an eighth of the machine's memory, read
         //when the pool first reaches it; 0 until then
         "@__olang_pool_bytes = linkonce_odr thread_local(initialexec) global i64 0\n"
@@ -6451,10 +6454,12 @@ void emitScopeRuntime(FILE* out) {
         "\n"
         "", out);
     fputs(
-        //an empty chunk whose data holds at least size bytes: the newest of the smallest class in the pool that holds it,
-        //no more than eight classes (two powers of two) above the request's own, or a new one of its class's size - mapped
-        //from 128KB up, where glibc's malloc itself turns to mmap, and taken from aligned_alloc below
-        "define linkonce_odr ptr @__olang_new_chunk(i64 %size) {\n"
+        //an empty chunk whose data holds at least size bytes, when the spare will not do (__olang_scope_alloc takes that
+        //itself): the newest chunk of the smallest class in the pool that holds size bytes, no more than eight classes (two
+        //powers of two) above the request's own, or a new one of its class's size - mapped from 128KB up, where glibc's
+        //malloc itself turns to mmap, and taken from aligned_alloc below. Never inlined, so __olang_scope_alloc stays
+        //small enough to inline wherever a scope allocates
+        "define linkonce_odr ptr @__olang_new_chunk(i64 %size) noinline {\n"
         "entry:\n"
         "  %small = icmp ule i64 %size, 4096\n"
         "  br i1 %small, label %search, label %sized\n"
@@ -6600,65 +6605,42 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n"
         "", out);
     fputs(
-        //O8b: chunk c into the pool, as the newest of its class - after making room for it under the pool's bound by
-        //giving the least recently given back chunks to the system, or giving c itself back when it alone is larger.
-        //The oldest chunk of a class is the one before its newest, and the oldest of all is the oldest of some class,
-        //so a bit per class is all the search needs
-        "define linkonce_odr void @__olang_pool_give(ptr %c) {\n"
+        //O8b: chunk c into the pool, as the newest of its class - once there is room for it under the pool's bound,
+        //which __olang_pool_make_room makes, or c itself goes back to the system when it alone is larger. Kept apart, so
+        //this, the common case, stays small enough to inline into every scope's close
+        "define linkonce_odr void @__olang_pool_give(ptr %given) {\n"
         "entry:\n"
+        "  %classptr0 = getelementptr %olang.chunk, ptr %given, i32 0, i32 5\n"
+        "  %class0 = load i64, ptr %classptr0\n"
+        "  %small = icmp eq i64 %class0, 0\n"
+        "  br i1 %small, label %spare, label %pool\n"
+        //a 4KB chunk becomes the spare, the newest of its class, and the one it replaces goes into the class
+        "spare:\n"
+        "  %s = load ptr, ptr @__olang_pool_spare\n"
+        "  store ptr %given, ptr @__olang_pool_spare\n"
+        "  %free = icmp eq ptr %s, null\n"
+        "  br i1 %free, label %done, label %pool\n"
+        "done:\n"
+        "  ret void\n"
+        "pool:\n"
+        "  %c = phi ptr [ %given, %entry ], [ %s, %spare ]\n"
         "  %capptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 2\n"
         "  %cap = load i64, ptr %capptr\n"
         "  %need = add i64 %cap, 64\n"
-        "  br label %room\n"
-        "room:\n"
-        "  %bytes = load i64, ptr @__olang_pool_bytes\n"
-        "  %after = add i64 %bytes, %need\n"
+        "  %bytes0 = load i64, ptr @__olang_pool_bytes\n"
+        "  %after0 = add i64 %bytes0, %need\n"
         "  %limit = load i64, ptr @__olang_pool_limit\n"
-        "  %over = icmp ugt i64 %after, %limit\n"
+        "  %over = icmp ugt i64 %after0, %limit\n"
         "  br i1 %over, label %bound, label %keep\n"
         "bound:\n"
-        "  %known = icmp ne i64 %limit, 0\n"
-        "  br i1 %known, label %evict, label %measure\n"
-        "measure:\n"
-        "  %measured = call i64 @__olang_pool_measure()\n"
-        "  store i64 %measured, ptr @__olang_pool_limit\n"
-        "  br label %room\n"
-        "evict:\n"
-        "  %toobig = icmp ugt i64 %need, %limit\n"
-        "  br i1 %toobig, label %drop, label %oldest\n"
-        "oldest:\n"
-        "  %mask = load i128, ptr @__olang_pool_mask\n"
-        "  %anyleft = icmp ne i128 %mask, 0\n"
-        "  br i1 %anyleft, label %scan, label %drop\n"
-        "scan:\n"
-        "  %m = phi i128 [ %mask, %oldest ], [ %mrest, %scan ]\n"
-        "  %best = phi ptr [ null, %oldest ], [ %best2, %scan ]\n"
-        "  %bestk = phi i64 [ 0, %oldest ], [ %bestk2, %scan ]\n"
-        "  %beststamp = phi i64 [ -1, %oldest ], [ %beststamp2, %scan ]\n"
-        "  %tz = call i128 @llvm.cttz.i128(i128 %m, i1 true)\n"
-        "  %k = trunc i128 %tz to i64\n"
-        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
-        "  %newest = load ptr, ptr %slot\n"
-        "  %tailptr = getelementptr %olang.chunk, ptr %newest, i32 0, i32 6\n"
-        "  %tail = load ptr, ptr %tailptr\n"
-        "  %stampptr = getelementptr %olang.chunk, ptr %tail, i32 0, i32 7\n"
-        "  %stamp = load i64, ptr %stampptr\n"
-        "  %older = icmp ult i64 %stamp, %beststamp\n"
-        "  %best2 = select i1 %older, ptr %tail, ptr %best\n"
-        "  %bestk2 = select i1 %older, i64 %k, i64 %bestk\n"
-        "  %beststamp2 = select i1 %older, i64 %stamp, i64 %beststamp\n"
-        "  %m1 = sub i128 %m, 1\n"
-        "  %mrest = and i128 %m, %m1\n"
-        "  %more = icmp ne i128 %mrest, 0\n"
-        "  br i1 %more, label %scan, label %victim\n"
-        "victim:\n"
-        "  call void @__olang_pool_unlink(ptr %best2, i64 %bestk2)\n"
-        "  call void @__olang_chunk_release(ptr %best2)\n"
-        "  br label %room\n"
+        "  %room = call i1 @__olang_pool_make_room(i64 %need)\n"
+        "  br i1 %room, label %keep, label %drop\n"
         "drop:\n"
         "  call void @__olang_chunk_release(ptr %c)\n"
         "  ret void\n"
         "keep:\n"
+        "  %bytes = load i64, ptr @__olang_pool_bytes\n"
+        "  %after = add i64 %bytes, %need\n"
         "  store i64 %after, ptr @__olang_pool_bytes\n"
         "  %clock = load i64, ptr @__olang_pool_clock\n"
         "  %tick = add i64 %clock, 1\n"
@@ -6692,6 +6674,82 @@ void emitScopeRuntime(FILE* out) {
         "  store ptr %c, ptr %tnextptr\n"
         "  store ptr %c, ptr %hprevptr\n"
         "  ret void\n"
+        "}\n\n"
+        "", out);
+    fputs(
+        //each chunk of a closed scope's list to the pool - a chunk's next is read before it is given, since giving relinks
+        //it
+        "define linkonce_odr void @__olang_pool_give_list(ptr %head) noinline {\n"
+        "entry:\n"
+        "  br label %each\n"
+        "each:\n"
+        "  %cur = phi ptr [ %head, %entry ], [ %next, %each ]\n"
+        "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
+        "  %next = load ptr, ptr %nextptr\n"
+        "  call void @__olang_pool_give(ptr %cur)\n"
+        "  %atend = icmp eq ptr %next, null\n"
+        "  br i1 %atend, label %done, label %each\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
+        "", out);
+    fputs(
+        //makes room in the pool for need more bytes, false when need alone is beyond the bound: gives the least recently
+        //given back chunks to the system until the rest and need fit. The oldest chunk of a class is the one before its
+        //newest, and the oldest of all the oldest of some class, so a pass over the non-empty classes finds it. The
+        //bound is measured here the first time it is reached (0 until then)
+        "define linkonce_odr i1 @__olang_pool_make_room(i64 %need) noinline {\n"
+        "entry:\n"
+        "  br label %room\n"
+        "room:\n"
+        "  %bytes = load i64, ptr @__olang_pool_bytes\n"
+        "  %after = add i64 %bytes, %need\n"
+        "  %limit = load i64, ptr @__olang_pool_limit\n"
+        "  %over = icmp ugt i64 %after, %limit\n"
+        "  br i1 %over, label %bound, label %yes\n"
+        "bound:\n"
+        "  %known = icmp ne i64 %limit, 0\n"
+        "  br i1 %known, label %evict, label %measure\n"
+        "measure:\n"
+        "  %measured = call i64 @__olang_pool_measure()\n"
+        "  store i64 %measured, ptr @__olang_pool_limit\n"
+        "  br label %room\n"
+        "evict:\n"
+        "  %toobig = icmp ugt i64 %need, %limit\n"
+        "  br i1 %toobig, label %no, label %oldest\n"
+        "oldest:\n"
+        "  %mask = load i128, ptr @__olang_pool_mask\n"
+        "  %anyleft = icmp ne i128 %mask, 0\n"
+        "  br i1 %anyleft, label %scan, label %no\n"
+        "scan:\n"
+        "  %m = phi i128 [ %mask, %oldest ], [ %mrest, %scan ]\n"
+        "  %best = phi ptr [ null, %oldest ], [ %best2, %scan ]\n"
+        "  %bestk = phi i64 [ 0, %oldest ], [ %bestk2, %scan ]\n"
+        "  %beststamp = phi i64 [ -1, %oldest ], [ %beststamp2, %scan ]\n"
+        "  %tz = call i128 @llvm.cttz.i128(i128 %m, i1 true)\n"
+        "  %k = trunc i128 %tz to i64\n"
+        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
+        "  %newest = load ptr, ptr %slot\n"
+        "  %tailptr = getelementptr %olang.chunk, ptr %newest, i32 0, i32 6\n"
+        "  %tail = load ptr, ptr %tailptr\n"
+        "  %stampptr = getelementptr %olang.chunk, ptr %tail, i32 0, i32 7\n"
+        "  %stamp = load i64, ptr %stampptr\n"
+        "  %older = icmp ult i64 %stamp, %beststamp\n"
+        "  %best2 = select i1 %older, ptr %tail, ptr %best\n"
+        "  %bestk2 = select i1 %older, i64 %k, i64 %bestk\n"
+        "  %beststamp2 = select i1 %older, i64 %stamp, i64 %beststamp\n"
+        "  %m1 = sub i128 %m, 1\n"
+        "  %mrest = and i128 %m, %m1\n"
+        "  %more = icmp ne i128 %mrest, 0\n"
+        "  br i1 %more, label %scan, label %victim\n"
+        "victim:\n"
+        "  call void @__olang_pool_unlink(ptr %best2, i64 %bestk2)\n"
+        "  call void @__olang_chunk_release(ptr %best2)\n"
+        "  br label %room\n"
+        "yes:\n"
+        "  ret i1 1\n"
+        "no:\n"
+        "  ret i1 0\n"
         "}\n\n"
         "", out);
     //the pool's bound: an eighth of the machine's memory, from sysconf, or 1GB where it will not say. The names are the
@@ -6760,8 +6818,25 @@ void emitScopeRuntime(FILE* out) {
         "  %newused = add i64 %csaligned, %size\n"
         "  store i64 %newused, ptr %csusedptr\n"
         "  ret ptr %result\n"
+        //the pool's spare 4KB chunk when it is there and holds this (O8b) - what a block allocating a little on each pass
+        //of a loop takes every time, taken here; anything else is __olang_new_chunk's
         "needchunk:\n"
-        "  %newchunk = call ptr @__olang_new_chunk(i64 %size)\n"
+        "  %small = icmp ule i64 %size, 4096\n"
+        "  %spare = load ptr, ptr @__olang_pool_spare\n"
+        "  %hasspare = icmp ne ptr %spare, null\n"
+        "  %quick = and i1 %small, %hasspare\n"
+        "  br i1 %quick, label %usespare, label %callnew\n"
+        //it has been used: what it holds is whatever its last scope left there
+        "usespare:\n"
+        "  store ptr null, ptr @__olang_pool_spare\n"
+        "  %sparefresh = getelementptr %olang.chunk, ptr %spare, i32 0, i32 4\n"
+        "  store i64 0, ptr %sparefresh\n"
+        "  br label %link\n"
+        "callnew:\n"
+        "  %made = call ptr @__olang_new_chunk(i64 %size)\n"
+        "  br label %link\n"
+        "link:\n"
+        "  %newchunk = phi ptr [ %spare, %usespare ], [ %made, %callnew ]\n"
         "  %oldhead = load ptr, ptr %headptr\n"
         "  %newnextptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 0\n"
         "  store ptr %oldhead, ptr %newnextptr\n"
@@ -7132,13 +7207,21 @@ void emitScopeRuntime(FILE* out) {
         //join rather than given back by their own thread
         "define linkonce_odr void @__olang_pool_drain() {\n"
         "entry:\n"
+        "  %s = load ptr, ptr @__olang_pool_spare\n"
+        "  store ptr null, ptr @__olang_pool_spare\n"
+        "  %nospare = icmp eq ptr %s, null\n"
+        "  br i1 %nospare, label %classes, label %spare\n"
+        "spare:\n"
+        "  call void @__olang_chunk_release(ptr %s)\n"
+        "  br label %classes\n"
+        "classes:\n"
         "  %mask = load i128, ptr @__olang_pool_mask\n"
         "  store i128 0, ptr @__olang_pool_mask\n"
         "  store i64 0, ptr @__olang_pool_bytes\n"
         "  %empty = icmp eq i128 %mask, 0\n"
         "  br i1 %empty, label %done, label %class\n"
         "class:\n"
-        "  %m = phi i128 [ %mask, %entry ], [ %mrest, %nextclass ]\n"
+        "  %m = phi i128 [ %mask, %classes ], [ %mrest, %nextclass ]\n"
         "  %tz = call i128 @llvm.cttz.i128(i128 %m, i1 true)\n"
         "  %k = trunc i128 %tz to i64\n"
         "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
@@ -7465,7 +7548,7 @@ void emitScopeRuntime(FILE* out) {
         "}\n\n"
         //walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
         //unwind would give - then gives each of its chunks to the pool (O8b) and resets the scope to empty
-        "define linkonce_odr void @__olang_scope_close(ptr %scope) {\n"
+        "define linkonce_odr void @__olang_scope_close(ptr %scope) alwaysinline {\n"
         "entry:\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %dhead = load ptr, ptr %dheadptr\n"
@@ -7490,20 +7573,31 @@ void emitScopeRuntime(FILE* out) {
         "  %head = load ptr, ptr %headptr\n"
         "  %empty = icmp eq ptr %head, null\n"
         "  br i1 %empty, label %done, label %give\n"
-        //each chunk to its class, the oldest given last so the next scope takes its chunks in the order this one did -
-        //the list's next is read first, since giving a chunk relinks it
+        //every chunk to the pool, out of line, so that what is left here is small; and this is always inlined, so a
+        //scope's header never escapes into a call and one allocating nothing on a path costs nothing there - its header
+        //kept in registers, the close folded away (LLVM's own estimate put it past the threshold for a cold call, and a
+        //loop's body scope then cost two stores and two tests every pass). The tail needs no reset: it is read only
+        //while the list is not empty, and set when the list next stops being empty
         "give:\n"
         "  store ptr null, ptr %headptr\n"
-        "  %ctailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
-        "  store ptr null, ptr %ctailptr\n"
-        "  br label %each\n"
-        "each:\n"
-        "  %cur = phi ptr [ %head, %give ], [ %next, %each ]\n"
-        "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
-        "  %next = load ptr, ptr %nextptr\n"
-        "  call void @__olang_pool_give(ptr %cur)\n"
-        "  %atend = icmp eq ptr %next, null\n"
-        "  br i1 %atend, label %done, label %each\n"
+        //one 4KB chunk, and no spare: it becomes the spare, here
+        "  %hnextptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 0\n"
+        "  %hnext = load ptr, ptr %hnextptr\n"
+        "  %single = icmp eq ptr %hnext, null\n"
+        "  %hclassptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 5\n"
+        "  %hclass = load i64, ptr %hclassptr\n"
+        "  %hsmall = icmp eq i64 %hclass, 0\n"
+        "  %spare = load ptr, ptr @__olang_pool_spare\n"
+        "  %nospare = icmp eq ptr %spare, null\n"
+        "  %one = and i1 %single, %hsmall\n"
+        "  %quick = and i1 %one, %nospare\n"
+        "  br i1 %quick, label %tospare, label %list\n"
+        "tospare:\n"
+        "  store ptr %head, ptr @__olang_pool_spare\n"
+        "  br label %done\n"
+        "list:\n"
+        "  call void @__olang_pool_give_list(ptr %head)\n"
+        "  br label %done\n"
         "done:\n"
         "  ret void\n"
         "}\n\n", out);
