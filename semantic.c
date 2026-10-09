@@ -10593,7 +10593,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (convMod) {
             struct type* cand = convMod == ctx->mod ? typeNamed(ctx->mod, strFromTok(nameTok))
                                                     : TypeGetList(&convMod->types, strFromTok(nameTok));
-            if (cand && convMod != ctx->mod && !isPublic(strFromTok(nameTok))) ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE);
+            if (cand && convMod != ctx->mod && !isPublic(strFromTok(nameTok))) Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok);
             //numeric goes through the numeric path (it may genuinely change width); anything else with a
             //shared representation is a pure retype
             if (cand && ((isTypeVanilla(cand->bType) && TypeIsNumeric(*cand))
@@ -12947,7 +12947,7 @@ static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx*
     refT.structMAlloc = true;
     bool unnamed = false;
     if (!adoptInitializerScope(wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx->blockDepth;
-    reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok);
+    reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
     struct token ct = forInHiddenTok(kw, "Col");
     struct var* col = scopeDeclare(wctx->mod, wctx->scope, ct.str, ct, refT, true);
     col->scopeUnnamed = unnamed;

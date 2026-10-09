@@ -885,6 +885,9 @@ bytes it is written against - an `Array<U8>`, or a declared type over one. Any o
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
+A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
+where the first occurrence starts, and fail with the default error (R15) when there is none - `try t.Find(sub) catch
+default -1` writes a fallback - as an array's `FindIndex(keep)` does for an element `keep` holds for.
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
 array type or a built-in one, of either length kind.
@@ -1451,15 +1454,21 @@ indexes (E31): `l[i]` is `At(i)`, a copy of the element, and `l[i] = x` is `SetA
 both unchecked, as an array index is (E16), with `try l[i]` and `try l[i] = x` checking `i` against `Len()` (E31a,
 derived). Every one of these costs the same whatever the length: storage is a run of chunks, each twice the size
 of the last, so a position's chunk is found by arithmetic rather than by a search, and nothing stored is moved by
-a later `Push`. `Iter()` hands out a fresh position (S9c), so `for x in l` walks a `List` through its iterator, not
-through `At` (S9d).
+a later `Push`. `RunFrom(at)` gives the elements stored next to each other from position `at` - a read-only slice of
+the chunk holding it, to that chunk's end or the list's - and fails with `Exhausted` at `Len()`, so `for x in l` walks a
+`List` run by run (S9f), not through `At`. `Iter()` hands out a fresh position (S9c), a `ListIter<T>` whose iterator
+helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` - M19e overrides) walk the rest of the list run by run too,
+leaving it where `Next()` would.
 
 The prelude declares `type Map<K Hashable<<K>>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
 default error (R15) when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
 where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
-and says whether it was there, and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a
-`MapEntry<K, V>` holding `Key` and `Value`, in no specified order. Everything a `Map` stores lives where the `Map` does.
+and says whether it was there, and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a copy of a
+`MapEntry<K, V>` holding `Key` and `Value`, in no specified order; the entry just given may be removed while the walk
+goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
+Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
+put - so a map whose keys come and go stays the size of what it holds.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -1480,6 +1489,11 @@ a value rounding to zero). `==` compares values as IEEE 754 does: a NaN
 equals nothing, itself included, and `-0` equals `0`. Each is a struct holding its `Bits` (a `U8`), built
 from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
 it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
+
+Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (none, and no point, for `n` at most
+`0`), rounded to the nearest such number, a tie to the even one - exactly, as C's `"%.*f"` rounds - with a `-` where
+`x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
+(E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -1828,7 +1842,7 @@ built-in type declares none; its `==` is the language's.
 `Hash() I64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
 array value** whose type declares neither `Hash` nor `Eq` and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `U8`, `I32`, `I64` and `String`; a float has none,
+prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type and `String`; a float has none,
 so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
 where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
 reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key.
@@ -2544,9 +2558,16 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
   is). The element type of a generic iterator is its instantiated `Next()`'s.
-- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()` nor
-  an `Iter()` of its own - either of which says how the type wants to be walked (a `List` has all three, and is
-  walked by its iterator). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
+- a value **stored in runs** (S9f): one whose type has `RunFrom(at I64) Array<T>& ? Exhausted` and no `Next()` of its
+  own. The loop asks for the run at position `0`, walks it as an array (a counted loop over the slice, `x` each
+  element **copied**), then asks for the run where that one ended, and so on until `RunFrom` fails with `Exhausted`,
+  which the loop takes itself; `i` counts across runs. The collection is borrowed (E12c), never copied, and each run
+  is asked for when the last is done - so an element added at the end while the loop runs is walked too. `break`
+  leaves the whole loop. A type with `RunFrom` and `Iter()` must give the same elements in the same order by both; the
+  loop uses `RunFrom` (a `List` has both, S9f) - except under `try` (S9e), where it uses `Iter()`.
+- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
+  `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
+  and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
   borrowed (E12c), never copied. A type with `TryAt` and `Len` but no `At` is walked through `TryAt`, under S9e.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
