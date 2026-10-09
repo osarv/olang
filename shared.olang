@@ -7340,6 +7340,36 @@ test "E27/T7: a comprehension or Array<T>(n) returned through a reference result
     assert m[1] == 5
 }
 
+# E27/T2a: a comprehension that keeps nothing still has storage of its own - an empty array, never a null one -
+# whether its source's length is known up front (a range, an array) or not (an iterator); the run time, a baked global
+# (K2) and an assert decided while compiling (S18c) agree
+fn comprNothing(n I32) String {
+    m := Map<I8, U32>()
+    a Array<U16> = U16[1 for x in m.Values()]
+    ra Array<U16>&a = a
+    l := List<U16>()
+    e Array<U16> = U16[3 for x in l if x > 0]
+    re Array<U16>&e = e
+    r Array<U16> = U16[2 for x in range n]
+    rr Array<U16>&r = r
+    return $ra " " $(ra == null) " " $re " " $(re == null) " " $rr " " $(rr == null)
+}
+
+ComprNothingBaked String = comprNothing(0)
+
+test "E27/T2a: a comprehension over an empty source is an empty array, not null" {
+    assert ComprNothingBaked == "U16[] false U16[] false U16[] false"
+    assert comprNothing(0) == "U16[] false U16[] false U16[] false"
+    n := 0
+    n++
+    n--
+    assert comprNothing(n) == ComprNothingBaked
+    l := List<I64>()
+    empty := I64[x for x in l]
+    er Array<I64>&empty = empty
+    assert empty.Len() == 0 and er != null
+}
+
 # E28: "a if c else b" - only the chosen value is evaluated; both have one type, a literal adapting
 fn condMax(a I32, b I32) I32 { return a if a > b else b }
 

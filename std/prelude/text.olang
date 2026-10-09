@@ -1003,6 +1003,11 @@ fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
 # growing, without affecting it
 fn (b StringBuilder&) ToString() mut String& { return String(b.chars.ToArray()) }
 
+# empties it, keeping its storage for what is added next - so a builder used again and again (once per line, per
+# request) allocates nothing after it has held its longest text. Replacing it with a new StringBuilder() instead
+# leaves the old one's storage where the builder lives until that scope closes (O1): in a long-running loop, Clear
+fn (b mut StringBuilder&) Clear() { b.chars.Clear() }
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 
@@ -1222,6 +1227,33 @@ if TestBuild {
     test "a StringBuilder, evaluated while compiling as at run time" {
         assert builtBaked == "0,1,2,end"
         assert builtText() == builtBaked
+    }
+
+    # Clear empties a builder and keeps its storage: what is added after it is all it holds
+    fn clearedText(n I64) String& {
+        b := StringBuilder()
+        last String& = ""
+        for i in range n {
+            b.Clear()
+            b.Push("line ")
+            b.Push($i)
+            last = b.ToString()
+        }
+        b.Clear()
+        assert b.Len() == 0 and b.ToString() == ""
+        b.Push(last)
+        b.PushChar('!')
+        return b.ToString()
+    }
+
+    clearedBaked := clearedText(300)
+
+    test "StringBuilder.Clear empties it for reuse, while compiling as at run time" {
+        assert clearedBaked == "line 299!"
+        n := 299
+        n++
+        assert clearedText(n) == clearedBaked
+        assert clearedText(1) == "line 0!"
     }
 
     # mutable, so the check below is made at run time, where the arena is - and the reason it exists: ToString's text is

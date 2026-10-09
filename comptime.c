@@ -117,6 +117,11 @@ struct ctCallFrame { struct var* func; struct list locals; };
 //P1g), run to completion at its join, in the order spawned
 struct ctTask { struct operand* op; struct ctCallFrame frame; struct list targets; };
 
+//B3e: tasks spawned and not yet run, and the task running now (NULL: none) - while either is so, a wait for another
+//thread can never end under -i, which runs a join's tasks one after another
+static int ctTasksPending;
+static struct ctTask* ctTaskRunning;
+
 bool SemanticIsBuildConst(struct var* v);
 
 //why a function with a branch still being decided (S8b) is not evaluated: its body is not yet the program's
@@ -2378,8 +2383,21 @@ static void ctExecBlock(struct ctState* st, struct list* block) {
         }
         ctExec(st, s);
     }
-    //last registered first, before the block's locals go - deferred code reads them as they are now
-    for (int i = defers.len - 1; i >= 0 && st->flow != CF_FAIL; i--) ctRunDeferred(st, *(struct statement**)ListGetIdx(&defers, i));
+    //last registered first, before the block's locals go - deferred code reads them as they are now. B3e: a running
+    //program -i stops on what it does not run leaves its blocks all the same, as the built program, which goes on, leaves
+    //them in time: their deferred code runs (a temporary directory removed), and the first stop is the one reported
+    for (int i = defers.len - 1; i >= 0; i--) {
+        struct statement* d = *(struct statement**)ListGetIdx(&defers, i);
+        if (st->flow != CF_FAIL) { ctRunDeferred(st, d); continue; }
+        if (!ctRun) break;
+        const char* why = st->why;
+        struct token whyTok = st->whyTok;
+        st->flow = CF_NORMAL;
+        ctRunDeferred(st, d);
+        st->flow = CF_FAIL;
+        st->why = why;
+        st->whyTok = whyTok;
+    }
     if (defers.elemSize) ListDestroy(defers);
     st->locals->len = mark;
 }
@@ -2459,6 +2477,7 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
 //(P1g). What the block was doing when it was left - a return's value, an error in flight, a loop jump - waits for them,
 //as the running program's does (P1b); a task that cannot be evaluated ends the evaluation
 static void ctRunTasks(struct ctState* st, struct list* tasks) {
+    if (st->flow == CF_FAIL) ctTasksPending -= tasks->len;
     if (st->flow == CF_FAIL || !tasks->len) return;
     enum ctFlow flow = st->flow;
     struct ctVal* ret = st->ret;
@@ -2468,10 +2487,15 @@ static void ctRunTasks(struct ctState* st, struct list* tasks) {
     bool errBypass = st->errBypass;
     st->flow = CF_NORMAL;
     st->ret = NULL;
+    struct ctTask* outerTask = ctTaskRunning;
     for (int i = 0; i < tasks->len; i++) {
         struct ctTask* t = ListGetIdx(tasks, i);
+        ctTasksPending--;
+        ctTaskRunning = t;
         struct ctVal* v = ctCallRun(st, t->op, &t->frame);
+        ctTaskRunning = outerTask;
         if (!v || st->flow != CF_NORMAL) { //a task declares no error (P4), so only a failure stops it
+            ctTasksPending -= tasks->len - 1 - i;
             if (st->flow != CF_FAIL) ctFail(st, t->op->tok, "a task it starts does not finish");
             return;
         }
@@ -2611,9 +2635,8 @@ static void ctExec(struct ctState* st, struct statement* s) {
             return;
         case STATEMENT_DEFER: return; //S19: registered by the block it is in (ctExecBlock), and run on its way out
         case STATEMENT_JOIN: {
-            if (ctRun) { ctFail(st, tok, "it starts tasks, which -i does not run yet"); return; }
-            //K1/P1b: the block, then - on whichever way it is left, after its deferred code - every task it spawned, in
-            //order, each to completion; the edges P8 states hold in that sequence
+            //K1/P1b, B3e: the block, then - on whichever way it is left, after its deferred code - every task it spawned,
+            //in order, each to completion; the edges P8 states hold in that sequence
             struct list tasks = ListInit(sizeof(struct ctTask));
             struct list* outer = st->tasks;
             st->tasks = &tasks;
@@ -2625,7 +2648,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
         }
         case STATEMENT_SPAWN: {
             //P8, P1g: the arguments and the targets' places are taken here, where the spawn is written
-            if (ctRun || !st->tasks) { ctFail(st, tok, ctRun ? "it starts tasks, which -i does not run yet" : "it starts a task outside a join"); return; }
+            if (!st->tasks) { ctFail(st, tok, "it starts a task outside a join"); return; }
             struct operand* op = s->op;
             if (op->readVar && op->readVar->type.isExtern) { ctFail(st, op->tok, "it calls an external function"); return; }
             struct ctTask t = (struct ctTask){0};
@@ -2639,6 +2662,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             }
             if (!ctCallBind(st, op, &t.frame)) return;
             ListAdd(st->tasks, &t);
+            ctTasksPending++;
             return;
         }
         case STATEMENT_CASE:
@@ -2932,18 +2956,38 @@ static unsigned long long ctRtDyncall(const char* name, const unsigned char* kin
     }
 }
 extern char** environ;
-static int ctRtSpawn(const char* args, long long count, int in, int out, int err) {
+//X6: the runtime's __olang_spawn - in its directory (empty: this process's own) by posix_spawn_file_actions_addchdir_np,
+//or, where the C library lacks it, through /bin/sh as the generated runtime does
+static int ctRtSpawn(const char* args, long long count, int in, int out, int err, const char* dir) {
     if (count < 1) { errno = EINVAL; return -1; }
-    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 1));
-    for (long long i = 0; i < count; i++) { argv[i] = (char*)args; args += strlen(args) + 1; }
-    argv[count] = NULL;
+    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 5));
+    char** prog = argv + 4;
+    for (long long i = 0; i < count; i++) { prog[i] = (char*)args; args += strlen(args) + 1; }
+    prog[count] = NULL;
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);
     if (in >= 0) posix_spawn_file_actions_adddup2(&fa, in, 0);
     if (out >= 0) posix_spawn_file_actions_adddup2(&fa, out, 1);
     if (err >= 0) posix_spawn_file_actions_adddup2(&fa, err, 2);
     pid_t pid;
-    int rc = posix_spawnp(&pid, argv[0], &fa, NULL, argv, environ);
+    int rc;
+    bool shell = false;
+    if (dir && dir[0]) {
+#if defined(__GLIBC__) && __GLIBC_PREREQ(2, 29)
+        posix_spawn_file_actions_addchdir_np(&fa, dir);
+#else
+        shell = true;
+#endif
+    }
+    if (shell) {
+        argv[0] = "/bin/sh";
+        argv[1] = "-c";
+        argv[2] = "cd -- \"$0\" && exec \"$@\"";
+        argv[3] = (char*)dir;
+        rc = posix_spawn(&pid, "/bin/sh", &fa, NULL, argv, environ);
+    } else {
+        rc = posix_spawnp(&pid, prog[0], &fa, NULL, prog, environ);
+    }
     posix_spawn_file_actions_destroy(&fa);
     free(argv);
     if (rc != 0) { errno = rc; return -1; }
@@ -3028,6 +3072,20 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
 }
 
 static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func) {
+    //B3e: a wait on a condition variable is a wait for another thread to signal it - and under -i no other runs: a join's
+    //tasks run one after another, the join's body before them. An untimed wait can never end, and a timed one while
+    //tasks wait or run would be waiting for one of them, so either stops -i, saying so, rather than hanging. A timed wait
+    //with no task anywhere waits out its time, as the built program would with nothing to wake it
+    struct str fname = func->name;
+    bool untimed = StrCmp(fname, StrFromCStr("pthread_cond_wait"));
+    if (ctRun && (untimed || StrCmp(fname, StrFromCStr("pthread_cond_timedwait"))) && (untimed || ctTasksPending || ctTaskRunning)) {
+        const char* why = "it waits for another task, and -i runs a join's tasks one after another, never beside each other";
+        if (ctTaskRunning && ctTaskRunning->op->tok.owner) {
+            struct str f = TokenGetFileName(ctTaskRunning->op->tok.owner);
+            why = StrFmt("%s - here in the task spawned at %.*s:%d", why, f.len, f.ptr, ctTaskRunning->op->tok.lineNr);
+        }
+        return ctFail(st, op->tok, why);
+    }
     struct ctExternCall* c = ctExternPrepare(st, op, func);
     if (!c) return NULL;
     int n = func->type.vars.len;
@@ -3164,6 +3222,8 @@ static void* ctRunThread(void* p) {
 
 int CtRunProgram(struct var* mainFunc, int argc, char** argv) {
     ctRun = true;
+    ctTasksPending = 0;
+    ctTaskRunning = NULL;
     ctArgc = argc;
     ctArgv = argv;
     CtReset(); //globals start over: what analysis computed is not the running program's storage

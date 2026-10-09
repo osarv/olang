@@ -114,15 +114,23 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 # just "a", and "a\n\n" is "a" and "" - an empty file has no lines at all.
 # Each line Next gives is new text, built where its caller puts it (O18a) and nowhere else, so it stays as it is
 # whatever is read after it: in "for line in", the loop body's own scope, reclaimed as each turn ends - to keep one
-# longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope). Next fails with
-# IoError.FAILED when the read under it does - calling it again reads again - and with Exhausted once every line has
-# been given.
+# longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope; a line, or anything, put
+# into a scope that outlives the loop stays there until that scope closes, O8c). Next fails with IoError.FAILED when
+# the read under it does, and with Exhausted when the file has no more lines - and either way calling it again reads
+# again, so the end of the file is never remembered: a file another program is still writing is followed by calling
+# Next again after a wait, as "tail -f" does:
+#
+#     for {
+#         line := try lines.Next() catch Exhausted { wait(); continue }
+#         ...
+#     }
+# The end of the file ends the line before it, as above, so a writer that writes a line in pieces
+# can be read between them as two lines; one that writes each line whole, its newline included, is read line by line.
 type Lines struct(fd I32, size I64 = 65536) {
     fd
     buf mut String& = String(Array<U8>(size if size > 0 else 1))
     start I64 = 0                    # buf[start:end] is what has been read and not yet given as a line
     end I64 = 0
-    ended Bool = false               # read has said the file is over
 }
 
 fn (l mut Lines&) Next() String& ? IoError + Exhausted {
@@ -134,12 +142,6 @@ fn (l mut Lines&) Next() String& ? IoError + Exhausted {
                 l.start = i + 1
                 return l.line(first, i)
             }
-        }
-        if l.ended {
-            if l.start == l.end { error Exhausted.END }
-            first := l.start
-            l.start = l.end
-            return l.line(first, l.end)
         }
         from = l.end - l.start
         if l.start > 0 {             # what is unread to the front, leaving the room after it to read into
@@ -154,7 +156,12 @@ fn (l mut Lines&) Next() String& ? IoError + Exhausted {
         }
         got := read(l.fd, l.buf[l.end:], l.buf.Len() - l.end)
         if got < 0 { error IoError.FAILED }
-        if got == 0 { l.ended = true }
+        if got == 0 {                # the end of the file, as it is now: what is left is its last line
+            if l.start == l.end { error Exhausted.END }
+            first := l.start
+            l.start = l.end
+            return l.line(first, l.end)
+        }
         l.end += got
     }
     unreachable

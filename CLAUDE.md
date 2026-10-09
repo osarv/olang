@@ -4296,6 +4296,22 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   `tools/perm_mut.py` migrates code using linalg's destinations (oann: 54 `mut`s in eight files, after which it all
   compiles). Compile-time only: the evaluator needed nothing, shown by a global it bakes through read-only copies
   beside the same computation at run time.
+- **From study 4: null reads trap, process handles, `chan.Close`, `-i` runs joins, defaults for build constants (T2b, P7,
+  E27, O8c, X6, B3e, B10c, 2026-10-09).** Every generated function carries `null_pointer_is_valid`, so a null read is a
+  trap T2b now guarantees (an optimizer-visible one used to delete `main`'s return; callgrind: the bench within 0.02%,
+  text +0.78%); E16e/X1a list a data race in its place. Under `-r` the OnCrash handler is uninstrumented (it could block
+  on TSan's own lock); P7 also states TSan's limit of ~200,000 frames. `StringBuilder.Clear`; O8c states that nothing is
+  reclaimed before its scope closes. `io.Lines` never remembers the end of a file (tail -f). `chan.Close`: buffered
+  values drain, then `Recv`/`RecvUntil` fail with `ChanError.CLOSED` (Recv is fallible now) and `for v in c` ends; a Send
+  on a closed channel stops the program (decided: a protocol mistake, as Go panics - not an error on every Send); closing
+  twice changes nothing. `os.Exec(..., dir)`, `os.ExecUntil(args, tok)` killing the child when the token fires,
+  `os.Start` -> `Process` (`Wait`, `WaitUntil`, `Kill`, `Pid`); the runtime's spawn takes a directory (addchdir_np,
+  weak, else /bin/sh with the directory as an argument). `-i` runs a join's tasks in sequence as K1 does, stops on a
+  wait another task would end, and runs deferred code of the blocks it is in when it stops on what it does not run.
+  **B10c**: an immutable top-level global outside std of type Bool/I32/I64/U64/F64/String is a build constant's
+  default - `-D` replaces its value, fitted to its type - and is configuration either way (S8a/S8b), **reversing** the
+  confirmed "`Verbose := false; if Verbose` is an error"; an unknown name in a condition says "define it with -D". An
+  empty comprehension gets storage of its own after its loop (not 100 reserved up front). Full story in HISTORY.md.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

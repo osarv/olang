@@ -209,7 +209,7 @@ struct cgCtx {
     struct statement* resultLocal;
     //E27: the comprehensions being built, innermost last - each one's buffer, length and capacity slots (entry
     //allocas), the scope its storage comes from, and its element type
-    struct { char* buf; char* len; char* cap; char* scope; struct type elem; } compr[64];
+    struct { char* buf; char* len; char* cap; char* scope; struct type elem; bool reserved; } compr[64];
     int comprDepth;
     //a failed check under "try" (an index, a slice, checked arithmetic): the one error it can produce, known
     //statically, which cgCatchDispatch matches clauses against when it is given no run-time code
@@ -3943,6 +3943,7 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
     int d = ctx->comprDepth++;
     ctx->compr[d].elem = *op->type.arrElem;
     ctx->compr[d].scope = scopeVal;
+    ctx->compr[d].reserved = false;
     ctx->compr[d].buf = cgNewTmp(ctx);
     ctx->compr[d].len = cgNewTmp(ctx);
     ctx->compr[d].cap = cgNewTmp(ctx);
@@ -3955,6 +3956,27 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
     ctx->targetScopeOverride = NULL;
     cgBlock(ctx, &op->comprBody);
     ctx->targetScopeOverride = prevOverride;
+    //E27: storage of its own even when nothing was pushed (T2a: an empty array is not a null one, and the evaluator's
+    //empty result is not) - a loop over a source of unknown length holds no buffer until its first element, so one
+    //that ran no times is given an empty one here; a reserve before the loop has already made one, of any size
+    if (!ctx->compr[d].reserved) {
+        int id = ctx->lblCtr++;
+        char* b0 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", b0, ctx->compr[d].buf);
+        char* none = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", none, b0);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%compr.empty.%d, label %%compr.done.%d\n", none, id, id);
+        ctx->terminated = true;
+        char lbl[40];
+        snprintf(lbl, sizeof(lbl), "compr.empty.%d", id);
+        cgLabel(ctx, lbl);
+        char* nb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 0)\n", nb, ctx->compr[d].scope);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", nb, ctx->compr[d].buf);
+        snprintf(lbl, sizeof(lbl), "compr.done.%d", id);
+        cgBr(ctx, lbl);
+        cgLabel(ctx, lbl);
+    }
     ctx->comprDepth--;
     char* n = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", n, ctx->compr[d].len);
@@ -4003,6 +4025,7 @@ void cgComprReserve(struct cgCtx* ctx, struct operand* op) {
     int d = ctx->comprDepth - 1;
     char* n = cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
     cgComprRealloc(ctx, d, n);
+    ctx->compr[d].reserved = true;
 }
 
 //E27: the element appended, the buffer first grown if it is full - to 100 from nothing, then doubling
@@ -9061,14 +9084,24 @@ void emitOsRuntime(FILE* out) {
 
     //the program named by the count NUL-terminated entries of args, started with them as its command line - the first
     //looked up through PATH as posix_spawnp does - and with in, out and err (each -1 for this process's own) as its
-    //standard input, output and error, without a shell; its process id, or -1 when it could not be started (errno says
-    //why - posix_spawnp gives its error as its result, which is put where __olang_err looks)
+    //standard input, output and error, in the directory dir (NUL-terminated; empty for this process's own), without a
+    //shell; its process id, or -1 when it could not be started (errno says why - posix_spawnp gives its error as its
+    //result, which is put where __olang_err looks). The directory is changed to in the child, after the descriptors are
+    //set, by glibc's posix_spawn_file_actions_addchdir_np (2.29 and later; declared weak, so a C library without it
+    //still links) - and without it, by running the program through /bin/sh as 'cd -- "$0" && exec "$@"', the one place
+    //a shell stands between: the directory and the arguments are its arguments, never its script, so they reach the
+    //program as they are
     fprintf(out, "declare i32 @posix_spawn_file_actions_init(ptr)\n"
                  "declare i32 @posix_spawn_file_actions_destroy(ptr)\n"
                  "declare i32 @posix_spawn_file_actions_adddup2(ptr, i32, i32)\n"
+                 "declare extern_weak i32 @posix_spawn_file_actions_addchdir_np(ptr, ptr)\n"
                  "declare i32 @posix_spawnp(ptr, ptr, ptr, ptr, ptr, ptr)\n"
-                 "@environ = external global ptr\n\n"
-                 "define linkonce_odr i32 @__olang_spawn(ptr %%args, i64 %%count, i32 %%in, i32 %%out, i32 %%err) {\n"
+                 "declare i32 @posix_spawn(ptr, ptr, ptr, ptr, ptr, ptr)\n"
+                 "@environ = external global ptr\n"
+                 "@__olang_sh = linkonce_odr constant [8 x i8] c\"/bin/sh\\00\"\n"
+                 "@__olang_sh_c = linkonce_odr constant [3 x i8] c\"-c\\00\"\n"
+                 "@__olang_sh_cd = linkonce_odr constant [24 x i8] c\"cd -- \\22$0\\22 && exec \\22$@\\22\\00\"\n\n"
+                 "define linkonce_odr i32 @__olang_spawn(ptr %%args, i64 %%count, i32 %%in, i32 %%out, i32 %%err, ptr %%dir) {\n"
                  "entry:\n"
                  "  %%fa = alloca [%zu x i8], align 16\n"
                  "  %%pid = alloca i32\n"
@@ -9120,7 +9153,36 @@ void emitOsRuntime(FILE* out) {
                  "doneErr:\n"
                  "  %%env = load ptr, ptr @environ\n"
                  "  %%prog = load ptr, ptr %%argv\n"
-                 "  %%rc = call i32 @posix_spawnp(ptr %%pid, ptr %%prog, ptr %%fa, ptr null, ptr %%argv, ptr %%env)\n"
+                 "  %%dir0 = load i8, ptr %%dir\n"
+                 "  %%here = icmp eq i8 %%dir0, 0\n"
+                 "  br i1 %%here, label %%direct, label %%moved\n"
+                 "moved:\n"
+                 "  %%canChdir = icmp ne ptr @posix_spawn_file_actions_addchdir_np, null\n"
+                 "  br i1 %%canChdir, label %%chdir, label %%viaShell\n"
+                 "chdir:\n"
+                 "  %%dc = call i32 @posix_spawn_file_actions_addchdir_np(ptr %%fa, ptr %%dir)\n"
+                 "  br label %%direct\n"
+                 "direct:\n"
+                 "  %%rc1 = call i32 @posix_spawnp(ptr %%pid, ptr %%prog, ptr %%fa, ptr null, ptr %%argv, ptr %%env)\n"
+                 "  br label %%spawned\n"
+                 "viaShell:\n"
+                 "  %%n5 = add i64 %%count, 5\n"
+                 "  %%bytes5 = mul i64 %%n5, 8\n"
+                 "  %%argv5 = call ptr @malloc(i64 %%bytes5)\n"
+                 "  store ptr @__olang_sh, ptr %%argv5\n"
+                 "  %%s1 = getelementptr ptr, ptr %%argv5, i64 1\n"
+                 "  store ptr @__olang_sh_c, ptr %%s1\n"
+                 "  %%s2 = getelementptr ptr, ptr %%argv5, i64 2\n"
+                 "  store ptr @__olang_sh_cd, ptr %%s2\n"
+                 "  %%s3 = getelementptr ptr, ptr %%argv5, i64 3\n"
+                 "  store ptr %%dir, ptr %%s3\n"
+                 "  %%s4 = getelementptr ptr, ptr %%argv5, i64 4\n"
+                 "  call void @llvm.memcpy.p0.p0.i64(ptr %%s4, ptr %%argv, i64 %%bytes, i1 false)\n"
+                 "  %%rc2 = call i32 @posix_spawn(ptr %%pid, ptr @__olang_sh, ptr %%fa, ptr null, ptr %%argv5, ptr %%env)\n"
+                 "  call void @free(ptr %%argv5)\n"
+                 "  br label %%spawned\n"
+                 "spawned:\n"
+                 "  %%rc = phi i32 [ %%rc1, %%direct ], [ %%rc2, %%viaShell ]\n"
                  "  %%fd = call i32 @posix_spawn_file_actions_destroy(ptr %%fa)\n"
                  "  call void @free(ptr %%argv)\n"
                  "  %%ok = icmp eq i32 %%rc, 0\n"
@@ -10353,8 +10415,12 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
         if (lineLen > 7 && !strncmp(&buf[i], "define ", 7) && buf[i + lineLen -1] == '{') {
             char* dbg = memmem(&buf[i], lineLen, " !dbg ", 6);
             size_t cut = dbg ? (size_t)(dbg - &buf[i]) : lineLen -1;
+            //S2: the crash handler is never instrumented - it can run while ThreadSanitizer's own state is
+            //inconsistent (a fault inside its bookkeeping, holding its locks), and an instrumented load there waited
+            //for a lock its own thread held, forever
+            bool plain = memmem(&buf[i], cut, "@__olang_crash_handler(", 23) != NULL;
             fwrite(&buf[i], 1, cut, dst);
-            fputs(dbg ? " #0" : "#0 {", dst);
+            fputs(plain ? (dbg ? " #1" : "#1 {") : (dbg ? " #0" : "#0 {"), dst);
             if (dbg) fwrite(dbg, 1, lineLen - cut, dst);
         } else {
             fwrite(&buf[i], 1, lineLen, dst);
@@ -10362,7 +10428,12 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
         if (end < len) fputc('\n', dst);
         i = end +1;
     }
-    fprintf(dst, "\nattributes #0 = { %s%s }\n", race ? "sanitize_thread " : "", cgTargetAttrs);
+    //T2b: null_pointer_is_valid - the kernel's -fno-delete-null-pointer-checks - takes from the optimizer its licence
+    //to assume a pointer it sees dereferenced is not null. Without it, a read through a null it could prove (a field
+    //defaulted to null, read after inlining) was undefined behaviour it acted on: the rest of the function, its return
+    //included, was deleted, and control fell into whatever code came next. With it the load stays a load and faults
+    fprintf(dst, "\nattributes #0 = { null_pointer_is_valid %s%s }\n", race ? "sanitize_thread " : "", cgTargetAttrs);
+    fprintf(dst, "attributes #1 = { null_pointer_is_valid %s }\n", cgTargetAttrs);
 }
 
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug) {

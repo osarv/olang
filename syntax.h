@@ -238,7 +238,7 @@ void SyntaxClearPendingConditions(void);
 struct pendingCond* SyntaxPendingFor(struct syntax* cond); //the one met for this parsed condition, or NULL
 
 //B9b: the token streams (TokenCtx) of every file of the module about to be scanned and parsed
-void SyntaxSetConditionFiles(struct list* tcs);
+void SyntaxSetConditionFiles(struct list* tcs, bool inStd);
 
 struct scanResult {
     struct list typeNames; //list of struct str
