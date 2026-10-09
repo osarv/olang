@@ -4615,7 +4615,8 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
     if (!mod || (name.len && name.ptr[0] == '$')) return;
     struct var* g = VarGetList(&mod->vars, name);
     if (g) {
-        Err(tok, g->isFuncDecl ? ERR_SHADOWS_FUNCTION : ERR_SHADOWS_GLOBAL, tok);
+        if (g->isFuncDecl) Err(tok, ERR_SHADOWS_FUNCTION, tok);
+        else Err(tok, ERR_SHADOWS_GLOBAL, tok);
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
