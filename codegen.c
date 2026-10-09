@@ -987,6 +987,18 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     return loaded;
 }
 
+//O1b: the program's scope, as this thread reaches it (@__olang_prog_scope): code in a function may run on a task, which
+//allocates into a private stand-in for it (P2), never into the shared scope itself
+char* cgProgramScope(struct cgCtx* ctx) {
+    char* t = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr @__olang_prog_scope\n", t);
+    return t;
+}
+
+static bool cgIsGlobalRead(struct operand* op) {
+    return op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->owner && !op->readVar->isFuncDecl;
+}
+
 static bool typeIsRefShaped(struct type t);
 static bool cgIsReference(struct type t);
 char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv);
@@ -1015,6 +1027,7 @@ static struct var* cgValueHomeVar(struct operand* op) {
 }
 
 char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
+    if (cgIsGlobalRead(base)) return cgProgramScope(ctx); //O1b: a global's referent, or its own storage
     //a tag belonging to a type, not this function: where the checker resolved it, else the container's (O23)
     if (base->type.scopeParam && !varIsOwnParam(base->type.scopeParam, ctx->curFunc)) {
         struct var* to;
@@ -1103,16 +1116,28 @@ static bool cgIsDtor(struct var* func) {
     return p->type.bType == BASETYPE_STRUCT && p->type.destructFunc == func;
 }
 
-//the scope a constructor call's instance lands in: the target being built into when there is one,
-//otherwise the caller's own function scope - the same place a nested unnamed-scope reference went before
-static char* cgCtorHereArg(struct cgCtx* ctx, struct operand* op) {
-    //O18a: where the checker landed the instance - a returned local's result scope, an assignment's target
+//O18a/E12c: the one answer to "where is this temporary built" - storage made by an expression itself, with nothing to
+//borrow: a constructor's instance, an enum value with a payload, text, "Array<T>(n)", a comprehension, a capturing
+//lambda's closure. In order: where the checker landed it (the program's scope, for a global or what is stored into
+//one), a scope its own type names, the target being built into around it (a promotion, a constructor's instance, a
+//task's join block, a "catch default"), and otherwise the block it stands in - the scope the checker assumed for it
+char* cgWhereBuilt(struct cgCtx* ctx, struct operand* op) {
     struct var* to;
     int depth;
+    if (SemanticLandedInProgram(op)) return cgProgramScope(ctx);
     if (SemanticCtorLanding(op, &to, &depth)) return cgResolveScope(ctx, to, depth);
+    if (op->type.scopeParam && op->opType != OPERATION_FUNCCALL) {
+        int d = op->type.scopeDepth;
+        struct var* sv = SemanticRuntimeScope(op->type.scopeParam, &d);
+        if (!sv || cgFindLocalKind(ctx, sv->name, true)) return cgResolveScope(ctx, op->type.scopeParam, op->type.scopeDepth);
+    }
     if (ctx->targetScopeOverride) return ctx->targetScopeOverride;
-    return ctx->ownScopeSlot;
+    return cgScopeSlotAt(ctx, op->type.scopeDepth > 0 && op->opType != OPERATION_FUNCCALL ? op->type.scopeDepth
+                                                                                         : ctx->blockDepth);
 }
+
+//the scope a constructor call's instance lands in (C2d)
+static char* cgCtorHereArg(struct cgCtx* ctx, struct operand* op) { return cgWhereBuilt(ctx, op); }
 
 char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct operand* callOp, struct type paramT) {
     (void)func;
@@ -1134,7 +1159,7 @@ char* cgResolveParamScopeOverride(struct cgCtx* ctx, struct var* func, struct op
 //referent is the program's scope - building into the caller's own instead left a borrowed result built from a global
 //("H = f(G)", f returning "String&t") in a scope that closed at the caller's return
 char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv) {
-    if (SemanticBindingIsUnnamed(callOp, sv)) return "@__olang_global_scope";
+    if (SemanticBindingIsUnnamed(callOp, sv)) return cgProgramScope(ctx);
     return cgResolveScope(ctx, SemanticBoundScope(callOp, sv), SemanticBoundScopeDepth(callOp, sv, ctx->blockDepth));
 }
 
@@ -2643,8 +2668,7 @@ static char* cgClosureType(struct var* L) {
 static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     struct var* L = op->readVar;
     char* envTy = cgClosureType(L);
-    char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth)
-                : ctx->targetScopeOverride ? ctx->targetScopeOverride : cgScopeSlotAt(ctx, ctx->blockDepth);
+    char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
     char* obj = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
             obj, scope, envTy);
@@ -2739,10 +2763,6 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
     return m.sub;
 }
 
-//P2: the scope a spawned call's scope variable sv stands in for - kept exactly as the task lowering always chose it
-static char* cgSpawnScopeParent(struct cgCtx* ctx, struct operand* op, struct var* sv) {
-    return cgResolveScope(ctx, SemanticBoundScope(op, sv), ctx->blockDepth);
-}
 
 //a call's target and its arguments in order - the closure of a call through a function value, a constructor's
 //instance scope, the callee's scope variables, then the parameters - shared by an ordinary call and a task (P1),
@@ -2778,11 +2798,17 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         //O18a: a scope that still follows the result where it was never landed explicitly is the scope the
         //code around the call is building into, if any - a constructor field's instance, a promotion's target
         //C2d: a constructor's bare parameter that nothing determined is built where the instance lands
+        //P2: a task gets a private stand-in for that very scope, folded into it at the join - the scope this call binds,
+        //resolved as any call resolves it (the block its binding names, the program's for a global's referent)
         bool atHere = ctor && sv->isImplicitScope && SemanticBindingIsLanding(op, sv);
         char* sval = atHere ? hereArg
-                     : spawnMerges ? cgSpawnSubScope(ctx, spawnMerges, cgSpawnScopeParent(ctx, op, sv))
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
+        if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval);
+        //R9a: where the result lives - a "catch default" standing for it is built there too
+        struct var* rsv = func->type.resultScope ? func->type.resultScope
+                          : func->type.hasRetType ? func->type.retType->scopeParam : NULL;
+        if (!spawnMerges && rsv && canonicalVar(sv) == canonicalVar(rsv)) op->cgResultScope = sval;
         cgArgAdd(args, "ptr", sval);
     }
     for (int i = 0; i < op->args.len; i++) {
@@ -3187,8 +3213,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
 
     //T7: "Array<T>(n)" is a temporary - built in the scope of whatever it lands in when that is known
     //(E12c), otherwise in the block it is written in
-    char* scopeVal = !op->type.scopeParam && ctx->targetScopeOverride ? ctx->targetScopeOverride
-                     : cgResolveScope(ctx, op->type.scopeParam, op->type.scopeDepth);
+    char* scopeVal = cgWhereBuilt(ctx, op);
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
     //D15b: a local "T[expr]" is left as the arena hands it over - chunk memory is recycled, so that is
@@ -3286,8 +3311,7 @@ char* cgCmpChain(struct cgCtx* ctx, struct operand* op) {
 //copies (the arena frees nothing before the scope closes, and nothing can hold the buffer before it is done).
 char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
     if (ctx->comprDepth >= 64) { fprintf(stderr, "comprehensions nest too deeply\n"); exit(1); }
-    char* scopeVal = !op->type.scopeParam && ctx->targetScopeOverride ? ctx->targetScopeOverride
-                     : cgResolveScope(ctx, op->type.scopeParam, op->type.scopeDepth);
+    char* scopeVal = cgWhereBuilt(ctx, op);
     int d = ctx->comprDepth++;
     ctx->compr[d].elem = *op->type.arrElem;
     ctx->compr[d].scope = scopeVal;
@@ -4192,10 +4216,7 @@ static void cgTextParts(struct cgCtx* ctx, struct operand* op, struct list* out)
 static char* cgText(struct cgCtx* ctx, struct operand* op) {
     struct list parts = ListInit(sizeof(struct operand*));
     cgTextParts(ctx, op, &parts);
-    char* scopeVal = ctx->targetScopeOverride ? ctx->targetScopeOverride
-            : op->type.scopeParam || op->type.scopeDepth
-                    ? cgResolveScope(ctx, op->type.scopeParam, op->type.scopeDepth)
-                    : cgResolveScope(ctx, NULL, ctx->blockDepth);
+    char* scopeVal = cgWhereBuilt(ctx, op);
     struct type textT = op->type;
     struct list pieces = ListInit(sizeof(struct textPiece));
     char* total = "0";
@@ -4277,10 +4298,17 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
 //the type a try's slot is stored at (R9a): a built result's scope is the callee's result-scope variable, which
 //names nothing in this function - what is stored there lives where the call's result lands, the scope being built
 //into or this block, given back in *where
-static struct type cgTrySlotType(struct cgCtx* ctx, struct type t, char** where) {
+//R9a: a try's value slot, and where a default standing for its result is built: where the call put its result (the
+//scope it passed for it), else - an index, a slice - the scope the slot's type names here
+static struct type cgTrySlotType(struct cgCtx* ctx, struct operand* op, struct type t, char** where) {
     *where = NULL;
+    if (op->opType == OPERATION_FUNCCALL && op->cgResultScope) {
+        *where = op->cgResultScope;
+        t.scopeParam = NULL;
+        return t;
+    }
     if (t.scopeParam && !cgFindLocalKind(ctx, t.scopeParam->name, true)) {
-        *where = ctx->targetScopeOverride ? ctx->targetScopeOverride : cgResolveScope(ctx, NULL, ctx->blockDepth);
+        *where = cgWhereBuilt(ctx, op);
         t.scopeParam = NULL;
     }
     return t;
@@ -4302,7 +4330,7 @@ static char* cgTryDefaultValue(struct cgCtx* ctx, struct operand* op) {
     memcpy(join, ctx->tdJoin, sizeof(join));
     char* v = cgValue(ctx, op);
     char* where = NULL;
-    struct type st = cgTrySlotType(ctx, op->type, &where);
+    struct type st = cgTrySlotType(ctx, op, op->type, &where);
     cgStoreInto(ctx, st, st, v, slot, where, false, false, false);
     cgBr(ctx, join);
     cgLabel(ctx, join);
@@ -4322,8 +4350,11 @@ static void cgTryDefaultStore(struct cgCtx* ctx, struct operand* op, struct oper
     //against the result type as seen from here (tryDefaultType): a temporary default is allocated into the
     //scope the call's result was bound to, which the callee's own scope variable names nothing for here
     char* where = NULL;
-    struct type dt = cgTrySlotType(ctx, op->tryDefaultType, &where);
+    struct type dt = cgTrySlotType(ctx, op, op->tryDefaultType, &where);
+    char* prevTarget = ctx->targetScopeOverride;
+    if (where) ctx->targetScopeOverride = where; //a value holding references keeps them there too
     char* dv = cgValueForTarget(ctx, dflt, dt, where);
+    ctx->targetScopeOverride = prevTarget;
     cgStoreInto(ctx, dt, dflt->type, dv, slot, where, false, OperandIsLvalue(dflt), false);
     cgBr(ctx, join);
 }
@@ -4577,9 +4608,14 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
         struct operand* dstOp = *(struct operand**)ListGetIdx(dstOps, d);
         dstAddr[d] = dstOp ? cgAddr(ctx, dstOp) : NULL; //D8c: a "_" captures nothing and its result is not stored
     }
-    //the very marshalling an ordinary call performs (cgCallTargetAndArgs), captured rather than passed
+    //the very marshalling an ordinary call performs (cgCallTargetAndArgs), captured rather than passed. What it builds
+    //with nowhere of its own to go - a temporary argument, a scope still following the result - lasts until the join,
+    //so it is built in the join block, never in a block the task may outlive (P2)
     struct list args = ListInit(sizeof(struct cgArg));
+    char* prevTarget = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = joinScope;
     char* target = cgCallTargetAndArgs(ctx, op, &args, merges, NULL);
+    ctx->targetScopeOverride = prevTarget;
     int nArgs = args.len; //everything after this is a destination, captured and never passed
     int* dstIdx = MallocOrCrash(sizeof(int) * (size_t)(nDst + 1));
     for (int d = 0; d < nDst; d++) {
@@ -4588,6 +4624,10 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
         dstIdx[d] = args.len;
         cgArgAdd(&args, "ptr", dstAddr[d]);
     }
+    //O1b/P2: the task's own stand-in for the program's scope, which code it runs may build into (a global assigned, a
+    //result borrowed from a global) - folded into the spawner's at the join, as every other scope it was handed is
+    int progIdx = args.len;
+    cgArgAdd(&args, "ptr", cgSpawnSubScope(ctx, merges, cgProgramScope(ctx)));
     struct cgBuf envB = {0};
     cgBufAdd(&envB, "{ ptr");
     for (int i = 0; i < args.len; i++) cgBufAdd(&envB, ", %s", ((struct cgArg*)ListGetIdx(&args, i))->ty);
@@ -4668,6 +4708,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
         if (i >= nArgs) continue; //a destination is captured, never passed to the call
         cgBufAdd(&callArgs, "%s%s %%a%d", callArgs.len ? ", " : "", ty, i);
     }
+    fprintf(ctx->out, "  %%prevprog = load ptr, ptr @__olang_prog_scope\n  store ptr %%a%d, ptr @__olang_prog_scope\n", progIdx);
     if (viaMem) {
         fprintf(ctx->out, "  call void %%fn(%s)\n", cgBufStr(&callArgs));
         struct type rt = *func->type.retType;
@@ -4710,7 +4751,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     //pool with it. A worker does not exit (P1e), so the pool stays and the next task to run on this
     //worker reuses it - the leak P2a fixed is gone by construction rather than by cleanup, and the
     //retained memory is bounded by the number of workers instead of the number of tasks.
-    fprintf(ctx->out, "  ret ptr null\n}\n\n");
+    fprintf(ctx->out, "  store ptr %%prevprog, ptr @__olang_prog_scope\n  ret ptr null\n}\n\n");
 }
 
 //P1: one task. Its bookkeeping - the env, any sub-scopes, the node holding the thread handle - all comes
@@ -4959,10 +5000,15 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     bool targetIsMemberOrIndex = s->target->opType == OPERATION_MEMBER || s->target->opType == OPERATION_INDEX;
     if (targetIsMemberOrIndex && cgIsReference(s->target->type)) {
         struct operand* base = *(struct operand**)ListGetIdx(&s->target->args, 0);
-        if (cgIsReference(base->type) || cgValueHomeVar(s->target)) {
+        if (cgIsReference(base->type) || cgValueHomeVar(s->target) || cgIsGlobalRead(base)) {
             scopeOverride = cgResolveEffectiveScope(ctx, base);
         }
     }
+    //O1b/O18a: a global reference - or a global value holding references - is assigned what lives in the program's
+    //scope, so a temporary assigned to it is built there
+    if (cgIsGlobalRead(s->target) && (s->target->type.structMAlloc || s->target->type.arrMalloc
+                                       || TypeHoldsReferences(s->target->type)))
+        scopeOverride = cgProgramScope(ctx);
     //S4: left to right - the target's place (its base and index, as written), then the value, then the store. A
     //compound assignment's value reads that same place (placeOf), so its base and index run once
     char* addr = cgAddr(ctx, s->target);
@@ -5187,6 +5233,27 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
     cgPopScope(ctx);
 }
 
+//T7b: whether cgBoundaryValue built op's array value in the result scope itself - fresh storage the expression made
+//there (on every path, for a conditional or a match), a literal copied there, or a call whose own result landed there
+static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type retT) {
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        return cgBuiltInResult(ctx, *(struct operand**)ListGetIdx(&op->args, 1), retT)
+               && cgBuiltInResult(ctx, *(struct operand**)ListGetIdx(&op->args, 2), retT);
+    }
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!cgBuiltInResult(ctx, *(struct operand**)ListGetIdx(&vs, i), retT)) return false;
+        return vs.len > 0;
+    }
+    if (cgIsFreshTemp(op) || typeNeedsRuntimeLengthPromotion(retT, op->type)) return true;
+    if (op->opType == OPERATION_FUNCCALL && op->readVar && !op->type.structMAlloc && op->readVar->type.resultScope
+            && retT.scopeParam) {
+        struct var* bound = SemanticBoundScope(op, op->readVar->type.resultScope);
+        return bound && canonicalVar(bound) == canonicalVar(retT.scopeParam);
+    }
+    return false;
+}
+
 //a fallible function's success return wraps the value as { i32 0, T val } (or, with no success type at
 //all, just `ret i32 0`) - see llvmFuncRetType. ctx->curFunc is NULL in a context with no real error-union
 //semantics (global initializers, test bodies), where a fallible-style wrap never applies.
@@ -5223,11 +5290,11 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     }
     char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
     ctx->targetScopeOverride = prevTarget;
-    //S19: the result is computed before deferred code runs - and a returned array value still shares its
-    //elements with the storage it came from until the caller copies them, so deferred code writing that storage
-    //would change the result. With deferred code pending, the result takes its own copy first, where it lands.
-    if (ctx->defers.len && retT.bType == BASETYPE_ARRAY && retT.arrMalloc && !retT.structMAlloc
-            && !cgIsFreshTemp(s->op)) {
+    //T7b: an array value result is a new array built where the call's result is put - the result scope - which the
+    //caller then takes as it is. One that is not already there (a local, a parameter's array, a field's) is copied
+    //there now, before this function's scopes close: they may hold its elements, and a destructor run by the close
+    //may allocate over them. Deferred code runs after the result is computed (S19), so it cannot change it either.
+    if (retT.bType == BASETYPE_ARRAY && retT.arrMalloc && !retT.structMAlloc && !cgBuiltInResult(ctx, s->op, retT)) {
         val = cgCopyRuntimeLengthArray(ctx, retT, val, cgResolveScope(ctx, retT.scopeParam, retT.scopeDepth), NULL);
     }
     cgCloseOwnScope(ctx);
@@ -5952,6 +6019,9 @@ void emitScopeRuntime(FILE* out) {
         //O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
         //it holds lives as long as the program
         "@__olang_global_scope = linkonce_odr global %olang.scope zeroinitializer\n"
+        //O1b/P2: the program's scope as this thread reaches it - the scope itself on the main thread, and a task's
+        //private stand-in while a task runs, folded back at its join - so no two threads ever bump it at once
+        "@__olang_prog_scope = linkonce_odr thread_local(initialexec) global ptr @__olang_global_scope\n"
         "\n"
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
         //larger, original capacity) or freshly malloc'd at max(4096, size) bytes

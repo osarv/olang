@@ -1,0 +1,15 @@
+# check: fail a global lives as long as the program, and so does everything it holds
+# O1b: a global, and everything reached from it, lives in the program's scope - so what a function stores there is built
+# there or already lives there. x lives in setIt's own block, which closes at its return; this used to compile and
+# leave the global pointing at reclaimed storage
+type Node struct(v I64) {
+    v
+}
+GA mut Node& = null
+fn setIt(n I64) {
+    x Node& = Node(n)
+    GA = x
+}
+fn main() ? {
+    setIt(7)
+}

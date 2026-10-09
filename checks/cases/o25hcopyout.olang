@@ -1,0 +1,16 @@
+# check: fail this value holds references to what was built with it, which lives in a scope the target outlives
+# O25h/O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration - so a copy
+# of one into a value the block does not outlive would keep pointing at them. Build it where it is kept instead
+type Link struct(v I64, next Link&) {
+    v
+    next
+}
+fn mk(i I64) Link { return Link(i, Link(i + 1, null)) }
+N mut I64 = 3
+fn main() ? {
+    o := Link(0, null)
+    for i in range N {
+        m := mk(i)
+        o = m
+    }
+}

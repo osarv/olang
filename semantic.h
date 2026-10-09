@@ -270,6 +270,7 @@ struct var {
     struct token tok;
     bool mut; //local variables are mutable by default
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
+    bool inProgram;    //O1b: a local whose referent - or, for a value, whose references - live in the program's scope
     //O25a: a value local holding references, declared with ":=", lives where its initializer built them - a
     //scope variable, or a block (valueHome NULL, at valueHomeDepth)
     bool valueHomeSet;
@@ -546,6 +547,9 @@ struct operand {
     bool ctorLanded;
     struct var* landedTo;
     int landedDepth;
+    bool landedInProgram; //O1b: a constructor call landed in the program's scope - assigned to a global, or into one
+    //codegen: what this call passed for the callee's result scope (an SSA value), for a "catch default" built there
+    char* cgResultScope;
     //O13c: a call whose borrowed result the callee always returns from one of its derived scopes (O23a) - what that
     //resolves to here, which is where the result's referent lives: the referent of a field the argument bound
     bool resultRefined;
@@ -737,7 +741,10 @@ bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including 
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.
 struct var* SemanticBoundScope(struct operand* callOp, struct var* sv);
+struct var* canonicalVar(struct var* v);
+bool TypeHoldsReferences(struct type t);
 bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth);
+bool SemanticLandedInProgram(struct operand* callOp);
 bool SemanticReferentScope(struct var* func, struct operand* op, struct var** to, int* depth);
 bool varIsOwnParam(struct var* scopeVar, struct var* func);
 int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDepth);

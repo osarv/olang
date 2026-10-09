@@ -44,7 +44,7 @@
 #define RETURNED_VALUE_BOUND_TO_OWN "this value holds a reference to storage of this function's own, bound where the value was built, so returning it hands back storage that dies at the return. Build what it points at where the result lives ('&return', O26), or take it as a parameter, whose scope outlives this call"
 #define INDEX_OUT_OF_RANGE "this index is outside the array's bounds, and both the index and the length are known here - so this is a compile-time error rather than a program that aborts when it reaches this line"
 #define NESTED_SLOT_OUTLIVES_VALUE "this stores a reference to storage that does not live as long as the container it is stored into - reading the container afterwards would follow a reference into a closed scope. Build the value where the container lives ('x T&c = ...', or 'f&c(...)'), so the lifetimes match (O20)"
-#define BARE_REF_PARAM_CONTAINER_WRITE "this writes into a container whose scope this function cannot allocate into - a global's referent, in the program's own scope (O25). Build what is stored elsewhere and store it, or write it where the program's scope is in reach"
+#define BARE_REF_PARAM_CONTAINER_WRITE "this writes into a container reached through a local that took a scope this function cannot build into - a global's referent, say, which lives in the program's scope (O25a). Write it through the global itself, where what is stored is built in the program's scope (O1b)"
 #define OWN_FROM_BARE_REF_PARAM "this value cannot satisfy anything longer-lived than this call: it lives in this function's own scope (O10d)"
 #define CHOICE_PATTERN_ARITY "a case pattern must name every field of the case's payload, in declaration order - write '_' for a field you do not want, or leave the parentheses out to match the case whatever its payload holds (S13b)"
 #define PATTERN_TYPE_MISMATCH "a case pattern names a case of the enum the value it is matched against holds, and this is not that enum (S13b)"
@@ -254,6 +254,9 @@ when an instance's scope closes (C7a)"
 #define SCOPE_OBLIGATION_UNMET "this call needs one of the target's scopes to outlive another, and \
 nothing here establishes that - pass an argument that lives at least as long as the one it is stored \
 into, or one from the same scope (O10c)"
+#define SPAWN_RESULTS_DISAGREE "these targets live in different scopes, and the task's results are built in one - give them targets that live in the same block, or spawn into locals there and copy (P1g)"
+#define VALUE_REFS_OUTLIVED "this value holds references to what was built with it, which lives in a scope the target outlives - a copy would keep pointing there after it closes. Copy it only into a place that lives no longer, or build the value where the target is (O25h)"
+#define GLOBAL_HOLDS_SHORTER "a global lives as long as the program, and so does everything it holds - this lives in a scope that closes first. Store something built here, which is then built in the program's scope, or something another global holds (O1b)"
 #define OWN_CANNOT_OUTLIVE "a value in this function's own scope cannot satisfy a longer-lived scope: this function's scope closes first and no caller can change that, so no argument would make this work"
 #define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \
 declared fields when the body completes; use 'error' to fail out of one instead"

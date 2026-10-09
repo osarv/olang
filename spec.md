@@ -423,7 +423,10 @@ parameter or receiver (D9a), a field or element (T7a), an enum payload, a lambda
 value array to one of those **borrows** it rather than copying it (E12c). So an array is never copied except where
 a new one is declared with a value written into it (`b Array<T> = a`), which is a copy because `b` is new
 storage; and a destructured result (S4b) is not copied at all - each declared local takes the array the call
-built for it.
+built for it. A function returning an array value that already lives somewhere - a local of its own, a parameter's
+array - builds its result from it: the elements are copied into the result scope (§8 O13) before the function's own
+scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
+allocating, say) can reach it.
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative
@@ -2790,7 +2793,10 @@ The store happens **on the task's thread, the instant its call returns** — som
 and the `join`. Two things follow. The target's type must be **exactly** the call's return type, since
 there is no caller frame left in which a conversion or a promotion could run. And the target must outlive
 the `join` block, on precisely the terms P2 states for an argument: one declared in a block nested inside
-the join closes first and is rejected.
+the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2): a result
+built where it lands (§8 O18a) is built where the target is - several targets sharing one result scope must all be in
+one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
+value would (§8 O25, O1b).
 
 The target's address is taken **at the `spawn`**, not when the task runs, which is what makes
 `spawn out[i] = f(i)` inside a loop mean slot `i`. Reading the target before the `join` is a data race
@@ -2808,14 +2814,18 @@ function call does.
 
 A scope a task is handed as a scope variable (§8 O3) is **not** shared with the task that was handed it: the task
 allocates into a private arena of its own standing in for that scope, and the spawner folds each one back
-into the scope it stands for after the join. A value a task allocates through such a scope therefore lives
+into the scope it stands for after the join - the scope the call bound that variable to, exactly as for an ordinary
+call (§8 O17, O18a), never the join block merely because the spawn is written in it. The program's scope (§8 O1b) is
+such a scope for every task: whatever a task builds there - a result borrowed from a global, a value assigned to one -
+goes into its own stand-in for it, folded into the spawner's at the join. A value a task allocates through such a scope therefore lives
 exactly as long as that scope, and is reachable from the spawner once the block ends, while no arena is
 ever bumped by more than one thread. Destructors registered on a task thread run when the scope they were
 registered with closes, ahead of those registered before the spawn.
 
 A task handed no scope variable allocates into its caller's own block, which inside a `join` block is the **join
 block's** arena (O2) — so such a value, and any destructor it registers, lives until the block closes and
-no longer. A task whose result must outlive the block says so the ordinary way, through a parameter or a spawn target living outside it.
+no longer. So does a temporary built for a spawned call with nowhere else to go, even where the `spawn` is written in a
+block nested inside the join. A task whose result must outlive the block says so the ordinary way, through a parameter or a spawn target living outside it.
 
 **P2a.** A task's chunk pool is **kept** on the worker that ran it, and the next task to run on that
 worker reuses it. Scope memory is pooled per thread (§8.7), so when a task's thread used to exit its
@@ -3224,7 +3234,11 @@ when that scope closes.
 **O1b.** The program has one more scope, opened before any global initializer runs and never closed.
 Whatever a global's initializer builds is built there, so a global may hold a reference (or an array) that
 lives as long as the program; and what a call builds into a scope variable a global's referent determined (a
-result borrowed from it, O13) is built there too. Destructors registered in it do not run at exit. `&g`, for a global `g`, names
+result borrowed from it, O13) is built there too. So is a temporary a function assigns to a global, or into a field
+or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
+already living somewhere that is stored there must live there too: a global's, or something built there. Storing
+anything shorter-lived is a compile-time error. Each task reaches the program's scope through a stand-in of its own
+(§6.8 P2). Destructors registered in it do not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
@@ -3466,9 +3480,15 @@ value where it dangles. Accordingly:
   one builds is built in the reference's scope and kept where the referent really is - so where none can happen, a
   reference held somewhere it merely outlives misplaces nothing, and O25c, O25e, O25f, O14 and C2d ask only that it
   outlive. A reference to plain data is the simplest such case.
+- **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
+  references are where its initializer put them - its own block for a result or an instance built there (O18a), where
+  its initializer's are when it is a copy of one that already lives somewhere - while the local's own storage is its
+  block. Assigning such a value from one that already lives somewhere requires the source's references to outlive the
+  target's, and to be exactly in its scope where something can be stored through one of them (O25g). So a value built
+  in a loop body is reclaimed with the iteration, and keeping it past the body means building it where it is kept.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
-stored through it, since no function's code allocates into the program's scope.
+stored through it: the program's scope is reached through a global or a call's binding, never through a local's own tag.
 
 **O23.** Where a field's scope tag cannot be resolved through its container's bindings and the container is not a
 parameter of the function (O23a), the field reads at the **container's** scope. This is an underestimate and never a
@@ -3618,7 +3638,7 @@ as a temporary is built where it lands (E12c):
 | a declaration written with a bare `&` | the local's block |
 | a declaration written `&x` | where `x` lives |
 | a declaration written `&return` | the result scope (O26) |
-| a declaration of a value holding references | the function's own scope |
+| a declaration of a value holding references | the local's own block, as the local is (O25h) |
 | an assignment's target | the scope the target's referent lives in (O25) |
 | `return f()` | the returning function's result scope, or `p`'s scope for a result borrowed from `p` |
 | an argument for a parameter of another call | that parameter's binding — and, where that is itself still landing, wherever the outer call's result lands |

@@ -3123,6 +3123,22 @@ Go through this for every change to what olang means - a rule added, revised or 
   field referred to - C2d now holds such an argument to outlive the instance, never exactly. Also: the for-in's typing
   probe left obligations owed after its muted errors. Corpus: two scope tests migrated (an instance may not outlive its
   `&p` referent; a local naming its container's scope for a `&p` field's referent narrows it now).
+- **Where a value lands, answered once (T7b, O1b, O18a, O25h, P1g, P2, R9a, 2026-10-09).** The codegen review found
+  the question answered in about eight places with different fallbacks, and six use-after-frees or leaks from the
+  disagreements. Now one function (`cgWhereBuilt`) answers for every temporary - the checker's landing, a scope its
+  own type names, the target being built into, else the block it stands in - fed by the checker. **Decided (mine)**:
+  an array value returned from storage that is not already in the result scope is copied there before the scopes
+  close, and the caller takes it as it is (T7b); a temporary assigned to a global, or into a field or element reached
+  from one, is **built in the program's scope** rather than rejected - consistent with O1b's borrowed-from-global
+  results and O18a's assignment row - and anything existing stored there must already live there (closing a
+  pre-existing hole: `GA = x` with `x` a local compiled); each task reaches the program's scope through a private
+  stand-in folded back at its join (P2), so the scope needs no lock; a task's stand-ins fold into the scope its call
+  bound, and a spawn target is checked as the assignment it is (P1g - its result's scope and permission were never
+  checked); a `catch default` is built where the call's result is; and **a value local's references live in its own
+  block** (O18a's row said the function's scope, so a loop body's values accumulated for the whole call), with a copy
+  of such a value out of its block checked instead (O25h) - so keeping one past its block means building it where it
+  is kept. Also fixed: a stack-use-after-return in the checker (a pending discharge kept a pointer into
+  `buildMatchCore`'s frame); ASan is clean on worker, runner and shared.
 - **The lexer and parser hardened from a review (L1/L3/L4/L12/L18/L21, B9a/B9c/B10, T17/T30, E32, 2026-10-09).** A
   review of token.c and syntax.c reproduced seventeen defects; all are fixed, each with a check. **Lexer**: a file ending
   inside a comment, string or character literal read past its buffer (an internal error) - the end of the file now ends

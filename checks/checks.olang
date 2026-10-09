@@ -105,6 +105,20 @@ test "every case in checks/cases does what its header says" {
     assert bad == 0
 }
 
+# O1b/P2: tasks building into the program's scope at once, at -d where nothing hides the allocations (it corrupted the
+# heap); O18a: a value local's references are reclaimed with its loop body's block, under an address-space limit ten
+# million passes would exceed when they went to the function's own scope
+test "where a value lands, as whole builds" {
+    dir := fresh("landing")
+    os.Run("cp checks/fixtures/landing/* " $os.Quote(dir))
+    progscope String& = "\"$OLANG\" -b -d progscope.olang > out.txt 2>&1 && ./build/progscope.debug > out.txt 2>&1"
+    assert sh(dir, progscope) == 0 or failed("progscope", dir)
+    assert outOf(dir) == "0 0\n" or failed("progscope output", dir)
+    assert sh(dir, "\"$OLANG\" -b valueloop.olang > out.txt 2>&1") == 0 or failed("valueloop build", dir)
+    assert sh(dir, "(ulimit -v 150000 && ./build/valueloop) > out.txt 2>&1") == 0 or failed("valueloop", dir)
+    assert outOf(dir) == "50000015000000\n" or failed("valueloop output", dir)
+}
+
 # M22a: a std module and a local file with the same base name are two modules - but one module may not
 # import both under the one alias the name gives them
 test "std/map beside a local map.olang" {
