@@ -8973,7 +8973,8 @@ LamVowels I64 = "olang inherits".Count(fn(c) { return c == 'a' or c == 'e' or c 
 test "T29e: String and a program's own array type inherit the array methods" {
     s := "hello world"
     assert s.Count(fn(c) { return c == 'o' }) == 2 and s.Any(fn(c) { return c == ' ' })
-    assert s.FindIndex(fn(c) { return c == 'w' }) == 6 and s.Find("world") == 6   # String's own Find too
+    assert (try s.FindIndex(fn(c) { return c == 'w' }) catch default -1) == 6
+    assert (try s.Find("world") catch default -1) == 6   # String's own Find too
     n := LamNums(I32[3, 1, 2])
     n.Sort(fn(x, y) { return x < y })
     assert n[0] == 1 and n.Total() == 6

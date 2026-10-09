@@ -83,25 +83,35 @@ fn (a String&) EndsWith(suffix String&) Bool {
     return a[a.Len() - suffix.Len():].Eq(suffix)
 }
 
-# the index of the first occurrence of c, or -1
-fn (a String&) FindByte(c U8) I64 {
+# the index of the first occurrence of c - failing with the default error when there is none, so a miss is never read
+# as a position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
+fn (a String&) FindByte(c U8) I64 ? {
     for i in range a.Len() {
-        if a[i] == c {
-            return i
-        }
+        if a[i] == c { return i }
     }
-    return -1
+    error
 }
 
-# the index of the first occurrence of sub, or -1. An empty sub is found at 0.
-fn (a String&) Find(sub String&) I64 {
-    last I64 = a.Len() - sub.Len()
-    for i in range last + 1 {
-        if a[i:i + sub.Len()].Eq(sub) {
-            return i
+# the index of the first occurrence of sub, failing with the default error when there is none. An empty sub is found
+# at 0. Compared where it stands - each candidate's first byte, then the rest one byte at a time - so nothing is
+# sliced per position
+fn (a String&) Find(sub String&) I64 ? {
+    return try a.findFrom(sub, 0)
+}
+
+# the index of the first occurrence of sub at or after from
+fn (a String&) findFrom(sub String&, from I64) I64 ? {
+    n I64 = sub.Len()
+    if n == 0 { return from }
+    first := sub[0]
+    for i in range from, a.Len() - n + 1 {
+        if a[i] == first {
+            j I64 = 1
+            for j < n and a[i + j] == sub[j] { j++ }
+            if j == n { return i }
         }
     }
-    return -1
+    error
 }
 
 # (Contains - whether sub occurs in it - is every array's, std/prelude/array.olang: text is an array of bytes)
@@ -110,6 +120,8 @@ fn (a String&) Find(sub String&) I64 {
 # so no text is copied, held in an array that lives where the receiver does. Adjacent separators, or one at
 # either end, give empty pieces, so joining the pieces with sep gives the text back; text with no separator
 # is one piece, and the empty text one empty piece. An empty sep splits the text into its single bytes.
+# The pieces are counted first, so the array is allocated once at its exact length; for a one-byte sep the count is a
+# plain loop over the bytes, which the optimizer turns into vector compares
 fn (t String&) Split(sep String&) mut Array<String&>&t {
     if sep.Len() == 0 {
         bytes Array<String&>&t = Array<String&>(t.Len())
@@ -118,20 +130,38 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         }
         return bytes
     }
+    if sep.Len() == 1 {
+        c := sep[0]
+        n I64 = 1
+        for x in t {
+            if x == c { n++ }
+        }
+        pieces Array<String&>&t = Array<String&>(n)
+        k I64 = 0
+        start I64 = 0
+        for i in range t.Len() {
+            if t[i] == c {
+                pieces[k] = t[start:i]
+                k++
+                start = i + 1
+            }
+        }
+        pieces[k] = t[start:]
+        return pieces
+    }
     n I64 = 1
-    at I64 = t.Find(sep)
     from I64 = 0
-    for at >= 0 {
+    for {
+        at := try t.findFrom(sep, from) catch { break }
         n++
-        from = from + at + sep.Len()
-        at = t[from:].Find(sep)
+        from = at + sep.Len()
     }
     pieces Array<String&>&t = Array<String&>(n)
     from = 0
     for i in range n - 1 {
-        at = t[from:].Find(sep)
-        pieces[i] = t[from:from + at]
-        from = from + at + sep.Len()
+        at := try t.findFrom(sep, from) catch { unreachable }
+        pieces[i] = t[from:at]
+        from = at + sep.Len()
     }
     pieces[n - 1] = t[from:]
     return pieces
@@ -253,12 +283,18 @@ test "prefixes, suffixes and searching" {
     assert s.EndsWith("world")
     assert s.StartsWith("")
     assert not "hi".StartsWith("high")
-    assert s.FindByte(',') == 5
-    assert s.FindByte('z') == -1
-    assert s.Find("world") == 7
-    assert s.Find("o") == 4
-    assert s.Find("") == 0
-    assert s.Find("worlds") == -1
+    assert (try s.FindByte(',') catch default -1) == 5
+    assert (try s.FindByte('z') catch default -1) == -1
+    assert (try s.Find("world") catch default -1) == 7
+    assert (try s.Find("o") catch default -1) == 4
+    assert (try s.Find("") catch default -1) == 0
+    assert (try s.Find("worlds") catch default -1) == -1
+    assert (try s.Find("hello, world!") catch default -1) == -1        # longer than the text
+    assert (try "aab".Find("ab") catch default -1) == 1                # a false start, then the match
+    assert (try "".Find("") catch default -1) == 0 and (try "".Find("a") catch default -1) == -1
+    missed := false
+    try s.Find("xyz") catch { missed = true }
+    assert missed
     assert s.Contains("lo, w")
     assert not "".Contains("a")
 }
@@ -366,6 +402,23 @@ test "Split gives the pieces between separators, borrowed from the text" {
         n = n + I32(try piece.ParseInt() catch default 0)
     }
     assert n == 6
+}
+
+# the same searching and splitting, computed while compiling (K2): a miss is the same error there as at run time
+fn splitShape() I64 {
+    p := "x::y::::z".Split("::")
+    q := "1 22 333".Split(" ")
+    found I64 = (try "hello".Find("ll") catch default -1) * 10 + (try "hello".Find("lo!") catch default -1)
+    return p.Len() * 100000 + p[2].Len() * 10000 + q.Len() * 1000 + q[2].Len() * 100 + found
+}
+
+splitShapeBaked := splitShape()
+
+test "Split and Find, evaluated while compiling as at run time" {
+    assert splitShapeBaked == 400000 + 0 + 3000 + 300 + 19
+    assert splitShape() == splitShapeBaked
+    one := "a b  c ".Split(" ")              # a one-byte separator: adjacent ones and one at the end
+    assert one.Len() == 5 and one[1] == "b" and one[2] == "" and one[3] == "c" and one[4] == ""
 }
 
 test "a StringBuilder gathers text and hands it back as one String" {

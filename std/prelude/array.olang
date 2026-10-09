@@ -56,12 +56,13 @@ fn (a Array<<T>>&) All(keep fn(x <T>) Bool) Bool {
     return true
 }
 
-# the index of the first element keep holds for, or -1
-fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) I64 {
+# the index of the first element keep holds for - failing with the default error when keep holds for none, so a miss
+# is never read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
+fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) I64 ? {
     for i, x in a {
         if keep(x) { return i }
     }
-    return -1
+    error
 }
 
 # how many elements keep holds for
@@ -224,7 +225,8 @@ test "the array methods take what to do as a lambda" {
     a := I32[5, 3, 8, 1, 9, 2]
     assert a.Any(fn(x) { return x > 8 }) and not a.Any(fn(x) { return x > 9 })
     assert a.All(fn(x) { return x > 0 }) and not a.All(fn(x) { return x > 1 })
-    assert a.FindIndex(fn(x) { return x == 8 }) == 2 and a.FindIndex(fn(x) { return x == 7 }) == -1
+    assert (try a.FindIndex(fn(x) { return x == 8 }) catch default -1) == 2
+    assert (try a.FindIndex(fn(x) { return x == 7 }) catch default -1) == -1
     assert a.Count(fn(x) { return x % 2 == 1 }) == 4
     doubled := a.Map(fn(x) { return I64(x) * 2 })
     assert doubled[4] == 18

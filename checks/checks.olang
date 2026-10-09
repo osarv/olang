@@ -15,11 +15,9 @@ import "std/io"
 
 # the text after "<prefix>" on the line that starts with it, or "" when no line does
 fn lineAfter(src String&, prefix String&) String&src {
-    at := src.Find(prefix)
-    if at < 0 { return src[0:0] }
+    at := try src.Find(prefix) catch { return src[0:0] }
     rest := src[at + prefix.Len():]
-    end := rest.FindByte('\n')
-    if end < 0 { return rest }
+    end := try rest.FindByte('\n') catch { return rest }
     return rest[:end]
 }
 
@@ -66,22 +64,18 @@ fn runCase(dir String&, name String&) Bool {
         if not outOf(dir).Contains(want) { return failed($name ": expected '" $want "'", dir) }
         rest := src[:]
         for {
-            at := rest.Find("# also: ")
-            if at < 0 { break }
+            at := try rest.Find("# also: ") catch { break }
             line := rest[at + 8:]
-            end := line.FindByte('\n')
-            if end < 0 { end = line.Len() }
+            end := try line.FindByte('\n') catch default line.Len()
             also := line[:end]
             if not outOf(dir).Contains(also) { return failed($name ": expected '" $also "'", dir) }
             rest = line[end:]
         }
         rest = src[:]
         for {
-            at := rest.Find("# never: ")
-            if at < 0 { break }
+            at := try rest.Find("# never: ") catch { break }
             line := rest[at + 9:]
-            end := line.FindByte('\n')
-            if end < 0 { end = line.Len() }
+            end := try line.FindByte('\n') catch default line.Len()
             never := line[:end]
             if outOf(dir).Contains(never) { return failed($name ": did not expect '" $never "'", dir) }
             rest = line[end:]
@@ -103,8 +97,7 @@ test "every case in checks/cases does what its header says" {
     count := 0
     rest String& = list
     for rest.Len() > 0 {
-        end := rest.FindByte('\n')
-        if end < 0 { end = rest.Len() }
+        end := try rest.FindByte('\n') catch default rest.Len()
         name := rest[:end]
         if name.EndsWith(".olang") {
             count++
