@@ -1,0 +1,6 @@
+# check: fail error[E15]: this call can fail
+# E24: "try" before a chain covers its last call only - a fallible call the chain starts with is not tried
+fn g() String& ? { return "12" }
+fn main() ? {
+    a := try g().ParseInt() catch default 0
+}

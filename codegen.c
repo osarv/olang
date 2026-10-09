@@ -6429,6 +6429,7 @@ void emitRuntimeDecls(FILE* out) {
     fputs(
         "declare i32 @printf(ptr, ...)\n"
         "declare i32 @fputs(ptr, ptr)\n"
+        "declare i32 @fflush(ptr)\n"
         "declare i32 @snprintf(ptr, i64, ptr, ...)\n"
         "declare double @strtod(ptr, ptr)\n"
         "declare i64 @strtol(ptr, ptr, i32)\n"
@@ -8982,6 +8983,9 @@ void emitTestResultPrint(struct cgCtx* ctx, struct str desc, bool passed) {
     char* descGlobal = cgGlobalStringConst(ctx, cbuf);
     char* fmt = cgGlobalStringConst(ctx, passed ? "ok - %s\n" : "FAIL - %s\n");
     fprintf(ctx->fnOut, "  call i32 (ptr, ...) @printf(ptr %s, ptr %s)\n", fmt, descGlobal);
+    //out at once, so a test that crashes the process - a segfault, a write to a closed pipe - does not take the lines of
+    //the tests before it down with what stdio was holding
+    fputs("  call i32 @fflush(ptr null)\n", ctx->fnOut);
 }
 
 void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {

@@ -1644,8 +1644,12 @@ void resolveTypeDecl(struct type* t);
 //T7/D15: a declaration's type is what a program can write, and the only array type it can write is
 //Array<T> - so ":=" from an array literal (laid out with its length known, T11) declares an Array<T>, whose
 //later assignments may give it any length. Nested levels are references (T7a) and are kept as they are.
-struct type declaredArrayType(struct type t) {
+//Only a literal's length is dropped: "an expression whose type is an Array<T, N> declares that type" (D15) - a call
+//returning one, a fixed-length local, an inline field
+struct type declaredArrayType(struct operand* init) {
+    struct type t = init->type;
     if (t.bType != BASETYPE_ARRAY || t.structMAlloc || t.arrMalloc) return t;
+    if (!init->isLiteral || init->opType != OPERATION_NONE) return t;
     t.arrMalloc = true;
     t.arrLen = NULL;
     return t;
@@ -1757,7 +1761,8 @@ void refreshStructSnapshots(struct type* t);
 
 static bool typeIsDeclaredStruct(struct type t);
 bool TypeIsGeneric(struct type t);
-static bool constPatternValue(struct type p, struct list* bindings, long long* out);
+static bool constPatternValue(struct type p, struct list* bindings, long long* out, bool* undecided);
+static struct type constUndecided(struct type slot, struct token tok);
 static void fixArrayLength(struct type* t, long long n, struct token tok);
 struct type TypeConst(struct type of, long long v);
 struct type TypeSubstitute(struct type t, struct list* bindings) {
@@ -1765,7 +1770,11 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
     if (t.bType == BASETYPE_CONST) {
         if (t.constKnown || t.unknown || !t.constExpr) return t;
         long long n;
-        if (!constPatternValue(t, bindings, &n)) return t;
+        bool undecided = false;
+        if (!constPatternValue(t, bindings, &n, &undecided)) return t;
+        //computed only once the program has checked (G21): this attempt it fits anything, so nothing about the 0 that
+        //stands in for it is reported - which would keep the program from checking, and so from computing it
+        if (undecided) return constUndecided(*t.constOf, t.tok);
         struct type k = TypeConst(*t.constOf, n);
         k.tok = t.tok;
         return k;
@@ -3436,8 +3445,9 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
 }
 
 //G24/G25: a pattern's value once the constant variables it reads are bound by `bindings` - false while one is not.
-//One that cannot be computed is reported, at the instantiation (G16b), and taken as 0
-static bool constPatternValue(struct type p, struct list* bindings, long long* out) {
+//One that cannot be computed is reported, at the instantiation (G16b), and taken as 0; one evaluation proper has to
+//compute (G21) is *undecided until a later attempt has its value
+static bool constPatternValue(struct type p, struct list* bindings, long long* out, bool* undecided) {
     struct cfCtx c = (struct cfCtx){0};
     c.mod = p.constMod;
     c.bindings = bindings;
@@ -3455,6 +3465,7 @@ static bool constPatternValue(struct type p, struct list* bindings, long long* o
         long long n;
         if (constArgDecided(p.constExpr, bindings, &n)) { *out = n; return true; }
         constArgPending(p.constMod, p.constExpr, bindings, *p.constOf);
+        *undecided = true;
         return true;
     }
     Err(c.errTok.type != TOK_NONE ? c.errTok : p.tok, ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
@@ -7329,7 +7340,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     }
     //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
     //built where the declaration lives and registered there. A value took it in, and its destructor never ran
-    struct type t = declaredArrayType(rhs->type);
+    struct type t = declaredArrayType(rhs);
     if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
         t.structMAlloc = true;
         t.refMut = OperandGivesWritable(rhs);
@@ -11384,11 +11395,13 @@ static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     bool asTarget = ctx->buildingTarget; //this postfix is an assignment's target, its last part the place written
     ctx->buildingTarget = false;
-    //E13b: a "try" covers the chain's last call, not a call inside it
+    //E13b/E24: a "try" covers the chain's last call - a function value's or a method's - and no call inside it, so
+    //what the chain starts with is built with no allowance ("try g().Parse()" covers Parse, never g)
     struct syntaxPart* lastPart = partAt(s, s->parts.len - 1);
     bool allowLast = false;
-    if (s->parts.len > 1 && !lastPart->isToken && lastPart->sntx->type == SNTX_EXPR_VALUE_CALL) {
-        allowLast = ctx->allowFallibleCall;
+    if (s->parts.len > 1) {
+        allowLast = ctx->allowFallibleCall && !lastPart->isToken && (lastPart->sntx->type == SNTX_EXPR_VALUE_CALL
+                    || (lastPart->sntx->type == SNTX_EXPR_MEMBR && firstPartOfType(lastPart->sntx, SNTX_EXPR_ARGS)));
         ctx->allowFallibleCall = false;
     }
     int consumed = 1;
@@ -11483,8 +11496,11 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             struct syntax* argsNode = firstPartOfType(p->sntx, SNTX_EXPR_ARGS);
             if (argsNode) {
                 bool mReported = false;
+                bool prevAllow = ctx->allowFallibleCall;
+                ctx->allowFallibleCall = i == s->parts.len - 1 && allowLast;
                 struct operand* mc = buildMethodCall(ctx, result, memberTok, argsNode,
                                                      ListInit(sizeof(struct syntax*)), &mReported);
+                ctx->allowFallibleCall = prevAllow;
                 if (mc) { result = mc; continue; }
                 if (!result->type.unknown) reportUnknownMethod(result, memberTok);
                 result = unknownPlaceholder(memberTok); //one error: not also a discarded value, or a mismatch
@@ -17085,7 +17101,7 @@ static bool lambdaValueType(struct var* f, struct operand* v, struct type* out) 
     if (v->isNullLiteral || v->type.isTuple || v->type.bType == BASETYPE_VOID) return false;
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(v)) { *out = *textT; return true; }
-    struct type t = declaredArrayType(v->type);
+    struct type t = declaredArrayType(v);
     //a reference into one of the lambda's own parameters is a borrowed result; anything else is built (O13)
     if (t.scopeParam && !varIsOwnParam(canonicalVar(t.scopeParam), f)) t.scopeParam = NULL;
     t.scopeWritten = false;
