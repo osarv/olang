@@ -2353,6 +2353,7 @@ static void checkHoldsItself(struct type* t) {
     }
 }
 
+static void applyInlineDecisions(struct type* spec);
 struct type* instantiateType(struct type* generic, struct list* bindings) {
     struct str name = instantiationNameFor(generic->name, &generic->typeParams, bindings);
     for (int i = 0; i < typeInstantiations.len; i++) {
@@ -2391,6 +2392,7 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //to emit. Keeping typeParams non-empty is what makes codegen skip it (G16) and what stops its
     //constructor being emitted with a field whose type is still a variable.
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
+    if (!argsStillGeneric) applyInlineDecisions(spec); //C2e
     refreshStructSnapshots(spec);
 
     //D13/D14a re-checked against the SUBSTITUTED field types. The generic's own declaration cannot answer
@@ -2958,19 +2960,45 @@ bool tryEvalConstIntExpr(struct syntax* s, long long* out);
 //has to be settled before any body is checked while n may need checked bodies to compute, so - as B9c does
 //for conditions - an attempt that meets an undecided n checks the program with that field in the arena,
 //computes n afterwards, and the next attempt lays the field out with the answer. Keyed by where the field's
-//name is written - file, line and name - which every attempt reads identically.
-struct inlineDecision { struct str file; int line; struct str name; long long n; }; //n < 0: stays in the arena
+//name is written - file, line and name - which every attempt reads identically, and by the type it is a field of:
+//each instantiation of a generic type decides its own, since n may depend on the type's arguments.
+struct inlineDecision { struct str file; int line; struct str name; struct str typeName; long long n; }; //n < 0: arena
 static struct list inlineDecisions;
-struct inlinePending { struct str file; int line; struct str name; struct operand* sizeOp; };
+struct inlinePending { struct str file; int line; struct str name; struct str typeName; struct operand* sizeOp; };
 static struct list inlinePendings;
 
-static struct inlineDecision* inlineDecisionFor(struct token tok) {
+static struct inlineDecision* inlineDecisionFor(struct token tok, struct str typeName) {
     struct str f = TokenGetFileName(tok.owner);
     for (int i = 0; i < inlineDecisions.len; i++) {
         struct inlineDecision* d = ListGetIdx(&inlineDecisions, i);
-        if (d->line == tok.lineNr && StrCmp(d->name, tok.str) && StrCmp(d->file, f)) return d;
+        if (d->line == tok.lineNr && StrCmp(d->name, tok.str) && StrCmp(d->typeName, typeName) && StrCmp(d->file, f)) return d;
     }
     return NULL;
+}
+
+//C2e: a field n elements long, stored in the instance itself - the arena array type it would have, laid out inline
+static void inlineFieldType(struct var* v, struct type rt, long long n) {
+    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
+    *lenOp = (struct operand){0};
+    lenOp->type = TypeVanilla(BASETYPE_INT64);
+    lenOp->isLiteral = true;
+    lenOp->intLiteralVal = n;
+    v->type = rt;
+    v->type.arrMalloc = false;
+    v->type.arrLen = lenOp;
+    v->inlineState = 1;
+}
+
+//C2e: an instantiation's own decisions for the fields its generic left undecided
+static void applyInlineDecisions(struct type* spec) {
+    for (int i = 0; i < spec->vars.len; i++) {
+        struct var* v = ListGetIdx(&spec->vars, i);
+        if (v->inlineState != 2 || v->type.bType != BASETYPE_ARRAY) continue;
+        struct inlineDecision* d = inlineDecisionFor(v->tok, spec->name);
+        if (!d) continue;
+        if (d->n >= 0) inlineFieldType(v, v->type, d->n);
+        else v->inlineState = 3;
+    }
 }
 
 //"Array<T>(size[, fill])" as written, through any single-child wrapping: its type-args and size nodes
@@ -3089,20 +3117,11 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
         bool valueArrayType = !typeExprNode || (v.type.bType == BASETYPE_ARRAY && v.type.arrMalloc && !v.type.structMAlloc);
         if (fieldRhs && valueArrayType && syntaxIsArrayCtorCall(fieldRhs, &arrTargs, &arrSize)) {
             long long n = -1;
-            struct inlineDecision* d = inlineDecisionFor(fieldNameTok);
+            struct inlineDecision* d = inlineDecisionFor(fieldNameTok, t->name);
             bool known = tryEvalConstIntExpr(arrSize, &n);
             if (!known && d) { n = d->n; known = true; }
             if (known && n >= 0) {
-                struct type rt = builtinArrayType(mod, arrTargs, fieldNameTok, &t->scopeVars);
-                struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
-                *lenOp = (struct operand){0};
-                lenOp->type = TypeVanilla(BASETYPE_INT64);
-                lenOp->isLiteral = true;
-                lenOp->intLiteralVal = n;
-                v.type = rt;
-                v.type.arrMalloc = false;
-                v.type.arrLen = lenOp;
-                v.inlineState = 1;
+                inlineFieldType(&v, builtinArrayType(mod, arrTargs, fieldNameTok, &t->scopeVars), n);
             } else if (!known) {
                 v.inlineState = 2;
             } else {
@@ -14343,7 +14362,7 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         } else if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
             if (field->inlineState == 2 && fieldOp->opType == OPERATION_SIZED_ARRAY_ALLOC) {
-                struct inlinePending ip = { TokenGetFileName(field->tok.owner), field->tok.lineNr, field->name,
+                struct inlinePending ip = { TokenGetFileName(field->tok.owner), field->tok.lineNr, field->name, t->name,
                                             *(struct operand**)ListGetIdx(&fieldOp->args, 0) };
                 ListAdd(&inlinePendings, &ip);
             }
@@ -14900,7 +14919,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         for (int i = 0; i < inlinePendings.len; i++) {
             struct inlinePending* p = ListGetIdx(&inlinePendings, i);
             struct ctVal* val = NULL;
-            struct inlineDecision d = { p->file, p->line, p->name, -1 };
+            struct inlineDecision d = { p->file, p->line, p->name, p->typeName, -1 };
             if (CtEvaluate(p->sizeOp, TypeVanilla(BASETYPE_INT64), &val, NULL, NULL, NULL) && val->i >= 0) d.n = val->i;
             ListAdd(&inlineDecisions, &d);
         }

@@ -3790,7 +3790,8 @@ instance itself**: its `n` elements are part of the struct's layout, as a primit
 then remains plain data — copying it copies the elements, returning it by value needs no scope — and its
 layout matches a C struct with an array member. `Len()` of such a field is the constant `n`, and an index known
 while compiling is checked against it. Where `n` cannot be computed at compile time the field cannot be
-stored inline, and must be written as a reference (T7a).
+stored inline, and must be written as a reference (T7a). In a generic type `n` is computed for each instantiation
+(G16), so it may depend on the type's arguments.
 
 An inline field is **fixed storage**: an array copied into it must have exactly its length. Where both
 lengths are known while compiling a mismatch is a compile-time error; otherwise the length is checked once

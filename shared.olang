@@ -7974,6 +7974,28 @@ test "C2e: an inline field is borrowed as an ordinary array" {
     assert c2eTotal(x.m) == 1.5
 }
 
+# C2e: each instantiation of a generic type decides its own inline length - it may depend on the type's arguments
+fn c2eCap(a Array<<T>>&) I64 {
+    match <T> {
+        case I32 { return 2 }
+        nomatch { return 5 }
+    }
+}
+type C2eBuf<T> struct() {
+    data Array<<T>> = Array<<T>>(c2eCap(Array<<T>>(0)))
+}
+fn c2eGenLens() I64 {
+    b := C2eBuf<F64>()
+    a := C2eBuf<I32>()
+    return a.data.Len() * 10 + b.data.Len()
+}
+C2eGenBaked := c2eGenLens()
+
+test "C2e: each instantiation of a generic type has its own inline length" {
+    assert c2eGenLens() == 25
+    assert C2eGenBaked == 25
+}
+
 # T7/D15: an array a declaration holds has no length in its type - one initialized from a literal, either
 # way it is declared, may later be given an array of any length
 test "an array declared from a literal can later hold one of another length" {
