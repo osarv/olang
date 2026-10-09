@@ -6,7 +6,7 @@ same sizes and byte-identical output, timed against each other.
 
 ```
 bench/run.sh                 # build both, check the outputs agree, time (median of 7, interleaved)
-bench/run.sh -n              # also -march=native for both
+bench/run.sh -x              # also baseline x86-64 for both (olang -a x86-64, C with no -march)
 bench/run.sh -q              # build and check only
 bench/run.sh -r 9 nbody text # 9 repetitions, only some rows
 BENCH_LOCK=/home/user/verify.lock bench/run.sh   # hold a lock while checking and timing, on a shared machine
@@ -18,10 +18,12 @@ Nothing here is part of `make verify` or `make test` - the makefile names the di
 not one of them.
 
 **Fairness.** The C versions are compiled with exactly the flags olang compiles and links its own output with
-(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization, for the
-default x86-64 target. The `-n` columns build olang's own emitted IR and the C source with `-march=native`; C there
-also gets `-ffp-contract=off`, because clang's default would fuse `a*b+c` into an FMA wherever the target has one and
-change the results - olang never contracts, and has no way to ask for an FMA either. Both versions print floats as
+(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization - and, since
+olang builds for the machine it runs on (B12, 2026-10-09), `-march=native`, with `-ffp-contract=off`, because clang's
+default would fuse `a*b+c` into an FMA wherever the target has one and change the results - olang never contracts, and
+fuses only where a program writes `math.Fma`. The `-x` columns build both for baseline x86-64 (`olang -a x86-64`, C with
+no `-march`). The tables below the next section were measured before B12, when olang built for baseline x86-64 and the
+`-n` columns were its IR relinked with `-march=native`. Both versions print floats as
 olang's `$` does (the fewest digits that read back as the same value; `c/common.h` copies util.c's `FloatShortest`),
 so one differing bit in any result fails the check.
 
