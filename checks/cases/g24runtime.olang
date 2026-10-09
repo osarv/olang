@@ -1,0 +1,11 @@
+# check: fail error[G24, E32b]: Array<F32>'s length is known only at run time - view it with 'x as Array<T, N>&'
+# G24: an Array<T> has no length in its type, so it binds no constant variable - E32b's "as" is the way to give it one
+fn total(a Array<F32, <N>>&) F32 {
+    s F32 = 0.0
+    for i in range <N> { s = s + a[i] }
+    return s
+}
+fn main() ? {
+    r := Array<F32>(3)
+    x := total(r)
+}

@@ -11790,6 +11790,11 @@ fn kSize(a Array<I32, <N>>&) String {
     }
 }
 fn kPick(a Array<I32, <N>>&) I64 { return 1 if <N> > 2 else 0 }
+fn kViaLocal(a Array<I32, <N>>&) I64 {
+    n := <N>                 # one parse serves every instantiation, so a condition on n is an ordinary one
+    if n > 3 { return 1 }
+    return 0
+}
 KTotalBaked := kTotal(I64[1, 2, 3, 4, 5])
 test "G26: decided per instantiation - a recursion on a constant ends where it is chosen to" {
     t Array<I64, 4> = I64[4, 3, 2, 1]
@@ -11799,6 +11804,7 @@ test "G26: decided per instantiation - a recursion on a constant ends where it i
     b Array<I32, 5>
     assert kSize(e) == "empty" and kSize(s) == "small" and kSize(b) == "big"
     assert kPick(b) == 1 and kPick(s) == 0
+    assert kViaLocal(b) == 1 and kViaLocal(s) == 0
 }
 
 # G20: a constant of an enum without payloads, and of Bool

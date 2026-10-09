@@ -1,0 +1,7 @@
+# check: fail error[G22]: <N> is a constant, not a type
+# G22: a constant variable is a value, never a type
+fn asType(a Array<I32, <N>>&) { x <N> = 3 }
+fn main() ? {
+    a Array<I32, 3>
+    asType(a)
+}

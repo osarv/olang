@@ -58,11 +58,6 @@ This specification covers the full language, including the static ownership-scop
 generics. It does not cover a general borrow checker or a standard library — neither exists in the
 language.
 
-**Designed, not yet implemented:** constant parameters (§12.7, G20-G28, and what G3, G4, G6, G8, G13, G16b and G17 add
-for them) and fixed-length arrays (T7c, T7d, E32b, and what they change in T7, T7a, T7b, T8, T10, T11, T11a, T12, T16,
-T29a, D9a, D13, D13c, D15, D15a, M19, E1, E12, E13a, E15a, E19, E20, E21, E32, O7, S8, S8a, K1, X3a, and C2e's being
-superseded, and L14). Until they are built the compiler follows the rules as they stood before them.
-
 ## 1. Lexical Structure
 
 ### 1.1 Source files
@@ -487,8 +482,8 @@ direction is implicit; the other is a claim about a length, checked once where i
 - An `Array<T>` - a value or a reference - copied into an `Array<T, N>` value (an initializer, an assignment, a
   fixed-length field's initializer) is copied into that storage with its length checked against `N`, **once per
   copy**: where both lengths are known while compiling a mismatch is a compile-time error, and otherwise a mismatch
-  aborts the program as an out-of-range slice bound does (E16b) - or, in a statement written under `try` (R21),
-  fails with `BuiltinError.OUT_OF_BOUNDS`.
+  aborts the program as an out-of-range slice bound does (E16b). A program wanting the mismatch as an error views the
+  array first: `try (a as Array<T, N>&)` (E32b) fails with `BuiltinError.OUT_OF_BOUNDS`, and the view is then copied.
 - An `Array<T>` never becomes an `Array<T, N>&` by itself: `x as Array<T, N>&` (E32b) is the checked view.
 - An array **literal** of `k` items (E20), and written text of `k` bytes (T29c), adapts to a length as a numeric
   literal adapts to a type (T6): written against an `Array<T, N>` it is one when `k` is `N`, and a compile-time
@@ -1515,8 +1510,7 @@ The receiver type may be:
   method, the call's E12 conversions deciding whether a given array reaches it — and an element that is a type
   variable (`Array<<T>>&`) makes the method one of every array. A method over a specific element type is a
   different receiver from the generic one and takes precedence where both apply, as G8a's concrete
-  application does. A receiver with a length (`Array<<T>, <N>>&`, §12.7) is a method of the fixed-length arrays
-  only, and takes precedence over one without where both apply.
+  application does.
 
 Once resolved, the call is exactly a call of that function with the receiver as parameter 0.
 
@@ -4939,15 +4933,17 @@ is its own instantiation (G16), told apart by the parameter's type and the value
 `Array<F32, 4>` are two types (T7c).
 
 **G26 (decided per instantiation).** In an instantiation every constant variable has its value, so a condition reading
-one is known while compiling. An `if` whose condition reads a constant variable - directly, through a fixed local
-(S8c) or through anything it evaluates - and can be evaluated at compile time in the instantiation - by K1, reading no
-parameter and no local that is not fixed - is **decided per instantiation**, and so is a conditional expression (E28) whose condition is such and a `match` whose matched value is
-such (its guards, S13e, included): only the branch, value or clause chosen is checked and compiled for that
-instantiation, and the others are not checked against it at all, as G14 says of a type match's other arms. Such a
-condition is configuration, as one reading a build constant is (S8b), never S8a's dead code. Every branch is still
-parsed, the body being one for all instantiations; the chosen one behaves as a block in its place, and an `if` none of
-whose branches is chosen is nothing. A `match` whose matched value is a constant variable alone is written
-`match <N>`, as G13's type match is, with values in its cases.
+one is known while compiling. An `if` whose condition reads a constant variable - `<N>` written in it - and can be evaluated at compile
+time in the instantiation - by K1, reading no parameter and no local - is **decided per instantiation**, and so is a
+conditional expression (E28) whose condition is such, and a `match <N>` over a constant variable: only the branch,
+value or clause chosen is checked and compiled for that instantiation, and the others are not checked against it at
+all, as G14 says of a type match's other arms. Such a condition is configuration, as one reading a build constant is
+(S8b), never S8a's dead code; one that cannot be evaluated (it calls something that cannot be) is an ordinary condition,
+both branches checked. Every branch is still parsed, the body being one for all instantiations; the chosen one behaves
+as a block in its place, and an `if` none of whose branches is chosen is nothing. `match <N>` is written as G13's type
+match is, with values in its cases (`case 0`, `case 1, 2`, `case Layout.RowMajor`) and no guard (S13e): the first case
+holding the constant's value is chosen, else the `nomatch`; a `match <N>` statement choosing nothing is nothing, and one
+used as a value (S12b) choosing nothing is a compile-time error at the instantiation.
 
 That is what lets one generic do what only some of its instantiations can, and what ends a recursion on a constant:
 

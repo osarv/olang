@@ -1,0 +1,4 @@
+# check: fail error[G22]: a constant variable takes no constraint - <N>'s type is its parameter's
+# G22: a constant variable's type is its parameter's, written nowhere else
+fn constrained(a Array<I32, <N I64>>&) { }
+fn main() ? { }

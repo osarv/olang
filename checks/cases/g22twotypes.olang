@@ -1,0 +1,7 @@
+# check: fail error[G22]: <N> fills constant parameters of two types, I64 and I32
+# G22: every constant parameter one constant variable fills has the same type
+type Ring<T, N I32> struct() {
+    items mut Array<<T>, 4>
+}
+fn twoTypes(a Array<I32, <N>>&, b Ring<I32, <N>>&) { }
+fn main() ? { }

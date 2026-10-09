@@ -13853,7 +13853,15 @@ static struct list* bodyStmts(int id) {
 //the checked condition of a queued local if, recorded where it is checked - in its own function's scope
 static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct operand* op) {
     struct pendingCond* p = SyntaxPendingFor(condNode);
-    if (p && p->local) { p->op = op; p->bodyId = ctx->bodyId; }
+    if (!p || !p->local) return;
+    //G26: in a generic with constant parameters one parse serves every instantiation, and what a local holds may be
+    //a constant's value - so such a condition is never decided once for all of them: it is an ordinary one, and a
+    //condition reading the constant itself is decided per instantiation where it is checked (buildIfStmnt)
+    for (int i = 0; currentBindings && i < currentBindings->len; i++) {
+        if (((struct typeBinding*)ListGetIdx(currentBindings, i))->type.bType == BASETYPE_CONST) op = NULL;
+    }
+    p->op = op;
+    p->bodyId = ctx->bodyId;
 }
 
 //a plain scalar value: nothing but its own name can reach it - there is no reference to a primitive - so a

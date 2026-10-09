@@ -324,7 +324,10 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
         //parameter it is written for
         if (nodeType == SNTX_TYPE_ARGS) {
             enum tokenType next = peekTok(sc).type;
-            if (!item || (next != TOK_COMMA && next != TOK_GRT && next != TOK_BTSFT_R)) {
+            //the list closes on ">", or on the first ">" of ">>", ">=" or ">>=" (split below)
+            bool closes = next == TOK_COMMA || next == TOK_GRT || next == TOK_BTSFT_R || next == TOK_GRE
+                          || next == TOK_ASS_BTSFT_R;
+            if (!item || !closes) {
                 TokenSetCursor(sc->tc, itemAt);
                 TokenEditRewind(sc->tc, itemMark);
                 item = parseConstArg(sc);
