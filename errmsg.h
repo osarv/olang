@@ -70,6 +70,7 @@ struct type;
     X(ERR_TWO_POINTS,                   "L12",   "a number has at most one decimal point") \
     /* ---- syntax ---- */ \
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
+    X(ERR_BLOCK_NOT_CLOSED,             "",      "the block opened on line %d has no '}' - found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \

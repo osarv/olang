@@ -48,6 +48,9 @@ struct syntaxContext {
     struct parseMemo blockMemo;   //parseBlock's
     int depth;                    //nesting of expressions and blocks being parsed - see nestEnter
     bool tooDeep;                 //the current top-level item went past MAX_NESTING, and that was reported
+    struct token unclosedOpen;    //a block's "{" whose statements ran into a declaration - its "}" is missing - and
+    struct token unclosedAt;      //that declaration's first token: what the current top-level item reports
+    int unclosedPos;              //and where it is, which the next item starts from
 };
 
 // ---- token-stream primitives ----
@@ -184,6 +187,23 @@ bool acceptStmntEnd(SyntaxCtx sc) {
     //L20a: only as the LAST token - one the line goes on past ("state Array<Float32>(n)") is not a statement's end
     struct token next = peekTok(sc);
     return next.type == TOK_NONE || next.lineNr > prevTok(sc).lineNr;
+}
+
+//a "{ }" whose "}" was wanted next: nothing inside braces starts with a declaration ("fn name", "type", "test", "import",
+//"extern"), so finding one there means this "}" is missing - which the item reports at the brace, rather than
+//"expected '('" at the declaration's name (reportTopItemFailure)
+static void noteUnclosed(SyntaxCtx sc, struct token open) {
+    int at = TokenGetCursor(sc->tc);
+    struct token t = TokenFeed(sc->tc);
+    struct token next = TokenFeed(sc->tc);
+    TokenSetCursor(sc->tc, at);
+    bool decl = ((t.type == TOK_FUNC || t.type == TOK_TYPE) && next.type == TOK_IDEN) || t.type == TOK_TEST
+                || t.type == TOK_IMPORT || t.type == TOK_EXTERN;
+    if (decl && sc->unclosedOpen.type == TOK_NONE) {
+        sc->unclosedOpen = open;
+        sc->unclosedAt = t;
+        sc->unclosedPos = at;
+    }
 }
 
 // ---- tree-building primitives ----
@@ -477,7 +497,7 @@ struct syntax* parseChoiceBody(SyntaxCtx sc) {
     }
     if (!any) return parseFail(sc, cur);
     struct token close = acceptTok(sc, TOK_CURLY_C);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
+    if (close.type == TOK_NONE) { noteUnclosed(sc, open); return parseFail(sc, cur); }
     addTok(s, close);
     return s;
 }
@@ -529,7 +549,7 @@ struct syntax* parseInterfaceBody(SyntaxCtx sc) {
         if (!acceptStmntEnd(sc)) break;
     }
     struct token close = acceptTok(sc, TOK_CURLY_C);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
+    if (close.type == TOK_NONE) { noteUnclosed(sc, open); return parseFail(sc, cur); }
     addTok(s, close);
     return s;
 }
@@ -668,7 +688,7 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     }
     if (!any) return parseFail(sc, cur);
     struct token close = acceptTok(sc, TOK_CURLY_C);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
+    if (close.type == TOK_NONE) { noteUnclosed(sc, open); return parseFail(sc, cur); }
     addTok(s, close);
     return s;
 }
@@ -924,7 +944,7 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     struct syntax* body = parseCtorBody(sc);
     addSntx(s, body);
     struct token curlyC = acceptTok(sc, TOK_CURLY_C);
-    if (curlyC.type == TOK_NONE) return parseFail(sc, cur);
+    if (curlyC.type == TOK_NONE) { noteUnclosed(sc, curlyO); return parseFail(sc, cur); }
     addTok(s, curlyC);
     struct syntax* destruct = parseDestruct(sc);
     if (destruct) addSntx(s, destruct);
@@ -1788,7 +1808,7 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     struct syntax* nomatch = parseStmntNomatch(sc);
     if (nomatch) addSntx(s, nomatch);
     struct token close = acceptTok(sc, TOK_CURLY_C);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
+    if (close.type == TOK_NONE) { noteUnclosed(sc, open); return parseFail(sc, cur); }
     addTok(s, close);
     return s;
 }
@@ -2237,7 +2257,10 @@ static struct syntax* parseBlockUncached(SyntaxCtx sc) {
     }
     sc->blockDepth--;
     struct token close = acceptTok(sc, TOK_CURLY_C);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
+    if (close.type == TOK_NONE) {
+        noteUnclosed(sc, open);
+        return parseFail(sc, cur);
+    }
     addTok(s, close);
     return s;
 }
@@ -4404,6 +4427,10 @@ static bool syntaxHint(struct token found, char* expected) {
 //alternative failed there and the last one tried says nothing useful - "a declaration" is what was wanted
 static void reportTopItemFailure(SyntaxCtx sc, int start) {
     if (sc->tooDeep) return; //that is what stopped it, and it was said
+    if (sc->unclosedOpen.type != TOK_NONE) {
+        ErrSyntax(sc->unclosedAt, ERR_BLOCK_NOT_CLOSED, sc->unclosedOpen.lineNr, sc->unclosedAt);
+        return;
+    }
     bool atFirst = sc->furthestPos <= start +1;
     char* expected = !atFirst && sc->furthestExpected ? sc->furthestExpected : "a declaration";
     if (!syntaxHint(sc->furthestTok, expected)) ErrSyntax(sc->furthestTok, ERR_EXPECTED, expected, sc->furthestTok);
@@ -4414,6 +4441,7 @@ static void parseTopItem(SyntaxCtx sc, struct list* out) {
     sc->itemIncomplete = false;
     sc->tooDeep = false;
     sc->depth = 0;
+    sc->unclosedOpen = (struct token){0};
     int start = TokenGetCursor(sc->tc);
     sc->furthestPos = start;
     if (peekTok(sc).type == TOK_IF) {
@@ -4426,7 +4454,8 @@ static void parseTopItem(SyntaxCtx sc, struct list* out) {
     struct syntax* decl = parseTopDecl(sc);
     if (!decl) {
         reportTopItemFailure(sc, start);
-        skipTopItem(sc, start);
+        if (sc->unclosedOpen.type != TOK_NONE && !sc->tooDeep) TokenSetCursor(sc->tc, sc->unclosedPos); //the next item
+        else skipTopItem(sc, start);
         struct syntax* salvaged = salvageFuncDecl(sc, start);
         if (salvaged) ListAdd(out, salvaged);
         return;

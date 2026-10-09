@@ -9987,7 +9987,7 @@ static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* 
 //passes every index to At (or TryAt): a check derived from Len has one position to check, so several need TryAt declared
 static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct list idxs, struct token sq) {
     const char* atName = operatorFor(ctx, base->type, "At", sq);
-    if (!atName) return OperandIntLiteral(sq);
+    if (!atName) return unknownPlaceholder(sq); //reported: what is read from it says nothing more
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
     if (derived && idxs.len > 1) {
@@ -10015,7 +10015,7 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
 static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base, struct operand* lo, struct operand* hi,
                                       struct token sq) {
     const char* slName = operatorFor(ctx, base->type, "Slice", sq);
-    if (!slName) return OperandIntLiteral(sq);
+    if (!slName) return unknownPlaceholder(sq);
     const char* lenName = operatorMethodName(ctx, base->type, "Len");
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
