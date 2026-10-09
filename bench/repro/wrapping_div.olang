@@ -1,0 +1,21 @@
+# Wrapping integer arithmetic (E6c) costs the optimizer a fact C gets for free. spectral-norm's matrix entry,
+# (i + j) * (i + j + 1) / 2 + i + 1, is emitted as "mul i64" with no nsw flag - correctly, since olang defines
+# overflow to wrap - so LLVM cannot prove the product non-negative and keeps the signed division by two as three
+# instructions (shr 63, add, sar) where C, whose overflow is undefined, gets "mul nsw" and one shr. In a loop bound
+# by a divide that is 35-45% (spectral-norm 3000: olang 0.83s, the same IR with nsw added by hand 0.54s, ">> 1"
+# written instead of "/ 2" 0.57s, C 0.52s).
+# See it: build, then  awk '/^define.*_entry\(/,/^}/' build/wrapping_div.main.ll  ("mul i64", then "sdiv i64 ..., 2")
+import "std/io"
+import "std/os"
+
+fn entry(i I64, j I64) F64 { return 1.0 / F64((i + j) * (i + j + 1) / 2 + i + 1) }
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    s F64 = 0.0
+    for i in range n {
+        for j in range n { s += entry(i, j) }
+    }
+    try io.Print($s "\n")
+}

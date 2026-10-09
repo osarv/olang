@@ -1,0 +1,18 @@
+# Counting with a Map takes two lookups per key - Get, then Put - because Map has no way to update a value in
+# place: no find-or-insert, and no At/SetAt (and "m[k] += 1" through At/SetAt would still be two). Each lookup
+# hashes the key and walks its chain again. k-nucleotide, 2,000,000 bases: olang 1.13s, C with one find-or-insert
+# 0.83s, the same C rewritten to look up then insert 1.03s - so most of the gap is the API, not the code generator.
+import "std/io"
+import "std/os"
+import "std/map"
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    m := map.Map<I64, I64>()
+    for i in range n {
+        k I64 = i * 7919 % 1000
+        m.Put(k, (try m.Get(k) catch default 0) + 1)            # two hashes, two chain walks
+    }
+    try io.Print($m.Len() "\n")
+}

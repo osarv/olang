@@ -1,0 +1,19 @@
+# "$n" on an integer formats it twice: the generated helper (olang.rd.I64) is called once to measure (snprintf with
+# a null buffer) and once to write, so every rendering costs two snprintf calls where C's code makes one - and
+# snprintf is the dominant cost of rendering (about 80ns each on this machine). 5,000,000 renderings: olang 0.79s,
+# C making one snprintf each 0.42s, C making two 0.81s.
+# See it: build, then  grep -n "call i64 @olang.rd.I64" build/render_int.main.ll
+# (a call with a null buffer, then the real one)
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    total I64 = 0
+    for i in range n {
+        s := $(i * 7919 % 1000003)
+        total += s.Len()
+    }
+    try io.Print($total "\n")
+}
