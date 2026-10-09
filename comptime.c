@@ -128,6 +128,21 @@ static void ctRunAbort(const char* msg) {
     abort();
 }
 
+//S18a: a written check that failed under -i says where, as the built program does - "FILE:LINE: what", then the
+//program's own message (text, evaluated now) when it gave one
+static void ctRunAbortAt(struct statement* s, const char* what, struct ctVal* msg) {
+    fflush(NULL);
+    if (s && s->line > 0 && s->file.len) fprintf(stderr, "%.*s:%d: ", s->file.len, s->file.ptr, s->line);
+    fputs(what, stderr);
+    while (msg && msg->kind == CT_REF) msg = msg->target;
+    if (msg && msg->kind == CT_AGG) {
+        fputs(": ", stderr);
+        for (int i = 0; i < msg->n; i++) fputc((int)msg->elems[i]->i, stderr);
+    }
+    fputc('\n', stderr);
+    abort();
+}
+
 //R20: exact integer results for the overflow checks - twice Int64's width, as the generated code computes them
 __extension__ typedef __int128 ctWide;
 static struct ctVal* ctFloat(struct type t, double f);
@@ -2215,7 +2230,7 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
         if (s->nomatchValue && out) *out = ctFit(st, s->nomatchValue, want);
         else ctExecBlock(st, &s->nomatchBlock);
     } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
-        if (ctRun) ctRunAbort("reached unreachable code\n");
+        if (ctRun) ctRunAbortAt(s, "reached unreachable code", NULL);
         ctFail(st, s->op ? s->op->tok : (struct token){0}, "it reaches unreachable code");
     }
     st->locals->len = outer;
@@ -2297,7 +2312,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
         case STATEMENT_CONTINUE: st->flow = CF_CONTINUE; return;
         case STATEMENT_ASSERT:
             if (!ctTruth(st, s->op) && st->flow == CF_NORMAL) {
-                if (ctRun) ctRunAbort("assertion failed\n");
+                if (ctRun) ctRunAbortAt(s, "assertion failed", s->assertMsg ? ctEval(st, s->assertMsg) : NULL);
                 ctFail(st, tok, "an assertion in it fails");
             }
             return;
@@ -2328,7 +2343,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 fflush(NULL);
                 if (s->sType == STATEMENT_DONE) exit(0);
                 if (s->sType == STATEMENT_FAIL) exit(1);
-                ctRunAbort(s->sType == STATEMENT_ABORT ? "aborted\n" : "reached unreachable code\n");
+                ctRunAbortAt(s, s->sType == STATEMENT_ABORT ? "aborted" : "reached unreachable code", NULL);
             }
             ctFail(st, tok, "it ends the test or the process");
             return;

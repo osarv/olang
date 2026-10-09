@@ -5399,7 +5399,7 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
 //S12-S14: the checker has built each alternative's test and its bindings' reads over the held value, so this lays out
 //only the order: the value held, then per case each alternative's test - the first to hold fills the clause's
 //bindings its own way - then the guard, then the block. An alternative or guard that fails falls to the next case.
-void cgAbortLike(struct cgCtx* ctx, bool isUnreachable);
+void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable);
 static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT);
 void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL, (struct type){0}); }
 
@@ -5482,7 +5482,7 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
     if (s->hasNomatch) {
         if (slot && s->nomatchValue) cgMatchStore(ctx, s->nomatchValue, slot, resultT);
         else cgBlock(ctx, &s->nomatchBlock);
-    } else if (slot) cgAbortLike(ctx, true); //S12b: every case is covered, so this is not reached - checked, not assumed
+    } else if (slot) cgAbortLike(ctx, s, true); //S12b: every case is covered, so this is not reached - checked, not assumed
     cgBr(ctx, endLbl);
     cgLabel(ctx, endLbl);
     cgPopScope(ctx);
@@ -5651,9 +5651,24 @@ void cgDone(struct cgCtx* ctx, struct statement* s) {
 //S16c/S16d: both go through the same path a failed check does - abort with a message outside a test,
 //recoverable inside one, exactly as "assert(false)" already behaved. That is the point: "abort" is
 //assert(false) with its intent stated, and "unreachable" states a different intent again.
-void cgAbortLike(struct cgCtx* ctx, bool isUnreachable) {
-    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n",
-            isUnreachable ? "@__olang_msg_unreach" : "@__olang_msg_abort");
+//S18a: where a written check failed, as its message's prefix - "FILE:LINE: what" and then sep ("\n", or ": " before a
+//message of the program's own). A statement the compiler made has no line of its own, and says only what failed
+static char* cgCheckWhere(struct cgCtx* ctx, struct statement* s, const char* what, const char* sep) {
+    char* text;
+    if (s && s->line > 0 && s->file.len) {
+        size_t n = (size_t)s->file.len + strlen(what) + strlen(sep) + 32;
+        text = MallocOrCrash(n);
+        snprintf(text, n, "%.*s:%d: %s%s", s->file.len, s->file.ptr, s->line, what, sep);
+    } else {
+        text = MallocOrCrash(strlen(what) + strlen(sep) + 1);
+        sprintf(text, "%s%s", what, sep);
+    }
+    return cgGlobalStringConst(ctx, text);
+}
+
+void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable) {
+    char* msg = cgCheckWhere(ctx, s, isUnreachable ? "reached unreachable code" : "aborted", "\n");
+    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", msg);
     fputs("  unreachable\n", ctx->fnOut);
     ctx->terminated = true;
 }
@@ -5679,7 +5694,14 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", notc, failLbl, okLbl);
     ctx->terminated = true;
     cgLabel(ctx, failLbl);
-    fputs("  call void @__olang_check_failed(ptr @__olang_msg_assert)\n", ctx->fnOut);
+    //S18a: its location, and the program's own message - evaluated here, only when the check has failed
+    if (s->assertMsg) {
+        char* where = cgCheckWhere(ctx, s, "assertion failed", ": ");
+        char* text = cgValue(ctx, s->assertMsg);
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed_text(ptr %s, { i64, ptr } %s)\n", where, text);
+    } else {
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", cgCheckWhere(ctx, s, "assertion failed", "\n"));
+    }
     cgBr(ctx, okLbl);
     cgLabel(ctx, okLbl);
 }
@@ -5766,8 +5788,8 @@ void cgStatement(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_DO: cgDo(ctx, s); return;
         case STATEMENT_MATCH: cgMatch(ctx, s); return;
         case STATEMENT_RET: cgRet(ctx, s); return;
-        case STATEMENT_ABORT: cgAbortLike(ctx, false); return;
-        case STATEMENT_UNREACHABLE: cgAbortLike(ctx, true); return;
+        case STATEMENT_ABORT: cgAbortLike(ctx, s, false); return;
+        case STATEMENT_UNREACHABLE: cgAbortLike(ctx, s, true); return;
         case STATEMENT_BREAK: cgBreakOrContinue(ctx, true); return;
         case STATEMENT_CONTINUE: cgBreakOrContinue(ctx, false); return;
         case STATEMENT_JOIN: cgJoin(ctx, s); return;
@@ -6319,6 +6341,9 @@ void emitRuntimeDecls(FILE* out) {
         "declare i32 @pthread_cond_broadcast(ptr)\n"
         "declare i32 @setjmp(ptr) returns_twice\n"
         "@stderr = external global ptr\n"
+        "@stdout = external global ptr\n"
+        "declare i64 @fwrite(ptr, i64, i64, ptr)\n"
+        "declare i32 @fputc(i32, ptr)\n"
         "declare void @longjmp(ptr, i32) noreturn\n"
         "\n"
         //initialexec, not the default general-dynamic: LLVM's default lowers every access to a
@@ -6335,14 +6360,11 @@ void emitRuntimeDecls(FILE* out) {
         //each check names what actually failed - they all used to print "assertion failed", including the
         //two that are not assertions. NUL-terminated, which the old one was not: it was exactly 17 bytes
         //for 16 characters plus a newline, so fputs/printf read past the end of the array looking for one.
-        "@__olang_msg_assert = linkonce_odr unnamed_addr constant [18 x i8] c\"assertion failed\\0A\\00\"\n"
         "@__olang_msg_slice = linkonce_odr unnamed_addr constant [27 x i8] c\"slice bounds out of range\\0A\\00\"\n"
         "@__olang_msg_as = linkonce_odr unnamed_addr constant [34 x i8] c\"'as' named what the value is not\\0A\\00\"\n"
         "@__olang_msg_arraylen = linkonce_odr unnamed_addr constant [27 x i8] c\"array length out of range\\0A\\00\"\n"
         "@__olang_msg_oom = linkonce_odr unnamed_addr constant [15 x i8] c\"out of memory\\0A\\00\"\n"
         "@__olang_msg_arrayfit = linkonce_odr unnamed_addr constant [47 x i8] c\"array length does not match its fixed storage\\0A\\00\"\n"
-        "@__olang_msg_abort = linkonce_odr unnamed_addr constant [9 x i8] c\"aborted\\0A\\00\"\n"
-        "@__olang_msg_unreach = linkonce_odr unnamed_addr constant [26 x i8] c\"reached unreachable code\\0A\\00\"\n"
         "@__olang_msg_spawn = linkonce_odr unnamed_addr constant [22 x i8] c\"could not start task\\0A\\00\"\n"
         "\n"
         //S16a: "done" and "fail" end the innermost thing that can end - the current test if one is
@@ -6371,15 +6393,43 @@ void emitRuntimeDecls(FILE* out) {
         //invariant. Under a test it is recoverable, exactly as S18 says.
         "define linkonce_odr void @__olang_check_failed(ptr %msg) {\n"
         "entry:\n"
+        "  %stream = call ptr @__olang_check_stream()\n"
+        "  call i32 @fputs(ptr %msg, ptr %stream)\n"
+        "  call void @__olang_check_end()\n"
+        "  unreachable\n"
+        "}\n\n"
+        , out);
+    fputs(
+        //S18a: "assert cond, message" - its location's prefix, then the program's own text and a line end
+        "define linkonce_odr void @__olang_check_failed_text(ptr %where, { i64, ptr } %text) {\n"
+        "entry:\n"
+        "  %stream = call ptr @__olang_check_stream()\n"
+        "  call i32 @fputs(ptr %where, ptr %stream)\n"
+        "  %len = extractvalue { i64, ptr } %text, 0\n"
+        "  %data = extractvalue { i64, ptr } %text, 1\n"
+        "  call i64 @fwrite(ptr %data, i64 1, i64 %len, ptr %stream)\n"
+        "  call i32 @fputc(i32 10, ptr %stream)\n"
+        "  call void @__olang_check_end()\n"
+        "  unreachable\n"
+        "}\n\n"
+        //where a failed check says what failed: stderr outside a test - not printf: stdout is block-buffered whenever
+        //it is not a terminal, so abort() discarded the message exactly when the output was being captured, and the
+        //unhandled-error path writes there too - and stdout inside one, beside the "FAIL - " line the harness prints
+        "define linkonce_odr ptr @__olang_check_stream() {\n"
+        "entry:\n"
+        "  %tgt = load ptr, ptr @__olang_jmp_target\n"
+        "  %isnull = icmp eq ptr %tgt, null\n"
+        "  %errs = load ptr, ptr @stderr\n"
+        "  %outs = load ptr, ptr @stdout\n"
+        "  %stream = select i1 %isnull, ptr %errs, ptr %outs\n"
+        "  ret ptr %stream\n"
+        "}\n\n"
+        "define linkonce_odr void @__olang_check_end() {\n"
+        "entry:\n"
         "  %tgt = load ptr, ptr @__olang_jmp_target\n"
         "  %isnull = icmp eq ptr %tgt, null\n"
         "  br i1 %isnull, label %hard, label %soft\n"
         "hard:\n"
-        //stderr, not printf: stdout is block-buffered whenever it is not a terminal, so abort() discarded
-        //the message exactly when the output was being captured. The same stream the unhandled-error path
-        //already writes to.
-        "  %errs = load ptr, ptr @stderr\n"
-        "  call i32 @fputs(ptr %msg, ptr %errs)\n"
         "  call void @abort()\n"
         "  unreachable\n"
         "soft:\n"

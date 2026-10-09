@@ -11788,3 +11788,19 @@ test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
     try g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
     assert MxCalls == 0 and g[1, 1] == 4 and (try g[-1, 0] catch default 7) == 7
 }
+
+# S18a: "assert cond, message" - the message (any text: a literal, a join, "$x", a String a call gives) is evaluated
+# only when the assert fails, so one that holds never runs it
+AsMsgCalls mut I64 = 0
+fn asMsg(i I64) String {
+    AsMsgCalls = AsMsgCalls + 1
+    return "message " $i
+}
+test "S18a: an assert's message is evaluated only when it fails" {
+    for i in range AsMsgCalls + 3 {
+        assert i < 3, asMsg(i)
+        assert i >= 0, "i is " $i
+        assert AsMsgCalls == 0, $asMsg(i) " " $AsMsgCalls
+    }
+    assert(AsMsgCalls == 0), "the message ran " $AsMsgCalls " times"
+}

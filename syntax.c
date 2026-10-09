@@ -1951,19 +1951,26 @@ struct syntax* parseStmntFail(SyntaxCtx sc) {
     return s;
 }
 
-//"assert EXPR" - takes its operand directly like "return" does, not a function call ("assert(cond)"
+//"assert EXPR [, MESSAGE]" - takes its operand directly like "return" does, not a function call ("assert(cond)"
 //still parses fine too, unchanged: the parens are just an ordinary parenthesized sub-expression, which
-//EXPR already handles on its own - see the report)
+//EXPR already handles on its own - see the report). S18a: an optional text after a comma says why, on failure
 struct syntax* parseStmntAssert(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ASSERT);
     if (kw.type == TOK_NONE) return NULL;
     struct syntax* val = parseExpr(sc);
     if (!val) return parseFail(sc, cur);
+    struct token comma = acceptTok(sc, TOK_COMMA);
+    struct syntax* msg = NULL;
+    if (comma.type != TOK_NONE && !(msg = parseExpr(sc))) return parseFail(sc, cur);
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_ASSERT);
     addTok(s, kw);
     addSntx(s, val);
+    if (msg) {
+        addTok(s, comma);
+        addSntx(s, msg);
+    }
     return s;
 }
 

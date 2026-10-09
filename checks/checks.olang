@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg"]
+                     "nestdeep", "nestparse", "diag", "linalg", "assertloc"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -221,6 +221,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
+        case "assertloc" { try assertloc(r) }
         case "s18c" { try s18c(r) }
         case "static" { try static(r) }
         case "k2" { try k2(r) }
@@ -578,6 +579,29 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i osexit.olang > out.txt 2>&1") == 42, "osexit -i", dir)
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
+}
+
+# S18a: a failed assert, abort or unreachable says where it is - and an assert the message written after it - built,
+# interpreted, and inside a test before the FAIL line
+test "a failed check says where it is" { assert passed("assertloc") }
+
+fn assertloc(r mut report&) ? Failed {
+    dir := fresh("assertloc")
+    os.Run("cp checks/fixtures/assertloc/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b located.olang > out.txt 2>&1") == 0, "located did not build", dir)
+    try r.expect(sh(dir, "./build/located > out.txt 2>&1") == 134 and outOf(dir) == "located.olang:8: assertion failed: n is 1\n",
+                 "an assert's location and message", dir)
+    try r.expect(sh(dir, "./build/located a > out.txt 2>&1") == 134 and outOf(dir) == "located.olang:6: aborted\n",
+                 "an abort's location", dir)
+    try r.expect(sh(dir, "./build/located a b > out.txt 2>&1") == 134
+                 and outOf(dir) == "located.olang:7: reached unreachable code\n", "an unreachable's location", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i located.olang > out.txt 2>&1") == 134
+                 and outOf(dir) == "located.olang:8: assertion failed: n is 1\n", "-i: an assert's location and message", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i located.olang a b > out.txt 2>&1") == 134
+                 and outOf(dir) == "located.olang:7: reached unreachable code\n", "-i: an unreachable's location", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -t tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
+    want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
+    try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)
 }
 
 # S18c: an assert the compiler proves emits no run-time check at all

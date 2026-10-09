@@ -15829,17 +15829,46 @@ struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
 //every if/do-while condition already goes through
 //S18c: every assert, with the body it is in, checked at compile time once the program has checked cleanly
-struct assertRec { struct operand* op; int bodyId; bool inTest; };
+struct assertRec { struct operand* op; struct operand* msg; int bodyId; bool inTest; };
 static struct list assertRecs;
 
+//S18c/S18a: a false assert's error carries its message, when the message can be computed while compiling as well
+static bool assertFalseWithMessage(struct assertRec* r) {
+    if (!r->msg) return false;
+    struct ctVal* m = NULL;
+    if (!CtEvaluateIn(r->msg, r->msg->type, &m, NULL, NULL, NULL, fixedLocalInit, bodyStmts(r->bodyId))) return false;
+    while (m && m->kind == CT_REF) m = m->target;
+    if (!m || m->kind != CT_AGG) return false;
+    char* text = MallocOrCrash((size_t)m->n + 1);
+    for (int i = 0; i < m->n; i++) text[i] = (char)m->elems[i]->i;
+    text[m->n] = '\0';
+    Err(r->op->tok, ERR_ASSERT_FALSE_MESSAGE, text);
+    return true;
+}
+
 struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    struct list exprs = allPartsOfType(s, SNTX_EXPR);
+    struct operand* cond = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 0));
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
-    struct assertRec r = { cond, ctx->bodyId, ctx->inTest };
+    //S18a: "assert cond, message" - text (a literal, a join, "$x", a String), written as a String value
+    struct operand* msg = NULL;
+    if (exprs.len > 1) {
+        msg = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 1));
+        struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+        if (textT && OperandIsWrittenText(msg)) {
+            struct type tv = *textT;
+            tv.structMAlloc = false;
+            msg = OperandNominalConversion(tv, msg, msg->tok);
+        }
+        if (!msg->type.unknown && !(TypeIsByteArray(msg->type) && msg->type.arrMalloc))
+            Err(msg->tok, ERR_ASSERT_MESSAGE_NOT_TEXT, &msg->type);
+    }
+    struct assertRec r = { cond, msg, ctx->bodyId, ctx->inTest };
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSERT;
     stmt.op = cond;
+    stmt.assertMsg = msg;
     return stmt;
 }
 
@@ -16925,7 +16954,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, NULL, NULL, NULL,
                               fixedLocalInit, bodyStmts(r->bodyId))) continue;
             if (v->i) r->op->ctProven = true;
-            else Err(r->op->tok, ERR_ASSERT_FALSE);
+            else if (!assertFalseWithMessage(r)) Err(r->op->tok, ERR_ASSERT_FALSE);
         }
     }
 

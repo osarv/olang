@@ -2865,11 +2865,13 @@ statements a checker ever *requires*.
 
 ### 6.7 `assert`
 
-**S17.** `assert-stmnt ::= "assert" expr STMNT_END`. `expr` must be `Bool`. `assert` is a statement,
-not a function call — `assert cond` and `assert(cond)` are both valid and identical, the latter
+**S17.** `assert-stmnt ::= "assert" expr [ "," expr ] STMNT_END`. The first `expr` must be `Bool`. `assert` is a
+statement, not a function call — `assert cond` and `assert(cond)` are both valid and identical, the latter
 simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in any function, test,
 constructor, or destructor body (§9), not
-only inside `test { }` blocks.
+only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
+or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
+are paid only then: `assert n < cap, "n is " $n ", cap " $cap`.
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -2880,10 +2882,15 @@ only inside `test { }` blocks.
   broken guarantee from the orderly `fail` (S16b).
 
 **S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and an array length out of range (§3.5
-D14b) each print a message naming what failed, to standard error.
+D14b) each print a message naming what failed - to standard error, or while a test is running to standard output,
+before the test's `FAIL` line. A failed `assert`, `abort` (S16c) or `unreachable` (S16d), and a value `match` no
+clause selects (S12b), also say **where** it is written, as `FILE:LINE: assertion failed`, `FILE:LINE: aborted` and
+`FILE:LINE: reached unreachable code`; an assert's message (S17) follows, after `: `. A program run with `-i` (B3e)
+prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
-values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert,
+values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, which
+carries its message (S17) when that can be computed while compiling too,
 and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
