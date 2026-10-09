@@ -432,6 +432,9 @@ because what it finds about structure feeds the refactor.
   weekly 0.66. Started (read-only, on /home/user/wt/s3c @ 0a1b122): review2 of chk4/cgfix3/s3scope (soundness first)
   -> /home/user/review/tonight2, and study4 (systems, concurrency, scripting) -> /home/user/review/study4. Running:
   oann-up, fuzz2, rvfix, review2, study4. After rvfix: bootstrap/ move (sources only, build/out stays) + modest cleanup.
+- 23:05 CEST: the user answered QA/QB/QC as recommended (ledger). Started wt-qc (copies of read-only stay read-only);
+  rvfix told to drop its T25b "known hole" note. Once the port starts, C compiler work is FIXES ONLY (QB).
+  The user asked how far the compiler is: told port design + P0 done, port not started (refactor first), ~1-2 h to M1.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
