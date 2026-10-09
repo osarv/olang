@@ -4092,7 +4092,8 @@ it, into a field or an element of it, or given to a call that keeps it there is 
 existing storage stored there must be there exactly where something can be stored through it, and outlive it
 otherwise (O25c, C2d); a borrowed value's callee binds its scope variable to the result scope (O17). A copy of storage
 that already lives somewhere (`t := a[i]`) keeps its references where they are (O25h) and is not moved: returning it is
-O14c's. It is Go's escape analysis, made static and read off the program: the declaration and the `return` say where
+O14c's. An array value so returned (T7b) is still handed back as a new array - copied into the result scope at the
+return, where its storage already is - so nothing that refers to the local refers to the caller's array. It is Go's escape analysis, made static and read off the program: the declaration and the `return` say where
 the local lives. The cost is memory, never safety - the result scope is the scope the caller puts the result in (O18a),
 so what is built into the local lives as long as the result does: deferred code, a join's tasks and a destructor
 registered in it (O15, run when the caller's scope closes) see it; a local declared in a loop body and returned from it
