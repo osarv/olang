@@ -9061,6 +9061,15 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
         case TOK_GRE: capName = "Less"; negate = true; break;
         default: break;
     }
+    //T29c: written text is a String where nothing adapts it, so as an operator's operand too - "\"a\" < s" asks
+    //String's Less as "s > \"a\"" does
+    struct type* textT = capName ? SemanticBuiltinType(StrFromCStr("String")) : NULL;
+    if (textT) {
+        struct type tv = *textT;
+        tv.structMAlloc = false;
+        if (OperandIsWrittenText(a)) a = OperandNominalConversion(tv, a, a->tok);
+        if (OperandIsWrittenText(b)) b = OperandNominalConversion(tv, b, b->tok);
+    }
     struct operand* recv = swap ? b : a;
     const char* name = capName ? operatorFor(ctx, recv->type, capName, opTok) : NULL;
     if (name) {

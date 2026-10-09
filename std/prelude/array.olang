@@ -111,6 +111,85 @@ fn (a Array<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
     return acc
 }
 
+# how many times sub occurs in it as a contiguous run - counted from the start, occurrences not overlapping, so "aaaa"
+# holds "aa" twice. The empty run occurs at every position, before each element and after the last: Len() + 1 times
+fn (a Array<<T>>&) CountOf(sub Array<<T>>&) I64 {
+    if sub.Len() == 0 { return a.Len() + 1 }
+    n I64 = 0
+    i I64 = 0
+    for i <= a.Len() - sub.Len() {
+        j I64 = 0
+        for j < sub.Len() and a[i + j] == sub[j] { j++ }
+        if j == sub.Len() {
+            n++
+            i += sub.Len()
+        } else {
+            i++
+        }
+    }
+    return n
+}
+
+# a new array with every occurrence of the run old - counted from the start, not overlapping, as CountOf counts them -
+# replaced by the run new: "a-b-c".Replace("-", ", ") is "a, b, c". The empty run occurs at every position, so an empty
+# old puts new before each element and after the last. Built at its exact length, once
+fn (a Array<<T>>&) Replace(old Array<<T>>&, new Array<<T>>&) Array<<T>> {
+    n := a.CountOf(old)
+    out := Array<<T>>(a.Len() + n * (new.Len() - old.Len()))
+    w I64 = 0
+    i I64 = 0
+    for i <= a.Len() {
+        j I64 = 0
+        for j < old.Len() and i + j < a.Len() and a[i + j] == old[j] { j++ }
+        if j == old.Len() {
+            for x in new {
+                out[w] = x
+                w++
+            }
+            if old.Len() > 0 {
+                i += old.Len()
+                continue
+            }
+        }
+        if i == a.Len() { break }
+        out[w] = a[i]
+        w++
+        i++
+    }
+    return out
+}
+
+# a new array of n copies of the elements, one after another - empty for n of 0 or below: "ab".Repeat(3) is "ababab"
+fn (a Array<<T>>&) Repeat(n I64) Array<<T>> {
+    k I64 = n if n > 0 else 0
+    out := Array<<T>>(a.Len() * k)
+    for r in range k {
+        for i, x in a { out[r * a.Len() + i] = x }
+    }
+    return out
+}
+
+# the elements in the opposite order, in place
+fn (a mut Array<<T>>&) Reverse() {
+    i I64 = 0
+    j I64 = a.Len() - 1
+    for i < j {
+        t := a[i]
+        a[i] = a[j]
+        a[j] = t
+        i++
+        j--
+    }
+}
+
+# a new List - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToList()", or n copies of one value,
+# "Array<I32>(n, v).ToList()". The reverse of List's ToArray
+fn (a Array<<T>>&) ToList() List<<T>>& {
+    out List<<T>>&return = List<<T>>()
+    out.PushAll(a)
+    return out
+}
+
 # sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not
 # order keep their order. It allocates nothing - elements only ever swap places, so it sorts an array of
 # references exactly as it sorts numbers: insertion-sorted blocks, merged by rotation (Go's sort.Stable)

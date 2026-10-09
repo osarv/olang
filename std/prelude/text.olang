@@ -171,8 +171,8 @@ fn isSpace(c U8) Bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r'
 }
 
-# the text without leading and trailing whitespace - a borrow of the receiver's own storage, so it shares
-# the receiver's scope "s" and costs no copy
+# the text without leading and trailing whitespace - a borrow of the receiver's own storage, so it lives where the
+# receiver does and costs no copy
 fn (t String&) Trim() String&t {
     lo I64 = 0
     hi I64 = t.Len()
@@ -183,6 +183,103 @@ fn (t String&) Trim() String&t {
         hi--
     }
     return t[lo:hi]
+}
+
+# the text without leading whitespace - a borrow of the receiver's own storage, as Trim's is
+fn (t String&) TrimStart() String&t {
+    lo I64 = 0
+    for lo < t.Len() and isSpace(t[lo]) {
+        lo++
+    }
+    return t[lo:]
+}
+
+# the text without trailing whitespace - a borrow of the receiver's own storage, as Trim's is
+fn (t String&) TrimEnd() String&t {
+    hi I64 = t.Len()
+    for hi > 0 and isSpace(t[hi - 1]) {
+        hi--
+    }
+    return t[:hi]
+}
+
+# the text with every ASCII lower-case letter made upper-case, as new text. Every other byte - those of a UTF-8 sequence
+# for a character beyond ASCII included - is left as it is
+fn (t String&) ToUpper() String {
+    out := String(Array<Char>(t.Len()))
+    for i, c in t { out[i] = c.ToUpper() }
+    return out
+}
+
+# the text with every ASCII upper-case letter made lower-case, as new text, every other byte left as it is
+fn (t String&) ToLower() String {
+    out := String(Array<Char>(t.Len()))
+    for i, c in t { out[i] = c.ToLower() }
+    return out
+}
+
+# the index of the last occurrence of sub, failing with the default error when there is none, as Find does. An empty
+# sub is found at Len()
+fn (a String&) FindLast(sub String&) I64 ? {
+    n I64 = sub.Len()
+    i I64 = a.Len() - n
+    for i >= 0 {
+        j I64 = 0
+        for j < n and a[i + j] == sub[j] { j++ }
+        if j == n { return i }
+        i--
+    }
+    error
+}
+
+# bytewise lexicographic order, as Compare gives it - what "<" asks of two texts (E31), and with it ">", "<=" and ">=":
+# "words.Sort(fn(a, b) { return a < b })"
+fn (a String&) Less(b String&) Bool { return a.Compare(b) < 0 }
+
+# the lines of the text, one at a time, each a borrow of the text's own storage, so no text is copied: "for line in
+# t.Lines() { ... }". Lines as io.Lines reads them from a file: a line is what comes before a newline, without it, and
+# one carriage return just before the newline goes with it, so "a\r\nb\n" is "a" and "b" as "a\nb\n" is. The last line
+# needs no newline after it: "a\nb" is "a" and "b", "a\n" is just "a", and "a\n\n" is "a" and "" - the empty text has no
+# lines at all
+fn (t String&) Lines() LineIter { return LineIter(t) }
+
+# a position in a text's lines - handed out fresh by Lines(), so every loop gets its own
+type LineIter struct(of String&) {
+    text String&of = of
+    at mut I64 = 0                   # where the next line starts
+}
+
+fn (it mut LineIter&) Next() String&it ? Exhausted {
+    if it.at == it.text.Len() { error Exhausted.END }
+    start := it.at
+    end I64 = start
+    for end < it.text.Len() and it.text[end] != '\n' { end++ }
+    it.at = end + 1 if end < it.text.Len() else end
+    if end > start and it.text[end - 1] == '\r' { end-- }
+    return it.text[start:end]
+}
+
+# the texts one after another with sep between each two: String&["a", "b", "c"].Join(", ") is "a, b, c" - the empty array
+# joins to the empty text. Built at its exact length, once; "$" renders the array itself as source instead (E11a)
+fn (parts Array<String&>&) Join(sep String&) String {
+    n I64 = 0
+    for p in parts { n += p.Len() }
+    if parts.Len() > 1 { n += sep.Len() * (parts.Len() - 1) }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i, p in parts {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in p {
+            out[w] = c
+            w++
+        }
+    }
+    return out
 }
 
 # a decimal integer with an optional leading '-' or '+', and nothing else - no surrounding space, no
