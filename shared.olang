@@ -11160,7 +11160,7 @@ test "L18a: lists, literals, comprehensions and joins run over several lines ins
     assert text == "s=3 t=3"
 }
 
-# S20: a block written as a statement is a scope of its own - what it allocates and its destructors end at its "}"
+# S1a: a block written as a statement is a scope of its own - what it allocates and its destructors end at its "}"
 cbClosed mut I32 = 0
 type cbHandle struct(n I32) {
     n
@@ -11178,7 +11178,7 @@ fn cbBlocks() I32 {
         return 1
     }
 }
-test "S20: a bare block closes its scope at its end, and leaves as its statements do (D10a)" {
+test "S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)" {
     cbClosed = 0
     assert cbBlocks() == 1
     x := 1

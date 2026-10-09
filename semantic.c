@@ -15563,7 +15563,7 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_MATCH: return buildMatchStmnt(ctx, actual);
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_JOIN: return buildJoinStmnt(ctx, actual);
-        case SNTX_STMNT_BLOCK: { //S20: a block of its own - built as the "if true" a chosen branch already is (S8b)
+        case SNTX_STMNT_BLOCK: { //S1a: a block of its own - built as the "if true" a chosen branch already is (S8b)
             struct statement stmt = buildEmptyIfStmnt(ctx, firstTokAnywhere(actual));
             stmt.block = buildBlock(ctx, firstPartOfType(actual, SNTX_BLOCK));
             return stmt;

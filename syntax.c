@@ -1813,7 +1813,7 @@ struct syntax* parseStmntRet(SyntaxCtx sc) {
     return s;
 }
 
-//S20: "{ ... }" as a statement - a block of its own, whose scope (and memory) ends at its "}". No expression begins with
+//S1a: "{ ... }" as a statement - a block of its own, whose scope (and memory) ends at its "}". No expression begins with
 //"{", so a statement that does is one
 struct syntax* parseStmntBlock(SyntaxCtx sc) {
     if (peekTok(sc).type != TOK_CURLY_O) return NULL;
