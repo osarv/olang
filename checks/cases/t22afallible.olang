@@ -1,4 +1,4 @@
-# check: fail doesn't match
+# check: fail error[E12]: expected fn(n I32) I32, found fn(n I32) I32 ? E
 # T22: a fallible function is not a value of an infallible function type - its errors are part of its type
 error E { X }
 fn bad(n I32) I32 ? E {

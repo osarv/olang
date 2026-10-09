@@ -1,4 +1,4 @@
-# check: fail a scope argument names where a local or parameter lives
+# check: fail error[E25, O1b]: 'G' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
 # E25/O1b: a scope argument naming a global - its referent lives in the program's scope, which a result reaches by
 # being put where the global is, not by a scope argument
 type GN struct(v I32) { v }

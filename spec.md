@@ -4016,7 +4016,8 @@ type happens to declare a destructor.
 object file and linked with the others. The compiler operates in exactly one of four modes, selected
 by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
 (B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
-beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f).
+beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f). Apart from
+the modes, `-e RULE` prints a rule of this specification (B11a).
 
 **B2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
 linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
@@ -4267,6 +4268,27 @@ global's data — so a module's object is a distinct artifact for each set of va
 import closure mentions (B4). Changing a value rebuilds exactly the modules that mention it, directly or
 through an import, and never reuses an object compiled under the old value; a module that mentions no
 changed name is not rebuilt, and changing a value back finds the earlier objects current.
+
+### 10.6 Diagnostics
+
+**B11.** Every compile-time error is reported as one line, `path:line:column: error[RULE]: message`, followed by the
+source line it is about and a caret line marking the token it is about (`^`, then `~` under the rest of the token).
+`RULE` is the rule of this specification the error applies, and is left out, with its brackets, for an error no rule
+states (`expected '}', found 'x'`); several are separated by `, `. An error about a whole file is `path: error[RULE]:
+message`, and one about no file - the command line - is `olang: error[RULE]: message`. A **note**, adding to the error
+before it (where something was declared, which instantiation of a generic was being checked), is a line of its own in
+the same form with `note` in place of `error[RULE]`, followed by its source. The message names what it is about - the
+name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
+explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
+order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
+`NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
+
+**B11a.** `-e RULE` prints the text of rule `RULE` of this specification - from its definition to the next rule or
+heading, under the heading of the section holding it - and compiles nothing. The rule is the one an error's brackets
+name; a first letter written in lowercase is read as uppercase (`-e t6b` is T6b). The specification is found as the
+standard library is (M23): `../spec.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
+error.
 
 ## 11. External Functions
 

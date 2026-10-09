@@ -1,4 +1,4 @@
-# check: fail there is nothing for it to permit
+# check: fail error[T25b]: 'mut' makes a reference writable, and I32 is no reference
 # T25b: "mut" before a type makes a reference writable - on a value type it is an error
 error E { X }
 fn main() ? E {

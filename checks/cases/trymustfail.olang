@@ -1,4 +1,4 @@
-# check: fail a Try method is the checked form of an operation
+# check: fail error[E31a]: TryAt is a checked form, so it declares the errors it fails with
 # E31: a Try form declares its errors
 type Bag struct() {
     n I64 = 2

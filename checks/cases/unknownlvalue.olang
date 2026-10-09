@@ -1,5 +1,5 @@
 # check: fail unknown name 'nope'
-# also: compilation failed with 4 error(s)
+# also: compilation failed with 4 errors
 # an undeclared name is one error wherever it is written - indexed, assigned, incremented, a member read - and nothing
 # after it fails again for it (an index of it crashed the checker)
 fn main() ? {

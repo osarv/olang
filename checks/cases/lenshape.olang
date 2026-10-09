@@ -1,4 +1,4 @@
-# check: fail gives an I64 (E31)
+# check: fail error[E31]: Len gives an I64
 type Bag struct() { n I32 = 0 }
 fn (b Bag&) Len() I32 { return b.n }
 fn main() ? { }

@@ -1,4 +1,4 @@
-# check: fail has SetAt but neither TrySetAt nor Len
+# check: fail error[E31a]: 'try c[i] = v' checks against Len, and Bag& has neither TrySetAt nor Len
 # E31: a derived TrySetAt checks the position against Len()
 type Bag struct() {
     v mut I32 = 0

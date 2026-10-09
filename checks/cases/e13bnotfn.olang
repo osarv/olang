@@ -1,4 +1,4 @@
-# check: fail this is not a function
+# check: fail error[E13b]: I32 is not a function, and declares no Call
 # E13b: only a function value can be called
 fn main() ? {
     n := I32[1, 2][0](3)

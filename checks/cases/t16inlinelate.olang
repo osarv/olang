@@ -1,4 +1,4 @@
-# check: fail a type cannot hold itself by value
+# check: fail error[T16]: N cannot hold itself by value
 # T16/C2e: the same when the inline length is computed only once the program has checked
 fn two() I64 { return 2 }
 type N struct() {

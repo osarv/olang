@@ -1,4 +1,4 @@
-# check: fail none for Neg, BitNot, Inc, Dec, Len and Str
+# check: fail error[E31]: Str's parameters besides its receiver: expected 0, found 1
 # E11c: a method named Str claims "$", so it must have that shape
 type Pt struct(n I32) {
     n

@@ -1,4 +1,4 @@
-# check: fail declared on a mutable receiver
+# check: fail error[S9a]: C& cannot be walked
 type C struct(n I32) { n mut }
 fn (c C&) Next() I32 ? Exhausted { error Exhausted.END }
 error E { X }

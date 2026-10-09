@@ -1,4 +1,4 @@
-# check: fail this builds something through a field that lives where its constructor's argument did
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
 # O23a: a field written "&p" of a parameter reads at a derived scope - where the caller's argument bound it - which no
 # code here has to build into, so a local naming where it lives may hold what lives there but not anything new
 type Node struct(v I64) {

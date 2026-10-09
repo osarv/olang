@@ -1,4 +1,4 @@
-# check: fail this type does not extend its base
+# check: fail error[T29f]: Meters does not extend its base, so it takes no '-'
 # T29f: negation makes a value of the type, so it is the type's own (Neg) or inherited with "extends"
 type Meters I32
 fn main() ? {

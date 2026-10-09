@@ -9534,3 +9534,85 @@ from their original form.
   command went into a variable; and an element of a static text literal (`for i, s in String&["a", "b"] { all[i] = s }`,
   into an array in the result scope, directly or through a local holding the literal) is rejected by O20 as storage
   that does not live long enough, though T25d makes it static data that lives as long as the program.
+- **Diagnostics remade: one row, the rule in brackets, `-e` for the rule (B11/B11a, 2026-10-09).** The user: "shorten
+  down the error messages and keep them concise. They should preferably exist on one row. I am still split about keeping
+  the rule number in there. I'd say keep it probably. It's better for agents later. You can also just remake the error
+  message system completely, it's very crude still." What was there: about 330 `#define`d strings in errmsg.h, 97 of
+  them over 200 characters, passed whole to `ErrMsgSemantic(tok, MACRO)` with no arguments - so a message could never
+  name the identifier or the types it was about, and said everything it knew in prose instead ("this value's type
+  doesn't match the target's declared type"), with its rule as a trailing "(D15)". The header was `12 file.olang error:
+  ...` (line first, then path, no column), the source line printed with the token in red, always in colour, even into a
+  file or a pipe.
+  **The format** is the one gcc and clang write, chosen because every editor, CI log scraper and agent already parses
+  it: `path:line:col: error[RULE]: message`, then the source line under a gutter (`   12 | ...`) and a caret line
+  (`^~~~` under the token's bytes, tabs kept so the caret lines up, a long line shown as a window around the token).
+  The `[RULE]` slot is Rust's `error[E0308]` placement - the user wanted the rule kept for agents, and in brackets it is
+  one regular expression away. Notes - "instantiated here, with T = I32", "declared here" - are rows of their own in
+  the same form, so the context-note stack errmsg.c already had keeps its behaviour and only changes shape. Lines are
+  numbered from the token, columns are bytes from the line's start plus one (clang's convention).
+  **Messages** are short, lowercase, one clause and an optional "- what to write", naming what they are about: a table
+  entry is `X(ERR_VAR_LIST_COUNT, "D12b", "%d names need as many values, found %d")`, and a call passes the arguments
+  (`Err(tok, ERR_VAR_LIST_COUNT, names.len, values.len)`). The directives are the compiler's own: `%n` renders a token
+  as a reader sees it (`'x'`, or `end of line`, `end of file`), `%t` a type through the code generator's source speller
+  (`Array<U8>&`), `%S` an olang `struct str`; `%c` escapes what does not print. The long explanations did not vanish:
+  they are what the spec's rules already say, and `olang -e D12b` prints the rule from `spec.md` - found as std is,
+  `../spec.md` beside the compiler - under its section heading, from its definition to the next rule or heading. Of the
+  formats considered, the X-macro table won over one function per diagnostic (typed parameters, but 400 functions) and
+  over keeping strings at the call site (no single place to read every message, or to check them): it is the one place
+  the messages live, the enum and the rule column come from it, and the user had asked for nothing cleverer.
+  **Argument counts are checked** by `checks/checks.olang`, which reads errmsg.h and every `.c` file, finds each call
+  naming a diagnostic and compares the arguments after the id with the message's directives - C cannot check a format
+  that lives in a table, and a wrong count in varargs is undefined behaviour that would surface as a crash inside an
+  error report. The same test holds every rule a diagnostic names to one the spec defines, so `-e` always finds it.
+  Shown to catch both by breaking one entry of each kind in a scratch copy.
+  **Colour** only where a person reads the output as it is written: standard output a terminal, `NO_COLOR` unset,
+  `TERM` not `dumb`. The `-t` status lines (`== file ==`, "cannot be built, skipping") follow the same rule.
+  **Decided (mine)**: a diagnostic no rule states carries no brackets - a parse error says `expected '}', found 'x'`
+  and nothing more, since inventing an id would send `-e` nowhere; one that applies several writes them all
+  (`error[T17, T19, C2]` for a separating comma, which is the same mistake in an enum, an error type and a constructor);
+  a command-line mistake (an unknown flag, a malformed `-D`, a missing file argument, `-e` with no rule) is `olang:
+  error[B1]: ...` and ends the process with no "compilation failed" line, since nothing was compiled; the token-type
+  names a parse error uses read as English (`expected a name`, `expected an expression`, `found end of line`); the
+  summary is `compilation failed with N errors` (it said `error(s)`).
+  **Phase 1** (this commit) built the system and converted the lexer, the parser (including the build-condition
+  evaluator, whose messages now take the token they are about - `'Level' is mutable, so a top-level condition cannot
+  read it`), the driver and errmsg itself; `SyntaxDefineBuildConst` returns a diagnostic id instead of a string. The
+  checker, code generator and evaluator - about 460 call sites, mostly in semantic.c, which two other batches were
+  editing - still pass whole messages; a compatibility layer prints them in the new form, taking a trailing
+  `(D15)`-style reference off the text and into the brackets. Phase 2 converts them and removes the layer. 32
+  `checks/cases` expectations and four `checks.olang` greps moved to the new wording.
+  **Found on the way, fixed**: a lexical error found after the lexer had passed a newline - a string or character
+  literal not closed on its line - was reported against the next line, since its line came from the lexer's cursor
+  rather than from the character (`3 nl.olang error: a string literal closes on its own line` for a literal on line 2);
+  each lexical error now locates its own bytes, and points at the literal from its opening quote. An excerpt shows a
+  control byte as `?`, so a terminal never acts on one, and a compiler-made token whose text lies outside its file is
+  located by its line alone rather than read past the file's end.
+  **Phase 2** converted every remaining call site - about 410 in the checker, and the evaluator's global-order cycle,
+  the code generator's identity clash, the build-condition decision - and removed the compatibility layer and the 330
+  old strings. Each message was rewritten for the site that raises it rather than mapped one to one, so one old string
+  often became several (`OPERATION_REQUIRES_BOOL` is `a condition is a Bool, found I32` at an `if`, `'and' takes a
+  Bool, found I32` at an operator) and a message now carries what it is about: `I64 does not flow into I32 - convert it,
+  as I32(x)` where it said "a number flows implicitly only where nothing is lost (T6b)", `case A of S is not covered -
+  add it, or 'nomatch { }'` where it said the match "does not cover every case", `type arguments for Box: expected 1,
+  found 2`. The messages that were built at run time from a reason - a constraint not met, a default or a zero value or
+  a literal's constructor the evaluator cannot run, an undecidable top-level condition, an unknown name with a
+  suggestion - take that reason as a `%s`, and where the evaluator stopped somewhere else, a `note: here` row points at
+  it instead of a `(file:line)` in the text. The condition decision carries a diagnostic id and its reason, as decided
+  with the coordinator, since it is reported in a later attempt than the one that decides it.
+  **The type speller needed a diagnostic mode.** `%t` first used the rendering speller `$` uses, which showed the
+  implicit scope variables (`Node&&n`), dropped permission (`expected Array<P&>&, found Array<P&>&` for a `mut` element
+  against a read-only one) and spelled an anonymous enum `?`. A diagnostic now shows `mut` on inner levels (the top
+  level's permission is T25c's message), names a scope only inside a function type's signature, where it is part of the
+  type, and spells an anonymous enum by its cases (`enum { A(n I32) B }`). Two same-named types from different modules
+  are told apart by the path written: `after 'is' or 'as' comes a case of Dir, found 'lib.Other.Dir'`.
+  **Expectations** of 236 `checks/cases` and eleven `checks.olang` greps moved to the new text, each to the error's rule
+  and its first clause (`error[O10d]: this value lives in this function's own scope, which closes first`), so a later
+  rewording of the fix part leaves them standing. Every case still fails with the diagnostic it was written for; the
+  mapping from old string to new id was checked per case, and the 19 that had several errors were picked by hand.
+  **Decided (mine)**: an unknown name carries no rule (`unknown name 'x'`); a note carries no rule; `-i`'s run-time
+  stop (`olang -i: FILE:LINE: why`) is unchanged, since it reports the program being run rather than a compile error.
+  **Found on the way, fixed**: `$` of a function rendered each reference parameter with its hidden scope variable -
+  `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a`, and a function value
+  `fn(n mut Node&&n)` - at run time and while compiling alike, since both use the one speller. It now renders as
+  written; a corpus test pins both paths. And `t is T.C` with C no case of T said "after 'is' or 'as' comes one of its
+  cases"; it says `T has no case 'C'` (T17) now, as a pattern does.

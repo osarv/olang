@@ -1,4 +1,4 @@
-# check: fail a scope name here would belong to this function
+# check: fail error[G11]: a type argument's reference marker is bare, as 'List<String&>'
 # G11: a reference type argument is written bare - its references live in the container's scope; naming a
 # variable would name this function's scope, inside generic code that cannot see it
 type Box<T> struct(v <T>) { v }

@@ -1,4 +1,4 @@
-# check: fail this expression is built only from literals
+# check: fail error[E4a]: this literal expression's value does not fit I32
 # E4a: a literal-only expression is computed exactly, never wrapped - 2147483648 is not an I32, though I32 arithmetic
 # at run time would wrap it to -2147483648 (E6c)
 fn main() ? {

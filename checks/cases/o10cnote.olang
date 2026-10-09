@@ -1,4 +1,4 @@
-# check: fail requires it because of this statement in its body
+# check: fail note: the callee requires it because of this statement
 # O10c: a call that fails an inferred obligation names the statement in the callee that required it
 type SSlot struct(key String&, val I32, next SSlot&) {
     key

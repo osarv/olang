@@ -1,4 +1,4 @@
-# check: fail after 'is' or 'as' on an enum value comes one of its cases
+# check: fail error[T17]: T has no case 'C'
 # E32: a name that is not a case of the value's enum
 type T enum {
     A(v I32)

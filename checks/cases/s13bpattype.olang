@@ -1,4 +1,4 @@
-# check: fail a case pattern names a case of the enum the value it is matched against holds
+# check: fail error[S13b]: a pattern here names a case of I32, found 'T'
 # S13b: a nested pattern names a case of the enum at its position
 type T enum {
     P

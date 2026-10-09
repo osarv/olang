@@ -1,4 +1,4 @@
-# check: fail a type variable may not be named after a type
+# check: fail 'I32' is named after a type
 # G1: nor after a primitive, or a generic type's own parameter after a declared type
 # also: compilation failed with 2 error
 type P struct(x I32) { x }

@@ -1,4 +1,4 @@
-# check: fail this type declares At, so 'x[i]' reads, but not SetAt
+# check: fail error[E31]: R& declares At but not SetAt, which x[i] = v calls
 # E31: assigning through an index calls SetAt
 type R struct() {
     v mut I32 = 0

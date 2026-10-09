@@ -1,4 +1,4 @@
-# check: fail that is not known through this path
+# check: fail error[O23, O11]: this stores into a '&p' field whose binding is not known through this path
 # O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
 # (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
 type N struct(v I32) {

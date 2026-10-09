@@ -1,4 +1,4 @@
-# check: fail a declaration of several names takes one value per name, or none
+# check: fail error[D12b]: 2 names need as many values, found 1
 # D12b: one value per name
 fn main() ? {
     a, b I32 = 1

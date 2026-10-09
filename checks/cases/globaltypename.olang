@@ -1,4 +1,4 @@
-# check: fail a type and a function or global may not share one
+# check: fail error[D2]: 'Circle' is already a type's name in this module
 # D2: a module's types and its functions and globals share no names
 type Circle struct(r I32) { r }
 Circle := 3

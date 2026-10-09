@@ -1,4 +1,4 @@
-# check: fail these two numbers do not meet
+# check: fail error[T6b]: Meters and Feet do not meet
 # T6b: two declared types over one base meet in an operator only if one flows into the other - neither does here
 type Meters I32
 type Feet I32

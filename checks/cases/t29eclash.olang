@@ -1,4 +1,4 @@
-# check: fail inherits every method of its base, and this one is already among them
+# check: fail error[T29e]: Ints& inherits a method Count from its base
 # T29e: any other inherited method is not overridden - for an array as for a number
 type Ints extends Array<I32>
 fn (a Ints&) Count(keep fn(x I32) Bool) I64 { return 9 }

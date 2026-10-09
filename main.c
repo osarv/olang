@@ -135,10 +135,7 @@ static char* objectHash(struct semaModule* mod) {
 
 void requireClangOrExplain(char* clang, char* irPath) {
     if (clang) return;
-    printf(COLOR_FG_YELLOW "clang not found on PATH - install the LLVM toolchain to produce a native binary:\n"
-        "  sudo apt install -y clang-20 llvm-20 llvm-20-dev\n" COLOR_RESET);
-    printf("LLVM IR was written to %s\n", irPath);
-    exit(EXIT_FAILURE);
+    ErrFatal((struct str){0}, ERR_NO_CLANG, irPath);
 }
 
 //true when `objPath` is older than `srcPath` (or missing) - B3's own staleness test, applied to one file.
@@ -277,7 +274,7 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
     argAdd(&args, "-o");
     argAdd(&args, objPath);
     argAdd(&args, irPath);
-    if (RunProgram(argEnd(&args), false) != 0) ErrMsgFatal(StrFmt("native compilation failed for %s", irPath));
+    if (RunProgram(argEnd(&args), false) != 0) ErrFatal((struct str){0}, ERR_CLANG_FAILED, irPath);
     ListDestroy(args);
     return objPath;
 }
@@ -307,7 +304,7 @@ void compileModule(char* file) {
     ensureBuildDir();
     char* clang = findClang();
     char* objPath = emitModuleObject(root, clang, CG_ENTRY_NONE);
-    printf(COLOR_FG_GREEN "built %s\n" COLOR_RESET, objPath);
+    printf("%sbuilt %s%s\n", ErrMsgColor(COLOR_FG_GREEN), objPath, ErrMsgColor(COLOR_RESET));
 }
 
 //"-b": every reachable module to its own object, then one link (B1/B3)
@@ -328,8 +325,8 @@ void buildProgram(char* file) {
     }
 
     char* binPath = StrFmt("build/%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "");
-    if (linkProgram(clang, &objs, binPath) != 0) ErrMsgFatal(StrFmt("linking %s failed", binPath));
-    printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, binPath);
+    if (linkProgram(clang, &objs, binPath) != 0) ErrFatal((struct str){0}, ERR_LINK_FAILED, binPath);
+    printf("%sbuilt ./%s%s\n", ErrMsgColor(COLOR_FG_GREEN), binPath, ErrMsgColor(COLOR_RESET));
 }
 
 //"-i": the program analyzed as -b analyzes it, then run by compile-time evaluation instead of built (B3e) -
@@ -344,7 +341,7 @@ int interpretProgram(char* file, int argc, char** argv) {
         struct var* v = ListGetIdx(&root->vars, i);
         if (v->isFuncDecl && StrCmp(v->name, StrFromCStr("main"))) mainFunc = v;
     }
-    if (!mainFunc) ErrMsgFatal(MAIN_FUNC_NOT_FOUND);
+    if (!mainFunc) ErrFatal(root->fileName, ERR_NO_MAIN);
     fflush(NULL);
     ErrMsgSetInterpreting(true);
     return CtRunProgram(mainFunc, argc, argv);
@@ -356,13 +353,13 @@ int interpretProgram(char* file, int argc, char** argv) {
 static int runTestFile(char* file, char* clang) {
     //B3a: a listed file that is no file to build is reported, and the others still run
     struct stat st;
-    char* unusable = stat(file, &st) != 0 ? "unable to open this file"
-                   : S_ISDIR(st.st_mode) ? "a module is a file, never a directory (M1) - name the .olang file"
-                   : !S_ISREG(st.st_mode) ? NOT_A_REGULAR_FILE : NULL;
+    enum diag unusable = stat(file, &st) != 0 ? ERR_CANNOT_OPEN
+                       : S_ISDIR(st.st_mode) ? ERR_IS_DIRECTORY
+                       : !S_ISREG(st.st_mode) ? ERR_NOT_REGULAR : DIAG_NONE;
     if (unusable) {
-        ErrMsgFile(StrFromCStr(file), unusable);
+        ErrFile(StrFromCStr(file), unusable);
         ErrMsgFlush();
-        printf(COLOR_FG_RED "%s: cannot be built, skipping\n" COLOR_RESET, file);
+        printf("%s%s: cannot be built, skipping%s\n", ErrMsgColor(COLOR_FG_RED), file, ErrMsgColor(COLOR_RESET));
         return 1;
     }
     int before = ErrMsgGetNErrors();
@@ -371,7 +368,7 @@ static int runTestFile(char* file, char* clang) {
     CodegenSetRoot(root);
     if (ErrMsgGetNErrors() > before) {
         ErrMsgFlush();
-        printf(COLOR_FG_RED "%s: semantic errors, skipping\n" COLOR_RESET, file);
+        printf("%s%s: semantic errors, skipping%s\n", ErrMsgColor(COLOR_FG_RED), file, ErrMsgColor(COLOR_RESET));
         return 1;
     }
 
@@ -390,11 +387,11 @@ static int runTestFile(char* file, char* clang) {
         ListAdd(&objs, &objPath);
     }
     if (linkProgram(clang, &objs, binPath) != 0) {
-        printf(COLOR_FG_RED "%s: native compilation failed\n" COLOR_RESET, file);
+        printf("%s%s: native compilation failed%s\n", ErrMsgColor(COLOR_FG_RED), file, ErrMsgColor(COLOR_RESET));
         return 1;
     }
 
-    printf(COLOR_FG_CYAN "== %s ==\n" COLOR_RESET, file);
+    printf("%s== %s ==%s\n", ErrMsgColor(COLOR_FG_CYAN), file, ErrMsgColor(COLOR_RESET));
     char* run[] = { StrFmt("./%s", binPath), NULL };
     int runRc = RunProgram(run, false);
     return runRc == 0 ? 0 : 1;
@@ -418,24 +415,30 @@ static int runTestFileApart(char* file, char* clang) {
     int st;
     while (waitpid(pid, &st, 0) < 0) {
         if (errno == EINTR) continue;
-        printf(COLOR_FG_RED "%s: lost track of its build, skipping\n" COLOR_RESET, file);
+        printf("%s%s: lost track of its build, skipping%s\n", ErrMsgColor(COLOR_FG_RED), file, ErrMsgColor(COLOR_RESET));
         return 1;
     }
     if (WIFEXITED(st)) return WEXITSTATUS(st) != 0;
     //a crash has said so already (ErrMsgInstallCrashHandler); a process killed from outside - by the system, out of
     //memory - has not
-    printf(COLOR_FG_RED "%s: the compiler ended (%s), skipping\n" COLOR_RESET, file,
-           WIFSIGNALED(st) ? strsignal(WTERMSIG(st)) : "unknown status");
+    printf("%s%s: the compiler ended (%s), skipping%s\n", ErrMsgColor(COLOR_FG_RED), file,
+           WIFSIGNALED(st) ? strsignal(WTERMSIG(st)) : "unknown status", ErrMsgColor(COLOR_RESET));
     return 1;
 }
 
 //B10: "-D Name=value" (or "-DName=value") - one build constant
 static void defineFromArg(char* arg) {
     char* eq = strchr(arg, '=');
-    if (!eq) ErrMsgFatal(StrFmt("-D takes Name=value, got '%s' (B10)", arg));
+    if (!eq) ErrUsage(ERR_DEFINE_SHAPE, arg);
     *eq = '\0';
-    char* err = SyntaxDefineBuildConst(arg, eq + 1, false);
-    if (err) ErrMsgFatal(StrFmt("-D %s=%s: %s (B10)", arg, eq + 1, err));
+    enum diag err = SyntaxDefineBuildConst(arg, eq + 1, false);
+    if (err) ErrUsage(err, arg, eq + 1);
+}
+
+//B10a: one constant every build defines - a -D giving the same name is reported here, since user constants are defined
+//first
+static void defineBuiltin(char* name, char* value) {
+    if (SyntaxDefineBuildConst(name, value, true)) ErrUsage(ERR_DEFINE_BUILTIN, name);
 }
 
 //B10a: the constants every build defines. The target is the host, since olang does not cross-compile yet.
@@ -450,12 +453,12 @@ static void defineBuiltinConsts(bool testBuild) {
     //quoted, so a value that happens to look like a number is still text
     char q[420];
     snprintf(q, sizeof(q), "\"%s\"", os);
-    SyntaxDefineBuildConst("TargetOs", q, true);
+    defineBuiltin("TargetOs", q);
     snprintf(q, sizeof(q), "\"%s\"", arch);
-    SyntaxDefineBuildConst("TargetArch", q, true);
-    SyntaxDefineBuildConst("DebugBuild", gDebug ? "true" : "false", true);
-    SyntaxDefineBuildConst("RaceBuild", gRace ? "true" : "false", true);
-    SyntaxDefineBuildConst("TestBuild", testBuild ? "true" : "false", true);
+    defineBuiltin("TargetArch", q);
+    defineBuiltin("DebugBuild", gDebug ? "true" : "false");
+    defineBuiltin("RaceBuild", gRace ? "true" : "false");
+    defineBuiltin("TestBuild", testBuild ? "true" : "false");
 }
 
 static int compilerMain(int argc, char** argv);
@@ -496,47 +499,48 @@ static int compilerMain(int argc, char** argv) {
         if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
         if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
         if (!strcmp(argv[i], "-D")) {
-            if (i + 1 >= argc) ErrMsgFatal("-D takes Name=value (B10)");
+            if (i + 1 >= argc) ErrUsage(ERR_DEFINE_MISSING);
             defineFromArg(argv[++i]);
             continue;
         }
         if (!strncmp(argv[i], "-D", 2)) { defineFromArg(argv[i] + 2); continue; }
         //B1: every flag is one character; anything else beginning with "-" is a mistake, not a file name
         if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")
-            && strcmp(argv[i], "-i")) {
-            ErrMsgFatal(StrFmt("%s: " UNKNOWN_FLAG, argv[i]));
+            && strcmp(argv[i], "-i") && strcmp(argv[i], "-e")) {
+            ErrUsage(ERR_UNKNOWN_FLAG, argv[i]);
         }
         argv[outp++] = argv[i];
     }
     argc = outp;
 
-    if (argc < 2) ErrMsgFatal(NO_FILE_SPECIFIED);
+    if (argc < 2) ErrUsage(ERR_USAGE);
+    //B11a: a rule of the specification, by its id
+    if (!strcmp(argv[1], "-e")) {
+        if (argc != 3) ErrUsage(ERR_EXPLAIN_NEEDS_RULE);
+        return ErrMsgExplain(argv[2]);
+    }
     //user constants were defined above; a built-in name given with -D is a clash, reported here
     defineBuiltinConsts(!strcmp(argv[1], "-t"));
-    struct list* bcs = SyntaxBuildConsts();
-    int builtins = 0;
-    for (int i = 0; i < bcs->len; i++) builtins += ((struct buildConst*)ListGetIdx(bcs, i))->builtin;
-    if (builtins != 5) ErrMsgFatal("-D may not redefine a built-in constant (B10a)");
 
     if (!strcmp(argv[1], "-c")) {
-        if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        if (argc != 3) ErrUsage(ERR_MODE_ONE_FILE, argv[1]);
         compileModule(argv[2]);
         return 0;
     }
 
     if (!strcmp(argv[1], "-b")) {
-        if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        if (argc != 3) ErrUsage(ERR_MODE_ONE_FILE, argv[1]);
         buildProgram(argv[2]);
         return 0;
     }
 
     if (!strcmp(argv[1], "-i")) {
-        if (argc < 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
+        if (argc < 3) ErrUsage(ERR_MODE_NEEDS_FILE, argv[1]);
         return interpretProgram(argv[2], argc - 2, argv + 2);
     }
 
     if (!strcmp(argv[1], "-t")) {
-        if (argc < 3) ErrMsgFatal(EXPECTED_AT_LEAST_ONE_TEST_FILE);
+        if (argc < 3) ErrUsage(ERR_MODE_NEEDS_FILE, argv[1]);
         gTestBuild = true;
         char* clang = findClang();
         int anyFailed = 0;
@@ -546,6 +550,6 @@ static int compilerMain(int argc, char** argv) {
         return anyFailed;
     }
 
-    ErrMsgFatal(EXPECTED_C_OR_T_FLAG);
+    ErrUsage(ERR_NOT_A_MODE, argv[1]);
     return 1;
 }
