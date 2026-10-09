@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg"]
+                     "nestdeep", "nestparse", "diag", "linalg", "chunkpool"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -237,6 +237,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "typereview" { try typereview(r) }
         case "agree" { try agree(r) }
         case "linalg" { try linalg(r) }
+        case "chunkpool" { try chunkpool(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -969,6 +970,19 @@ fn linalg(r mut report&) ? Failed {
     }
     try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i shapes.olang gemm > out.txt 2>&1") == 134, "-i gemm did not abort", dir)
+}
+
+# O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -
+# run with sysconf answering a machine of 8MB (a preloaded sysconf.c), so the bound is 1MB and a 16MB phase is far past
+# it. (That the pool finds any chunk big enough is a case, checks/cases/chunkpool.olang)
+test "the arena's chunk pool gives memory back beyond its bound" { assert passed("chunkpool") }
+
+fn chunkpool(r mut report&) ? Failed {
+    dir := fresh("chunkpool")
+    os.Run("cp checks/fixtures/chunkpool/* " $os.Quote(dir))
+    try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
+    try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
 }
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {

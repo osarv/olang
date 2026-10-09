@@ -6263,6 +6263,9 @@ void emitRuntimeDecls(FILE* out) {
         "declare i32 @munmap(ptr, i64)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i64 @llvm.ctlz.i64(i64, i1)\n"
+        "declare i128 @llvm.cttz.i128(i128, i1)\n"
+        //O8b: the chunk pool's budget, an eighth of the machine's memory
+        "declare i64 @sysconf(i32)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an
@@ -6382,27 +6385,33 @@ void emitRuntimeDecls(FILE* out) {
     emitOsRuntime(out);
 }
 
-/* the real backing for "scope"/"own"/"&name" (see the report): every scope is a growable, chunked
- * bump allocator. A chunk is { next, used, cap } followed immediately by cap bytes of data; a scope is
- * just a chunk-list head, lazily null until first use. Allocating only ever bumps a cursor or links on
- * one more chunk - nothing is ever freed individually. Closing a scope doesn't return memory to the OS at
- * all: it splices the whole chunk list onto @__olang_chunk_pool (a single global free-list) in one O(1)
- * operation (after an O(chunks-in-this-scope) walk to find the tail to splice at), so the very next scope
- * that needs a chunk anywhere in the program can reuse it without ever calling malloc again. This is
- * exactly the "arena allocator, but the whole language's memory model is built out of scopes of these"
- * design from the report - not yet wired to reclaim scope-generic struct fields (they don't exist yet)
- * or anything beyond the current function/test's own private scope and whatever scope was explicitly
- * passed to it. */
+/* the real backing for every scope (O2): a growable, chunked bump allocator. A chunk is a 64-byte header followed by
+ * cap bytes of data; a scope is a chunk-list head, lazily null until first use. Allocating only ever bumps a cursor or
+ * links on one more chunk - nothing is ever freed individually. Closing a scope gives its chunks to this thread's
+ * pool (O8b), where the next scope needing one takes it without asking the system again.
+ *
+ * The pool is a set of size classes, so any chunk big enough is found, not only the one on top. It used to be one
+ * list taken from its head: a closing scope gives its chunks back newest first, so a scope that took a large chunk and
+ * then a smaller one left the large one under the small one - the next call found the small one at the head, mapped
+ * another large one, and the old one was never taken again (std/linalg's Gemm lost a B panel per product that way). A
+ * class holds chunks of one size, four classes per power of two from 4KB up (4096, 5120, 6144, 7168, 8192, 10240, ...),
+ * and a new chunk is made at its class's size, so every chunk of a class holds whatever the class is asked for. A
+ * request takes the newest chunk of the smallest non-empty class that holds it, up to two powers of two above its own
+ * - one count of trailing zeros, over a bit per class saying which are non-empty - and asks the system only when
+ * there is none. Further up is left for a request its size: a small one would pin a large chunk in a scope that may
+ * live long.
+ *
+ * What the pool keeps is bounded, per thread, by an eighth of the machine's memory: a chunk given back beyond that
+ * returns the pool's least recently given back chunks to the system first (munmap, or free for one from
+ * aligned_alloc), or goes back itself when it alone is larger. So a phase that needed much memory gives it back once
+ * later ones do not use it, and a computation repeated in a loop takes the same chunks every time. */
 void emitScopeRuntime(FILE* out) {
     fputs(
-        //next, used, cap, then padding out to 64 bytes. X3a-style alignment: the arena used to round only the
-        //SIZE to 8, so a returned pointer was 8-aligned at best and nothing SIMD could be handed one. The
-        //chunk is now allocated 64-aligned and its header padded to 64, which makes the data area 64-aligned
-        //too; __olang_scope_alloc then aligns each allocation by its own size. 40 bytes per >=4096-byte
-        //chunk is under 1%.
         //next, used, cap, the length mmap gave it (0 for one from aligned_alloc), whether it is fresh from the system and
-        //zero above "used" (__olang_scope_alloc_zeroed), then padding out to 64 bytes
-        "%olang.chunk = type { ptr, i64, i64, i64, i64, [24 x i8] }\n"
+        //zero above "used" (__olang_scope_alloc_zeroed), its class, then the pool's: prev (a class is a circular list
+        //through next and prev) and the stamp ordering chunks by when they were given back. 64 bytes, so the data area
+        //after it is 64-aligned like the chunk itself (O8a)
+        "%olang.chunk = type { ptr, i64, i64, i64, i64, i64, ptr, i64 }\n"
         "%olang.dtornode = type { ptr, ptr, ptr }\n"
         //P1: one node per task, bump-allocated from the join block's own scope - which is exactly the
         //lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
@@ -6416,16 +6425,23 @@ void emitScopeRuntime(FILE* out) {
         "%olang.worker = type { ptr, ptr, ptr, i64, ptr, [40 x i8], [48 x i8] }\n"
         "%olang.merge = type { ptr, ptr, ptr }\n"  //next, dst scope, src sub-scope //next, instance, dtorFn - see __olang_scope_register_dtor
         "%olang.scope = type { ptr, ptr, ptr }\n"  //head chunk, head dtor-list node, TAIL chunk (all null
-                                                    //if unused). The tail is tracked so closing can splice
-                                                    //the whole chunk list onto the pool in O(1) instead of
-                                                    //walking to find it - chunks are PREPENDED, so the tail
-                                                    //is whichever chunk this scope allocated first, set
-                                                    //once when the list goes from empty to non-empty and
-                                                    //never touched again.
-        //P1: thread_local, so two threads never bump or splice the same free-list. A scope belongs to exactly
-        //one thread, and so do the chunks it takes and returns, which is what makes a per-thread pool
-        //correct rather than merely faster.
-        "@__olang_chunk_pool = linkonce_odr thread_local(initialexec) global ptr null\n"
+                                                    //if unused). The tail is tracked so a task's sub-scope
+                                                    //can be spliced into its parent in O(1) (P2) - chunks are
+                                                    //PREPENDED, so the tail is whichever chunk this scope
+                                                    //allocated first, set once when the list goes from empty
+                                                    //to non-empty and never touched again.
+        //P1: the pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
+        //exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
+        //correct rather than merely faster. A class's list, by its newest chunk (O8b)
+        "@__olang_pool = linkonce_odr thread_local(initialexec) global [128 x ptr] zeroinitializer\n"
+        //bit k set when class k holds a chunk
+        "@__olang_pool_mask = linkonce_odr thread_local(initialexec) global i128 0\n"
+        //what the pool holds, in bytes of whole chunks, and the bound on it - an eighth of the machine's memory, read
+        //when the pool first reaches it; 0 until then
+        "@__olang_pool_bytes = linkonce_odr thread_local(initialexec) global i64 0\n"
+        "@__olang_pool_limit = linkonce_odr thread_local(initialexec) global i64 0\n"
+        //stamps: one more for every chunk given back, so a smaller stamp was given back earlier
+        "@__olang_pool_clock = linkonce_odr thread_local(initialexec) global i64 0\n"
         //O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
         //it holds lives as long as the program
         "@__olang_global_scope = linkonce_odr global %olang.scope zeroinitializer\n"
@@ -6435,36 +6451,62 @@ void emitScopeRuntime(FILE* out) {
         "\n"
         "", out);
     fputs(
-        //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
-        //larger, original capacity) or freshly malloc'd at max(4096, size) bytes
+        //an empty chunk whose data holds at least size bytes: the newest of the smallest class in the pool that holds it,
+        //no more than eight classes (two powers of two) above the request's own, or a new one of its class's size - mapped
+        //from 128KB up, where glibc's malloc itself turns to mmap, and taken from aligned_alloc below
         "define linkonce_odr ptr @__olang_new_chunk(i64 %size) {\n"
         "entry:\n"
-        "  %pool = load ptr, ptr @__olang_chunk_pool\n"
-        "  %poolnull = icmp eq ptr %pool, null\n"
-        "  br i1 %poolnull, label %fresh, label %trypool\n"
-        "trypool:\n"
-        "  %capptr = getelementptr %olang.chunk, ptr %pool, i32 0, i32 2\n"
+        "  %small = icmp ule i64 %size, 4096\n"
+        "  br i1 %small, label %search, label %sized\n"
+        //the class of a size s above 4KB: with e the top bit of s - 1 and q the two bits below it plus 4 (4 to 7),
+        //the class is 4(e - 11) + q - 7 and holds (q + 1) 2^(e - 2) bytes. 4096 itself is class 0; nothing smaller is
+        //made. The last class takes every size beyond it, which is why a chunk taken is still measured
+        "sized:\n"
+        "  %x = sub i64 %size, 1\n"
+        "  %lz = call i64 @llvm.ctlz.i64(i64 %x, i1 true)\n"
+        "  %e = sub i64 63, %lz\n"
+        "  %sh = sub i64 %e, 2\n"
+        "  %q = lshr i64 %x, %sh\n"
+        "  %e4 = shl i64 %e, 2\n"
+        "  %c0 = add i64 %e4, %q\n"
+        "  %c1 = sub i64 %c0, 51\n"
+        "  %q1 = add i64 %q, 1\n"
+        "  %csz = shl i64 %q1, %sh\n"
+        "  %past = icmp ugt i64 %c1, 127\n"
+        "  %c = select i1 %past, i64 127, i64 %c1\n"
+        "  br label %search\n"
+        "search:\n"
+        "  %class = phi i64 [ 0, %entry ], [ %c, %sized ]\n"
+        "  %classsize = phi i64 [ 4096, %entry ], [ %csz, %sized ]\n"
+        "  %mask = load i128, ptr @__olang_pool_mask\n"
+        "  %class128 = zext i64 %class to i128\n"
+        "  %above = lshr i128 %mask, %class128\n"
+        "  %window = and i128 %above, 511\n"
+        "  %none = icmp eq i128 %window, 0\n"
+        "  br i1 %none, label %make, label %found\n"
+        "found:\n"
+        "  %tz = call i128 @llvm.cttz.i128(i128 %window, i1 true)\n"
+        "  %tz64 = trunc i128 %tz to i64\n"
+        "  %k = add i64 %class, %tz64\n"
+        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
+        "  %c.p = load ptr, ptr %slot\n"
+        "  %capptr = getelementptr %olang.chunk, ptr %c.p, i32 0, i32 2\n"
         "  %cap = load i64, ptr %capptr\n"
         "  %fits = icmp uge i64 %cap, %size\n"
-        "  br i1 %fits, label %usepool, label %fresh\n"
-        "usepool:\n"
-        "  %nextptr = getelementptr %olang.chunk, ptr %pool, i32 0, i32 0\n"
-        "  %next = load ptr, ptr %nextptr\n"
-        "  store ptr %next, ptr @__olang_chunk_pool\n"
-        "  %usedptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 1\n"
+        "  br i1 %fits, label %take, label %make\n"
+        "take:\n"
+        "  call void @__olang_pool_unlink(ptr %c.p, i64 %k)\n"
+        "  %usedptr.p = getelementptr %olang.chunk, ptr %c.p, i32 0, i32 1\n"
         "  store i64 0, ptr %usedptr.p\n"
         //it has been used: what it holds is whatever its last scope left there
-        "  %freshptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 4\n"
+        "  %freshptr.p = getelementptr %olang.chunk, ptr %c.p, i32 0, i32 4\n"
         "  store i64 0, ptr %freshptr.p\n"
-        "  ret ptr %pool\n"
-        "fresh:\n"
-        "  %big = icmp ugt i64 %size, 4096\n"
-        "  %reqsize = select i1 %big, i64 %size, i64 4096\n"
+        "  ret ptr %c.p\n"
+        "make:\n"
         "  %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64\n"
-        "  %total0 = add i64 %hdrsize, %reqsize\n"
-        //D13c: a large chunk (128KB up, where glibc's malloc itself turns to mmap) is mapped here, in whole pages - mapped
-        //memory comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
-        "  %huge = icmp uge i64 %reqsize, 131072\n"
+        "  %total0 = add i64 %hdrsize, %classsize\n"
+        //D13c: a mapped chunk comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
+        "  %huge = icmp uge i64 %classsize, 131072\n"
         "  br i1 %huge, label %map, label %heap\n"
         "map:\n"
         "  %mt1 = add i64 %total0, 4095\n"
@@ -6497,9 +6539,177 @@ void emitScopeRuntime(FILE* out) {
         "  store i64 %maplen, ptr %mapptr.n\n"
         "  %freshptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 4\n"
         "  store i64 %zeroed, ptr %freshptr.n\n"
+        "  %classptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 5\n"
+        "  store i64 %class, ptr %classptr.n\n"
         "  ret ptr %new\n"
         "}\n\n"
         "", out);
+    fputs(
+        //takes chunk c out of class k's circular list: the class is emptied when c was all it held, and its newest chunk is
+        //the one after c when c was the newest
+        "define linkonce_odr void @__olang_pool_unlink(ptr %c, i64 %k) {\n"
+        "entry:\n"
+        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
+        "  %nextptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 0\n"
+        "  %next = load ptr, ptr %nextptr\n"
+        "  %alone = icmp eq ptr %next, %c\n"
+        "  br i1 %alone, label %empty, label %link\n"
+        "empty:\n"
+        "  store ptr null, ptr %slot\n"
+        "  %mask = load i128, ptr @__olang_pool_mask\n"
+        "  %k128 = zext i64 %k to i128\n"
+        "  %bit = shl i128 1, %k128\n"
+        "  %keep = xor i128 %bit, -1\n"
+        "  %mask2 = and i128 %mask, %keep\n"
+        "  store i128 %mask2, ptr @__olang_pool_mask\n"
+        "  br label %count\n"
+        "link:\n"
+        "  %prevptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 6\n"
+        "  %prev = load ptr, ptr %prevptr\n"
+        "  %pnextptr = getelementptr %olang.chunk, ptr %prev, i32 0, i32 0\n"
+        "  store ptr %next, ptr %pnextptr\n"
+        "  %nprevptr = getelementptr %olang.chunk, ptr %next, i32 0, i32 6\n"
+        "  store ptr %prev, ptr %nprevptr\n"
+        "  %head = load ptr, ptr %slot\n"
+        "  %washead = icmp eq ptr %head, %c\n"
+        "  %head2 = select i1 %washead, ptr %next, ptr %head\n"
+        "  store ptr %head2, ptr %slot\n"
+        "  br label %count\n"
+        "count:\n"
+        "  %capptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 2\n"
+        "  %cap = load i64, ptr %capptr\n"
+        "  %bytes = load i64, ptr @__olang_pool_bytes\n"
+        "  %less = sub i64 %bytes, %cap\n"
+        "  %hdr = sub i64 %less, 64\n"
+        "  store i64 %hdr, ptr @__olang_pool_bytes\n"
+        "  ret void\n"
+        "}\n\n"
+        //chunk c back to the system it came from: munmap for a mapped one, free for one from aligned_alloc
+        "define linkonce_odr void @__olang_chunk_release(ptr %c) {\n"
+        "entry:\n"
+        "  %mapptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 3\n"
+        "  %maplen = load i64, ptr %mapptr\n"
+        "  %mapped = icmp ne i64 %maplen, 0\n"
+        "  br i1 %mapped, label %unmap, label %release\n"
+        "unmap:\n"
+        "  %r = call i32 @munmap(ptr %c, i64 %maplen)\n"
+        "  ret void\n"
+        "release:\n"
+        "  call void @free(ptr %c)\n"
+        "  ret void\n"
+        "}\n\n"
+        "", out);
+    fputs(
+        //O8b: chunk c into the pool, as the newest of its class - after making room for it under the pool's bound by
+        //giving the least recently given back chunks to the system, or giving c itself back when it alone is larger.
+        //The oldest chunk of a class is the one before its newest, and the oldest of all is the oldest of some class,
+        //so a bit per class is all the search needs
+        "define linkonce_odr void @__olang_pool_give(ptr %c) {\n"
+        "entry:\n"
+        "  %capptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 2\n"
+        "  %cap = load i64, ptr %capptr\n"
+        "  %need = add i64 %cap, 64\n"
+        "  br label %room\n"
+        "room:\n"
+        "  %bytes = load i64, ptr @__olang_pool_bytes\n"
+        "  %after = add i64 %bytes, %need\n"
+        "  %limit = load i64, ptr @__olang_pool_limit\n"
+        "  %over = icmp ugt i64 %after, %limit\n"
+        "  br i1 %over, label %bound, label %keep\n"
+        "bound:\n"
+        "  %known = icmp ne i64 %limit, 0\n"
+        "  br i1 %known, label %evict, label %measure\n"
+        "measure:\n"
+        "  %measured = call i64 @__olang_pool_measure()\n"
+        "  store i64 %measured, ptr @__olang_pool_limit\n"
+        "  br label %room\n"
+        "evict:\n"
+        "  %toobig = icmp ugt i64 %need, %limit\n"
+        "  br i1 %toobig, label %drop, label %oldest\n"
+        "oldest:\n"
+        "  %mask = load i128, ptr @__olang_pool_mask\n"
+        "  %anyleft = icmp ne i128 %mask, 0\n"
+        "  br i1 %anyleft, label %scan, label %drop\n"
+        "scan:\n"
+        "  %m = phi i128 [ %mask, %oldest ], [ %mrest, %scan ]\n"
+        "  %best = phi ptr [ null, %oldest ], [ %best2, %scan ]\n"
+        "  %bestk = phi i64 [ 0, %oldest ], [ %bestk2, %scan ]\n"
+        "  %beststamp = phi i64 [ -1, %oldest ], [ %beststamp2, %scan ]\n"
+        "  %tz = call i128 @llvm.cttz.i128(i128 %m, i1 true)\n"
+        "  %k = trunc i128 %tz to i64\n"
+        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
+        "  %newest = load ptr, ptr %slot\n"
+        "  %tailptr = getelementptr %olang.chunk, ptr %newest, i32 0, i32 6\n"
+        "  %tail = load ptr, ptr %tailptr\n"
+        "  %stampptr = getelementptr %olang.chunk, ptr %tail, i32 0, i32 7\n"
+        "  %stamp = load i64, ptr %stampptr\n"
+        "  %older = icmp ult i64 %stamp, %beststamp\n"
+        "  %best2 = select i1 %older, ptr %tail, ptr %best\n"
+        "  %bestk2 = select i1 %older, i64 %k, i64 %bestk\n"
+        "  %beststamp2 = select i1 %older, i64 %stamp, i64 %beststamp\n"
+        "  %m1 = sub i128 %m, 1\n"
+        "  %mrest = and i128 %m, %m1\n"
+        "  %more = icmp ne i128 %mrest, 0\n"
+        "  br i1 %more, label %scan, label %victim\n"
+        "victim:\n"
+        "  call void @__olang_pool_unlink(ptr %best2, i64 %bestk2)\n"
+        "  call void @__olang_chunk_release(ptr %best2)\n"
+        "  br label %room\n"
+        "drop:\n"
+        "  call void @__olang_chunk_release(ptr %c)\n"
+        "  ret void\n"
+        "keep:\n"
+        "  store i64 %after, ptr @__olang_pool_bytes\n"
+        "  %clock = load i64, ptr @__olang_pool_clock\n"
+        "  %tick = add i64 %clock, 1\n"
+        "  store i64 %tick, ptr @__olang_pool_clock\n"
+        "  %cstampptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 7\n"
+        "  store i64 %tick, ptr %cstampptr\n"
+        "  %classptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 5\n"
+        "  %class = load i64, ptr %classptr\n"
+        "  %cslot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %class\n"
+        "  %head = load ptr, ptr %cslot\n"
+        "  store ptr %c, ptr %cslot\n"
+        "  %cnextptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 0\n"
+        "  %cprevptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 6\n"
+        "  %first = icmp eq ptr %head, null\n"
+        "  br i1 %first, label %alone, label %link\n"
+        "alone:\n"
+        "  store ptr %c, ptr %cnextptr\n"
+        "  store ptr %c, ptr %cprevptr\n"
+        "  %pmask = load i128, ptr @__olang_pool_mask\n"
+        "  %class128 = zext i64 %class to i128\n"
+        "  %bit = shl i128 1, %class128\n"
+        "  %pmask2 = or i128 %pmask, %bit\n"
+        "  store i128 %pmask2, ptr @__olang_pool_mask\n"
+        "  ret void\n"
+        "link:\n"
+        "  %hprevptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 6\n"
+        "  %tail.l = load ptr, ptr %hprevptr\n"
+        "  store ptr %head, ptr %cnextptr\n"
+        "  store ptr %tail.l, ptr %cprevptr\n"
+        "  %tnextptr = getelementptr %olang.chunk, ptr %tail.l, i32 0, i32 0\n"
+        "  store ptr %c, ptr %tnextptr\n"
+        "  store ptr %c, ptr %hprevptr\n"
+        "  ret void\n"
+        "}\n\n"
+        "", out);
+    //the pool's bound: an eighth of the machine's memory, from sysconf, or 1GB where it will not say. The names are the
+    //C library's own constants, read from the compiler's headers - sound while the target is the host, as the rest of
+    //the runtime's use of them (X6)
+    fprintf(out,
+        "define linkonce_odr i64 @__olang_pool_measure() {\n"
+        "entry:\n"
+        "  %%pages = call i64 @sysconf(i32 %d)\n"
+        "  %%psize = call i64 @sysconf(i32 %d)\n"
+        "  %%pagesok = icmp sgt i64 %%pages, 0\n"
+        "  %%psizeok = icmp sgt i64 %%psize, 0\n"
+        "  %%ok = and i1 %%pagesok, %%psizeok\n"
+        "  %%ram = mul i64 %%pages, %%psize\n"
+        "  %%eighth = lshr i64 %%ram, 3\n"
+        "  %%limit = select i1 %%ok, i64 %%eighth, i64 1073741824\n"
+        "  ret i64 %%limit\n"
+        "}\n\n", (int)_SC_PHYS_PAGES, (int)_SC_PAGESIZE);
     fputs(
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
         //doesn't have room
@@ -6510,7 +6720,7 @@ void emitScopeRuntime(FILE* out) {
         //fine for an i32 but misaligned for any i64 or pointer field, which is UB at the LLVM level even
         //where the hardware tolerates it. Latent before; the dtor nodes below (24 bytes, three pointers,
         //one per registered instance) made it near-certain to be hit. The chunk's own data area is
-        //already 8-aligned: malloc is at least 16-aligned and the header is exactly 24 bytes.
+        //already 64-aligned (O8a): the chunk is, and its header is 64 bytes.
         "  %sizeup = add i64 %rawsize, 7\n"
         "  %size8 = and i64 %sizeup, -8\n"
         //E10: an allocation of nothing still gets storage of its own, so two of them are two instances (an empty array
@@ -6598,11 +6808,6 @@ void emitScopeRuntime(FILE* out) {
         "  ret ptr %p\n"
         "}\n\n", out);
     fputs(
-        //P2a: returns this thread's whole chunk pool to the allocator. The pool is thread_local, so a task
-        //thread's chunks were simply lost when it exited - ~4KB per task that allocated anything, and
-        //unbounded in the number of tasks. Every chunk on the pool came from a scope that has already
-        //closed, so nothing references it; a sub-scope's chunks are never here, having been spliced into
-        //the parent at the join rather than freed by their own thread.
         //E11a: an integer in decimal - the length it takes (a digit count: the bit length gives the count to within
         //one, a power of ten settles it), and with a destination, the digits written there, two at a time from a
         //table, last first. No snprintf: measuring is a few instructions, and writing is no more than it has to be.
@@ -6921,30 +7126,38 @@ void emitScopeRuntime(FILE* out) {
         "  %total = add i64 %o, 1\n"
         "  ret i64 %total\n"
         "}\n\n"
+        //P2a: gives this thread's whole chunk pool back to the system - a worker retiring (P1f), whose pool would
+        //otherwise be lost with its thread. Every chunk in the pool came from a scope that has already closed, so
+        //nothing refers to it; a task's sub-scope's chunks are never here, having been spliced into the parent at the
+        //join rather than given back by their own thread
         "define linkonce_odr void @__olang_pool_drain() {\n"
         "entry:\n"
-        "  %p0 = load ptr, ptr @__olang_chunk_pool\n"
-        "  store ptr null, ptr @__olang_chunk_pool\n"
-        "  %empty = icmp eq ptr %p0, null\n"
-        "  br i1 %empty, label %done, label %walk\n"
+        "  %mask = load i128, ptr @__olang_pool_mask\n"
+        "  store i128 0, ptr @__olang_pool_mask\n"
+        "  store i64 0, ptr @__olang_pool_bytes\n"
+        "  %empty = icmp eq i128 %mask, 0\n"
+        "  br i1 %empty, label %done, label %class\n"
+        "class:\n"
+        "  %m = phi i128 [ %mask, %entry ], [ %mrest, %nextclass ]\n"
+        "  %tz = call i128 @llvm.cttz.i128(i128 %m, i1 true)\n"
+        "  %k = trunc i128 %tz to i64\n"
+        "  %slot = getelementptr [128 x ptr], ptr @__olang_pool, i64 0, i64 %k\n"
+        "  %newest = load ptr, ptr %slot\n"
+        "  store ptr null, ptr %slot\n"
+        "  br label %walk\n"
+        //round the circle once, from the newest back to it
         "walk:\n"
-        "  %cur = phi ptr [ %p0, %entry ], [ %next, %freed ]\n"
+        "  %cur = phi ptr [ %newest, %class ], [ %next, %walk ]\n"
         "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
         "  %next = load ptr, ptr %nextptr\n"
-        //a chunk mmap gave (__olang_scope_alloc_zeroed) goes back the way it came
-        "  %mapptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 3\n"
-        "  %maplen = load i64, ptr %mapptr\n"
-        "  %ismapped = icmp ne i64 %maplen, 0\n"
-        "  br i1 %ismapped, label %unmap, label %release\n"
-        "unmap:\n"
-        "  %ur = call i32 @munmap(ptr %cur, i64 %maplen)\n"
-        "  br label %freed\n"
-        "release:\n"
-        "  call void @free(ptr %cur)\n"
-        "  br label %freed\n"
-        "freed:\n"
-        "  %atend = icmp eq ptr %next, null\n"
-        "  br i1 %atend, label %done, label %walk\n"
+        "  call void @__olang_chunk_release(ptr %cur)\n"
+        "  %round = icmp eq ptr %next, %newest\n"
+        "  br i1 %round, label %nextclass, label %walk\n"
+        "nextclass:\n"
+        "  %m1 = sub i128 %m, 1\n"
+        "  %mrest = and i128 %m, %m1\n"
+        "  %more = icmp ne i128 %mrest, 0\n"
+        "  br i1 %more, label %class, label %done\n"
         "done:\n"
         "  ret void\n"
         "}\n\n"
@@ -7250,10 +7463,8 @@ void emitScopeRuntime(FILE* out) {
         "done:\n"
         "  ret void\n"
         "}\n\n"
-        //walks and calls (then frees) this scope's own dtor-node list first, LIFO - most-recently-
-        //registered first, same order a stack unwind would give - then splices its entire chunk list onto
-        //the free pool in one O(1) op (after walking to find this list's own tail) and resets the scope
-        //back to empty/lazy
+        //walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
+        //unwind would give - then gives each of its chunks to the pool (O8b) and resets the scope to empty
         "define linkonce_odr void @__olang_scope_close(ptr %scope) {\n"
         "entry:\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
@@ -7278,20 +7489,21 @@ void emitScopeRuntime(FILE* out) {
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %empty = icmp eq ptr %head, null\n"
-        "  br i1 %empty, label %done, label %linkpool\n"
-        //genuinely O(1) now: the tail was recorded when the first chunk was taken (see scope_alloc), so
-        //there is nothing to walk - splice the whole list onto the pool by pointing the known tail at the
-        //current pool head. Previously this walked head-to-tail on every close purely to find this node.
-        "linkpool:\n"
-        "  %ctailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
-        "  %tail = load ptr, ptr %ctailptr\n"
-        "  %tailnextptr = getelementptr %olang.chunk, ptr %tail, i32 0, i32 0\n"
-        "  %poolhead = load ptr, ptr @__olang_chunk_pool\n"
-        "  store ptr %poolhead, ptr %tailnextptr\n"
-        "  store ptr %head, ptr @__olang_chunk_pool\n"
+        "  br i1 %empty, label %done, label %give\n"
+        //each chunk to its class, the oldest given last so the next scope takes its chunks in the order this one did -
+        //the list's next is read first, since giving a chunk relinks it
+        "give:\n"
         "  store ptr null, ptr %headptr\n"
+        "  %ctailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
         "  store ptr null, ptr %ctailptr\n"
-        "  br label %done\n"
+        "  br label %each\n"
+        "each:\n"
+        "  %cur = phi ptr [ %head, %give ], [ %next, %each ]\n"
+        "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
+        "  %next = load ptr, ptr %nextptr\n"
+        "  call void @__olang_pool_give(ptr %cur)\n"
+        "  %atend = icmp eq ptr %next, null\n"
+        "  br i1 %atend, label %done, label %each\n"
         "done:\n"
         "  ret void\n"
         "}\n\n", out);
