@@ -132,12 +132,12 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    and **a zero-filled array from a freshly mapped chunk is not cleared again**: a chunk of 128KB or more comes from
    `mmap`, whose pages are zero, and is flagged fresh until it is recycled, so `Array<T>(n)` skips the memset there -
    D13c's "nothing uninitialized" unchanged. 20M pushes 0.51s -> 0.165s (C 0.167s). `repro/fresh_into_field.olang`.
-3. **`for x in List` does not vectorize - 4.7-4.8x.** `ListIter.Next` hands out one element at a time with the chunk
+3. **FIXED (S9f, M19e): `for x in List` did not vectorize - 4.7-4.8x.** `ListIter.Next` hands out one element at a time with the chunk
    change folded into every step, so the loop has a data-dependent branch in its body and stays scalar; `ToArray()`
    then the same loop runs at C's speed. **Fix:** walk a List chunk-wise - an outer loop over chunks, an inner
    counted loop over each - e.g. a protocol for "contiguous pieces" that `for ... in` lowers to nested loops, or
    `ListIter` overriding the iterator defaults (`Fold`, `Count`, ...) with chunk loops. `repro/list_sum.olang`.
-4. **Text: `$n` formats every integer twice - 2.3-2.5x.** A rendering calls its `olang.rd.<T>` helper once with a null
+4. **FIXED (E11a, T29c): text - `$n` formatted every integer twice, 2.3-2.5x.** A rendering calls its `olang.rd.<T>` helper once with a null
    buffer to measure and once to write, so each `$n` is two `snprintf` calls (about 80ns each here) where C makes one;
    5M renderings take 0.79s against 0.42s for one `snprintf` each (0.81s for two). And `Split` scans the text twice
    (count, then fill), and `Find` builds a bounds-checked slice and calls `Eq` at every position - 0.48s for split
@@ -153,7 +153,7 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    undefined to get it - and the only general fix is a direction decision (overflow undefined outside `try`, or
    poison-producing arithmetic). The same missing fact keeps the per-position bounds check in `Find`'s loop
    (`a[i:i + sub.Len()]`) from being hoisted. `repro/wrapping_div.olang`.
-6. **A `Map` counts with two lookups - k-nucleotide 1.36-1.49x.** `Map` has no find-or-insert, so counting is
+6. **FIXED (M19d): a `Map` counted with two lookups - k-nucleotide 1.36-1.49x.** `Map` has no find-or-insert, so counting is
    `m.Put(k, (try m.Get(k) catch default 0) + 1)`: two hashes and two chain walks per key. The same C rewritten to
    look up then insert goes from 0.83s to 1.03s (olang 1.13s in that run), so most of the gap is the API. **Fix:** an
    update in one lookup - `m.Update(k, init, fn(v) { return v + 1 })`, or a method handing out the slot (a reference
@@ -205,13 +205,16 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    `I64(1) << ...`; C programmers know to write `1L`, olang's adapting literals teach the opposite.
 5. Packing bits into a `U8` needs `U8(128) >> U8(x % 8)`: a compound assignment's result must fit the target, and the
    literal meets the `I64` index.
-6. `Map` has no update-in-place (item 6 above), and it lives in `std/map` (`import`, `map.Map<...>`) while `List` is
-   in the prelude.
+6. (Fixed: `Map` is in the prelude, with `Update`.) `Map` had no update-in-place (item 6 above), and it lived in
+   `std/map` (`import`, `map.Map<...>`) while `List` was in the prelude.
 7. A function whose `for { }` returns from inside still needs `unreachable` after the loop (D10a counts no loop).
-8. std has no clock, so a benchmark cannot time itself and this runner is a shell script.
-9. There is no fixed-precision float formatting (`%.9f`): `$` gives the shortest round-trip text only, so the
-   Benchmarks Game's output formats cannot be produced and the C side had to imitate olang's.
-10. `String.Find` answers "not found" with `-1` - a sentinel value, against "errors are errors".
+8. (Fixed: `std/time`'s `Now`/`Since`/`Wall`.) std had no clock, so a benchmark could not time itself and this runner is
+   a shell script.
+9. (Fixed: `x.Fixed(n)`, rounded as `%.*f`.) There was no fixed-precision float formatting (`%.9f`): `$` gives the
+   shortest round-trip text only, so the Benchmarks Game's output formats could not be produced and the C side had to
+   imitate olang's.
+10. (Fixed: `Find`, `FindByte` and `FindIndex` fail with the default error on a miss.) `String.Find` answered "not
+   found" with `-1` - a sentinel value, against "errors are errors".
 
 ## Machine
 

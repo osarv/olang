@@ -3929,7 +3929,11 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
   may build into, is a compile-time error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
-  existing storage (O17); a temporary argument is built in the instance scope (O18a).
+  existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
+  `<T>` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);
+- a value field whose initializer builds a value from such a parameter - a nested constructor call or an enum case,
+  `e Entry = Entry(k, v)` - lands in the instance: what it holds is held as the instance holds the parameter's
+  argument, which is checked where the instance lands (below).
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and

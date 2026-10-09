@@ -3446,6 +3446,37 @@ Go through this for every change to what olang means - a rule added, revised or 
   **`x := R(...)` of a destructor-declaring type declared a value and never ran the destructor** - in a local, a
   constructor field or a global (C11/D15: `:=` now declares the reference `x R&` would). The function-value
   representation is not specified (T21 speaks of reference-shape and identity only), so the spec did not change for it.
+- **std closes the benchmarks' library gaps; `Map` joins the prelude (S9f, M19d, E11a, T29c, E31, G19, C2d, X6,
+  2026-10-09).** The benchmarks' std findings (3, 4, 6) and frictions (6, 8, 9, 10), plus four bugs from the usage study.
+  **`for x in c` over a type with `RunFrom(at I64) Array<T>& ? Exhausted` walks it run by run (S9f)**: an outer loop asks
+  for the run of contiguous elements from the position reached, an inner counted loop walks it as an array's elements
+  are walked - so it vectorizes - and `break` in the body leaves both (`breakOuter`). It wins over `Iter` and `At`; a
+  run is asked for where the last ended, so a push during the walk is seen as an iterator would see it. `List.RunFrom`
+  gives one chunk's used part; `ListIter` keeps a plain `Next` (returning the element itself - the r04/r05 bugs) and
+  overrides `Any`/`All`/`Count`/`Fold`/`Map`/`Filter` (M19e) with the same run-wise walk. **`Map` is in the prelude**
+  (`std/map` is gone; every import migrated), with **`m.Update(k, init, f)`** - insert-or-update in one lookup (my
+  name and shape); removed keys' slots are kept on a free list and reused (a Map whose keys come and go stays the size
+  of what it holds - 120MB -> 1.6MB on the usage study's churn); a walk hands out a copy of the entry the map keeps
+  (`MapEntry`'s `Key`/`Value` are now `mut`), so a Map of `List`s can be walked, and the entry just given may be
+  removed mid-walk. **`$n` on an integer** is a digit count (`ctlz`) and a two-digit table in the runtime IR, no
+  `snprintf` (5M renderings 0.79s -> 0.09s); the evaluator's rendering was already exact. **`Find`, `FindByte` and
+  `FindIndex` fail with the default error on a miss** (errors are errors; they returned `-1`), `Find` compares in place
+  with a one-byte fast path, and `Split` by one byte counts in one vectorizable pass. **`std/time`**: `Now()` (monotonic
+  ns), `Since(t)`, `Wall()` (ns since the epoch) over `clock_gettime`, interpreted by `-i` like any extern. **`x.Fixed(n)`**
+  on every float - `n` digits after the point, rounded as C's `%.*f` (half to even on the exact binary value), computed
+  exactly in olang with 32-bit limbs, so the evaluator gives the same text (checked against glibc on 299,910 values).
+  **`Bool.Hash`**; **`os.ReadFile` reads to the end** (a file whose size `stat` misreports, `/proc`, was cut short).
+  The prelude's tests and what only they use sit under `if TestBuild`, Map's and Fixed's in `std/prelude/tests/`, so no
+  ordinary program compiles them (a hello-world `-b` 0.7-1.0s -> 0.4s). **Compiler fixes on the way, all pre-existing**:
+  a written type's G19 constraints are checked once every signature is resolved (`Map<measure.Tag&, I32>` in a
+  signature failed when `Tag`'s methods were in a module resolved later); `measure.Tag(x)` - a declared type converted
+  through an import alias - was "unknown function"; `f() == s` with a `String` value result crashed the code generator;
+  the hidden borrow of a collection walked through `At`/`Len` (S9d) or runs kept the scope its declared type wrote and
+  so took the loop's block, rejecting `for w in ws { mine.Push(w) }`; an instantiated generic constructor's parameters
+  that became references got no scope variable (O4b), and a value a constructor field builds from its parameters
+  (`e Entry = Entry(k, v)`) was checked against whatever was being built when the pending checks next ran - it lands in
+  the instance now (C2d). Decided (mine): the API names (`Update`, `RunFrom`, `Fixed`, `Now`/`Since`/`Wall`), and that
+  `RunFrom` is a protocol method the compiler recognises by shape, as `Len` and `At` are.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

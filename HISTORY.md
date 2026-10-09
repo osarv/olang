@@ -9781,3 +9781,76 @@ from their original form.
   destructor never ran (a file handle would never close), and C11's "reference-only" was bypassed because `:=` writes no
   type-ref for C11 to check. `:=` now declares the reference `x R&` would (D15 says so); the instance is built where
   the declaration lives and destructed when that scope closes.
+- **std closes the benchmarks' library gaps; `Map` joins the prelude (S9f, M19d, E11a, T29c, E31, G19, C2d, X6,
+  2026-10-09).** The benchmarks (the entry above) left three findings in std's court - the `List` iterator, text
+  rendering and `Find`, and `Map`'s two lookups per count - and four frictions: `Map` in `std/map` while `List` was in
+  the prelude, no clock, no fixed-precision formatting, `Find`'s `-1`. A study of realistic programs added four std
+  bugs: `for x in l` over a `List` of references rejected (r04/r05), a `Map` whose values are `List`s could not be
+  walked (r12), `Bool` had no `Hash` (r15), and a `Map` whose keys come and go grew without bound (r17).
+  **Walking a List.** `ListIter.Next` folded the chunk change into every step, so the loop had a data-dependent exit in
+  its body and never vectorized (4.7-4.8x C). The fix the benchmarks named - nested loops, an outer one over chunks and
+  an inner counted one over each - is now a protocol the loop recognises: a type with `RunFrom(at I64) Array<T>& ?
+  Exhausted` hands out the contiguous run of its elements starting at position `at`, and `for x in c` lowers to "ask
+  for the run from where the last ended, walk it by a counted loop, repeat until Exhausted" (S9f). It is the same
+  shape a hand-written chunk walk has, so LLVM vectorizes the inner loop as it does an array's. Three details had to
+  be got right. `break` in the body must leave the outer loop too, so the inner `for` carries `breakOuter`, honoured by
+  codegen and by the evaluator (which runs the same lowering, so a global summing a List still bakes). Asking for the
+  run "from where the last ended" rather than "the next chunk" is what keeps an element pushed during the walk visible,
+  as `Next` would show it. And an element read out of the run must live where the collection's elements live, or `for
+  w in ws { mine.Push(w) }` cannot show `w` outlives `mine` - the element's references are given the run's scope
+  (refsHome) as an array walk's are. The iterator helpers got the same treatment by M19e's override: `ListIter`
+  declares its own `Any`, `All`, `Count`, `Fold`, `Map` and `Filter`, each a run-wise loop, so `l.Iter().Fold(...)`
+  vectorizes too. `ListIter.Next` returns the element itself rather than through a local - the r04/r05 rejection, a
+  checker gap with `v := e; return v` that is being fixed separately and that this no longer depends on. Measured
+  (100,000 I64 x 8,000 passes, in cache): `for x in List` 0.68s (0.59s in another run) -> 0.256s, against `for x in
+  Array` 0.246s and C 0.195s; `List.Iter().Fold` level with `Array.Iter().Fold`.
+  **Map.** It moved into the prelude beside `List`, so `Map<K, V>` is named bare everywhere; `std/map` is gone and
+  every importer migrated (the `twolists` check, which needs a std module beside a same-named local file, uses
+  `std/io` now). Counting got **`m.Update(k, init, f)`**: one hash and one chain walk, `f` given the current value (or
+  `init` for a new key) and its result stored. k-nucleotide rewritten with it went from 1.39x C to 1.00x. Removed keys'
+  slots go on a free list the next `Put` takes from, so a Map whose keys come and go stays the size of what it holds:
+  the r17 churn (a million puts and removes over a window of a hundred keys) peaked at 120MB and now at 1.6MB, pinned by
+  `checks/cases/mapchurn.olang`. A walk used to build a `MapEntry` per step from the slot's key and value, which C2d
+  rejects where the value is a writable reference read through the iterator's `&of` field (r12: a Map of Lists); the
+  slot now holds its entry whole and the walk hands out a copy of it, so nothing is built, and `MapEntry`'s `Key` and
+  `Value` are `mut` so a slot reused from the free list is refilled in place. The entry just given may be removed
+  during the walk - the iterator already holds the next slot.
+  **Text.** `$n` on an integer called its rendering helper twice, measure then write, and each was an `snprintf`. The
+  runtime now has `__olang_fmt_u64`/`__olang_fmt_i64`: the digit count from `ctlz` (`(bits * 1233) >> 12`, corrected by
+  one compare against a table of powers of ten), and the digits written two at a time from a 200-byte table - a null
+  buffer measures, which is now a handful of instructions. 5M renderings 0.79s -> 0.09s; the text benchmark 2.46x C ->
+  0.92x. The evaluator's rendering already produced the same digits and was left alone. `Find` built a checked slice
+  and called `Eq` at every position; it compares in place now, with a one-byte needle going to `FindByte`. And by
+  "errors are errors", `Find`, `FindByte` and `FindIndex` **fail with the default error** on a miss instead of
+  returning `-1` - `try s.Find(x) catch default -1` where a caller wants the old value; every caller in the corpus,
+  std and checks migrated. `Split` by one byte counts its pieces in one pass the vectorizer takes.
+  **Clock and formatting.** `std/time`: `Now()` (monotonic nanoseconds), `Since(t)` and `Wall()` (nanoseconds since the
+  epoch), over `clock_gettime` with the timespec as two `I64`s (X3) - an ordinary extern, so `-i` runs it through libffi
+  like any other. `x.Fixed(n)` on `F64`, `F32`, `F16` and `BF16` (the narrower ones widen exactly): `n` digits after
+  the point, rounded as C's `%.*f` rounds - half to even on the exact binary value, which is not the decimal the
+  shortest rendering shows (`1.25.Fixed(1)` is `1.2`, `2.675.Fixed(2)` is `2.67`). It is computed exactly in olang -
+  the value is m x 2^e, so x x 10^n is a big integer shifted, and the rounding is one look at the bits shifted out -
+  with no C library call, so the evaluator gives the same text and a global built from it bakes. Checked against
+  glibc's `printf` on 299,910 values (random bit patterns, halfway cases, subnormals, `n` from 0 to 40): identical.
+  **The rest.** `Bool.Hash` (r15). `os.ReadFile` trusted `stat`'s size, so `/proc` files read as empty; it reads to the
+  end, doubling its buffer. The prelude's own tests made every program compile them - every test body and every
+  instantiation they asked for went into every program's root object - so they and the globals only they read are
+  under `if TestBuild`, and Map's and Fixed's live in `std/prelude/tests/` (the makefile runs that directory): a
+  hello-world `-b` went from 0.7-1.0s to 0.4s.
+  **Compiler bugs found on the way, all pre-existing, all fixed.** (1) A written type's G19 constraints were checked as
+  the type was resolved - `fn TagCount(m Map<measure.Tag&, I32>&)` in `geom/rect` was rejected because `Tag`'s `Hash`
+  lives in a module whose signatures were resolved later; constraints met while signatures are still being resolved are
+  now checked once they all are. (2) `measure.Tag("ax")` - converting to a declared type through an import alias - was
+  "unknown function". (3) `f() == s` with `f` giving a `String` value crashed the code generator: the value held for
+  `Eq` kept the callee's result scope. (4) The hidden borrow of a collection a `for` walks through `At`/`Len` (S9d), and
+  the new run-wise walk, copied the collection's declared type - scope included - so a collection declared with a
+  written scope, or any local in a test's block, adopted nothing and was taken to live in the loop's block; `for w in
+  ws { mine.Push(w) }` was then rejected, as the merged suite showed. (5) An instantiated generic constructor's
+  parameters that became references (or values holding them) were given no scope variable (O4b), as `instantiateFunc`
+  gives a function's - so whatever its body built from them was held to a scope nothing could name. And (6) a value a
+  constructor field builds from the constructor's parameters (`e Entry = Entry(k, v)`) was queued as a pending C2d check
+  and judged whenever the queue next emptied - against whatever was being built then, which was a different type's
+  destructor in one build order and nothing at all (a muted probe) in another; it is judged at the field now, landing
+  in the instance, where every call already holds that instance to the parameter's argument (spec C2d says so). (5)
+  and (6) surfaced when a module importing `shared.olang` and `geom/rect` built `mapSlot<Tag&, I32>`'s constructor in a
+  different order from every earlier build; the corpus pins the shape (`TagCount`) and a non-generic one.

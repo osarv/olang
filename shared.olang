@@ -11140,3 +11140,23 @@ test "T29e/G19: a type extending a number is a key through its inherited Hash, o
     assert extKeys()
     assert ExtKeysBaked
 }
+
+# C2d: a value a constructor field builds from the constructor's own parameters lands in the instance, its references
+# held as the instance holds the parameter's argument - an entry holding a writable List reference, inside a slot
+type C2Ent struct(k I64, v mut List<I64>&) {
+    K mut I64 = k
+    V mut List<I64>& = v
+}
+type C2Slot struct(k I64, v mut List<I64>&, next mut C2Slot&) {
+    e mut C2Ent = C2Ent(k, v)
+    next mut
+}
+
+test "C2d: a constructor field builds an entry from the constructor's parameters" {
+    l := List<I64>()
+    s C2Slot& = C2Slot(1, l, null)
+    s = C2Slot(2, l, s)
+    s.e.V.Push(7)
+    obChurn()
+    assert s.e.K == 2 and s.next.e.K == 1 and l.Len() == 1 and s.next.e.V.Len() == 1
+}
