@@ -3669,14 +3669,17 @@ static struct condDecision* condDecisionFor(TokenCtx tc, int at) {
 //an immutable global. Set by the loader before it scans or parses the module.
 static struct list condFiles;
 static bool condFilesReady;
-void SyntaxSetConditionFiles(struct list* tcs) {
+static bool condFilesStd; //B10c: the module is the standard library's, whose globals are no build constant's default
+void SyntaxSetConditionFiles(struct list* tcs, bool inStd) {
     condFiles = ListInit(sizeof(TokenCtx));
     for (int i = 0; i < tcs->len; i++) ListAdd(&condFiles, ListGetIdx(tcs, i));
     condFilesReady = true;
+    condFilesStd = inStd;
 }
 
 static struct condVal condOr(struct condCtx* c);
 static struct condVal condGlobal(struct condCtx* c, struct token name);
+static struct condGlobalDecl* condDeclOf(struct token name);
 
 //a value no evaluation produced - what a failure leaves behind, of no kind any check could object to
 static struct condVal condNone(void) {
@@ -3844,6 +3847,8 @@ static struct condVal condPrimary(struct condCtx* c) {
                     }
                 }
             }
+            //B10c: the module's own declaration of the name first - a build constant's default, or the B10 error
+            if (condDeclOf(t)) return condGlobal(c, t);
             struct list* bcs = SyntaxBuildConsts();
             for (int i = 0; i < bcs->len; i++) {
                 struct buildConst* b = ListGetIdx(bcs, i);
@@ -4161,9 +4166,52 @@ static struct condVal condAsDeclared(struct condCtx* c, struct token name, struc
     }
 }
 
-//a name that is not a local or a build constant: a global this module declares - immutable, found by condIndexFor,
-//whose initializer evaluates - or else something only compile-time evaluation can read (a function, a computed global,
-//another module's name, B9c)
+//the module's own top-level declaration of a name, outside every conditional - NULL when it declares none
+static struct condGlobalDecl* condDeclOf(struct token name) {
+    if (!condFilesReady) return NULL;
+    for (int f = 0; f < condFiles.len; f++) {
+        struct condGlobalIndex* ix = condIndexFor(*(TokenCtx*)ListGetIdx(&condFiles, f));
+        for (int i = 0; i < ix->decls.len; i++) {
+            struct condGlobalDecl* x = ListGetIdx(&ix->decls, i);
+            if (x->name.len == name.str.len && !strncmp(x->name.ptr, name.str.ptr, (size_t)name.str.len)) return x;
+        }
+    }
+    return NULL;
+}
+
+//B10c: the constant -D defined with this name (never one of B10a's), or NULL
+static struct buildConst* condDefined(struct token name) {
+    struct list* bcs = SyntaxBuildConsts();
+    for (int i = 0; i < bcs->len; i++) {
+        struct buildConst* b = ListGetIdx(bcs, i);
+        if (!b->builtin && b->name.len == name.str.len && !strncmp(b->name.ptr, name.str.ptr, (size_t)name.str.len)) return b;
+    }
+    return NULL;
+}
+
+//B10c: a value of a type a -D value can have - Bool, I32, I64, U64, F64 or String - as this evaluator types it
+static bool condBuildType(struct condVal v) {
+    if (v.anyKind) return false;
+    if (v.kind == BUILD_BOOL || v.kind == BUILD_STR) return true;
+    if (v.kind == BUILD_FLOAT) return v.bits == 64;
+    return v.kind == BUILD_INT && (v.uns ? v.bits == 64 : v.bits == 32 || v.bits == 64);
+}
+
+//B10c: the value -D gave a default's name, as its literal would be read - then fitted to the declaration as condAsDeclared
+//fits any value
+static struct condVal condDefinedValue(struct condCtx* c, struct token name, struct buildConst* b) {
+    struct condVal v = (struct condVal){0};
+    if (b->kind == BUILD_INT && b->u64) return condDefer(c, name); //beyond the 64-bit signed arithmetic here (B9c)
+    v.kind = b->kind;
+    v.i = b->i;
+    v.f = b->f;
+    v.s = b->text;
+    return v;
+}
+
+//a name that is not a local: a global this module declares - immutable, found by condIndexFor, whose initializer
+//evaluates (or, for a build constant's default, -D's value, B10c) - or else something only compile-time evaluation
+//can read (a function, a computed global, another module's name, B9c)
 static struct condVal condGlobal(struct condCtx* c, struct token name) {
     if (!condFilesReady) return condDefer(c, name);
     if (c->depth > 64) return condFail(c, name, ERR_COND_CYCLE);
@@ -4178,6 +4226,20 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
         if (!d) continue;
         if (d->mut) return condRuntime(c, name, ERR_COND_MUTABLE);
         struct condGlobalDecl decl = *d; //the index may be rebuilt while its initializer is read
+        //B10c: a written type a -D value can have makes the global a build constant's default - read from -D when it
+        //defines the name, and configuration either way
+        struct buildConst* defined = condFilesStd ? NULL : condDefined(name);
+        if (!condFilesStd && decl.declared != DECLARED_NONE && decl.declared != DECLARED_OTHER) {
+            struct condVal typed = (struct condVal){0};
+            typed.kind = decl.declared == DECLARED_INT ? BUILD_INT : decl.declared == DECLARED_FLOAT ? BUILD_FLOAT
+                       : decl.declared == DECLARED_BOOL ? BUILD_BOOL : BUILD_STR;
+            typed.bits = decl.bits;
+            typed.uns = decl.uns;
+            if (condBuildType(typed)) {
+                if (!c->skip) c->usedBuild = true;
+                if (defined) return condAsDeclared(c, name, &decl, condDefinedValue(c, name, defined));
+            }
+        }
         int saved = TokenGetCursor(tc);
         TokenSetCursor(tc, decl.init);
         struct condCtx inner = *c;
@@ -4200,7 +4262,27 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
         }
         //more than tokens can evaluate - a method call, a member, an index: compile-time evaluation can (B9c)
         if (!whole) return condDefer(c, name);
-        return condAsDeclared(c, name, &decl, v);
+        struct condVal typed = condAsDeclared(c, name, &decl, v);
+        //B10c: a ":=" default takes its initializer's type - -D's value fitted to it, as a literal written there would be
+        if (!condFilesStd && decl.declared == DECLARED_NONE && condBuildType(typed)) {
+            if (!c->skip) c->usedBuild = true;
+            if (defined) {
+                struct condVal dv = condDefinedValue(c, name, defined);
+                if (dv.anyKind) return dv;
+                if (typed.kind == BUILD_FLOAT && dv.kind == BUILD_INT) {
+                    double fv;
+                    if (!intAsFloat(dv, &fv)) return condDefer(c, name);
+                    dv.kind = BUILD_FLOAT;
+                    dv.f = fv;
+                }
+                if (dv.kind != typed.kind) return condDefer(c, name); //the checker reports it (B10c)
+                if (dv.kind == BUILD_INT && !intFits(dv.i, typed.bits, typed.uns)) return condDefer(c, name);
+                dv.bits = typed.bits;
+                dv.uns = typed.uns;
+                return dv;
+            }
+        }
+        return typed;
     }
     return condDefer(c, name);
 }

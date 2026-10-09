@@ -354,6 +354,9 @@ struct var {
     bool refsHomeUnnamed;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
+    bool buildDefault; //B10c: an immutable global of a type a -D value can have, outside std - a -D of its name gives
+                       //its value, and a condition reading it depends on the build either way
+    bool buildDefaultAsked; //B10c: declared with the name of a constant -D defines - judged once its type is known
     bool isGlobalVar; //module-level only: declared as a global variable - storage, whatever its type, a function type
                       //included (a function-typed global holds a function value; it is not a function)
     bool isFuncDecl; //module-level only: this name was declared by "func"/"extern func" rather than as a

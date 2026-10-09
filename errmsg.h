@@ -128,6 +128,10 @@ struct type;
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
     X(ERR_NAME_IS_TYPE,                 "D2",    "%n is already a type's name in this module - choose another") \
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
+    X(ERR_BUILD_DEFAULT_MUT,            "B10c",  "%n is a build constant, and a declaration giving it a default is immutable - drop 'mut'") \
+    X(ERR_BUILD_DEFAULT_TYPE,           "B10c",  "%n is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found %t") \
+    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-D %S=%S does not fit %n, which is %t") \
+    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-D %S=VALUE', or declare it with a default") \
     X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
@@ -493,6 +497,7 @@ struct type;
     X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
+    X(ERR_COND_UNKNOWN_BUILD,           "B10",   "unknown name %s") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
     X(ERR_GLOBAL_READS_ITSELF,          "B5a",   "%S's initializer reads %S, which is not set until the initializer is done") \
     X(ERR_GLOBALS_CYCLE,                "B5a",   "these globals' initializers read each other, so none can be set first: %s") \

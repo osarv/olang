@@ -1092,6 +1092,9 @@ static struct str relativeIdentity(struct semaModule* from, const char* spec) {
     return StrFromCStr(normalizePath(StrFmt("%s%s%s", base, base[0] ? "/" : "", spec)));
 }
 
+//a module of the standard library - its identity is its import path, "std/..." (M22)
+static bool identityIsStd(struct str id) { return id.len > 4 && !strncmp(id.ptr, "std/", 4); }
+
 static bool hasPrefixElems(const char* id, const char* prefix) {
     size_t n = strlen(prefix);
     return !strncmp(id, prefix, n) && id[n] == '/';
@@ -1241,7 +1244,7 @@ static struct semaModule* semaLoadModuleAt(char* path, struct str identity, stru
     struct list scanned = ListInit(sizeof(struct scannedImport));
     TokenCtx tc0 = TokenizeFile(path);
     ListAdd(&tcs, &tc0);
-    SyntaxSetConditionFiles(&tcs); //B9b: a top-level condition may read an immutable global of any file here
+    SyntaxSetConditionFiles(&tcs, identityIsStd(identity)); //B9b: a top-level condition may read an immutable global of any file here
     //B10b: which -D names this module mentions at all - a superset of what it depends on, which is the safe
     //direction: at worst an object is rebuilt when a value it names only in a branch not taken changes
     mod->buildRefs = ListInit(sizeof(struct str));
@@ -1283,7 +1286,7 @@ static struct semaModule* semaLoadModuleAt(char* path, struct str identity, stru
     }
 
     mod->syn.decls = ListInit(sizeof(struct syntax));
-    SyntaxSetConditionFiles(&tcs); //set again: loading the imports above set it to theirs
+    SyntaxSetConditionFiles(&tcs, identityIsStd(identity)); //set again: loading the imports above set it to theirs
     for (int f = 0; f < tcs.len; f++) {
         struct syntaxModule sm = ParseSyntax(*(TokenCtx*)ListGetIdx(&tcs, f), mod, isKnownTypeForParsing);
         if (f == 0) mod->syn.tc = sm.tc;
@@ -1560,6 +1563,9 @@ void collectType(struct semaModule* mod, struct token nameTok, enum baseType bTy
 //rest once every signature is known.
 static void rejectUnderscoreName(struct str name, struct token tok);
 static struct var* buildConstVar(struct str name);
+static bool definedBuildConst(struct str name);
+static bool identityIsStd(struct str id);
+static bool isPreludeModule(struct semaModule* mod);
 static bool isPreludeWord(struct str name);
 static struct var* preludeWordVar(struct str name);
 static struct semaModule* buildModule;
@@ -1570,7 +1576,15 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     //reservation applies to it - "Det" the function and "m.Det()" the method are distinct by construction
     //reported, and then declared anyway: later passes look the declaration up, and the module's own
     //name shadows the constant for the rest of the check, so nothing downstream trips over a missing var
-    if (!isMethod && mod != buildModule && buildConstVar(name)) Err(nameTok, ERR_BUILD_CONST_REDECLARED, nameTok);
+    //B10c: an immutable global outside std may be a default for the constant -D defines - which turns on its type,
+    //known only once signatures and initializers are (semaBuildGlobalInits)
+    bool asksDefault = false;
+    if (!isMethod && mod != buildModule && buildConstVar(name)) {
+        bool std = identityIsStd(mod->identity) || isPreludeModule(mod);
+        if (isFuncDecl || std || !definedBuildConst(name)) Err(nameTok, ERR_BUILD_CONST_REDECLARED, nameTok);
+        else if (mut) Err(nameTok, ERR_BUILD_DEFAULT_MUT, nameTok);
+        else asksDefault = true;
+    }
     if (!isMethod && !isPreludeModule(mod) && isPreludeWord(name)) Err(nameTok, ERR_PRELUDE_WORD_REDECLARED, nameTok); //M19f
     if (!isMethod) {
         struct var* prev = VarGetList(&mod->vars, name);
@@ -1587,6 +1601,7 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     v.mut = mut;
     v.isFuncDecl = isFuncDecl;
     v.isGlobalVar = !isFuncDecl;
+    v.buildDefaultAsked = asksDefault;
     v.type.placeholder = true;
     ListAdd(&mod->vars, &v);
 }
@@ -6189,6 +6204,7 @@ struct checkCtx {
     bool* loopBreak; //D10a: set by a "break" of the innermost loop being checked - every loop points it at its own flag
     struct list blockStmts;  //O26a: the statements (SNTX_STMNT) of the block being checked, and which one this is - a
     int blockStmtIdx;        //declaration looks ahead in its own block for a return of the local it declares
+    bool inCondition; //B10: building an if's condition - a name found nowhere there may be a build constant -D did not define
     bool inTextJoin; //E11b: building a piece of a text join - "(" after a piece is a call of it, never what was meant
 };
 
@@ -6285,6 +6301,8 @@ struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str na
     return v;
 }
 
+//B10: the first name a condition used that nothing declares - what a top-level condition's report names (B9c)
+static struct token condUnknownTok;
 struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     struct str name = strFromTok(tok);
     struct var* v = scopeFindUse(ctx->scope, name, tok);
@@ -6294,6 +6312,12 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (!v) v = preludeWordVar(name); //M19f: so are the prelude's words for writing text
     //G23: a type variable written bare as a value - "return T"
     if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
+    //B10: in a condition, a name nothing declares and nothing is near is most likely a build constant -D did not define
+    if (!v && ctx->inCondition && !suggestName(ctx->mod, name, true).len) {
+        Err(tok, ERR_UNKNOWN_BUILD_NAME, tok, name);
+        if (!condUnknownTok.str.len) condUnknownTok = tok;
+        return NULL;
+    }
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
@@ -16159,7 +16183,7 @@ static bool condIsConstant(struct operand* op, bool* build, int depth) {
         case OPERATION_READ_VAR: {
             struct var* v = canonicalVar(op->readVar);
             if (!v || !v->owner || v->type.bType == BASETYPE_FUNC || v->mut) return false;
-            if (v->owner == buildModule) { *build = true; return true; }
+            if (v->owner == buildModule || v->buildDefault) { *build = true; return true; } //B10, B10c
             return v->initExpr && condIsConstant(v->initExpr, build, depth + 1);
         }
         case OPERATION_NOT: case OPERATION_MINUS: case OPERATION_BTWSE_INV:
@@ -16396,7 +16420,10 @@ static struct statement buildDecidedIf(struct checkCtx* ctx, struct syntax* s, b
 
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
+    bool outerCond = ctx->inCondition;
+    ctx->inCondition = true;
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    ctx->inCondition = outerCond;
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
     if (ErrMsgGetNErrors() == errs) {
         int decided = constCondValue(cond, firstPartOfType(s, SNTX_EXPR));
@@ -20191,6 +20218,7 @@ static void buildTypeBodiesDtor(struct semaModule* mod, struct type* t) {
 //Built while its own module's bodies were checked, it came too late for a body in another module that
 //read the global first - which saw a length-less "T[]" - and the length was never adopted at all, so the
 //global stayed runtime-length and its initializer tried to allocate from a scope no global has.
+static void buildDefaultFor(struct semaModule* mod, struct var* v, struct token nameTok);
 void semaBuildGlobalInits(struct semaModule* mod) {
     SemanticMethodScope = mod;
     for (int i = 0; i < mod->syn.decls.len; i++) {
@@ -20211,20 +20239,93 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         //invisible dangling pointer with no way to test it.
         if (!exprNode) {
             v->initExpr = zeroValueFor(&ctx, v->type, nameTok, false); //D13c: a constructor's zero value, if not zero bits
-            continue;
+        } else {
+            struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
+            if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
+                reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
+            } else { // ":=" - type read straight off the initializer
+                v->type = inferredDeclType(ctx.func, rhs);
+                //O1b: a global lives in the program's own scope - never in a callee's result scope, which is
+                //meaningless outside the call (and crashed code generation when the global was set at startup)
+                v->type.scopeParam = NULL;
+                v->type.scopeWritten = false;
+            }
+            v->initExpr = rhs;
         }
-        struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
-        if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
-            reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
-        } else { // ":=" - type read straight off the initializer
-            v->type = inferredDeclType(ctx.func, rhs);
-            //O1b: a global lives in the program's own scope - never in a callee's result scope, which is
-            //meaningless outside the call (and crashed code generation when the global was set at startup)
-            v->type.scopeParam = NULL;
-            v->type.scopeWritten = false;
-        }
-        v->initExpr = rhs;
+        buildDefaultFor(mod, v, nameTok);
     }
+}
+
+//B10: a build constant's value, as the literal -D wrote - text a String (T29c), once the prelude has made one
+static struct operand* buildConstOperand(struct buildConst* b) {
+    struct token tok = (struct token){0};
+    tok.str = b->text;
+    switch (b->kind) {
+        case BUILD_BOOL:
+            tok.type = TOK_BOOL_LIT;
+            tok.str = StrFromCStr(b->i ? "true" : "false");
+            return OperandBoolLiteral(tok);
+        case BUILD_INT:
+            tok.type = TOK_INT_LIT;
+            return OperandIntLiteralValue(tok, b->i, b->u64); //the value -D gave, read once (B10)
+        case BUILD_FLOAT:
+            tok.type = TOK_FLOAT_LIT;
+            return OperandFloatLiteral(tok);
+        default: {
+            //a string literal token carries its quotes and escapes, which codegen decodes
+            char* q = MallocOrCrash((size_t)b->text.len * 2 + 3);
+            int n = 0;
+            q[n++] = '"';
+            for (int c = 0; c < b->text.len; c++) {
+                char ch = b->text.ptr[c];
+                if (ch == '"' || ch == '\\') q[n++] = '\\';
+                q[n++] = ch;
+            }
+            q[n++] = '"';
+            tok.type = TOK_STR_LIT;
+            tok.str = Str(q, n);
+            return OperandStringLiteral(tok);
+        }
+    }
+}
+
+//the constant -D defined with this name - never one the build defines itself (B10a)
+static struct buildConst* definedBuildConstEntry(struct str name) {
+    struct list* bcs = SyntaxBuildConsts();
+    for (int i = 0; i < bcs->len; i++) {
+        struct buildConst* b = ListGetIdx(bcs, i);
+        if (!b->builtin && StrCmp(b->name, name)) return b;
+    }
+    return NULL;
+}
+static bool definedBuildConst(struct str name) { return definedBuildConstEntry(name) != NULL; }
+
+//B10c: the types a -D value can have - Bool, I32, I64, U64, F64 and String, as themselves (not a type declared over one)
+static bool isBuildConstType(struct type t) {
+    if (t.unknown || t.placeholder) return false;
+    enum baseType bs[] = { BASETYPE_BOOL, BASETYPE_INT32, BASETYPE_INT64, BASETYPE_U64, BASETYPE_FLOAT64 };
+    for (size_t i = 0; i < sizeof(bs) / sizeof(bs[0]); i++) if (TypeIsSame(t, TypeVanilla(bs[i]))) return true;
+    struct type* str = preludeType(StrFromCStr("String"));
+    return str && TypeIsSame(t, *str);
+}
+
+//B10c: an immutable global of a build constant's type, outside std, is a default for the constant of its name - which
+//replaces its value when -D defines it. Asked of a declaration of another shape, it is an error
+static void buildDefaultFor(struct semaModule* mod, struct var* v, struct token nameTok) {
+    bool std = identityIsStd(mod->identity) || isPreludeModule(mod);
+    v->buildDefault = !v->mut && !std && v->isGlobalVar && isBuildConstType(v->type);
+    if (!v->buildDefaultAsked) return;
+    if (!v->buildDefault) {
+        if (!v->type.unknown) Err(nameTok, ERR_BUILD_DEFAULT_TYPE, nameTok, &v->type);
+        return;
+    }
+    struct buildConst* b = definedBuildConstEntry(v->name);
+    struct operand* lit = buildConstOperand(b);
+    if (OperandFitsType(NULL, lit, v->type) != TYPE_FIT_OK) {
+        Err(nameTok, ERR_BUILD_DEFAULT_FIT, b->name, b->text, nameTok, &v->type);
+        return;
+    }
+    v->initExpr = lit;
 }
 
 //O10b: set once function bodies are being checked - before that, global initializers are being built, and a body
@@ -20449,40 +20550,7 @@ static struct semaModule* makeBuildModule(void) {
     struct list* bcs = SyntaxBuildConsts();
     for (int i = 0; i < bcs->len; i++) {
         struct buildConst* b = ListGetIdx(bcs, i);
-        struct token tok = (struct token){0};
-        tok.str = b->text;
-        tok.lineNr = 0;
-        struct operand* init;
-        switch (b->kind) {
-            case BUILD_BOOL:
-                tok.type = TOK_BOOL_LIT;
-                tok.str = StrFromCStr(b->i ? "true" : "false");
-                init = OperandBoolLiteral(tok);
-                break;
-            case BUILD_INT:
-                tok.type = TOK_INT_LIT;
-                init = OperandIntLiteralValue(tok, b->i, b->u64); //the value -D gave, read once (B10)
-                break;
-            case BUILD_FLOAT:
-                tok.type = TOK_FLOAT_LIT;
-                init = OperandFloatLiteral(tok);
-                break;
-            default: {
-                //a string literal token carries its quotes and escapes, which codegen decodes
-                char* q = MallocOrCrash((size_t)b->text.len * 2 + 3);
-                int n = 0;
-                q[n++] = '"';
-                for (int c = 0; c < b->text.len; c++) {
-                    char ch = b->text.ptr[c];
-                    if (ch == '"' || ch == '\\') q[n++] = '\\';
-                    q[n++] = ch;
-                }
-                q[n++] = '"';
-                tok.type = TOK_STR_LIT;
-                tok.str = Str(q, n);
-                init = OperandStringLiteral(tok);
-            }
-        }
+        struct operand* init = buildConstOperand(b);
         struct var v = (struct var){0};
         v.owner = mod;
         v.name = b->name;
@@ -20539,7 +20607,7 @@ static struct var* buildConstVar(struct str name) {
     return buildModule ? VarGetList(&buildModule->vars, name) : NULL;
 }
 
-bool SemanticIsBuildConst(struct var* v) { return v && buildModule && v->owner == buildModule; }
+bool SemanticIsBuildConst(struct var* v) { return v && ((buildModule && v->owner == buildModule) || v->buildDefault); }
 
 //where the evaluator stopped, as a note - when that is somewhere else than the error itself
 static void noteWhy(struct token at, struct token whyTok) {
@@ -20925,7 +20993,9 @@ static bool decidePendingConditions(void) {
         }
         struct checkCtx ctx = {0};
         ctx.mod = mod;
+        ctx.inCondition = true;
         int before = ErrMsgGetNErrors();
+        condUnknownTok = (struct token){0};
         struct operand* op = buildExprFromSyntax(&ctx, p->cond);
         while (SemanticHasPendingInstantiations()) {
             semaDrainInstantiations();
@@ -20935,7 +21005,12 @@ static bool decidePendingConditions(void) {
         enum diag err = DIAG_NONE;
         char* reason = NULL; //for ERR_COND_UNDECIDABLE: what stopped the evaluation, and where
         struct ctVal* val = NULL;
-        if (ErrMsgGetNErrors() != before) {
+        if (ErrMsgGetNErrors() != before && condUnknownTok.str.len) { //B10: a build constant -D did not define, most likely
+            struct str n = condUnknownTok.str;
+            err = ERR_COND_UNKNOWN_BUILD;
+            reason = StrFmt("'%.*s' - if it is a build constant, define it with '-D %.*s=VALUE', or declare it with a default",
+                            n.len, n.ptr, n.len, n.ptr);
+        } else if (ErrMsgGetNErrors() != before) {
             err = ERR_COND_UNSEEN;
         } else if (op->type.bType != BASETYPE_BOOL) {
             err = ERR_COND_DECIDED_NOT_BOOL;

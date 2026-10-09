@@ -1,5 +1,7 @@
-# check: fail B10
+# check: fail error[B10]: 'Level' is a build constant - choose another name
 # flags: -D Level=3
+# B10: a declaration of a name -D defines is an error - unless it gives the constant a default (B10c), which a function
+# never does
 error E { X }
-Level I32 = 1
+fn Level() I32 { return 1 }
 fn main() ? E { }

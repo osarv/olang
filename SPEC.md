@@ -2882,8 +2882,8 @@ instantiation of a generic, a constant parameter does (§12.7 G26).
 
 **S8a.** A condition that is **fixed on every build** decides nothing, so one of its branches is dead code: a
 condition that can be evaluated at compile time (K1) — however it is computed, calls included, and reading only locals
-whose values are **fixed** (S8c) — and reads **no** build constant (B10) and no constant variable of a generic (§12.7
-G26), directly or through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an
+whose values are **fixed** (S8c) — and reads **no** build constant (B10) - a default for one (B10c) included - and no
+constant variable of a generic (§12.7 G26), directly or through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an
 `assert` is not an `if`.)
 
 **S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `U8`, or an enum without
@@ -4850,7 +4850,7 @@ S8a and S8b say when its condition is dead code and when the build decides it.
 **B9a.** A top-level condition decides which declarations exist, so it is decided before the module's
 types are resolved where it can be: when it uses only **literals**, **build constants** (B10), and
 **immutable globals** the module declares at its top level outside every conditional — in any of its files
-— whose own initializers are built the same way; combined with parentheses, `not`, unary `-`, `* / % + -`,
+— whose own initializers are built the same way, or whose value `-D` gives (a build constant's default, B10c); combined with parentheses, `not`, unary `-`, `* / % + -`,
 the six comparisons, `and` and `or`. It must evaluate to a `Bool`. Text (a string literal, a text build constant,
 or a global holding one) compares with `==` and `!=` **by content**. A mutable global has no value a build
 could decide on and is rejected, as are globals defined in terms of each other.
@@ -4892,7 +4892,19 @@ at most 64 bits; and a float that is not an infinity. A malformed or out-of-rang
 flag that gave it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
-compile-time error, as is defining one name twice.
+compile-time error, unless the declaration gives it a default (B10c), as is defining one name twice.
+
+**B10c (a build constant's default).** An immutable global declared at the top level of a module outside the standard
+library, whose type is one a `-D` value can have - `Bool`, `I32`, `I64`, `U64`, `F64` or `String` - is a **build
+constant with a default**: `-D` of its name replaces its initializer, the value read as B10 reads it and fitted to the
+declared type as a literal written there would be (`-D Port=443` for `Port I64 = 8080` is an `I64`); a value that does
+not fit is an error naming the flag. Without `-D`, the declaration's own value stands. The declaration stays its
+module's global - its bare name in the module, `m.Name` from an importer - while `-D Name=value` still defines the
+build constant `Name` every module sees (B10), the two holding one value; every such declaration of the name takes it.
+Whether `-D` names it or not, it is configuration as a build constant is: a condition reading it depends on the build
+(S8a, S8b). Any other top-level declaration of a name `-D` defines - a function, a type, a mutable global, a global of
+another type, one in the standard library - is B10's error; and a condition naming a name that exists nowhere (B9c,
+S8b) says it may be a build constant `-D` did not define.
 
 **B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its

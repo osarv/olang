@@ -1,0 +1,4 @@
+# check: fail error[B10c]: 'Level' is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found U8
+# flags: -D Level=1
+Level U8 = 3
+fn main() ? { }
