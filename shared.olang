@@ -6246,10 +6246,12 @@ fn fieldFnsE(n I32) I32 {
     return b.f(n) + h.b.f(1) * 100 + (try r.g(9) catch default 7) * 1000
 }
 FieldFnsBakedE := fieldFnsE(21)
+FieldFnGlobalE FieldFnE = FieldFnE(doubleO)
 
 test "E13b: a field holding a function is called as x.f(args)" {
     assert fieldFnsE(21) == 7242
     assert FieldFnsBakedE == 7242
+    assert FieldFnGlobalE.f(5) == 10        # through a global, as through a local
 }
 
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
