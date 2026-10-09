@@ -434,7 +434,30 @@ static void endError(FILE* f, struct where w) {
     }
 }
 
+//B11: a statement reports one error about where something lives - a rule of §8 (O...), C2d's or T17c's: a scope found
+//wrong is wrong for every check that reads it after, and the first one says what to change. A later one, and its notes,
+//is dropped. Groups nest - a statement in a catch block, or a lambda's, is one of its own
+static bool scopeGroupOn, scopeGroupSeen, lastDropped;
+int ErrMsgScopeGroupStart(void) {
+    int saved = (scopeGroupOn ? 1 : 0) | (scopeGroupSeen ? 2 : 0);
+    scopeGroupOn = true;
+    scopeGroupSeen = false;
+    return saved;
+}
+void ErrMsgScopeGroupEnd(int saved) {
+    scopeGroupOn = saved & 1;
+    scopeGroupSeen = saved & 2;
+}
+static bool isScopeRule(const char* rule) {
+    return (rule[0] == 'O' && rule[1] >= '0' && rule[1] <= '9') || !strncmp(rule, "C2d", 3) || !strncmp(rule, "T17c", 4);
+}
+
 static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
+    lastDropped = false;
+    if (scopeGroupOn && !muteDepth && isScopeRule(diags[d].rule)) {
+        if (scopeGroupSeen) { lastDropped = true; return; }
+        scopeGroupSeen = true;
+    }
     if (!countError(syntax)) return;
     FILE* f = startError(w, diags[d].rule);
     putMessage(f, diags[d].fmt, ap);
@@ -478,7 +501,7 @@ static void noteText(struct where w, const char* text) {
 }
 
 void Note(struct token at, enum diag d, ...) {
-    if (muteDepth) return;
+    if (muteDepth || lastDropped) return;
     struct where w = whereOf(at);
     FILE* f = eo();
     startNote(f, w);

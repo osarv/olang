@@ -1,0 +1,15 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# O25h/O10c: List.Push stores a value holding a reference that can be stored through - so the list and what the value
+# refers to must be in one scope, an equality Push's callers show; this one's node is from a loop body
+type Node struct(v I64) {
+    v mut
+    next mut Node& = null
+}
+fn main() ? {
+    fields := List<Pair<String&, Node&>>()
+    for i in range 2 {
+        value Node& = Node(i)
+        p := Pair<String&, Node&>("k", value)
+        fields.Push(p)
+    }
+}

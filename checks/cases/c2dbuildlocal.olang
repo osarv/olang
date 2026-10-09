@@ -1,12 +1,13 @@
 # check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
-# C2d/O23: a field written '&p' lives where its argument did, unknown to a function given the container
-type N struct(v I32, nx N&) {
+# C2d/O23: a field written '&p' lives where its argument did - unknown through an element of an array, where only its
+# container's scope is known, an underestimate a local would wrongly claim as its own
+type N struct(v I32, nx mut N&) {
     v
     next mut N& = nx
 }
-type Cur struct(of N&) { at mut N&of = of }
-fn fill(c mut Cur&) I32 {
-    x N&c = c.at
+type Cur struct(of mut N&) { at mut N&of = of }
+fn fill(cs Array<mut Cur&>&) I32 {
+    x := cs[0].at
     return x.v
 }
 fn main() ? { }

@@ -1,0 +1,17 @@
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# O25h/O1b: a copy of a global's element holds what lives in the program's scope, and keeps claiming it - so what is
+# assigned to it must live there too. It used to forget the claim, and the copy, stored back into the global, dangled
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+G mut Array<WC> = Array<WC>(1)
+fn put(n I64) {
+    best := G[0]
+    t := WC($n, 1)
+    best = t
+    G[0] = best
+}
+fn main() ? {
+    put(3)
+}
