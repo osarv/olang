@@ -186,7 +186,7 @@ static void ctRunAbortAt(struct statement* s, const char* what, struct ctVal* ms
     abort();
 }
 
-//R20: exact integer results for the overflow checks - twice Int64's width, as the generated code computes them
+//R20: exact integer results for the overflow checks - twice I64's width, as the generated code computes them
 __extension__ typedef __int128 ctWide;
 static struct ctVal* ctFloat(struct type t, double f);
 
@@ -261,7 +261,7 @@ static struct ctVal* ctNew(enum ctKind k, struct type t) {
     return v;
 }
 
-//E10: a reference, an interface value and a function value compare by identity - the node named (for an
+//E10: a reference and a function value compare by identity - the node named (for an
 //array, the same storage and the same length, so two slices of one buffer agree exactly when they would at run
 //time), or the function named. Null is no node at all.
 static bool ctIsIdentity(struct ctVal* v) { return v->kind == CT_REF || v->kind == CT_NULL || v->kind == CT_FUNC; }
@@ -2806,7 +2806,7 @@ enum ctMathFn CtMathFn(struct var* f) {
 //program links against too, and libm on first need. A number is passed as itself; an array as a pointer to its
 //first element, which here is a buffer filled from the array's elements and read back into them after the
 //call, so a callee writing through it (read, say) is seen as it is at run time. Each prepared call is kept.
-struct ctExternCall { struct var* f; void* sym; void (*rt)(void); ffi_cif cif; ffi_type** argTypes; };
+struct ctExternCall { struct var* f; void* sym; void (*rt)(void); ffi_cif cif; };
 static struct list ctExternCalls;
 static bool ctExternReady;
 
@@ -2876,7 +2876,7 @@ static int ctRtMkdtemp(char* tmpl) { return mkdtemp(tmpl) ? 0 : -1; }
 //S2: under -i the compiler's own handler is the one installed (ErrMsgInstallCrashHandler); it writes the program's
 //message first, so a crash in a foreign function the program calls says what the built program would
 static void ctRtOnCrash(const unsigned char* msg, long long len) { ErrMsgSetRunCrashMessage((const char*)msg, len); }
-//S3: -i's own dynamic call - the runtime's contract (codegen.c, emitDyncallRuntime) over the dlsym and libffi this
+//S3: -i's own dynamic call - the runtime's contract (runtime.c, emitDyncallRuntime) over the dlsym and libffi this
 //process uses for externs: kinds one byte per argument and a 0 after the last (a number type's code 1-12, 0x80 added
 //for an array), each number one word, each array a word holding its length and then its elements' bytes
 static void* ctDynsym(const char* name) {
@@ -3062,7 +3062,7 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
     }
     ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
     if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type -i cannot receive"); return NULL; }
-    struct ctExternCall c = { func, sym, own, {0}, at };
+    struct ctExternCall c = { func, sym, own, {0} };
     if (ffi_prep_cif(&c.cif, FFI_DEFAULT_ABI, (unsigned)n, rt, at) != FFI_OK) {
         ctFail(st, op->tok, "it calls an external function -i cannot call");
         return NULL;
