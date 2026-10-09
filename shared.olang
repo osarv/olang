@@ -13996,7 +13996,7 @@ fn rvWalkCopy(src mut rvHW&) {
     for p in h.pairs { p.n.next = rvN(p.n.v + 30) }
 }
 fn rvWalkParam(l List<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
-fn rvCopyOut(src rvHold&) {
+fn rvCopyOut(src mut rvHold&) {
     d rvHold = src
     d.items[0].next.next = rvN(50)
 }

@@ -12453,6 +12453,10 @@ linalg (`fused`, `mlp`, `repro/captured_value`) were migrated with it (18 `mut`s
 (`QcBaked`) is baked through read-only copies - a `:=` copy, a for-in over a read-only parameter, a by-value reader,
 `Clone()` then pushes - and asserted equal to the same computation at run time.
 
+**Merged with rvfix's batch**: its test of O25h (`rvCopyOut`) copied a value out of a read-only parameter
+(`d rvHold = src`, `src rvHold&`) and wrote through the copy's `mut` element references - exactly what T25c now refuses;
+the parameter became `mut rvHold&`, which keeps what the test is about (where the copy's references live).
+
 **Found on the way, left as is**: pushing to a for-in copy of a `List` element (`for l in ls { l.Push(1) }`) is O17's
 error whatever the collection's permission - the recorded r06 limit (an obligation cannot tell a copy's storage from its
 contents) - so the corpus test writes through a writable collection's `Box` elements instead.
