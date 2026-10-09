@@ -4272,7 +4272,13 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         //rendering belong to the type, not to one module's view of it: a private "eq" would make "==" in the declaring
         //module and in a Map from another disagree about the same two values
         if (priv && (!strcmp(sh->name, "Str") || !strcmp(sh->name, "Eq"))) continue;
-        if (a->type.vars.len != sh->operands + 1) Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
+        //E31: At and SetAt (and their checked forms) take one index or several - "m[i, j]" is At(i, j)
+        bool indexes = !strcmp(sh->name, "At") || !strcmp(sh->name, "SetAt") || !strcmp(sh->name, "TryAt")
+                       || !strcmp(sh->name, "TrySetAt");
+        if (indexes && a->type.vars.len < sh->operands + 1)
+            Err(a->tok, ERR_OPERATOR_ARITY_MIN, sh->name, sh->operands, a->type.vars.len - 1);
+        else if (!indexes && a->type.vars.len != sh->operands + 1)
+            Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
@@ -9967,23 +9973,29 @@ static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* 
     return x;
 }
 
-//E31: "c[i]" on a declared type - At; under "try", TryAt when declared, else At after checking i against Len()
-static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct operand* idx, struct token sq) {
+//E31: "c[i]" on a declared type - At; under "try", TryAt when declared, else At after checking i against Len(). "c[i, j]"
+//passes every index to At (or TryAt): a check derived from Len has one position to check, so several need TryAt declared
+static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct list idxs, struct token sq) {
     const char* atName = operatorFor(ctx, base->type, "At", sq);
     if (!atName) return OperandIntLiteral(sq);
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
+    if (derived && idxs.len > 1) {
+        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TryAt");
+        derived = false;
+    }
     if (derived) {
         const char* lenName = operatorMethodName(ctx, base->type, "Len");
         if (!lenName) Err(sq, ERR_TRY_INDEX_NEEDS_LEN, &base->type);
         else {
             base = heldOnce(ctx, base, sq, "col", &seq);
-            idx = asParam(ctx, base->type, atName, 1, idx);
+            struct operand* idx = asParam(ctx, base->type, atName, 1, *(struct operand**)ListGetIdx(&idxs, 0));
             struct operand* len = operatorCall(ctx, base, NULL, lenName, sq);
             idx = operandBounds(idx, OperandIntLiteral(sq), len, false, sq);
+            *(struct operand**)ListGetIdx(&idxs, 0) = idx;
         }
     }
-    struct operand* call = operatorCall(ctx, base, idx, atName, sq);
+    struct operand* call = operatorCallArgs(ctx, base, idxs, atName, sq);
     if (!derived) call->isAtCall = true;
     return finishSeq(seq, call);
 }
@@ -10048,23 +10060,35 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             else if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
             else result = OperandUnary(result, OPERATION_POSTFIX_DEC, p->tok);
         } else if (p->sntx->type == SNTX_EXPR_INDEX) {
-            struct syntax* idxExprNode = firstPartOfType(p->sntx, SNTX_EXPR);
-            struct operand* idx = buildExprFromSyntax(ctx, idxExprNode);
+            //E31: "x[i, j]" - several indices, each passed to At (or SetAt) in order; an array takes one
+            struct list idxs = ListInit(sizeof(struct operand*));
+            for (int j = 0; j < p->sntx->parts.len; j++) {
+                struct syntaxPart* q = partAt(p->sntx, j);
+                if (q->isToken || q->sntx->type != SNTX_EXPR) continue;
+                struct operand* x = buildExprFromSyntax(ctx, q->sntx);
+                ListAdd(&idxs, &x);
+            }
+            struct operand* idx = *(struct operand**)ListGetIdx(&idxs, 0);
             //E31: "x[i]" on a type declaring At - or, under "try", TryAt
             struct token sq = firstTokOfType(p->sntx, TOK_SQUARE_O);
             bool hasAt = operatorMethodName(ctx, result->type, "At") || tryOperatorName(ctx, result->type, "At");
             bool hasSet = operatorMethodName(ctx, result->type, "SetAt") || tryOperatorName(ctx, result->type, "SetAt");
             if (result->type.bType != BASETYPE_ARRAY && hasAt) {
-                result = buildIndexCall(ctx, result, idx, sq);
+                result = buildIndexCall(ctx, result, idxs, sq);
             } else if (result->type.bType != BASETYPE_ARRAY && hasSet) {
                 //a type that only stores: "x[i]" is a place for SetAt, and nothing to read (E31)
                 if (!(asTarget && i == s->parts.len - 1)) Err(sq, ERR_AT_UNDECLARED, &result->type);
                 struct operand* place = operandNew(sq, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
                 ListAdd(&place->args, &result);
-                ListAdd(&place->args, &idx);
+                ListAddList(&place->args, idxs);
                 place->isAtCall = true;
                 result = place;
-            } else result = OperandIndex(result, idx, sq);
+            } else {
+                //E16: an array has one position per element - several indices are a type's At (E31)
+                if (idxs.len > 1 && result->type.bType == BASETYPE_ARRAY)
+                    Err((*(struct operand**)ListGetIdx(&idxs, 1))->tok, ERR_ARRAY_ONE_INDEX, &result->type);
+                result = OperandIndex(result, idx, sq);
+            }
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
             //either bound may be absent; the colon's own position is what says which side a present one
             //sits on (see parseExprIndex)
@@ -12286,7 +12310,9 @@ static enum tokenType compoundBinTokType(enum operation compoundOp) {
 
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
-    struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
+    //E31: every index the place was written with ("x[i, j] = v" is SetAt(i, j, v)), in order
+    struct list idxs = ListInit(sizeof(struct operand*));
+    for (int k = 1; k < target->args.len; k++) ListAdd(&idxs, ListGetIdx(&target->args, k));
     //under "try" (E31): TrySetAt when declared, else SetAt after checking i against Len()
     const char* setName = operatorFor(ctx, base->type, "SetAt", opTok);
     if (!setName) {
@@ -12294,6 +12320,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
         return (struct statement){0};
     }
     bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
+    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TrySetAt"); derived = false; }
     const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
     if (derived && !lenName) { Err(opTok, ERR_TRY_SETAT_NEEDS_LEN, &base->type); derived = false; }
     bool isCompound = false;
@@ -12302,7 +12329,10 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
     struct operand* value = rhs;
     if (isCompound || derived) {
         if (!(base->opType == OPERATION_READ_VAR)) base = OperandReadVar(holdInHidden(ctx, base, opTok, "base", &pre), opTok);
-        if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) idx = OperandReadVar(holdInHidden(ctx, idx, opTok, "idx", &pre), opTok);
+        for (int k = 0; k < idxs.len; k++) {
+            struct operand** ip = ListGetIdx(&idxs, k);
+            if (!((*ip)->isLiteral || (*ip)->opType == OPERATION_READ_VAR)) *ip = OperandReadVar(holdInHidden(ctx, *ip, opTok, "idx", &pre), opTok);
+        }
     }
     if (isCompound) {
         //"x[i] += v" reads x[i] first, through At
@@ -12311,18 +12341,21 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             Err(opTok, ERR_AT_UNDECLARED, &base->type);
             return (struct statement){0};
         }
-        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok) : operatorCall(ctx, base, idx, atName, opTok);
+        struct list readIdxs = ListInit(sizeof(struct operand*));
+        ListAddList(&readIdxs, idxs);
+        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, readIdxs, opTok) : operatorCallArgs(ctx, base, readIdxs, atName, opTok);
         if (!cur) return (struct statement){0}; //reported
         struct token binTok = opTok;
         binTok.type = compoundBinTokType(compoundOp);
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
     }
     if (derived) {
-        idx = asParam(ctx, base->type, setName, 1, idx);
+        struct operand* idx = asParam(ctx, base->type, setName, 1, *(struct operand**)ListGetIdx(&idxs, 0));
         idx = operandBounds(idx, OperandIntLiteral(opTok), operatorCall(ctx, base, NULL, lenName, opTok), false, opTok);
+        *(struct operand**)ListGetIdx(&idxs, 0) = idx;
     }
     struct list args = ListInit(sizeof(struct operand*));
-    ListAdd(&args, &idx);
+    ListAddList(&args, idxs);
     ListAdd(&args, &value);
     struct statement call = (struct statement){0};
     call.sType = STATEMENT_EXPR;
@@ -13570,6 +13603,15 @@ static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
     return m;
 }
 
+//S9d: whether t's At (or only its TryAt) takes one position - a type indexed by several ("m[i, j]", E31) is not walked
+//by position
+static bool atTakesOneIndex(struct checkCtx* ctx, struct type t) {
+    const char* at = operatorMethodName(ctx, t, "At");
+    if (!at) at = tryOperatorName(ctx, t, "At");
+    struct var* m = at ? methodNamedOn(t, at) : NULL;
+    return m && m->type.vars.len == 2;
+}
+
 //S9d/S9f: the type of the hidden borrow of a collection the loop walks - its own type as a reference, its scope still
 //to be taken from the collection (O25a). The scope its declared type wrote ("&y", a parameter's own) is not where the
 //borrow lives, and kept it would stop the borrow adopting anything, leaving it at the loop's block - an element pushed
@@ -13816,8 +13858,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             ListAdd(&pre, &r);
         }
     } else if (!forInMethod(src->type, "Next") && !forInMethod(src->type, "Iter")
-               && (operatorMethodName(&wctx, src->type, "At") || tryOperatorName(&wctx, src->type, "At"))
-               && operatorMethodName(&wctx, src->type, "Len")) {
+               && atTakesOneIndex(&wctx, src->type) && operatorMethodName(&wctx, src->type, "Len")) {
         //S9d: a type with At and Len - and neither a Next nor an Iter of its own, either of which says how it wants
         //to be walked (a List walked by position would work out each element's chunk again, where its iterator
         //holds the chunk it is in) - is walked as an array is: a counted loop over

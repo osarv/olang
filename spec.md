@@ -1693,7 +1693,8 @@ primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
+`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { "," expr } "]"` (several indices only
+for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" [ arg { "," arg } [ "," ] ] ")"` calls the function value everything to its left gives (E13b).
 A trailing `","` in any of these lists is allowed only where the closing bracket begins a line of its own (L18a).
@@ -2366,8 +2367,8 @@ type declares one:
 | `a @ b` | `MatMul` | one operand, a result |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
-| `x[i]` | `At` | one operand, a result |
-| `x[i] = v` | `SetAt` | two operands, no result |
+| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
+| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value; no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
 | `~a` | `BitNot` | none, a result |
@@ -2387,11 +2388,12 @@ errors it fails with** (one declaring none is an error). The lowercase spelling 
 is what the operator calls; the checked form is what it calls **where `try` checks it** (E15a, R21, S9e). Where a
 type declares no checked form:
 
-- `TryAt` is **derived** from `At` and `Len`: the position is checked against `[0, x.Len())`, failing with
+- `TryAt` is **derived** from a one-index `At` and `Len`: the position is checked against `[0, x.Len())`, failing with
   `BuiltinError.OUT_OF_BOUNDS` (R20), and `At` is called - so `try x[i]` on such a type checks exactly as it does on
   an array. `TrySlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and `TrySetAt`
   from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or stored into
-  under `try` - a compile-time error.
+  under `try` - a compile-time error - and neither can one indexed by several indices (`try m[i, j]`) that does not
+  declare `TryAt` (or `TrySetAt`) itself, since `Len` checks one position.
 - every other operation is its plain form, which the `try` then does not check.
 
 A type declaring only the checked form of an operation (`TryAt` and no `At`) has that operation only under `try`:
@@ -2412,7 +2414,10 @@ built-in operation, which for `@` does not exist (an error), and for indexing an
 `a > b` is `b < a`, `a <= b` is `not (b < a)`, `a >= b` is `not (a < b)` - `Less` looked up on the type of the operand
 that becomes the receiver, `a` still evaluated before `b` - and they chain (E30).
 
-`x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. An `At`
+`x[i] = v` is `x.SetAt(i, v)`; `x[i] op= v` is `x.SetAt(i, x.At(i) op v)`, with `x` and `i` evaluated once. Several
+indices are passed in the order written, after `x` and before `v`: `m[i, j] = v` is `m.SetAt(i, j, v)`, and
+`m[i, j] += v` evaluates `m`, `i` and `j` once each. A built-in array takes one index; several on one are a
+compile-time error. An `At`
 returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element; with an `At`
 returning a value, `x[i].f = v` is a compile-time error, since it would write only a copy - as is any write into a
 value a call returned. In `x[lo:hi]`
@@ -2635,7 +2640,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   is asked for when the last is done - so an element added at the end while the loop runs is walked too. `break`
   leaves the whole loop. A type with `RunFrom` and `Iter()` must give the same elements in the same order by both; the
   loop uses `RunFrom` (a `List` has both, S9f) - except under `try` (S9e), where it uses `Iter()`.
-- an **indexable** value (S9d): one whose type has `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
+- an **indexable** value (S9d): one whose type has a one-index `At(i I64) T` and `Len() I64` (E31) and neither a `Next()`, an
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection

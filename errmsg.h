@@ -161,6 +161,9 @@ struct type;
     X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
     /* ---- methods and operators ---- */ \
     X(ERR_OPERATOR_ARITY,               "E31",   "%s's parameters besides its receiver: expected %d, found %d") \
+    X(ERR_OPERATOR_ARITY_MIN,           "E31",   "%s's parameters besides its receiver: expected at least %d, found %d") \
+    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'try' on several indices needs %t to declare %s - a check derived from Len checks one position") \
+    X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
     X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \

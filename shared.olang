@@ -11744,3 +11744,47 @@ test "a generic's by-value array parameter: borrowed for a call, and its own cop
     m Array<I64> = Array<I64>(3, GvSeen)
     assert gvBumpNums(m) == 12 and m[0] == 1
 }
+
+# E31: an index with several operands - "m[i, j]" calls At(i, j), "m[i, j] = v" SetAt(i, j, v), "m[i, j] += v" both with
+# the indices evaluated once, and under "try" the checked forms of the same arity. Baked while compiling (K2) and
+# computed at run time, which agree
+type mxGrid struct(rows I64, cols I64) {
+    rows
+    cols
+    cells mut Array<I64>& = Array<I64>(rows * cols)
+}
+fn (g mxGrid&) At(i I64, j I64) I64 { return g.cells[i * g.cols + j] }
+fn (g mxGrid&) SetAt(i I64, j I64, v I64) { g.cells[i * g.cols + j] = v }
+fn (g mxGrid&) TryAt(i I64, j I64) I64 ? BuiltinError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+    return g[i, j]
+}
+fn (g mxGrid&) TrySetAt(i I64, j I64, v I64) ? BuiltinError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+    g[i, j] = v
+}
+MxCalls mut I64 = 0
+fn mxNext() I64 {
+    MxCalls = MxCalls + 1
+    return MxCalls
+}
+fn mxTrace(n I64) I64 {
+    g := mxGrid(n, n)
+    for i in range n { for j in range n { g[i, j] = i * 10 + j } }
+    g[1, 1] += 100
+    t I64 = 0
+    for i in range n { t = t + g[i, i] }
+    return t + (try g[n, 0] catch default -1000)
+}
+MxBaked I64 = mxTrace(3)
+test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
+    assert MxBaked == 33 + 100 - 1000 and mxTrace(MxCalls + 3) == MxBaked
+    g := mxGrid(2, 2)
+    g[mxNext(), mxNext() - 2] = 5                           # indices left to right: [1, 0]
+    assert MxCalls == 2 and g[1, 0] == 5
+    g[mxNext() - 2, 0] *= 3
+    assert MxCalls == 3 and g[1, 0] == 15
+    try g[1, 1] = 4 catch { fail }
+    try g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
+    assert MxCalls == 0 and g[1, 1] == 4 and (try g[-1, 0] catch default 7) == 7
+}

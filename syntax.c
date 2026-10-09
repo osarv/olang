@@ -2763,7 +2763,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
     }
 }
 
-//"[" expr "]" (an index) or "[" [expr] ":" [expr] "]" (a slice, E16a). One function because the two are
+//"[" expr { "," expr } "]" (an index) or "[" [expr] ":" [expr] "]" (a slice, E16a). One function because the two are
 //indistinguishable until the ":" is reached, or isn't: a slice's lower bound parses exactly as an index
 //would. An absent bound is simply an absent SNTX_EXPR child, which the colon token's position tells apart -
 //so the node carries the colon to mark itself a slice and each present bound in written order.
@@ -2776,13 +2776,19 @@ struct syntax* parseExprIndex(SyntaxCtx sc) {
     if (!lo) TokenSetCursor(sc->tc, beforeLo);
     struct token colon = acceptTok(sc, TOK_COLON);
     if (colon.type == TOK_NONE) {
-        //an ordinary index - its single expression is mandatory
+        //an ordinary index - its first expression is mandatory, and E31 lets a type's At take several: "m[i, j]"
         if (!lo) return parseFail(sc, cur);
-        struct token close = acceptTok(sc, TOK_SQUARE_C);
-        if (close.type == TOK_NONE) return parseFail(sc, cur);
         struct syntax* s = newNode(SNTX_EXPR_INDEX);
         addTok(s, open);
         addSntx(s, lo);
+        for (struct token comma = acceptTok(sc, TOK_COMMA); comma.type != TOK_NONE; comma = acceptTok(sc, TOK_COMMA)) {
+            struct syntax* more = parseExpr(sc);
+            if (!more) return parseFail(sc, cur);
+            addTok(s, comma);
+            addSntx(s, more);
+        }
+        struct token close = acceptTok(sc, TOK_SQUARE_C);
+        if (close.type == TOK_NONE) return parseFail(sc, cur);
         addTok(s, close);
         return s;
     }
