@@ -79,6 +79,10 @@ because what it finds about structure feeds the refactor.
   wait for the 05:30 window; running until then: scope fix, parser fixes.
 - 03:00: scope follow-up merged (8a38b36, on master; codegen findings 1-4, 6, 19 and parser A fixed). Parser fixes
   (fadf5ce on wt-parsefix) are being merged with master by their agent (L10 U64 rule reconciled), then verified.
+- 03:00: parser fixes merged (c14467b via ffacca8, on master; all 17 parser findings + checker crashes B-E; L10's U64
+  decimals go to B9c in the token evaluator; `-D X=18446744073709551615` is a U64). LEAD: the full-suite `build/out -t`
+  process now peaks at ~11GB (was ~7GB) of the container's ~15GB - unmeasured whether the parser memo or the scope work
+  grew it; find out (and shrink it) before running anything beside a full verify.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
