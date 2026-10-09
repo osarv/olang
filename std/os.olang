@@ -25,6 +25,8 @@ extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
 extern fn __olang_mkdtemp(template Array<U8>) I32
+extern fn __olang_run_on_stack(bytes I64, f fn())
+extern fn __olang_on_crash(message Array<U8>, len I64)
 extern fn waitpid(pid I32, status Array<I32>, options I32) I32
 extern fn memfd_create(name Array<U8>, flags U32) I32
 extern fn isatty(fd I32) I32
@@ -105,6 +107,28 @@ fn Env(name String&) String& ? {
 # owing a result writes `unreachable` after it.
 fn Exit(code I32) {
     exit(code)
+}
+
+# calls f on a stack of "bytes" bytes, and returns once f has - for recursion deeper than a thread's own stack holds
+# (8MB, ordinarily): a parser over deeply nested input, say, run as "os.RunOnStack(1 << 30, fn() { ... })". f runs on a
+# thread of its own made with that stack - reserved, its pages taken only as they are used - and nothing runs beside
+# it: this call waits, so it is the call f() would be, and what f does is seen when it returns. A failed check, "done"
+# or "fail" inside f ends what it would have ended (S16a): the test running, as a direct call would. A stack smaller than
+# the least the system allows a thread is made that size; one the system will not make stops the program as a failed
+# check does. While compiling, and under -i, f is simply called, the evaluator's own limits on depth standing for the
+# stack's
+fn RunOnStack(bytes I64, f fn()) {
+    __olang_run_on_stack(bytes, f)
+}
+
+# what the program writes to its standard error if it crashes - a segmentation fault (a null dereference, a stack
+# overflow), a bus error, an arithmetic or illegal-instruction fault, or an abort (a failed check outside a test) - before
+# it ends as the signal ends it, its status and core dump unchanged: "os.OnCrash(\"mytool: internal error - please
+# report it\\n\")". Written exactly as given, with nothing added; called again, the newer message replaces it. It is
+# written from a handler running on a stack of its own, so a stack overflow is reported too, on the thread calling
+# OnCrash and on every thread the runtime starts after it - RunOnStack's, and the tasks' (spawn)
+fn OnCrash(message String&) {
+    __olang_on_crash(message, message.Len())
 }
 
 # whether the descriptor fd is a terminal - for a program deciding whether to colour what it writes, or whether there is
@@ -754,4 +778,55 @@ test "Exec without capture leaves the program this one's output and error" {
     assert (try ReadFile("build/os_files/fd1") catch default "") == $own "\n"
     fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false) catch { fail }
     assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
+}
+
+if TestBuild {
+    # how many stackRes instances have been destructed
+    stackDrops mut I64 = 0
+
+    type stackRes struct() {
+    } destruct { stackDrops += 1 }
+
+    type stackCell struct() {
+        v mut I64 = 0
+    }
+
+    # 1 + 2 + ... + n, one frame per number - a million of them is far more than a thread's ordinary 8MB holds
+    fn stackSum(n I64) I64 {
+        if n == 0 { return 0 }
+        return n + stackSum(n - 1)
+    }
+
+    # stackSum(n) on a stack of its own, as a function whose result the compiler can compute (K2)
+    fn stackSumOn(n I64) I64 {
+        c stackCell& = stackCell()
+        RunOnStack(1 << 20, fn() { c.v = stackSum(n) })
+        return c.v
+    }
+    stackBaked := stackSumOn(1000)
+
+    test "RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it" {
+        n I64 = 1000000
+        if RaceBuild { n = 200000 }        # ThreadSanitizer records each call, and holds no more than ~260,000 at once
+        c stackCell& = stackCell()
+        RunOnStack(1 << 30, fn() { c.v = stackSum(n) })
+        assert c.v == n * (n + 1) / 2
+        RunOnStack(0, fn() { c.v = 7 })                 # below the least a thread may have: given that
+        assert c.v == 7
+        assert stackBaked == 500500 and stackSumOn(1000) == stackBaked      # while compiling (K2) as at run time
+    }
+
+    # P1d through a thread of RunOnStack's own: "done" ends the test, and what f's scopes held is destructed on the way
+    test "done inside RunOnStack ends the test, unwinding the scopes f had open" {
+        RunOnStack(1 << 20, fn() {
+            r stackRes& = stackRes()
+            assert stackDrops == 0
+            done
+        })
+        fail
+    }
+
+    test "the test before ended with f's scopes closed" {
+        assert stackDrops == 1
+    }
 }

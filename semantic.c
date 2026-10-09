@@ -5020,9 +5020,17 @@ static bool isExternAllowedType(struct type t) {
     return false;
 }
 
+//X2/X6: a function value taking nothing, giving nothing and declaring no errors - "fn()" - which a runtime function (a
+//name beginning "__olang_") may take as a parameter, and no other external function: the runtime calls olang code
+//only on threads it made and set up itself (os.RunOnStack's)
+static bool isExternRunnableType(struct type t) {
+    return t.bType == BASETYPE_FUNC && !t.isExtern && t.vars.len == 0 && !t.hasRetType && t.errors.len == 0
+           && t.typeParams.len == 0;
+}
+
 //"IDEN type-expr" (COMMA ...)* - mirrors resolveParamList, but for SNTX_EXTERN_PARAM nodes (no "mut" to
 //read) and with every param's type checked against the X2 restriction
-void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out) {
+void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out, bool runtimeFn) {
     *out = ListInit(sizeof(struct var));
     struct list params = allPartsOfType(paramListNode, SNTX_EXTERN_PARAM);
     for (int i = 0; i < params.len; i++) {
@@ -5036,7 +5044,7 @@ void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode
         v.tok = nameTok;
         //no scope params exist for an extern function - scope/"&" are never valid extern types anyway
         v.type = resolveTypeExpr(mod, typeExprNode, NULL);
-        if (!isExternAllowedType(v.type)) Err(nameTok, ERR_EXTERN_TYPE, &v.type);
+        if (!isExternAllowedType(v.type) && !(runtimeFn && isExternRunnableType(v.type))) Err(nameTok, ERR_EXTERN_TYPE, &v.type);
         ListAdd(out, &v);
     }
 }
@@ -5049,7 +5057,9 @@ struct type resolveExternFuncSig(struct semaModule* mod, struct syntax* declNode
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
     t.isExtern = true;
-    resolveExternParamList(mod, firstPartOfType(declNode, SNTX_EXTERN_PARAM_LIST), &t.vars);
+    struct str name = strFromTok(firstTokOfType(declNode, TOK_IDEN));
+    bool runtimeFn = name.len > 8 && !strncmp(name.ptr, "__olang_", 8);
+    resolveExternParamList(mod, firstPartOfType(declNode, SNTX_EXTERN_PARAM_LIST), &t.vars, runtimeFn);
     t.errors = ListInit(sizeof(struct type*));
 
     struct syntax* retTypeNode = firstPartOfType(declNode, SNTX_RET_TYPE);

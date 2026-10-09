@@ -1045,7 +1045,10 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_FUNCCALL: {
             struct var* f = op->readVar;
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
-            if (!f || (f->type.isExtern && !CtMathFn(f))) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
+            if (!f || (f->type.isExtern && !CtMathFn(f) && !CtRunsOnStack(f))) {
+                ctScanFail(sc, op->tok, "it calls an external function");
+                return;
+            }
             if (f->type.isExtern && CtMathFn(f) == CT_MATH_INEXACT && ctForeignTarget) {
                 ctScanFail(sc, op->tok, CT_WHY_FOREIGN_MATH);
                 return;
@@ -1444,9 +1447,34 @@ void CtOrderGlobals(void) {
 // ---- calls ----
 
 static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func);
+static struct ctVal* ctRunOnStack(struct ctState* st, struct operand* op);
+static struct ctVal* ctCall(struct ctState* st, struct operand* op);
 
 static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
 static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
+
+//S1: os.RunOnStack(bytes, f) evaluated - its size computed, as an argument is, and f called with nothing, through the
+//function value as any call through one is. The thread and its stack are the run time's; here the evaluator's own
+//depth and stack guards stand for them (ctCallBind), so recursion RunOnStack makes room for stops with their message
+static struct ctVal* ctRunOnStack(struct ctState* st, struct operand* op) {
+    struct operand* bytes = *(struct operand**)ListGetIdx(&op->args, 0);
+    if (!ctEval(st, bytes)) return NULL;
+    static struct var through; //the function value's type: fn(), no owner - a call through a value (E13b)
+    struct type ft = ((struct var*)ListGetIdx(&op->readVar->type.vars, 1))->type;
+    through = (struct var){0};
+    through.type = ft;
+    through.name = StrFromCStr("f");
+    struct operand call = (struct operand){0};
+    call.opType = OPERATION_FUNCCALL;
+    call.readVar = &through;
+    call.callee = *(struct operand**)ListGetIdx(&op->args, 1);
+    call.tok = op->tok;
+    call.args = ListInit(sizeof(struct operand*));
+    call.type = TypeVanilla(BASETYPE_VOID);
+    struct ctVal* r = ctCall(st, &call);
+    ListDestroy(call.args);
+    return r;
+}
 
 //the call itself: parameters bound, body run. A reference parameter is bound to the argument's own node, so
 //writing through a "mut &" parameter writes the caller's value - exactly E12c's borrow.
@@ -1456,6 +1484,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     if (func && func->type.isExtern && !ctRun && CtMathFn(func) == CT_MATH_INEXACT && ctForeignTarget) {
         return ctFail(st, op->tok, CT_WHY_FOREIGN_MATH);
     }
+    if (CtRunsOnStack(func)) return ctRunOnStack(st, op);
     if (func && func->type.isExtern && (ctRun || CtMathFn(func))) return ctExtern(st, op, func);
     struct ctCallFrame fr;
     if (!ctCallBind(st, op, &fr)) return NULL;
@@ -2649,6 +2678,14 @@ static const struct { const char* name; int arity; bool exact; } ctMathLib[] = {
     { "erfc", 1, false }, { "hypot", 2, false },
 };
 
+//S1: the runtime's os.RunOnStack, "__olang_run_on_stack(bytes I64, f fn())" - a call of f, with a stack the evaluator
+//has no use for: evaluated as the call f() is, while compiling (K1) and under -i
+bool CtRunsOnStack(struct var* f) {
+    return f && f->type.isExtern && f->type.vars.len == 2 && !f->type.hasRetType
+           && StrCmp(f->name, StrFromCStr("__olang_run_on_stack"))
+           && ((struct var*)ListGetIdx(&f->type.vars, 1))->type.bType == BASETYPE_FUNC;
+}
+
 enum ctMathFn CtMathFn(struct var* f) {
     if (!f || f->type.bType != BASETYPE_FUNC || !f->type.isExtern || !f->type.hasRetType) return CT_MATH_NONE;
     enum baseType want = f->type.retType->bType;
@@ -2739,6 +2776,88 @@ static long long ctRtRealpath(const char* path, unsigned char* buf, long long ca
     return len;
 }
 static int ctRtMkdtemp(char* tmpl) { return mkdtemp(tmpl) ? 0 : -1; }
+//S2: under -i the compiler's own handler is the one installed (ErrMsgInstallCrashHandler); it writes the program's
+//message first, so a crash in a foreign function the program calls says what the built program would
+static void ctRtOnCrash(const unsigned char* msg, long long len) { ErrMsgSetRunCrashMessage((const char*)msg, len); }
+//S3: -i's own dynamic call - the runtime's contract (codegen.c, emitDyncallRuntime) over the dlsym and libffi this
+//process uses for externs: kinds one byte per argument and a 0 after the last (a number type's code 1-12, 0x80 added
+//for an array), each number one word, each array a word holding its length and then its elements' bytes
+static void* ctDynsym(const char* name) {
+    void* f = dlsym(RTLD_DEFAULT, name);
+    if (f) return f;
+    static void* libm;
+    if (!libm) libm = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
+    return libm ? dlsym(libm, name) : NULL;
+}
+static ffi_type* ctDynType(unsigned char k) {
+    static ffi_type* const types[13] = { NULL, &ffi_type_sint8, &ffi_type_sint16, &ffi_type_sint32, &ffi_type_sint64,
+        &ffi_type_uint8, &ffi_type_uint16, &ffi_type_uint32, &ffi_type_uint64, NULL, NULL, &ffi_type_float, &ffi_type_double };
+    unsigned c = k & 0x7F;
+    if (c == 0 || c > 12) return NULL;
+    return k & 0x80 ? &ffi_type_pointer : types[c];
+}
+static int ctDynReady(const char* name, const unsigned char* kinds, unsigned char ret, ffi_cif* cif, ffi_type** types,
+                      void** fn, unsigned* n) {
+    *n = 0;
+    while (kinds[*n]) (*n)++;
+    ffi_type* rt = ret == 0 ? &ffi_type_void : (ret & 0x80) ? NULL : ctDynType(ret);
+    if (!rt) return 2;
+    for (unsigned i = 0; i < *n; i++) if (!(types[i] = ctDynType(kinds[i]))) return 2;
+    if (!(*fn = ctDynsym(name))) return 1;
+    return ffi_prep_cif(cif, FFI_DEFAULT_ABI, *n, rt, types) == FFI_OK ? 0 : 2;
+}
+static int ctRtDyncallCheck(const char* name, const unsigned char* kinds, unsigned char ret) {
+    size_t n = strlen((const char*)kinds);
+    ffi_type** types = MallocOrCrash(sizeof(ffi_type*) * (n + 1));
+    ffi_cif cif;
+    void* fn;
+    unsigned got;
+    int r = ctDynReady(name, kinds, ret, &cif, types, &fn, &got);
+    free(types);
+    return r;
+}
+static unsigned long long ctRtDyncall(const char* name, const unsigned char* kinds, unsigned long long* words,
+                                      unsigned char ret) {
+    static const unsigned widths[13] = { 0, 1, 2, 4, 8, 1, 2, 4, 8, 2, 2, 4, 8 };
+    size_t n = strlen((const char*)kinds);
+    ffi_type** types = MallocOrCrash(sizeof(ffi_type*) * (n + 1));
+    void** values = MallocOrCrash(sizeof(void*) * (n + 1));
+    void** ptrs = MallocOrCrash(sizeof(void*) * (n + 1));
+    ffi_cif cif;
+    void* fn;
+    unsigned got;
+    if (ctDynReady(name, kinds, ret, &cif, types, &fn, &got) != 0) {
+        fputs("dynamic call of a function not found, or not callable\n", stderr);
+        abort();
+    }
+    size_t at = 0;
+    for (unsigned i = 0; i < got; i++) {
+        if (kinds[i] & 0x80) {
+            unsigned long long len = words[at];
+            ptrs[i] = &words[at + 1];
+            values[i] = &ptrs[i];
+            at += 1 + (len * widths[kinds[i] & 0x7F] + 7) / 8;
+        } else {
+            values[i] = &words[at++];
+        }
+    }
+    union { ffi_arg a; ffi_sarg s; unsigned long long u; float f; double d; } rv;
+    memset(&rv, 0, sizeof(rv));
+    ffi_call(&cif, FFI_FN(fn), &rv, values);
+    free(types);
+    free(values);
+    free(ptrs);
+    switch (ret) {
+        case 1: return (unsigned long long)(long long)(signed char)rv.s;
+        case 2: return (unsigned long long)(long long)(short)rv.s;
+        case 3: return (unsigned long long)(long long)(int)rv.s;
+        case 5: return rv.a & 0xFF;
+        case 6: return rv.a & 0xFFFF;
+        case 7: return rv.a & 0xFFFFFFFF;
+        case 11: { unsigned b; memcpy(&b, &rv.f, 4); return b; } //E33: an F32's bits as they came
+        default: return rv.u;
+    }
+}
 extern char** environ;
 static int ctRtSpawn(const char* args, long long count, int in, int out, int err) {
     if (count < 1) { errno = EINVAL; return -1; }
@@ -2763,7 +2882,8 @@ static ctRtFn ctRuntimeSym(const char* name) {
         { "__olang_arg_count", (ctRtFn)ctRtArgCount }, { "__olang_arg", (ctRtFn)ctRtArg }, { "__olang_env", (ctRtFn)ctRtEnv },
         { "__olang_err", (ctRtFn)ctRtErr }, { "__olang_stat", (ctRtFn)ctRtStat }, { "__olang_dir", (ctRtFn)ctRtDir },
         { "__olang_realpath", (ctRtFn)ctRtRealpath }, { "__olang_spawn", (ctRtFn)ctRtSpawn },
-        { "__olang_mkdtemp", (ctRtFn)ctRtMkdtemp },
+        { "__olang_mkdtemp", (ctRtFn)ctRtMkdtemp }, { "__olang_on_crash", (ctRtFn)ctRtOnCrash },
+        { "__olang_dyncall", (ctRtFn)ctRtDyncall }, { "__olang_dyncall_check", (ctRtFn)ctRtDyncallCheck },
     };
     for (size_t i = 0; i < sizeof(syms) / sizeof(syms[0]); i++) if (!strcmp(syms[i].name, name)) return syms[i].fn;
     return NULL;

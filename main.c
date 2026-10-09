@@ -319,6 +319,8 @@ static int linkProgram(char* clang, struct list* objs, char* binPath) {
     for (int i = 0; i < objs->len; i++) argAdd(&args, *(char**)ListGetIdx(objs, i));
     argAdd(&args, "-lm");
     argAdd(&args, "-lpthread");
+    //S3: the runtime's dynamic call is over libffi and dlsym, linked only into a program that declares it
+    if (CodegenProgramUsesDyncall()) { argAdd(&args, "-lffi"); argAdd(&args, "-ldl"); }
     int rc = RunProgram(argEnd(&args), false);
     ListDestroy(args);
     return rc;

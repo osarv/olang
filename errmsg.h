@@ -533,5 +533,6 @@ void ErrMsgFlush(void);
 void ErrMsgInstallCrashHandler(void);
 //B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
 void ErrMsgSetInterpreting(bool on);
+void ErrMsgSetRunCrashMessage(const char* msg, long long len);
 
 #endif //ERRMSG_H
