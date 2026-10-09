@@ -586,7 +586,7 @@ test "the type checker's review fixes, across modules" {
     assert oneError(dir, "matchother", "this is not that enum")
     assert oneError(dir, "isprivate", "this enum case is private")
     assert oneError(dir, "matchprivate", "this enum case is private")
-    assert oneError(dir, "isnoalias", "unknown namespace")
+    assert oneError(dir, "isnoalias", "unknown name 'nosuchalias'")    # E10c: naming no type, it is a value
     assert oneError(dir, "privcase", "this enum case is private")
     assert oneError(dir, "privword", "this error word is private")
     assert oneError(dir, "privmethod", "this method is private")

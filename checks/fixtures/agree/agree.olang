@@ -16,7 +16,7 @@ fn identity(n I64) String {
     f Array<I32>& = Array<I32>(n - 2)
     x Array<I32>
     y Array<I32>
-    return $same(a, b) " " $(a == b) " " $same(e, f) " " $same(x[:], y[:])
+    return $(a is b) " " $(a == b) " " $(e is f) " " $(x[:] is y[:])
 }
 
 type P struct(v I64) {
@@ -32,7 +32,7 @@ fn classify(n I64) String {
     }
 }
 
-fn two(a String&, b String&) Bool { return same(a, b) }
+fn two(a String&, b String&) Bool { return a is b }
 fn sites(n I64) String {
     l := List<String&>()
     for i in range n { l.Push("hello") }
@@ -106,7 +106,7 @@ fn adapters(k I32) String {
     a := apply(c, k)
     f fn(x I32) I32 = c
     b I32 = f(k) + f(k)
-    return $a " " $b " " $c.n " " $twice(Scale(k + 1), 5) " " $same(f, f)
+    return $a " " $b " " $c.n " " $twice(Scale(k + 1), 5) " " $(f is f)
 }
 
 extern fn memcpy(d Array<BF16>, s Array<BF16>, n I64) I64

@@ -23,7 +23,12 @@ fn ring() Node& {
 }
 Chain Node& = Node(1, Node(2, null))
 Ring Node& = ring()
-Looped Bool = Ring.next is Ring and Chain.next is not Chain      # E10c: identity, while compiling
+fn looped() Bool {
+    r := ring()
+    c Node& = Node(1, Node(2, null))
+    return r.next is r and c.next is not c and c.next.next is null
+}
+Looped Bool = looped()                  # E10c: identity, while compiling
 closed mut I32 = 0
 type Loud struct(id I32) { id } destruct { closed = closed + 1 }
 fn loudOnce() I32 {

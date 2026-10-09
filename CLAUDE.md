@@ -3328,7 +3328,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   operations - so codegen, the evaluator and `-i` needed nothing; K1 still refuses an atomic while compiling. Found on
   the way: an unknown function in an `assert`/`if`/`for` condition added "operand must be a boolean" - one error now
   (the unknown method's "discards a value" was fixed alongside by the type checker's review); P8b still said olang has
-  no atomic operations.
+  no atomic operations; and two `std/cancel` tests assumed a task or the test itself would run within milliseconds
+  (flaky under concurrent verifies) - the busy-task test now cancels once the task has counted, atomically.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

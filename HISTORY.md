@@ -9389,11 +9389,24 @@ from their original form.
   comparison and which the evaluator already answered as identity, so nothing changed there either; it is proven by a
   corpus global (`IdBaked`, K2) counting seven groups of identity and case questions - equal-by-`Eq` nodes that are two instances,
   a self-loop, nulls on either side, function values, an enum reference - asserted equal to the same call at run time,
-  and by the K2 fixture baking `Ring.next is Ring and Chain.next is not Chain` to `i1 true`. The `-i` fixture now prints
+  and by the K2 fixture baking a self-loop's and a chain's identities to `i1 true` (built inside the initializer's call:
+  read through the globals `Ring` and `Chain`, whose fields are writable, it is set at startup instead, as the
+  evaluator's review decided for anything reaching writable storage). The `-i` fixture now prints
   an atomic counter and two identities, compared byte for byte with the built program.
+  **Merging beside the type checker's review**: its check that an unknown alias in `d is nosuchalias.Dir.North` is one
+  "unknown namespace" now gets one "unknown name 'nosuchalias'" - a chain naming no type is read as a value (E10c),
+  and that is what an unknown name in an expression says; the check expects that now.
   **Found on the way.** Making `same` and `atomicAdd` unknown names showed two cascades, both pre-existing: an unknown
   method (`a.Foo()`) left an `int` literal behind, which as a statement added S3's "computes a value and then discards
   it" (fixed the same way, in parallel, by the type checker's review - the two fixes merged as one); and an unknown
   function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean" (the stand-in type
-  had been taught to meet operator requirements, not conditions). A condition no longer judges the stand-in. And P8b still said "olang has no atomic operations, so no access is
+  had been taught to meet operator requirements, not conditions). A condition no longer judges the stand-in.
+  **`std/cancel`'s tests were timing-dependent** (the coordinator saw "a busy task stops when the token is cancelled"
+  fail once under concurrent verifies). The spawner spun 5ms and cancelled, asserting the task had counted - but a task
+  need not have run by any particular time, and on a loaded machine it had not, so it saw the token already fired and
+  counted nothing. It now counts with `AtomicAdd` and the spawner cancels once `AtomicLoad` shows it has counted - the
+  test still shows a running task stopping, with no clock in it, and no race either (the count is read while the task
+  writes it, which is why it must be atomic). "a token with a deadline fires by itself" had the same flaw the other
+  way: it asserted a 20ms token had not fired right after making it, false if the test thread lost its core for 20ms;
+  it times from before the token now, asserting only what holds however long a preemption lasts. And P8b still said "olang has no atomic operations, so no access is
   atomic", written before P9; it now says only P9's methods are atomic.
