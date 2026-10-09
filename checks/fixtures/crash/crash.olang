@@ -4,7 +4,7 @@
 import "std/os"
 
 type Cell struct() {
-    v mut I64 = 0
+    v I64 = 0
 }
 
 # one frame per level, kept from becoming a loop by the call after it
@@ -22,7 +22,7 @@ fn main() ? {
     args := os.Args()
     how := args[1] if args.Len() > 1 else ""
     os.OnCrash("crash.olang crashed: " $how "\n")
-    c Cell& = Cell()
+    c mut Cell& = Cell()
     match how {
         case "overflow" { c.v = deep(100000000) }
         case "assert" { assert c.v == 1, "c.v is " $c.v }

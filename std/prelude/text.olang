@@ -359,7 +359,7 @@ fn formatSigned(n I64, base I64) String {
 }
 
 # v's digits in base, last first into room for the longest (64 binary digits and a sign), behind a '-' when neg
-fn formatDigits(v mut U64, neg Bool, base I64) String {
+fn formatDigits(v U64, neg Bool, base I64) String {
     assert base >= 2 and base <= 36, "a base is 2 to 36, found " $base
     letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
     room Array<Char, 65>

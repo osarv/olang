@@ -391,7 +391,7 @@ fn MkTemp(dir String& = "", prefix String& = "") String& ? OsError {
     if prefix.Contains("/") { error OsError.FAILED }      # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
-    path String&return = $base $sep $prefix "XXXXXX\0"
+    path mut String&return = $base $sep $prefix "XXXXXX\0"
     if __olang_mkdtemp(path) != 0 { try raise(__olang_err()) }
     return path[:path.Len() - 1]
 }
@@ -788,7 +788,7 @@ if TestBuild {
     } destruct { stackDrops += 1 }
 
     type stackCell struct() {
-        v mut I64 = 0
+        v I64 = 0
     }
 
     # 1 + 2 + ... + n, one frame per number - a million of them is far more than a thread's ordinary 8MB holds
@@ -799,7 +799,7 @@ if TestBuild {
 
     # stackSum(n) on a stack of its own, as a function whose result the compiler can compute (K2)
     fn stackSumOn(n I64) I64 {
-        c stackCell& = stackCell()
+        c mut stackCell& = stackCell()
         RunOnStack(1 << 20, fn() { c.v = stackSum(n) })
         return c.v
     }
@@ -808,7 +808,7 @@ if TestBuild {
     test "RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it" {
         n I64 = 1000000
         if RaceBuild { n = 200000 }        # ThreadSanitizer records each call, and holds no more than ~260,000 at once
-        c stackCell& = stackCell()
+        c mut stackCell& = stackCell()
         RunOnStack(1 << 30, fn() { c.v = stackSum(n) })
         assert c.v == n * (n + 1) / 2
         RunOnStack(0, fn() { c.v = 7 })                 # below the least a thread may have: given that
