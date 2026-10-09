@@ -11003,3 +11003,101 @@ field and in its own constraint; a bare `T` before its introduction (with the no
 unknown type) - plus a corpus test writing a struct's fields, a method's body, a callback type, `T[a, b, c]` and
 `match T` bare, with a generic global baked (`TrioBaked`, `constant i64 6` in the IR) and asserts decided while
 compiling.
+
+### A review of constant generics, fixed (G21, G16b, G20, G22, G23, D8a, D9a, D15, T29a, E32b, E10, E10c, T7c, T7d, M6b, M19f, E31a, G19, 2026-10-09)
+
+A read-only review of the day's features (compiler 189ec6a; reproducers in /home/user/review/today) found fifteen
+confirmed defects; this batch took items 2-12 and the diagnostics of 15 (1 went to the scope batch, 13-14 to the pool
+batch). Each was reproduced on this branch first and checked after under `-b`, `-b -d` and `-i`.
+
+**A declared type over an `Array<T, N>` converted from a run-time array (T29a, E32b).** `type V3 extends Array<F32, 3>`
+then `V3(a)` with `a` an `Array<F32>`: accepted, with no length check, and lowered as the conversion that emits nothing -
+a `{ i64, ptr }` used as a `ptr`, invalid IR under `-b`/`-d`; `-i` gave a `V3` of length 2. **Decided (mine): it is the
+E32b view** - `a as Array<F32, 3>&` read under `V3`'s name, its length checked once where the conversion is evaluated
+(an abort as a slice bound's, `OUT_OF_BOUNDS` under `try`), for any argument, a temporary included. T7d's checked copy
+into a `V3` value was the other choice; it would have made this the one conversion that copies, where T29a says a
+conversion names its argument's storage (`V3(f)` from a fixed `f` already does). `V3(b)` then writes into `b`, and
+`w V3 = V3(b)` copies, as any value declaration does.
+
+**The constant-argument fold had a semantics of its own (G21).** `cfExpr`/`cfBinary` computed every constant argument
+in exact 64-bit arithmetic with no types, so with `B U8 = 255` `Array<I32, B + 1>` had length 256 where `B + 1` is 0 in
+the program, and a field `Array<I32, N - 20 + 256>` of a `<N U8>` type had 246 elements where the same expression in the
+body - U8 arithmetic wrapping, then a literal too large for `U8` meeting it at `I32` (E6d) - is 502: a loop over "the
+array's length" as the body computed it wrote past the array into the next field. A third semantics beside the program's
+and the evaluator's. **Decided (mine): the fold computes only what it computes exactly, as the program would, and defers
+the rest to evaluation (K1).** Every value carries its type - none for a literal or a literal-only expression, which is
+exact (E4a); its own for a constant variable, a global (declared, or its literal's own by D15), a build constant -
+and an operator is computed in the type its operands meet at (T6b; a literal adapting, or meeting at its own type,
+E6d). A result its type cannot hold (the program wraps), a shift of a literal by a value (E8b decides its type by where
+it lands), two types that do not meet, a declared type's operators: deferred, computed once the program has checked and
+the program checked again (C2e's/B9c's loop). Values are 128-bit, so a `U64` argument above `I64`'s maximum
+(`K<18446744073709551615>`, `K<0xFFFFFFFFFFFFFFFF>`, L10/L10a) and `I64`'s minimum (`K<-9223372036854775808>`) are
+written as they are; both were rejected, the first as "beyond I64's range", the second because the literal's magnitude
+was. The reviewer's other option, routing every constant argument through the evaluator, needs a checked operand - which
+does not exist while types are resolved - and would make every constant argument cost a whole re-check of the program;
+deciding only what is decided exactly is B9a's design for the token evaluator, and the same argument. A typed value of a
+type that does not flow into the parameter's (`K<X + 1>`, `X U8`, an `I8` parameter) is the error the program would give.
+A `U64` constant's value is spelled unsigned in a type (`K<18446744073709551615>`; it read `K<-1>`).
+
+**A deferred argument read as a known 0 (G21).** In an instantiation, an argument evaluation proper had to decide
+(`Array<I32, twice(N)>`) stood a known 0 in for its value on the first attempt, so `b.a[5]` was "outside the array's 0
+elements" - and those errors kept the program from checking, so the value was never computed. The stdport batch, merged
+meanwhile, had made it the unknown constant `resolveConstArg` already used (`constUndecided`); here the pattern path
+(`constPatternValue`) has one outcome of three - still a pattern, known, undecided - and an argument reported as not
+computable is undecided too, so it is one error and not a cascade.
+
+**Both branches of a conditional were computed (G21, E28, E7).** `(10 / N if N != 0 else 1)` at `N = 0` failed with
+"it divides by zero" - twice, the field's type and the constructor's being substituted separately, and with no note of
+the instantiation. The fold now computes the condition first and only the value it chooses, and `and`/`or` short-circuit,
+as at run time. A pattern's error is reported once per instantiation and attempt (`constArgReported`), with the G16b note
+of the instantiation it was computed for (`bindingsNote`).
+
+**`:=` dropped a fixed length (D15).** `a := Array<U8, 4>()` declared an `Array<U8>`. The stdport batch made
+`declaredArrayType` drop only a literal's length; here a conditional or `match` all of whose values are array literals is
+literal-like too (they adapt as their values do).
+
+**Code proportional to an array's length (T7d, E10).** Promoting a fixed array into a run-time one copied it one
+`load`/`store` pair per element in the IR, and `==` on two fixed arrays compared one element per IR block: 100,000
+elements were 18MB of IR and 9.4s to build, and `Array<U8, 3000000000>` grew the compiler past 4.7GB. The copy is one
+`memcpy` (a loop where each row needs storage of its own), and a fixed array of more than 8 elements is compared by the
+run-time-length loop: 126KB of IR for each.
+
+**A lambda over an array of fixed arrays (D9a, D16a).** `a.Any(fn(x) { return x[0] == 5 })` on an
+`Array<Array<I32, 2>>`: the expected function type's parameter is the prelude's `x T` with `T = Array<I32, 2>` - a
+generic's by-value parameter bound to an array, which D9b gives its meaning - but the lambda's parameter, given that type,
+was D9a's "array parameter passed by value". Sort, Map and Filter were unusable on such arrays. **Decided (mine):** D9a
+judges a lambda's parameter only where its type is written; an omitted one is the expected parameter's, as a generic's
+by-value parameter is.
+
+**A constant variable could not be read in a default (D8a, G23).** `struct(k I64 = N * 10)` and `F(x I64 = N + 1)` were
+"unknown name 'N'": a default was built once, with no bindings, for every instantiation. A default whose syntax reads a
+variable its declaration introduced (`readsVars`) is now each instantiation's: substitution gives the instantiated
+signature its own copy holding the bindings, built when a call omits it, as the instantiation's body is checked with
+them; the generic's own is never built. One no call omits is checked by none - as the generic's body is not.
+
+**G20's "declares no Eq" was never enforced.** `constParamTypeOk` ran while types resolved, before any method is
+collected, so `Box<N K>` was accepted with `K` declaring `Eq` in either order. It is now judged once every signature is
+resolved (`constParamEqChecks`), with a message of its own naming `Eq`.
+
+**A fixed-array local larger than the stack (T7c).** `a Array<U8, 64000000> = Array<U8, 64000000>()` segfaulted: the
+local and the zero value it was copied from were each an `alloca` of 64MB. **Decided (mine): storage over 64KB** - Go's
+bound on a variable it keeps in a frame implicitly - **is taken from the arena of the block it is made in** (one
+`__olang_scope_alloc` where the value is made, which comes before every use, as a declaration does), reclaimed with the
+block as the frame's would be: a local's, a zero value's, a literal's, a conditional's or match's value, a by-value
+argument's copy, a result through memory. A helper with no arena keeps its frame. `-i` holds such an array as one node
+per element and cannot run one of 100,000 in a loop (the stage-2 limit recorded with B3e).
+
+**`is` between an `Array<T, N>&` and an `Array<T>&` (E10c).** `f is r` with `f` the view `a[0:3] as Array<I64, 3>&` and
+`r` the slice `a[0:3]` said they "never name one instance" while `f == r` - identity, T7d meeting them as `Array<T>&`s -
+was true. `is` meets them the same way now.
+
+**Diagnostics.** An unknown trait in a constraint added "I32 is not a trait" (the unknown stand-in's type); `try g[0, 1]`
+with no `TryAt` added R20's "'try' needs something that can fail" after E31a's error (the derived form recovers as unknown
+now, and R20 says nothing about an unknown operand); an M6b error reached twice by one operation (`==` part by part over
+two fields of one type) was printed twice; a private `len()` returning `I32` was "Len gives an I64", now with a note
+saying `len` is `Len`'s private spelling and is held to its shape; constant variables named `print`/`println` were
+accepted, reading the constant where every module reads the prelude's function (M19f, G22); and G16b's notes, capped at
+three innermost, dropped the program's own call that began a long chain - the outermost is always shown now.
+
+**Checked**: shared.olang's tests (eight new ones beside the others, each with globals baked and asserts decided while
+compiling compared with the run time), the fifteen reproducers under `-b`, `-b -d` and `-i`, and twelve checks cases.

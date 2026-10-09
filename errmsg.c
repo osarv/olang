@@ -472,11 +472,22 @@ static void endError(FILE* f, struct where w, int use, struct where met) {
         noteText(met, diags[NOTE_IN_LIBRARY].fmt);
         if (use < top) top = use + 1;
     }
-    for (int i = top - 1, shown = 0; i >= 0 && shown < ERR_CONTEXT_SHOWN; i--) {
+    //the innermost contexts, and always the outermost - the program's own use that began the chain (G16b) - which a cap
+    //on the innermost alone dropped from a long one (an instantiation asking for the next, N times)
+    int outer = -1, valid = 0;
+    for (int i = 0; i < top; i++) {
         if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
+        if (outer < 0) outer = i;
+        valid++;
+    }
+    int inner = valid > ERR_CONTEXT_SHOWN ? ERR_CONTEXT_SHOWN - 1 : ERR_CONTEXT_SHOWN;
+    for (int i = top - 1, shown = 0; i >= 0 && shown < inner; i--) {
+        if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
+        if (i == outer && valid > ERR_CONTEXT_SHOWN) break;
         noteText(whereOf(errContexts[i].tok), errContexts[i].msg);
         shown++;
     }
+    if (valid > ERR_CONTEXT_SHOWN) noteText(whereOf(errContexts[outer].tok), errContexts[outer].msg);
 }
 
 //B11: a statement reports one error about where something lives - a rule of §8 (O...), C2d's or T17c's: a scope found

@@ -1,0 +1,11 @@
+# check: fail error[E31]: Len gives an I64
+# also: note: 'len' is Len's private spelling, held to Len's shape
+# M6b: a lowercase helper spelling a protocol method is held to its shape - and the error says why, since its name does not
+type Node struct(v I32) {
+    v
+}
+fn (n Node&) len() I32 { return 1 }
+fn main() ? {
+    n := Node(1)
+    println($n.len())
+}

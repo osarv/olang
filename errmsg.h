@@ -141,10 +141,11 @@ struct type;
     X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
     X(ERR_TYPE_ARGS_ON_NON_GENERIC,     "G7",    "%S is not generic, so it takes no type arguments") \
     X(ERR_CONST_PARAM_TYPE,             "G20",   "a constant parameter is an integer, a Bool or an enum without payloads, found %t") \
+    X(ERR_CONST_PARAM_EQ,               "G20",   "%t declares Eq - a constant parameter's type compares by its value alone") \
     X(ERR_CONST_ARG_IS_TYPE,            "G21",   "%S's parameter %S is a constant - write a value, as '%S<..., 3>'") \
     X(ERR_TYPE_ARG_IS_VALUE,            "G21",   "%S's parameter %S is a type, and this is a value") \
     X(ERR_CONST_ARG_NOT_COMPUTABLE,     "G21",   "a constant argument must be computable while compiling: %s") \
-    X(ERR_CONST_ARG_RANGE,              "G21",   "%l does not fit %t") \
+    X(ERR_CONST_ARG_RANGE,              "G21",   "%s does not fit %t") \
     X(ERR_CONST_ARG_KIND,               "G21",   "this constant argument is not a value of %t") \
     X(ERR_CONST_VAR_UNKNOWN,            "G22",   "%S is no constant variable of this declaration") \
     X(ERR_CONST_VAR_TYPE_AND_CONST,     "G22",   "%S is a type in one place and a constant in another") \
@@ -285,6 +286,7 @@ struct type;
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
+    X(NOTE_PROTOCOL_SPELLING,           "",      "'%S' is %s's private spelling, held to %s's shape - a helper of another shape needs another name") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \

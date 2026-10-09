@@ -1,0 +1,11 @@
+# check: fail error[G21]: a constant argument must be computable while compiling: it divides by zero
+# also: note: instantiated here, with N = 0
+# also: compilation failed with 1 error
+# G21/G16b: a constant argument that cannot be computed for an instantiation is reported once, at that instantiation
+type Box<N I64> struct() {
+    a mut Array<I32, 10 / N>
+}
+fn main() ? {
+    b := Box<0>()
+    println($b.a.Len())
+}

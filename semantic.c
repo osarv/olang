@@ -1634,6 +1634,7 @@ void semaCollectNames(struct semaModule* mod) {
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
+static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings);
 struct operand* paramDefaultOp(struct var* param);
 void resolveTypeDecl(struct type* t);
 
@@ -1641,11 +1642,26 @@ void resolveTypeDecl(struct type* t);
 //parameters visible at this point in the signature/body being resolved, or NULL where none are - struct
 //fields and globals, which have no such context; see the report). Bare "&" (no name token at all) is
 //left as scopeParam == NULL, meaning "this value's own private/local scope".
-//T7/D15: a declaration's type is what a program can write, and the only array type it can write is
-//Array<T> - so ":=" from an array literal (laid out with its length known, T11) declares an Array<T>, whose
-//later assignments may give it any length. Nested levels are references (T7a) and are kept as they are.
-struct type declaredArrayType(struct type t) {
-    if (t.bType != BASETYPE_ARRAY || t.structMAlloc || t.arrMalloc) return t;
+//T7d/D15: an array literal adapts to a length as a numeric literal adapts to a type, so ":=" from one (laid out with
+//its length known) declares an Array<T>, whose later assignments may give it any length - as from a conditional or a
+//match all of whose values are literals. Anything else whose type is an Array<T, N> declares that type. Nested levels
+//are kept as they are.
+static bool opIsLiteralArray(struct operand* op) {
+    if (op->opType == OPERATION_NONE && op->isLiteral && op->type.bType == BASETYPE_ARRAY) return true;
+    if (op->opType == OPERATION_COND && op->args.len == 3)
+        return opIsLiteralArray(*(struct operand**)ListGetIdx(&op->args, 1))
+            && opIsLiteralArray(*(struct operand**)ListGetIdx(&op->args, 2));
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!opIsLiteralArray(*(struct operand**)ListGetIdx(&vs, i))) return false;
+        return vs.len > 0;
+    }
+    if (op->opType == OPERATION_SEQ && op->args.len) return opIsLiteralArray(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
+    return false;
+}
+struct type declaredArrayType(struct operand* op) {
+    struct type t = op->type;
+    if (t.bType != BASETYPE_ARRAY || t.structMAlloc || t.arrMalloc || !opIsLiteralArray(op)) return t;
     t.arrMalloc = true;
     t.arrLen = NULL;
     return t;
@@ -1757,15 +1773,21 @@ void refreshStructSnapshots(struct type* t);
 
 static bool typeIsDeclaredStruct(struct type t);
 bool TypeIsGeneric(struct type t);
-static bool constPatternValue(struct type p, struct list* bindings, long long* out);
+//G24/G25: what a pattern's value is once its variables are bound (constPatternValue)
+enum constOutcome { CONST_STILL_PATTERN, CONST_KNOWN, CONST_UNDECIDED };
+static enum constOutcome constPatternValue(struct type p, struct list* bindings, long long* out);
+static struct type constUndecided(struct type slot, struct token tok);
 static void fixArrayLength(struct type* t, long long n, struct token tok);
 struct type TypeConst(struct type of, long long v);
 struct type TypeSubstitute(struct type t, struct list* bindings) {
-    //G24/G25: a constant argument computed from constant variables is computed once they are bound
+    //G24/G25: a constant argument computed from constant variables is computed once they are bound - one evaluation has
+    //to decide, or one reported, fits anything until then, as an argument not decided yet does (resolveConstArg)
     if (t.bType == BASETYPE_CONST) {
         if (t.constKnown || t.unknown || !t.constExpr) return t;
         long long n;
-        if (!constPatternValue(t, bindings, &n)) return t;
+        enum constOutcome outcome = constPatternValue(t, bindings, &n);
+        if (outcome == CONST_STILL_PATTERN) return t;
+        if (outcome == CONST_UNDECIDED) return constUndecided(*t.constOf, t.tok);
         struct type k = TypeConst(*t.constOf, n);
         k.tok = t.tok;
         return k;
@@ -1835,6 +1857,9 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
         for (int i = 0; i < t.vars.len; i++) {
             struct var v = *(struct var*)ListGetIdx(&t.vars, i);
             v.type = TypeSubstitute(v.type, bindings);
+            //G23: a default reading the declaration's variables is this instantiation's own
+            if (v.defaultVal && v.defaultVal->readsVars && bindings && bindings->len)
+                v.defaultVal = boundParamDefault(v.defaultVal, v.type, bindings);
             ListAdd(&out, &v);
         }
         t.vars = out;
@@ -2833,13 +2858,22 @@ static struct list* currentConstVars;
 
 //G20: what a constant parameter may be - an integer type, Bool, a declared type over one with no constructor, or an
 //enum whose cases carry no payload - none declaring Eq, since two arguments are one exactly when their values are
-static bool constParamTypeOk(struct type t) {
+//Whether a type declares Eq is known only once every method is (M19): a declaration resolved before then is checked for
+//it then (constParamEqChecks), whatever order the declarations come in
+struct constParamEqCheck { struct type t; struct token tok; };
+static struct list constParamEqChecks;
+static bool constParamTypeOk(struct type t, struct token tok) {
     if (t.unknown) return true;
     if (t.structMAlloc) return false;
-    if (t.bType == BASETYPE_CHOICE) return !ChoiceHasPayload(t) && !typeDeclaresEq(t);
-    bool intOrBool = t.bType == BASETYPE_BOOL || (PrimInfo(t.bType) && PrimInfo(t.bType)->kind != 'f');
-    if (!intOrBool) return false;
-    if (t.owner) return !t.hasCtor && !typeDeclaresEq(t);
+    if (t.bType == BASETYPE_CHOICE) {
+        if (ChoiceHasPayload(t)) return false;
+    } else {
+        bool intOrBool = t.bType == BASETYPE_BOOL || (PrimInfo(t.bType) && PrimInfo(t.bType)->kind != 'f');
+        if (!intOrBool || (t.owner && t.hasCtor)) return false;
+        if (!t.owner) return true;
+    }
+    if (!signaturesResolved) ListAdd(&constParamEqChecks, &(struct constParamEqCheck){t, tok});
+    else if (typeDeclaresEq(t)) { Err(tok, ERR_CONST_PARAM_EQ, &t); return true; } //reported: the type stands
     return true;
 }
 
@@ -2854,14 +2888,15 @@ struct type TypeConst(struct type of, long long v) {
     return c;
 }
 
-//G21: does v fit a constant parameter of type `of` - an integer's range, Bool's two values, an enum's cases
+//G21: does v - a value's bits, as a constant argument holds them - fit a constant parameter of type `of`: an integer's
+//range (any bits for a U64), Bool's two values, an enum's cases
 static bool constFits(struct type of, long long v) {
     if (of.unknown) return true;
     if (of.bType == BASETYPE_BOOL) return v == 0 || v == 1;
     if (of.bType == BASETYPE_CHOICE) return v >= 0 && v < of.vars.len;
     const struct primInfo* pi = PrimInfo(of.bType);
     if (!pi || pi->kind == 'f') return false;
-    if (pi->kind == 'u') return v >= 0 && (pi->bits >= 63 || v < (1LL << pi->bits));
+    if (pi->kind == 'u') return pi->bits >= 64 || (v >= 0 && v < (1LL << pi->bits));
     if (pi->bits >= 64) return true;
     long long lim = 1LL << (pi->bits - 1);
     return v >= -lim && v < lim;
@@ -2870,19 +2905,125 @@ static bool constFits(struct type of, long long v) {
 //G21: a constant argument folded on its syntax, while types are resolved - literals, arithmetic, constant variables,
 //immutable globals and build constants. What needs evaluation proper (a call, a global computed by one) is deferred:
 //computed once the program has checked, and the program checked again with it (B9c's loop). What reads a constant
-//variable not bound yet is a pattern, computed per instantiation (G24, G25)
+//variable not bound yet is a pattern, computed per instantiation (G24, G25).
+//The fold computes what the program would (K1), never a value of its own: every value keeps its type - a literal, or
+//an expression of literals only, none (it is exact and adapts, E4a), a constant variable, a global or a build constant
+//its own - and an operator on typed values is computed in the type they meet at (T6b, a literal adapting or meeting at
+//its own type, E6d). A result its type cannot hold wraps in the program (E6c): that, a declared type's operators, a
+//shift of a literal by a value (E8b) and two types that do not meet are evaluation's, deferred. So the fold never
+//decides a value the program would not compute
 enum cfKind { CF_INT, CF_BOOL, CF_ENUM };
-struct cfVal { enum cfKind kind; long long i; struct type* enumType; };
+__extension__ typedef __int128 cfWide;
+__extension__ typedef unsigned __int128 cfUWide;
+//an integer is exact here (128 bits hold every 64-bit value of either signedness, and their products); `prim` is its
+//type, BASETYPE_VOID for a literal's, and `declType` a declared one's (Char) - whose arithmetic is evaluation's. A hex
+//or binary literal with its top bit set is read as its target wants (L10a): `hexBits` holds it unsigned
+struct cfVal { enum cfKind kind; cfWide i; struct type* enumType; enum baseType prim; struct type* declType; bool hexBits; };
 enum cfRes { CF_OK, CF_PATTERN, CF_DEFER, CF_ERROR };
-struct cfCtx { struct semaModule* mod; struct list* bindings; bool substituting; int depth; struct token errTok; const char* why; };
+struct cfCtx { struct semaModule* mod; struct list* bindings; bool substituting; int depth; bool wantUnsigned;
+               struct token errTok; const char* why; };
 
 static enum cfRes cfFail(struct cfCtx* c, struct token t, const char* why) {
     if (!c->why) { c->errTok = t; c->why = why; }
     return CF_ERROR;
 }
 static enum cfRes cfWorst(enum cfRes a, enum cfRes b) { return a > b ? a : b; }
-static struct cfVal cfBool(bool v) { struct cfVal r = { CF_BOOL, v, NULL }; return r; }
-static struct cfVal cfInt(long long v) { struct cfVal r = { CF_INT, v, NULL }; return r; }
+static struct cfVal cfBool(bool v) { struct cfVal r = (struct cfVal){0}; r.kind = CF_BOOL; r.i = v; return r; }
+static struct cfVal cfInt(cfWide v, enum baseType prim) {
+    struct cfVal r = (struct cfVal){0};
+    r.kind = CF_INT;
+    r.i = v;
+    r.prim = prim;
+    return r;
+}
+
+static bool primIsUnsigned(enum baseType p) { const struct primInfo* pi = PrimInfo(p); return pi && pi->kind == 'u'; }
+//whether v is a value of the integer type p
+static bool cfRange(enum baseType p, cfWide v) {
+    const struct primInfo* pi = PrimInfo(p);
+    if (!pi || pi->kind == 'f') return false;
+    if (pi->kind == 'u') return v >= 0 && v <= (((cfWide)1 << pi->bits) - 1);
+    cfWide lim = (cfWide)1 << (pi->bits - 1);
+    return v >= -lim && v < lim;
+}
+//a literal's value as a target of the given signedness reads it (L10a)
+static cfWide cfRead(struct cfVal v, bool unsignedTarget) {
+    if (v.hexBits && !unsignedTarget) return v.i - ((cfWide)1 << 64);
+    return v.i;
+}
+//a value's bits as a constant argument of an integer type holds them, and back
+static long long cfBits(cfWide v) { return (long long)(unsigned long long)v; }
+static cfWide cfFromBits(long long bits, enum baseType p) {
+    const struct primInfo* pi = PrimInfo(p);
+    if (pi && pi->kind == 'u' && pi->bits >= 64) return (cfWide)(unsigned long long)bits;
+    return bits;
+}
+//a literal's own type (T6a, L10): I32, else I64, else U64 - BASETYPE_VOID beyond them
+static enum baseType cfOwnType(cfWide v) {
+    if (cfRange(BASETYPE_INT32, v)) return BASETYPE_INT32;
+    if (cfRange(BASETYPE_INT64, v)) return BASETYPE_INT64;
+    if (cfRange(BASETYPE_U64, v)) return BASETYPE_U64;
+    return BASETYPE_VOID;
+}
+//a value as text, for a range error: an exact value can be beyond 64 bits
+static const char* cfText(cfWide v) {
+    char buf[48];
+    int n = 0;
+    bool neg = v < 0;
+    cfUWide u = neg ? (cfUWide)0 - (cfUWide)v : (cfUWide)v;
+    do { buf[n++] = (char)('0' + (int)(u % 10)); u /= 10; } while (u);
+    if (neg) buf[n++] = '-';
+    char* out = MallocOrCrash((size_t)n + 1);
+    for (int i = 0; i < n; i++) out[i] = buf[n - 1 - i];
+    out[n] = '\0';
+    return out;
+}
+//a value of a constant parameter's type, as the constant variable bound to it reads
+static struct cfVal cfOfConst(struct type of, long long bits) {
+    struct cfVal r = (struct cfVal){0};
+    if (of.bType == BASETYPE_BOOL) return cfBool(bits != 0);
+    if (of.bType == BASETYPE_CHOICE) {
+        r.kind = CF_ENUM;
+        r.i = bits;
+        r.enumType = MallocOrCrash(sizeof(struct type));
+        *r.enumType = of;
+        return r;
+    }
+    r = cfInt(cfFromBits(bits, of.bType), of.bType);
+    if (of.owner) { r.declType = MallocOrCrash(sizeof(struct type)); *r.declType = of; }
+    return r;
+}
+
+static bool primFlows(enum baseType a, enum baseType b);
+bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
+//G21: a folded value as a constant argument for a parameter of type `slot` - its bits in *bits. CF_ERROR is reported
+//here (it is the program's error too: a literal out of range, a value of another type); CF_DEFER leaves the question to
+//evaluation, which knows the program's rule for a declared type
+static enum cfRes cfFitSlot(struct cfVal v, struct type slot, struct token at, long long* bits) {
+    *bits = 0;
+    if (slot.unknown) return CF_OK;
+    if (slot.bType == BASETYPE_BOOL || slot.bType == BASETYPE_CHOICE) {
+        bool kindOk = slot.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
+                    : v.kind == CF_ENUM && TypeIsSame(*v.enumType, slot);
+        if (!kindOk) { Err(at, ERR_CONST_ARG_KIND, &slot); return CF_ERROR; }
+        *bits = (long long)v.i;
+        return CF_OK;
+    }
+    if (v.kind != CF_INT || !PrimInfo(slot.bType)) { Err(at, ERR_CONST_ARG_KIND, &slot); return CF_ERROR; }
+    cfWide x;
+    if (v.declType) { //a declared type's value: its own type, or its base where it flows there (T6b)
+        if (TypeIsSame(*v.declType, slot) || NumericFlows(*v.declType, slot, true)) x = v.i;
+        else return CF_DEFER;
+    } else if (v.prim != BASETYPE_VOID) { //a typed value flows into a built-in type, never into a declared one (T6b)
+        if (slot.owner || (v.prim != slot.bType && !primFlows(v.prim, slot.bType))) { Err(at, ERR_CONST_ARG_KIND, &slot); return CF_ERROR; }
+        x = v.i;
+    } else {
+        x = cfRead(v, primIsUnsigned(slot.bType)); //a literal adapts
+    }
+    if (!cfRange(slot.bType, x)) { Err(at, ERR_CONST_ARG_RANGE, cfText(x), &slot); return CF_ERROR; }
+    *bits = cfBits(x);
+    return CF_OK;
+}
 
 static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out);
 
@@ -2914,25 +3055,44 @@ static enum cfRes cfGlobal(struct cfCtx* c, struct semaModule* mod, struct token
         struct syntax* init = firstPartOfType(decl, SNTX_EXPR);
         if (!init) return CF_DEFER; //its zero value - evaluation knows it
         if (c->depth > 32) return cfFail(c, nameTok, "a global is defined in terms of itself");
-        struct cfCtx inner = *c;
-        inner.mod = mod;
-        inner.bindings = NULL;
-        inner.depth = c->depth + 1;
-        inner.why = NULL;
-        enum cfRes r = cfExpr(&inner, init, out);
-        if (r == CF_ERROR) return cfFail(c, inner.errTok, inner.why);
-        if (r != CF_OK) return CF_DEFER;
         //a declared type is the global's own: the value must be one of it, as its initializer would have to be (T6) -
         //anything that is not plainly a primitive or Bool is evaluation's to judge
         struct syntax* te = firstPartOfType(decl, SNTX_TYPE_EXPR);
+        enum baseType declared = BASETYPE_VOID;
+        bool declBool = false;
         if (te) {
             struct syntax* ref = te->parts.len == 1 && !partAt(te, 0)->isToken ? partSntx(te, 0) : NULL;
             struct syntax* nm = ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 ? firstPartOfType(ref, SNTX_NAME) : NULL;
             if (!nm || nm->parts.len != 1) return CF_DEFER;
             struct str tn = strFromTok(partAt(nm, 0)->tok);
-            enum baseType pb;
-            if (StrCmp(tn, StrFromCStr("Bool"))) return out->kind == CF_BOOL ? CF_OK : CF_DEFER;
-            if (!PrimByName(tn, &pb) || out->kind != CF_INT || !constFits(TypeVanilla(pb), out->i)) return CF_DEFER;
+            if (StrCmp(tn, StrFromCStr("Bool"))) declBool = true;
+            else if (!PrimByName(tn, &declared) || !PrimInfo(declared) || PrimInfo(declared)->kind == 'f') return CF_DEFER;
+        }
+        struct cfCtx inner = *c;
+        inner.mod = mod;
+        inner.bindings = NULL;
+        inner.depth = c->depth + 1;
+        inner.why = NULL;
+        inner.wantUnsigned = declared != BASETYPE_VOID && primIsUnsigned(declared);
+        enum cfRes r = cfExpr(&inner, init, out);
+        if (r == CF_ERROR) return cfFail(c, inner.errTok, inner.why);
+        if (r != CF_OK) return CF_DEFER;
+        if (declBool) return out->kind == CF_BOOL ? CF_OK : CF_DEFER;
+        if (out->kind != CF_INT) return te ? CF_DEFER : CF_OK;
+        if (out->declType) return te ? CF_DEFER : CF_OK;
+        if (declared != BASETYPE_VOID) { //the global's type, which its value must be (T6) and flow into (T6b)
+            cfWide x = out->prim == BASETYPE_VOID ? cfRead(*out, primIsUnsigned(declared)) : out->i;
+            if (out->prim != BASETYPE_VOID && out->prim != declared && !primFlows(out->prim, declared)) return CF_DEFER;
+            if (!cfRange(declared, x)) return CF_DEFER;
+            *out = cfInt(x, declared);
+            return CF_OK;
+        }
+        //"X := 5": a literal's own type (D15)
+        if (out->prim == BASETYPE_VOID) {
+            if (out->hexBits) return CF_DEFER;
+            enum baseType own = cfOwnType(out->i);
+            if (own == BASETYPE_VOID) return CF_DEFER;
+            out->prim = own;
         }
         return CF_OK;
     }
@@ -2940,8 +3100,10 @@ static enum cfRes cfGlobal(struct cfCtx* c, struct semaModule* mod, struct token
         struct var* bc = VarGetList(&buildModule->vars, name);
         if (bc && bc->initExpr && bc->initExpr->isLiteral) {
             if (bc->type.bType == BASETYPE_BOOL) { *out = cfBool(bc->initExpr->intLiteralVal != 0); return CF_OK; }
-            if (TypeIsInt(bc->type) && !TypeIsUnsigned(bc->type)) { *out = cfInt(bc->initExpr->intLiteralVal); return CF_OK; }
-            if (TypeIsInt(bc->type)) return CF_DEFER;
+            if (TypeIsInt(bc->type) && !bc->type.owner) {
+                *out = cfInt(cfFromBits(bc->initExpr->intLiteralVal, bc->type.bType), bc->type.bType);
+                return CF_OK;
+            }
             return cfFail(c, nameTok, "a build constant of text or a float is no constant argument");
         }
     }
@@ -2957,6 +3119,7 @@ static enum cfRes cfCase(struct cfCtx* c, struct type* et, struct token caseTok,
     for (int i = 0; i < et->vars.len; i++) {
         struct var* cs = ListGetIdx(&et->vars, i);
         if (!StrCmp(cs->name, strFromTok(caseTok))) continue;
+        *out = (struct cfVal){0};
         out->kind = CF_ENUM;
         out->i = i;
         out->enumType = et;
@@ -3007,10 +3170,7 @@ static enum cfRes cfConstVar(struct cfCtx* c, struct token nameTok, struct cfVal
         if (b->bType == BASETYPE_TYPEVAR && b->isConstVar) return CF_PATTERN; //bound to another declaration's variable
         if (b->bType != BASETYPE_CONST) return cfFail(c, nameTok, "it reads a type variable as a value");
         if (!b->constKnown || b->unknown) return b->unknown && b->constKnown ? CF_DEFER : CF_PATTERN;
-        struct type of = *b->constOf;
-        out->i = b->constVal;
-        out->kind = of.bType == BASETYPE_BOOL ? CF_BOOL : of.bType == BASETYPE_CHOICE ? CF_ENUM : CF_INT;
-        if (out->kind == CF_ENUM) { out->enumType = MallocOrCrash(sizeof(struct type)); *out->enumType = of; }
+        *out = cfOfConst(*b->constOf, b->constVal);
         return CF_OK;
     }
     if (c->substituting) return CF_PATTERN; //not bound by this substitution: still a pattern
@@ -3020,43 +3180,89 @@ static enum cfRes cfConstVar(struct cfCtx* c, struct token nameTok, struct cfVal
     return cfFail(c, nameTok, "it names no constant variable of this declaration");
 }
 
+//the operators on two integers, computed as the program computes them - in the type the operands meet at, or exactly
+//between two literals (E4a). What the program would wrap, or reports, or decides by where the value lands, is deferred
+static enum cfRes cfIntBinary(struct cfCtx* c, struct token op, struct cfVal a, struct cfVal b, struct cfVal* out) {
+    if (a.declType || b.declType) return CF_DEFER; //a declared type's operators (T29f): evaluation's
+    enum baseType t;
+    cfWide x, y;
+    bool shift = op.type == TOK_BTSFT_L || op.type == TOK_BTSFT_R;
+    if (shift) { //the left operand's type is the result's (E8); a literal shifted by a value takes its landing type (E8b)
+        if (a.prim == BASETYPE_VOID && b.prim != BASETYPE_VOID) return CF_DEFER;
+        t = a.prim;
+        x = t == BASETYPE_VOID ? cfRead(a, c->wantUnsigned) : a.i;
+        y = b.prim == BASETYPE_VOID ? cfRead(b, false) : b.i;
+    } else if (a.prim == BASETYPE_VOID && b.prim == BASETYPE_VOID) {
+        t = BASETYPE_VOID;
+        x = cfRead(a, c->wantUnsigned);
+        y = cfRead(b, c->wantUnsigned);
+    } else if (a.prim != BASETYPE_VOID && b.prim != BASETYPE_VOID) { //two values meet at the wider type (T6b)
+        if (a.prim == b.prim || primFlows(b.prim, a.prim)) t = a.prim;
+        else if (primFlows(a.prim, b.prim)) t = b.prim;
+        else return CF_DEFER; //they do not meet - evaluation reports it as the program does
+        x = a.i;
+        y = b.i;
+    } else { //a value beside a literal: the literal adapts where the type holds it, and meets it at its own type where not (E6d)
+        bool aTyped = a.prim != BASETYPE_VOID;
+        struct cfVal tv = aTyped ? a : b, lv = aTyped ? b : a;
+        cfWide l = cfRead(lv, primIsUnsigned(tv.prim));
+        if (cfRange(tv.prim, l)) t = tv.prim;
+        else {
+            enum baseType own = lv.hexBits ? BASETYPE_VOID : cfOwnType(l);
+            if (own == BASETYPE_VOID || !primFlows(tv.prim, own)) return CF_DEFER;
+            t = own;
+        }
+        x = aTyped ? a.i : l;
+        y = aTyped ? l : b.i;
+    }
+    cfWide r = 0;
+    switch (op.type) {
+        case TOK_LST: *out = cfBool(x < y); return CF_OK;
+        case TOK_LSE: *out = cfBool(x <= y); return CF_OK;
+        case TOK_GRT: *out = cfBool(x > y); return CF_OK;
+        case TOK_GRE: *out = cfBool(x >= y); return CF_OK;
+        case TOK_EQ: *out = cfBool(x == y); return CF_OK;
+        case TOK_NEQ: *out = cfBool(x != y); return CF_OK;
+        case TOK_ADD: if (__builtin_add_overflow(x, y, &r)) return cfFail(c, op, "it is beyond any integer type"); break;
+        case TOK_SUB: if (__builtin_sub_overflow(x, y, &r)) return cfFail(c, op, "it is beyond any integer type"); break;
+        case TOK_MUL: if (__builtin_mul_overflow(x, y, &r)) return cfFail(c, op, "it is beyond any integer type"); break;
+        case TOK_DIV: case TOK_MOD:
+            if (y == 0) return cfFail(c, op, "it divides by zero");
+            r = op.type == TOK_DIV ? x / y : x % y;
+            break;
+        case TOK_BTSFT_L: case TOK_BTSFT_R: {
+            int width = t == BASETYPE_VOID ? 127 : PrimInfo(t)->bits;
+            if (y < 0 || y >= width) {
+                if (t != BASETYPE_VOID) return CF_DEFER; //E8a: evaluation's to report
+                return cfFail(c, op, "it shifts by more than the width");
+            }
+            if (op.type == TOK_BTSFT_R) r = x >> (int)y;
+            else if (__builtin_mul_overflow(x, (cfWide)1 << (int)y, &r)) return cfFail(c, op, "it is beyond any integer type");
+            break;
+        }
+        case TOK_BTWSE_AND: r = x & y; break;
+        case TOK_BTWSE_OR: r = x | y; break;
+        case TOK_BTWSE_XOR: r = x ^ y; break;
+        default: return CF_DEFER;
+    }
+    if (t != BASETYPE_VOID && !cfRange(t, r)) return CF_DEFER; //it wraps (E6c), or is undefined (E6a): evaluation's
+    *out = cfInt(r, t);
+    return CF_OK;
+}
+
 static enum cfRes cfBinary(struct cfCtx* c, struct token op, struct cfVal a, struct cfVal b, struct cfVal* out) {
-    long long r = 0;
     bool ints = a.kind == CF_INT && b.kind == CF_INT;
     bool bools = a.kind == CF_BOOL && b.kind == CF_BOOL;
     switch (op.type) {
         case TOK_ADD: case TOK_SUB: case TOK_MUL: case TOK_DIV: case TOK_MOD:
         case TOK_BTSFT_L: case TOK_BTSFT_R: case TOK_BTWSE_AND: case TOK_BTWSE_OR: case TOK_BTWSE_XOR:
             if (!ints) return cfFail(c, op, "these values do not combine");
-            break;
-        default: break;
-    }
-    switch (op.type) {
-        case TOK_ADD: if (__builtin_add_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
-        case TOK_SUB: if (__builtin_sub_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
-        case TOK_MUL: if (__builtin_mul_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
-        case TOK_DIV: case TOK_MOD:
-            if (b.i == 0) return cfFail(c, op, "it divides by zero");
-            if (a.i == LLONG_MIN && b.i == -1) return cfFail(c, op, "it is beyond 64 bits");
-            *out = cfInt(op.type == TOK_DIV ? a.i / b.i : a.i % b.i);
-            return CF_OK;
-        case TOK_BTSFT_L:
-            if (b.i < 0 || b.i > 62 || a.i < 0 || (a.i >> (62 - b.i)) != 0) return cfFail(c, op, "it is beyond 64 bits");
-            *out = cfInt(a.i << b.i);
-            return CF_OK;
-        case TOK_BTSFT_R:
-            if (b.i < 0 || b.i > 63) return cfFail(c, op, "it shifts by more than the width");
-            *out = cfInt(a.i >> b.i);
-            return CF_OK;
-        case TOK_BTWSE_AND: *out = cfInt(a.i & b.i); return CF_OK;
-        case TOK_BTWSE_OR: *out = cfInt(a.i | b.i); return CF_OK;
-        case TOK_BTWSE_XOR: *out = cfInt(a.i ^ b.i); return CF_OK;
+            return cfIntBinary(c, op, a, b, out);
         case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE:
             if (!ints) return cfFail(c, op, "only numbers are ordered");
-            *out = cfBool(op.type == TOK_LST ? a.i < b.i : op.type == TOK_LSE ? a.i <= b.i
-                          : op.type == TOK_GRT ? a.i > b.i : a.i >= b.i);
-            return CF_OK;
+            return cfIntBinary(c, op, a, b, out);
         case TOK_EQ: case TOK_NEQ:
+            if (ints) return cfIntBinary(c, op, a, b, out);
             if (a.kind != b.kind || (a.kind == CF_ENUM && !TypeIsSame(*a.enumType, *b.enumType)))
                 return cfFail(c, op, "these values do not compare");
             *out = cfBool((a.i == b.i) == (op.type == TOK_EQ));
@@ -3115,15 +3321,21 @@ static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out) {
                 return cfNameChain(c, one, out);
             }
             if (t.type == TOK_BOOL_LIT) { *out = cfBool(t.str.len == 4); return CF_OK; }
-            if (t.type == TOK_CHAR_LIT) { *out = cfInt(decodeCharBody(t.str.ptr + 1, t.str.len - 2)); return CF_OK; }
-            if (t.type == TOK_INT_LIT) {
+            if (t.type == TOK_CHAR_LIT) { //T29h: a Char
+                *out = cfInt(decodeCharBody(t.str.ptr + 1, t.str.len - 2), BASETYPE_BYTE);
+                out->declType = MallocOrCrash(sizeof(struct type));
+                *out->declType = SemanticCharType();
+                return CF_OK;
+            }
+            if (t.type == TOK_INT_LIT) { //exact: a decimal one above I64's maximum is U64's (L10), a hex one its bits (L10a)
                 char buf[t.str.len + 1];
                 memcpy(buf, t.str.ptr, (size_t)t.str.len);
                 buf[t.str.len] = '\0';
                 bool tooLarge;
                 long long v = parseIntLiteralChecked(buf, &tooLarge);
-                if (tooLarge || (intLiteralIsDecimal(t.str) && v < 0)) return cfFail(c, t, "it is beyond I64's range");
-                *out = cfInt(v);
+                if (tooLarge) return cfFail(c, t, "it is beyond 64 bits");
+                *out = cfInt((cfWide)(unsigned long long)v, BASETYPE_VOID);
+                out->hexBits = !intLiteralIsDecimal(t.str) && v < 0;
                 return CF_OK;
             }
             return cfFail(c, t, "a constant argument is an integer, a Bool or an enum case");
@@ -3134,13 +3346,15 @@ static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out) {
             if (r != CF_OK) return r;
             for (int i = nOps - 1; i >= 0; i--) {
                 struct token op = partAt(partSntx(s, i), 0)->tok;
-                if (op.type == TOK_SUB) {
-                    if (out->kind != CF_INT) return cfFail(c, op, "only a number is negated");
-                    if (out->i == LLONG_MIN) return cfFail(c, op, "it is beyond 64 bits");
-                    out->i = -out->i;
-                } else if (op.type == TOK_BTWSE_INV) {
-                    if (out->kind != CF_INT) return cfFail(c, op, "only an integer is inverted");
-                    out->i = ~out->i;
+                if (op.type == TOK_SUB || op.type == TOK_BTWSE_INV) {
+                    if (out->kind != CF_INT) return cfFail(c, op, op.type == TOK_SUB ? "only a number is negated" : "only an integer is inverted");
+                    if (out->declType) return CF_DEFER;
+                    enum baseType t = out->prim;
+                    cfWide x = t == BASETYPE_VOID ? cfRead(*out, c->wantUnsigned) : out->i;
+                    cfWide r2 = op.type == TOK_SUB ? -x
+                                : t != BASETYPE_VOID && primIsUnsigned(t) ? ((((cfWide)1 << PrimInfo(t)->bits) - 1) ^ x) : ~x;
+                    if (t != BASETYPE_VOID && !cfRange(t, r2)) return CF_DEFER; //it wraps (E6c)
+                    *out = cfInt(r2, t);
                 } else if (op.type == TOK_NOT) {
                     if (out->kind != CF_BOOL) return cfFail(c, op, "'not' takes a Bool");
                     out->i = !out->i;
@@ -3156,21 +3370,24 @@ static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out) {
             if (op.type == TOK_IN || op.type == TOK_AT) return CF_DEFER;
             struct cfVal a, b;
             enum cfRes ra = cfExpr(c, partSntx(s, 0), &a);
+            //E7: "and" and "or" short-circuit - the right side is computed only where the left does not decide
+            if ((op.type == TOK_AND || op.type == TOK_OR) && ra == CF_OK && a.kind == CF_BOOL
+                    && (a.i != 0) == (op.type == TOK_OR)) {
+                *out = a;
+                return CF_OK;
+            }
+            if ((op.type == TOK_AND || op.type == TOK_OR) && ra != CF_OK) return ra;
             enum cfRes rb = cfExpr(c, partSntx(s, 2), &b);
             enum cfRes w = cfWorst(ra, rb);
             if (w != CF_OK) return w;
             return cfBinary(c, op, a, b, out);
         }
-        case SNTX_EXPR_COND: {
-            struct cfVal v, cond, other;
-            enum cfRes rv = cfExpr(c, partSntx(s, 0), &v);
+        case SNTX_EXPR_COND: { //E28: the condition picks one value, and only that one is computed
+            struct cfVal cond;
             enum cfRes rc = cfExpr(c, partSntx(s, 2), &cond);
-            enum cfRes ro = cfExpr(c, partSntx(s, 4), &other);
-            enum cfRes w = cfWorst(cfWorst(rv, rc), ro);
-            if (w != CF_OK) return w;
+            if (rc != CF_OK) return rc;
             if (cond.kind != CF_BOOL) return cfFail(c, firstTokAnywhere(partSntx(s, 2)), "the condition is not a Bool");
-            *out = cond.i ? v : other;
-            return CF_OK;
+            return cfExpr(c, partSntx(s, cond.i ? 0 : 4), out);
         }
         default:
             return CF_DEFER;
@@ -3225,12 +3442,37 @@ static struct constArgDecision* constArgDecisionFor(struct str key) {
     return NULL;
 }
 
-//decided by an earlier attempt: its value, or the error saying why it has none (reported, and 0 given)
+//G16b: an instantiation's bindings, as a note says them
+static char* bindingsNote(struct list* bindings) {
+    struct sbuf b = {0};
+    sbufStr(&b, "instantiated here");
+    for (int i = 0; bindings && i < bindings->len; i++) {
+        struct typeBinding* tb = ListGetIdx(bindings, i);
+        char tn[200];
+        DiagSpellType(tb->type, tn, sizeof(tn));
+        sbufStr(&b, i ? ", " : ", with ");
+        sbufS(&b, tb->name);
+        sbufStr(&b, " = ");
+        sbufStr(&b, tn);
+    }
+    return sbufTake(&b).ptr;
+}
+
+//decided by an earlier attempt: its value, or the error saying why it has none - reported once an attempt (at the
+//instantiation that asked for it, G16b), and 0 given
+static struct list constArgReported;
 static bool constArgDecided(struct syntax* node, struct list* bindings, long long* out) {
-    struct constArgDecision* d = constArgDecisionFor(constArgKey(node, bindings));
+    struct str key = constArgKey(node, bindings);
+    struct constArgDecision* d = constArgDecisionFor(key);
     if (!d) return false;
     *out = d->ok ? d->n : 0;
-    if (!d->ok) Err(firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, d->why);
+    if (d->ok) return true;
+    for (int i = 0; i < constArgReported.len; i++) if (StrCmp(*(struct str*)ListGetIdx(&constArgReported, i), key)) return true;
+    ListAdd(&constArgReported, &key);
+    bool context = bindings && bindings->len && instSite.type != TOK_NONE && !ErrMsgSaveContext();
+    if (context) ErrMsgPushContext(instSite, bindingsNote(bindings));
+    Err(firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, d->why);
+    if (context) ErrMsgPopContext();
     return true;
 }
 
@@ -3396,6 +3638,7 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
     }
     struct cfCtx c = (struct cfCtx){0};
     c.mod = mod;
+    c.wantUnsigned = primIsUnsigned(slot.bType);
     struct cfVal v = (struct cfVal){0};
     enum cfRes r = cfExpr(&c, node, &v);
     if (r == CF_ERROR) {
@@ -3413,52 +3656,74 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
         p.tok = firstTokAnywhere(node);
         return p;
     }
-    if (r == CF_DEFER) {
-        long long n;
-        if (constArgDecided(node, currentBindings, &n)) {
-            if (!constFits(slot, n)) { Err(firstTokAnywhere(node), ERR_CONST_ARG_RANGE, n, &slot); return bad; }
+    long long n;
+    if (r == CF_OK) {
+        enum cfRes f = cfFitSlot(v, slot, firstTokAnywhere(node), &n);
+        if (f == CF_ERROR) return bad;
+        if (f == CF_OK) {
             struct type k = TypeConst(slot, n);
             k.tok = firstTokAnywhere(node);
             return k;
         }
-        constArgPending(mod, node, currentBindings, slot);
-        return constUndecided(slot, firstTokAnywhere(node));
     }
-    struct type of = slot;
-    bool kindOk = of.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
-                : of.bType == BASETYPE_CHOICE ? (v.kind == CF_ENUM && TypeIsSame(*v.enumType, of))
-                : v.kind == CF_INT;
-    if (!kindOk && !of.unknown) { Err(firstTokAnywhere(node), ERR_CONST_ARG_KIND, &slot); return bad; }
-    if (!constFits(of, v.i)) { Err(firstTokAnywhere(node), ERR_CONST_ARG_RANGE, v.i, &slot); return bad; }
-    struct type k = TypeConst(slot, v.i);
-    k.tok = firstTokAnywhere(node);
-    return k;
+    if (constArgDecided(node, currentBindings, &n)) {
+        if (!constFits(slot, n)) { Err(firstTokAnywhere(node), ERR_CONST_ARG_RANGE, cfText(cfFromBits(n, slot.bType)), &slot); return bad; }
+        struct type k = TypeConst(slot, n);
+        k.tok = firstTokAnywhere(node);
+        return k;
+    }
+    constArgPending(mod, node, currentBindings, slot);
+    return constUndecided(slot, firstTokAnywhere(node));
 }
 
-//G24/G25: a pattern's value once the constant variables it reads are bound by `bindings` - false while one is not.
-//One that cannot be computed is reported, at the instantiation (G16b), and taken as 0
-static bool constPatternValue(struct type p, struct list* bindings, long long* out) {
+//G24/G25: a pattern's value once the constant variables it reads are bound by `bindings`: CONST_STILL_PATTERN while one
+//is not, CONST_KNOWN with *out, or CONST_UNDECIDED - evaluation's to decide after this attempt, or reported (at the
+//instantiation, G16b) - which fits anything, as an argument not decided yet does, so it is no error of its own
+static void constPatternError(struct type p, struct list* bindings, struct token at, enum diag d, const char* why) {
+    struct str key = constArgKey(p.constExpr, bindings);
+    for (int i = 0; i < constArgReported.len; i++) if (StrCmp(*(struct str*)ListGetIdx(&constArgReported, i), key)) return;
+    ListAdd(&constArgReported, &key);
+    bool context = instSite.type != TOK_NONE && !ErrMsgSaveContext(); //G16b: the instantiation it was computed for
+    if (context) ErrMsgPushContext(instSite, bindingsNote(bindings));
+    if (d == ERR_CONST_ARG_RANGE) Err(at, d, why, p.constOf);
+    else if (d == ERR_CONST_ARG_KIND) Err(at, d, p.constOf);
+    else Err(at, d, why);
+    if (context) ErrMsgPopContext();
+}
+static enum constOutcome constPatternValue(struct type p, struct list* bindings, long long* out) {
     struct cfCtx c = (struct cfCtx){0};
     c.mod = p.constMod;
     c.bindings = bindings;
     c.substituting = true;
+    c.wantUnsigned = primIsUnsigned(p.constOf->bType);
     struct cfVal v = (struct cfVal){0};
     enum cfRes r = cfExpr(&c, p.constExpr, &v);
-    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, p.constMod, bindings))) return false;
+    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, p.constMod, bindings))) return CONST_STILL_PATTERN;
     *out = 0;
+    if (r == CF_ERROR) {
+        constPatternError(p, bindings, c.errTok.type != TOK_NONE ? c.errTok : p.tok, ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
+        return CONST_UNDECIDED;
+    }
     if (r == CF_OK) {
-        if (!constFits(*p.constOf, v.i)) Err(p.tok, ERR_CONST_ARG_RANGE, v.i, p.constOf);
-        else *out = v.i;
-        return true;
+        ErrMsgMuteStart(); //reported once, with its instantiation, below
+        int before = ErrMsgGetNErrors();
+        enum cfRes f = cfFitSlot(v, *p.constOf, p.tok, out);
+        bool failed = ErrMsgGetNErrors() != before;
+        ErrMsgMuteEnd();
+        if (f == CF_OK) return CONST_KNOWN;
+        if (failed) {
+            bool range = v.kind == CF_INT && !v.declType && (v.prim == BASETYPE_VOID || v.prim == p.constOf->bType
+                                                              || primFlows(v.prim, p.constOf->bType));
+            if (range) constPatternError(p, bindings, p.tok, ERR_CONST_ARG_RANGE, cfText(v.prim == BASETYPE_VOID
+                                         ? cfRead(v, c.wantUnsigned) : v.i));
+            else constPatternError(p, bindings, p.tok, ERR_CONST_ARG_KIND, NULL);
+            return CONST_UNDECIDED;
+        }
     }
-    if (r == CF_DEFER) {
-        long long n;
-        if (constArgDecided(p.constExpr, bindings, &n)) { *out = n; return true; }
-        constArgPending(p.constMod, p.constExpr, bindings, *p.constOf);
-        return true;
-    }
-    Err(c.errTok.type != TOK_NONE ? c.errTok : p.tok, ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
-    return true;
+    long long n;
+    if (constArgDecided(p.constExpr, bindings, &n)) { *out = n; return CONST_KNOWN; }
+    constArgPending(p.constMod, p.constExpr, bindings, *p.constOf);
+    return CONST_UNDECIDED;
 }
 
 //T7c: an array's length, known
@@ -3569,7 +3834,10 @@ static struct type* resolveConstraint(struct semaModule* mod, struct syntax* nod
     resolvingConstraint = true;
     struct type c = resolveTypeExpr(mod, node, scopeParams);
     resolvingConstraint = prev;
-    if (c.bType != BASETYPE_INTERFACE) { Err(firstTokAnywhere(node), ERR_CONSTRAINT_NOT_TRAIT, &c); return NULL; }
+    if (c.bType != BASETYPE_INTERFACE) {
+        if (!c.unknown) Err(firstTokAnywhere(node), ERR_CONSTRAINT_NOT_TRAIT, &c); //an unknown name is reported once
+        return NULL;
+    }
     struct type* out = MallocOrCrash(sizeof(struct type));
     *out = c;
     return out;
@@ -5002,7 +5270,7 @@ static void resolveTypeDeclIn(struct type* t) {
                         struct type* decl = TypeGetList(&ct.owner->types, ct.name);
                         if (decl) { resolveTypeDecl(decl); ct = *decl; }
                     }
-                    if (!constParamTypeOk(ct)) { Err(firstTokAnywhere(cn), ERR_CONST_PARAM_TYPE, &ct); ct = unknownTypeStandIn(); }
+                    if (!constParamTypeOk(ct, firstTokAnywhere(cn))) { Err(firstTokAnywhere(cn), ERR_CONST_PARAM_TYPE, &ct); ct = unknownTypeStandIn(); }
                     slot = ct;
                     anyConst = true;
                     struct typeBinding cb = { *(struct str*)ListGetIdx(&declaredParams, i), ct };
@@ -5309,6 +5577,7 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
     const struct operatorShape* sh = NULL;
     for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
         if (!strcmp(operatorShapes[k].name, cap)) sh = &operatorShapes[k];
+    int before = ErrMsgGetNErrors();
     if (sh) {
         //E31: At and SetAt (and their checked forms) take one index or several - "m[i, j]" is At(i, j)
         bool indexes = !strcmp(sh->name, "At") || !strcmp(sh->name, "SetAt") || !strcmp(sh->name, "TryAt")
@@ -5347,6 +5616,8 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
             if (writes) Err(a->tok, ERR_EQ_STR_WRITES, sh->name);
         }
     }
+    //M6b: a lowercase helper that happens to spell a protocol method is held to it - said, since its name says otherwise
+    if (priv && ErrMsgGetNErrors() != before) Note(a->tok, NOTE_PROTOCOL_SPELLING, a->name, cap, cap);
     char* low = protocolPrivateName(cap);
     struct type bare = *ra;
     bare.structMAlloc = false;
@@ -5738,6 +6009,7 @@ static void rejectConstVarClash(struct semaModule* mod, struct str name, struct 
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (isPreludeWord(name) && !isPreludeModule(mod)) Err(tok, ERR_PRELUDE_WORD_REDECLARED, tok); //M19f
 }
 
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
@@ -7329,7 +7601,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     }
     //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
     //built where the declaration lives and registered there. A value took it in, and its destructor never ran
-    struct type t = declaredArrayType(rhs->type);
+    struct type t = declaredArrayType(rhs);
     if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
         t.structMAlloc = true;
         t.refMut = OperandGivesWritable(rhs);
@@ -7477,14 +7749,49 @@ static struct list defaultRecs;
 //there: a signature is resolved before the module's globals have types, so a default naming one ("m Mode =
 //DefaultMode") saw an unfinished global, and a constructor's, resolved with its type, always did
 static struct list paramDefaults; //struct paramDefault*: every one, so those no call needed are built too
+//G23: does a default read a variable its declaration introduced - "struct(k I64 = N * 10)", "F(x I64 = N + 1)"
+static bool syntaxReadsDeclVar(struct syntax* s) {
+    if (!s) return false;
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) return true;
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* p = partAt(s, i);
+        if (p->isToken) {
+            if (p->tok.type == TOK_IDEN && bareVarAt(strFromTok(p->tok), p->tok) > 0) return true;
+        } else if (syntaxReadsDeclVar(p->sntx)) return true;
+    }
+    return false;
+}
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
     struct paramDefault* d = MallocOrCrash(sizeof(struct paramDefault));
     *d = (struct paramDefault){0};
     d->syntax = defNode;
     d->mod = mod;
     d->type = paramType;
+    d->readsVars = syntaxReadsDeclVar(defNode);
+    d->bindings = ListInit(sizeof(struct typeBinding));
     ListAdd(&paramDefaults, &d);
     return d;
+}
+
+//G23: a default reading its declaration's variables, for one instantiation - built with its bindings when a call needs
+//it (paramDefaultOp), as the instantiation's body is checked with them. A further substitution composes
+static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings) {
+    struct paramDefault* b = MallocOrCrash(sizeof(struct paramDefault));
+    *b = *d;
+    b->op = NULL;
+    b->building = false;
+    b->type = paramType;
+    b->bindings = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < d->bindings.len; i++) {
+        struct typeBinding tb = *(struct typeBinding*)ListGetIdx(&d->bindings, i);
+        tb.type = TypeSubstitute(tb.type, bindings);
+        ListAdd(&b->bindings, &tb);
+    }
+    for (int i = 0; i < bindings->len; i++) {
+        struct typeBinding* tb = ListGetIdx(bindings, i);
+        if (!bindingGet(&b->bindings, tb->name)) ListAdd(&b->bindings, tb);
+    }
+    return b;
 }
 
 //D8a: builds a parameter's declared default. Deliberately checked in the DECLARING module's own context
@@ -7493,9 +7800,14 @@ struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defN
 //it - which is why one operand can serve every call site. One that does not fit its parameter is reported
 //here and stands in as the unknown type, so no call reports it again.
 static struct operand* buildParamDefault(struct paramDefault* d) {
+    //G23: one reading its declaration's variables is its instantiations' - the generic's own is never built
+    if (d->readsVars && !d->bindings.len) return unknownPlaceholder(firstTokAnywhere(d->syntax));
     struct checkCtx dctx = {0};
     dctx.mod = d->mod;
+    struct list* prevB = currentBindings;
+    if (d->readsVars) currentBindings = &d->bindings;
     struct operand* def = buildExprFromSyntax(&dctx, d->syntax);
+    currentBindings = prevB;
     //G18: a default for a parameter whose type is a type variable ("alpha <T> = 1") has no type to fit yet - it is
     //fitted at each call, against the instantiation's, a literal adapting there as any literal argument does
     if (TypeIsGeneric(d->type) && def->isLiteral) return def;
@@ -7521,7 +7833,7 @@ struct operand* paramDefaultOp(struct var* param) {
 static void buildParamDefaults(void) {
     for (int i = 0; i < paramDefaults.len; i++) {
         struct paramDefault* d = *(struct paramDefault**)ListGetIdx(&paramDefaults, i);
-        if (d->op || d->building) continue;
+        if (d->op || d->building || d->readsVars) continue; //G23: an instantiation's, built where a call needs it
         d->building = true;
         d->op = buildParamDefault(d);
         d->building = false;
@@ -9069,6 +9381,31 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
             && OperandFitsType(NULL, arg, underlying) != TYPE_FIT_OK
             && (baseElems.arrElem == underlying.arrElem || OperandFitsType(NULL, arg, baseElems) != TYPE_FIT_OK)) {
         Err(arg->tok, ERR_CONVERSION_REPRESENTATION, &arg->type, &target);
+        return operandNew(tok, OPERATION_NONE, target);
+    }
+    //T29a/E32b: an array whose length is known only at run time, converted to a declared type over Array<T, N>, is
+    //the view "v as Array<T, N>&" read under the declared type's name - v's storage, its length checked once, here
+    //(an abort, or OUT_OF_BOUNDS under try). A conversion moves nothing, so the one way to know the length is the check
+    if (target.bType == BASETYPE_ARRAY && !target.arrMalloc && target.arrLen && target.arrElem
+            && arg->type.bType == BASETYPE_ARRAY && arg->type.arrMalloc && arg->type.arrElem && !arg->type.unknown) {
+        struct operand* hi = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT64));
+        hi->isLiteral = true;
+        hi->intLiteralVal = target.arrLen->intLiteralVal;
+        struct operand* sl = OperandSlice(arg, NULL, hi, tok);
+        if (sl->opType != OPERATION_SLICE) return sl;
+        struct type t = target;
+        t.structMAlloc = true;
+        t.refMut = sl->type.refMut;
+        t.scopeParam = sl->type.scopeParam;
+        t.scopeDepth = sl->type.scopeDepth;
+        t.scopeWritten = sl->type.scopeWritten;
+        t.arrElem = MallocOrCrash(sizeof(struct type));
+        *t.arrElem = *target.arrElem;
+        t.arrElem->refMut = arg->type.arrElem->refMut;
+        sl->type = t;
+        sl->sliceExact = true;
+        sl->viaConversion = true;
+        return sl;
     }
     //T29a: a conversion names its argument's storage - a variable, a field, an element or a slice read under the
     //declared type's name, so it may be written exactly as the argument may, and a borrow of it is checked against
@@ -10187,8 +10524,15 @@ static struct var* protocolMethod(struct type t, const char* cap) {
 //M6b: whether code in mod may call m, the protocol method an operation at tok needs on t - a public one from anywhere,
 //a private one only from its own module. Reported where it may not, naming the method: the operation does not exist
 //there (M6), and nothing stands in for it
+struct protocolReported { void* owner; int tokId; struct var* m; };
+static struct list protocolReported; //an operation reaching one private method twice (two fields of one type) says it once
 static bool protocolReach(struct semaModule* mod, struct type t, struct var* m, struct token tok) {
     if (!m || isPublic(m->name) || m->owner == mod || protocolHelperDepth) return true;
+    for (int i = 0; i < protocolReported.len; i++) {
+        struct protocolReported* r = ListGetIdx(&protocolReported, i);
+        if (r->owner == (void*)tok.owner && r->tokId == tok.tokId && r->m == m) return false;
+    }
+    ListAdd(&protocolReported, &(struct protocolReported){(void*)tok.owner, tok.tokId, m});
     bool priv = false;
     const char* cap = protocolOf(m->name, &priv);
     struct type bare = t;
@@ -11155,7 +11499,12 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
         Err(kw, ERR_IS_NOT_REFERENCES, &a->type, &b->type);
         return OperandBoolLiteral(kw);
     }
-    if (!a->isNullLiteral && !b->isNullLiteral && !a->pendingLambda && !b->pendingLambda && !TypeIsSame(a->type, b->type)) {
+    //T7d: an Array<T, N>& meets an Array<T>& as one, as in "==" - a view of N elements of the very storage the other names
+    bool lengthKinds = a->type.bType == BASETYPE_ARRAY && b->type.bType == BASETYPE_ARRAY && a->type.arrMalloc != b->type.arrMalloc
+                       && a->type.arrElem && b->type.arrElem && TypeIsSame(*a->type.arrElem, *b->type.arrElem)
+                       && a->type.owner == b->type.owner && StrCmp(a->type.name, b->type.name);
+    if (!a->isNullLiteral && !b->isNullLiteral && !a->pendingLambda && !b->pendingLambda && !TypeIsSame(a->type, b->type)
+            && !lengthKinds) {
         Err(kw, ERR_IS_NOT_ONE_TYPE, &a->type, &b->type);
         return OperandBoolLiteral(kw);
     }
@@ -11325,13 +11674,13 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
     if (!atName) return unknownPlaceholder(sq); //reported: what is read from it says nothing more
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
-    if (derived && idxs.len > 1) {
+    if (derived && idxs.len > 1) { //reported once: the "try" around it has nothing more to say (R20)
         Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TryAt");
-        derived = false;
+        return unknownPlaceholder(sq);
     }
     if (derived) {
         const char* lenName = operatorMethodName(ctx, base->type, "Len");
-        if (!lenName) Err(sq, ERR_TRY_INDEX_NEEDS_LEN, &base->type);
+        if (!lenName) { Err(sq, ERR_TRY_INDEX_NEEDS_LEN, &base->type); return unknownPlaceholder(sq); }
         else {
             base = heldOnce(ctx, base, sq, "col", &seq);
             struct operand* idx = asParam(ctx, base->type, atName, 1, *(struct operand**)ListGetIdx(&idxs, 0));
@@ -11920,7 +12269,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         errors = callOp->readVar->type.errors;
         rt = callOp->readVar->type.hasRetType ? callOp->readVar->type.retType : NULL;
     } else {
-        Err(tok, ERR_TRY_NOTHING_FAILS);
+        if (!callOp->type.unknown) Err(tok, ERR_TRY_NOTHING_FAILS); //what failed to build was reported already
         return callOp;
     }
     callOp->isTried = true;
@@ -15898,13 +16247,20 @@ static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* a
 //G26: "match <N>" - a constant variable's value picks the case, per instantiation: only the chosen arm is checked and
 //compiled, as G14 says of a type match's
 static int constCaseMatches(struct checkCtx* ctx, struct syntax* alt, struct type bound) {
+    struct type of = *bound.constOf;
     struct cfCtx c = (struct cfCtx){0};
     c.mod = ctx->mod;
+    c.wantUnsigned = primIsUnsigned(of.bType);
     struct cfVal v = (struct cfVal){0};
     enum cfRes r = cfExpr(&c, alt, &v);
     if (r == CF_ERROR) { Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(alt), ERR_CONST_ARG_NOT_COMPUTABLE, c.why); return -1; }
-    struct type of = *bound.constOf;
-    if (r != CF_OK) { //a call: evaluated as the expression it is
+    long long bits = 0;
+    if (r == CF_OK) { //a case's value is one of the matched type's, as in any match (S13)
+        enum cfRes f = cfFitSlot(v, of, firstTokAnywhere(alt), &bits);
+        if (f == CF_ERROR) return -1;
+        if (f == CF_OK) return bits == bound.constVal;
+    }
+    { //a call, or what the fold leaves to evaluation: evaluated as the expression it is
         if (alt->type != SNTX_EXPR) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
         struct operand* op = buildExprFromSyntax(ctx, alt);
         reportTypeFit(OperandFitsType(ctx->func, op, of), op->tok, op, of);
@@ -15913,11 +16269,6 @@ static int constCaseMatches(struct checkCtx* ctx, struct syntax* alt, struct typ
         if (!CtEvaluate(op, of, &val, NULL, &why, NULL)) { Err(op->tok, ERR_CONST_ARG_NOT_COMPUTABLE, why ? why : ""); return -1; }
         return val->i == bound.constVal;
     }
-    bool kindOk = of.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
-                : of.bType == BASETYPE_CHOICE ? (v.kind == CF_ENUM && TypeIsSame(*v.enumType, of))
-                : v.kind == CF_INT;
-    if (!kindOk) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
-    return v.i == bound.constVal;
 }
 static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* arm, struct token tok);
 static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct type bound, struct token opTok,
@@ -17085,7 +17436,7 @@ static bool lambdaValueType(struct var* f, struct operand* v, struct type* out) 
     if (v->isNullLiteral || v->type.isTuple || v->type.bType == BASETYPE_VOID) return false;
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(v)) { *out = *textT; return true; }
-    struct type t = declaredArrayType(v->type);
+    struct type t = declaredArrayType(v);
     //a reference into one of the lambda's own parameters is a borrowed result; anything else is built (O13)
     if (t.scopeParam && !varIsOwnParam(canonicalVar(t.scopeParam), f)) t.scopeParam = NULL;
     t.scopeWritten = false;
@@ -17170,7 +17521,9 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
             if (v.mut && !ep->mut) Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
             if (!typeNode) v.mut = ep->mut;
         }
-        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type); //D9a
+        //D9a, written: a parameter whose type the expected function type supplies is that type's parameter - a generic's
+        //by-value one bound to an array, say, which D9b gives its meaning
+        if (typeNode && v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type);
         giveImplicitScope(&v, &t.scopeVars); //O4b
         ListAdd(&t.vars, &v);
     }
@@ -18391,6 +18744,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     literalShifts = ListInit(sizeof(struct operand*)); //E4a
     zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
     constArgPends = ListInit(sizeof(struct constArgPend)); //G21
+    constArgReported = ListInit(sizeof(struct str));
+    protocolReported = ListInit(sizeof(struct protocolReported));
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     bareErrorType = (struct type){0};
@@ -18412,6 +18767,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
     deferredConstraints = ListInit(sizeof(struct deferredConstraint));
+    constParamEqChecks = ListInit(sizeof(struct constParamEqCheck));
     signaturesResolved = false;
     allModules = ListInit(sizeof(struct semaModule*));
     buildModule = makeBuildModule();
@@ -18449,6 +18805,10 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     //G19: the constraints written types met during that pass, now that every method is known - one not met is reported
     //at its type, and the instantiation's body is not checked (instantiateType)
     signaturesResolved = true;
+    for (int i = 0; i < constParamEqChecks.len; i++) { //G20
+        struct constParamEqCheck* c = ListGetIdx(&constParamEqChecks, i);
+        if (typeDeclaresEq(c->t)) Err(c->tok, ERR_CONST_PARAM_EQ, &c->t);
+    }
     for (int i = 0; i < deferredConstraints.len; i++) {
         struct deferredConstraint* dc = ListGetIdx(&deferredConstraints, i);
         if (checkTypeConstraints(&dc->generic->typeConstraints, &dc->bindings, dc->site)) continue;

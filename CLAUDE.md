@@ -3882,6 +3882,25 @@ Go through this for every change to what olang means - a rule added, revised or 
   point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
   on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`
   spelling (`typeExprIsBareTypeVar`), so the prelude's `acc U = init` in `Fold` failed O25 - it reads `U` now.
+- **A review of constant generics, fixed (G21, G16b, G20, G22, G23, D8a, D9a, D15, T29a, E32b, E10, E10c, T7c, T7d,
+  2026-10-09).** Items 2-12 and 15 of the day's review. **Decided (mine)**: (1) `V3(a)`, `V3` over `Array<T, N>` and `a` of
+  a run-time length, is the E32b view read as `V3` - checked once, `OUT_OF_BOUNDS` under `try` - never a copy (it was
+  invalid IR) (T29a); (2) **the constant-argument fold computes only what it computes exactly, as the program would** -
+  every value typed (a literal exact, E4a), operators in the type the operands meet at (T6b/E6d), 128-bit so `U64`
+  values above `I64`'s maximum and `I64`'s minimum are written as they are - and defers to evaluation (K1) whatever the
+  program would wrap or decides by where it lands (G21; it had computed untyped 64-bit arithmetic, so `Array<I32, B + 1>`
+  with `B U8 = 255` had 256 elements where the program's `B + 1` is 0, and a field's length could exceed what the body
+  computed); a conditional computes only the value it chooses and `and`/`or` short-circuit; an undecided or reported
+  argument is the unknown constant, reported once with its instantiation; (3) D9a judges a lambda's parameter only where
+  its type is written - an omitted one is the expected function type's, D9b's (Sort/Map/Filter on an
+  `Array<Array<I32, 2>>`); (4) a default reading its declaration's constant variables is each instantiation's (D8a/G23);
+  (5) storage over 64KB - a local's, a temporary's - comes from its block's arena, not the stack (T7c; Go's bound);
+  (6) `:=` from a conditional or match of array literals declares `Array<T>`, as a literal does (D15). **Fixed**: G20's
+  "declares no Eq" is judged once methods are known (it never was); `is` meets `Array<T, N>&` and `Array<T>&` as `==`
+  does (E10c); fixed-array copies and `==` are a `memcpy`/loop, not unrolled (18MB of IR for 100,000 elements); constant
+  variables may not be named `print`/`println` (M19f); G16b's notes always keep the outermost (the program's own call);
+  cascades after an unknown trait, a `try` multi-index without `TryAt`, and an M6b error reached twice; a private `len()`
+  of the wrong shape says it is `Len`'s spelling.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

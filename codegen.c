@@ -1273,9 +1273,9 @@ bool typeNeedsRuntimeLengthPromotion(struct type dstT, struct type srcT) {
 //arena-allocated into scopeVal (own by default, or the target's own "&name" tag - see cgResolveScope),
 //not a bare @malloc: a runtime-length array is implicitly reference-shaped for scope-checking purposes even with
 //no explicit "&" marker, since a runtime-known length can never be embedded - see the report. Returns the
-//resulting { i64, ptr } slice value - element-by-element, same convention every other aggregate-building
-//loop in this file already uses (no memcpy intrinsic, kept consistent with e.g. cgAggregateLiteral's own
-//runtime-length-array branch). Also registers each destructor-bearing element found in the fresh buffer (see
+//resulting { i64, ptr } slice value - one memcpy of the elements, or a loop where each row needs storage of its own,
+//so the code is the same size whatever the length (it was unrolled per element: 100,000 elements made 18MB of IR).
+//Also registers each destructor-bearing element found in the fresh buffer (see
 //cgRegisterDtorIfNeeded) - srcT is always a COMPILE-TIME-LENGTH array here (a runtime-length one is never itself promoted
 //again - see typeNeedsRuntimeLengthPromotion), so its own element loop is the exact same compile-time-
 //unrolled shape cgRegisterDtorIfNeeded already walks generically, regardless of whether srcAddr came from
@@ -1357,7 +1357,6 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct 
     //sized by the TARGET's element type: when rows are promoted below, this level holds { i64, ptr }
     //descriptors, not the source's inline rows
     long long dstElemSize = TypeGetSize(*dstT.arrElem);
-    (void)elemSize;
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", bytes, scopeVal, dstElemSize * count);
     char srcStorTy[256];
@@ -1371,19 +1370,45 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct 
     bool promoteElems = typeNeedsRuntimeLengthPromotion(*dstT.arrElem, elemT);
     char dstElemTy[256];
     llvmType(*dstT.arrElem, dstElemTy, sizeof(dstElemTy));
-    for (long long i = 0; i < count; i++) {
+    if (!promoteElems && dstElemSize == elemSize) { //the same elements laid out alike: one copy, whatever the length
+        if (count > 0)
+            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", bytes, srcAddr,
+                    elemSize * count);
+    } else { //each row its own allocation: a loop, so the code is one row's whatever the length
+        int id = ctx->lblCtr++;
+        char condLbl[32], bodyLbl[32], endLbl[32];
+        snprintf(condLbl, sizeof(condLbl), "promote.cond.%d", id);
+        snprintf(bodyLbl, sizeof(bodyLbl), "promote.body.%d", id);
+        snprintf(endLbl, sizeof(endLbl), "promote.end.%d", id);
+        char* idxSlot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca i64\n", idxSlot);
+        fprintf(ctx->fnOut, "  store i64 0, ptr %s\n", idxSlot);
+        cgBr(ctx, condLbl);
+        cgLabel(ctx, condLbl);
+        char* i = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", i, idxSlot);
+        char* more = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp slt i64 %s, %lld\n", more, i, count);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", more, bodyLbl, endLbl);
+        ctx->terminated = true;
+        cgLabel(ctx, bodyLbl);
         char* srcElemAddr = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %lld\n", srcElemAddr, srcStorTy, srcAddr, i);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 0, i64 %s\n", srcElemAddr, srcStorTy, srcAddr, i);
         char* dstElemAddr = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %lld\n", dstElemAddr, dstElemTy, bytes, i);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", dstElemAddr, dstElemTy, bytes, i);
         if (promoteElems) {
             char* row = cgPromoteFixedToRuntimeLength(ctx, *dstT.arrElem, elemT, srcElemAddr, scopeVal);
             fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", row, dstElemAddr);
-            continue;
+        } else {
+            char* v = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, elemTy, srcElemAddr);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", elemTy, v, dstElemAddr);
         }
-        char* v = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, elemTy, srcElemAddr);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", elemTy, v, dstElemAddr);
+        char* next = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", next, i);
+        fprintf(ctx->fnOut, "  store i64 %s, ptr %s\n", next, idxSlot);
+        cgBr(ctx, condLbl);
+        cgLabel(ctx, endLbl);
     }
     cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, bytes);
     char* agg1 = cgNewTmp(ctx);
@@ -1450,6 +1475,25 @@ static long long cgStackAlign(struct type t) {
     if (sz >= 32) return 32;
     long long nat = TypeGetAlign(t);
     return nat > 0 ? nat : 8;
+}
+
+//T7c: storage for a value of type t - a local's, a temporary's. One larger than CG_FRAME_LIMIT (64KB, Go's bound on a
+//variable it keeps in a frame) is taken from the arena of the block it is made in, which reclaims it with the block -
+//an Array<U8, 64000000> local had overflowed the stack at its first touch. Defined where it is made, which comes before
+//every use, as a declaration does; a helper with no arena keeps its frame
+#define CG_FRAME_LIMIT 65536
+static void cgValueSlotAs(struct cgCtx* ctx, char* slot, struct type t, const char* ty) {
+    if (TypeGetSize(t) > CG_FRAME_LIMIT && ctx->ownScopeSlot) {
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, cgScopeSlotAt(ctx, ctx->blockDepth),
+                TypeGetSize(t));
+        return;
+    }
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(t));
+}
+static char* cgValueSlot(struct cgCtx* ctx, struct type t, const char* ty) {
+    char* slot = cgNewTmp(ctx);
+    cgValueSlotAs(ctx, slot, t, ty);
+    return slot;
 }
 
 //TBAA (type-based alias analysis). olang's types cannot be punned (T36): there are no unions, no pointer
@@ -2128,8 +2172,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
     if (op->type.bType == BASETYPE_STRUCT) {
         char storTy[256];
         structAggSpelling(op->type, storTy, sizeof(storTy));
-        char* slot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, storTy);
+        char* slot = cgValueSlot(ctx, op->type, storTy);
         for (int i = 0; i < op->args.len; i++) {
             struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
             //the field's own declared type (not arg->type) is what decides malloc-promotion - a "&"
@@ -2149,8 +2192,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
     //compile-time-length array - the only shape a literal ever builds directly now (see buildArrLiteralLevel)
     char storTy[256];
     llvmType(op->type, storTy, sizeof(storTy));
-    char* slot = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, storTy);
+    char* slot = cgValueSlot(ctx, op->type, storTy);
     for (int i = 0; i < op->args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&op->args, i);
         char* elemAddr = cgNewTmp(ctx);
@@ -2177,8 +2219,7 @@ static char* cgChoiceValue(struct cgCtx* ctx, struct operand* op) {
     struct type t = op->type;
     char ty[256];
     llvmType(t, ty, sizeof(ty));
-    char* slot = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(t));
+    char* slot = cgValueSlot(ctx, t, ty);
     fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
     char* tagAddr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", tagAddr, ty, slot);
@@ -2333,14 +2374,13 @@ char* cgIncDec(struct cgCtx* ctx, struct operand* op, bool prefix, bool inc) {
 char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal);
 
 //runtime-length arrays carry no compile-time length, so equality needs a runtime length-check + elementwise loop
-//(everything else cgDeepEq handles is compile-time-bounded and can be unrolled straight-line)
+//(a fixed array longer than a few elements is compared by the same loop; anything shorter is unrolled straight-line)
 //copies a runtime-length array's ELEMENTS into a fresh buffer of its own, arena-allocated into scopeVal,
 //and returns the resulting { i64, ptr } descriptor. This is what an UNMARKED runtime-length array's
 //assignment does now that T11 is gone: without a marker it is a value, so "b = a" must give b storage of
 //its own rather than pointing it at a's - the same thing "b = a" already did for a compile-time-length
 //array, and the whole point of making the two behave alike. A marked "T[]&" keeps copying the descriptor
-//instead (that is what a reference assignment means, S4a). Length is a runtime value here, so unlike
-//cgPromoteFixedToRuntimeLength's unrolled copy this is a real loop.
+//instead (that is what a reference assignment means, S4a). Length is a runtime value here, so this is a real loop.
 char* cgCopyRuntimeLengthArray(struct cgCtx* ctx, struct type t, char* srcVal, char* scopeVal, char* liveDstAddr) {
     char elemTy[256];
     llvmType(*t.arrElem, elemTy, sizeof(elemTy));
@@ -2634,6 +2674,17 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         char storTy[256];
         llvmType(t, storTy, sizeof(storTy));
         long long n = t.arrLen ? t.arrLen->intLiteralVal : 0;
+        //E10: beyond a few elements a loop, as for a run-time length - the code is one element's whatever the length
+        if (n > 8) {
+            char* da = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } { i64 %lld, ptr undef }, ptr %s, 1\n", da, n, aVal);
+            char* db = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } { i64 %lld, ptr undef }, ptr %s, 1\n", db, n, bVal);
+            struct type rt = t;
+            rt.arrMalloc = true;
+            rt.arrLen = NULL;
+            return cgDeepEqSlice(ctx, rt, da, db);
+        }
         char* acc = "true";
         for (long long i = 0; i < n; i++) {
             char* addrA = cgNewTmp(ctx);
@@ -3019,7 +3070,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                 if (spawnMerges)
                     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", copy,
                             cgScopeSlotAt(ctx, ctx->joinDepth), TypeGetSize(paramT));
-                else fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", copy, ty, cgStackAlign(paramT));
+                else cgValueSlotAs(ctx, copy, paramT, ty);
                 fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", copy, src,
                         TypeGetSize(paramT));
             }
@@ -3049,8 +3100,7 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     if (cgRetViaMemory(func->type)) {
         char ty[256];
         llvmType(*func->type.retType, ty, sizeof(ty));
-        outSlot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", outSlot, ty, cgStackAlign(*func->type.retType));
+        outSlot = cgValueSlot(ctx, *func->type.retType, ty);
     }
     struct list args = ListInit(sizeof(struct cgArg));
     char* target = cgCallTargetAndArgs(ctx, op, &args, NULL, outSlot);
@@ -3522,8 +3572,7 @@ char* cgCond(struct cgCtx* ctx, struct operand* op) {
     struct operand* c = *(struct operand**)ListGetIdx(&op->args, 0);
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
-    char* slot = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(op->type));
+    char* slot = cgValueSlot(ctx, op->type, ty);
     char* cv = cgValue(ctx, c);
     int id = ctx->lblCtr++;
     char thenLbl[32], elseLbl[32], endLbl[32];
@@ -4082,6 +4131,8 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
             cgBufAdd(b, "%.*s.%.*s", t.constOf->name.len, t.constOf->name.ptr, c->name.len, c->name.ptr);
         } else if (t.constOf && t.constOf->bType == BASETYPE_BOOL) {
             cgBufAdd(b, "%s", t.constVal ? "true" : "false");
+        } else if (t.constOf && PrimInfo(t.constOf->bType) && PrimInfo(t.constOf->bType)->kind == 'u') {
+            cgBufAdd(b, "%llu", (unsigned long long)t.constVal); //a U64 constant holds its bits
         } else cgBufAdd(b, "%lld", t.constVal);
         return;
     }
@@ -4883,8 +4934,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             char ty[256];
             llvmType(op->type, ty, sizeof(ty));
             if (!typeIsByRef(op->type)) return "zeroinitializer";
-            char* slot = cgNewTmp(ctx);
-            fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
+            char* slot = cgValueSlot(ctx, op->type, ty);
             if (cgViaMemory(op->type)) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(op->type));
             else fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
             //T7c: an Array<T, N> whose elements' zero value a constructor gives - each element that value, unless it was
@@ -5297,7 +5347,7 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char ty[256];
     llvmType(s->var.type, ty, sizeof(ty));
     char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(s->var.type));
+    cgValueSlotAs(ctx, slot, s->var.type, ty);
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
     //D15c: "x T[N] = v" / "x T[expr] = v" - every element gets v
     if (s->fillValue) {
@@ -5439,7 +5489,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
         llvmType(s->var.type, ty, sizeof(ty));
         char* rhs = cgValueForTarget(ctx, s->forInit, s->var.type, NULL);
         char* slot = cgDeclareLocal(ctx, s->var.name, s->var.type);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(s->var.type));
+        cgValueSlotAs(ctx, slot, s->var.type, ty);
         cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
         cgStoreInto(ctx, s->var.type, s->forInit->type, rhs, slot, NULL, false, OperandIsLvalue(s->forInit), false);
     }
@@ -5520,8 +5570,7 @@ void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL,
 char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
-    char* slot = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(op->type));
+    char* slot = cgValueSlot(ctx, op->type, ty);
     cgMatchInto(ctx, ListGetIdx(&op->comprBody, 0), slot, op->type);
     return cgLoadOrAddr(ctx, op->type, slot, false);
 }
@@ -5840,8 +5889,7 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     if (cgRetViaMemory(func->type)) {
         char ty[256];
         llvmType(*func->type.retType, ty, sizeof(ty));
-        outSlot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", outSlot, ty, cgStackAlign(*func->type.retType));
+        outSlot = cgValueSlot(ctx, *func->type.retType, ty);
     }
     struct list args = ListInit(sizeof(struct cgArg));
     char* target = cgCallTargetAndArgs(ctx, callOp, &args, NULL, outSlot);

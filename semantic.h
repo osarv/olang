@@ -297,6 +297,8 @@ struct paramDefault {
     struct type type; //the parameter's declared type, which the default fits
     struct operand* op; //NULL until built
     bool building;
+    bool readsVars;      //G23: it reads a constant (or type) variable of its declaration - built per instantiation,
+    struct list bindings; //with that instantiation's bindings (struct typeBinding); empty in the generic's own
 };
 
 struct var {

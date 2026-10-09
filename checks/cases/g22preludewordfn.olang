@@ -1,0 +1,6 @@
+# check: fail error[M19f]: 'println' is the prelude's function, seen in every module - choose another name
+# G22/M19f: nor is a function's
+fn f(a Array<I64, <println>>&) I64 { return println }
+fn main() ? {
+    println($f(I64[1, 2]))
+}
