@@ -490,6 +490,13 @@ because what it finds about structure feeds the refactor.
   mprotect them) so a read of freed memory gives a recognisable value or faults; extend the fuzzer with scope-stress
   programs (lend, copy out, return, spawn, slice) whose -d/-i difference then flags a UAF mechanically. The same oracle
   serves the port's M6 acceptance.
+- 02:00 CEST: boot merged and pushed (1be85eb): C sources in bootstrap/, runtime IR in bootstrap/runtime.c, dead code
+  and stale comments gone (IR byte-identical on 743 files), `make bootstrap` builds build/stage0, bootstrap/README.md
+  and CHAIN. LEFT for after s4sem: semantic.c cleanup (dead TypeFromType, TypeDescribe, VarListAddSetOrigin,
+  findLoadedModule, semaModuleCmpForList, flushPendingDischarges, typeHasNamedScopeTag, varCmpForList, the walker
+  structContainsBareScopeField, stale comments) with the same IR comparison (scripts in the scratchpad: collect.sh,
+  fakebin/, all.sh). Started wt-scopesan (poison + quarantine closed chunks under a debug mode, validate on the review
+  repros, scope-stress fuzzer). Running: s4sem, rv3fix, oann-p7, scopesan.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
