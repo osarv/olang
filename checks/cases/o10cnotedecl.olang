@@ -1,0 +1,21 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# also: note: 'c' is declared here, in a block that closes first - declare it where 'ok' lives: 'c Counter&ok = ...'
+# B11: an obligation an argument from a loop body cannot meet - the note names the declaration to change
+type Counter struct() {
+    n mut I64 = 0
+}
+type Button struct(label String&) {
+    label
+    onClick mut fn() = null
+}
+fn wire(b mut Button&, c mut Counter&) {
+    b.onClick = fn() { c.n++ }
+}
+fn main() ? {
+    ok Button& = Button("OK")
+    for i in range 2 {
+        c Counter& = Counter()
+        wire(ok, c)
+    }
+    ok.onClick()
+}

@@ -1,7 +1,7 @@
-# Os - the program's command line and environment, running commands, and files and directories. Ordinary olang on
-# top of "extern fn" (§11), like std/io: the C library's own functions where they take and give numbers, and the
-# runtime's (X6) where C would hand back a pointer, a structure or errno. A path is text; the C library wants it
-# NUL-terminated, so each call here passes "$path "\0"".
+# Os - the program's command line and environment, running programs (Run through a shell, Exec without one), and files
+# and directories. Ordinary olang on top of "extern fn" (§11), like std/io: the C library's own functions where they
+# take and give numbers, and the runtime's (X6) where C would hand back a pointer, a structure or errno. A path is
+# text; the C library wants it NUL-terminated, so each call here passes "$path "\0"".
 
 import "io"
 
@@ -23,6 +23,9 @@ extern fn __olang_err() I32
 extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
 extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
+extern fn waitpid(pid I32, status Array<I32>, options I32) I32
+extern fn memfd_create(name Array<U8>, flags U32) I32
 
 # why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
 # every other
@@ -108,6 +111,81 @@ fn Run(cmd String&) I32 {
     if status < 0 { return 127 }
     if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
     return status / 256
+}
+
+# what a program Exec ran did: the status it ended with - its exit status, or 128 plus the signal that ended it, as a
+# shell reports it - and everything it wrote to its standard output and its standard error
+type Output struct(Status I32, Stdout String&, Stderr String&) {
+    Status
+    Stdout
+    Stderr
+}
+
+# runs the program args[0] with args as its command line - no shell between, so each argument reaches it as it is,
+# whatever it holds - and waits for it to end. Its standard input is "input" and then the end of the file; what it
+# writes to its standard output and error is gathered, in full, into what Exec gives back, built where the caller puts
+# it. args[0] is looked up through PATH unless it holds a '/'. A program that runs and fails is no error here: its
+# status says so. Exec fails, with the OsError naming why, only when the program cannot be started - NOT_FOUND (no
+# such program), DENIED (not executable) - or with FAILED when there is nothing to run, an argument holds a zero byte
+# (which no command line can carry), or the system refuses what Exec needs. Output is gathered in memory files the
+# program writes into as fast as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output.
+fn Exec(args Array<String&>&, input Array<U8>& = "") Output ? OsError {
+    if args.Len() == 0 { error OsError.FAILED }
+    size I64 = 0
+    for a in args {
+        zero := true
+        try a.FindByte(0) catch { zero = false }
+        if zero { error OsError.FAILED }
+        size += a.Len() + 1
+    }
+    line := Array<U8>(size)                         # the arguments, each ended by a zero byte
+    at I64 = 0
+    for a in args {
+        for c in a {
+            line[at] = c
+            at++
+        }
+        at++
+    }
+    feed := try memFile()
+    defer close(feed)
+    try io.Write(feed, input) catch io.IoError { error OsError.FAILED }
+    lseek(feed, 0, 0)
+    out := try memFile()
+    defer close(out)
+    errs := try memFile()
+    defer close(errs)
+    pid := __olang_spawn(line, args.Len(), feed, out, errs)
+    if pid < 0 { try raise(__olang_err()) }
+    waited := Array<I32>(1)
+    if waitpid(pid, waited, 0) < 0 { try raise(__olang_err()) }
+    status I32 = (waited[0] >> 8) & 0xFF
+    if (waited[0] & 0x7F) != 0 { status = 128 + (waited[0] & 0x7F) }      # ended by a signal
+    return Output(status, try readBack(out), try readBack(errs))
+}
+
+# a file in memory, with no name in the file system: written and read through its descriptor as any file, gone once
+# closed - and closed in any program Exec starts (MFD_CLOEXEC), but for the copies it is given as its standard streams
+fn memFile() I32 ? OsError {
+    fd := memfd_create("olang\0", 1)
+    try check(fd)
+    return fd
+}
+
+# everything written to the file fd, from its start, as text built where the caller puts it
+fn readBack(fd I32) String& ? OsError {
+    size := lseek(fd, 0, 2)
+    if size < 0 { try raise(__olang_err()) }
+    lseek(fd, 0, 0)
+    text String&return = String(Array<U8>(size))
+    got I64 = 0
+    for got < size {
+        n := read(fd, text[got:], size - got)
+        if n < 0 { try raise(__olang_err()) }
+        if n == 0 { error OsError.FAILED }
+        got += n
+    }
+    return text
 }
 
 # the whole of the file at "path", built where the caller puts it, or where the scope argument says
@@ -479,4 +557,61 @@ test "what os gives back lives where it is put" {
     assert names.Len() == 3 and names[0] == "aa" and names[1] == "bb" and names[2] == "ln"
     assert link == "bb"
     assert real.EndsWith("/build/os_files/c/bb")
+}
+
+test "Exec runs a program without a shell, and gathers what it writes" {
+    r := try Exec(String&["printf", "%s|%s|%s", "two words", "it's", "$HOME;*"]) catch { fail }
+    assert r.Status == 0 and r.Stdout == "two words|it's|$HOME;*" and r.Stderr == ""
+    e := try Exec(String&["sh", "-c", "echo out; echo err >&2; exit 3"]) catch { fail }
+    assert e.Status == 3 and e.Stdout == "out\n" and e.Stderr == "err\n"
+    k := try Exec(String&["sh", "-c", "kill -9 $$"]) catch { fail }
+    assert k.Status == 137 and k.Stdout == ""                 # ended by signal 9: 128 + 9, as a shell says
+}
+
+test "Exec feeds its input to the program's standard input" {
+    c := try Exec(String&["cat"], "line one\nline two") catch { fail }
+    assert c.Status == 0 and c.Stdout == "line one\nline two"
+    w := try Exec(String&["wc", "-c"]) catch { fail }             # no input: the end of the file at once
+    assert w.Stdout.Trim() == "0"
+    bytes := Array<U8>(70000, 'x')
+    big := try Exec(String&["wc", "-c"], bytes) catch { fail }
+    assert big.Stdout.Trim() == "70000"
+}
+
+test "Exec takes any amount of output without waiting on it" {
+    big := try Exec(String&["head", "-c", "3000000", "/dev/zero"]) catch { fail }
+    assert big.Status == 0 and big.Stdout.Len() == 3000000 and big.Stdout[2999999] == 0
+    both := try Exec(String&["sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2"]) catch { fail }
+    assert both.Stdout.Len() == 200000 and both.Stderr.Len() == 300000
+}
+
+test "Exec fails only when the program cannot be started" {
+    missing := false
+    try Exec(String&["olang-no-such-program"]) catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
+    assert Run("mkdir -p build/os_files && printf '#!/bin/sh\\necho hi\\n' > build/os_files/noexec.sh && chmod -x build/os_files/noexec.sh") == 0
+    denied := false
+    try Exec(String&["build/os_files/noexec.sh"]) catch OsError.DENIED { denied = true } catch { }
+    assert denied
+    nothing := false
+    try Exec(Array<String&>(0)) catch OsError.FAILED { nothing = true } catch { }
+    assert nothing
+    zero := false
+    try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch OsError.FAILED { zero = true } catch { }
+    assert zero
+    assert Run("chmod +x build/os_files/noexec.sh") == 0
+    ok := try Exec(String&["build/os_files/noexec.sh"]) catch { fail }
+    assert ok.Status == 0 and ok.Stdout == "hi\n"
+}
+
+# what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
+fn echoed(i I64) Output {
+    return try Exec(String&["echo", "run " $i]) catch { fail }
+}
+
+test "what Exec gives back lives where it is put" {
+    a := echoed(1)
+    b := echoed(2)
+    assert churn() > 0
+    assert a.Stdout == "run 1\n" and b.Stdout == "run 2\n" and a.Status == 0
 }

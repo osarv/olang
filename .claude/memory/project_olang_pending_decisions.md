@@ -68,12 +68,40 @@ each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choic
 kernels shared so an eager tape can be added - olang's arenas make a per-step tape cheap: one scope per step);
 transformers first after the MNIST MLP; optimizers: plain AdamW AND "AdamW with the regularisation of orthonormal
 projection as (I - alpha x x^T)".
-11. (asked 2026-10-09) what exactly is the orthonormal-projection AdamW? Readings: (a) a decoupled regularizer per
-   weight matrix applied after the AdamW step, W <- (I - a W W^T) W (penalizing large singular values; Newton-Schulz
-   with a = 0.5 and an extra 0.5 W pushes toward orthonormal); (b) projecting each parameter vector's Adam update,
-   u <- (I - a x x^T) u with x the (normalized) weight row - AdamP-like, removing the radial component. Also: does it
-   replace weight decay or add to it, and which parameters (weight matrices only, not biases/norms)? Default: build
-   plain AdamW first; the variant waits for the answer. Rec: (a) if the goal is near-orthonormal weights.
+11. (asked 2026-10-09; the user: the regularizer is from "Nested Learning: The Illusion of Deep Learning
+   Architectures", Behrouz et al., NeurIPS 2025) my reading, to confirm: the paper's delta rule / Delta Gradient
+   Descent - for a linear layer y = W x, W <- W (I - a x x^T) - lr * (AdamW update), where x is the layer's INPUT (the
+   key), not the weights; per batch W <- W - (a/B) (W X^T) X (two GEMMs, as cheap as a forward pass), optionally
+   normalized by ||x||^2 per sample (the unofficial implementation's default). The user (2026-10-09): "It replaces the weight
+   decay I think" - so the term REPLACES AdamW's weight decay in this variant. Still open: normalized or not; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
+   container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
+12. (asked 2026-10-09, const generics design - wt-constgen becd37f, spec only) run-time dimensions: in the library
+   (`Dynamic I64 = -1`; Matrix stores rows/cols when a dimension is Dynamic; `Matrix<F32, Dynamic, 784> @
+   Matrix<F32, 784, 128>` checks 784 at compile time) or a language-level `_` (hidden storage and hidden run-time
+   checks in every generic)? Default/rec: the library.
+13. (asked 2026-10-09) `Array<T, N>&` puts a length in a reference type again (reversing T11a for fixed arrays) -
+   forced by D9a (array parameters are references); the alternative is fixed arrays by value (on hold). Rec: keep D9a.
+14. (asked 2026-10-09) a constant variable is written `<N>` in expressions too (`for i in range <N>`, `i < <N>`),
+   one spelling as G8b - or bare `N` in bodies (reads better, two spellings)? Default: `<N>`. Rec: `<N>` (the
+   agent's call; flagged because it is the most visible syntax choice).
+**Decided 2026-10-09 (the user, on settling networks):** "Don't do licenses. Take inspiration from [the source] but
+don't mention it specifically. We are really only interested in the dynamics, not the actual implementation. Don't
+call it [that], call it something else." -> the paradigm is "settling networks" (reciprocal regions iterating to an
+equilibrium, local free/nudged-phase learning, eligibility traces with a broadcast reward signal, associative memory,
+arousal gating, offline consolidation); oann/docs/settling.md describes the dynamics as oann's own model, never naming
+or linking the inspiration (also not in code, comments, commits or memory); no licence work. Transformers first, then
+settling networks. FPGA target: PYNQ-Z2 (Zynq-7020). Details mine: Circuit<T> beside Graph<T> in oann sharing Matrix,
+planner and optimizers; one stream first; validation by finite differences and analytic fixed points.
+Licence workaround (the user: "I really don't want to make myself forced to license"): clean room - copyright covers
+code, not ideas, equations or dynamics. docs/settling.md is the spec: dynamics only, each mechanism cited to the public
+literature (equilibrium propagation, centered EP, Hopfield relaxation, TD(lambda)/eligibility traces, three-factor
+rules, delta-rule associative memory, complementary learning systems), oann's own constants and API. RULE for every
+future agent implementing settling networks: work only from docs/settling.md and the papers - never open the original
+repository or its code. Not legal advice; told the user so.
+18. (asked 2026-10-09, re-explained when the user asked "what is 18?") spiking: should the settling networks' neuron
+   be pluggable so a spiking neuron (leaky integrate-and-fire, learning from spike-count differences between the free
+   and nudged phases) can replace the continuous one later - and is that the spiking direction meant for the FPGA?
+   Default: a pluggable neuron enum, continuous neurons first.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

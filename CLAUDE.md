@@ -3507,6 +3507,91 @@ Go through this for every change to what olang means - a rule added, revised or 
   `note:` at the other declaration. Found already working: `x := "abc" if c else "no"` (E28/D15, pinned by a test).
   **Not fixed (the scope agent's)**: `for w in root.kids` over `List<mut Widget&>` with `Widget` holding a `mut`
   reference field still fails inside `ListIter.Next` (C2d, the recorded `At`/element limit).
+- **`std/json`, `os.Exec` and `std/http` (X6, 2026-10-09, the coordinator's request: JSON as a recursive enum tree,
+  running a program without a shell, HTTP by running curl).** **`std/json`**: `Json` is an enum held by reference -
+  `Null`, `Bool(v)`, `Num(v F64)`, `Str(s String&)`, `Arr(items Array<Json&>&)`, `Obj(o Object&)` - and a tree **never
+  changes once built**: every payload is read-only, so nothing can be stored through one (O25g never asks exactness),
+  parts may be shared, and `List<Json&>`/for-in over items just work - a first version with `List`s and `mut` objects
+  in the payloads hit the prelude's ListIter C2d limit, as the usage study's JSON parser did. An `Object` keeps its
+  members' order (`Keys`, `Values` arrays) and, above eight members, a private open-addressed index of the names -
+  measured, a hashed lookup is ~11ns flat, a linear one 9-17ns up to eight and 62ns at 32. Building in code is
+  `Json.Obj(json.Object(names, values))`. **`json.Parse(text, at = null) Json& ? JsonError`**: RFC 8259 exactly
+  (JSONTestSuite: every y_ accepted, every n_ rejected), iterative (no recursion; nesting beyond `MaxDepth`, 1000, is
+  `DEPTH`), strings copied so the tree outlives the text, UTF-8 validated, `\u` surrogate pairs to UTF-8 and a lone
+  surrogate `BAD_ESCAPE`, a leading BOM passed over, a repeated name kept with lookups answering the last (as most
+  readers do). Errors carry no data (T20), so where a parse stopped is written into a `Position` the caller passes -
+  `try json.Parse(text, at) catch JsonError { ... $at ... }` is "LINE:COL", the column counting characters. Words:
+  `UNEXPECTED UNTERMINATED BAD_ESCAPE BAD_NUMBER BAD_UTF8 TRAILING DEPTH` for reading, `MISSING WRONG_KIND` for asking -
+  one type, so a function that parses and asks declares one. **Where it lives**: Parse's reader is itself built in the
+  result scope and builds every node, string and array through its own growable stacks, so the whole tree is where the
+  caller puts the result and the reader's garbage is one stack. **Numbers, exactly, in olang** (no strtod, so Parse is
+  K1-evaluable and asserts on it are decided while compiling): Clinger's fast path, Eisel-Lemire with Go's 128-bit
+  table, and Go's simple-decimal conversion when that cannot decide - verified identical to Python's `float()` on 2.2M
+  inputs (halfway cases, subnormals, 900-digit numbers); beyond `F64` is `BAD_NUMBER`, below is zero. **Asking**:
+  `j[key]` and `j[i]` only under `try` (`TryAt` generic over `String`, `String&`, `I32`, `I64` by `match <K>`; a try
+  over an index chain checks each link), `key in j`, `AsNum AsInt AsBool AsStr AsArr AsObj` (`? JsonError`), `IsNull`;
+  the idioms are `try (try doc["a"][0]).AsStr()` or `try (doc["a"][0] as Json.Str)`. `Eq` (objects in any order) and
+  `Hash`; `Str`, so `$doc` is its compact text. **`json.Encode(j, indent = "")`**: compact, or one item per line;
+  numbers as the **shortest text that reads back** (Schubfach, with the same table: Python's repr digits on 488k values,
+  laid out as `$` lays numbers out) - `$` on a float costs ~20us (seventeen snprintf/strtod tries, twice) and made a
+  float-heavy encode 160x slower; NaN and infinities as `null`, as JavaScript writes them. Measured on 5-7MB files:
+  parse 100-240MB/s (cJSON 73-282, jansson 33-51, json-c 49-257; 2x cJSON on numbers), encode 28-64ms against cJSON's
+  25-607ms. **`os.Exec(args, input = "") Output ? OsError`**: runs `args[0]` (PATH unless it holds a `/`) with `args`
+  as its command line through a new runtime function, `__olang_spawn` (posix_spawnp, no shell; X6, and `-i` has its
+  own); stdin, stdout and stderr are **memory files** (`memfd_create`), so it never deadlocks on a pipe and needs no
+  poll or tasks; `Output{Status, Stdout, Stderr}` with a shell's status (128 + a signal); a program that fails is no
+  error, failing to start is (`NOT_FOUND`, `DENIED`, `FAILED` for no arguments or a zero byte in one). **`std/http`**:
+  `Get(url, headers)`, `Post(url, contentType, body, headers)`, `Send(method, url, headers, body, timeoutMs)` give a
+  `Response{Status, Headers, Body}` (`r.Header(name)`, case-insensitive) - **a 4xx/5xx is a response**, `HttpError` is
+  for no response (curl's exit status: `NO_CURL BAD_URL INVALID RESOLVE CONNECT TIMEOUT TLS REDIRECTS TRANSFER FAILED`).
+  curl must be installed; it runs with `-q` (no curlrc), `--proto =http,https` (redirects too), ten redirects at most,
+  the header fields dumped to its stderr and the last block read (proxy CONNECT, 100 Continue and redirects come
+  before it), every part an argument of its own; a line break or zero byte in a header, a method that is not letters,
+  is `INVALID` before anything runs. Tested offline on canned dumps and live against a local Python server (skipped,
+  as passed, where curl or python3 is missing). **Decided (mine)**: all of the above names and shapes; memfds over
+  pipes; one error type for JSON; NaN as null rather than an error (Encode stays infallible, so `Str` can call it).
+- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, O13c,
+  O17, D16d, C2d, O25c, T22a, T25b, G18, B11, 2026-10-09).** From a study that wrote 15 programs and marked every
+  workaround. **Copies (O25h)**: a value holding references copied from existing storage keeps them where the source's
+  are, typed or `:=` (it was the copy's block, so `t := a[i]; a[i] = a[j]; a[j] = t`, a parallel swap, `Sort` on
+  records holding text, `for wc in recs { out.Push(wc.word) }` and an argmin `best = x` were rejected); that home
+  (`refsHome`, now with a depth and the program's scope) is a claim like a reference's scope - assignments are held to
+  it and temporaries assigned into it built there. **Decided (mine)**: a copy's home is its references' only, never
+  its storage's (borrowing a copy hands over its block). **Other over-rejections fixed**: a catch block's statements
+  flushed the enclosing statement's pending discharges, so `n := try m.Get(k) catch { error }` never landed (now each
+  statement flushes its own); a call result passed on as an argument or walked by for-in (`adj[a].Push(v)`, `for x in
+  adj[a]`) lands by its obligations as `:=` does (O18c); a number read out of a call carried that call's scope
+  bindings, tainting a later call it indexed (`v I32 = q[0]; g.adj[v]`); `v := e; return v` with `e` a parameter's
+  `&p` field was refused as building through it - a derived scope (O23a) is exact for what it is; a lambda returned
+  where it is made, capturing several scopes, is built in the result scope with each capture an obligation (D16d -
+  `compose(f, g)`); an enum field's case rebuilt from its own payload (r11) follows from the copy home; a static
+  literal's elements stored into a longer-lived array (a program-scope referent outlives every non-exact slot, O25c);
+  one exact C2d binding between two scope variables is an equality obligation as several were (the prelude's `Map.add`
+  now rebuilds a reused slot's entry whole). **r13, the decision given**: a local written as a bare type variable
+  (`acc <U> = init`) takes its initializer's scope (O25a); and a type-variable result has its argument's permission in
+  a function type too (T25b), so a lambda's result meets it. **Use-after-frees found on the way, all pre-existing**:
+  returning an element of a local array, or a local array, whose elements' references live in the function's block
+  (now O26 - a struct or enum built here is still judged by its bindings); a field store into a constructed local then
+  a return judged by the stale construction binding (the store now rebinds); a return inside a loop judged before a
+  later reassignment in the same loop (O13a: each such return is judged again by every assignment in its loop); a copy
+  of a global's element reassigned a local value and stored back (the program claim was a flag nothing enforced).
+  **Diagnostics (B11, mine)**: one error about where something lives per statement, and a note at the local the
+  offending value was made as naming the fix (`make it where 'st' lives: 'ReadFile&st(...)'`, `'c Counter&ok = ...'`).
+  **T22a, decided (mine)**: a function type whose result is a type variable bound to a reference requires each
+  reference argument to outlive its result scope (exactly where stores are possible); calls through such a value are
+  held to it, and a lambda requiring no more fits - so `Fold` can keep one of its elements. **From the matrix library
+  (the coordinator's batch)**: an ordinary call's result no longer carries its arguments' bindings (only a
+  constructor's does), so `return copyOf(id.Data)` / `return x + x` is not O26; a value local's own storage is its
+  block wherever its references were built (`valueHome` is their home only), so `b := Box&return(n); b.size()` and
+  `f(b.Data)` work, and a lend through which the callee could keep what it builds in the value's own slots (not its
+  `&p` fields) is refused with the fix named (O17 - before, it bound the callee to the result scope while the value
+  sat in the block, a use-after-free the other way round); a typed `null` default fits any scope (`Box&return(n)`);
+  and a literal default for a type-variable parameter is fitted per call (G18). **Found after the merge with checker
+  batch 2**: the study's JSON reader no longer compiled - O25h's exactness inside `List.Push` (a `Pair<String&,
+  Json&>` element) was an error between two scope variables where it is an equality obligation (as C2d's now is), and
+  the program shows it. **Not done**: r14's permission inference (a local's writable reference binds a type variable
+  writable) is the type checker's. Study: every scope workaround reverts and the programs give the same output;
+  report's `sum.biggest = s.item` is left by T25b (a `mut` field of a reference type is a writable reference).
 - **`std/linalg`: `Matrix<T>`, the operand of numeric code, and `std/rand` (2026-10-09; the user: the matrix library
   "should work as the base for all operations and operands", efficiency first, a 2-D `Matrix` rather than a tensor).**
   `Matrix<T>` is row-major with a row stride and is a **view** - shape, stride and a reference to storage - so a copy

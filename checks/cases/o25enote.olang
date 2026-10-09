@@ -1,0 +1,23 @@
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# also: note: 'text' is made here, in a block that closes first - make it where 'st' lives: 'mk&st(...)'
+# never: error[O25e]
+# B11: arguments a signature requires in one scope, one made in a block that closes first - one error for the one
+# cause, with a note naming the declaration to change and what to write there
+type Store struct() {
+    keys mut List<String&>& = List<String&>()
+}
+fn (s mut Store&) put(k String&s, v String&s) {
+    s.keys.Push(k)
+    s.keys.Push(v)
+}
+fn mk(n I64) String& { return $n "x" }
+fn load(n I64) Store& {
+    st Store&return = Store()
+    text := mk(n)
+    st.put(text[:1], text[1:])
+    return st
+}
+fn main() ? {
+    s := load(4)
+    assert s.keys.Len() == 2
+}

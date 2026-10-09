@@ -212,6 +212,19 @@ because what it finds about structure feeds the refactor.
   an importable package. Queued small language items from it: `x[i, j]` -> At(i, j)/SetAt(i, j, v) (E31 multi-index);
   a hex/binary literal with the top bit set fits U64 (L10a); a failed test assert prints its file:line. Phase 2 waits
   for the matrix library (then update /home/user/wt/oannc and resume it).
+- 11:40: merged stdjson (644853a: std/json immutable tree, pure-olang float parse/print bit-exact with Python,
+  os.Exec via memfd, std/http over curl) and chk2scope (b92a952, verified by me after merging: r06-r13, lit2, Map.add,
+  the linalg agent's three, `alpha <T> = 1`, one scope error per statement with a note naming the fix, and five
+  use-after-frees). constgen phase 2 resumed (defaults for questions 12-14). QUEUED small-fixes batch (start after the
+  12:00 reset): SILENT MISCOMPILE - a local named like a method makes `x.method()` call the local (codegen
+  cgNamedTarget looks up func->name as a local even for methods; /home/user/review/stdjson/method_named_local.olang);
+  hex/binary literal with the top bit set fits U64 (L10a); a generic bound to a by-value String rejected with O10d
+  (generic_string_value_eq.olang); `$` on a float ~20us (17 snprintf+strtod tries, rendered twice) - use the
+  Schubfach in std/json for the runtime and evaluator; ParseFloat into the prelude as String.ParseFloat (from
+  std/json); multi-index `x[i, j]` -> At(i, j)/SetAt(i, j, v); a failed test assert prints file:line; cascades (E14
+  then O10d; TryAt chain; missing final `}`); the study leftovers: kvtool:89 and matrix:127 invalid IR, calc:157 crash,
+  widgets:26 generic snapshot (/home/user/review/study, programs migrated in chk2scope's notes); std-gaps (List
+  Pop/Clear/Remove/Sort/List(n, fill), Map Keys/Values/Clear, Join, String ToUpper/ToLower/Replace/Repeat).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
