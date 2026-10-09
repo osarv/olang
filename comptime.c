@@ -2288,7 +2288,7 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
         else ctExecBlock(st, &s->nomatchBlock);
     } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
         if (ctRun) ctRunAbort("reached unreachable code\n");
-        ctFail(st, s->op ? s->op->tok : (struct token){0}, "it reaches unreachable code");
+        ctFail(st, s->op ? s->op->tok : (struct token){0}, CT_WHY_UNREACHABLE);
     }
     st->locals->len = outer;
 }

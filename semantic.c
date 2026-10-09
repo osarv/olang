@@ -5702,6 +5702,7 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
         cc.block = ListInit(sizeof(struct statement));
         struct statement u = (struct statement){0};
         u.sType = STATEMENT_UNREACHABLE;
+        u.var.tok = tok; //K1: where an evaluation that reaches it says it stopped
         ListAdd(&cc.block, &u);
         ListAdd(&call->catchClauses, &cc);
     }
@@ -14284,6 +14285,7 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
         stmt.hasNomatch = true;
         struct statement u = (struct statement){0};
         u.sType = STATEMENT_UNREACHABLE;
+        u.var.tok = firstTokOfType(s, TOK_MATCH); //K1: where an evaluation that reaches it says it stopped
         stmt.nomatchBlock = ListInit(sizeof(struct statement));
         ListAdd(&stmt.nomatchBlock, &u);
     }

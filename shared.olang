@@ -11169,6 +11169,34 @@ test "K1: a function holding unreachable or abort is evaluated until it reaches 
     assert fzGuarded(I32(fzRun) + 4) == 15
 }
 
+# K1/S13a/E11c: a statement match covering every case of an enum reference holds an unreachable for a null one - which
+# made every function with such a match unevaluable, and a Str written that way an error, until unreachable stopped an
+# evaluation only where reached
+type fzShape enum {
+    Dot
+    Bar(n I64)
+}
+fn (s fzShape&) Str() String {
+    match s {
+        case fzShape.Dot { return "dot" }
+        case fzShape.Bar(n) { return "bar" $n }
+    }
+}
+fn fzShapeName(s fzShape&) String {
+    match s {
+        case fzShape.Dot { return "Dot" }
+        case fzShape.Bar(n) { return "Bar" $n }
+        case null { return "none" }
+    }
+}
+FzShapeBar fzShape& = fzShape.Bar(3)
+FzShapeBaked String = $FzShapeBar " " $fzShapeName(FzShapeBar) " " $fzShapeName(null)
+test "K1/S13a: a function with an exhaustive match over an enum reference is evaluated while compiling" {
+    assert FzShapeBaked == "bar3 Bar3 none" and $FzShapeBar == "bar3"
+    b fzShape& = fzShape.Bar(I64(fzRun) + 2)
+    assert $b " " $fzShapeName(b) == "bar3 Bar3"
+}
+
 # K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
 # evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
 type fzCtr struct(n I32) {
