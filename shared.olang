@@ -11148,6 +11148,19 @@ test "E33: the bits of one 16-bit float made into the other are read as the othe
     assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
 }
 
+# T4/T6b: a BF16 widened, computed on and narrowed to F16 is computed as written - at -O3 LLVM 18 narrowed the BF16
+# straight to F16 for the computation, as though only its precision mattered: 2^-126, a BF16 below F16's range, became 0
+# and 2^-126 / 2^-126 a NaN (fuzz/repro/bf16shrink.olang, .ll)
+fn fzShrink(b BF16) String {
+    w F32 = b
+    return $F16(w / w) " " $F16(F32(b) * 2.0) " " $F16(F64(b) + 1.0) " " $F16(b) " " $(b < BF16(1.0))
+}
+FzShrinkBaked String = fzShrink(1.1754943508222875e-38)
+test "T4: a BF16 below F16's range, widened and computed on, narrows to F16 as computed" {
+    assert FzShrinkBaked == "1 0 1 0 true" and fzShrink(1.1754943508222875e-38) == FzShrinkBaked
+    assert fzShrink(BF16(F64(fzRun) * 1.1754943508222875e-38)) == FzShrinkBaked
+}
+
 # K1/K1a: "unreachable" and "abort" stop an evaluation only where reached - a function holding one ("catch {
 # unreachable }", a guard for what cannot happen) is evaluated like any other, so its global is baked and its assert
 # decided; it used to be refused outright for holding one

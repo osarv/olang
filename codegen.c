@@ -3243,6 +3243,26 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
 //T4: the instructions converting val from one numeric type to another - none between two of one width and kind (a
 //retag, or I32 and U32 which share a representation), an extension or truncation chosen by the source's signedness,
 //and between F16 and BF16 (one width, neither containing the other) a trip through float
+//a BF16 widened to F32 (wide "float") or F64 ("double"): its bits are the top half of the F32 holding the same value, so
+//by an integer shift - exact for every value and payload. Not "fpext bfloat": LLVM 18's InstCombine takes a value
+//extended from bfloat to fit in any type of at least bfloat's precision, so "fptrunc (fdiv (fpext b), (fpext b)) to
+//half" became an F16 division of b narrowed to F16, where bfloat's range does not fit - 2^-126 / 2^-126 was 0 / 0, a
+//NaN (found by the fuzzer, fuzz/repro/bf16shrink.ll)
+static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide) {
+    char* bits = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast bfloat %s to i16\n", bits, val);
+    char* z = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = zext i16 %s to i32\n", z, bits);
+    char* sh = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = shl i32 %s, 16\n", sh, z);
+    char* f = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast i32 %s to float\n", f, sh);
+    if (!strcmp(wide, "float")) return f;
+    char* d = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = fpext float %s to %s\n", d, f, wide);
+    return d;
+}
+
 static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to, char* val) {
     char fromTy[16], toTy[16];
     llvmType(from, fromTy, sizeof(fromTy));
@@ -3253,12 +3273,13 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
     const char* instr;
     if (fromF && toF) {
         if (fb == tb) { //F16 <-> BF16
-            char* wide = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
+            char* wide = from.bType == BASETYPE_BF16 ? cgWidenBF16(ctx, val, "float") : cgNewTmp(ctx);
+            if (from.bType != BASETYPE_BF16) fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = fptrunc float %s to %s\n", r, wide, toTy);
             return r;
         }
+        if (tb > fb && from.bType == BASETYPE_BF16) return cgWidenBF16(ctx, val, toTy);
         instr = tb > fb ? "fpext" : "fptrunc";
     } else if (fromF) instr = TypeIsUnsigned(to) ? "fptoui" : "fptosi";
     else if (toF && to.bType == BASETYPE_BF16) { //T4: rounded once, by the runtime's own conversion
@@ -3328,7 +3349,8 @@ static void cgCheckConvert(struct cgCtx* ctx, struct operand* op, struct type fr
     bool u = TypeIsUnsigned(to);
     if (fromF) {
         char* d = val;
-        if (from.bType != BASETYPE_FLOAT64) {
+        if (from.bType == BASETYPE_BF16) d = cgWidenBF16(ctx, val, "double");
+        else if (from.bType != BASETYPE_FLOAT64) {
             d = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", d, fromTy, val);
         }
@@ -4142,6 +4164,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     char* wide = cgNewTmp(ctx);
     //E11a: "x + -0.0" is x for every x - a negative zero included, which "+ 0.0" would turn into a positive one
     if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, -0.0\n", wide, v);
+    else if (t.bType == BASETYPE_BF16) fprintf(ctx->fnOut, "  %s = fadd double %s, -0.0\n", wide, cgWidenBF16(ctx, v, "double"));
     else if (isFloat) fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", wide, ty, v);
     else if (TypeGetSize(t) == 8) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
     else fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", wide, TypeIsUnsigned(t) ? "zext" : "sext", ty, v);
