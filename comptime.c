@@ -85,8 +85,8 @@ struct ctState {
     bool errBypass;              //CF_ERROR raised while evaluating a tried operation's OWN operands (an
                                  //argument's "try g()"): it leaves the enclosing function, and the
                                  //operation's clauses must not see it - until it crosses a function boundary
-    struct operand* tryStmtCall; //R10: the call a "try ... catch" statement is evaluating - tried as a try-expr's
-                                 //call is, though the checker marks only the expression form's (isTried)
+    struct operand* stmtTried;   //R10: the call a "try ... catch" STATEMENT tries - tried as an expression's is, so
+                                 //an error from its arguments' own "try" leaves the function too (errBypass)
     struct list* locals;         //struct ctLocal, the current call's, innermost last
     const char* why;             //CF_FAIL: what could not be done at compile time
     struct token whyTok;
@@ -1510,7 +1510,7 @@ static struct ctVal* ctRunOnStack(struct ctState* st, struct operand* op) {
 
 //R9/R10: whether a call is tried - a try-expr's (isTried) or the one a try statement is evaluating - so that an error
 //from its own operands (an argument's "try g()", a callee computed by one) leaves the function its clauses are in
-static bool ctTried(struct ctState* st, struct operand* op) { return op && (op->isTried || op == st->tryStmtCall); }
+static bool ctTried(struct ctState* st, struct operand* op) { return op && (op->isTried || op == st->stmtTried); }
 
 //the call itself: parameters bound, body run. A reference parameter is bound to the argument's own node, so
 //writing through a "mut &" parameter writes the caller's value - exactly E12c's borrow.
@@ -2555,10 +2555,10 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = s->op->intLiteralVal;
             return;
         case STATEMENT_TRY_CATCH: {
-            struct operand* prevTryStmt = st->tryStmtCall;
-            st->tryStmtCall = s->op;
+            struct operand* outerTried = st->stmtTried;
+            st->stmtTried = s->op;
             ctCall(st, s->op);
-            st->tryStmtCall = prevTryStmt;
+            st->stmtTried = outerTried;
             if (st->flow != CF_ERROR || st->errBypass) return;
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);

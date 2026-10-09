@@ -28,13 +28,15 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): QA and QB below.
-**Asked 2026-10-09 18:35 CEST (from the port's design, compiler/DESIGN.md):**
-- QA. Should `Name<` open type arguments only when the `<` touches the name (`<` whitespace-significant - a language
-  change, zero corpus sites change)? It lets any file be parsed alone (formatters, editors, tree-sitter). In effect:
-  a declared-name oracle (D2/D3a make it exact). My recommendation: no for now; revisit when tooling is built.
-- QB. Should C compiler feature work pause, fixes only, while the port builds its checker (DESIGN.md M5-M12), so no
-  feature is built twice? In effect: features keep landing in C and are ported. My recommendation: yes, fixes only.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
+- QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
+  tooling (formatter, editor support) is built.
+- QB (pause C compiler feature work while the port builds its checker, DESIGN.md M5-M12): YES - from the start of the
+  port the C compiler takes fixes only; features are built once, in olang. Soundness fixes and the decided QC count as fixes.
+- QC (a copy of a read-only List/Map was writable through its `mut` reference fields): CLOSE IT - a value whose type
+  holds `mut` references, copied out of a place reached read-only, is read-only itself; a typed copy from read-only is
+  an error naming Clone() or a read-only borrow. Permission otherwise stays shallow. Being built: wt-qc (started 23:05).
 **Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
 - Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
   public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).
@@ -173,6 +175,18 @@ rule and where it is recorded; the morning report lists them all, then they move
    every value and anything after it is dead code; `case v` naming the subject or an unknown name says `case _ if`;
    keywords (not true/false/null) as method names (L9a); a List's zero value runs its constructor per declaration, so
    `Array<List<T>>(n)` with no fill is D13c's "no zero value".
+26. (wt-chk4, G10d/E31/O26a) a plain type's constructor may introduce type variables (one type, "twins" per binding);
+   a protocol role (operator, Eq/Hash/Str/Next/Iter/Has/Contains/RunFrom/Len/Try forms) is decided by parameter count
+   only - another shape is an ordinary method, and using the operator names it; a local passed in a return to a call
+   that can keep it lives in the result scope.
+27. (wt-cgfix3) `spawn fn(){...}()` made correct (same path as the uncalled form; it built its closure in the loop
+   body - wrong answers); a task's temporary callee held to P2; F32->BF16 narrowing inline integer arithmetic (10-20 ->
+   0.7-1.0 ns, linalg BF16 product 3x faster; F64->BF16 still a libcall); function values cross calls as two words
+   (captured lambda 19-32 -> 1.4-2.7 ns); evaluator try-clause fix; linalg direct path only where measured faster.
+28. (wt-s3scope) a reference local the function returns (or that flows into what is returned) lives in the result
+   home; O17 by what the callee's body keeps (a fixed point after all bodies); R11 by-value defaults holding references
+   when the default builds everything it holds. Limits recorded: r06 (obligations can't tell storage from contents),
+   r10 (G11 one scope for chunks and element referents).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

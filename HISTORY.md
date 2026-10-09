@@ -11814,6 +11814,326 @@ numeric literal or written text already is; a variable only `null` reaches still
 through the packed micro-kernels and FMA - is decided while compiling (a wrong value is S18c's compile error), and the
 same call on a mutable global runs at run time and gives the same value.
 
+### From oann: a spawned lambda called where it is made, BF16 narrowing, a lambda through a larger caller, small products (D16b, D16e, P2, T4, E33, D16, std/linalg, 2026-10-09)
+
+oann found three compiler problems and one in std/linalg while moving attention onto per-head products and its kernels
+onto a compute type (its `repro/spawncall`, `bf16narrow`, `capturedvalue` and DESIGN.md section 13). One was wrong
+answers; three were speed.
+
+**A lambda called where it is spawned (D16e, P2).** `spawn fn() { ... }()` inside a loop gave wrong elements - 8,000 of
+25,600 in the reproducer, as many as a third of the products in oann's attention. The call's callee (E13b) is a
+lambda capturing two parameters' arrays and the loop's variable; captures living in several scopes put the closure in
+the block it is made in (D16d) - the loop body - whose arena closes at the end of each iteration and is the first thing
+the next iteration's closure is built over, while the task that runs the closure may not even have started. The
+uncalled form, `spawn fn() { ... }`, has a path of its own that holds the closure in a hidden local typed at the join
+block's depth and checks it there (P2); the called form never reached it - its callee is not a variable - so it was
+neither placed nor checked. Now the called form takes the same path: the callee lambda becomes the hidden local and the
+call is a call through it with the arguments it had, so it behaves exactly as the uncalled form, arguments aside.
+**Decided (mine)**: rather than rejecting `spawn fn() { ... }()` with a diagnostic naming the uncalled form, it is made
+correct - it reads naturally, it is the only way to hand a spawned lambda arguments, and it costs nothing.
+
+Placing the closure exposed a second half: the uncalled form was refused for the very same program ("captures a
+variable declared inside the join") when it captured two parameters - it captured nothing declared inside the join, but
+the closure's home, the block it is made in, is. **Decided (mine)**: a spawned lambda is built in the join block
+whenever every scope it captured from lasts until the join - which is all P2 ever required of it; where one does not,
+P2's error stands. So `spawn fn() { c[n * 16 + t] = a[t] }` with `a` and `c` parameters compiles now.
+
+And a third, found looking for other callees: `spawn id(f)()` - a function value computed for the task, `id` returning
+its parameter - handed the task a closure `f` living in the loop body; the existing check covers a callee that is a
+local, a field or an element (its type's scope), not one a call computes. Such a callee is now held to P2 as a
+temporary argument is: what it was made from must last until the join (checks/cases/p2spawncallee.olang). A call's
+result that makes its own closure (`spawn mk(c, t)()`) is built in the join block, as any temporary for a task is, and
+was already right.
+
+**Found on the way**: a lambda called where it is written - `x := fn() I64 { return 3 + k }()`, `fn(a I64) { ... }(1)` -
+did not work at all: its call was built against the lambda's placeholder, which has no parameters and no result
+("expected 0 arguments", "a call returning nothing"), and the lambda was checked only at the end of the statement. A
+callee has no expected function type, so it is checked as D16b says, before its call is built. Corpus: the called
+lambda, run and baked (the evaluator calls it while compiling); the spawned form in a loop, read back after an arena
+churn in the spawner and baked (the evaluator runs a join's tasks in sequence); two checks cases.
+
+**BF16 narrowing (T4, E33).** `BF16(x)` from an F32, and every BF16 operation (computed in F32 and narrowed after each
+one), was a call of the C library's `__truncsfbf2` per element: LLVM 18 has no inline lowering of `fptrunc float to
+bfloat` on x86 without AVX512-BF16 or AVX-NE-CONVERT, and B12c switches those off because VCVTNEPS2BF16 flushes
+subnormals. 10-14 ns an element, against ~1 for widening (already an integer shift, T4); a BF16 multiply-add 23-30 ns;
+std/linalg's BF16 product spent most of its time narrowing its results. The narrowing is now integer arithmetic on the
+F32's bits, emitted inline (`cgNarrowBF16`): add `0x7FFF` plus the bit that will be the result's last, shift right 16 -
+round to nearest, ties to even, through the subnormals and into infinity - and for a NaN the top 16 bits with the quiet
+bit set, which is what `__truncsfbf2` gives. BF16 `+ - * /`, `++`/`--`, and a `try`'s finiteness checks widen, compute in
+F32 and narrow through it (`cgBF16Arith`); negation flips the sign bit (`fneg bfloat` was promoted and narrowed too);
+F16 -> BF16 goes through it after the exact widening. A BF16 compare (`< <= > >= == !=`, a NaN or zero test) widens
+both sides too (`cgFcmp`): left as an `fcmp bfloat`, LLVM's instruction selection promoted the bfloat values feeding it
+and rounded one back through `__truncsfbf2` again - a call that survived in the exhaustive test's loop after everything
+else was inline. F64 -> BF16 still calls `__truncdfbf2`: narrowing the F64 to F32
+first would round twice, and doing it right (round to odd) was not needed by anything measured. **Same bits, checked
+exhaustively**: every one of the 2^32 F32 patterns narrowed, every F16 pattern converted, and every BF16 against ten
+others through `+ - * /` and negation, hashed, identical between the previous compiler and this one (8.5 s against
+43.8 s for the whole run; NaN results
+compared as NaNs only - an operation's NaN is unspecified, E33a); `-d` and `-i` agree with `-b` on the tie and
+subnormal cases, and the evaluator decides an assert over them and bakes a global from them (shared.olang). One
+difference that was already there and is within E33a: `-i` keeps a signalling NaN's quiet bit clear through a
+conversion where the built program sets it.
+
+E33's guard was in the way of the bit-level route as well: every bitcast to F16 or BF16 went through an empty inline asm,
+which no loop vectorizes through, so oann's narrowing by bits (`U16(h).BF16FromBits()`) stayed scalar. The guard exists
+for LLVM 18's InstCombine taking a bitcast between `half` and `bfloat` for a no-op cast - which needs a half on one side
+of an i16 and a bfloat on the other - and only an F16's bits ever put a half beside an i16 (a BF16's are also widened
+and narrowed through one, by the code generator itself). **Decided (mine)**: the asm is on every F16 bitcast, both
+directions (`h.Bits()` after, `u.F16FromBits()` before), and on no BF16 one - so `BF16FromBits` and `BF16.Bits()` are
+plain bitcasts and vectorize. `F16.Bits()` became scalar where it was not; nothing measured reads an F16's bits in a hot
+loop. Checked: the fuzzer's `bf16bitcastfold`, `bf16shrink`, `bf16fastisel` and `f16fold` reproducers give their fixed
+answers at `-b`, `-d` and `-i`, shared.olang's tests of them pass, and fuzz runs over the BF16-heavy generator (60
+programs and 1,800 cases each, seeds 1, 500 and 2000) found nothing of it - one finding, below, was the evaluator's.
+
+Measured (interleaved, load 7-10): `BF16(x)` 10.3-20 -> 0.65-1.0 ns an element; a BF16 multiply-add 23-30 -> 0.5-1.4;
+by bits 1.3-2.3 -> 0.7-1.6 (vectorized now); std/linalg's BF16 product 1024 x 512 x 128 4.9-7.5 -> 1.6-1.7 ms (F32
+1.9-2.4) and 1024 x 128 x 128 1.9-2.3 -> 0.34-0.38 (F32 0.40-0.60).
+
+**A capturing lambda through a larger caller (D16).** oann's GELU kernel captured two zero values naming its types and
+ran 20-25 ns an element, against 2 for the same lambda declaring them in its body, once the function handing it to
+linalg's `Map` sat inside a dispatch of eight operations. From the optimized IR: `Map$F32` is one function for every
+lambda of its type, called from each case of the dispatch; LLVM inlined it where its argument was a capture-free
+lambda's pair - a constant, `{ ptr @lambda, ptr null }` - and not where it was a capturing one's, built around its
+environment by `insertvalue`. The inliner credits a call site whose inlining turns an indirect call direct, but it
+follows the argument only when it simplifies to a constant, and it does not look through an aggregate built at the call;
+without the credit `Map` was too big to inline into a large caller, and the lambda was called per element. Proven by
+hand first: splitting `Map`'s parameter into two in the IR took the reproducer to 2.2-2.6 ns. **The fix (mine)**: a
+function value crosses a call as two words, code then environment (`cgParamSplit`) - in a function's parameter list
+and its declaration, at every call (ordinary, through a value, a task's), in the named function's and `Call`'s
+adapters - and is paired again in the callee's prologue. The code is then a constant argument wherever the lambda is
+made at the call, captures or not. The x86-64 calling convention passed the pair in the same two registers already, so
+nothing changes below the IR; the function-value representation is not specified (T21), so the spec did not change.
+`!invariant` metadata and `alwaysinline` on the lambda were not needed and would not have helped: the call to inline
+was `Map`'s, not the lambda's. Measured: captured 19-32 -> 1.4-2.7 ns an element, declared 1.4-3.4 (bench/repro/
+captured_value.olang, a reduced copy).
+
+**Small products in std/linalg.** A product of at most 64^3 multiply-adds with its right operand not transposed was
+computed directly - the i-k-j loop, each row of C updated in memory from rows of B - and on AVX-512 that was 2-3x
+slower than the packed path for most such shapes: attention's 64 x 32 x 64 10.5 us against 5.0, 32^3 6.5 against 1.7,
+64 x 8 x 5 3.9 against 1.3. Measured both paths over 60-odd shapes on AVX-512, AVX2 and SSE (a copy of std/linalg with
+the bound a mutable global, both paths in one process, interleaved, minimum of 11): the direct loop is ahead only for
+products under about a thousand multiply-adds (the packed path has ~0.5 us of its own) and for results of a few rows
+that are several vectors wide (its per-row loop then runs at full width where a tile would be mostly padding: 5 x 64 x
+64 1.5 against 3.9 us, 8 x 64 x 512 17 against 24), and it is behind wherever a row is one or two vectors long, the
+loop's tests then costing more than its work. **Decided (mine)**: direct when m n k <= 1024, or when m < 12, n >= four
+vectors of the element type and k n <= 65536 (B stays in L2) - `computedDirectly`. Through the real `Gemm`, before and
+after: 64 x 32 x 64 10.3-10.5 -> 4.75-4.8 us, 64^3 19.7 -> 8.2-8.4, 32^3 5.45 -> 1.66, 64 x 8 x 5 2.9-3.1 -> 1.0, F64 64 x
+32 x 64 14.5-15 -> 11.0; 8^3 and 8 x 64 x 64 unchanged. SSE loses a little at 14^3 and 16^3 (1.2-1.6 against 1.1-1.2
+us), not the default target. A test runs shapes either side of each bound, F32 and I32, against the plain sum, exactly.
+
+**Found by the fuzzer on the way (seed 551), pre-existing, fixed (K1, R10)**: `try h(try g()) catch { ... }` - an
+argument's own `try` inside a try *statement* - handed g's error to the statement's clauses while compiling, where at
+run time it leaves the function (R9: the inner `try` has no clauses), so a baked global and a decided assert disagreed
+with `-b` and `-d` (and `-i` with them). The expression form was fixed long ago (K1's "an argument's own try"): the
+evaluator lets an error from a tried call's arguments bypass that call's clauses only when the call is marked tried,
+which the statement form's call never was. It is told which call a statement tries now (`stmtTried`), so the two forms
+agree; the old compiler gives 3 where the program gives 9 (shared.olang's `ktOuterStmt`, an assert decided while
+compiling).
+
+### A method is an operator only in its shape; a generic constructor; a value built from a local the return reads (E31, M6b, E10a, E10b, E11c, G10d, O26a, D13c, B11, 2026-10-09)
+
+A batch from oann's `repro/` and the usage studies, each reproduced first.
+
+**E31, revisited under the revisit rule.** E31 (2026-10-07) said a method named for an operator, in either spelling,
+must have the operator's shape, and M6b extended that to every method the compiler calls by itself. oann's graph
+builder hit it at once: a node for a product is naturally `g.MatMul(a, b, transA, transB)` and an element-wise one
+`g.Mul(a, b)`, and both were errors (`MatMul's parameters besides its receiver: expected 1, found 4`) - oann renamed
+them `Product` and `Multiply` and recorded `repro/operatornames`, which was first kept as designed. It is the kind of
+rule the revisit rule is for: it reserved a name for every method of every type, whatever the method means, to protect
+an operator nobody was using on that type. Now a method takes a role only in the role's **number of parameters** -
+binary operators one, unary ones none, `At` and `SetAt` one or more, `Slice` two, `Call` any, and among the methods the
+compiler calls for other operations `Eq`, `Has`, `Contains` and `RunFrom` one, `Str`, `Hash`, `Next`, `Iter` and `Len`
+none, the Try forms as their plain forms. Of the role's number it is held to the rest of the shape (result, no
+errors), as before; of another it is an **ordinary method**, called by name, and an ordinary `Plus(b, c)` may sit beside
+a private operator `plus(b)` (M6b's "never both spellings" counts only the role's methods). The error moved to where it
+helps: using the operator on such a type says why it does not apply - `Graph's MatMul takes 4 parameters besides its
+receiver - an ordinary method, not the one '@' calls, which takes one`, with a note at the method - for `@`, binary and
+unary operators, `x[i]`, `x[i] = v`, slices, `in`, `for ... in` and `++`. `==` and `$` fall back to the language's
+(an ordinary `Eq(a, b)` leaves `==` structural); an ordinary `Hash(seed)` holds the name, so the compiler supplies none
+(E10b), and a constraint asking for `Hash` notes the method of another signature. Considered and not done: telling the
+roles apart by parameter *types* too - the number is what a reader sees at a glance, and a wrong type in the right
+number is still a shape error worth reporting. Five cases written for the old rule became cases of the new one
+(`oparity`, `atnoindex` and `strshape` now show the ordinary method working and the operator's use failing).
+
+**G10d, a generic constructor (the coordinator's decision).** oann's `repro/genericctor`: a non-generic struct whose
+constructor takes `g mut Graph<<T>>&` was accepted at its declaration and every call then failed, printing `<<T>>`
+(the stale G8a spelling). The use is real - a layer holds only graph handles (numbers), so it has no reason to carry
+`T` in its type, and a model is a `List` of layers over graphs of several element types. So the constructor is generic
+when its parameters introduce a variable, and is instantiated per call as a generic function is. **How**: each
+distinct binding set makes a *twin* of the type - same owner and name, so T13/T25a's identity (owner and name) makes
+every twin the same type - whose constructor is the generic one substituted, its body checked on demand with the
+bindings (so C2d's held-arguments analysis and its errors point back at the call, G16) and emitted by the root object as
+instantiations are (B3d), declared in the others. Fields are the type's own and the destructor is shared. **Decided
+(mine)**: a field whose type names such a variable is an error naming the fix (`type D<T>`) - the variable would make
+the type's layout depend on the call; a `:=` field likewise (its type would be read off each instantiation's body);
+`D<I64>(...)` stays G7's error (the type takes no arguments; the constructor's are inferred); a call binding nothing
+(`D(null)`) is an error; the type has no zero value (D13c: no zero binds the variables); and a *generic* type's
+constructor introduces none of its own - a variable not in the type's list is an error at its introduction. The
+evaluator needed nothing: a twin's constructor is an ordinary function to it, and a global built through one bakes.
+
+**O26a, extended.** `return Node.Many(l.ToArray())`, with `l` a local `List<Node&>` the nodes were pushed onto, was
+O26: `l` lived in its block, and since a type argument's references live in the container's scope (G11), so did every
+node in the array returned. The manual fix was `l := List<Node&>&return()`. O26a (the same day) moved a local into the
+result scope only when the return *gives* it; it now also moves one holding references when a returned value **reads**
+it where what is built from it can be what is handed back. "Can" is decided per call, before the statement using the
+local is checked, from what is already known: a method of the local, or a function or constructor the local is passed
+to, can keep it when its result is borrowed from that parameter, when its body (checked first, as calls already do,
+O10c) has an obligation holding that parameter's scope to outlive its result scope, when it is a constructor whose
+instance holds the parameter (C2d's held analysis), or when it is generic or its body is not known yet. A rendering
+(`$l`) never keeps anything, nor does a field holding no reference, a result holding none (`l.Len()`), or anything
+else. The first version moved a local on any read in a return, which broke two things at once: a corpus test
+(`return $copied " " $h.s ...` - text rendered from a holder of a borrowed array, then storing that array into the
+holder failed O20), and - worse, found by trying it - the most ordinary front-end shape, `p := Parser(src); return
+p.parse()` with `src` text made in the block: the parser moved to the result scope and could no longer hold `src`
+(C2d). With the per-call test both are as before, and a case pins the parser shape. **Where the result is put** also
+covers a borrowed result: for `fn (p mut Parser&) many() Node&p` it is the scope `p`'s referent lives in, which the
+function builds into (O4b), so `many` building its `List` there works too. Consequences: the five must-fail cases that
+kept O26/O17 for a local returned *inside another value* (`return W(e)`, a slice, an element, a lend to a `mut` method)
+now run - the local lives where the result does, and each reads its text back after an arena churn - and three new
+cases keep the errors where the value returned is a *copy* (`b := a`), which O25h leaves where the original's references
+are. The cost is O26a's own: memory lives as long as the result.
+
+**D13c located at the program's type argument.** `List<Ticket>` no longer needs a zero value (langb), so the shape is
+reproduced with `chan.Chan<Ticket>(4)` and `a.Repeat(2)`, where `Ticket`'s constructor writes a global: the error was
+reported inside `std/chan.olang` with the program's line as a note. It is now reported at the type argument the program
+wrote (`Chan<Ticket>`'s `Ticket`), with the library's line as a note and a second note naming the fix
+(`'Chan<Ticket&>' holds it by reference, whose zero value is null`); where no type argument names it (`a.Repeat(2)`),
+the note says to hold the type as `Ticket&` where the use names it. Recorded per written application while types
+resolve (`writtenApplies`), so the lookup is exact rather than a search of the line.
+
+**Confirmed gone**: oann's `ctorpush` (prints `after a new array: 6` three times), `ctorunstored` (compiles and runs)
+and `capturedfn` (captured 0.52-0.53 ns an element against 0.55-0.58 direct) no longer reproduce on this compiler.
+
+**Found on the way, fixed**: diagnostics named prelude files as `.../build/../std/prelude/...` (the path is normalized
+now); a diagnostic spelled a type variable `<T>`, the pre-G8b spelling, where the program writes `T`; a type's name met
+where a value is wanted (`Res&(3)`) said `unknown name 'Res' - did you mean 'Res'?` and now says `'Res' is a type, not a
+value`.
+### What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11, 2026-10-09)
+
+Study 3 wrote realistic programs against the newest rules (permissions, constant generics, bare type variables) and
+marked every workaround (/home/user/review/study3, repro/r01-r35). This batch took its scope and checker findings and
+its diagnostics; std, codegen and the parser went to another batch.
+
+**O26a reaches reference locals (#4, r04 - the coordinator's decision).** The Pratt loop
+`lhs := p.primary(); for { ... rhs := p.expr(...); lhs = Expr.Bin(op, lhs, rhs) }; return lhs` was refused: `lhs` is a
+reference local, which O26a (value locals only) did not move, so the node built by `Expr.Bin(...)` at the assignment
+went to `lhs`'s block and returning it was O14's error; `rhs` likewise. The rule now covers a reference local declared by
+`:=` or with a bare `&` and no scope written, whose initializer is a temporary or `null`, when the function returns it -
+"returns" read off the rest of its declaring block, and extended through assignments: a local whose value is assigned
+to a returned local (`lhs = Bin(op, lhs, rhs)` makes `rhs` flow into `lhs`) is returned as far as where it is built goes.
+That is a small flow walk over the block's syntax (`localFlowsToResult`: a name used whole - not as the base of a member
+or an index - as a returned value, or as an assignment's value to a local that flows), the same walk the value-local
+rule now uses. A local initialized from existing storage keeps O25a's exact scope: moving it would claim a scope the
+storage is not in. Such a local is declared with `scopeParam` the function's result scope and its initializing call
+landed there, so codegen needed nothing - every temporary assigned to it is built where its type says.
+
+**O17 decided by the body (#5-#8).** O17 refused to lend a "split" value - one whose references live elsewhere than its
+storage (a copy of an element, O25h; a value built where a scope argument said; a for-in's hidden iterator) - to any
+callee whose parameter type could hold references, on the grounds that the callee might build into the value's slots.
+That was a test of the type. Nearly every lend in the study was a callee that only read (`count(toks)`, `for v in c`
+over a local iterator) or wrote numbers (`w.age.values[i] += 1` through a parameter). The check is now of what the
+callee's body does with the region its scope variable names: it **stores** into it a reference or a value holding
+references (`buildAssignCore`, any depth of field or element), it **hands out** a writable reference into it
+(`noteRegionHandOut` at a return: a caller could then build through the result), or it **passes** the region to a
+callee that does either (an edge recorded at the call). Unknown bodies (not yet checked - a later function, a cycle)
+are recorded as edges and lend checks and settled after `dischargeLateObligations` by a fixed point (`settleRegions`);
+an unknown callee with no body keeps everything, an `extern` nothing (X3 hands it a pointer for the call). A lambda's
+capture binding is a synthetic var on the stack, so it is decided at once and marks only writable captures - the first
+version queued it and settleRegions read freed stack (a segfault, caught by the corpus). An attempt to build
+instantiated constructors' bodies eagerly, to have their answers in time, raised new C2d/O10c errors inside
+`MapIter.Next` and was reverted in favour of the deferred settlement. The must-fail case `o17borrowsplitwrap` had shown
+the old rule with `b := Box&return(n)`; with O26a moving a returned `b` into the result scope it now builds, correctly,
+and the case was rewritten to the shape O17 still refuses (a copy `b := src.b` lent to `regrow`, which assigns a new
+array into it). `o17handout` pins the hand-out branch: `headOf()` returns `b.head` borrowed and writable, and the caller
+builds through it.
+
+**r06 stays a limit.** With O17 settled, `for p in parts { merge(sum, p) }` fails O10c instead: `p` is the for-in's copy,
+its storage the loop body and its references `parts`'s; lent to `merge(from Map&)`, the callee's scope variable binds
+to the storage (the body), and `merge`'s obligation (`from`'s scope outlives `into`'s) is about what it reads out of
+`from` - its contents - which the obligation cannot tell from the referent's own storage. Binding it to the references'
+home instead would be unsound whenever the callee keeps `from` itself (stores the reference, or a borrow of an inline
+part): a pointer into the loop body's slot would be accepted into `sum`. Doing it properly means splitting every
+obligation on a reference parameter into "its storage" and "its contents" at each place an obligation is made
+(`scopeCanFlowInto` has no operand to ask), a larger change than this batch; `merge(sum, parts[i])` lends the array's
+own storage and compiles.
+
+**r10 is a limit of G11, recorded.** A local `List<String&>` of slices of a parameter cannot hand its elements to
+something outliving the list (`m.Put(toks[0], 1)` into the caller's map): the type has one scope for the list's chunks
+and its elements' referents, and a read element is known only to live where the list does. The study's suggestion -
+O13c-style provenance, "the elements are `line`'s" - would be sound only if every store into the list were tracked
+(Push, SetAt, Insert, PushAll, any writable lend), and every read path carried it (At, RunFrom's runs, ListIter, copies):
+a second, flow-tracked scope per value, not an extension of the one there is. Landing the result scope at `line`'s
+instead would be sound and leaks the scratch list into the caller's arena, which is what the study's workaround did by
+hand. The prelude's `Split` returns `Array<String&>&t` for exactly this; a list built where it is kept works too.
+
+**Decided (mine), the smaller ones.** C2d (#11): `Ctx(nums, d)` with `d` a writable reference to the caller's sink
+(exact: something can be stored through it) and `nums` a local `List<I64>` (no stores possible through a list of
+numbers: need only outlive) was refused because all arguments had to agree on one scope; now the instance lands exactly
+where the exact ones live and each other one must outlive that (`bindHereFrom` in both orders; `checkCtorHereFits` lets
+an untraced binding stand where only outliving is asked). r12's static names kept by rooms in a returned game followed.
+T22 (#15): a function value fits a type differing only in permission where reading for writing is safe - a read-only
+parameter for a writable one, a writable result for a read-only one (`funcFitsByPermission`); identity (T22's "same
+type") is unchanged. G9a (#14): a lambda's written parameter and result types are unified before literals are bound
+(`unifyLambdaWritten`, resolved muted through a trial copy of the bindings), so `a.Fold(0, fn(acc I64, x I32) I64 {...})`
+binds `U` to `I64` and the `0` adapts. E31 (#13): `x[i]++` on an At/SetAt type is lowered to `x[i] += 1` (an
+`OPERATION_SEQ` whose body is the compound assignment), `try x[i]++` to its checked form, the index built as a place so
+the try covers the store and not a separate checked read. Found doing it, pre-existing: `h.v[i] += 3` through a value
+field's `SetAt` held the place in a hidden **value** local, so `SetAt` wrote the copy and the field never changed - a
+place is now held through a hidden reference (`holdPlaceInHidden`). G4 (#36, #20): a constant variable appearing in no
+parameter as a whole argument is reported once at the declaration, saying to introduce it in a parameter's type; the
+signature is marked uninferable, the body not checked and the result an unknown stand-in, so neither calls nor the body
+add errors (r20's six errors for two causes were cascades of this). R11 (#31): a by-value default holding references
+was refused outright; one that builds everything it holds - a constructor call whose arguments are numbers, `Bool`s,
+`null`, text written in the program, or such calls - is built where the call's result is (R9a's codegen already put a
+default there), so its references are where the result's are and later pushes land there too; existing storage is still
+refused, since its references would have to agree with every scope the result's live in. Checked at run time after an
+arena churn, under `-d` and `-i`, and baked by the evaluator. `Map.Keys()`/`Values()` (#9) went through `MapIter` and
+a two-number position; their iterators now hold the map and walk its buckets as `MapIter` does, so what they hand out
+carries the map's per-instance binding (O23a) and `for k in m.Keys() { l.Push(k) }` compiles.
+
+**Diagnostics (#17-#27).** T25c's "drop the 'mut'" for a read-only reference returned from a built `T&` result, where no
+`mut` was written: now T25c/O14 naming the borrowed form, built from the parameter the value is read through
+(`'Item&l'`). O10c's note proposed `parse&s(...)` for an entry whose references are the line's - following it moved the
+error into `parse`; the note now follows a result to the argument its callee obliges to outlive the result scope and
+points there (`line mut String&s = ...`), and never offers `callee&x(...)` for an operator's or a method's call (`At&g`,
+`Recv&total`); a declaration's suggested type is written `mut` where the value local was writable, and inside an
+instantiation with the generic's own variables (reverse substitution through the instantiation's bindings,
+`typeAsGeneric`). G16b's dedupe lives in errmsg.c: a scope-rule error at one place inside an instantiation context is
+written once; when the first record had to spell an instantiation's types because two variables were bound to one type
+(`K = V = I64`), it is marked weak and the next instantiation's record replaces it. Also: E29's for-in message leads with
+D3a; T22a names the parameter a lambda keeps and drops the compiler's `lambda$1`; type variables are spelled bare in
+every message (`Array<I16, N>&`, the D9a suggestion G22 then rejected); a case did-you-mean (`'Other'` -> `'OTHER'`); an
+unknown import that std has (`import "std/math"`); no method names among an unknown name's suggestions; `nomatch =>
+unreachable` says a leaving clause is a block; a line beginning with a binary operator says the line before ended its
+statement (L18).
+
+**After merging master (List and Map handles).** `MapKeyIter`/`MapValueIter` read the map's shared state (`of.s`) as
+`MapIter` now does. Two note fixes came out of re-running the cases: a value local *copying* another (a for-in's
+element, `t := a[i]`) is storage of its own block, so the "declared in a block that closes first" note no longer
+follows the copy to the array it came from (r06 had it name `parts`, declared beside `sum`, as the declaration to
+move); for a for-in's copy of an array element it now says to lend the element itself (`parts[i]` with a counted loop),
+which is r06's workaround. The suggested reference declaration is written `mut` where the value local it replaces was
+writable (`l mut List<I32>&m`), or the next write through it is the next error - three cases' expected notes updated.
+`o25enote`'s program is now accepted: `text := mk(n)` handed to `st.put(...)` with `st` returned flows into the result
+(O26a) and is built there - which is correct, not a hole: the slices then point into the result scope. The case keeps
+its purpose through a plain function, `put(st, ...)`, whose arguments the flow reading does not follow.
+
+**Merged with chk4's O26a (a value a returned value reads).** chk4 extended O26a the other way at the same time: a value
+local holding references is returned also when a returned value reads it through a call that can keep it
+(`return Node.Many(l.ToArray())`), judged per callee (`calleeMayKeepArg`), and "where the result goes" became
+`resultHome` - the result scope, or for a borrowed result `T&p` the scope `p`'s referent is in. The two compose: a local
+is in the result home when chk4's reading says so or when the flow reading here does, and this batch's reference locals
+and flow use `resultHome` too, so a reference local of a function with a borrowed result is built where `p`'s referent
+is. The flow's return test now asks chk4's question rather than "is it mentioned": `return p.parse()` does not move a
+parser whose result is new. And one thing chk4's cases showed the flow must not do: follow a **plain copy** of a value
+local (`f := e`, `b := a`, `x = y` with a value target). A copy keeps its references where its source's are (O25h) - the
+guard for copies of existing storage the coordinator asked to keep - so moving the source because its copy is
+returned would make `o13acopywrap` and `o14ccopyslice` compile (soundly, but against that decision); a reference target
+(`n Node& = v`) borrows, and still flows. Five older must-fail cases had built their "own storage" from a reference local
+built here and returned (`q P& = P(x); return NB(q)`, `c mut Counter& = Counter(41); return c`, a try default `n`), which
+now lives in the result scope - correct, and pinned as `o26areflocal` (a run case, under `-b`, `-d` and `-i`); the
+cases keep their purpose with a by-value parameter, the function's own copy, which cannot move.
+
 ### The fuzzer covers the day's later features, and what it found (K1, K2/K2b, S18c, R10, E10, E11a, E27, T8, E10a-c, E11c, S13f, T7c/T7d, E32b, G20-G26, T25b, O25, O17, E16, X8, 2026-10-09)
 
 The fuzzer was built before most of the day's later work landed, so its generator never wrote a `List` copy, a `Map`
@@ -11861,14 +12181,14 @@ extended (seeds 101-160, 201-260, 301-348, 1001-1010), and the checks scenario's
 after what turned out to be the generator's own (a counter pushed as the wrong type; a machine-wide out-of-memory kill
 during another worktree's verify, not a finding):
 
-1. **A try statement's clauses took an error raised by its call's arguments (R10, fixed in `comptime.c`).** `try h(try
+1. **A try statement's clauses took an error raised by its call's arguments (R10, `comptime.c`).** `try h(try
    g(n)) catch E.A { return 7 }`: the argument's `try` is R9's expression form, which ends the enclosing function, and
    the program does that - but the evaluator ran the statement's clause, so a baked global, an assert decided while
-   compiling and `-i` all said 7 where `-d` and `-b` said 1 (seed 3296). The evaluator lets an argument's error bypass a
-   call's clauses only for a call marked `isTried`, which the checker sets on a try-expr's call and never on a try
-   statement's; the statement now marks its call for the evaluation (`ctTried`, `tryStmtCall`) without touching the
-   checked program, and the path where a computed callee fails (`try pick(try g(n))(3) catch ...`) bypasses too, which
-   neither form did. `fuzz/repro/trystmtarg.olang`; a corpus test computes it three ways.
+   compiling and `-i` all said 7 where `-d` and `-b` said 1 (seed 3296). The same bug was found and fixed on master the
+   same evening from seed 551 (`stmtTried`, above); this branch's fix was the same and the merge keeps master's, adding
+   the one path both had missed: a computed callee whose own expression fails (`try pick(try g(n))(3) catch ...`)
+   bypasses the call's clauses too, in either form (`ctTried`). `fuzz/repro/trystmtarg.olang`; a corpus test computes
+   both three ways.
 2. **`$` on a reference to an array with no storage (E10/E11a, fixed in `comptime.c`).** A borrow of an array value's
    zero value is a null reference, bit for bit, and the run time renders it `null`; the evaluator rendered the empty
    array it holds (`U16[]`), while agreeing that `== null` was true - it decided null-ness for `==` (`ctArrayRefNull`)

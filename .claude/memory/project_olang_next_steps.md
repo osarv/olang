@@ -419,6 +419,34 @@ because what it finds about structure feeds the refactor.
   (oann onto master 472373d: perm migration, repro hygiene, GemmBatch attention, GemmPatches conv) - it predates the
   List/Map handle change; move oann's compiler again after. Found, not fixed: `type Nest Array<Nest&>` accepted but
   unbuildable ("expected Nest&, found Nest&") - for the next checker batch.
+- 22:05 CEST: chk4 merged and pushed (77689b1, its own verify on the same code). oann's genericctor and operatornames
+  repros fixed (oann-up deletes them). Started at 21:50: a read-only review of tonight's merges (/home/user/review/tonight)
+  and wt-fuzz2 (fuzzer extended to tonight's features). Running: s3scope, cgfix3, oann-up, review, fuzz2.
+  After s3scope and cgfix3 merge: the bootstrap/ move + modest refactor (no other compiler agent then).
+- 22:30 CEST: review of tonight's merges done (/home/user/review/tonight: 8 confirmed - RunOnStack in a task races
+  the program scope (heap corruption), by-value param building through ref fields UAF (old), cgDeepEq infinite on a
+  self-referential struct, read-only List/Map writable through a copy (QC), evaluator copying an unwritten by-value
+  array, ListIter after Clear endless, RunOnStack small stacks in -d (TLS, no comdat on linkonce_odr globals), `x mut T`
+  local in a generic). Started wt-rvfix for all of them + Nest + Exec fd leak + SPEC T25b note.
+- 23:00 CEST: cgfix3 and s3scope merged locally (0a1b122, full verify running). Usage 20:49 UTC: five-hour 0.70,
+  weekly 0.66. Started (read-only, on /home/user/wt/s3c @ 0a1b122): review2 of chk4/cgfix3/s3scope (soundness first)
+  -> /home/user/review/tonight2, and study4 (systems, concurrency, scripting) -> /home/user/review/study4. Running:
+  oann-up, fuzz2, rvfix, review2, study4. After rvfix: bootstrap/ move (sources only, build/out stays) + modest cleanup.
+- 23:05 CEST: the user answered QA/QB/QC as recommended (ledger). Started wt-qc (copies of read-only stay read-only);
+  rvfix told to drop its T25b "known hole" note. Once the port starts, C compiler work is FIXES ONLY (QB).
+  The user asked how far the compiler is: told port design + P0 done, port not started (refactor first), ~1-2 h to M1.
+- 23:25 CEST: cgfix3+s3scope pushed (e139b9b, verified). oann upgraded and pushed (ac77201): perm migration (168 mut
+  removed, 45 added), fixed repros deleted, attention as GemmBatch a cache-sized part at a time (step at ctx 256
+  206 -> 190 ms, bit-identical), conv forward by GemmPatches (1.2x), GemmAct measured and not adopted. oann's compiler
+  (oannc2) is 472373d: move it to master after rvfix/qc land and re-test (List/Map handles, ==, QC may need migration).
+  New: oann repro/condliteral (a conditional of literals beside an F32 is typed F64 - linalg's ActivationSlope/
+  ActivationBackward do not compile for F32) -> handed to rvfix as item 11.
+- 23:35 CEST: review2 (/home/user/review/tonight2): 8 confirmed - three NEW use-after-frees from s3scope's O17
+  change (callee storing its parameter's own storage into the lent region; settleRegions not revisiting callers;
+  multi-target spawn not a store), two older (split value borrowed into a ref local / for-in -> handed to rvfix as
+  item 12; spawn h.f() field closure not held to P2), x[i]++ index evaluated twice, a T22 over-rejection, a G4
+  cascade, `x = E.Neg(x)` self-cycle. Started wt-rv2fix for all but the rvfix twin. LESSON: every O-rule relaxation
+  gets a soundness review before it is merged - three agents' relaxations tonight each opened a UAF.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

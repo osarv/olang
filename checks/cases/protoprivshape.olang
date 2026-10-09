@@ -1,8 +1,8 @@
 # check: fail error[E10a]: Eq takes one parameter of its receiver's own type and gives a Bool
-# also: error[E31]: Str's parameters besides its receiver: expected 0, found 1
-# M6b: the private spelling of a protocol method is that method, held to its shape - an eq or a str is no longer an
-# ordinary method free to be anything
+# also: error[E11c]
+# M6b: the private spelling of a protocol method with its parameters is that method, held to its shape - an eq or a str
+# taking what Eq or Str takes is not an ordinary method free to be anything
 type K struct(n I32) { n }
 fn (a K) eq(b I32) Bool { return a.n == b }
-fn (k K) str(x I32) String { return "k" }
+fn (k K) str() I32 { return 1 }
 fn main() ? { }

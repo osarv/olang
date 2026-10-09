@@ -1,0 +1,26 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O17/O25h: a copy of a value holding references keeps them where its source's are, while its own storage is this
+# block - lending it to a callee that stores into what it is lent (regrow builds a new array and puts it in a field)
+# would put what that builds in the block, under a value claiming the source's scope, and "src.b = b" would then hand
+# the source a reference into the closed block. A callee that only reads it may be lent it (O17 decides by the body).
+type Box struct(n I64) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) size() I64 { return b.Data.Len() }
+fn (b mut Box&) regrow(v I64) {
+    b.Data = Array<I64>(8, v)
+}
+fn bump(src mut W&) {
+    b := src.b
+    assert b.size() == 3
+    b.regrow(7)
+    src.b = b
+}
+fn main() ? {
+    w := W(Box(3))
+    bump(w)
+    assert w.b.Data[0] == 7
+}

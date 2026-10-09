@@ -134,6 +134,8 @@ struct type {
 
     //BASETYPE_FUNC
     bool hasRetType;
+    bool sigUninferable; //G4: a variable the result names that no parameter's type does - reported at the declaration,
+                         //whose body is then never checked (one error, not one per use of the variable)
     struct type* retType; //heap-allocated, valid when hasRetType
     struct list errors; //list of struct type*: error types declared in the signature's error list
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
@@ -173,6 +175,8 @@ struct type {
     //which is the whole point: without it, substituting T later rewrites the field types but leaves the
     //name derived from the OLD arguments, so "Box$T" never becomes "Box$int32" and nothing matches.
     struct type* genericOrigin;   //the generic this was applied from; NULL if it is not an instantiation
+    struct type* ctorTwinOf;      //G10d: a non-generic type whose constructor is generic, as one call's bindings construct
+                                  //it - the same type (name, identity, layout), with that instantiation of the constructor
     struct list typeArgs;         //list of struct type, index-aligned with genericOrigin->typeParams
     struct list typeParams; //list of struct str: for BASETYPE_FUNC, every distinct type variable in this
                              //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
@@ -320,6 +324,11 @@ struct var {
     bool paramWritten; //D9b: a signature parameter its body writes, or makes a writable reference to - a by-value array
                        //it is bound to is then the callee's own copy
     bool permByType;   //B11: a local whose written reference type, without "mut", made it read-only (T25b)
+    //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
+    //reached through it something not read out of that region (built, or handed in), itself or through a callee
+    //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
+    bool regionStored;
+    bool regionHandedOut;
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
@@ -838,6 +847,7 @@ struct list* SemanticAllInstantiations(void);
 //list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
+struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);

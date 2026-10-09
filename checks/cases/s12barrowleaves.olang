@@ -1,0 +1,10 @@
+# check: fail error[S12b]: '=>' gives a value, and 'unreachable' gives none - a clause that leaves is a block: '{ unreachable }'
+# S12b: a clause that leaves gives no value - written as a block
+fn sign(n I64) I64 {
+    return match n {
+        case 0 => 0
+        case 1 => 1
+        nomatch => unreachable
+    }
+}
+fn main() ? { println($sign(1)) }

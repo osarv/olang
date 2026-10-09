@@ -2,11 +2,13 @@
 # also: note: 'text' is made here, in a block that closes first - make it where 'st' lives: 'mk&st(...)'
 # never: error[O25e]
 # B11: arguments a signature requires in one scope, one made in a block that closes first - one error for the one
-# cause, with a note naming the declaration to change and what to write there
+# cause, with a note naming the declaration to change and what to write there. (Handed to a method called on "st",
+# "text" would flow into what the function returns and be made in the result scope, O26a; through a plain function
+# the flow is not read, and the text is made in the block.)
 type Store struct() {
     keys mut List<String&>& = List<String&>()
 }
-fn (s mut Store&) put(k String&s, v String&s) {
+fn put(s mut Store&, k String&s, v String&s) {
     s.keys.Push(k)
     s.keys.Push(v)
 }
@@ -14,7 +16,7 @@ fn mk(n I64) String& { return $n "x" }
 fn load(n I64) Store& {
     st mut Store&return = Store()
     text := mk(n)
-    st.put(text[:1], text[1:])
+    put(st, text[:1], text[1:])
     return st
 }
 fn main() ? {

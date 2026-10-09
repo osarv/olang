@@ -1,0 +1,12 @@
+# check: fail error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - borrow it: 'Item&l'
+# T25c/O14: returning an element read through a parameter from a built result ("Item&") - no "mut" was written to drop;
+# the result is to be borrowed from the parameter
+type Item struct(name String&) { name }
+fn first(l List<Item&>&) Item& {
+    return l[0]
+}
+fn main() ? {
+    l := List<Item&>()
+    l.Push(Item("a"))
+    println(first(l).name)
+}

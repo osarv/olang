@@ -1,0 +1,22 @@
+# check: fail error[O25e]: these arguments live in different scopes
+# C2d/O25e: a context struct whose writable field can be written through (diag) and whose other field is a List the
+# instance holds - built again in an inner block from that block's sink, it would hold two scopes under one
+Run mut I64 = 1
+type Diag struct() {
+    col I64 = 0
+}
+type Ctx struct(diag mut Diag&, nums List<I64>&) {
+    diag
+    nums
+}
+fn check() I64 {
+    nums := List<I64>()
+    nums.Push(4)
+    c := Ctx(Diag(), nums)
+    if Run > 0 {
+        d := Diag()
+        c = Ctx(d, nums)
+    }
+    return c.nums.Len()
+}
+fn main() ? { println($check()) }

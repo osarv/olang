@@ -1,0 +1,13 @@
+# check: fail error[G19, E10b]: K does not satisfy the constraint Hashable on K: it has no Hash
+# also: note: 'Hash' is declared here, with another signature
+# E10b/E31: a Hash taking a parameter is an ordinary method - not the one a Map key needs - and the compiler supplies
+# none beside it, since the name is taken
+type K struct(a I64) {
+    a
+}
+fn (k K&) Hash(seed I64) I64 { return k.a + seed }
+fn main() ? {
+    assert K(2).Hash(3) == 5
+    m := Map<K, I64>()
+    m.Put(K(1), 5)
+}
