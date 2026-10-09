@@ -2331,7 +2331,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **Integer arithmetic wraps (E6c, 2026-10-05, the user's call).** `+ - *`, unary `-`, `++`/`--` and `<<` reduce
   modulo 2^w - two's complement for Int32/Int64, unsigned for Byte - never undefined, checked or trapped, and the
   compile-time evaluator wraps identically. It was already what codegen did (no `nsw`/`nuw`) but no rule said so,
-  and the prelude's hashes rely on it. Division by zero and MIN / -1 stay undefined (E6a).
+  and the prelude's hashes rely on it. Division by zero and MIN / -1 stay undefined (E6a). **Re-confirmed by the user 2026-10-09** after
+  the benchmarks priced it (no `nsw`: spectral-norm 1.4x C's time) - "keep overflow".
 - **The default error and BuiltinError (R15-R20, 2026-10-05, the user's design).** The bare error became **the
   default error**, with no name: `?` **alone** declares it, meaning "this can fail, without saying how". A function
   naming its errors (`? MathError`) fails with exactly those - `catch MathError` is complete, and a plain `error`

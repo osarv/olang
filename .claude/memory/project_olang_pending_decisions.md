@@ -28,36 +28,39 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
-1. (asked 2026-10-09; the user wondered whether lowercase and uppercase Eq should differ, and asked for precedent)
-   one rule - the compiler only ever calls CAPITALIZED methods (drop E31's lowercase private operators, used only by
-   three tests), or keep private operators and make a lowercase eq/hash/str an error instead of silently ignored?
-   Default (in effect): private operators kept; lowercase eq/hash/str ordinary, ignored by ==/Map/$ (tfix's decision F).
-   Rec: drop them (Go's fmt, Rust impls and Python dunders are all type-global; no mainstream language has
-   module-private operators).
-2. (asked 2026-10-09, from the benchmarks) keep integer overflow wrapping (E6c)? It costs `nsw`: spectral-norm 1.4x
-   slower than C (`(i+j)*(i+j+1)/2` keeps a 3-instruction signed divide); `>> 1` or unsigned types avoid it. Default:
-   wrapping stays. Rec: keep - the alternative is C's undefined behaviour, which the evaluator could not reproduce
-   (K1) and the language has spent weeks removing; Rust (release) and Go pay the same cost.
-3. (asked 2026-10-09, from the benchmarks: nbody writes F64 on ten temporaries) relax D15 so `x := a - b` (any
-   expression whose type is determined; still not `null` or an untyped literal-only expression beyond today's rule)
-   declares with that type? Default: D15 as is. Rec: relax - the operands' types are visible and every mainstream
-   language infers here.
-4. (asked 2026-10-09, from the usage study) a local's reference permission: today a typed local is writable unless
-   its initializer is read-only, so `path String& = "x"` then `path = args[1]` (read-only) fails, and no read-only
-   local can be declared (D11a forbids `mut` on locals). Proposal: the written type decides, as for parameters and
-   fields - `x T& = ...` read-only, `x mut T& = ...` writable (that `mut` speaks about the referent; the binding is
-   always reassignable); `:=` copies the initializer's permission. Default: as today. Rec: yes.
-5. (asked 2026-10-09) a reassignable field holding a READ-ONLY reference cannot be written: a field's top `mut` means
-   both "reassignable" and "writable referent" (T25c), forcing `$x` copies (LRU value, Query.order). Options: (a)
-   `f mut String&` = reassignable + read-only, `f mut mut String&`-like spelling for both - ugly; (b) the top `mut`
-   on a field/global means the binding only and the reference's permission is written inside the type like an
-   element's (`f mut (mut String&)`); (c) leave it. Rec: decide together with 4 - make `mut` mean one thing per
-   position. Default: as today.
-6. (asked 2026-10-09) scripting: printing needs `try io.Print(...)` and every main `? io.IoError`. Add a prelude
-   `print`/`println` that aborts on a write failure (Rust's println! panics; Python's print raises)? Default: no.
-   Rec: yes - a failed write to stdout is not something a script handles.
-7. (asked 2026-10-09) the linear algebra library in std with oann a separate repo on top? Default (being built): yes.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
+- Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
+  public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).
+- Q2 keep integer wrapping (E6c), its `nsw` cost accepted.
+- Q3 `:=` infers from any expression whose type is determined (wt-langb).
+- Q4/Q5 "Do 4 and 5 as you want" - MY DESIGN, queued as the permissions batch (after langb + constgen merge): `mut`
+  speaks only about what a reference reaches - `mut T&` writable, `T&` read-only, in every position including locals
+  (`x mut T& = ...`; D11a still forbids `mut` before a value type on a local) and fields; a binding's reassignability
+  is never written: locals and parameters always (a parameter is the callee's own copy/cursor, so `mut` on a by-value
+  parameter becomes an error), a field through a writable instance (Rust's model - so per-field immutability (C3) goes:
+  `x mut I32` fields become `x I32`, X3a's mutex-blob opacity then rests on privacy), and a global keeps `mut` as its
+  binding (`X mut I32`; a reference global's single `mut` stays both, T25c - a mutable global with a read-only referent
+  remains inexpressible, recorded). `:=` copies the initializer's permission. Flag the lost per-field immutability to
+  the user in the report.
+- Q6 prelude `print`/`println` aborting on a write failure: yes (wt-langb). The user's "methods with errors called
+  without try abort?" - agreed with me that it is a bad idea ("Ye it's a bad idea").
+- Q7 linalg in std, oann on top: built (9b88d44).
+- Q11 the Nested-Learning projection: normalized by |x|^2 ("Normalize"); oann's AdamWProjected defaults are normalized,
+  alpha 1e-3 (89c8585, 97.79% MNIST). Which layers / alpha vs learning rate stay oann design questions, not the user's.
+- Q12 run-time dimensions: library `Dynamic` ("Do dynamic the way you want it").
+- Q13 `Array<T, N>&` carries its length (D9a kept): yes.
+- Q14 the user: "can we make Ts appear as T after being given as generics with <T>?" -> DECIDED: a type variable or a
+  constant is introduced by its first `<X>` (a type's parameter list; in a function the first `<X>` left to right:
+  receiver, parameters, results) and written bare `X` everywhere after (signature and body); `<X>` again is an error.
+  Replaces G8b's `<T>` everywhere. Constants: built in constgen phase 2 (told 13:05); type variables: a follow-up
+  agent switches them and migrates corpus/std after constgen merges.
+- Q18 spiking: answered ("We want spiking set up").
+- Q19/Q21 the user: "by default compilation is always for the machine you are on. To cross compile, use the -arch= ...
+  syntax. If fast math is its own functions then don't add the compiler option yet." -> native by default; flag
+  spelled `-a TARGET` (B1's one-character rule - tell the user, they may object); no fast-math/contraction option
+  (FastExp etc. stay functions; FMA only where code writes math.Fma). Being built: wt-native (started 13:10).
+- Q20 `assert cond, "message"`: yes (wt-smallfix).
 **Decided 2026-10-09 (the user):** a 2-D Matrix, not a tensor - "Matrix cuz then we don't interpret data in two
 places (both Tensor and Operation)". And: "make the language generics take constants (and comp time expressions) as
 parameters ... Expand it across arrays too ... Array<T, size>. Then re-evaluate the matrix question on the new basis."
@@ -68,22 +71,6 @@ each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choic
 kernels shared so an eager tape can be added - olang's arenas make a per-step tape cheap: one scope per step);
 transformers first after the MNIST MLP; optimizers: plain AdamW AND "AdamW with the regularisation of orthonormal
 projection as (I - alpha x x^T)".
-11. (asked 2026-10-09; the user: the regularizer is from "Nested Learning: The Illusion of Deep Learning
-   Architectures", Behrouz et al., NeurIPS 2025) my reading, to confirm: the paper's delta rule / Delta Gradient
-   Descent - for a linear layer y = W x, W <- W (I - a x x^T) - lr * (AdamW update), where x is the layer's INPUT (the
-   key), not the weights; per batch W <- W - (a/B) (W X^T) X (two GEMMs, as cheap as a forward pass), optionally
-   normalized by ||x||^2 per sample (the unofficial implementation's default). The user (2026-10-09): "It replaces the weight
-   decay I think" - so the term REPLACES AdamW's weight decay in this variant. Still open: normalized or not; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
-   container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
-12. (asked 2026-10-09, const generics design - wt-constgen becd37f, spec only) run-time dimensions: in the library
-   (`Dynamic I64 = -1`; Matrix stores rows/cols when a dimension is Dynamic; `Matrix<F32, Dynamic, 784> @
-   Matrix<F32, 784, 128>` checks 784 at compile time) or a language-level `_` (hidden storage and hidden run-time
-   checks in every generic)? Default/rec: the library.
-13. (asked 2026-10-09) `Array<T, N>&` puts a length in a reference type again (reversing T11a for fixed arrays) -
-   forced by D9a (array parameters are references); the alternative is fixed arrays by value (on hold). Rec: keep D9a.
-14. (asked 2026-10-09) a constant variable is written `<N>` in expressions too (`for i in range <N>`, `i < <N>`),
-   one spelling as G8b - or bare `N` in bodies (reads better, two spellings)? Default: `<N>`. Rec: `<N>` (the
-   agent's call; flagged because it is the most visible syntax choice).
 **Decided 2026-10-09 (the user, on settling networks):** "Don't do licenses. Take inspiration from [the source] but
 don't mention it specifically. We are really only interested in the dynamics, not the actual implementation. Don't
 call it [that], call it something else." -> the paradigm is "settling networks" (reciprocal regions iterating to an
@@ -102,31 +89,6 @@ repository or its code. Not legal advice; told the user so.
 a pluggable enum from the start - continuous neurons first, leaky integrate-and-fire (LIF) neurons learning from
 spike-count differences between the free and nudged phases set up as a real variant, aimed at the PYNQ-Z2. "We don't
 license either Oann or Olang" (may change; no licence files for now).
-Licence workaround (the user: "I really don't want to make myself forced to license"): clean room - copyright covers
-code, not ideas, equations or dynamics. docs/settling.md is the spec: dynamics only, each mechanism cited to the public
-literature (equilibrium propagation, centered EP, Hopfield relaxation, TD(lambda)/eligibility traces, three-factor
-rules, delta-rule associative memory, complementary learning systems), oann's own constants and API. RULE for every
-future agent implementing settling networks: work only from docs/settling.md and the papers - never open the original
-repository or its code. Not legal advice; told the user so.
-18. (asked 2026-10-09, re-explained when the user asked "what is 18?") spiking: should the settling networks' neuron
-   be pluggable so a spiking neuron (leaky integrate-and-fire, learning from spike-count differences between the free
-   and nudged phases) can replace the continuous one later - and is that the spiking direction meant for the FPGA?
-   Default: a pluggable neuron enum, continuous neurons first.
-19. (asked 2026-10-09, from std/linalg) a native-target build option (tile sizes per target, AVX2/AVX-512) plus an
-   opt-in contraction of a*b + c into FMA? The 5-7x gap to OpenBLAS is the instruction set (olang targets baseline
-   x86-64/SSE2, no FMA). Default: no. Rec: yes, opt-in (a flag), since it changes float results.
-20. (asked 2026-10-09) `assert` with a message (so a shape mismatch can say which shapes)? Being built with my rec as
-   the default (wt-smallfix): `assert cond, "text"`, evaluated only on failure; easy to drop if the user says no.
-21. (asked 2026-10-09) an opt-in fast-math mode (libmvec vector math, contraction) that gives up evaluator/run-time
-   agreement? Default: no (the matrix library ships FastExp/FastTanh/FastSigmoid approximations instead). Rec: only as
-   an explicit flag, if ever.
-**Answered 2026-10-09 (the user, numbering my list 1-13):** Q1 protocol methods follow privacy: "call private ones if
-in private and public if in public, if calling a private in public it can't be found and is an error. One may not declare
-both public and private" (being built, wt-langb). Q2 keep wrapping. Q3 `:=` infers (wt-langb). Q6 print/println: yes
-(wt-langb) - and the user floated "methods with errors called without try abort on errors?"; I advised against
-(explained). Q13 (Array<T,N>& carries its length): yes. Q20 assert message: yes ("sure"). Asked back / explained:
-Q4 ("aren't locals always mutable?"), Q5 ("talk to me more"), Q11 normalization ("probably shouldn't normalize?"),
-Q12 Dynamic, Q14 <N> vs N, Q19 native target/FMA, Q21 fast-math - explanations given, answers pending.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

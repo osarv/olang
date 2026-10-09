@@ -250,6 +250,12 @@ because what it finds about structure feeds the refactor.
   listzero (D13c: a struct whose ctor reads through a reference parameter cannot be a List element), ctordefault (a
   constructor default naming a global: "expected Mode, found ?", twice); kept as designed: operatornames (E31 reserves
   Mul/MatMul for every method), joinparen (`$alpha (" x")` is a call, E13b). at2/hexu64/failloc are in wt-smallfix.
+- 13:10: the user answered the last open questions (ledger): oann's projection is normalized, alpha 1e-3 by default
+  (oann 89c8585, pushed). Started wt-native (native CPU by default, `-a TARGET`, target build constants, per-target
+  GEMM tiles + math.Fma). Told constgen: constants introduced by `<N>` once, bare `N` after. QUEUED after langb and
+  constgen merge, in this order: (a) type variables bare after their introducing `<T>` - switch the resolver constgen
+  prepared and migrate corpus/std/oann; (b) the permissions batch (ledger Q4/Q5, my design: `mut` only before a
+  reference type, bindings never `mut` except globals, fields assignable through a writable instance).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
