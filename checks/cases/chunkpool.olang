@@ -1,0 +1,48 @@
+# check: run
+# O8b: storage a closed scope gave back is reused by later allocations whatever their order and size, so a computation
+# repeated in a loop settles at the memory one repetition needs. Each pattern here reached tens of megabytes when the
+# pool was one list taken from its head: a scope taking a large chunk and then a smaller one left the large one behind
+# the small one, and a new large one was mapped on every call (std/linalg's Gemm lost a panel per product that way);
+# and a size growing a little each time never fitted the chunk the last time gave back
+import "std/os"
+
+# the most this process has held resident, in kB
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+# a large scratch array and then a smaller one, both filled so their pages are resident, gone at the return
+fn largeThenSmall(big I64, small I64) F32 {
+    a := Array<F32>(big, 1.0)
+    b := Array<F32>(small, 2.0)
+    return a[big - 1] + b[small - 1]
+}
+
+# the same the other way round
+fn smallThenLarge(small I64, big I64) F32 {
+    b := Array<F32>(small, 2.0)
+    a := Array<F32>(big, 1.0)
+    return a[big - 1] + b[small - 1]
+}
+
+# one scratch array of n elements
+fn scratch(n I64) F32 {
+    a := Array<F32>(n, 3.0)
+    return a[n - 1]
+}
+
+fn main() ? {
+    s F32 = 0
+    for i in range 200 { s += largeThenSmall(100000, 16384) }      # 400KB then 64KB: 80MB when the first leaked
+    for i in range 200 { s += smallThenLarge(16384, 100000) }
+    for i in range 450 { s += scratch(37500 + 250 * i) }           # 150KB growing to 600KB, 1KB at a time: 160MB
+    for i in range 300 { s += scratch(I64[40000, 300000, 90000][i % 3]) }    # three sizes in turn
+    assert s == 200 * 3 + 200 * 3 + 450 * 3 + 300 * 3
+    kb := peakKb()
+    assert kb > 0 and kb < 24000
+}

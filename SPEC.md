@@ -3610,9 +3610,9 @@ independent of its immediate container's.
 `Array<T>(n)` (§3 D14) is built in the scope of whatever it lands in, and only a literal or an inline field
 (C2e) is laid out in place.
 
-**O8.** Closing a scope (O1) reclaims every allocation made into it. This specification does not
-guarantee any particular reuse or timing of underlying storage beyond "valid until the owning scope
-closes, invalid after."
+**O8.** Closing a scope (O1) reclaims every allocation made into it. Beyond O8b, this specification does not
+guarantee when or by what underlying storage is reused: it is valid until the owning scope closes, and invalid
+after.
 
 **O8a (allocation alignment).** Storage a scope hands out is aligned by its own size: 8 bytes below 32,
 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
@@ -3621,6 +3621,12 @@ for it without anything being written at the declaration.
 
 Alignment beyond 64 bytes is not expressible (see also §11 X3a, which states the same ceiling for a
 foreign type reached through an array).
+
+**O8b (reuse and return).** Storage a closing scope reclaims is kept for later allocations on the same thread, and an
+allocation reuses kept storage of a suitable size whatever order it was reclaimed in - so a computation repeated, a
+loop's body or a function called again, settles at the memory one repetition needs rather than growing with the number
+of repetitions. What a thread keeps is bounded by an eighth of the machine's physical memory; storage reclaimed beyond
+the bound is returned to the operating system, what has gone longest unused first.
 
 ### 8.4 The static scope check
 

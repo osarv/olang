@@ -10440,3 +10440,70 @@ capitalized: the top-level documents about the project (`CLAUDE.md`, `PRINCIPLES
 follow the Unix habit of capitals, which sort first in a listing, and `spec.md` was the one exception. `olang -e RULE`
 reads `../SPEC.md` beside the compiler, and the checks hold every rule an error names to it. References in the records
 were updated, older entries included, since it is the same file.
+- **The arena's chunk pool finds any chunk big enough, and is bounded (O8b, O8, O2b, P2a, 2026-10-09); `GemmWorkspace`
+  in `std/linalg`.** Found training a network with oann: memory grew by ~540KB a training step, ~245MB an MNIST epoch,
+  although nothing outlived a step. `oann/repro/chunkpool.olang` reduced it to two scratch arrays per call, a large one
+  and then a smaller one: the resident set grew 78MB over 200 calls, and strace showed one `mmap` per call.
+  **The cause.** `__olang_new_chunk` looked at the head of the thread's free list and nowhere else, and a closing scope
+  spliced its chunk list onto that head newest first. A scope that took a 400KB chunk and then a 64KB one put the 64KB
+  chunk on top; the next call asked for 400KB, found 64KB at the head, mapped a new 400KB chunk, and the old one was
+  never looked at again. `Gemm` packs its B panel and then its A panel, so every packed product lost one B panel. The
+  recorded "revisit only if" - the pool reusing more than its head chunk if allocation patterns demand it - had come
+  due.
+  **The pool now (my design).** A thread's pool is a set of size classes, four per power of two from 4KB up (4096,
+  5120, 6144, 7168, 8192, 10240, ...: with e the top bit of s - 1 and q the two bits below it plus 4, class
+  4(e - 11) + q - 7 of (q + 1) 2^(e - 2) bytes), and a new chunk is made at its class's size, so every chunk of a class
+  holds whatever the class is asked for - no first-fit search within a class. A request takes the newest chunk of the
+  smallest non-empty class at or above its own, at most eight classes (4x) up: one `cttz` over an `i128` with a bit per
+  class. Further up is left alone, because a small request would pin a large chunk in a scope that may live long; a
+  chunk four times the request is used, since its remainder serves the scope's next allocations. Rounding to a class
+  costs at most 25% of a chunk, and only virtually for a mapped one (pages untouched stay unbacked); it is what settles a
+  size that creeps up a little each call, which with exact sizes made a chunk per call (a 150KB buffer growing 1KB a
+  call: 160MB peak before, 4MB now, in `checks/cases/chunkpool.olang`). Each class is a circular doubly linked list
+  (`next`, and `prev` in the header's spare words), so any chunk can leave it in O(1).
+  **Giving memory back (measured, then decided).** A pool keeping everything holds a phase's peak forever, and a pool
+  keeping too little re-faults pages a loop could have reused. Faulting fresh pages here costs about 1ms a MB (a VM:
+  1MB filled fresh 1.33ms against 0.08ms reused, 64MB 64ms against 31ms, 256MB 247ms against 123ms), so the bound is
+  generous: **an eighth of physical memory, per thread** (`sysconf`, read the first time the bound is reached; 1GB where
+  it does not answer). Per thread, so no atomics on the path every scope's close takes; the idle-worker cap (P1f) and
+  P2a's drain at a retiring worker bound how many pools there are. A chunk given back past the bound first returns the
+  pool's least recently given back chunks to the system (`munmap`, or `free` for one from `aligned_alloc`), the oldest
+  found among each class's oldest (its newest's `prev`) by a stamp taken from a per-thread clock; a chunk larger than the
+  whole bound goes back at once. LRU rather than the simpler rules because each simpler one leaves a hog: evicting the
+  chunk being given back keeps stale chunks of sizes no one asks for any more and churns the ones that are wanted, and
+  smallest-first keeps a stale large chunk while a working set of medium ones churns. The scenario `chunkpool` in
+  `checks/checks.olang` runs a program under a preloaded `sysconf` answering a machine of 8MB (a 1MB bound): a phase
+  holding 16MB grows the resident set by 8kB once it ends (16MB before), a 4MB array goes straight back.
+  **Keeping it as cheap as the old pool took three rounds, each found with callgrind.** The first version was 5x slower
+  on a loop whose body allocates a little each pass (a call per pass, 18 instructions under the old pool, 110 under the
+  new). (1) The common case is a block taking one 4KB chunk and giving it back, so one spare 4KB chunk sits beside the
+  classes, outside their bookkeeping: `__olang_scope_alloc` takes it inline and `__olang_scope_close` gives it back
+  inline (the spare is the top of class 0's stack: a 4KB chunk given back takes its place and the one it replaces goes
+  into the class). (2) Everything else is out of line - `__olang_new_chunk`, `__olang_pool_give_list`,
+  `__olang_pool_make_room` are `noinline` - because inlining `__olang_new_chunk` into `__olang_scope_alloc` pushed the
+  allocator's inline cost past LLVM's thresholds at some call sites. (3) **`__olang_scope_close` is `alwaysinline`**:
+  LLVM put its cost at 55 against 45 for a cold call site (the old close was 35), so it stopped being inlined there, the
+  scope header's address escaped into the call, SROA could no longer keep an unused block's header in registers, and a
+  loop body whose scope allocates nothing on its fast path paid two stores and two tests every pass - `List` push went
+  from 16 to 36 instructions an element. The close no longer resets the scope's tail, which is read only while the list
+  is not empty. After the three: callgrind counts 21 instructions a pass on the allocating loop (19 before), the same on
+  `List` push (3.593M against 3.591M for 200k), fewer on binary-trees (144.4M against 148.7M at depth 14); cachegrind sees
+  binary-trees' last-level misses unchanged and ~10% more first-level write misses (the class links touch a neighbour's
+  header). CPU time, medians of 11 interleaved runs on the shared machine: List push 0.187s -> 0.183s, the allocating
+  loop 0.060s -> 0.062s, k-nucleotide 0.730s -> 0.755s, text 0.437s -> 0.385s, binary-trees 0.427s -> 0.470s - and
+  `parallel`, whose one hot function is byte-for-byte the same in both binaries (it allocates nothing), 1.747s -> 1.829s:
+  differences of this size between two binaries are layout, not the allocator.
+  **Checked further**: a stress program - random sizes from 8 bytes to 2.4MB, scopes nested four deep holding several
+  each, four tasks and the main thread - gives the same answers with the old pool, the new one, a 1MB bound, `-r` (TSan
+  silent) and `-d`. D13c's fresh flag (a recycled chunk is not fresh), O8a's alignment (a class size is a multiple of 1KB
+  and the header is still 64 bytes) and P2a's drain are unchanged; the drain walks the classes and releases the spare.
+  **`std/linalg` (mine)**: `GemmWorkspace<T>()` holds the packing panels - its own element type's, or F32 ones for F16,
+  BF16 and the F8s - and grows, where it lives, to what the largest product given needs (a bare field lives with its
+  instance, C2d, so the panels are built in the workspace's scope); `ws.Gemm(c, a, transA, b, transB, alpha, beta,
+  threads)` is `Gemm` packing into it, so a training step allocates nothing after its first, and `Gemm` itself packs into
+  a workspace of its own scope, given back to the pool at its return. A test checks `ws.Gemm` against `Gemm` in every
+  transpose, with threads, in F64 and F16, and that a smaller product after a larger one reuses the very panels (`is`).
+  Sized by growth rather than by a constructor taking the largest shape, because the panel sizes depend on the tile
+  width and the task split, which only the product knows. **Measured end to end**: oann's MNIST trainer peaked at 793MB
+  over three epochs and now at 57MB, with the same losses and accuracies; `checks/cases/gemmflat.olang` runs 600 products
+  with a 400KB B panel at an 11MB peak (242MB before).

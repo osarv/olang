@@ -3715,6 +3715,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   ("the block opened on line N has no '}'") with the next item read from the declaration found, so a second one is found
   too; a checked-only index recovers as unknown (one error). Study leftovers kvtool:89, matrix:127, calc:157 and
   widgets:26 compile and run as first written (fixed by the merged batches; checked against their workarounds' output).
+- **The arena's chunk pool finds any chunk big enough, and is bounded (O8b, O8, O2b, P2a, 2026-10-09); `GemmWorkspace`.**
+  Found training oann: `__olang_new_chunk` tried only the pool's head, and a closing scope gave its chunks back newest
+  first, so a scope taking a large chunk and then a smaller one left the large one behind the small one - every later
+  call mapped a new large one and the old one was never taken again. `std/linalg`'s `Gemm` makes its B panel and then
+  its A panel, so every packed product lost one B panel: 793MB peak over three MNIST epochs (~245MB an epoch). **Now
+  (my design)**: per-thread **size classes**, four per power of two from 4KB (4096, 5120, 6144, 7168, 8192, ...), a new
+  chunk made at its class's size so every chunk of a class holds whatever the class is asked for; a request takes the
+  newest chunk of the smallest non-empty class up to eight classes (4x) above its own - one count of trailing zeros over
+  an `i128` bit per class - and maps a new one only when there is none; further up is left for a request its size. A
+  growing request settles too (a size creeping up 1KB at a time made a chunk per call). **Returned to the system
+  (decided on measurements)**: what a thread's pool holds is bounded by **an eighth of physical memory** (sysconf); a chunk
+  given back beyond it first returns the least recently given back chunks (munmap or free) - LRU by a stamp per chunk,
+  the oldest of a class being the one before its newest - or goes back itself when larger than the bound. Faulting fresh
+  pages costs ~1ms/MB on this machine (VM), 2-15x a reuse, so the bound is generous and per thread (no atomics); it
+  answers phase peaks and stale sizes, not steady loops. **Kept as cheap as the old pool**: one spare 4KB chunk sits
+  beside the classes, taken inline by `__olang_scope_alloc` and given inline by `__olang_scope_close`; the rest is
+  out of line (`__olang_new_chunk`, `__olang_pool_give_list`, `__olang_pool_make_room` noinline), and `scope_close` is
+  `alwaysinline` - at LLVM's cold-call threshold it stopped being inlined, the scope header escaped, and a loop body's
+  empty scope cost two stores and two tests a pass (`List` push 16 -> 36 instructions an element, found by callgrind).
+  Callgrind: equal or fewer instructions on binary-trees, List push and a scope-churn loop (19 -> 21 per call); CPU
+  time within the layout noise (an unchanged hot function measured 5% apart between the two binaries). D13c's fresh
+  flag, O8a's alignment, P2a's per-thread pools and P1f's drain at a retiring worker are unchanged. **`std/linalg`
+  (mine)**: `GemmWorkspace<T>()` holds the packing panels (the F32 ones for F16/BF16/F8) and grows, where it lives, to the
+  largest product given; `ws.Gemm(...)` packs into it, so a training step allocates nothing after its first; `Gemm`
+  packs into a workspace of its own scope. oann's trainer: 793MB -> 57MB peak over three epochs, same losses.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
