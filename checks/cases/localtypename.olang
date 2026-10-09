@@ -1,0 +1,10 @@
+# check: fail this name is a type's
+# D3a: a local may not reuse a type's name, so what follows "is" is a type exactly when it names one
+type Shape enum {
+    Circle(r F64)
+    Nil
+}
+fn main() ? {
+    Shape := 3
+    assert Shape == 3
+}

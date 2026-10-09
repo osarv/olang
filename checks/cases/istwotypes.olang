@@ -1,0 +1,9 @@
+# check: fail references of two different types never do
+# E10c: "a is b" between references of two different types
+type P struct(v I32) { v }
+type Q struct(v I32) { v }
+fn main() ? {
+    p P& = P(1)
+    q Q& = Q(1)
+    assert p is not q
+}

@@ -1,0 +1,7 @@
+# check: fail writes the place it is called on, so the place must be writable
+# P9: only AtomicLoad reads a read-only place
+type C struct(n I32) { n }
+fn bump(c C&) { c.n.AtomicAdd(1) }
+fn main() ? {
+    bump(C(1))
+}

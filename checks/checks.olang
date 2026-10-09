@@ -419,6 +419,7 @@ test "computed globals are written out as data" {
     assert sh(dir, "grep -q '@ct_Table = global { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0
     assert sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Looped = global i1 true'" $ll) == 0               # E10c: identity
     assert sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0           # K2c: never destructs, so baked
     assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    # its temporary's destructor runs
     assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
@@ -585,7 +586,7 @@ test "the type checker's review fixes, across modules" {
     assert oneError(dir, "matchother", "this is not that enum")
     assert oneError(dir, "isprivate", "this enum case is private")
     assert oneError(dir, "matchprivate", "this enum case is private")
-    assert oneError(dir, "isnoalias", "unknown namespace")
+    assert oneError(dir, "isnoalias", "unknown name 'nosuchalias'")    # E10c: naming no type, it is a value
     assert oneError(dir, "privcase", "this enum case is private")
     assert oneError(dir, "privword", "this error word is private")
     assert oneError(dir, "privmethod", "this method is private")
