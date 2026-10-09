@@ -12,37 +12,37 @@
 # map, which every call checks (O10b).
 
 # one key and its value, as a "for ... in" over a Map gives them
-type MapEntry<K, V> struct(key <K>, value <V>) {
-    Key mut <K> = key
-    Value mut <V> = value
+type MapEntry<K, V> struct(key K, value V) {
+    Key mut K = key
+    Value mut V = value
 }
 
 # a key and its value where the Map keeps them, and the next of its chain. The entry is held whole, so a walk hands out
 # a copy of one that already exists rather than building one per step
-type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
-    entry mut MapEntry<<K>, <V>> = MapEntry<<K>, <V>>(key, value)
+type mapSlot<K, V> struct(key K, value V, next mut mapSlot<K, V>&) {
+    entry mut MapEntry<K, V> = MapEntry<K, V>(key, value)
     next mut
 }
 
-type Map<K Hashable<<K>>, V> struct() {
-    buckets mut Array<mut mapSlot<<K>, <V>>&>& = Array<mut mapSlot<<K>, <V>>&>(8)
+type Map<K Hashable<K>, V> struct() {
+    buckets mut Array<mut mapSlot<K, V>&>& = Array<mut mapSlot<K, V>&>(8)
     count mut I64 = 0
-    free mut mapSlot<<K>, <V>>& = null          # slots of removed keys, chained through next, for the next keys put
+    free mut mapSlot<K, V>& = null              # slots of removed keys, chained through next, for the next keys put
 }
 
 fn (m Map<<K>, <V>>&) Len() I64 { return m.count }
 
-fn (m Map<<K>, <V>>&) bucketOf(key <K>) I64 { return key.Hash() & (m.buckets.Len() - 1) }
+fn (m Map<<K>, <V>>&) bucketOf(key K) I64 { return key.Hash() & (m.buckets.Len() - 1) }
 
 # a new key and its value, at the head of bucket i's chain - in a slot a removed key left, when there is one, so a Map
 # whose keys come and go stays the size of what it holds
-fn (m mut Map<<K>, <V>>&) add(i I64, key <K>, value <V>) {
+fn (m mut Map<<K>, <V>>&) add(i I64, key K, value V) {
     if m.free == null {
-        m.buckets[i] = mapSlot<<K>, <V>>(key, value, m.buckets[i])
+        m.buckets[i] = mapSlot<K, V>(key, value, m.buckets[i])
     } else {
-        s mapSlot<<K>, <V>>&m = m.free
+        s mapSlot<K, V>&m = m.free
         m.free = s.next
-        s.entry = MapEntry<<K>, <V>>(key, value)
+        s.entry = MapEntry<K, V>(key, value)
         s.next = m.buckets[i]
         m.buckets[i] = s
     }
@@ -51,9 +51,9 @@ fn (m mut Map<<K>, <V>>&) add(i I64, key <K>, value <V>) {
 }
 
 # sets the value for key, replacing the one it had
-fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
+fn (m mut Map<<K>, <V>>&) Put(key K, value V) {
     i := m.bucketOf(key)
-    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+    for s mapSlot<K, V>&m = m.buckets[i], s != null, s = s.next {
         if s.entry.Key == key {
             s.entry.Value = value
             return
@@ -65,9 +65,9 @@ fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
 # doubles the buckets and re-links every slot into its new one
 fn (m mut Map<<K>, <V>>&) grow() {
     old := m.buckets
-    m.buckets = Array<mut mapSlot<<K>, <V>>&>(old.Len() * 2)
+    m.buckets = Array<mut mapSlot<K, V>&>(old.Len() * 2)
     for i in range old.Len() {
-        s mapSlot<<K>, <V>>&m = old[i]
+        s mapSlot<K, V>&m = old[i]
         for s != null {
             after := s.next
             j := m.bucketOf(s.entry.Key)
@@ -80,9 +80,9 @@ fn (m mut Map<<K>, <V>>&) grow() {
 
 # the value for key made f(its value) - or, where key has none, f(init) put for it: counting is
 # "m.Update(word, 0, fn(n) { return n + 1 })". One hash and one walk of key's chain, where Get then Put take two
-fn (m mut Map<<K>, <V>>&) Update(key <K>, init <V>, f fn(v <V>) <V>) {
+fn (m mut Map<<K>, <V>>&) Update(key K, init V, f fn(v V) V) {
     i := m.bucketOf(key)
-    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+    for s mapSlot<K, V>&m = m.buckets[i], s != null, s = s.next {
         if s.entry.Key == key {
             s.entry.Value = f(s.entry.Value)
             return
@@ -93,26 +93,26 @@ fn (m mut Map<<K>, <V>>&) Update(key <K>, init <V>, f fn(v <V>) <V>) {
 
 # the value for key - failing with the default error when there is none, so a miss is never read as a value:
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
-fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
-    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+fn (m Map<<K>, <V>>&) Get(key K) V ? {
+    for s mapSlot<K, V>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
         if s.entry.Key == key { return s.entry.Value }
     }
     error
 }
 
 # whether key has a value - what "key in m" asks (E29)
-fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
-    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+fn (m Map<<K>, <V>>&) Has(key K) Bool {
+    for s mapSlot<K, V>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
         if s.entry.Key == key { return true }
     }
     return false
 }
 
 # removes key and its value, and says whether it was there. Its slot is kept for the next key put
-fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
+fn (m mut Map<<K>, <V>>&) Remove(key K) Bool {
     i := m.bucketOf(key)
-    prev mapSlot<<K>, <V>>&m = null
-    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+    prev mapSlot<K, V>&m = null
+    for s mapSlot<K, V>&m = m.buckets[i], s != null, s = s.next {
         if s.entry.Key == key {
             if prev == null { m.buckets[i] = s.next } else { prev.next = s.next }
             s.next = m.free
@@ -129,7 +129,7 @@ fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
 # were, so emptying a map and filling it again allocates nothing
 fn (m mut Map<<K>, <V>>&) Clear() {
     for i in range m.buckets.Len() {
-        s mapSlot<<K>, <V>>&m = m.buckets[i]
+        s mapSlot<K, V>&m = m.buckets[i]
         for s != null {
             after := s.next
             s.next = m.free
@@ -145,14 +145,14 @@ fn (m mut Map<<K>, <V>>&) Clear() {
 # next slot itself, so each step follows one link rather than walking a chain from its start. The entry just given may
 # be removed while the walk goes on; any other change to the map during a walk leaves which entries the rest of it gives
 # unspecified
-type MapIter<K, V> struct(of Map<<K>, <V>>&) {
-    m Map<<K>, <V>>&of = of
+type MapIter<K, V> struct(of Map<K, V>&) {
+    m Map<K, V>&of = of
     bucket mut I64 = 0                          # the next bucket to start a chain from
-    slot mut mapSlot<<K>, <V>>&of = null        # the next slot along the current chain; null once it is walked
-    given mut mapSlot<<K>, <V>>&of = null       # the slot given last
+    slot mut mapSlot<K, V>&of = null            # the next slot along the current chain; null once it is walked
+    given mut mapSlot<K, V>&of = null           # the slot given last
 }
 
-fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
+fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<K, V> ? Exhausted {
     try it.advance()
     return it.given.entry
 }
@@ -168,29 +168,29 @@ fn (it mut MapIter<<K>, <V>>&) advance() ? Exhausted {
     it.slot = it.slot.next
 }
 
-fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }
+fn (m Map<<K>, <V>>&) Iter() MapIter<K, V> { return MapIter<K, V>(m) }
 
 # the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToList()" for a List of
 # them. A walk of the map as Iter's is, under the same rule for changes made during it
-fn (m Map<<K>, <V>>&) Keys() MapKeyIter<<K>, <V>> { return MapKeyIter<<K>, <V>>(m) }
+fn (m Map<<K>, <V>>&) Keys() MapKeyIter<K, V> { return MapKeyIter<K, V>(m) }
 
 # the values, one at a time, in the order Iter() gives the entries
-fn (m Map<<K>, <V>>&) Values() MapValueIter<<K>, <V>> { return MapValueIter<<K>, <V>>(m) }
+fn (m Map<<K>, <V>>&) Values() MapValueIter<K, V> { return MapValueIter<K, V>(m) }
 
-type MapKeyIter<K, V> struct(of Map<<K>, <V>>&) {
-    entries mut MapIter<<K>, <V>> = MapIter<<K>, <V>>(of)
+type MapKeyIter<K, V> struct(of Map<K, V>&) {
+    entries mut MapIter<K, V> = MapIter<K, V>(of)
 }
 
-fn (it mut MapKeyIter<<K>, <V>>&) Next() <K> ? Exhausted {
+fn (it mut MapKeyIter<<K>, <V>>&) Next() K ? Exhausted {
     try it.entries.advance()
     return it.entries.given.entry.Key
 }
 
-type MapValueIter<K, V> struct(of Map<<K>, <V>>&) {
-    entries mut MapIter<<K>, <V>> = MapIter<<K>, <V>>(of)
+type MapValueIter<K, V> struct(of Map<K, V>&) {
+    entries mut MapIter<K, V> = MapIter<K, V>(of)
 }
 
-fn (it mut MapValueIter<<K>, <V>>&) Next() <V> ? Exhausted {
+fn (it mut MapValueIter<<K>, <V>>&) Next() V ? Exhausted {
     try it.entries.advance()
     return it.entries.given.entry.Value
 }

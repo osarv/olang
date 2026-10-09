@@ -2163,12 +2163,11 @@ static void collectTypeVarToks(struct syntax* node, struct list* out) {
         if (!p->isToken) collectTypeVarToks(p->sntx, out);
     }
 }
-//G22: a generic's variable is INTRODUCED by its first "<X>" - in a struct type or trait by its parameter list, in a function
-//by the first "<X>" read left to right (receiver, parameters, results) - and written bare, "X", everywhere after it: in
-//the rest of the declaration and in its body. "<X>" written again is an error, and a bare "X" before the introduction
-//names no variable. Constant variables follow the rule; type variables follow it once bareTypeVars is set, and are
-//written "<T>" everywhere until then (G8b)
-static const bool bareTypeVars = false;
+//G8b/G22: a generic's variable - a type variable or a constant one - is INTRODUCED by its first "<X>": in a struct type
+//or trait by its parameter list, in a function by the first "<X>" read left to right (receiver, parameters, results).
+//It is written bare, "X", everywhere after it: in the rest of the declaration and in its body. "<X>" written again is
+//an error (reported once, at the declaration - writtenAgainIn), and a bare "X" before the introduction names no
+//variable.
 //the introduction of each variable of the signature being resolved - its first "<X>", by source position - or NULL
 //outside a signature
 static struct list* currentSigIntros; //struct token
@@ -2203,16 +2202,48 @@ static struct token* sigIntroOf(struct str name) {
     }
     return NULL;
 }
-//G22: whether "<X>" written at t is written again - after the variable's introduction: in a body or a type's own
-//declaration always, in a signature anywhere but its first "<X>"
+//G8b/G22: whether "<X>" written at t in a signature is written again - anywhere but the variable's first "<X>". A body,
+//or a type's own declaration, is read once for its declaration (writtenAgainIn), not again per instantiation
 static bool varWrittenAgain(struct token t) {
-    struct str name = strFromTok(t);
-    if (currentBindings && bindingGet(currentBindings, name)) return true;
-    if (currentConstVars && bindingGet(currentConstVars, name)) return true;
-    struct token* intro = sigIntroOf(name);
+    if (currentBindings) return false;
+    struct token* intro = sigIntroOf(strFromTok(t));
     return intro && intro->str.ptr != t.str.ptr;
 }
-//G22: what a bare name written at `at` is - 1 a variable of the declaration in scope there, -1 one of the signature's
+//G8b/G22: "<X>" written again, X a type variable or a constant one
+static void reportWrittenAgain(struct token t, bool constant) {
+    struct str n = strFromTok(t);
+    if (constant) Err(t, ERR_VAR_WRITTEN_AGAIN, n, n, n);
+    else Err(t, ERR_TYPE_VAR_WRITTEN_AGAIN, n, n, n);
+}
+//G8b/G22: a bare "X" before its introduction in a signature, X a type variable or a constant one - with a note at the
+//"<X>" that introduces it
+static void reportBeforeIntro(struct token t, bool constant) {
+    struct str n = strFromTok(t);
+    if (constant) Err(t, ERR_VAR_BEFORE_INTRO, t, n);
+    else Err(t, ERR_TYPE_VAR_BEFORE_INTRO, t, n);
+    struct token* intro = sigIntroOf(n);
+    if (intro) Note(*intro, NOTE_INTRODUCED_HERE, n);
+}
+//G8b/G22: every "<X>" written under node naming one of names - the variables a declaration introduced elsewhere - is
+//written again. constNames are those of the names that are constants. Read once per declaration, so an error is one
+//error however many instantiations the declaration has
+static void writtenAgainIn(struct syntax* node, struct list* names, struct list* constNames) {
+    if (!node) return;
+    if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
+        struct token t = firstTokOfType(node, TOK_IDEN);
+        struct str n = strFromTok(t);
+        bool named = false, constant = false;
+        for (int i = 0; i < names->len && !named; i++) named = StrCmp(*(struct str*)ListGetIdx(names, i), n);
+        for (int i = 0; constNames && i < constNames->len && !constant; i++)
+            constant = StrCmp(*(struct str*)ListGetIdx(constNames, i), n);
+        if (named) { reportWrittenAgain(t, constant); return; } //one error: "<I Iterator<<E>>>" again is not two
+    }
+    for (int i = 0; i < node->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&node->parts, i);
+        if (!p->isToken) writtenAgainIn(p->sntx, names, constNames);
+    }
+}
+//G8b/G22: what a bare name written at `at` is - 1 a variable of the declaration in scope there, -1 one of the signature's
 //introduced only after it, 0 no variable
 static int bareVarAt(struct str name, struct token at) {
     if (currentBindings && bindingGet(currentBindings, name)) return 1;
@@ -2220,7 +2251,7 @@ static int bareVarAt(struct str name, struct token at) {
     struct token* intro = sigIntroOf(name);
     if (intro) return intro->str.ptr < at.str.ptr ? 1 : -1;
     //a type's own list, or an enclosing declaration's, introduced its type variables before anything they are read in
-    for (int i = 0; bareTypeVars && currentTypeParamNames && i < currentTypeParamNames->len; i++)
+    for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
         if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) return 1;
     return 0;
 }
@@ -3284,7 +3315,7 @@ static struct token constArgUnknownVar(struct syntax* s) {
     if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
         struct token t = firstTokOfType(s, TOK_IDEN);
         struct str n = strFromTok(t);
-        if (varWrittenAgain(t)) Err(t, ERR_VAR_WRITTEN_AGAIN, n, n, n);
+        if (varWrittenAgain(t)) reportWrittenAgain(t, true);
         if (currentBindings && bindingGet(currentBindings, n)) return (struct token){0};
         if (currentConstVars && bindingGet(currentConstVars, n)) return (struct token){0};
         for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
@@ -3292,7 +3323,7 @@ static struct token constArgUnknownVar(struct syntax* s) {
         return t;
     }
     struct token bt = bareNameTok(s);
-    if (bt.type != TOK_NONE && bareVarAt(strFromTok(bt), bt) < 0) Err(bt, ERR_VAR_BEFORE_INTRO, bt, strFromTok(bt));
+    if (bt.type != TOK_NONE && bareVarAt(strFromTok(bt), bt) < 0) reportBeforeIntro(bt, true);
     for (int i = 0; i < s->parts.len; i++) {
         if (partAt(s, i)->isToken) continue;
         struct token t = constArgUnknownVar(partSntx(s, i));
@@ -3314,11 +3345,11 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
     bool written = whole && whole->type == SNTX_TYPE_VAR;
     struct token bareTok = bareNameTok(whole);
     int bare = bareTok.type == TOK_NONE ? 0 : bareVarAt(strFromTok(bareTok), bareTok);
-    if (bare < 0) { Err(bareTok, ERR_VAR_BEFORE_INTRO, bareTok, strFromTok(bareTok)); return bad; }
+    if (bare < 0) { reportBeforeIntro(bareTok, true); return bad; }
     if (written || bare > 0) {
         struct token nameTok = written ? firstTokOfType(whole, TOK_IDEN) : bareTok;
         struct str vname = strFromTok(nameTok);
-        if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
+        if (written && varWrittenAgain(nameTok)) reportWrittenAgain(nameTok, true);
         //"<N I64>": a constant variable's type written where it is introduced - the parameter's type, or none at all
         struct syntax* typeNode = written ? firstPartOfType(whole, SNTX_TYPE_EXPR) : NULL;
         if (typeNode) {
@@ -3559,8 +3590,8 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (varNode) {
         struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
         struct str vname = strFromTok(nameTok);
-        //G22: a type variable following the introduction rule is written "<T>" once
-        if (bareTypeVars && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
+        //G8b: a type variable is written "<T>" once, where it is introduced
+        if (varWrittenAgain(nameTok)) reportWrittenAgain(nameTok, false);
         //inside an instantiation, a type variable IS its bound type - see currentBindings
         if (currentBindings) {
             struct type* bound = bindingGet(currentBindings, vname);
@@ -3589,32 +3620,19 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (idens.len == 1) {
         nameTok = *(struct token*)ListGetIdx(&idens, 0);
         struct str name = strFromTok(nameTok);
-        //G22: a variable written bare after its introduction - a constant one is a value, where a type belongs; a type
-        //variable is its type once type variables follow the rule
+        //G8b/G22: a variable written bare after its introduction - a type variable is its type, and so is one written
+        //as a type argument ("Cell<T>"), which is what lets one generic be written in terms of another (G8a); a
+        //constant one is a value, where a type belongs. Checked before the declared-type lookup: a variable named
+        //after a type is G1's one error, and stays the variable everywhere the declaration writes it
         int bv = bareVarAt(name, nameTok);
-        if (bv != 0 && !TypeGetList(&mod->types, name)) {
+        if (bv != 0) {
             struct type* bound = currentBindings ? bindingGet(currentBindings, name) : NULL;
             if ((bound && (bound->bType == BASETYPE_CONST || bound->isConstVar)) || (currentConstVars && bindingGet(currentConstVars, name))) {
                 Err(nameTok, ERR_CONST_VAR_AS_TYPE, name);
                 return unknownTypeStandIn();
             }
-            if (bareTypeVars) {
-                if (bv < 0) { Err(nameTok, ERR_VAR_BEFORE_INTRO, nameTok, name); return unknownTypeStandIn(); }
-                return bound ? *bound : TypeVar(name, nameTok);
-            }
-        }
-        //G8: a bare IDEN here may name a type parameter in scope rather than a declared type, which is
-        //what lets one generic be written in terms of another. Checked before the declared-type lookup so
-        //G8b: a type variable is written "<T>" everywhere, type arguments included - "Cell<<T>>" - so a bare
-        //name is always a declared type. A bare name that happens to be a variable in scope is diagnosed
-        //as such rather than as an unknown type, since that is the mistake it almost certainly is.
-        bool namesVariable = currentBindings && bindingGet(currentBindings, name);
-        for (int i = 0; !namesVariable && currentTypeParamNames && i < currentTypeParamNames->len; i++) {
-            if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) namesVariable = true;
-        }
-        if (namesVariable && !TypeGetList(&mod->types, name)) {
-            Err(nameTok, ERR_TYPE_VAR_WRITTEN_BARE, nameTok, name);
-            return TypeVar(name, nameTok);
+            if (bv < 0) { reportBeforeIntro(nameTok, false); return unknownTypeStandIn(); }
+            return bound ? *bound : TypeVar(name, nameTok);
         }
         found = typeNamed(mod, name);
         if (!found && StrCmp(name, StrFromCStr("Array"))) {
@@ -3896,6 +3914,9 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
     if (idens.len == 1) {
         struct token nameTok = *(struct token*)ListGetIdx(&idens, 0);
         struct str name = strFromTok(nameTok);
+        //G8b: "T[a, b]" - a literal of a type variable's elements, the type the instantiation binds
+        struct type* bound = currentBindings ? bindingGet(currentBindings, name) : NULL;
+        if (bound && bound->bType != BASETYPE_CONST && !bound->isConstVar) return *bound;
         found = typeNamed(mod, name);
         if (!found) {
             if (StrCmp(name, StrFromCStr("Bool"))) return TypeVanilla(BASETYPE_BOOL);
@@ -4607,13 +4628,24 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             if (StrCmp(*(struct str*)ListGetIdx(&sigTypeVars, j), strFromTok(vt))) { ListRemoveIdx(&sigTypeVars, j); break; }
         }
     }
+    //an enclosing declaration's variables (a trait's, for its methods' signatures) stay in scope beside these
+    for (int i = 0; sigTypeVars.len && prevTPN && i < prevTPN->len; i++) {
+        struct str n = *(struct str*)ListGetIdx(prevTPN, i);
+        if (!strListHas(&sigTypeVars, n)) ListAdd(&sigTypeVars, &n);
+    }
     if (sigTypeVars.len > 0) currentTypeParamNames = &sigTypeVars;
     //G22: the variables this signature introduces, each by its first "<X>". A signature inside it (a parameter's function
     //type) introduces none of its own (G3a), and neither does one inside a generic's body, whose variables its own
     //signature introduced
     struct list* prevIntros = currentSigIntros;
     struct list sigIntros = ListInit(sizeof(struct token));
-    if (!currentSigIntros && !currentBindings) { collectSigIntros(sigNode, &sigIntros); currentSigIntros = &sigIntros; }
+    if (!currentSigIntros && !currentBindings) {
+        collectSigIntros(sigNode, &sigIntros);
+        //a trait's method signature introduces none of the trait's own variables - its list did (G8b)
+        for (int i = sigIntros.len - 1; prevTPN && i >= 0; i--)
+            if (strListHas(prevTPN, strFromTok(*(struct token*)ListGetIdx(&sigIntros, i)))) ListRemoveIdx(&sigIntros, i);
+        currentSigIntros = &sigIntros;
+    }
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
     resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
@@ -4850,8 +4882,24 @@ static void resolvePrimCtor(struct semaModule* mod, struct type* t, struct synta
     t->ctorBodySyntax = firstPartOfType(node, SNTX_BLOCK);
 }
 
+static void resolveTypeDeclIn(struct type* t);
+//a declaration is resolved in a context of its own: one reached from inside a signature or an instantiation's body
+//(its first use) must not see that signature's variables or that instantiation's bindings - a field's bare "T" is the
+//declaration's own variable, and "T" in a non-generic type is no variable at all
 void resolveTypeDecl(struct type* t) {
     if (!t->placeholder) return;
+    struct list* savedBindings = currentBindings;
+    struct list* savedConstVars = currentConstVars;
+    struct list* savedTypeParams = currentTypeParamNames;
+    struct list* savedIntros = currentSigIntros;
+    currentBindings = currentConstVars = currentTypeParamNames = currentSigIntros = NULL;
+    resolveTypeDeclIn(t);
+    currentBindings = savedBindings;
+    currentConstVars = savedConstVars;
+    currentTypeParamNames = savedTypeParams;
+    currentSigIntros = savedIntros;
+}
+static void resolveTypeDeclIn(struct type* t) {
     if (t->resolving) {
         Err(t->tok, ERR_TYPE_DEFINED_THROUGH_ITSELF, t->name);
         t->placeholder = false;
@@ -4967,6 +5015,13 @@ void resolveTypeDecl(struct type* t) {
         if (!anyConst) constParams = ListInit(sizeof(struct type));
         t->constParams = constParams;
         if (anyConst) currentConstVars = &constVars;
+        //G8b/G22: the parameter list introduced every variable, so the rest of the declaration - its constraints
+        //included - writes each bare; "<X>" anywhere in it is written again, said once here for every instantiation
+        if (declaredParams.len) {
+            struct list constNames = ListInit(sizeof(struct str));
+            for (int k = 0; k < constVars.len; k++) ListAdd(&constNames, &((struct typeBinding*)ListGetIdx(&constVars, k))->name);
+            writtenAgainIn(actual, &declaredParams, &constNames);
+        }
 
         struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
         //O3a: a scope declaration is only meaningful on a constructor-bearing type - a plain struct has no
@@ -5512,6 +5567,24 @@ static struct var* varGetMethodIn(struct semaModule* mod, struct str name, struc
     return NULL;
 }
 
+//G8b/G22: a function's body writes each variable its signature introduced bare - "<X>" there is written again, said
+//once here, at the declaration, rather than once per instantiation the body is checked for
+static void writtenAgainInBody(struct type* ft, struct syntax* sigNode, struct syntax* body) {
+    struct list intros = ListInit(sizeof(struct token));
+    collectSigIntros(sigNode, &intros);
+    if (!intros.len || !body) return;
+    struct list names = ListInit(sizeof(struct str));
+    for (int i = 0; i < intros.len; i++) ListAdd(&names, &((struct token*)ListGetIdx(&intros, i))->str);
+    struct list uses = ListInit(sizeof(struct sigVarUse));
+    collectSigVarUses(*ft, &uses, 0);
+    struct list constNames = ListInit(sizeof(struct str));
+    for (int i = 0; i < uses.len; i++) {
+        struct sigVarUse* u = ListGetIdx(&uses, i);
+        if (u->constant && !strListHas(&constNames, u->name)) ListAdd(&constNames, &u->name);
+    }
+    writtenAgainIn(body, &names, &constNames);
+}
+
 void semaResolveModule(struct semaModule* mod) {
     for (int i = 0; i < mod->types.len; i++) {
         struct type* t = ListGetIdx(&mod->types, i);
@@ -5527,6 +5600,7 @@ void semaResolveModule(struct semaModule* mod) {
             struct var* v = varForDecl(mod, nameTok);
             struct syntax* sigNode = firstPartOfType(actual, SNTX_FUNC_SIG);
             v->type = resolveFuncSig(mod, sigNode);
+            writtenAgainInBody(&v->type, sigNode, firstPartOfType(actual, SNTX_BLOCK));
             //G16: kept here, in the SIGNATURE pass, and not where the body is checked - an instantiation
             //copies the generic var wholesale, so if the copy is made before the generic's own declaration
             //has been reached, bodySyntax is still NULL and the instantiation silently gets an empty body.
@@ -5707,6 +5781,8 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
     if (!v) v = preludeWordVar(name); //M19f: so are the prelude's words for writing text
+    //G23: a type variable written bare as a value - "return T"
+    if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
@@ -12302,7 +12378,7 @@ struct operand* OperandConstValue(struct type of, long long v, struct token tok)
 //G23: a constant variable read as a value - "N", or "<N>" written again (G22), reported and read as "N"
 static struct operand* buildConstVarExpr(struct token nameTok, bool written) {
     struct str name = strFromTok(nameTok);
-    if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, name, name, name);
+    if (written && varWrittenAgain(nameTok)) reportWrittenAgain(nameTok, true);
     struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
     if (!b) { Err(nameTok, ERR_CONST_VAR_UNKNOWN, name); return unknownPlaceholder(nameTok); }
     if (b->bType != BASETYPE_CONST) { Err(nameTok, ERR_TYPE_VAR_AS_VALUE, name); return unknownPlaceholder(nameTok); }
@@ -13453,8 +13529,15 @@ static void valueHomeOf(struct checkCtx* ctx, struct operand* rhs, struct var* v
 //its initializer's scope, as ":=" does: generic code can then keep a reference parameter's value in a local
 static bool typeExprIsBareTypeVar(struct syntax* typeExprNode) {
     struct syntax* ref = typeExprNode && typeExprNode->parts.len ? partSntx(typeExprNode, 0) : NULL;
-    return ref && ref->type == SNTX_TYPE_REF && firstPartOfType(ref, SNTX_TYPE_VAR)
-           && !firstPartOfType(ref, SNTX_ELEM_REF_MARKER) && !firstPartOfType(ref, SNTX_REF_MARKER);
+    if (!ref || ref->type != SNTX_TYPE_REF || firstPartOfType(ref, SNTX_ELEM_REF_MARKER) || firstPartOfType(ref, SNTX_REF_MARKER))
+        return false;
+    if (firstPartOfType(ref, SNTX_TYPE_VAR)) return true;
+    //G8b: "acc U = init" - the variable written bare, as a body writes it
+    struct syntax* nameNode = firstPartOfType(ref, SNTX_NAME);
+    if (!nameNode || firstPartOfType(ref, SNTX_TYPE_ARGS) || nameNode->parts.len != 1 || !partAt(nameNode, 0)->isToken) return false;
+    struct str name = strFromTok(partAt(nameNode, 0)->tok);
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    return b && b->bType != BASETYPE_CONST && !b->isConstVar;
 }
 
 //O25a: a local's type says where it lives - a bare "&" is its block - and an initializer never changes that.
@@ -15879,8 +15962,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
     struct str vname = strFromTok(opTok);
     struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
     if (!bound) { Err(opTok, ERR_UNKNOWN_TYPE_VAR, vname); return buildEmptyIfStmnt(ctx, opTok); }
-    if (written && (bareTypeVars || bound->bType == BASETYPE_CONST) && varWrittenAgain(opTok))
-        Err(opTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname); //G22: "match N"
+    if (written && varWrittenAgain(opTok)) reportWrittenAgain(opTok, bound->bType == BASETYPE_CONST); //"match <T>"
     if (bound->bType == BASETYPE_CONST) return buildConstMatchStmnt(ctx, s, *bound, opTok, asValue);
     struct type operandT = *bound;
 
@@ -16138,11 +16220,10 @@ static bool patCaseCovered(struct list* rows, struct type t, int tag) { return p
 static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
     if (varNode) return buildTypeMatchStmnt(ctx, s, firstTokOfType(varNode, TOK_IDEN), true, asValue);
-    //G22/G26: "match N" over a constant variable picks its case per instantiation - and "match T" over a type variable,
-    //once type variables are written bare
+    //G8b/G22/G26: "match T" over a type variable picks its case per instantiation, as does "match N" over a constant one
     struct token subj = bareNameTok(firstNodeOfChain(firstPartOfType(s, SNTX_EXPR)));
     struct type* bound = subj.type != TOK_NONE && currentBindings ? bindingGet(currentBindings, strFromTok(subj)) : NULL;
-    if (bound && (bound->bType == BASETYPE_CONST || bareTypeVars)) return buildTypeMatchStmnt(ctx, s, subj, false, asValue);
+    if (bound) return buildTypeMatchStmnt(ctx, s, subj, false, asValue);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;

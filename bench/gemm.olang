@@ -9,17 +9,17 @@ import "std/os"
 import "std/time"
 import "std/linalg"
 
-fn conv(x F64, like <T>) <T> {
-    return match <T> {
+fn conv(x F64, like <T>) T {
+    return match T {
         case F32 => F32(x)
         case F64 => x
     }
 }
 
 fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError {
-    a := linalg.Matrix<<T>>(n, m)
-    b := linalg.Matrix<<T>>(n, m)
-    c := linalg.Matrix<<T>>(n, m)
+    a := linalg.Matrix<T>(n, m)
+    b := linalg.Matrix<T>(n, m)
+    c := linalg.Matrix<T>(n, m)
     s I64 = 1
     for i in range n * m {
         s = (s * 1103515245 + 12345) % 2147483648
@@ -41,7 +41,7 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
         per F64 = F64(fastest) / 1000.0
         rate := (2.0 * F64(n) * F64(m) / per).Fixed(2)
         perText := per.Fixed(1)
-        total <T> = like
+        total T = like
         for v in y { total = total + v }
         try io.Print($n "x" $m " " $mode " " $perText "ns " $rate " GFLOPS check " $total "\n")
         return

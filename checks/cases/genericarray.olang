@@ -1,4 +1,4 @@
 # check: fail error[G6]: only a struct or a trait takes type parameters
 # section 12: nor is a declared array type
-type Arr<T> Array<<T>>
+type Arr<T> Array<T>
 fn main() ? { }

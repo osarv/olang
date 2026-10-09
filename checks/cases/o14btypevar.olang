@@ -5,7 +5,7 @@
 type Node struct(v I64) {
     v
 }
-fn id(x <T>) <T> { return x }
+fn id(x <T>) T { return x }
 fn main() ? {
     y Node& = Node(0)
     for i in range 3 {

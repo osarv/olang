@@ -286,9 +286,9 @@ because the grammar never expects one there and L18 never produces one there eit
   exception concerns the bare form only.);
 - immediately after the `mut` of a constructor's bare-pun field (§9.1 C2, `open mut`) — the only
   statement-shaped form in the language whose last token is that keyword;
-- immediately after the `>` closing a type's argument list, or a type variable, that ends a declaration
-  with no initializer (`none <T>`, `q Pair<I32, I64>`). A `>` used as "greater than" is always followed
-  by its right operand, so it is never a complete statement's last token.
+- immediately after the `>` closing a type's argument list that ends a declaration with no initializer
+  (`q Pair<I32, I64>`). A `>` used as "greater than" is always followed by its right operand, so it is never a
+  complete statement's last token.
 
 Each of the last three applies only where its token is the last on its line (or of the file): a token after it
 on the same line continues the statement, so `s Array<I32>(4)` is a syntax error at the `(`, not a declaration
@@ -321,8 +321,9 @@ variable (which then stands for a writable reference when bound to one), and at 
 `enum-body`, `struct-body`, `trait-body`, and `func-type` are anonymous type *shapes*,
 constructible inline anywhere a type expression is expected (§2.4, §2.5, §2.7, §2.11). `type-ref`
 (§2.9) names an existing primitive, or a previously declared struct, enum, error, or (in a constraint) trait,
-with an optional array suffix and reference marker. `type-var` (§12.1 G1) names a type parameter and is valid only inside a generic
-declaration.
+with an optional array suffix and reference marker. `type-var` (§12.1 G1) introduces a type parameter and is valid only
+in a generic declaration's signature or parameter list; after its introduction the parameter is written as its bare name,
+a `type-ref` (G8b).
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
@@ -625,21 +626,32 @@ holding it by value, reached by reference (`type Node struct(e Expr) { e }` besi
 in either declaration order.
 
 **G8a (composition).** A `type-arg` (G8) may be a **type variable**, so one generic can be written in terms
-of another — `Vec<<T>>` inside a declaration that has a `T`. This is what makes a generic type's own
+of another — `Vec<T>` inside a declaration that has a `T`. This is what makes a generic type's own
 helpers and methods writable once rather than once per instantiation.
 
-**G8b.** A type variable is written `<T>` **everywhere**, type arguments included: `Cell<<T>>`,
-`Pair<<K>, <V>>`, `Cell<Cell<<T>>>`. A bare `IDEN` is always a declared type, so a misspelled type name is
-an error rather than silently a variable, and writing a variable bare is diagnosed as such. `<T>`
-introduces the variable wherever it is written; a function's variables are every `<T>` in its signature,
-receiver included — **one set, not left-to-right**, as G3 already has it. The opening `<<` and the
-closing `>>` of a type-argument list lex as the shift tokens and are split where a type-argument list is
-being parsed, and only there, so `x << 3 >> 1` is unaffected.
+**G8b (the introduction rule).** A generic's variable - a type variable, or a constant one (§12.7) - is
+**introduced** once, by a `type-var` (G1), and written as its bare `IDEN` everywhere after:
 
-A **constant** variable follows G22's introduction rule instead: introduced by its first `<N>` (in a type, by the
-parameter list), written bare, `N`, after it. That rule is the one intended for type variables as well; once they
-follow it, a type variable too is written `<T>` once and `T` after, and this paragraph's "everywhere" and "one set" give
-way to it.
+- In a struct type or a trait, the `type-params` list (G6) introduces every parameter, so the rest of the declaration -
+  the list's own constraints (`type Map<K Hashable<K>, V>`), the constructor, the fields, the destructor, a trait's
+  method signatures - writes each bare: `type Vec<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
+- In a function, a variable is introduced by its **first** `type-var` reading the signature left to right - the
+  receiver, the parameters in order, the results - and is written bare everywhere after it, in the rest of the
+  signature and in the body: `fn max(a <T>, b T) T`, and a method over a generic type introduces its variables in its
+  receiver, `fn (l List<<T>>&) Push(x T)`. A `type-var` inside a constraint introduces a variable too (`<I
+  Iterator<<E>>>`, G19). The introduction carries the variable's constraint (`<T Shape>`, G19) and a constant
+  variable's type (`<N I64>`, G22).
+- A function type (G3a) and a lambda (D16) introduce nothing: a variable written in one is the enclosing
+  declaration's.
+
+`<T>` written after the introduction is a compile-time error saying to write `T`, reported once, at the declaration,
+however many instantiations it has; a bare `T` before its introduction in a signature is a compile-time error naming
+where it is introduced. Anywhere else a bare name that is no variable in scope is a type's name, as always, so a
+misspelled type stays an unknown type rather than becoming a variable. A type variable is written bare wherever a type's
+name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element type (`T[a, b]`, E19),
+after `is` and `as` (E32), and as a type `match`'s operand (`match T`, G13). The opening `<<` and the closing `>>` of a
+type-argument list lex as the shift tokens and are split where a type-argument list is being parsed, and only there,
+so `x << 3 >> 1` is unaffected.
 
 An application whose arguments are not all known is a **pattern**, not a type: it has no layout, nothing is
 emitted for it, and its constructor is not monomorphized — the same treatment G16 gives a generic function's
@@ -667,14 +679,14 @@ instantiating one generic over one type is ordinary and costs nothing beyond the
 **G18.** Every rule about what a type **contains** is re-checked against each instantiation's substituted
 types, not only against the generic's own declaration. A generic cannot answer such a question about
 itself: a type variable contains no reference and no destructor-bearing struct, so a rule
-asking what a field of type `<T>` holds is answered vacuously at declaration, for every `T`, and would stay
+asking what a field of type `T` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
 
 **G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy:
 `type-var ::= "<" IDEN [ type-expr ] ">"` (`<T Shape>`, `<I Iterator<<E>>>`), and a generic type's declared
-parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name a trait; it is a requirement, not a
-value, so it carries no reference marker. A constraint may be written on any occurrence
-of the variable in a declaration; two occurrences constraining one variable differently are an error.
+parameter likewise (`type Map<K Hashable<K>, V>`). The `type-expr` must name a trait; it is a requirement, not a
+value, so it carries no reference marker. A constraint is written where its variable is introduced (G8b) - a
+function's first `<T Shape>`, or a type's parameter list - since every later occurrence is the bare name.
 
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
 inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
@@ -738,7 +750,7 @@ callee's own list (§7).
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
 as a value is a compile-time error naming the obligation. The exception is a function type whose result is written as
-a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc <U>, x <T>) <U>`):
+a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
@@ -816,9 +828,9 @@ no `mut` (D11a): its own top-level reference is writable unless what initializes
 the local is read-only too (writing through it is the error, where it is written); `x := e` gives it `e`'s type,
 permission included. A function's **built** result (§8 O13, a reference type naming no parameter) is writable,
 since it is new storage only the caller holds; a result **borrowed** from a parameter (`T&p`) is read-only
-unless written `mut T&p`. A result written as a **type variable** (`<U>`) is neither: it may hand back existing
+unless written `mut T&p`. A result written as a **type variable** (`U`) is neither: it may hand back existing
 storage (O14b), so it has the permission its type argument has - in a function type too, a callback's
-`fn(acc <U>, x <T>) <U>` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
+`fn(acc U, x T) U` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
 type with a result of its own (`fn(a String&, w String&) String& { ... }`) has the expected type's.
 
 **T25c (converting permission).** A writable reference converts to a read-only one wherever a value is
@@ -1002,7 +1014,7 @@ satisfied by every type, built-in types included. The leading `mut` marks a meth
 receiver**, one that writes through to the value it is called on - the receiver half of D9's two axes.
 
 A trait is **only a constraint** (G19): it is written where a type variable is constrained - `fn area(s <S Shape>)`,
-`<I Iterator<<E>>>`, `type Map<K Hashable<<K>>, V>` - and nowhere else. It is never the type of a value, a
+`<I Iterator<<E>>>`, `type Map<K Hashable<K>, V>` - and nowhere else. It is never the type of a value, a
 reference, a parameter, a field, a local, an element or a result, and writing it as one is a compile-time error.
 Code over a trait is generic (§12): compiled for each type it is used with, every call a direct one. A value of one
 of several types is an enum of them (T17); one thing that can be called is a function value (T21).
@@ -1032,19 +1044,19 @@ and could name only traits that module already knows; a built-in type has no dec
 with one method per name, and a generic signature names a family of them.
 
 **T35a (generic traits).** A trait may declare type parameters, after its name exactly as a struct type does
-(G6): `type Source<T> trait { mut Next() <T> ? Exhausted }`. Its method signatures may use them, including in a
+(G6): `type Source<T> trait { mut Next() T ? Exhausted }`. Its method signatures may use them, including in a
 result alone. An **application** such as `Source<I32>` is an ordinary trait — its methods concrete — and two
 applications are the same trait exactly when their arguments are (G16a). A constraint may name the application's
 arguments as type variables, bound through the constrained type's methods (`<I Iterator<<E>>>` binds `E`, G9c). A
-method of a generic type (`fn (b mut Box<<T>>&) Next() <T> ? Exhausted`) satisfies a trait through the
+method of a generic type (`fn (b mut Box<<T>>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
 **T35b (built-in traits).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T> trait {
-mut Next() <T> ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
+mut Next() T ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
 `Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
 `v := try it.Next() catch Exhausted { break }`.
-The prelude declares `type Indexable<T> trait { At(i I64) <T>  Len() I64 }` and, as its default (M19e), `Iter()`
+The prelude declares `type Indexable<T> trait { At(i I64) T  Len() I64 }` and, as its default (M19e), `Iter()`
 giving an `IndexIter<T, C>` over positions `0` to `Len() - 1` of the collection `C` - so a type with `At` and `Len`
 and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 
@@ -1580,7 +1592,7 @@ name (D3a). They are the only modules that may declare methods on a built-in typ
 types get their methods; those methods are visible in every module. A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
 
-Among the prelude's types is `type Pair<A, B> struct(First <A>, Second <B>)`, two values of any types held as
+Among the prelude's types is `type Pair<A, B> struct(First A, Second B)`, two values of any types held as
 one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
 every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
 
@@ -1606,7 +1618,7 @@ program, checked once per call, and stops it as an `assert` does. `Reverse()` re
 `Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
 leaves which elements the rest of the walk gives unspecified.
 
-The prelude declares `type Map<K Hashable<<K>>, V>`, values found by key, keys compared with `==` (E10) and hashed
+The prelude declares `type Map<K Hashable<K>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
 default error (R15) when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
 where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
@@ -1691,7 +1703,7 @@ A method may not share a name with a **field** of its receiver type; such a call
 `x.f` names exactly one thing.
 
 **M19e (defaults).** A method whose receiver is a type variable constrained by a trait - `fn (s <S Shape>) Describe()
-I32`, `fn (it mut <I Iterator<<T>>>&) Count(keep fn(x <T>) Bool) I64` - is a **default** of that trait: a method of
+I32`, `fn (it mut <I Iterator<<T>>>&) Count(keep fn(x T) Bool) I64` - is a **default** of that trait: a method of
 every type that satisfies it, written once. It is declared in the trait's own module, and may not reuse the name of a
 method the trait requires. `l.Iter().Count(f)` calls the `Count` declared for `Iterator<T>`, since a `List`'s
 iterator satisfies it: the call is an ordinary generic one (§12), its receiver's variable bound to the value's type
@@ -2033,8 +2045,8 @@ is-expr ::= operand "is" [ "not" ] ( type-ref | binary )
 
 What follows `is` (and `not`) is read as a `type-ref` when it is one that names a type - a name declared as a type
 in this module or the one an alias chain reaches, the prelude's, a primitive, `Bool` or `Array`, or a name whose
-last-but-one word names one (a case, `Shape.Circle`), or a type that is no plain name (`<T>`, a function type,
-`mut T`). Anything else is a value: an expression at the ordering comparisons' precedence and tighter, so
+last-but-one word names one (a case, `Shape.Circle`), a variable of the generic it is written in (`T`, G8b), or a
+type that is no plain name (a function type, `mut T`). Anything else is a value: an expression at the ordering comparisons' precedence and tighter, so
 `a is b + c` is `a is (b + c)` and `a is b == c` is `(a is b) == c`. Since no local, parameter, function or global
 shares a type's name (D2, D3a), a name is never both. `not a is b`, `a is not b` and `not (a is b)` are one
 question (E7a).
@@ -2347,9 +2359,10 @@ type is that field's declared type.
 
 **E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } [ "," ] ] "]"`, where
 `elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ]` and
-`scalar-name ::= alias-chain IDEN | type-var`
-(§4.4 M8, §12.1 G1) names the literal's
-element type, stated exactly once regardless of nesting depth (E21). The optional
+`scalar-name ::= alias-chain IDEN`
+(§4.4 M8) names the literal's
+element type, stated exactly once regardless of nesting depth (E21) - a type's name, or a type variable of the generic
+the literal is written in (`T[a, b]`, §12 G8b). The optional
 `reference-marker` (T24) makes each element a separately allocated reference rather than a value laid
 out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
 tag. A primitive scalar type may never carry one (T24).
@@ -3877,7 +3890,7 @@ value where it dangles. Accordingly:
   block (O2), `x T&y` where `y` does, `x T&return` in the result scope (O26). An initializer that already lives
   somewhere must live in exactly that scope; a temporary is built there. `x := e` writes no scope, and takes
   `e`'s exact scope — the one way a local adopts where its value lives. A type written as a **bare type variable**
-  (`acc <U> = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
+  (`acc U = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
   references, the local takes its initializer's scope as `:=` does - the spelling generic code has for "a local of this
   variable's type, where its initializer lives" beside `:=` itself. A local declared from a field
   read through a parameter takes the derived scope it reads at (O23a), exact for what it is.
@@ -4010,10 +4023,10 @@ result scope; it is an obligation of the function (O10b), and every call checks 
 where `y`'s closure lives in a block `keep` outlives.
 
 **O14b.** A built result whose type was written as a **type variable** (G1) - and became a reference, or a value
-holding references, by instantiation - is another exception: there is no borrowed form to write for it (`<T>&p`
+holding references, by instantiation - is another exception: there is no borrowed form to write for it (`T&p`
 would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
 that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
-obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) <T> {
+obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) T {
 return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
 `y`.
 
@@ -4225,7 +4238,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   may build into, is a compile-time error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
-  `<T>` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);
+  `T` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);
 - a value field whose initializer builds a value from such a parameter - a nested constructor call or an enum case,
   `e Entry = Entry(k, v)` - lands in the instance: what it holds is held as the instance holds the parameter's
   argument, which is checked where the instance lands (below).
@@ -4252,7 +4265,7 @@ type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shor
 
 **C2e (superseded by T7c).** An array stored in the instance itself is a field of a fixed-length array type,
 `m mut Array<F32, 16>` or `blob Array<I64, MutexWords>` - its length any constant argument (§12.7 G21), and in a
-generic type one its arguments compute (`Array<<T>, N * 2>`). Copying an array into one is T7d's checked copy. An
+generic type one its arguments compute (`Array<T, N * 2>`). Copying an array into one is T7d's checked copy. An
 `Array<T>` value field is T7a's error whatever initializes it - `m Array<F32> = Array<F32>(16)` is written
 `m Array<F32, 16>`.
 
@@ -4770,37 +4783,38 @@ compile-time error at its declaration. A trait may be (T35a).
 ### 12.1 Type variables
 
 **G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19 - or, introducing a constant variable, its type, G22), written where an entire `type-expr` (T2) would otherwise
-appear. It names a **type variable**: a type that is not known at the declaration and is supplied
-per instantiation. `IDEN` must not name a type the referencing module can name - one it declares or imports by
+appear. It introduces a **type variable**: a type that is not known at the declaration and is supplied
+per instantiation. A variable is introduced once and written as its bare `IDEN` - a `type-ref` (T24) - everywhere after
+(G8b). `IDEN` must not name a type the referencing module can name - one it declares or imports by
 bare name (D2), a prelude type, `Array` or a primitive; writing such a name inside a `type-var` (or as a generic
 type's parameter) is a compile-time error, reported once where it is first written, since `<Point>` would otherwise
 read as parameterizing over something already concrete.
 
-**G2.** A `type-var` may carry a reference marker exactly as a `type-ref` does (T24), and is written as an
-array's element as any type is — `<T>&`, `Array<<T>>&`, `Array<<T>&>&` are all well-formed — and the marker rules of §2.9 apply to it
-unchanged once the variable is bound to a concrete type by instantiation.
+**G2.** A type variable may carry a reference marker exactly as any type does (T24), and is written as an array's
+element as any type is — `<T>&` where it is introduced, `T&`, `Array<T>&` and `Array<T&>&` after — and the marker rules
+of §2.9 apply to it unchanged once the variable is bound to a concrete type by instantiation.
 
 ### 12.2 Generic functions
 
 **G3.** A function is generic exactly when a `type-var` (G1) appears anywhere in its signature
-(`func-sig`, D8). It declares no type-parameter list: its set of type parameters is every *distinct*
-`type-var` name appearing in that signature, and repeating a name binds those positions to one and
+(`func-sig`, D8). It declares no type-parameter list: its set of type parameters is every variable its signature
+introduces, each by its first `<T>` (G8b), and every later `T` in the signature or the body - bare - is that one and
 the same type. A `type-var` written as the argument of a constant parameter is a constant variable (G22), one of the
 function's parameters in the same way - introduced by its first `<N>` and written `N` after it.
 
 ```
-fn max(a<T>, b<T>) <T> { ... }
-fn pairUp(a<A>, b<B>) <A> { ... }
+fn max(a <T>, b T) T { ... }
+fn pairUp(a <A>, b <B>) A { ... }
 ```
 
 **G3a.** G3 applies to a function **declaration** only. A function **type** (T2's `func-type`, written as a
-parameter's or variable's type) is never generic in its own right: a `type-var` appearing in one names the
-*enclosing* declaration's type parameter and introduces nothing of its own, so the function type has an
-empty type-parameter list. There is no higher-rank polymorphism — a parameter cannot demand "any generic
+parameter's or variable's type) is never generic in its own right: a variable written in one is the *enclosing*
+declaration's, introduced there or by the function type's own position in its signature (G8b), and the function type
+has an empty type-parameter list. There is no higher-rank polymorphism — a parameter cannot demand "any generic
 function", only a function at the enclosing declaration's own (possibly generic) types.
 
 ```
-fn sortBy(v mut Array<<T>>&, less fn(a <T>, b <T>) Bool) { ... }
+fn sortBy(v mut Array<<T>>&, less fn(a T, b T) Bool) { ... }
 ```
 
 `T` here is `sortBy`'s, inferred from the call as usual (G9, which unifies through a function type's own
@@ -4819,20 +4833,22 @@ is the same for every instantiation.
 **G6.** `type-decl` (D4) is extended to
 `"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
 `type-params ::= "<" type-param { "," type-param } ">"` and `type-param ::= IDEN [ type-expr ]`. Each `IDEN`
-declares a parameter, unique within the list, in scope throughout the whole declaration: the constructor's own
-`param-list` and error list (C1), every field, and the `destruct` block (C7). An `IDEN` alone, or followed by a
+declares a parameter, unique within the list, in scope throughout the whole declaration - the list's own constraints,
+the constructor's `param-list` and error list (C1), every field, and the `destruct` block (C7) - written there as its
+bare `IDEN` (G8b). An `IDEN` alone, or followed by a
 trait, declares a **type parameter** (the trait its constraint, G19); followed by any other type it declares a
 **constant parameter** of that type (G20).
 
 ```
 type Vec<T> struct(cap I64) {
-    items mut Array<<T>>& = Array<<T>>(cap)
+    items mut Array<T>& = Array<T>(cap)
     len I64 = 0
 }
 ```
 
-**G7.** Within such a declaration a type parameter is written as a `type-var` (G1) — `<T>` — exactly
-as in a generic function. The `type-params` list fixes the parameters' **order**, which is what a
+**G7.** Within such a declaration a type parameter is written bare — `T` — the list having introduced it
+(G8b), as a generic function writes its variables after their introduction; `<T>` there is written again. The
+`type-params` list fixes the parameters' **order**, which is what a
 type argument list (G8) supplies positionally; a function needs no such list because its arguments
 are inferred (G9) and order therefore never arises.
 
@@ -4841,10 +4857,11 @@ are inferred (G9) and order therefore never arises.
 the name and before any reference marker. A type parameter takes a `type-expr`, a constant parameter a `const-arg`
 (G21). The count must equal the named type's own `type-params` count exactly. A generic
 type is never valid without one — a bare reference to a generic type name is a compile-time error.
-Within a `type-args` list a type parameter is written `<T>` like anywhere else (G8b), so a generic
-declaration may instantiate another generic with its own parameter (`Vec<<T>>` inside a declaration that
-declares `T`) — or itself, through a reference marker (`next Node<<T>>&` inside `type Node<T>`). In a
-function's body, the type variables of its signature are in scope exactly as in the signature.
+Within a `type-args` list a type variable is written as anywhere else (G8b) - bare after its introduction, so a
+generic declaration may instantiate another generic with its own parameter (`Vec<T>` inside a declaration that
+declares `T`) or itself, through a reference marker (`next Node<T>&` inside `type Node<T>`), and as `<T>` where it is
+introduced (`fn (l List<<T>>&) Len()`). In a function's body, the variables its signature introduced are in scope,
+written bare.
 
 ### 12.4 Inference and instantiation
 
@@ -4916,8 +4933,8 @@ instances of that instantiation only.
 the instantiation holds a value of that type, the reference lives in its container's scope (O5), as an
 array's element reference does, and a parameter of that type is passed with its scope (O4b). A type
 argument naming a variable (`List<String&x>`) is a compile-time error: the variable belongs to the
-function writing it, inside generic code that cannot see it (O11). A type variable written bare (`x <T>`)
-and bound to a reference is that reference; written with a marker (`x <T>&`), `T` is the referent's type.
+function writing it, inside generic code that cannot see it (O11). A type variable written without a marker
+(`x T`) and bound to a reference is that reference; written with one (`x T&`), `T` is the referent's type.
 Reference-shapedness is part of an instantiation's identity (G16a), so `List<String>` and `List<String&>`
 are two types.
 
@@ -4927,14 +4944,15 @@ value and may be used wherever a function value is expected.
 
 ### 12.5 Dispatching on a type parameter
 
-**G13.** `match` (S12) accepts a `type-var` as its own operand, with each `case` naming one or more
+**G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, the signature or the
+type's parameter list having introduced it (G8b) - with each `case` naming one or more
 `type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 `match N` over a constant variable takes values in its cases instead, decided per instantiation (G26).
 
 ```
-fn writeVal(fd I32, v<T>) I64 ? error {
-    match <T> {
+fn writeVal(fd I32, v <T>) I64 ? error {
+    match T {
         case I32  { return write(fd, i32Bytes(v)) }
         case Array<U8> { return write(fd, v) }
     }
@@ -4982,7 +5000,7 @@ its parameter list with the parameter's type (G6):
 
 ```
 type Matrix<T, R I64, C I64> struct() {
-    data mut Array<<T>, R * C>
+    data mut Array<T, R * C>
 }
 type Ring<T, N I64> struct() { ... }
 type Grid<T, L Layout> struct() { ... }      # Layout an enum whose cases carry no payload
@@ -5010,8 +5028,8 @@ constant parameter is a value - a global, a build constant (`Array<U8, BufSize>`
 type-argument list the comparison and shift operators `<`, `<=`, `>`, `>=`, `<<` and `>>` are written only within
 parentheses, since a bare `>` there ends the list: `Array<U8, (1 << 12)>`, `Flag<(Width > 64)>`.
 
-**G22 (constant variables; the introduction rule).** A generic's constant variable is **introduced** once and written
-bare after that. In a struct type or trait the parameter list introduces its constant parameters, and the whole
+**G22 (constant variables).** A generic's constant variable follows the introduction rule (G8b): it is
+**introduced** once and written bare after that. In a struct type or trait the parameter list introduces its constant parameters, and the whole
 declaration - fields, constructor, destructor, a trait's method signatures - writes each bare: `R`, `C`. In a function a
 constant variable is introduced by its **first** `type-var` `<N>`, reading the signature left to right - the receiver,
 the parameters, the results - and is written `N` everywhere after it, in the rest of the signature and in the body. An
@@ -5020,23 +5038,19 @@ variable's type, `<N I64>`. Its type is that type, else that of the constant par
 standing as no whole argument and carrying no type has none, and is G4's error anyway.
 
 ```
-fn Dot(a Array<<T>, <N>>&, b Array<<T>, N>&) <T> { ... }
-fn (a Matrix<<T>, <M>, <K>>&) Mul(b Matrix<<T>, K, <N>>&) Matrix<<T>, M, N> { ... }
-fn Concat(a Array<<T>, <N>>&, b Array<<T>, <M>>&) Array<<T>, N + M> { ... }
+fn Dot(a Array<<T>, <N>>&, b Array<T, N>&) T { ... }
+fn (a Matrix<<T>, <M>, <K>>&) Mul(b Matrix<T, K, <N>>&) Matrix<T, M, N> { ... }
+fn Concat(a Array<<T>, <N>>&, b Array<T, <M>>&) Array<T, N + M> { ... }
 fn Widen(a Array<I32, <N I64>>&) Array<I32, twice(N)> { ... }
 ```
 
 `<N>` written after the introduction - again in the signature, in the body, or in a type's own declaration - is a
-compile-time error saying to write `N`; a bare `N` before its introduction names no variable, and where it would read
-one is a compile-time error saying so. A name is a type variable or a constant variable, never both; every constant
+compile-time error saying to write `N`, and a bare `N` before its introduction in a signature one naming where it is
+introduced (G8b). A name is a type variable or a constant variable, never both; every constant
 parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
 constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
 constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
 a parameter or a local (D3a) - so a bare `N` means one thing wherever it is written.
-
-The rule is the one intended for type variables too: once they follow it, `T` is written bare after its first `<T>`
-(G8b's "everywhere" giving way), and nothing else in this section changes. Until then a type variable is written `<T>`
-everywhere (G8b), so `Array<<T>, N>` holds one of each.
 
 **G23 (a constant variable is a value).** A constant variable is also a **primary expression** (E1), written bare,
 wherever it is in scope - the declaration's body, its fields and constructor, its constant arguments; `<N>` there is
@@ -5050,7 +5064,7 @@ for i in range N { s = s + a[i] * b[i] }
 cells I64 = R * C
 ```
 
-A type variable is no value: reading one as a constant is a compile-time error (`match <T>`, G13, takes a type variable
+A type variable is no value: reading one as a constant is a compile-time error (`match T`, G13, takes a type variable
 as its operand by a form of its own).
 
 **G24 (inference by value).** At a call, constant variables are bound by the same matching that binds type variables
@@ -5107,7 +5121,7 @@ function's body, for every instantiation of the function. There is no other synt
 ```
 type Ring<T, N I64> struct() {
     assert N > 0 and (N & (N - 1)) == 0       # Ring<I32, 6> is a compile-time error here
-    items mut Array<<T>, N>
+    items mut Array<T, N>
     head mut I64
 }
 ```

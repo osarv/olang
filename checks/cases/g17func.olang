@@ -1,9 +1,9 @@
 # check: fail error[G17]: this generic's instantiations never end
 # G17: a generic function instantiating itself with a bigger argument - once reported
-type Box<T> struct(v <T>) { v }
+type Box<T> struct(v T) { v }
 fn deep(x <T>, n I32) I32 {
   if n == 0 { return 0 }
-  return deep(Box<<T>>(x), n - 1)
+  return deep(Box<T>(x), n - 1)
 }
 fn main() ? {
   r := deep(1, 3)

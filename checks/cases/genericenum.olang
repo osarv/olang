@@ -3,7 +3,7 @@
 # also: compilation failed with 1 error
 type Opt<T> enum {
   None
-  Some(v <T>)
+  Some(v T)
 }
 fn show(o Opt<I32>) I32 {
   match o {

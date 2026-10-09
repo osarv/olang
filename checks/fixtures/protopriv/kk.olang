@@ -40,7 +40,7 @@ type Wrap struct(k Key) {
 fn apply(f fn(x I32) I32, x I32) I32 { return f(x) }
 
 # a generic of this module: its code sees this module's private methods, wherever it is instantiated
-fn Same(a <T>, b <T>) Bool { return a == b }
+fn Same(a <T>, b T) Bool { return a == b }
 
 # every operation, in the module that may use the private methods
 fn Inside() Bool {

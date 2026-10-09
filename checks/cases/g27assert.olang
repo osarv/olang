@@ -3,7 +3,7 @@
 # G27: a rule about a constant's value is an assert, decided for each instantiation - with the one that broke it named
 type Ring<T, N I64> struct() {
     assert N > 0 and (N & (N - 1)) == 0
-    items mut Array<<T>, N>
+    items mut Array<T, N>
 }
 fn main() ? {
     ok := Ring<I32, 8>()

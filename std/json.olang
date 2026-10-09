@@ -73,7 +73,7 @@ fn (p Position&) Str() String { return $p.Line ":" $p.Col }
 # checks each: "try doc["users"][0]["name"]". Fails with MISSING when there is no such member or item, WRONG_KIND
 # when the value is not an object (a name asked) or an array (an index).
 fn (j Json&) TryAt(key <K>) Json&j ? JsonError {
-    match <K> {
+    match K {
         case String {
             match j {
                 case Json.Obj(o) { return o.Values[try o.find(key) catch { error JsonError.MISSING }] }

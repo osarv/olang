@@ -1,4 +1,4 @@
-# check: fail error[G4]: type variable <T> appears in no parameter's type, so no call can infer it
+# check: fail error[G4]: type variable T appears in no parameter's type, so no call can infer it
 # G4: the same with the bare variable as the result - one error, not a second about what is returned
 # also: compilation failed with 1 error
 fn mk(n I32) <T> { return n }

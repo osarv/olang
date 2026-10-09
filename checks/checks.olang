@@ -30,7 +30,8 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv"]
+                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
+                     "lazytype"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -242,6 +243,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "fuzz" { try fuzz(r) }
         case "linalg" { try linalg(r) }
         case "chunkpool" { try chunkpool(r) }
+        case "lazytype" { try lazytype(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -782,7 +784,7 @@ test "editing the prelude rebuilds what uses it" { assert passed("preludestale")
 fn preludestale(r mut report&) ? Failed {
     dir := fresh("preludestale")
     os.Run("cp checks/fixtures/preludestale/* " $os.Quote(dir) " && cp -r std " $os.Quote($dir "/std"))
-    probe String& = "fn (p Pair<<A>, <B>>) Probe() <A> { return p.First }"
+    probe String& = "fn (p Pair<<A>, <B>>) Probe() A { return p.First }"
     try r.expect(sh(dir, "echo " $os.Quote(probe) " >> std/prelude/pair.olang") == 0, "adding Probe", dir)
     try r.expect(sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0,
                  "first build", dir)
@@ -1057,6 +1059,18 @@ fn chunkpool(r mut report&) ? Failed {
     try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
     try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
+}
+
+# G8b: a generic type first resolved from inside another module's signature - b.olang's ReadA names a.Wrap before a's
+# types are resolved - resolves in a context of its own, so the signature's "<T>" is not the type's T. Which file's
+# storage lay above the other's decided whether it went wrong, so b.olang is padded until it is stored apart, above
+test "a generic type first reached from another module's signature" { assert passed("lazytype") }
+
+fn lazytype(r mut report&) ? Failed {
+    dir := fresh("lazytype")
+    os.Run("cp checks/fixtures/lazytype/* " $os.Quote(dir))
+    os.Run("yes '# padding' | head -n 20000 >> " $os.Quote($dir "/b.olang"))
+    try r.expect(sh(dir, "\"$OLANG\" -t b.olang > out.txt 2>&1") == 0, "b.olang's tests", dir)
 }
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {
