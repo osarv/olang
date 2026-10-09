@@ -1138,7 +1138,10 @@ compile time** (§13 K1): a literal, or any expression the compile-time evaluato
 constructor call (`p Point = Point(0, 0)`). It is evaluated on behalf of callers the declaration cannot
 see, so it must have a value and no other behaviour - it reads no mutable global, calls no `extern fn`,
 and builds nothing with a destructor. It is checked in the declaring module, and one that cannot be
-computed is a compile-time error naming what stops it.
+computed is a compile-time error naming what stops it. A literal default for a parameter whose type is a type
+variable (`alpha <T> = 1`) has no type to fit there: it is fitted at each call against the instantiation's type, adapting
+as a literal argument does (G18), and a call whose instantiation it does not fit is the error. A `null` default refers
+to nothing, so it fits whatever scope a call binds its parameter to.
 
 **D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
@@ -3850,7 +3853,9 @@ result where every `return` agrees:
 
 - the **per-instance bindings** of the returned value's type (O23a) that are scopes of the function: a call's result
   carries each, resolved through the call, so `it := l.Iter()` knows its iterator's `&of` field reads where `l`
-  lives, as `it := ListIter(l)` would;
+  lives, as `it := ListIter(l)` would. That is all a result carries: what an argument was bound to is a constructor's
+  instance's (C2d, through its bare-pun fields), never an ordinary function's result's, so `return copyOf(id.Data)`
+  returns what `copyOf` built, whatever `id` is;
 - for a result **borrowed** from a parameter (`T&p`), the derived scope (O23a) every `return` gave a value in: the
   call's result then lives where that resolves to - the referent of the argument's own field - rather than where
   the argument does, which it outlives.
@@ -3866,7 +3871,11 @@ binding the same variable — a parameter and those written `&` it (O4a) — mus
 is a compile-time error.
 
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
-so it binds the variable to where that storage is - its block, or where its references were built (O25a).
+so it binds the variable to where that storage is - a value local's block, wherever its references were built. Where
+those live elsewhere (a value built in the result scope by a scope argument, `b := Box&return(n)`, or a copy of an
+element, O25h) and something can be stored through the parameter (O25g), what the callee built and stored would be in the
+storage's scope under a value claiming the other - a compile-time error naming the fix, to declare it a reference where
+its references live (`b Box&return = Box(n)`); lent read-only, or for its fields' referents, it is fine.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
@@ -3911,7 +3920,9 @@ determined scope is the program's (a global argument, O25e), the temporary is bu
 **O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
 where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
-value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
+value holding references, as O18a says). A value local whose result scope those obligations only require to be outlived
+- never to outlive anything - lands in its own block instead, which they outlive in turn: its references then live where
+its storage does. `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
 not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a

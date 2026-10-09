@@ -650,6 +650,7 @@ struct operand {
     //D16d: a lambda whose captured references live in several scopes, none known to outlive the others - each as a
     //struct scopeAt, so that returned where it is made it can be built in the result scope, which each must outlive
     struct list lambdaCapScopes;
+    bool loopMade;     //S9a: a call a for-in makes by itself (Next, Iter, At) - no program text names it
     bool isDefaultArg; //this operand is the "default" keyword standing in an argument slot (E14a). Never
                         //survives past OperandFuncCall, which replaces it with the parameter's own
                         //declared default; every other consumer of an argument list rejects it.

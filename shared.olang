@@ -11672,3 +11672,26 @@ test "O13c/O17: fresh results from a local's operands; a value built in the resu
     assert sbFresh(sbRun + 1) == 547 and SbFreshBaked == 547
     assert sbScale(I32(3)) == 6 and sbScale(F32(1.5)) == 3.0 and sbScale(I64(4), 5) == 20
 }
+
+# O25h/O10c: List.Push storing a value holding a reference that can be stored through asks the list and the value's
+# references to be in one scope - an equality Push's callers show, as a JSON object's fields are built where it lives
+type sbJNode struct(v I64) {
+    v mut
+    next mut sbJNode& = null
+}
+fn sbFields(n I64) List<Pair<String&, sbJNode&>>& {
+    fields List<Pair<String&, sbJNode&>>&return = List<Pair<String&, sbJNode&>>()
+    for i in range n {
+        key String&fields = $i "k"
+        value sbJNode&fields = sbJNode(I64(i) * 10)
+        fields.Push(Pair<String&, sbJNode&>(key, value))
+    }
+    return fields
+}
+test "O25h/O10c: pairs holding text and nodes pushed where their list lives" {
+    f := sbFields(sbRun + 2)
+    sbChurn()
+    last := f[2]
+    r := $last.First $last.Second.v
+    assert r == "2k20"
+}

@@ -7033,17 +7033,6 @@ static bool landDeclByObligations(struct checkCtx* ctx, struct operand* rhs) {
         else if (!scopeOutlives(ctx->func, to, normDepth(d), best, normDepth(bestDepth))) return false;
     }
     if (!found) return false;
-    //O18c/O25h: a value local whose result scope nothing requires to outlive anything - only to be outlived - is as well
-    //built in the local's own block, which the scopes it must be outlived by outlive in turn: its references then live
-    //where its storage does, so it may be lent to a callee that stores through it (O17)
-    if (!best && !rhs->type.structMAlloc && ctx->blockDepth > normDepth(bestDepth)) {
-        bool rOutlives = false;
-        for (int i = 0; i < func->type.scopeObligations.len && !rOutlives; i++) {
-            struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
-            rOutlives = !o->shorterViaParam && canonicalVar(o->longer) == canonicalVar(R);
-        }
-        if (!rOutlives) bestDepth = ctx->blockDepth;
-    }
     landCall(rhs, best, bestDepth);
     return true;
 }
@@ -7081,6 +7070,36 @@ static void noteArgsDisagree(struct checkCtx* ctx, struct operand* a, struct var
     if (!ctx || !ctx->hasOwnScope || !a || !b || av == SCOPE_AMBIGUOUS || bv == SCOPE_AMBIGUOUS) return;
     if (bu || (!au && scopeOutlives(ctx->func, bv, normDepth(bd), av, normDepth(ad)))) noteMakeWhere(ctx, a, b);
     else if (au || scopeOutlives(ctx->func, av, normDepth(ad), bv, normDepth(bd))) noteMakeWhere(ctx, b, a);
+}
+
+//O17: whether a callee given a value by a writable reference can build something and keep it in the value's OWN slots -
+//a field it can assign a reference to, a field referring to something that can be stored through, an element - which
+//live where the value's references do. A field written "&p" is no such slot: its referent is where the instance's binding
+//says, and a callee is held to that binding by derived obligations (O22, O23a), never to where the value is
+static bool ownSlotsAdmitStores(struct type v, int depth) {
+    if (depth > 16 || v.bType == BASETYPE_TYPEVAR) return true;
+    if (v.bType == BASETYPE_ARRAY) return v.arrElem && (v.arrElem->structMAlloc || TypeHoldsReferences(*v.arrElem));
+    if (v.bType == BASETYPE_CHOICE) { //T17c: a payload is never assigned - only stored through
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* c = ListGetIdx(&v.vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) {
+                struct type pt = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+                if (pt.structMAlloc ? RefNarrowingMatters(pt) : ownSlotsAdmitStores(pt, depth + 1)) return true;
+            }
+        }
+        return false;
+    }
+    if (v.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < v.vars.len; i++) {
+        struct var* f = ListGetIdx(&v.vars, i);
+        bool named = f->type.structMAlloc && f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope
+                     && v.ctorFunc && varIsOwnParam(canonicalVar(f->type.scopeParam), v.ctorFunc);
+        if (named) continue;
+        bool holds = f->type.structMAlloc || TypeHoldsReferences(f->type);
+        if (f->mut && holds) return true;
+        if (f->type.structMAlloc ? RefNarrowingMatters(f->type) : (holds && ownSlotsAdmitStores(f->type, depth + 1))) return true;
+    }
+    return false;
 }
 
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
@@ -7153,7 +7172,8 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             //live elsewhere (built by a scope argument, a copy of an element) would have what the callee builds and stores
             //through it put in that storage's scope, and its own claim broken. Only where nothing can be stored through
             //the parameter is that one scope enough
-            if (borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)) {
+            if (borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)
+                    && ownSlotsAdmitStores(arg->type, 0)) {
                 struct var* hv;
                 int hd;
                 bool hu;
@@ -7382,7 +7402,10 @@ static void noteMakeWhere(struct checkCtx* ctx, struct operand* shortArg, struct
     struct operand* init = made->declInit;
     if (init && heldResult(init)) init = heldResult(init);
     if (init && init->opType == OPERATION_FUNCCALL && init->readVar && !opIsCtorCall(init)) {
-        Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, init->readVar->name, withName);
+        if (init->loopMade) return; //a loop's own call - there is nothing written to put the marker on
+        struct str callee = init->readVar->name;
+        for (int i = 0; i < callee.len; i++) if (callee.ptr[i] == '$') { callee.len = i; break; } //G16: as written
+        Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, callee, withName);
         return;
     }
     if (!made->type.structMAlloc) return; //a value: there is no marker to write on it
@@ -12496,8 +12519,9 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 bool exact = valueRefsAdmitStores(target->type);
                 bool ok;
                 if (hu || tu) ok = tu ? hu : !exact; //the program's scope outlives every scope of this function
+                //exactly - between two of this function's scope variables, an equality its callers show (O10c)
                 else ok = hv != SCOPE_AMBIGUOUS
-                          && (exact ? sameExactScope(hv, hd, tv, td)
+                          && (exact ? sameScopeOrObliged(ctx, hv, hd, tv, td)
                                     : scopeCanFlowInto(ctx->func, hv, normDepth(hd), tv, normDepth(td)));
                 if (!ok) Err(opTok, ERR_VALUE_REFS_OUTLIVED);
             }
@@ -13287,7 +13311,9 @@ static struct operand* forInCall(struct checkCtx* ctx, struct operand* recv, str
     mTok.type = TOK_IDEN;
     mTok.str = StrFromCStr(name);
     bool reported = false;
-    return buildMethodCall(ctx, recv, mTok, &noArgs, ListInit(sizeof(struct syntax*)), &reported);
+    struct operand* call = buildMethodCall(ctx, recv, mTok, &noArgs, ListInit(sizeof(struct syntax*)), &reported);
+    if (call) call->loopMade = true;
+    return call;
 }
 
 //S9b: pieces of the range lowering - a hidden local of a given type, a literal, an assignment, an if

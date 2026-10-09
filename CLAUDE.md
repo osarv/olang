@@ -3507,8 +3507,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `note:` at the other declaration. Found already working: `x := "abc" if c else "no"` (E28/D15, pinned by a test).
   **Not fixed (the scope agent's)**: `for w in root.kids` over `List<mut Widget&>` with `Widget` holding a `mut`
   reference field still fails inside `ListIter.Next` (C2d, the recorded `At`/element limit).
-- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, D16d, C2d,
-  O25c, T25b, B11, 2026-10-09).** From a study that wrote 15 programs and marked every workaround. **Copies (O25h)**: a
+- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, O13c, O17,
+  D16d, C2d, O25c, T22a, T25b, G18, B11, 2026-10-09).** From a study that wrote 15 programs and marked every workaround. **Copies (O25h)**: a
   value holding references copied from existing storage keeps them where the source's are, typed or `:=` (it was the
   copy's block, so `t := a[i]; a[i] = a[j]; a[j] = t`, a parallel swap, `Sort` on records holding text, `for wc in recs
   { out.Push(wc.word) }` and an argmin `best = x` were rejected); that home (`refsHome`, now with a depth and the program's
@@ -3533,11 +3533,18 @@ Go through this for every change to what olang means - a rule added, revised or 
   judged again by every assignment in its loop); a copy of a global's element reassigned a local value and stored back
   (the program claim was a flag nothing enforced). **Diagnostics (B11, mine)**: one error about where something lives
   per statement, and a note at the local the offending value was made as naming the fix (`make it where 'st' lives:
-  'ReadFile&st(...)'`, `'c Counter&ok = ...'`). **Not done**: a lambda returning one of its reference parameters through
-  `Fold`'s callback is still T22a (its obligations cannot be checked through a function value - recorded); r14's
-  permission inference (a local's writable reference binds a type variable writable) is the type checker's. Study: every
-  scope workaround reverts and the programs give the same output; report's `sum.biggest = s.item` is left by T25b (a
-  `mut` field of a reference type is a writable reference).
+  'ReadFile&st(...)'`, `'c Counter&ok = ...'`). **T22a, decided (mine)**: a function type whose result is a type
+  variable bound to a reference requires each reference argument to outlive its result scope (exactly where stores are
+  possible); calls through such a value are held to it, and a lambda requiring no more fits - so `Fold` can keep one
+  of its elements. **From the matrix library (the coordinator's batch)**: an ordinary call's result no longer carries
+  its arguments' bindings (only a constructor's does), so `return copyOf(id.Data)` / `return x + x` is not O26; a value
+  local's own storage is its block wherever its references were built (`valueHome` is their home only), so `b :=
+  Box&return(n); b.size()` and `f(b.Data)` work, and a lend through which the callee could store is refused with the
+  fix named (O17 - before, it bound the callee to the result scope while the value sat in the block); a typed `null`
+  default fits any scope (`Box&return(n)`); and a literal default for a type-variable parameter is fitted per call
+  (G18). **Not done**: r14's permission inference (a local's writable reference binds a type variable writable) is the
+  type checker's. Study: every scope workaround reverts and the programs give the same output; report's `sum.biggest =
+  s.item` is left by T25b (a `mut` field of a reference type is a writable reference).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

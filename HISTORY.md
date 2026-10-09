@@ -9938,8 +9938,8 @@ from their original form.
   with a note at the function (D3a). New check cases pin each, and the counts where a cascade was cut.
 
 
-- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, D16d, C2d,
-  O25c, T25b, B11, 2026-10-09).** A study wrote fifteen realistic programs (a word counter, a graph, an LRU cache, a key
+- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, O13c, O17,
+  D16d, C2d, O25c, T22a, T25b, G18, B11, 2026-10-09).** A study wrote fifteen realistic programs (a word counter, a graph, an LRU cache, a key
   file tool, widgets, a report, a pipeline, ...) as a programmer would and marked each workaround the checker forced,
   with a minimized reproducer for each. This batch took the scope ones.
   **Copies.** O25h said a copy of a value holding references keeps them where its initializer's are, and only the typed
@@ -9988,15 +9988,34 @@ from their original form.
   reference accumulator usable needed a T25b detail as well: a function type's result written as a type variable
   (`fn(acc <U>, x <T>) <U>`) was made writable as a built result is, so a lambda returning a read-only element could not
   match; it now has the type argument's permission, as an instantiated function's own type-variable result already had.
-  What stays: a lambda handing back one of its reference parameters records an obligation, which T22a forbids for a
-  function value - checking it through a value of a type-variable result would need the function type itself to carry
-  "each argument outlives the result" and calls through values to discharge it; recorded, not built.
+  That left a lambda handing back one of its reference parameters (`fn(best, w) { return w if ... else best }`), which
+  records an obligation T22a forbids for a function value - a call through a value checks none. The way through, mine:
+  a function type whose result is written as a type variable may be given exactly such a function (O14b), so the type
+  itself now says it - each reference argument outlives the result scope, and equals it where something can be stored
+  through the argument - and a call through a value of the type is held to that as a direct call is held to its
+  callee's obligations. A lambda written for such a type may require that and nothing more. `Fold` keeping its longest
+  element compiles, and keeping it past the words' block is rejected where it is kept (`o14bfoldshort`).
   **Diagnostics.** The study found three or four errors per cause and none naming the fix. A statement now reports one
   error about where something lives (a scope found wrong is wrong for every check after it), and where the cause is an
   argument made in a block that closes too soon, a note at the local it was made as - following slices, borrowed
   results and locals copied from one another back to the call or declaration that made it - says what to write:
   `'text' is made here, in a block that closes first - make it where 'st' lives: 'ReadFile&st(...)'`. Four check cases
   pinned a second error in one statement; they now pin the first and that the second is not reported.
+  **From the matrix library**, three more the coordinator passed on, each blocking ordinary Matrix code. (1) `fn f()
+  Matrix<F32> { x := Matrix<F32>(2, 2); return x + x }` was O26: an ordinary function's call merged its arguments'
+  bindings into its result (with a via-path meant for a constructor's bare-pun fields), and the return check matched
+  them by scope variable alone, so `Plus`'s result looked like `x`'s storage. Only a constructor's result takes its
+  arguments' bindings now; a function's result carries what O13c says its body gave it. (2) `b := Box&return(n);
+  b.size()` was O10d: `valueHome` meant both where a value local's references were built and where its storage is, so a
+  borrow bound the callee's variable to the result scope while the fit check saw the block. Storage is the block,
+  always - which made a real hazard visible: a callee able to store through the borrowed value (`b.regrow()` assigning
+  a new array to `b.Data`) builds in the block under a value claiming the result scope (reproduced: the array read
+  back as another loop's data). That lend is refused with the fix named (O17, `b Box&return = Box(n)`), a read-only one
+  or a field passed on is fine; and a value local whose result scope its callee's obligations only require to be
+  outlived lands in its own block, so the for-in's hidden iterator is lent as before. (3) `Box&return(n)` with a
+  constructor parameter defaulting to `null` was O10d at the default - the default, typed as its parameter, went through
+  the scope check as existing storage; `null` refers to nothing. And `alpha <T> = 1` could not be declared - a literal
+  default for a type-variable parameter is fitted at each call now, each call its own copy (G18, D8a).
   **Study, after**: every scope workaround in graph, inventory, lru, pipeline, report, widgets and wordfreq reverts and
   the program prints what it printed before; report's `sum.biggest = s.item` stays a copy for a T25b reason (a `mut`
   field of reference type is a writable reference, and the item text is read-only).
