@@ -8597,6 +8597,35 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
 
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
 # value is a value (E10); decided at compile time (the global above) and at run time alike
+# T29a: "String(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
+# b's does; a value declaration from it is a copy, and an inline field is lent as a slice of it
+type CtConvBox struct() {
+    buf mut Array<Char> = Array<Char>(3, 'q')
+}
+type CtConvHolder struct() {
+    s mut String& = null
+}
+fn ctConvWrite(s mut String&) { s[0] = 'Z' }
+fn ctConv(n I32) String& {
+    raw := Array<U8>(2, U8(104 + n))
+    copied := String(raw)
+    h := CtConvHolder()
+    h.s = String(raw)
+    ctConvWrite(String(raw))
+    raw[1] = 65
+    b := CtConvBox()
+    v := String(b.buf)
+    b.buf[1] = 'z'
+    return $copied " " $h.s " " $String(raw) " " $v
+}
+CtConvBaked := ctConv(1)
+
+test "T29a: a conversion names its argument's storage, at run time and while compiling" {
+    k I32 = ctRuntimeZero
+    assert ctConv(k + 1) == "ii ZA ZA qzq"
+    assert CtConvBaked == "ii ZA ZA qzq"
+}
+
 test "written text compares with a String value" {
     u String = "cm"
     k I32 = ctRuntimeZero

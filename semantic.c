@@ -5603,7 +5603,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
             && OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 2));
     }
     //a conversion names its type as plainly as a constructor call does - "String(bytes)", "Int64(n)"
-    if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT) return true;
+    if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT || op->viaConversion) return true;
     //D15: a field read - its type is the field's declared one, as a call's is its callee's result, and it is how
     //a cursor starts: "c := l.head" takes the field's type and where its referent lives (O25a)
     if (op->opType == OPERATION_MEMBER) return true;
@@ -6887,6 +6887,7 @@ bool numericPrimitiveBaseType(struct str name, enum baseType* out) {
 //usefully. The two must share a representation, so this is purely a change of type: codegen emits nothing.
 //It is what makes a nominal array type constructible at all; without it "type String byte[]" would have
 //an identity and no way to produce a value of it.
+struct operand* OperandSlice(struct operand* base, struct operand* lo, struct operand* hi, struct token tok);
 struct operand* OperandNominalConversion(struct type target, struct operand* arg, struct token tok) {
     //"fits", not "is identical": a compile-time-length literal reaching a run-time-length named type is
     //E12's ordinary promotion, and a conversion should admit everything an assignment to the underlying
@@ -6909,6 +6910,26 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
             && OperandFitsType(NULL, arg, underlying) != TYPE_FIT_OK
             && (baseElems.arrElem == underlying.arrElem || OperandFitsType(NULL, arg, baseElems) != TYPE_FIT_OK)) {
         ErrMsgSemantic(arg->tok, NOMINAL_CONVERT_MISMATCH);
+    }
+    //T29a: a conversion names its argument's storage - a variable, a field, an element or a slice read under the
+    //declared type's name, so it may be written exactly as the argument may, and a borrow of it is checked against
+    //how long that storage lives. Only a temporary argument makes the conversion a value of its own. An inline field
+    //(C2e) is lent as a slice of it, as everywhere a run-time length is wanted.
+    if (target.bType == BASETYPE_ARRAY && target.arrMalloc && target.arrElem && arg->type.bType == BASETYPE_ARRAY
+            && arg->type.arrElem && (OperandIsLvalue(arg) || arg->opType == OPERATION_SLICE)) {
+        if (!arg->type.arrMalloc) arg = OperandSlice(arg, NULL, NULL, tok);
+        struct type t = target;
+        t.structMAlloc = arg->type.structMAlloc;
+        t.refMut = arg->type.refMut;
+        t.scopeParam = arg->type.scopeParam;
+        t.scopeDepth = arg->type.scopeDepth;
+        t.scopeWritten = arg->type.scopeWritten;
+        t.arrElem = MallocOrCrash(sizeof(struct type));
+        *t.arrElem = *target.arrElem;
+        t.arrElem->refMut = arg->type.arrElem->refMut;
+        arg->type = t;
+        arg->viaConversion = true;
+        return arg;
     }
     struct operand* op = operandNew(tok, OPERATION_NOMINAL_CONVERT, target);
     ListAdd(&op->args, &arg);
@@ -7197,7 +7218,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     struct operand* op = operandNew(tok, opType, in->type);
     ListAdd(&op->args, &in);
     if (in->type.unknown) return op; //an unknown name, reported where it is written
-    if (!OperandIsLvalue(in)) {
+    if (!OperandIsLvalue(in) || in->viaConversion) {
         ErrMsgSemantic(tok, NOT_AN_LVALUE);
         return op;
     }
@@ -10905,7 +10926,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     if (target->isAtCall) return buildSetAt(ctx, target, rhs, opTok);
     if (rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE);
     if (target->type.unknown) {} //an unknown name, reported where it is written
-    else if (!OperandIsLvalue(target)) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
+    else if (!OperandIsLvalue(target) || target->viaConversion) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
     else if (!OperandIsMutableLvalue(target)) {
         struct var* root = lvalueRootVar(target);
         ErrMsgSemantic(target->tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(target) ? READ_ONLY_REF_WRITE : writeIntoCallValue(target) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
@@ -13140,7 +13161,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct operand* t = NULL;
         if (!(destructTargetName(tn, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) {
             t = buildExprFromSyntax(ctx, tn);
-            if (!OperandIsLvalue(t)) ErrMsgSemantic(t->tok, NOT_AN_LVALUE);
+            if (!OperandIsLvalue(t) || t->viaConversion) ErrMsgSemantic(t->tok, NOT_AN_LVALUE);
             else if (!OperandIsMutableLvalue(t)) ErrMsgSemantic(t->tok, VAR_IMMUTABLE);
         }
         ListAdd(&stmt.spawnTargets, &t);

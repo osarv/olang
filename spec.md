@@ -798,7 +798,12 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   `s String& = "hello"`. A literal is written at the point of use and has no type worth preserving.
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
-  merely identical shapes. It moves nothing.
+  merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
+  variable, a field, an element or a slice, `Name(v)` is that storage read as `Name` - it may be written exactly
+  where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
+  lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
+  assignment may name. An inline field (C2e) is lent as a slice of it. Only a temporary `v` makes the conversion a
+  value of its own.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
   always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
