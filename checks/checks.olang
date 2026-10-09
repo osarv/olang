@@ -1161,7 +1161,7 @@ fn lazytype(r mut report&) ? Failed {
 }
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {
-    table := try os.ReadFile("errmsg.h") catch default ""
+    table := try os.ReadFile("bootstrap/errmsg.h") catch default ""
     spec := try os.ReadFile("SPEC.md") catch default ""
     assert table.Len() > 0 and spec.Len() > 0
     bad := 0
@@ -1188,7 +1188,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     assert entries > 0
     # each call naming a diagnostic, in every source file
     dir := fresh("diags")
-    os.Run("ls *.c > " $os.Quote($dir "/sources.txt"))
+    os.Run("ls bootstrap/*.c > " $os.Quote($dir "/sources.txt"))
     list := try os.ReadFile($dir "/sources.txt") catch default ""
     calls := 0
     for name in list.Split("\n") {

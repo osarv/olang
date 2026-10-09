@@ -61,7 +61,7 @@ Go through this for every change to what olang means - a rule added, revised or 
 
 1. **Spec first**: write or revise the rule in `SPEC.md`, grammar included.
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
-3. **Compile-time evaluator** (`comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
+3. **Compile-time evaluator** (`bootstrap/comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
    or a global it bakes, K2) beside the run-time test.
 4. **Tests**: corpus tests for what now works (read back after an arena churn where scopes are involved), and

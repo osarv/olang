@@ -5,8 +5,9 @@ CC = gcc
 # the same struct, and the resulting compiler segfaulted on valid input. "make verify" always ran clean
 # so it never caught this - the failure only ever appeared mid-edit.
 CFLAGS = -Wall -Werror -Wextra -Wpedantic -g -MMD -MP
-SRC = $(wildcard *.c)
-OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(SRC))))
+# the C compiler - stage 0 of the bootstrap (bootstrap/README.md) - is bootstrap/*.c, built to build/out
+SRC = $(wildcard bootstrap/*.c)
+OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
 DEP = $(OBJ:.o=.d)
 # M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
 # tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
@@ -17,7 +18,7 @@ DEP = $(OBJ:.o=.d)
 OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) checks/checks.olang
 
-build/%.o: %.c
+build/%.o: bootstrap/%.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -99,6 +100,6 @@ clean:
 .PHONY: all build run test usertest verify checkir race fuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
-# ("build/codegen.o: codegen.c ..."), and the first explicit rule make reads becomes its default goal.
+# ("build/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
 # Placed higher up, that silently made "make" build one object file instead of build/out.
 -include $(DEP)
