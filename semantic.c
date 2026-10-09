@@ -2002,6 +2002,22 @@ static void collectTypeVarNames(struct syntax* node, struct list* out) {
         if (!p->isToken) collectTypeVarNames(p->sntx, out);
     }
 }
+//G1: the first token naming each distinct type variable written in node
+static void collectTypeVarToks(struct syntax* node, struct list* out) {
+    if (!node) return;
+    if (node->type == SNTX_TYPE_VAR) {
+        struct token t = firstTokOfType(node, TOK_IDEN);
+        if (t.type != TOK_NONE) {
+            for (int i = 0; i < out->len; i++) if (StrCmp(strFromTok(*(struct token*)ListGetIdx(out, i)), strFromTok(t))) return;
+            ListAdd(out, &t);
+        }
+        return;
+    }
+    for (int i = 0; i < node->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&node->parts, i);
+        if (!p->isToken) collectTypeVarToks(p->sntx, out);
+    }
+}
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
 //the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
@@ -2477,6 +2493,14 @@ static struct type* resolveConstraint(struct semaModule* mod, struct syntax* nod
     struct type* out = MallocOrCrash(sizeof(struct type));
     *out = c;
     return out;
+}
+
+bool numericPrimitiveBaseType(struct str name, enum baseType* out);
+//G1: a type variable's name may not be a type's - a declared one, a built-in one, or a primitive
+static bool nameIsAType(struct semaModule* mod, struct str name) {
+    enum baseType b;
+    return typeNamed(mod, name) || numericPrimitiveBaseType(name, &b) || StrCmp(name, StrFromCStr("Bool"))
+        || StrCmp(name, StrFromCStr("Array"));
 }
 
 struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
@@ -3470,6 +3494,20 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct list* prevTPN = currentTypeParamNames;
     struct list sigTypeVars = ListInit(sizeof(struct str));
     collectTypeVarNames(sigNode, &sigTypeVars);
+    //G1: a variable named after a type is reported once, where it is first written, and is no variable of this
+    //signature - a bare "I32" elsewhere in it stays the type
+    struct list varToks = ListInit(sizeof(struct token));
+    collectTypeVarToks(sigNode, &varToks);
+    for (int i = 0; i < varToks.len; i++) {
+        struct token vt = *(struct token*)ListGetIdx(&varToks, i);
+        if (!nameIsAType(mod, strFromTok(vt))) continue;
+        bool enclosing = false; //a variable of the enclosing generic type, checked where that declares it
+        for (int j = 0; prevTPN && j < prevTPN->len; j++) enclosing = enclosing || StrCmp(*(struct str*)ListGetIdx(prevTPN, j), strFromTok(vt));
+        if (!enclosing) ErrMsgSemantic(vt, TYPE_VAR_NAMES_TYPE);
+        for (int j = 0; j < sigTypeVars.len; j++) {
+            if (StrCmp(*(struct str*)ListGetIdx(&sigTypeVars, j), strFromTok(vt))) { ListRemoveIdx(&sigTypeVars, j); break; }
+        }
+    }
     if (sigTypeVars.len > 0) currentTypeParamNames = &sigTypeVars;
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
@@ -3769,6 +3807,7 @@ void resolveTypeDecl(struct type* t) {
                     if (StrCmp(*(struct str*)ListGetIdx(&declaredParams, j), pname)) { dup = true; break; }
                 }
                 if (dup) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+                if (nameIsAType(owner, pname)) ErrMsgSemantic(nameTok, TYPE_VAR_NAMES_TYPE); //G1
                 ListAdd(&declaredParams, &pname);
             }
         }

@@ -4238,8 +4238,9 @@ parameterize.
 
 **G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19), written where an entire `type-expr` (T2) would otherwise
 appear. It names a **type variable**: a type that is not known at the declaration and is supplied
-per instantiation. `IDEN` must not name a type declared in the referencing module (D2); writing a
-declared type's name inside a `type-var` is a compile-time error, since `<Point>` would otherwise
+per instantiation. `IDEN` must not name a type the referencing module can name - one it declares or imports by
+bare name (D2), a prelude type, `Array` or a primitive; writing such a name inside a `type-var` (or as a generic
+type's parameter) is a compile-time error, reported once where it is first written, since `<Point>` would otherwise
 read as parameterizing over something already concrete.
 
 **G2.** A `type-var` may carry a reference marker exactly as a `type-ref` does (T24), and is written as an

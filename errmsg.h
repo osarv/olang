@@ -100,6 +100,7 @@
 #define DESTRUCT_COUNT_MISMATCH "the number of targets must be the number of values the call returns - write '_' for a value you do not want (D8c)"
 #define DESTRUCT_DECLARES_NAMES "':=' declares each target, so each must be a plain name or '_' - use '=' to assign into existing places (D8c)"
 #define UNNAMED_SCOPE_BOUND "this reference lives in the program's own scope (a global's referent), and the callee may write references through it into that scope, which no function allocates into (O25e)"
+#define TYPE_VAR_NAMES_TYPE "a type variable may not be named after a type - it would read as parameterizing over a type that is already concrete. Name the variable something no type is called, as '<T>' (G1)"
 #define TYPE_VAR_WRITTEN_BARE "a type variable is written with its angle brackets everywhere, type arguments included: 'Cell<<T>>', not 'Cell<T>' - a bare name is always a declared type (G8b)"
 #define TRY_DEFAULT_NO_VALUE "this call returns no value, so there is nothing for a default to stand in for - handle its errors with a try ... catch statement instead (R9a)"
 #define TRY_DEFAULT_COUNT "a clause's defaults must be one per result the call returns - several are written only where the try is the whole value being destructured or returned (R9a)"
