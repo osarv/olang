@@ -133,7 +133,7 @@ test "where a value lands, as whole builds" {
 
 # M22a: a std module and a local file with the same base name are two modules - but one module may not
 # import both under the one alias the name gives them
-test "std/map beside a local map.olang" {
+test "std/io beside a local io.olang" {
     dir := fresh("twolists")
     os.Run("cp checks/fixtures/twolists/* " $os.Quote(dir))
     assert sh(dir, "\"$OLANG\" -b twolists.olang > out.txt 2>&1 && ./build/twolists") == 0 or failed("twolists", dir)

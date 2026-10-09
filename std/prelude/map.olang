@@ -1,6 +1,7 @@
-# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() I64" agreeing with "==": the
-# prelude gives it to I32, I64, U8 and String, the compiler supplies one for a struct, enum or array value whose
-# parts all have one (E10b), and a key type declaring Eq declares its Hash too.
+# Map - values found by key, compared with "==" (E10). Part of the prelude, as List is: "Map<K, V>" is named bare
+# everywhere. A key is any type with a "Hash() I64" agreeing with "==": the prelude gives it to the integers and
+# String, the compiler supplies one for a struct, enum or array value whose parts all have one (E10b), and a key type
+# declaring Eq declares its Hash too.
 #
 # Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
 # Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
@@ -59,6 +60,21 @@ fn (m mut Map<<K>, <V>>&) grow() {
             s = after
         }
     }
+}
+
+# the value for key made f(its value) - or, where key has none, f(init) put for it: counting is
+# "m.Update(word, 0, fn(n) { return n + 1 })". One hash and one walk of key's chain, where Get then Put take two
+fn (m mut Map<<K>, <V>>&) Update(key <K>, init <V>, f fn(v <V>) <V>) {
+    i := m.bucketOf(key)
+    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+        if s.key == key {
+            s.value = f(s.value)
+            return
+        }
+    }
+    m.buckets[i] = mapSlot<<K>, <V>>(key, f(init), m.buckets[i])
+    m.count++
+    if m.count * 4 > m.buckets.Len() * 3 { m.grow() }
 }
 
 # the value for key - failing with the default error when there is none, so a miss is never read as a value:
@@ -127,6 +143,39 @@ test "put, get, replace, remove" {
     assert missed
     assert m.Remove(1) and not m.Remove(1)
     assert not m.Has(1) and m.Has(2) and m.Len() == 1
+}
+
+test "Update counts in one lookup, inserting f(init) for a missing key" {
+    text String& = "a b a c a b"
+    m := Map<String&, I64>()
+    for w in text.Split(" ") { m.Update(w, 0, fn(n) { return n + 1 }) }
+    assert m.Len() == 3
+    assert (try m.Get("a") catch default 0) == 3 and (try m.Get("b") catch default 0) == 2
+    assert (try m.Get("c") catch default 0) == 1
+    d := Map<I32, I32>()
+    d.Update(7, 10, fn(v) { return v * 2 })            # missing: f(init) goes in
+    assert (try d.Get(7) catch default 0) == 20
+    d.Update(7, 10, fn(v) { return v * 2 })            # present: f(its value)
+    assert (try d.Get(7) catch default 0) == 40 and d.Len() == 1
+    g := Map<I32, I32>()
+    for i in range 3000 { g.Update(I32(i % 1000), 0, fn(v) { return v + 1 }) }     # grows while updating
+    assert g.Len() == 1000
+    for i in range 1000 { assert (try g.Get(I32(i)) catch default 0) == 3 }
+}
+
+# the same, computed while compiling (K2) - the evaluator runs Update and its lambda as the run time does
+fn wordCounts() I64 {
+    text String& = "to be or not to be"
+    m := Map<String&, I64>()
+    for w in text.Split(" ") { m.Update(w, 0, fn(n) { return n + 1 }) }
+    return (try m.Get("to") catch default 0) * 100 + (try m.Get("be") catch default 0) * 10 + m.Len()
+}
+
+wordCountsBaked := wordCounts()
+
+test "Update, evaluated while compiling as at run time" {
+    assert wordCountsBaked == 224
+    assert wordCounts() == wordCountsBaked
 }
 
 test "a map grows, and keeps every key through it" {

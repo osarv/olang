@@ -1,8 +1,7 @@
-import "std/map"
-import mine "map"
+import "std/io"
+import mine "io"
 error E { X }
 fn main() ? E {
-    m := map.Map<I32, I32>()
-    m.Put(1, mine.Mine())
-    assert m.Len() == 1
+    try io.Print("") catch { }
+    assert mine.Mine() == 7
 }

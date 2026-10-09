@@ -1,9 +1,8 @@
 # check: fail Pf does not satisfy the constraint Hashable on K: it has no method Hash that fits
 # E10b: a F64 has no Hash, so neither does a struct holding one
-import "std/map"
 type Pf struct(x F64) {
     x
 }
 fn main() ? {
-    m := map.Map<Pf, I32>()
+    m := Map<Pf, I32>()
 }

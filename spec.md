@@ -1295,11 +1295,11 @@ any other, and its imports are its own.
 
 **M22a.** A module has an **identity**, from which its symbols and object files are named (§10 B3b): its
 path without the `.olang` extension. For a std module it is `std/` followed by its path within the standard
-library (`std/map`); for a remote module, the repository and the path within it as the import names them
+library (`std/chan`); for a remote module, the repository and the path within it as the import names them
 (`example.com/me/tools@v1/mathx/add`); for a local module, its path relative to the working directory the
 compiler was run from (`geom/rect`), or its file name alone when it lies outside that directory. A relative
 import (M23) is identified by the importing module's identity with its last element replaced by the
-relative path - so `import "map"` written in `std/io` names `std/map`, the module `import "std/map"` names,
+relative path - so `import "io"` written in `std/os` names `std/io`, the module `import "std/io"` names,
 and each version of a repository has its own copy of what it imports relatively.
 
 **M2.** Module imports may form cycles: module A may import module B while B imports A. This is
@@ -1319,14 +1319,14 @@ the imported module's exported names (§4.4).
 alone:
 
 - **std**: `std/PATH` - a file of the standard library, which is located by the implementation (in this one,
-  the `OLANG_STD` environment variable, or `../std` beside the compiler); `std/map` is the file `map.olang`
+  the `OLANG_STD` environment variable, or `../std` beside the compiler); `std/chan` is the file `chan.olang`
   at the standard library's root;
 - **remote**: `HOST/OWNER/REPO[@REF]/PATH`, where `HOST` contains a `.` - the file `PATH` within a remote
   version-controlled repository, at the branch or tag `REF` (its default branch when omitted);
 - **relative**: any other path - a file relative to the **importing module's own directory**, never the
   working directory, so a module means its own neighbours wherever it was found. It may descend into
   directories (`geom/rect`) and climb out of them (`../shared`). Within the standard library or a remote
-  repository a relative import stays within it: `import "map"` in `std/io` is `std/map`.
+  repository a relative import stays within it: `import "io"` in `std/os` is `std/io`.
 
 A path ending in `.olang`, a path naming no file, and a first element `std` naming anything outside the
 standard library are compile-time errors. The first element of a relative path is therefore never `std`
@@ -1359,8 +1359,8 @@ compilation does not reach are kept as they are, since several programs in one d
 a line (M23b) remains the way to update one repository alone.
 
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
-path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/map"`
-and `import map "std/map"`. If the derived alias is not a legal identifier
+path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/chan"`
+and `import chan "std/chan"`. If the derived alias is not a legal identifier
 (L6 — e.g. the file name contains a hyphen or starts with a digit), that is a compile-time error;
 such a file must be imported with an explicit alias instead.
 
@@ -1450,6 +1450,13 @@ derived). Every one of these costs the same whatever the length: storage is a ru
 of the last, so a position's chunk is found by arithmetic rather than by a search, and nothing stored is moved by
 a later `Push`. `Iter()` hands out a fresh position (S9c), so `for x in l` walks a `List` through its iterator, not
 through `At` (S9d).
+
+The prelude declares `type Map<K Hashable<<K>>, V>`, values found by key, keys compared with `==` (E10) and hashed
+with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
+default error (R15) when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
+where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
+and says whether it was there, and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a
+`MapEntry<K, V>` holding `Key` and `Value`, in no specified order. Everything a `Map` stores lives where the `Map` does.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one

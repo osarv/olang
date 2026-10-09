@@ -1033,7 +1033,7 @@ static char* normalizePath(const char* p) {
 }
 
 //M22a: a relative import's identity is the importer's with its last element replaced by the relative path -
-//so "map" written in std/io is std/map, the same module "std/map" names, and each version of a remote
+//so "io" written in std/os is std/io, the same module "std/io" names, and each version of a remote
 //repository has its own copy of what it imports relatively
 static struct str relativeIdentity(struct semaModule* from, const char* spec) {
     char* base = StrDupStr(from->identity);
@@ -2061,6 +2061,12 @@ static struct list pendingInstances; //int: indices into instantiations whose bo
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
 //further generics, so they queue here and drain alongside the function ones.
 struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; };
+//G19: a written type's constraints, met while signatures are still being resolved, wait until every signature is - a
+//method that makes a type satisfy one may be declared in a module whose signatures come later ("Map<b.Key&, I32>" in a
+//module resolved before b, whose Key has its Hash; or a prelude file before text.olang's String.Hash)
+struct deferredConstraint { struct type* generic; struct type* spec; struct list bindings; struct token site; };
+static struct list deferredConstraints;
+static bool signaturesResolved;
 //G16: where the instantiation being made was asked for - a call, or a written type - for a note on errors in its body
 static struct token instSite;
 
@@ -2512,8 +2518,16 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //signature a substitution reached it through. One not met is reported there and its body is not checked: the body
     //would only repeat that one error inside the generic's own code. Nor is a pattern's (G16): its arguments are not
     //known, and each instantiation of it is checked for its own
-    bool met = argsStillGeneric
-        || checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    bool met = argsStillGeneric;
+    if (!met && !signaturesResolved) {
+        struct deferredConstraint dc = { generic, spec, ListInit(sizeof(struct typeBinding)),
+                                         instSite.type != TOK_NONE ? instSite : generic->tok };
+        ListAddList(&dc.bindings, *bindings);
+        ListAdd(&deferredConstraints, &dc);
+        met = true;
+    } else if (!met) {
+        met = checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    }
     if (spec->ctorFunc && !argsStillGeneric && met) {
         struct pendingTypeInst p = (struct pendingTypeInst){0};
         p.spec = spec;
@@ -15575,6 +15589,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
+    deferredConstraints = ListInit(sizeof(struct deferredConstraint));
+    signaturesResolved = false;
     allModules = ListInit(sizeof(struct semaModule*));
     buildModule = makeBuildModule();
     //T35b: the prelude - ordinary olang in <std>/prelude, part of every program. Loaded first, so its
@@ -15608,6 +15624,18 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
 
     for (int i = 0; i < allModules.len; i++) semaCollectNames(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));
+    //G19: the constraints written types met during that pass, now that every method is known - one not met is reported
+    //at its type, and the instantiation's body is not checked (instantiateType)
+    signaturesResolved = true;
+    for (int i = 0; i < deferredConstraints.len; i++) {
+        struct deferredConstraint* dc = ListGetIdx(&deferredConstraints, i);
+        if (checkTypeConstraints(&dc->generic->typeConstraints, &dc->bindings, dc->site)) continue;
+        for (int k = 0; k < pendingTypeInsts.len; k++) {
+            if (((struct pendingTypeInst*)ListGetIdx(&pendingTypeInsts, k))->spec != dc->spec) continue;
+            ListRemoveIdx(&pendingTypeInsts, k);
+            break;
+        }
+    }
     for (int i = 0; i < allModules.len; i++) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) refreshStructSnapshots(ListGetIdx(&m->types, j));
