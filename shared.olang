@@ -6620,6 +6620,27 @@ test "B10a: the built-in build constants are ordinary immutable globals" {
     assert TargetArch.Len() > 0
 }
 
+# B10a/B12: the target's constants - while compiling (each assert below is decided there, S18c), in a top-level
+# condition choosing a declaration, and at run time through mutable globals, which the running program reads
+if TargetVectorBits >= 256 {
+    ccVectorKernel String& = "wide"
+} else {
+    ccVectorKernel String& = "narrow"
+}
+ccRunBits mut I32 = TargetVectorBits
+ccRunFma mut Bool = TargetHasFma
+ccRunCpu mut String = TargetCpu
+
+test "B12: the target's build constants describe one machine, while compiling and at run time" {
+    assert TargetCpu.Len() > 0 and TargetOs == "linux"
+    assert TargetArch == "x86_64" or TargetArch == "aarch64"
+    assert TargetVectorBits == 128 or TargetVectorBits == 256 or TargetVectorBits == 512
+    # on x86-64 an FMA instruction comes with AVX's wide vectors, never with SSE's alone
+    assert TargetArch != "x86_64" or not TargetHasFma or TargetVectorBits >= 256
+    assert ccVectorKernel == ("wide" if TargetVectorBits >= 256 else "narrow")
+    assert ccRunBits == TargetVectorBits and ccRunFma == TargetHasFma and ccRunCpu == TargetCpu
+}
+
 # B9a: a top-level condition may read an immutable global computed from literals and build constants
 ccLevel I32 = 2 + 1
 ccRatio F64 = 1

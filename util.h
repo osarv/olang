@@ -50,6 +50,8 @@ int RunProgram(char* const argv[], bool quiet);
 //RunProgram, with the program's standard output read into out (at most n - 1 bytes, NUL-terminated) and its standard
 //error discarded
 int RunProgramCapture(char* const argv[], char* out, size_t n);
+//RunProgramCapture, with input (at most 4096 bytes) as the program's standard input, or nothing when it is NULL
+int RunProgramFeed(char* const argv[], const char* input, char* out, size_t n);
 //path and everything under it removed, symbolic links never followed - 0, also when path does not exist, or -1
 int RemoveTree(const char* path);
 //path made a directory, with every missing parent - 0 when it is one afterwards, or -1

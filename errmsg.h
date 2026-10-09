@@ -27,7 +27,14 @@ struct type;
     X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
     X(ERR_MODE_ONE_FILE,                "B1",    "%s takes exactly one file") \
     X(ERR_MODE_NEEDS_FILE,              "B1",    "%s needs a file") \
-    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -u -D") \
+    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -u -a -D") \
+    X(ERR_TARGET_MISSING,               "B12",   "-a needs a target after it, as '-a x86-64-v3'") \
+    X(ERR_TARGET_UNKNOWN,               "B12",   "unknown target '%s' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") \
+    X(ERR_TARGET_UNSUPPORTED,           "B12",   "olang does not build for '%s' - it builds for x86_64 and aarch64 Linux with the GNU C library") \
+    X(ERR_TARGET_NATIVE_FOREIGN,        "B12",   "'-a %s': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") \
+    X(ERR_TARGET_FOREIGN_MODE,          "B12a",  "%s builds and runs on this machine, and '-a %s' is another architecture or system - only -c builds for it") \
+    X(ERR_TARGET_NO_BACKEND,            "B12a",  "this clang cannot build for '%s': its back end for that architecture cannot generate the BF16 code the runtime holds") \
+    X(ERR_TARGET_NO_CLANG,              "B12",   "clang not found on PATH - it is what builds the program, and what says what target '%s' is") \
     X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "-e takes one rule, as 'olang -e B1'") \
     X(ERR_NO_SPEC,                      "B11a",  "no specification at %s") \
     X(ERR_NO_RULE,                      "B11a",  "the specification has no rule %s") \

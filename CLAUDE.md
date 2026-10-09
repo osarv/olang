@@ -3829,6 +3829,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   judged by the parameter's slot, and O25c's exactness between two of a function's scope variables was an error, not an
   obligation (both over-rejections, closed soundly); a capitalized `Str`/`Eq`/`Less` declaring errors pointed at a
   `TryStr` that does not exist. Not fixed: a type-variable array literal (`<T>[...]`, E19's grammar) does not parse.
+- **Builds are for this machine; `-a TARGET` names another (B12/B12a/B12b/B12c, B10a, X8, K1, 2026-10-09, the user:
+  "by default compilation is always for the machine you are on. To cross compile, use the -arch= ... syntax").** The
+  flag is **`-a`**, not `-arch=`: B1, the user's own rule of one character per flag (theirs to object to). Every
+  generated function carries the target's `"target-cpu"`/`"target-features"` (and `"prefer-vector-width"`), as a C
+  frontend's do - under LTO the code is generated at the link from bitcode, where a compile flag reaches nothing - and
+  the CPU is passed to the compile and the link too. `native` (the default) is what clang's `-march=native` resolves
+  to, found by asking clang to compile one empty C function and reading its attributes (~50ms a build); `TARGET` is
+  also an x86-64 level, a CPU clang knows, or `ARCH-linux-gnu[:CPU]`. **Decided (mine)**: five target constants
+  (`TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits`, `TargetHasFma`); the code generator is told to use
+  `TargetVectorBits`-wide vectors (512 on AVX-512, where LLVM's own tuning prefers 256 on Intel parts) so the constant
+  is the truth - measured on the bench suite, 512 against 256: matmul, the sums and GEMM faster, the rest within noise,
+  and both native widths cost fannkuch ~20% against baseline x86-64 (C's `-march=native` does the same); the resolved
+  target is mixed into every object's hash (B12b), so `native` on another CPU rebuilds; the BF16 conversions of
+  AVX512-BF16/AVX-NE-CONVERT (VCVTNEPS2BF16 flushes subnormals) are taken out of the target's features (B12c, found by
+  checking what LLVM 18 selects: it uses them for every `fptrunc` to `bfloat`); no contraction anywhere - `a * b + c`
+  rounds twice on every target, `math.Fma` once (X8's exact functions are now LLVM's intrinsics, so `fma` is `vfmadd`
+  given FMA and the library's call without). **Another architecture (B12a)**: `-c` only (`-b`/`-t`/`-i` are errors), its
+  inexact libm calls not evaluated while compiling (K1), the runtime's C-library layouts (struct stat etc.) from a
+  per-architecture table checked against this compiler's headers for its own row; and only where the clang found can
+  compile the runtime's code for it - LLVM 18's AArch64 back end cannot select any `bfloat` operation, so `aarch64` is
+  refused here with that reason (a capability probe, so a newer clang lifts it). x86_64 and aarch64 Linux/glibc are the
+  architectures known; anything else is an error. Without clang, `-i` takes `native` as the x86-64 level the processor
+  has. **std/linalg** chooses its GEMM tile by the constants - 12 x 32 / 12 x 16 (F32 / F64) on AVX-512, 6 x 16 / 6 x 8
+  on AVX, 4 x 12 / 4 x 6 on SSE - and fuses its products' multiply-adds where `TargetHasFma` (results then differ in
+  the last bits between targets, never between the program, `-i` and the evaluator). Measured single-threaded: GEMM F32 15-17 ->
+  57-78 GFLOPS, F64 7.5-8 -> 25-33 (OpenBLAS 91-108 / 48; the gap 5-7x -> 1.3-1.9x), the 784-128-10 training step
+  2.3-2.9 -> 0.8-1.1 ms, oann's MNIST epoch through `linalg.GemmWorkspace` 2.6-2.9 -> 0.55 s. **The hazard the width
+  brings, measured**: a hand-tiled kernel whose rows are not whole vectors (oann's copy of linalg's old 4 x 12 F32
+  kernel) is SLP-vectorized across rows with gathers - 3x slower native (5.1-5.4 s an epoch) than at 256 bits (1.8 s);
+  tile by `TargetVectorBits`. Kept 512 for that price: the tuned width costs GEMM 1.4-1.5x and plain loops up to 1.3x.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

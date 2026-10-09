@@ -10788,3 +10788,122 @@ interpreted run's standard output and error, and runs one with its standard outp
 checked form `TryStr` and so on, which do not exist - now `Str cannot fail - the operation calling it has nowhere to
 write 'try'`. A type-variable array literal (`<T>[a, b]`), which E19's grammar admits, does not parse in expression
 position; not fixed here (List's empty case uses an array's zero value instead) - recorded for the parser.
+
+
+### Builds are for this machine; `-a TARGET` names another (B12, 2026-10-09)
+
+**Why.** The benchmarks found std/linalg's GEMM 5-7x behind OpenBLAS, and the reason was not the code: olang built
+everything for baseline x86-64 - SSE2's 128-bit vectors, no FMA - on a machine with AVX-512. The user's decision: "by
+default compilation is always for the machine you are on. To cross compile, use the -arch= ... syntax. If fast math is
+its own functions then don't add the compiler option yet." The flag became `-a TARGET`, since the user's own rule B1
+(2026-10-08) makes every flag one character; `-arch=native` is reported as an unknown flag.
+
+**How the target reaches the code.** olang hands clang `.ll` text and links with `-flto` (B2d), so under LTO the machine
+code is generated at the link, from bitcode - a `-march` on the compile step reaches nothing. What decides the
+instructions a function may use there is its own `"target-cpu"`/`"target-features"` attributes, which a C frontend
+writes on every function and nothing wrote on olang's. So every `define` is now rewritten to carry them - the same text
+rewrite `-r` already used for `sanitize_thread`, which reaches the runtime's functions inside string literals too - and
+the CPU is passed as `-march` at the compile and the link as well, which is what clang's driver turns into the LTO
+plugin's `mcpu`. Verified with `objdump`: a default build of an F32 loop uses `zmm` registers and `vfmadd` for
+`math.Fma`; `-a x86-64` has neither and calls `fmaf`.
+
+**What `native` is.** Exactly what clang's `-march=native` resolves to: the compiler asks clang to compile one empty C
+function (`-S -emit-llvm`, fed on standard input - `RunProgramFeed`) and reads the attributes, the triple and the data
+layout from what comes back. Here that is `cascadelake` with its feature list (AVX-512 F/BW/CD/DQ/VL/VNNI, FMA, F16C,
+no AVX512-BF16 or AVX512-FP16). About 50ms a build, once (before `-t` forks). The same probe resolves an x86-64 level
+(`x86-64` ... `x86-64-v4`), a CPU name (`skylake`, `znver4`), and a triple `ARCH-linux-gnu[:CPU]`; an unknown CPU is the
+probe failing, reported as `olang: error[B12]: unknown target ...` naming every form. Without clang (which `-i` does not
+otherwise need) `-i` resolves `native` to the x86-64 level the processor supports (`__builtin_cpu_supports`).
+
+**The vector width (decided, mine).** LLVM's tuning for Intel's AVX-512 parts (Skylake-SP through Sapphire Rapids, and
+`x86-64-v4`) prefers 256-bit vectors, from the frequency drop 512-bit instructions caused on the first of them; Zen 4
+prefers 512. A program choosing code by `TargetVectorBits` needs the constant to be the width its loops actually get,
+so the compiler tells the code generator the width outright (`"prefer-vector-width"`) and the constant is that width:
+the widest the target has. Measured on the bench suite at a load average of 5-7 (medians of 5-7 interleaved runs,
+seconds, baseline x86-64 / native preferring 256 / native preferring 512): matmul F32 1.25 / 1.15 / 0.87, the sums over
+an Array or a List 0.26-0.28 / 0.14-0.16 / 0.10-0.12, List push 0.18 / 0.18 / 0.16, parallel 1.10 / 1.01 / 0.90,
+spectral-norm 0.93 / 0.63 / 0.62; nbody, k-nucleotide, text, mandelbrot and binary-trees within the noise; fannkuch
+1.17 / 1.45 / 1.44 - slower native at either width, as C's own `-march=native` is (the README's earlier run: 1.02 ->
+1.07), LLVM vectorizing its short reversal loops. And GEMM needs the 512-bit tile to get near OpenBLAS (below).
+
+**One result on every target (B12c).** Native code must not change what a program computes - only how fast - since the
+compile-time evaluator, `-i` and `-d` all give the built program's answer. Three things were checked rather than
+assumed. (1) No contraction: olang emits no `contract` flags, and the LTO plugin's default fusion mode (Standard) fuses
+only those; a loop of `a[i] * b[i] + c[i]` has no `vfmadd` in a native build. (2) `math.Fma` is one rounding
+everywhere: X8's exact functions (`sqrt`, `fma`, `floor`, `ceil`, `trunc`, `round`, `roundeven`, `fabs`, `copysign`)
+are now emitted as LLVM's intrinsics rather than calls of the library's functions declared `memory(none)` - LLVM 18
+never turned a `fmaf` call into the intrinsic, so `math.Fma` stayed a call even with FMA - which lower to the
+instruction where the target has it and to the library's call where it has not, the same correctly rounded value.
+(3) The instructions LLVM would select: on targets with AVX512-BF16 (Cooper Lake, Sapphire Rapids, Zen 4) LLVM 18 lowers
+every `fptrunc float to bfloat` to `vcvtneps2bf16` (seen with `llc -mcpu=cooperlake`), which by Intel's manual treats
+denormal inputs as zero and flushes denormal results - not IEEE's rounding, and not what the evaluator computes for a
+BF16 subnormal. Those two features (`avx512bf16`, `avxneconvert`) are turned off in what every function carries; the
+conversion is then the library's (`__truncsfbf2`). Not runnable here (this CPU has neither), so stated from the
+documentation. F16/BF16 arithmetic on a target with instructions for it (AVX512-FP16's `vaddsh`) gives what the
+promote-to-F32 lowering gives: F32's 24 bits are at least twice F16's 11 (and BF16's 8) plus two, so a sum, difference,
+product, quotient or square root rounded to F32 and then to the narrow type is correctly rounded (the double rounding is
+innocuous); this CPU has F16C, which changes how conversions are done (`vcvtps2ph`, round to nearest even) and not what
+they give. The fuzzer's four LLVM 18 workarounds stay as they were (`-fast-isel=false` under `-d`, BF16 widened by a
+shift, F16 from an integer through a fenced double, the asm between half/bfloat bitcasts); `make fuzz SEED=1 COUNT=40`
+under the native default found nothing (40 programs, 1,200 cases, every global baked).
+
+**Objects (B12b)** - the same trap B4 has recorded five times: an object built for one CPU, reused for another, would
+run instructions the other lacks or miss ones it has. The resolved triple and attributes are mixed into every object's
+hash, so `-a x86-64` and `native` keep objects of their own (changing back finds the earlier ones current, checked by
+modification times in the `target` scenario), and `native` resolved on a machine with another CPU names other objects.
+
+**Another architecture (B12a) - what is and is not supported.** The compiler's layouts assume a 64-bit little-endian
+machine, the runtime holds glibc's structures (`struct stat`, `struct dirent`, `posix_spawn_file_actions_t`) and the
+kernel's constants, and a foreign object cannot be linked or run here. So: x86_64 and aarch64 Linux with glibc are the
+architectures known (anything else, or a 32-bit or big-endian data layout, is an error); another architecture is built
+for with `-c` only (`-b`, `-t` and `-i` are errors naming it), its objects the target's bitcode, to be linked on that
+machine; the runtime reads glibc's structures through a per-architecture table (`cgLibcLayouts`) rather than this
+compiler's headers, with `_Static_assert`s checking the table's row for the machine the compiler is built on against
+those headers, and errno's values asserted equal across both; and while compiling for it, the C math library's inexact
+functions are not evaluated (K1: the target's library may round differently), the exact ones still are - checked by
+hand with the next step disabled: a global set from `math.Exp` was left for startup, one from `math.Sqrt` baked, and a
+top-level condition calling `math.Exp` was the B9c error naming why. **The next step is a capability check, and it
+refuses aarch64 here**: LLVM 18's AArch64 back end cannot select any `bfloat` operation (`fpext`, `fptrunc`, `fadd` all
+"Cannot select", with or without `+bf16`), and the runtime's float renderer converts BF16 - so every aarch64 object
+would crash the code generator at the link. The compiler compiles a three-instruction bfloat function for the target
+with the clang found and refuses the target, naming the reason, when that fails; a clang whose back end can lifts it
+with nothing else changed. A test build's `jmp_buf` is now sized by the compiler's own C library (it was a written 200,
+x86-64 glibc's), since `-t` is for this machine only.
+
+**std/linalg** chooses its tile by the target, BLIS's shapes: 12 x 32 (F32) / 12 x 16 (F64) on AVX-512 - 24
+accumulators of the 32 registers, two vectors of B and a broadcast - 6 x 16 / 6 x 8 on AVX's 16 registers, 4 x 12 / 4 x 6
+on SSE's (as before); and every multiply-add of a product (the micro-kernels, the small and matrix-vector products, the
+dot products) goes through `mulAdd`, which is `math.Fma` where `TargetHasFma` and the element is a float, else `a * b +
+c`. Both conditions are build constants, so the evaluator takes the program's branch: a test makes a product whose second
+step leaves 2^-24 fused and 0 unfused, decided while compiling and again at run time, at `native` and at `-a x86-64`.
+The first version wrote the micro-kernel as one loop nest over the tile's rows and columns, as the 4 x 12 one had been:
+at 12 x 32 LLVM no longer unrolled the row loop, so the accumulators lived in memory and the product ran at 3-5 GFLOPS.
+Writing each row's step on a line of its own (`rowStep`, inlined, its column loop unrolled with constant indices) gives
+the textbook inner loop: 12 broadcasts, 2 loads of B, 24 `vfmadd231ps` on `zmm`, no spills.
+
+**Measured** (single-threaded, best of several runs inside the program, load 3-9; bench/README.md has the tables).
+GEMM F32 at 256 / 512 / 1024 / 2048: 15.4 / 16.6 / 15.6 / 12.8 GFLOPS before, 56.6 / 65.0 / 73.4 / 77.8 native, 16.5 /
+13.4 / 16.3 / 16.1 at `-a x86-64` (the old 4 x 12 tile, as before), 47.9 / 51.7 / 44.6 / 47.3 at `-a x86-64-v3`, OpenBLAS
+106 / 108 / 91 / 104; F64 7.5-8 before, 25.5 / 30.2 / 31.3 / 32.6 native, 19.6-24.2 at v3, OpenBLAS ~48. The tuning of
+`kc`/`mc` was tried (kc 256 or 384, mc 96-192) and was within the noise, so they stayed. The 784-128-10 training step:
+2.3-2.9 ms -> 0.8-1.1 native (v3 1.3-1.4, OpenBLAS 0.4-0.5). oann's MNIST perceptron (its bench/train.olang, an epoch of
+forward, backward and AdamW) with its products through `linalg.GemmWorkspace` (merged the same day): 0.55 s native,
+0.68 s at v3, 2.1 s at `-a x86-64`, against 2.6-2.9 s before - the same losses and accuracy (93.49% after one epoch at
+either target).
+
+**Found by that measurement: what 512-bit vectors do to a kernel tiled for another width.** oann, as it stood, carried its
+own copy of linalg's earlier 4 x 12 F32 kernel (a stopgap until the workspace Gemm existed). Built native it ran 5.1-5.4
+s an epoch - 2x slower than before B12 and 3x slower than the same build told to prefer 256-bit vectors (1.8 s). Sampled
+with gdb, all of it was in that kernel, and the disassembly said why: LLVM's SLP vectorizer, allowed sixteen lanes,
+groups the accumulators sixteen at a time in memory order - row 0's twelve and four of row 1's - so each group needs B's
+twelve values and four of them again (a `vgatherqps`) and two different broadcasts (`vpermt2pd`/`vpermps`), every step.
+At 256 bits the groups of eight still straddle rows, less often. linalg's own kernels have rows of whole vectors (32 F32
+on AVX-512), which is the point of choosing them by `TargetVectorBits`, and they do not degrade. **So the width stayed
+512 (decided, mine)**, with the hazard stated in bench/README.md and here: against the tuned 256
+- which is also what C gets from `-march=native`, so the safe choice in the sense of "never slower than C" - the wider
+vectors measured GEMM F32 57-71 against 41-46 GFLOPS, F64 25-32 against 15-23, the training step 0.86-1.02 against
+1.19-1.38 ms, matmul 0.87 s against 1.15, the sums 0.10-0.12 against 0.14-0.16, and nothing slower in the suite. A kernel
+tiled for a narrower width is the price, and it is visible, measurable and fixed by reading one constant; the tuned
+width's price would be paid by every program on every AVX-512 machine. What would remove the choice altogether is a way
+to say the width per function or in a type - explicit SIMD vectors (`Vec<F32, 16>` lowering to `<16 x float>`) - which
+is a language feature and not built.

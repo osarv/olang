@@ -1,0 +1,4 @@
+# check: fail error[B12]: unknown target 'pentium9000'
+# flags: -a pentium9000
+# B12: a target is native, a CPU of this machine's architecture, or a triple - anything else is the command line's error
+fn main() ? { }
