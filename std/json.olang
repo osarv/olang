@@ -726,28 +726,40 @@ fn (r reader&) utf8() I64 ? JsonError {
 
 # the number starting at pos, to the nearest F64: checked against JSON's grammar, -?(0|[1-9][0-9]*)(.[0-9]+)?
 # ([eE][+-]?[0-9]+)?, then read by the prelude's String.ParseFloat, whose grammar is wider - a number too large for an
-# F64 is BAD_NUMBER, one too small is zero
+# F64 is BAD_NUMBER, one too small is zero. A whole number of at most 15 digits, the commonest kind, is worked out as it
+# is checked: it is exactly an F64, so there is nothing to round
 fn (r mut reader&) number() F64 ? JsonError {
     start I64 = r.pos
-    if r.src[r.pos] == '-' { r.pos++ }
+    neg Bool = r.src[r.pos] == '-'
+    if neg { r.pos++ }
     if not r.digitAt(r.pos) { error JsonError.BAD_NUMBER }
+    whole I64 = 0
+    digits I64 = 0
     if r.src[r.pos] == '0' {
         r.pos++
         if r.digitAt(r.pos) { error JsonError.BAD_NUMBER }     # no leading zeros
     } else {
-        for r.digitAt(r.pos) { r.pos++ }
+        for r.digitAt(r.pos) {
+            whole = whole * 10 + I64(r.src[r.pos] - '0')
+            digits++
+            r.pos++
+        }
     }
+    simple Bool = digits <= 15
     if r.pos < r.src.Len() and r.src[r.pos] == '.' {
+        simple = false
         r.pos++
         if not r.digitAt(r.pos) { error JsonError.BAD_NUMBER }
         for r.digitAt(r.pos) { r.pos++ }
     }
     if r.pos < r.src.Len() and (r.src[r.pos] == 'e' or r.src[r.pos] == 'E') {
+        simple = false
         r.pos++
         if r.pos < r.src.Len() and (r.src[r.pos] == '+' or r.src[r.pos] == '-') { r.pos++ }
         if not r.digitAt(r.pos) { error JsonError.BAD_NUMBER }
         for r.digitAt(r.pos) { r.pos++ }
     }
+    if simple { return -F64(whole) if neg else F64(whole) }
     v := try r.src[start:r.pos].ParseFloat() catch {
         r.pos = start
         error JsonError.BAD_NUMBER
