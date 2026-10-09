@@ -75,6 +75,20 @@ projection as (I - alpha x x^T)".
    normalized by ||x||^2 per sample (the unofficial implementation's default). Open: normalized or not; replaces
    weight decay or adds to it; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
    container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
+12. (asked 2026-10-09, const generics design - wt-constgen becd37f, spec only) run-time dimensions: in the library
+   (`Dynamic I64 = -1`; Matrix stores rows/cols when a dimension is Dynamic; `Matrix<F32, Dynamic, 784> @
+   Matrix<F32, 784, 128>` checks 784 at compile time) or a language-level `_` (hidden storage and hidden run-time
+   checks in every generic)? Default/rec: the library.
+13. (asked 2026-10-09) `Array<T, N>&` puts a length in a reference type again (reversing T11a for fixed arrays) -
+   forced by D9a (array parameters are references); the alternative is fixed arrays by value (on hold). Rec: keep D9a.
+14. (asked 2026-10-09) a constant variable is written `<N>` in expressions too (`for i in range <N>`, `i < <N>`),
+   one spelling as G8b - or bare `N` in bodies (reads better, two spellings)? Default: `<N>`. Rec: `<N>` (the
+   agent's call; flagged because it is the most visible syntax choice).
+**Also in progress (2026-10-09):** "settling networks" (the user -
+(source omitted), Python/NumPy: reciprocal regions settling to equilibrium until a residual tolerance,
+local free/nudged-phase learning with no backprop, online and continual, working trace, associative memories,
+arousal, sleep/consolidation) - a research agent writes /home/user/oann/docs/settling.md; the matrix-library agent was
+told batch-1 matvec, rank-1/rank-k updates and residual norms matter as much as big GEMM.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
