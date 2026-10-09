@@ -4003,8 +4003,10 @@ root module (transitively pulling in its own imports, exactly as `-b` would) and
 `test { }` block declared *directly in that file* (§10.4) — not those declared in any module it
 merely imports. `main` is not required in this mode, and is not run even if present. Each listed
 file's compilation and test run is independent: a compile-time error in one listed file - or a listed file that does
-not exist or is a directory - does not prevent the others from being checked and run, and the exit status is nonzero
-when any listed file failed to build or failed a test.
+not exist or is a directory, or the compiler itself failing on one, with a fatal or an internal error - does not
+prevent the others from being checked and run, and the exit status is nonzero when any listed file failed to build or
+failed a test. The files are built and run one at a time, in the order listed, and what one file's build holds is
+released before the next begins: a list needs the memory of its largest file, not of the whole list.
 
 **B3e.** `-i <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `-b` - `main` is required (B4), and every compile-time error is reported the
