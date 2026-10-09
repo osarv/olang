@@ -221,13 +221,35 @@ IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, NULL_LIT,
 other field.)
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
-implicit end-of-statement token before continuing. This token has no literal spelling; it exists
+implicit end-of-statement token before continuing - except inside brackets (L18a). This token has no literal spelling; it exists
 only in the token stream produced by the tokenizer, and appears in the grammar as `STMNT_END`
 wherever a rule below requires it. It stands at the end of the line it ends - just past that line's last token - and
 a diagnostic about one names that line, as "end of line".
 
-**L19.** Consequently, an operator or continuation that is meant to extend an expression onto the
-next line must appear at the *end* of the first line, not the start of the next:
+**L18a (brackets).** Inside parentheses or square brackets a newline ends nothing: L18 synthesizes no end-of-statement
+while the innermost bracket open at that point is a `(` or a `[`. A `{` opened inside them - a lambda's body, a `match`
+used as a value - holds statements again until its `}`, and a `}` closes every bracket left open inside its block. So
+an argument or parameter list, an array literal, a comprehension or a parenthesized expression - a join among them -
+may run over several lines, its closing bracket on a line of its own:
+
+```
+xs := I32[
+    1,
+    2,
+]
+total := add(first,
+             second)
+line := ("n=" $n
+         " of " $total)
+```
+
+A list (arguments, parameters, an array literal's items) may end with a comma before its closing bracket where that
+bracket begins a line of its own, as above; on one line (`I32[1, 2,]`) such a comma is a compile-time error. A
+declaration starting a line - `type`, `test`, `import`, `extern`, or `fn` followed by a name - ends a bracket still
+open from before it outside any block, so a missing `)` is one error and not one per declaration after it.
+
+**L19.** Consequently, outside brackets (L18a), an operator or continuation that is meant to extend an expression onto
+the next line must appear at the *end* of the first line, not the start of the next:
 
 ```
 x := 1 +
@@ -603,7 +625,9 @@ Where the variable is bound - by inference at a call (G9), by written type argum
 inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
 asked for it - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
-missing, and the instantiation's body is not checked. Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
+missing, and the instantiation's body is not checked - nor the body of any method or function instantiated for it
+(a parameter or receiver of that instantiation), which would only repeat the one error inside the generic's own code.
+Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
 every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
 through `extends` (T29e).
 
@@ -1054,7 +1078,7 @@ a method, whatever its first parameter's type.
 **D8.** `func-sig ::= "(" param-list ")" [ ret-type ] [ "?" [ error-list ] ]`, where:
 
 ```
-param-list      ::= [ param { "," param } ]
+param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L18a allows)
 param           ::= IDEN [ "mut" ] type-expr [ "=" expr ]
 ret-type        ::= type-expr | "(" type-expr "," type-expr { "," type-expr } ")"
 error-list      ::= error-list-item { "+" error-list-item }
@@ -1196,8 +1220,10 @@ the end of its body without returning. Falling off the end is a compile-time err
 Whether a path leaves is decided **structurally**, with no dataflow analysis and no constant folding. A
 `return` leaves, and so does an `error` (§7), `done`, `fail`, `abort` and `unreachable` (§6.6). An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
-either exhaustive by §2.5 S13a or has a `nomatch` that leaves. **A loop never counts**, even one whose
-body always returns — `break` (S11) makes a body leaving and the loop leaving different questions, and
+either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
+do. **A loop counts only as `for { }` - no condition - with no `break` of its own** (one in a nested loop is that
+loop's): it is left only by what leaves the function, never by falling through. Any other loop never counts, even one
+whose body always returns — `break` (S11) makes a body leaving and the loop leaving different questions, and
 answering the second needs a reachability pass this rule does not have.
 
 So the rule rejects some functions that do in fact always return, which is what `unreachable` (S16d) is
@@ -1642,9 +1668,10 @@ primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } ] ")" ]`. A `member` carrying an
+`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr "]"`, `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
-`call-on ::= "(" [ arg { "," arg } ] ")"` calls the function value everything to its left gives (E13b).
+`call-on ::= "(" [ arg { "," arg } [ "," ] ] ")"` calls the function value everything to its left gives (E13b).
+A trailing `","` in any of these lists is allowed only where the closing bracket begins a line of its own (L18a).
 Postfix `++`/`--` and unary `++`/`--` are the same
 two operators in prefix and postfix position (E5); both require the operand to be an assignable
 lvalue (§6.2).
@@ -1655,7 +1682,7 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" [ arg { "," arg } ] ")"`,
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" [ arg { "," arg } [ "," ] ] ")"`,
 where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
@@ -1788,6 +1815,16 @@ This is not merely undefined in the abstract: the result is architecture-depende
 to the low bits of the operand width, so `1 << 32` yields `1`; other targets yield `0` or trap. A program
 that shifts out of range has no portable meaning.
 
+**E8b (a shift of a literal).** A shift whose shifted operand is a literal (or a literal-only expression, E4a) and whose
+amount is not - `1 << s` - has the type that literal would have standing where the shift stands: where the shift
+lands in a target of an integer type (an initializer's, an argument's, a return's, an assignment's - T6), or beside an
+operand of one in a binary operator (T6's adaptation to the other operand), the literal adapts to that type, and the
+shift is computed at its width. So `x I64 = 1 << s` and `i64 + (1 << s)` shift an `I64`, as their `1` alone would have
+been one. The same holds through arithmetic of such shifts with literals - `mask I64 = (1 << s) - 1` - every literal in
+it adapting together. With nothing adapting it, the literal keeps its own type (T6a): in `y := 1 << s` the shift is an
+`I32`'s. The literals must hold values of the type they adapt to, as T6 requires of any literal; only a primitive
+integer type is adapted to (a declared type is entered through its constructor, T29d).
+
 **E9.** `< <= > >=` require both operands to be of one numeric type (subject to T6's numeric-literal
 adaptation and T6b's meeting at the wider) and produce `Bool`; there is no ordering on any non-numeric type.
 
@@ -1908,8 +1945,9 @@ Only a call that returns nothing has no rendering.
 **E11b (joining text).** Two or more **text pieces** written side by side are joined into one text value:
 `"n is " $n "!"`, `$a ", " $b`. A text piece is a string literal (`STR_LIT`, with nothing applied to it)
 or a `$` rendering; nothing else can stand beside one, so `f("a" b)` is a syntax error rather than a join —
-a value becomes text only through `$`. Pieces must be written on one line (a line end ends the statement,
-L18).
+a value becomes text only through `$`. Pieces are written on one line (a line end ends the statement, L18), except
+inside brackets, where a join may run over several lines (L18a): `("n is " $n` then `"!")` on the next. Text on a
+line of its own outside brackets is a statement that discards its value (S3).
 
 String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
@@ -2126,7 +2164,7 @@ type is that field's declared type.
 
 ### 5.7 Array literals
 
-**E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } ] "]"`, where
+**E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } [ "," ] ] "]"`, where
 `elem-type ::= PRIMITIVE-NAME | scalar-name [ reference-marker ] | scalar-name { array-type-suffix }
 reference-marker` and `scalar-name ::= alias-chain IDEN | type-var`
 (§4.4 M8, §12.1 G1) names the literal's
@@ -2152,7 +2190,7 @@ is no multi-dimensional array (T7a). An array of arrays is a literal of referenc
 
 ### 5.8 Enum values
 
-**E22.** `enum-value ::= alias-chain IDEN "." IDEN [ "(" [ arg { "," arg } ] ")" ]` (§4.4 M8), where the
+**E22.** `enum-value ::= alias-chain IDEN "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]` (§4.4 M8), where the
 argument list is present exactly when the named case carries a payload (T17a), and the identifier before the final
 `"."` names an enum type — in this module, or in one reached through the alias chain (M12) — and the final
 `IDEN` is one of that type's declared cases (T17). Its type is the named enum type. Across a module
@@ -2420,7 +2458,12 @@ inside it is not visible outside it, and ceases to exist (for scoping and, where
 ownership purposes — §8) at the block's
 closing `}`.
 
-**S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt
+**S1a (a block as a statement).** `block-stmnt ::= block`. A block written where a statement may stand is a scope of
+its own: what it declares, what it allocates (§8 O2) and the destructors of what was allocated there end at its `}`, so
+a long function may give memory back before it returns. No expression begins with `{`, so a statement that does is a
+block. It runs once, and it leaves (D10a) when its statements do.
+
+**S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | done-stmnt | fail-stmnt | abort-stmnt
 | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
 | defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
@@ -2661,8 +2704,8 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 `case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
 `return`, `error`, `break`, `continue`, `done`, `fail`, `abort` or `unreachable`, as D10a decides it with `break`
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
-error. The match must give a value whatever the matched value is: over an enum it is exhaustive by S13a or has a
-`nomatch`; over any other type it has a `nomatch`. Every value has one type: the first value that is not a literal,
+error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
+has a `nomatch`; over any other type it has a `nomatch`. Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
 the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
@@ -2681,8 +2724,10 @@ clause is selected when one of its alternatives matches (S13c) and its guard, if
 and no other clause or `nomatch` does. If none is selected the `nomatch` body runs, if there is one; otherwise a
 match statement does nothing - a match over an enum must be exhaustive (S13a), and over any other type no
 exhaustiveness is asked. A null **reference to an enum** (T17d) holds no case, so no pattern matches it - a `null`
-value alternative or the `nomatch` does; where neither is written, a match statement does nothing and a match used
-as a value aborts as `unreachable` does (S16d), having no value to give. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
+value alternative or the `nomatch` does; where neither is written, a match whose clauses cover every value (S13a) -
+used as a value, or as a statement - aborts as `unreachable` does (S16d), having no clause to run: what such a match
+lets through cannot happen otherwise, and a statement match every clause of which leaves leaves (D10a), so it may not
+fall through instead. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
 decides it (E10a); it must have the matched value's type (T27), a literal or a literal-only expression (E4a) adapting to it (T6) as it would beside it in
 `==`, written text adapting to text (T29c) and `null` to a reference (T2a).
 
@@ -2692,9 +2737,14 @@ it is the only one whose set of alternatives is both closed and written down: an
 from one declaration the compiler reads. An integer's "cases" are not usefully enumerable, so it does not admit the
 question. Making `match` exhaustive here is most
 of the point of declaring an enum — adding a case tells you every place that now has to handle it — and
-`nomatch` is the opt-out. A case **covers** an enum case only when it matches that case whatever its payload holds -
-a pattern `Type.Case` with no payload list, or one whose every position is a name or `_` - and has no guard: a
-guard, a literal or a nested case in the payload may let a value through to the next clause.
+`nomatch` is the opt-out. The clauses without a guard **cover** an enum case together: one pattern `Type.Case` with no
+payload list, or one whose every position is a name or `_`, covers it alone; patterns with literals or nested cases
+in the payload cover it when, position by position, they leave no value out - `Service(true)` and `Service(false)`
+for a `Bool` field, `Paint(Color.Red, n)` and `Paint(Color.Green, _)` for an enum field with those two cases. A
+guard may let a value through to the next clause, so a guarded clause covers nothing; a literal of any type other
+than `Bool` never completes a position (its values cannot be listed). A `match` over a `Bool` is exhaustive in the same
+sense when `true` and `false` are both covered - not required of a statement, but it is what lets one used as a value
+(S12b) do without a `nomatch`.
 
 **S13b (patterns).** A pattern names a case of the enum at its position: `Type.Case` matches that case whatever its
 payload holds, and `Type.Case(p, ...)` matches it when each position of its payload matches, in declaration order,
@@ -4345,7 +4395,7 @@ has no view into it. Every other guarantee in this specification is stated as ho
 not declare an incorrect prototype. Keeping the vocabulary deliberately narrow (X2) reduces how much can
 be got wrong, but does not close it.
 
-**X2.** `extern-param-list ::= [ extern-param { "," extern-param } ]`, where `extern-param ::= IDEN
+**X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
 numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or an array type (T7,
 compile-time-length or runtime-length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
@@ -4591,7 +4641,13 @@ match the declared `type-params` (G6). Omitting it is G10c.
 the constructor's arguments, exactly as a generic function's are inferred (G9, G9a, G9b): `Pair(1, s)` is
 `Pair<I32, String&>(1, s)`. A type parameter an array value reaches - written text, an array literal, an array
 variable - is bound to a reference to it, since a struct holds an array by reference (T7a, T7b): `Pair(1, "x")` is a
-`Pair<I32, String&>`, the text built where the pair lands and a variable's array borrowed. A type parameter no
+`Pair<I32, String&>`, the text built where the pair lands and a variable's array borrowed. A reference argument binds
+its **read-only** form, as that array does (T25b): `Pair(k, 3)` is a `Pair<String&, I32>` whatever `k`'s permission.
+Where the call is the whole of an expression a type is already expected for - a declaration's written type, a
+parameter's (with what a receiver binds, G9b), a plain assignment's target, a `return`'s result type - and that type is
+an instantiation of the same generic, the call takes **that type's arguments**, as if they were written: `p Pair<mut
+Node&, I32> = Pair(n, 1)`, `l.Push(Pair(k, 3))` into a `List<Pair<String&, I64>>` (the `3` an `I64`). Its arguments
+are then checked against that instantiation's constructor, a mismatch reported at the argument. A type parameter no
 constructor parameter mentions, or arguments that bind one inconsistently, cannot be inferred, and the call is then a
 compile-time error naming the written form. A type named anywhere other than a constructor call always writes its
 arguments (G6).
