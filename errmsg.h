@@ -37,7 +37,7 @@
 #define TYPE_NAME_IN_USE "type name already in use"
 #define INTERFACE_METHOD_IS_GENERIC "a trait method's signature may not be generic in a type of its own - a type satisfies a trait with one method per name, and a generic signature names a family of them (T35)"
 #define UNKNOWN_METHOD "this is written as a method call, but the value on the left has no method of this name - its type declares none, and no trait it satisfies has a default of this name (M19, M19e)"
-#define DUPLICATE_METHOD_FOR_TYPE "this module already declares a method of this name for this same type. Several functions may share a name only when each is a method of a DIFFERENT type - that is what lets two types in one module implement the same interface - so one name per type is the limit"
+#define DUPLICATE_METHOD_FOR_TYPE "this module already declares a method of this name for this same type. Several functions may share a name only when each is a method of a DIFFERENT type - that is what lets two types in one module satisfy the same trait - so one name per type is the limit"
 #define NAME_CLASHES_WITH_IMPORT "this name is already an import alias in this module, and an alias's name is reserved - otherwise the left of a dot could mean either the import or this, and the tiebreak would be silent. Rename this, or give the import an explicit alias"
 #define VAR_NAME_IN_USE "variable name already in use"
 #define MATCH_NOT_EXHAUSTIVE "this match over an enum type does not cover every case. An enum declares a closed set, so the compiler can tell you which places must change when you add one - add the missing case(s), or write 'nomatch { }' to say the rest are deliberately ignored. A case with a guard, or with a value or another case inside its payload, may let a value through, so it covers nothing (S13a)"
@@ -216,11 +216,11 @@ statement - only a call and the '++'/'--' forms are. A bare name declares nothin
 takes at most one '&' - the two marker positions (before and after the array suffixes) are the same \
 place here, and writing both would leave one of the two scope tags meaning nothing"
 #define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
-(e.g. 'U8[]&'). Without it the array is copied at every call, in time proportional to its \
+(e.g. 'Array<U8>&'). Without it the array is copied at every call, in time proportional to its \
 length, and a 'mut' one would be written where the caller can never see it"
-#define MODULE_NAME_COLLISION "another module in this program has the same file base name - a module's \
-symbols are named from it (§10 B3b), so two modules sharing one would define the same symbols; rename \
-one of the files"
+#define MODULE_NAME_COLLISION "another module in this program has a path that spells the same symbol prefix ('a_b' and \
+'a/b' both spell 'a_b') - a module's symbols are named from its path (§10 B3b), so the two would define the same \
+symbols; rename one of the files"
 #define SCOPE_DECL_REMOVED "a scope cannot be declared after a name - scopes have no names. A built result lives where the caller puts it, a returned local lives there too (O26), and anything else names a variable that lives where it should ('&x', O4a)"
 #define SCOPE_DECL_ON_PLAIN_TYPE "a scope cannot be declared - write a bare '&' where something lives with the instance, and '&p' where it lives with a constructor parameter (O3)"
 #define SCOPE_ARG_NOT_ACCEPTED "this call's target builds no result a scope argument could place - it returns nothing that is or holds a reference, or its result is borrowed from a parameter (E25)"
@@ -301,8 +301,6 @@ constructor, in a position whose parameter declares a default value"
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
 #define OPERATION_REQUIRES_BOOL "operand must be a boolean"
 #define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's - only the same scope, or one received from the caller flowing into one of this function's own, is provably safe"
-#define VAR_DECL_MISSING_INITIALIZER "a variable declaration needs an initializer ('= expr' or ':= expr'), unless its declared type is an array with a size ('T[N]', zero-filled, or 'T[expr]', arena-allocated and zero-filled)"
-#define REDUNDANT_ARRAY_SIZE "a compile-time-length array target ('T[N]') already knows its own size from the literal's own value count - restating it on both is redundant; either drop the size ('T[]', inferred from the literal) or drop the literal ('T[N]' alone, zero-filled)"
 
 // ---- statements and control flow ----
 
@@ -359,7 +357,7 @@ int ErrMsgGetNSyntaxErrors();
 void ErrMsgFlush(void);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
-#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"
+#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text extends Array<Char>') and give that methods (M19d)"
 #define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
 #define ARRAY_SIZE_MISMATCH "this array's length is known here and differs from the length of the fixed storage it is copied into - an array is never silently truncated or padded to fit (C2e)"
 

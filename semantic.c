@@ -7212,7 +7212,7 @@ bool numericPrimitiveBaseType(struct str name, enum baseType* out) {
 //never a separate "checked" vs "unchecked" pair) - explicit means the programmer already said what they
 //want, the same trust this language already extends at every other system boundary (E16's own unchecked
 //indexing, for one). Converting a type to itself is accepted as a harmless identity, not a redundant-use
-//error - unlike REDUNDANT_ARRAY_SIZE, there's no second thing here that could disagree with it.
+//error - there's no second thing here that could disagree with it.
 //T29: "Name(x)" where Name is a declared type over something that is not numeric - an array, most
 //usefully. The two must share a representation, so this is purely a change of type: codegen emits nothing.
 //It is what makes a nominal array type constructible at all; without it "type String byte[]" would have
@@ -14712,9 +14712,6 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         }
         struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
         if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
-            if (v->type.bType == BASETYPE_ARRAY && !v->type.arrMalloc && rhs->isLiteral) {
-                ErrMsgSemantic(rhs->tok, REDUNDANT_ARRAY_SIZE);
-            }
             reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok);
         } else { // ":=" - type read straight off the initializer
             v->type = inferredDeclType(ctx.func, rhs);

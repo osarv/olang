@@ -1,0 +1,2 @@
+# a module whose path "a/b" spells "a_b" too
+fn Mk() I32 { return 2 }

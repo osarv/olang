@@ -437,7 +437,7 @@ fn oneError(dir String&, prog String&, want String&) Bool {
 }
 test "the type checker's review fixes, across modules" {
     dir := fresh("cases")
-    os.Run("cp checks/fixtures/cases/* " $os.Quote(dir))
+    os.Run("cp -r checks/fixtures/cases/* " $os.Quote(dir))
     assert sh(dir, "\"$OLANG\" -b good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0 or failed("good", dir)
     assert outOf(dir) == "14 1 3 true 4\n" or failed("good output", dir)
     assert oneError(dir, "isother", "after 'is' or 'as' on an enum value comes one of its cases")
@@ -450,4 +450,5 @@ test "the type checker's review fixes, across modules" {
     assert oneError(dir, "privmethod", "this method is private")
     assert oneError(dir, "privtype", "this type is private")
     assert oneError(dir, "lambdaalias", "this name is already an import alias")
+    assert oneError(dir, "collide", "a path that spells the same symbol prefix")
 }
