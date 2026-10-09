@@ -115,8 +115,8 @@ repository or its code. Not legal advice; told the user so.
 19. (asked 2026-10-09, from std/linalg) a native-target build option (tile sizes per target, AVX2/AVX-512) plus an
    opt-in contraction of a*b + c into FMA? The 5-7x gap to OpenBLAS is the instruction set (olang targets baseline
    x86-64/SSE2, no FMA). Default: no. Rec: yes, opt-in (a flag), since it changes float results.
-20. (asked 2026-10-09) `assert` with a message (so a shape mismatch can say which shapes)? Default: no. Rec: yes -
-   `assert cond, "text"` or adjacency `assert cond "text"`.
+20. (asked 2026-10-09) `assert` with a message (so a shape mismatch can say which shapes)? Being built with my rec as
+   the default (wt-smallfix): `assert cond, "text"`, evaluated only on failure; easy to drop if the user says no.
 21. (asked 2026-10-09) an opt-in fast-math mode (libmvec vector math, contraction) that gives up evaluator/run-time
    agreement? Default: no (the matrix library ships FastExp/FastTanh/FastSigmoid approximations instead). Rec: only as
    an explicit flag, if ever.
