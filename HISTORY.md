@@ -9222,3 +9222,56 @@ from their original form.
   **Found, not fixed (another agent's area)**: under `-i` an error leaving a bare-`?` function keeps its original name
   ("unhandled error: Err.Loud") where the built program reports the default error ("unhandled error") - the evaluator does
   not re-encode at the R17 boundary; and `-i` cannot call through a `Call` adapter.
+- **Diagnostics remade: one row, the rule in brackets, `-e` for the rule (B11/B11a, 2026-10-09).** The user: "shorten
+  down the error messages and keep them concise. They should preferably exist on one row. I am still split about keeping
+  the rule number in there. I'd say keep it probably. It's better for agents later. You can also just remake the error
+  message system completely, it's very crude still." What was there: about 330 `#define`d strings in errmsg.h, 97 of
+  them over 200 characters, passed whole to `ErrMsgSemantic(tok, MACRO)` with no arguments - so a message could never
+  name the identifier or the types it was about, and said everything it knew in prose instead ("this value's type
+  doesn't match the target's declared type"), with its rule as a trailing "(D15)". The header was `12 file.olang error:
+  ...` (line first, then path, no column), the source line printed with the token in red, always in colour, even into a
+  file or a pipe.
+  **The format** is the one gcc and clang write, chosen because every editor, CI log scraper and agent already parses
+  it: `path:line:col: error[RULE]: message`, then the source line under a gutter (`   12 | ...`) and a caret line
+  (`^~~~` under the token's bytes, tabs kept so the caret lines up, a long line shown as a window around the token).
+  The `[RULE]` slot is Rust's `error[E0308]` placement - the user wanted the rule kept for agents, and in brackets it is
+  one regular expression away. Notes - "instantiated here, with T = I32", "declared here" - are rows of their own in
+  the same form, so the context-note stack errmsg.c already had keeps its behaviour and only changes shape. Lines are
+  numbered from the token, columns are bytes from the line's start plus one (clang's convention).
+  **Messages** are short, lowercase, one clause and an optional "- what to write", naming what they are about: a table
+  entry is `X(ERR_VAR_LIST_COUNT, "D12b", "%d names need as many values, found %d")`, and a call passes the arguments
+  (`Err(tok, ERR_VAR_LIST_COUNT, names.len, values.len)`). The directives are the compiler's own: `%n` renders a token
+  as a reader sees it (`'x'`, or `end of line`, `end of file`), `%t` a type through the code generator's source speller
+  (`Array<U8>&`), `%S` an olang `struct str`; `%c` escapes what does not print. The long explanations did not vanish:
+  they are what the spec's rules already say, and `olang -e D12b` prints the rule from `spec.md` - found as std is,
+  `../spec.md` beside the compiler - under its section heading, from its definition to the next rule or heading. Of the
+  formats considered, the X-macro table won over one function per diagnostic (typed parameters, but 400 functions) and
+  over keeping strings at the call site (no single place to read every message, or to check them): it is the one place
+  the messages live, the enum and the rule column come from it, and the user had asked for nothing cleverer.
+  **Argument counts are checked** by `checks/checks.olang`, which reads errmsg.h and every `.c` file, finds each call
+  naming a diagnostic and compares the arguments after the id with the message's directives - C cannot check a format
+  that lives in a table, and a wrong count in varargs is undefined behaviour that would surface as a crash inside an
+  error report. The same test holds every rule a diagnostic names to one the spec defines, so `-e` always finds it.
+  Shown to catch both by breaking one entry of each kind in a scratch copy.
+  **Colour** only where a person reads the output as it is written: standard output a terminal, `NO_COLOR` unset,
+  `TERM` not `dumb`. The `-t` status lines (`== file ==`, "cannot be built, skipping") follow the same rule.
+  **Decided (mine)**: a diagnostic no rule states carries no brackets - a parse error says `expected '}', found 'x'`
+  and nothing more, since inventing an id would send `-e` nowhere; one that applies several writes them all
+  (`error[T17, T19, C2]` for a separating comma, which is the same mistake in an enum, an error type and a constructor);
+  a command-line mistake (an unknown flag, a malformed `-D`, a missing file argument, `-e` with no rule) is `olang:
+  error[B1]: ...` and ends the process with no "compilation failed" line, since nothing was compiled; the token-type
+  names a parse error uses read as English (`expected a name`, `expected an expression`, `found end of line`); the
+  summary is `compilation failed with N errors` (it said `error(s)`).
+  **Phase 1** (this commit) built the system and converted the lexer, the parser (including the build-condition
+  evaluator, whose messages now take the token they are about - `'Level' is mutable, so a top-level condition cannot
+  read it`), the driver and errmsg itself; `SyntaxDefineBuildConst` returns a diagnostic id instead of a string. The
+  checker, code generator and evaluator - about 460 call sites, mostly in semantic.c, which two other batches were
+  editing - still pass whole messages; a compatibility layer prints them in the new form, taking a trailing
+  `(D15)`-style reference off the text and into the brackets. Phase 2 converts them and removes the layer. 32
+  `checks/cases` expectations and four `checks.olang` greps moved to the new wording.
+  **Found on the way, fixed**: a lexical error found after the lexer had passed a newline - a string or character
+  literal not closed on its line - was reported against the next line, since its line came from the lexer's cursor
+  rather than from the character (`3 nl.olang error: a string literal closes on its own line` for a literal on line 2);
+  each lexical error now locates its own bytes, and points at the literal from its opening quote. An excerpt shows a
+  control byte as `?`, so a terminal never acts on one, and a compiler-made token whose text lies outside its file is
+  located by its line alone rather than read past the file's end.
