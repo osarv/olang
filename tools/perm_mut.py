@@ -167,6 +167,19 @@ def realign(lines, k, delta, at):
     lines[k] = text[:gap] + " " * want + text[hash_at:]
 
 
+def shift_expected(lines, shifts):
+    """A checks/cases header naming LINE:COL on a line an edit changed follows the edit's shift of that column."""
+    def moved(m):
+        line, col = int(m.group(1)), int(m.group(2))
+        for l, at, delta in shifts:
+            if l == line and col - 1 > at:
+                col += delta
+        return "%d:%d:" % (line, col)
+    for k in range(min(12, len(lines))):
+        if re.match(r"#\s*(?:check:\s*fail|also:)", lines[k]):
+            lines[k] = re.sub(r"\b(\d+):(\d+):", moved, lines[k])
+
+
 def apply(edits):
     by_file = {}
     for e in edits:
@@ -178,6 +191,7 @@ def apply(edits):
         expect = expected_texts(src)
         lines = src.split("\n")
         done = set()
+        shifts = []
         # right to left within a line, so earlier columns stay put
         for line, col, kind, name, why in sorted(es, key=lambda e: (e[0], -e[1])):
             if any(x in why for x in expect):
@@ -208,7 +222,9 @@ def apply(edits):
                     continue
                 lines[line - 1] = text[:after] + " mut" + text[after:]
             realign(lines, line - 1, len(lines[line - 1]) - len(text), at)
+            shifts.append((line, at, len(lines[line - 1]) - len(text)))
             count[kind] += 1
+        shift_expected(lines, shifts)
         with open(path, "w") as f:
             f.write("\n".join(lines))
     return count

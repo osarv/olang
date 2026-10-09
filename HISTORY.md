@@ -11405,7 +11405,8 @@ more permissive than the checker, and now they say the same thing.
 **The migration** is `tools/perm_mut.py`, kept and re-runnable, written to be driven by the compiler rather than by
 guessing types from text: a text pass removes the puns' `mut`; then every file is compiled (`-c`, or `-t` for one that
 tests on `TestBuild`) and the D9/C3/D11a errors and the note above are applied - a `mut` removed at the error's column,
-or one added after the noted local's name - and that repeats until nothing changes, keeping trailing comments' columns.
+or one added after the noted local's name - and that repeats until nothing changes, keeping trailing comments' columns
+and moving a `LINE:COL` a case's header names on an edited line.
 A checks case that must fail keeps its failure: nothing is applied from a diagnostic carrying its expected text, and a
 case about the old spelling itself opts out of the text pass with `# perm_mut: skip`. Over the repository: 125 pun
 `mut`s and 212 others removed (value fields above all - std's List, Map, iterators, chan, json, linalg - then by-value
