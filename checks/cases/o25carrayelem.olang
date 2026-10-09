@@ -2,10 +2,10 @@
 # O25c/T7: an array's elements live where the array does - a literal or a fill holding a local, returned or stored
 # further out than the local, is rejected where it lands
 type Node struct(v I32) {
-    v mut
+    v
 }
 fn f() Array<mut Node&>& {
-    n Node& = Node(41)
+    n mut Node& = Node(41)
     return Array<mut Node&>(2, n)
 }
 fn g() Array<mut Node&>& {
@@ -13,11 +13,11 @@ fn g() Array<mut Node&>& {
     return Node&[n]
 }
 fn main() ? {
-    outer Node& = Node(1)
+    outer mut Node& = Node(1)
     c Array<mut Node&>& = Array<mut Node&>(1, outer)
     d Array<mut Node&>& = Node&[outer]
     for i in range 2 {
-        inner Node& = Node(43)
+        inner mut Node& = Node(43)
         c = Array<mut Node&>(1, inner)
         d = Node&[inner]
     }

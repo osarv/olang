@@ -1,4 +1,4 @@
 # check: fail error[G20]: a constant parameter is an integer, a Bool or an enum without payloads, found F32
 # G20: a float's "==" is no identity (a NaN is unequal to itself), so no float is a constant parameter
-type Scale<K F32> struct() { v mut I32 }
+type Scale<K F32> struct() { v I32 }
 fn main() ? { }

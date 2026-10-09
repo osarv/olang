@@ -2,16 +2,16 @@
 # O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
 # (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
 type N struct(v I32) {
-    v mut
+    v
 }
 type Cur struct(of mut N&) {
     at mut N&of = of
 }
 fn main() ? {
-    outer N& = N(1)
+    outer mut N& = N(1)
     keep N& = outer
     for i in range 2 {
-        x N& = N(42)
+        x mut N& = N(42)
         c := Cur(outer)
         arr Array<mut Cur&> = Cur&[c]
         arr[0].at = x

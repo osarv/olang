@@ -47,7 +47,7 @@ fn main() ? {
     if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
     if args.Len() > 5 { Cases = try args[5].ParseInt() catch default 30 }
     os.Run("mkdir -p " $os.Quote($Root "/build/fz/found"))
-    queue chan.Chan<I64>& = chan.Chan<I64>(I32(count + jobs))
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(count + jobs))
     chan.Init(queue)
     for i in range count { chan.Send(queue, start + i) }
     for w in range jobs { chan.Send(queue, -1) }
@@ -151,7 +151,7 @@ fn write(dir String&, seed I64, expect Array<String&>&, has Array<Bool>&) Bool {
 
 # the cases whose asserts the compiler decided false, from its diagnostics
 fn falseAsserts(diag String&) List<I64>& {
-    bad List<I64>&return = List<I64>()
+    bad mut List<I64>&return = List<I64>()
     rest := diag[:]
     for {
         at := try rest.Find("error[S18c]") catch { break }

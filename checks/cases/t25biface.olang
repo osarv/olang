@@ -2,7 +2,7 @@
 # T25b: a "mut" trait method needs a writable receiver - in generic code too, judged where it is instantiated
 type Writer trait { mut Put(n I32) }
 type Box struct() {
-    n mut I32 = 0
+    n I32 = 0
 }
 fn (b mut Box&) Put(n I32) { b.n = n }
 fn feed(w <W Writer>&) { w.Put(1) }

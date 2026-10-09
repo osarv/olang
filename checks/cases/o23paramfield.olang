@@ -2,7 +2,7 @@
 # O23/O11: a '&of' field reached through a field of a parameter - its binding is the inner instance's, which nothing in
 # setDeep can see, so the store is unverifiable
 type N struct(v I32) {
-    v mut
+    v
 }
 type Cur struct(of mut N&) {
     at mut N&of = of
@@ -12,8 +12,8 @@ type Outer struct(c mut Cur&) {
 }
 fn setDeep(o mut Outer&, x mut N&) { o.c.at = x }
 fn main() ? {
-    outer N& = N(1)
-    x N& = N(42)
+    outer mut N& = N(1)
+    x mut N& = N(42)
     c := Cur(outer)
     o := Outer(c)
     setDeep(o, x)

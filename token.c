@@ -570,7 +570,7 @@ struct token tokenizeToken(TokenCtx tc) {
  * comment, which runs to one) right after a token that could legally end a statement implicitly closes
  * it, by synthesizing an invisible TOK_STMNT_END. This is exactly the set of tokens the grammar's own
  * TOK_STMNT_END positions can follow: literals/identifiers, ++/--, closing ')'/']', the bare
- * no-value forms of return/exit, and the "mut" closing a mutable bare-pun field. It deliberately excludes '}' - no rule in the grammar ever expects a
+ * no-value forms of return/exit. It deliberately excludes '}' - no rule in the grammar ever expects a
  * TOK_STMNT_END after one - so blocks, struct/choice bodies, and if/for/match never need it.
  * As with any such scheme (Go's automatic semicolon insertion works the same way), an operator meant to
  * continue an expression must stay at the end of the previous line, not the start of the next
@@ -583,7 +583,6 @@ bool stmntEndTriggerType(enum tokenType type) {
         case TOK_PAREN_C: case TOK_SQUARE_C:
         case TOK_RET: case TOK_DONE: case TOK_FAIL: case TOK_ERROR:
         case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
-        case TOK_MUT: //a "mut" ending a line can only close a mutable bare-pun field ("x mut", C4)
             return true;
         default: return false;
     }

@@ -61,7 +61,7 @@ fn (it mut <I Iterator<<T>>>&) Map(f fn(x T) <U>) List<U>& {
 
 # a new List - in the caller's scope - of the elements keep holds for
 fn (it mut <I Iterator<<T>>>&) Filter(keep fn(x T) Bool) List<T>& {
-    out List<T>&return = List<T>()
+    out mut List<T>&return = List<T>()
     for x in it {
         if keep(x) { out.Push(x) }
     }
@@ -70,7 +70,7 @@ fn (it mut <I Iterator<<T>>>&) Filter(keep fn(x T) Bool) List<T>& {
 
 # a new List - in the caller's scope - of every value, in order: "m.Keys().ToList()"
 fn (it mut <I Iterator<<T>>>&) ToList() List<T>& {
-    out List<T>&return = List<T>()
+    out mut List<T>&return = List<T>()
     for x in it {
         out.Push(x)
     }
@@ -87,7 +87,7 @@ type Indexable<T> trait {
 # a position in an Indexable - the collection by reference, and the next index
 type IndexIter<T, C Indexable<T>> struct(of C&) {
     c C&of = of
-    i mut I64 = 0
+    i I64 = 0
 }
 
 fn (it mut IndexIter<<T>, <C>>&) Next() T ? Exhausted {

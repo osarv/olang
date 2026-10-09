@@ -2,7 +2,7 @@
 # S13c: alternatives binding one name meet - a writable payload and a read-only one bind a read-only x, so writing
 # through it is rejected (it used to take the first alternative's permission, and write through R's read-only one)
 type Node struct(v I32) {
-    v mut
+    v
 }
 type Box enum {
     W(a mut Node&)

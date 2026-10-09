@@ -2,7 +2,7 @@
 # C2d: a value a constructor field builds from the constructor's parameter lands in the instance, so the parameter's
 # argument is held to wherever the instance lands - here it dies with each iteration while the instance outlives it
 type FeEnt struct(v mut List<I64>&) { V mut List<I64>& = v }
-type FeSlot struct(v mut List<I64>&) { e mut FeEnt = FeEnt(v) }
+type FeSlot struct(v mut List<I64>&) { e FeEnt = FeEnt(v) }
 
 fn main() ? {
     s FeSlot& = FeSlot(List<I64>())

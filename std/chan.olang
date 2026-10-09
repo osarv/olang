@@ -16,9 +16,9 @@ import "cancel"
 # wherever it sits - inline in a struct (T7c), in a local, in the arena - which is what pthread needs. An
 # "Array<U8, 64>" would be alignment 1 and could land at any offset in its container: measured, a byte blob
 # after a single byte field sits at offset 1, where a word blob sits at 8.
-# And they carry no "mut" because their bytes are pthread's, not ours - that stops olang writing them
-# while leaving pthread free to, since an extern-param carries no mutability and X3 hands over a bare
-# pointer.
+# And they are private (lowercase), because their bytes are pthread's, not ours - no module but this one can name
+# them, and this one only hands them to pthread, which is free to write them since an extern-param carries no
+# mutability and X3 hands over a bare pointer (X3a).
 MutexWords I32 = 8
 CondWords I32 = 8
 
@@ -45,12 +45,12 @@ type Chan<T> struct(cap I32) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
     data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
-    head mut I64 = 0
-    tail mut I64 = 0
-    count mut I64 = 0
+    head I64 = 0
+    tail I64 = 0
+    count I64 = 0
     rendezvous Bool = cap == 0
-    sent mut I64 = 0
-    taken mut I64 = 0
+    sent I64 = 0
+    taken I64 = 0
     lock Array<I64, MutexWords>                    # in the channel itself (T7c): its length is its type's
     notEmpty Array<I64, CondWords>
     notFull Array<I64, CondWords>
@@ -179,13 +179,13 @@ fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
 }
 
 type sumBox struct(start I32) {
-    v mut I32 = start
+    v I32 = start
 }
 
 test "a bounded channel carries values between two tasks" {
-    c Chan<I32>& = Chan<I32>(4)
+    c mut Chan<I32>& = Chan<I32>(4)
     Init(c)
-    total sumBox& = sumBox(0)
+    total mut sumBox& = sumBox(0)
     join {
         spawn produce(c, 100)
         spawn consume(c, 100, total)
@@ -196,9 +196,9 @@ test "a bounded channel carries values between two tasks" {
 
 # and the same channel used sequentially, which exercises the ring buffer wrapping several times over
 test "the ring buffer wraps" {
-    c Chan<I32>& = Chan<I32>(4)
+    c mut Chan<I32>& = Chan<I32>(4)
     Init(c)
-    total sumBox& = sumBox(0)
+    total mut sumBox& = sumBox(0)
     for round in range 5 {
         produce(c, 4)
         consume(c, 4, total)
@@ -207,7 +207,7 @@ test "the ring buffer wraps" {
 }
 
 test "a wait with a token returns what is there, and gives up when the deadline passes" {
-    c Chan<I32>& = Chan<I32>(1)
+    c mut Chan<I32>& = Chan<I32>(1)
     Init(c)
     tok := cancel.After(30)
     try SendUntil(c, 5, tok) catch { fail }
@@ -226,10 +226,10 @@ fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut sumBox&) {
 }
 
 test "Cancel wakes a task blocked in a wait" {
-    c Chan<I32>& = Chan<I32>(1)
+    c mut Chan<I32>& = Chan<I32>(1)
     Init(c)
-    tok cancel.Token& = cancel.Token()
-    got sumBox& = sumBox(0)
+    tok mut cancel.Token& = cancel.Token()
+    got mut sumBox& = sumBox(0)
     start := cancel.NowNs()
     join {
         spawn waitFor(c, tok, got)
@@ -258,20 +258,20 @@ fn sumReadings(c mut Chan<reading>&, n I32, total mut sumBox&) {
 }
 
 test "a channel carries any element type" {
-    c Chan<reading>& = Chan<reading>(3)
+    c mut Chan<reading>& = Chan<reading>(3)
     Init(c)
-    total sumBox& = sumBox(0)
+    total mut sumBox& = sumBox(0)
     join {
         spawn sendReadings(c, 50)
         spawn sumReadings(c, 50, total)
     }
     assert total.v == 1225
-    f Chan<F64>& = Chan<F64>(2)
+    f mut Chan<F64>& = Chan<F64>(2)
     Init(f)
     Send(f, 1.5)
     Send(f, 2.25)
     assert Recv(f) + Recv(f) == 3.75
-    t Chan<String&>& = Chan<String&>(2)
+    t mut Chan<String&>& = Chan<String&>(2)
     Init(t)
     Send(t, "one")
     Send(t, $(1 + 1))
@@ -286,10 +286,10 @@ fn sendCounting(c mut Chan<I32>&, n I32, sentAll mut sumBox&) {
 }
 
 test "a channel of capacity 0 is a rendezvous" {
-    c Chan<I32>& = Chan<I32>(0)
+    c mut Chan<I32>& = Chan<I32>(0)
     Init(c)
-    total sumBox& = sumBox(0)
-    sentAll sumBox& = sumBox(0)
+    total mut sumBox& = sumBox(0)
+    sentAll mut sumBox& = sumBox(0)
     join {
         spawn sendCounting(c, 100, sentAll)
         spawn consume(c, 100, total)

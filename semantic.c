@@ -59,9 +59,26 @@ bool lambdaInferError(struct var* f, struct type* e);
 
 bool TypeIsPermRef(struct type t);
 bool OperandNamesExistingStorage(struct operand* op);
-//T25b: at the top of a declaration, "mut" is the binding's and - for a reference - its permission's
+bool hasTokOfType(struct syntax* s, enum tokenType t);
+struct token firstTokOfType(struct syntax* s, enum tokenType t);
+//T25b: at the top of a GLOBAL, "mut" is the binding's and - for a reference - its permission's (D11)
 static void declPermission(struct var* v) {
     if (v->mut && TypeIsPermRef(v->type)) v->type.refMut = true;
+}
+
+//T25b: everywhere but a global, "mut" before a declaration's type says only what a reference reaches may be written -
+//a writable reference, or a type variable standing for one when it is bound to a reference (G8a). Before a value type
+//it says nothing, since the binding is always the declaration's own to write (a parameter, D9; a field through a
+//writable instance, C3; a local, D11a), and that position's error is reported. v->mut is then "declared writable"
+static void declTypePermission(struct var* v, struct syntax* node, enum diag valueErr) {
+    v->mut = false;
+    if (!hasTokOfType(node, TOK_MUT)) return;
+    if (TypeIsPermRef(v->type) || v->type.bType == BASETYPE_TYPEVAR) {
+        v->type.refMut = true;
+        v->mut = true;
+    } else if (!v->type.unknown) {
+        Err(firstTokOfType(node, TOK_MUT), valueErr, &v->type);
+    }
 }
 
 struct list* SemanticAllModules(void) {
@@ -4399,8 +4416,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
         struct var v = (struct var){0};
         v.name = fieldName;
         v.tok = fieldNameTok;
-        v.mut = hasTokOfType(f, TOK_MUT);
-        bool fieldDeclMut = v.mut; //T25b, applied once the type is known
+        v.mut = hasTokOfType(f, TOK_MUT); //T25b/C3: for a ":=" field, judged once its type is known (pass 3)
 
         if (typeExprNode) {
             //explicit type - "= expr" is checked for real in pass 3 (needs ctor params in scope). No
@@ -4411,7 +4427,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
             scopeTagParams = &ctorParams; //O3c: a field may live where a parameter or an earlier field does
             scopeTagFields = &t->vars;
             v.type = resolveTypeExpr(mod, typeExprNode, &t->scopeVars);
-            declPermission(&v); //T25b
+            declTypePermission(&v, f, ERR_MUT_ON_VALUE_FIELD); //C3/T25b: a field's "mut" is its reference's
             scopeTagParams = prevTP;
             scopeTagFields = prevTF;
         } else if (hasTokOfType(f, TOK_ASS_INFER)) {
@@ -4428,8 +4444,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
             v.punParam = param; //see struct var.punParam's own comment - lets OperandMember later tell
                                  //which of the base's own via-tagged scopeBinding entries belong to this
                                  //field specifically
-            //T25c: a field written "mut" holds a writable reference, which a read-only parameter is not
-            if (fieldDeclMut && TypeIsPermRef(v.type) && !v.type.refMut) Err(fieldNameTok, ERR_READ_ONLY_TO_WRITABLE);
+            v.mut = v.type.refMut; //C4: the parameter's type, permission included
         }
         ListAdd(&t->vars, &v);
         ListAdd(&t->ctorFieldSyntax, &f);
@@ -4548,11 +4563,12 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         struct var v = (struct var){0};
         v.name = name;
         v.tok = nameTok;
-        v.mut = hasTokOfType(p, TOK_MUT);
         //O3: a "&name" tag declares its scope variable by appearing, into the signature's own shared
         //scopeVars list - so order among parameters no longer matters, unlike the old scope-parameter form
         v.type = resolveTypeExpr(mod, typeExprNode, scopeVars);
-        declPermission(&v); //T25b
+        //D9/T25b: "mut" says the reference is writable; a by-value parameter is the callee's own copy, always writable -
+        //an enum's payload is no parameter of anyone's, so its "mut" is the plain T25b error
+        declTypePermission(&v, p, resolvingPayload ? ERR_MUT_ON_VALUE_TYPE : ERR_MUT_ON_VALUE_PARAM);
         //D8a: an "= expr" default, built here in the DECLARING module's own context (a caller's context
         //would resolve a struct-literal's type name against the wrong module). Restricted to a literal,
         //so there is nothing call-site-dependent to get wrong - no allocation, no scope, no failure.
@@ -7576,6 +7592,8 @@ static enum diag ownOutliveDiag(struct operand* op, struct var* func) {
     return ownCameFromBareRefParam(op, func) ? ERR_OWN_FROM_BARE_REF_PARAM : ERR_OWN_CANNOT_OUTLIVE;
 }
 
+static void noteReadOnlyLocal(struct operand* op);
+static void noteReadOnlyTarget(struct operand* in);
 //what does not fit, reported at tok: the value op against the type it was to fit, want
 void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
@@ -7587,7 +7605,7 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_NUMBER) Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want);
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
     else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);
-    else if (fit == TYPE_FIT_READ_ONLY) Err(tok, ERR_READ_ONLY_TO_WRITABLE);
+    else if (fit == TYPE_FIT_READ_ONLY) { Err(tok, ERR_READ_ONLY_TO_WRITABLE); noteReadOnlyLocal(op); }
     else if (fit == TYPE_FIT_PRIVATE_CALL) {
         struct type bare = op->type;
         bare.structMAlloc = false;
@@ -7703,28 +7721,67 @@ static bool writeIntoCallValue(struct operand* op) {
     return false;
 }
 
+//B11/T25b: the local whose written type made op read-only - so a diagnostic can say where "mut" goes. A reference
+//decides by its own permission: a local declared with a reference type and no "mut" is the one, and a ":=" local took
+//its initializer's; a slice has its base's. A value (a field, an element, a slice of one) is as writable as the first
+//reference on its way. NULL where anything else decides - a reference field's or element's own type, a call's result
+static struct var* readOnlyLocalOf(struct operand* op) {
+    struct var* v = NULL;
+    for (int guard = 0; guard < 64; guard++) {
+        if (!v) {
+            if (!op) return NULL;
+            bool through = op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE;
+            if (through && (!TypeIsPermRef(op->type) || op->opType == OPERATION_SLICE)) {
+                op = *(struct operand**)ListGetIdx(&op->args, 0);
+                continue;
+            }
+            if (op->opType != OPERATION_READ_VAR || !op->readVar) return NULL;
+            v = op->readVar;
+        }
+        if (!TypeIsPermRef(v->type) || v->type.refMut) return NULL;
+        if (v->permByType) return v;
+        if (v->isCapture && v->capturedFrom) { v = v->capturedFrom; continue; } //D16c: the variable a lambda copied
+        op = v->declInit; //a ":=" local, permission and all
+        v = NULL;
+    }
+    return NULL;
+}
+static void noteReadOnlyLocal(struct operand* op) {
+    struct var* v = readOnlyLocalOf(op);
+    if (v) Note(v->tok, NOTE_DECLARE_WRITABLE, v->name, v->name, &v->type);
+}
+//...for a write to the lvalue in, refused: what in is reached through decides, not in's own type (a reference field
+//being assigned is a slot of the instance its base names)
+static void noteReadOnlyTarget(struct operand* in) {
+    if (in->opType == OPERATION_MEMBER || in->opType == OPERATION_INDEX || in->opType == OPERATION_SLICE)
+        noteReadOnlyLocal(*(struct operand**)ListGetIdx(&in->args, 0));
+}
+
 //a write to in refused, reported at tok, saying why: a lambda's capture, a read-only reference on the way, a copy a
-//call gave back, or a variable not declared "mut"
+//call gave back, or an immutable global
 struct var* lvalueRootVar(struct operand* op);
 static void reportWriteBlocked(struct token tok, struct operand* in) {
     struct var* root = lvalueRootVar(in);
     if (root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture)) Err(tok, ERR_CAPTURE_READ_ONLY);
-    else if (writeBlockedByPermission(in)) Err(tok, ERR_READ_ONLY_REF_WRITE);
+    else if (writeBlockedByPermission(in)) { Err(tok, ERR_READ_ONLY_REF_WRITE); noteReadOnlyTarget(in); }
     else if (writeIntoCallValue(in)) Err(tok, ERR_WRITE_INTO_CALL_VALUE);
     else Err(tok, ERR_IMMUTABLE, root ? root->name : StrFromCStr("this"));
 }
 
 bool OperandIsMutableLvalue(struct operand* op) {
     switch (op->opType) {
-        case OPERATION_READ_VAR: return op->readVar->mut;
+        case OPERATION_READ_VAR: {
+            struct var* v = op->readVar;
+            //D9b: a parameter's copy in its body is written, or a writable reference made to it - so a by-value array
+            //it holds must be the callee's own copy of the elements (codegen, and the evaluator, read this)
+            if (v->mut && canonicalVar(v) != v) canonicalVar(v)->paramWritten = true;
+            return v->mut;
+        }
         case OPERATION_INDEX: return baseWritable(*(struct operand**)ListGetIdx(&op->args, 0));
-        //C3: a field is mutable only if declared "mut" - checked here alongside the base's own
-        //mutability, not instead of it, so writing through an immutable base stays rejected too. This used
-        //to recurse on the base alone, which never consulted the field's own flag at all and so let every
-        //field of a mutable variable be written regardless of how it was declared. A plain (T13) struct's
-        //fields carry mut = true (there is no "mut" in that grammar at all), so they are unaffected.
+        //C3: a field may be written exactly where its instance may be - through a writable base. There is no
+        //per-field immutability: a field's "mut" says only what a reference field's referent permits (T25b)
         case OPERATION_MEMBER:
-            return op->memberMut && baseWritable(*(struct operand**)ListGetIdx(&op->args, 0));
+            return baseWritable(*(struct operand**)ListGetIdx(&op->args, 0));
         //E16a: a slice is a borrow of its base's storage, so writing through it writes the base. It carries
         //the base's mutability for the same reason an index does - otherwise slicing would launder an
         //immutable array into a "mut T[]&" parameter, which is exactly the hole D9's two axes exist to
@@ -8570,11 +8627,20 @@ static bool ownSlotsAdmitStores(struct type v, int depth) {
         bool named = f->type.structMAlloc && f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope
                      && v.ctorFunc && varIsOwnParam(canonicalVar(f->type.scopeParam), v.ctorFunc);
         if (named) continue;
-        bool holds = f->type.structMAlloc || TypeHoldsReferences(f->type);
-        if (f->mut && holds) return true;
-        if (f->type.structMAlloc ? RefNarrowingMatters(f->type) : (holds && ownSlotsAdmitStores(f->type, depth + 1))) return true;
+        //C3: any field may be assigned wherever the value may be written, so one holding a reference is such a slot
+        if (f->type.structMAlloc || TypeHoldsReferences(f->type)) return true;
     }
     return false;
+}
+
+//D9: whether a callee may write what its parameter pv holds, and so build into the scope its references live in -
+//through a reference, as the reference's type permits (T25b); a by-value parameter is the callee's own copy, written
+//where its body writes it (D9b): known once that body is checked, assumed while it is not (a cycle, a function value)
+static bool paramMayWrite(struct var* func, struct var* pv) {
+    if (TypeIsPermRef(pv->type)) return pv->type.refMut;
+    if (pv->type.bType == BASETYPE_FUNC) return false; //nothing is written through a function value (D16d)
+    if (func && func->bodyState == 2 && func->owner) return pv->paramWritten;
+    return true;
 }
 
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
@@ -8673,7 +8739,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             //which is where such a build really lands and which the derived scope outlives (O23)
             {
                 struct var* pv = ListGetIdx(&func->type.vars, j);
-                bool mayBuild = pv->mut || (func->type.hasRetType && paramTypeNamesScope(*func->type.retType, sv));
+                bool mayBuild = paramMayWrite(func, pv) || (func->type.hasRetType && paramTypeNamesScope(*func->type.retType, sv));
                 if (mayBuild && argScope && argScope != SCOPE_AMBIGUOUS && argScope->derivedFrom) {
                     argScope = SemanticRuntimeScope(argScope, &argDepth);
                     if (argScope) argDepth = 0;
@@ -8695,7 +8761,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             //neither can be the right place for a field whose real scope is not known here
             if (RefNarrowingMatters(pt) && (scopeViaFallback(arg) || argScope == SCOPE_AMBIGUOUS)) {
                 struct var* pv = ListGetIdx(&func->type.vars, j);
-                if (pv->mut || results)
+                if (paramMayWrite(func, pv) || results)
                     Err(arg->tok, scopeViaFallback(arg) ? ERR_BUILD_THROUGH_UNKNOWN_SCOPE : ERR_BUILD_INTO_UNKNOWN_SCOPE);
             }
             boundTo = argScope;
@@ -9386,6 +9452,7 @@ static struct operand* OperandAtomic(struct var* func, struct operand* target, s
     //read-only references
     if (!OperandIsLvalue(target) || (kind != OPERATION_ATOMIC_LOAD && !OperandIsMutableLvalue(target))) {
         Err(target->tok, !OperandIsLvalue(target) ? ERR_ATOMIC_NOT_PLACE : ERR_ATOMIC_NOT_WRITABLE);
+        if (OperandIsLvalue(target)) noteReadOnlyTarget(target);
         return unknownPlaceholder(tok);
     }
     struct operand* op = operandNew(tok, kind, resT);
@@ -9664,7 +9731,6 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
     }
     struct operand* op = operandNew(tok, OPERATION_MEMBER, memberVar->type);
     op->memberName = member;
-    op->memberMut = memberVar->mut;
     ListAdd(&op->args, &base);
     //if this field carries a scope tag (only possible for a constructor-bearing type - see the report),
     //resolve it through base's own scopeBindings map one hop and record the (possibly still-foreign)
@@ -13471,7 +13537,7 @@ static bool valueAdmitsStores(struct type v, bool writable, struct list* seen, i
         case BASETYPE_STRUCT:
             for (int i = 0; i < v.vars.len; i++) {
                 struct var* f = ListGetIdx(&v.vars, i);
-                if (partAdmitsStores(f->type, writable && f->mut, seen, depth)) return true;
+                if (partAdmitsStores(f->type, writable, seen, depth)) return true; //C3: every field, through a writable one
             }
             return false;
         case BASETYPE_CHOICE: //T17: a payload is never assigned - only what its references let through
@@ -14161,14 +14227,26 @@ static void bareLocalLivesInBlock(struct checkCtx* ctx, struct type* t) {
     t->scopeDepth = ctx->blockDepth;
 }
 
+//T25b/D11a: a local's written type decides what its reference permits - "x mut T&" writable, "x T&" read-only - since the
+//local itself may always be reassigned (D11). "mut" before a value type says nothing, and is the error D11a states
+//(before ":=", which takes the initializer's permission already, its other one). Returns whether "mut" was written
+static bool localPermission(struct syntax* s, struct type* declType) {
+    if (!hasTokOfType(s, TOK_MUT)) {
+        if (TypeIsPermRef(*declType)) declType->refMut = false;
+        return false;
+    }
+    if (TypeIsPermRef(*declType) || declType->bType == BASETYPE_TYPEVAR) declType->refMut = true;
+    else if (!declType->unknown) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_LOCAL, declType);
+    return true;
+}
+
 struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token nameTok = firstTokOfType(s, TOK_IDEN);
-    bool mut = true; //D11: a local is always mutable; "mut" is meaningful on globals, parameters and fields
-    //D11a: so writing it on a local says nothing, and a keyword that says nothing is worse than none - a
-    //reader takes its absence to mean "immutable", which it never did
-    if (ctx->hasOwnScope && hasTokOfType(s, TOK_MUT)) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_LOCAL);
+    bool mut = true; //D11: a local is always mutable - "mut" on one belongs to its type (localPermission)
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
+    if (ctx->hasOwnScope && !typeExprNode && hasTokOfType(s, TOK_MUT)) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_INFERRED_LOCAL);
+    bool permByType = false; //B11
     //ctx->func is NULL for a global initializer, which has no parameter list to tag a "&name" against
     struct list* scopeParams = ctx->func ? &ctx->func->type.scopeVars : NULL;
 
@@ -14183,7 +14261,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
         scopeTagBody = NULL;
         bareLocalLivesInBlock(ctx, &declType);
-        if (TypeIsPermRef(declType)) declType.refMut = true; //T25b: a local's own reference is writable
+        if (ctx->hasOwnScope) permByType = !localPermission(s, &declType) && TypeIsPermRef(declType); //T25b
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
         inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, NULL); //O26a
     } else {
@@ -14191,14 +14269,17 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             scopeTagBody = ctx; //O3c
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
             scopeTagBody = NULL;
+            bool bareVar = typeExprIsBareTypeVar(typeExprNode);
+            //T25b: what the written type permits - "x mut T&" writable, "x T&" read-only; a type variable's binding
+            //carries its own permission ("acc U = init"), which "mut" may make writable
+            if (ctx->hasOwnScope && !(bareVar && !hasTokOfType(s, TOK_MUT)))
+                permByType = !localPermission(s, &declType) && TypeIsPermRef(declType) && !bareVar;
             rhs = buildExpecting(ctx, exprNode, &declType); //G10c
             inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, rhs); //O26a
-            if (typeExprIsBareTypeVar(typeExprNode)) { //...writes no scope, whatever the binding's type carried
+            if (bareVar) { //...writes no scope, whatever the binding's type carried
                 declType.scopeParam = NULL;
                 declType.scopeWritten = false;
             } else bareLocalLivesInBlock(ctx, &declType);
-            //T25b: a local's own reference is writable - unless what initializes it is read-only, which it then is
-            if (TypeIsPermRef(declType)) declType.refMut = OperandGivesWritable(rhs);
             //O23a: a local naming where a derived scope's referent lives may hold what lives there, never what is new
             if (scopeIsDerived(declType.scopeParam) && ctx->hasOwnScope && operandIsTemporary(ctx, rhs))
                 Err(rhs->tok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
@@ -14237,6 +14318,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType.scopeDepth = ctx->blockDepth;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     v->scopeUnnamed = unnamedScope;
+    v->permByType = permByType;
     if (exprNode) v->declInit = rhs;
     //O25a: "x := e" takes e's scope - for a value holding references, where e's references were built
     if (inResult) { //O26a: its storage and its references are in the result scope
@@ -16036,7 +16118,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         //...and so is a private next (M6b): Iterator<T> names Next, so only its shape can be asked of it
         if (ok && (nextM->type.errors.len > 1 || !isPublic(nextM->name))) {
             struct var* r0 = nextM->type.vars.len ? ListGetIdx(&nextM->type.vars, 0) : NULL;
-            ok = r0 && (r0->mut || r0->type.refMut);
+            ok = r0 && TypeIsPermRef(r0->type) && r0->type.refMut;
         } else if (ok && src->type.bType != BASETYPE_INTERFACE) {
             struct list b = ListInit(sizeof(struct typeBinding));
             struct typeBinding tb = (struct typeBinding){0};
@@ -16172,21 +16254,22 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* initNode = firstPartOfType(s, SNTX_FOR_INIT);
     if (!initNode) return buildForBareStmnt(&innerCtx, s); //S9: "for { }" or "for cond { }"
     struct token nameTok = firstTokOfType(initNode, TOK_IDEN);
-    bool mut = true; //D11: a local is always mutable
-    if (hasTokOfType(initNode, TOK_MUT)) Err(firstTokOfType(initNode, TOK_MUT), ERR_MUT_ON_LOCAL); //D11a
+    bool mut = true; //D11: a local is always mutable - "mut" on one belongs to its type (localPermission)
     struct operand* initVal = buildExprFromSyntax(&innerCtx, firstPartOfType(initNode, SNTX_EXPR));
 
     struct syntax* typeExprNode = firstPartOfType(initNode, SNTX_TYPE_EXPR);
     struct type declType;
+    bool permByType = false; //B11
     if (typeExprNode) {
         scopeTagBody = &innerCtx; //O4a
         declType = resolveTypeExpr(ctx->mod, typeExprNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
         scopeTagBody = NULL;
         bareLocalLivesInBlock(&innerCtx, &declType);
-        if (TypeIsPermRef(declType)) declType.refMut = OperandGivesWritable(initVal); //T25b
+        permByType = !localPermission(initNode, &declType) && TypeIsPermRef(declType); //T25b
         if (declType.scopeParam || declType.scopeWritten) landCall(initVal, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
         reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok, initVal, declType);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
+        if (hasTokOfType(initNode, TOK_MUT)) Err(firstTokOfType(initNode, TOK_MUT), ERR_MUT_ON_INFERRED_LOCAL); //D11a
         declType = inferredDeclType(ctx->func, initVal);
         declType.scopeParam = NULL; //as in buildVarDeclStmnt's ":="
     }
@@ -16194,6 +16277,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!adoptInitializerScope(&innerCtx, &declType, initVal, &loopUnnamed)) declType.scopeDepth = innerCtx.blockDepth;
     struct var* loopVar = scopeDeclare(innerCtx.mod, innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
     loopVar->scopeUnnamed = loopUnnamed;
+    loopVar->permByType = permByType;
     loopVar->scopeBindings = initVal->scopeBindings; //see buildVarDeclStmnt's identical propagation
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
@@ -16322,7 +16406,7 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
     }
     struct var* v = NULL;
     if (altIdx == 0) {
-        v = scopeDeclare(ctx->mod, ctx->scope, name, tok, t, false);
+        v = scopeDeclare(ctx->mod, ctx->scope, name, tok, t, true); //D11: a binding is a local, its own to reassign
         if (!v) return;
         v->mayBeInitialized = true;
         if (refLike && unnamed) v->scopeUnnamed = true;
@@ -17717,6 +17801,7 @@ static struct var* lambdaCapture(struct var* L, struct var* outer, struct token 
     inner->type = outer->type;
     inner->mayBeInitialized = true;
     inner->isCapture = true;
+    inner->capturedFrom = outer;
     bool isRef = inner->type.structMAlloc;
     //D16c: an array is never copied implicitly (D9a), so a value array - text included - is BORROWED, as passing
     //it to a "&" parameter would borrow it (E12c): the lambda's copy is a read-only reference to the variable's
@@ -17814,7 +17899,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         struct syntax* typeNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         if (typeNode) {
             v.type = resolveTypeExpr(octx->mod, typeNode, &t.scopeVars);
-            declPermission(&v); //T25b
+            declTypePermission(&v, p, ERR_MUT_ON_VALUE_PARAM); //D9/T25b
             if (ep && !TypeIsGeneric(ep->type) && !TypeIsSame(v.type, ep->type)) {
                 Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
                 v.type = lambdaOwnType(ep->type); //reported once, here - not again where the lambda lands
@@ -17923,6 +18008,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         *local = *param;
         local->origin = param;
         local->mayBeInitialized = true;
+        local->mut = true; //D9: the callee's own copy, or its own cursor
         ListAdd(&fnScope.localPtrs, &local);
     }
     struct checkCtx c = {0};
@@ -18388,6 +18474,7 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
         *local = *param;
         local->origin = param;
         local->mayBeInitialized = true;
+        local->mut = true; //D9: the callee's own copy, or its own cursor
         local->paramOf = spec; //O23a
         ListAdd(&fnScope.localPtrs, &local);
     }
@@ -18481,6 +18568,7 @@ static void buildPrimCtorBody(struct semaModule* mod, struct type* t) {
     *local = *param;
     local->origin = param;
     local->mayBeInitialized = true;
+    local->mut = true; //T29d: the value being constructed, which the body may change
     ListAdd(&fnScope.localPtrs, &local);
     struct checkCtx ctx = {0};
     ctx.mod = mod;
@@ -18701,8 +18789,7 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         *local = *param;
         local->origin = param; //canonicalVar traces this copy back to the type-level original
         local->mayBeInitialized = true;
-        //D9, same as the function-body case above: a constructor parameter is immutable unless
-        //declared "mut"
+        local->mut = true; //D9, as a function's: the constructor's own copy, or its own cursor
         ListAdd(&ctorScope.localPtrs, &local);
     }
     struct checkCtx cctx = {0};
@@ -18764,10 +18851,14 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
                             && varIsOwnParam(canonicalVar(fv), t->ctorFunc))
                         field->type.scopeParam = canonicalVar(fv);
                 }
-                //T25b: the field's own "mut" is its permission; a writable field cannot hold a read-only reference
+                //T25b: the field's own "mut" is its permission; a writable field cannot hold a read-only reference. On
+                //a value it says nothing - a field is writable wherever its instance is (C3)
                 if (TypeIsPermRef(field->type)) {
                     if (field->mut && !OperandGivesWritable(fieldOp)) Err(fieldOp->tok, ERR_READ_ONLY_TO_WRITABLE);
                     field->type.refMut = field->mut;
+                } else if (field->mut && !field->type.unknown) {
+                    Err(firstTokOfType(f, TOK_MUT), ERR_MUT_ON_VALUE_FIELD, &field->type);
+                    field->mut = false;
                 }
             }
         } else if (typeExprNode) {
@@ -18965,9 +19056,9 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
             local->origin = param; //canonicalVar traces this copy back to the type-level original
             local->mayBeInitialized = true;
             local->paramOf = func; //O23a
-            //D9: a parameter is immutable unless declared "mut" - unlike an ordinary local (D11), where
-            //"mut" is accepted but has no effect. This used to force mut = true for parameters too, which
-            //made D9 unenforced: any parameter was assignable regardless of how it was declared.
+            //D9: a parameter is the callee's own - a by-value one its copy, a reference one its cursor - so it may always
+            //be assigned; whether what a reference names may be written is its type's permission (T25b)
+            local->mut = true;
             ListAdd(&fnScope.localPtrs, &local);
         }
 

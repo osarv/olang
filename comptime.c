@@ -1513,16 +1513,22 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
     for (int i = recv; i < func->type.vars.len && i - recv < op->args.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         struct operand* a = *(struct operand**)ListGetIdx(&op->args, i - recv);
-        struct ctVal* v = ctFitBoundary(st, a, p->type);
+        //D9b: a by-value run-time-length array the body never writes is the caller's array itself, elements shared, as
+        //the generated code hands over the caller's { length, storage } pair
+        bool shareArr = !ctIsRef(p->type) && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc && !p->paramWritten
+                        && OperandIsLvalue(a) && !ctIsRef(a->type);
+        struct ctVal* v = shareArr ? ctLvalue(st, a, false) : ctFitBoundary(st, a, p->type);
+        if (v && shareArr) v = ctDeref(v);
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
             if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
             return false;
         }
         //a parameter is a node of its own: a value one holds a copy, a reference one points where the
-        //argument does - so repointing the parameter (S4a) moves only the callee's cursor
+        //argument does - so repointing the parameter (S4a) moves only the callee's cursor. D9b: a by-value array the body
+        //never writes is the caller's array itself, its elements shared, as at run time
         struct ctVal* node = ctNew(CT_INT, p->type);
-        *node = *(ctIsRef(p->type) ? v : ctCopy(v));
+        *node = *(ctIsRef(p->type) || (shareArr && v->kind == CT_AGG) ? v : ctCopy(v));
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }

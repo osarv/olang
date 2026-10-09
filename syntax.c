@@ -180,14 +180,11 @@ bool acceptStmntEnd(SyntaxCtx sc) {
     //this can never swallow something a longer parse would have wanted.
     if (peekTok(sc).type == TOK_CURLY_C) return true;
     enum tokenType prev = prevTok(sc).type;
-    //TOK_MUT: a constructor's bare-pun field may be written "name mut" (C2/C3), the one statement-shaped
-    //form in the language whose last token is that keyword - no ordinary statement can end in it, so
-    //accepting it here terminates the pun without making "mut" a stmntEndTriggerType everywhere
     //TOK_GRT/TOK_BTSFT_R: a type's argument list closing a declaration with no initializer ("none <T>",
     //"q Pair<Int32, <T>>") - a "greater than" is never a complete statement's last token, since the
     //expression parser always goes on to its right operand, so this cannot end a comparison early
     if (prev == TOK_CURLY_C) return true;
-    if (!(prev == TOK_BTWSE_AND || prev == TOK_MUT || prev == TOK_GRT || prev == TOK_BTSFT_R)) return false;
+    if (!(prev == TOK_BTWSE_AND || prev == TOK_GRT || prev == TOK_BTSFT_R)) return false;
     //L20a: only as the LAST token - one the line goes on past ("state Array<Float32>(n)") is not a statement's end
     struct token next = peekTok(sc);
     return next.type == TOK_NONE || next.lineNr > prevTok(sc).lineNr;
@@ -819,9 +816,11 @@ struct syntax* parseParam(SyntaxCtx sc) {
     int beforeMut = TokenGetCursor(sc->tc);
     struct token mut = TokenFeed(sc->tc);
     if (mut.type == TOK_MUT) addTok(s, mut); else TokenSetCursor(sc->tc, beforeMut);
-    //a lambda's parameter may leave its type out ("fn(a, b)"), to be taken from where it is passed
+    //a lambda's parameter may leave its type out ("fn(a, b)"), to be taken from where it is passed - permission
+    //included, so such a parameter has no "mut" of its own (D16)
     struct token nextTok = peekTok(sc);
     if (lambdaParams && (nextTok.type == TOK_COMMA || nextTok.type == TOK_PAREN_C)) {
+        if (mut.type == TOK_MUT) return parseFail(sc, cur);
         ListAdd(&sc->localNames, &name.str); //S8b
         return s;
     }
@@ -880,7 +879,7 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
 }
 
 //one field inside a constructor-bearing struct's body. Tries, in order: ":=" inference, an explicit type
-//(optionally followed by "= expr"), and finally a bare pun (just the name, possibly "mut") when no type
+//(optionally followed by "= expr"), and finally a bare pun (just the name) when no type
 //expression follows at all - see the report for what each form means
 struct syntax* parseCtorField(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -921,7 +920,9 @@ struct syntax* parseCtorField(SyntaxCtx sc) {
     }
 
     //no type, no "=", no ":=" - a bare pun, valid only if it turns out to name one of the constructor's
-    //own parameters (checked in semantic.c, which has the param list this parser doesn't)
+    //own parameters (checked in semantic.c, which has the param list this parser doesn't). It takes its parameter's
+    //type, permission included, so it has no "mut" of its own (C4)
+    if (mut.type == TOK_MUT) return parseFail(sc, cur);
     return s;
 }
 
@@ -1231,7 +1232,7 @@ struct syntax* parseVarDecl(SyntaxCtx sc) {
 
 //D12b: "a, b [mut] T [= x, y]" - several names declared with one type, each its own declaration of nodeType
 //(SNTX_VAR_DECL, or a constructor's SNTX_CTOR_FIELD) taking its value from the list in order. A constructor's fields
-//may also be puns ("a, b mut") or inferred ("a, b := x, y"); a local or global inferred list is a destructuring
+//may also be puns ("a, b") or inferred ("a, b := x, y"); a local or global inferred list is a destructuring
 //(parseStmntDestruct). The statement end is the caller's. Each initializer sees the names declared before it.
 struct syntax* parseMultiDecl(SyntaxCtx sc, enum syntaxType nodeType) {
     int cur = TokenGetCursor(sc->tc);
@@ -1247,6 +1248,7 @@ struct syntax* parseMultiDecl(SyntaxCtx sc, enum syntaxType nodeType) {
     struct token infer = field ? acceptTok(sc, TOK_ASS_INFER) : (struct token){0};
     struct syntax* type = infer.type == TOK_NONE ? parseTypeExpr(sc) : NULL;
     if (infer.type == TOK_NONE && !type && !field) return parseFail(sc, cur);
+    if (infer.type == TOK_NONE && !type && mut.type != TOK_NONE) return parseFail(sc, cur); //C4: a pun has no "mut"
     struct token ass = type ? acceptTok(sc, TOK_ASS) : (struct token){0};
     struct list values = ListInit(sizeof(struct syntax*));
     if (infer.type != TOK_NONE || ass.type != TOK_NONE) {

@@ -1,0 +1,7 @@
+# check: fail error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and I32 is none
+# D9: a by-value parameter is the callee's own copy, so "mut" before its type says nothing - it is for a reference
+fn bump(n mut I32) I32 {
+    n = n + 1
+    return n
+}
+fn main() ? { }

@@ -1,7 +1,7 @@
 # check: fail error[S9a]: It& cannot be walked
 # S9a: running out is an error, not a flag - a Next giving a value and a Bool is not an iterator
 type It struct() {
-    i mut I32 = 0
+    i I32 = 0
 }
 fn (t mut It&) Next() (I32, Bool) { return 0, false }
 fn main() ? {

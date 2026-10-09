@@ -2,7 +2,7 @@
 # T4/T7: a type may not be named after a primitive, as not after Array - one error
 # also: compilation failed with 1 error
 type I32 struct() {
-  x mut I64 = 7
+  x I64 = 7
 }
 fn main() ? {
   a I32 = I32()

@@ -76,7 +76,7 @@ type Holder struct(a mut Array<I64>&) {
     a
 }
 fn mkHolder() Holder {
-    arr Array<I64>&return = Array<I64>(3)
+    arr mut Array<I64>&return = Array<I64>(3)
     return Holder(arr)
 }
 Hold Holder = mkHolder()
@@ -89,7 +89,7 @@ Poked I64 = poke()
 After I64 = Hold.a[1]
 
 type Counter struct(start I32) {
-    n mut I32 = start
+    n I32 = start
 }
 fn (c mut Counter&) Call(x I32) I32 {
     c.n += x

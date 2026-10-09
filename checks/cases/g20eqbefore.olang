@@ -3,7 +3,7 @@
 type K extends I32
 fn (a K) Eq(b K) Bool { return true }
 fn (a K) Hash() I64 { return 0 }
-type Box<N K> struct() { x mut I32 }
+type Box<N K> struct() { x I32 }
 fn main() ? {
     a := Box<1>()
     println($a.x)

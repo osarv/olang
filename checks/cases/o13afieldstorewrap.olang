@@ -3,7 +3,7 @@
 # which puts references where its own are (its block): here text that dies at the return. A local the function returns
 # itself lives in the result scope (O26a, o13afieldstore.olang); one returned inside another value does not
 type H struct(r mut String&) {
-    r mut
+    r
 }
 type W struct(h H) {
     h
@@ -14,7 +14,7 @@ fn mk(n I64, s mut String&) W {
     return W(e)
 }
 fn main() ? {
-    q String& = "x"
+    q mut String& = "x"
     w := mk(12, q)
     assert w.h.r.Len() == 4
 }

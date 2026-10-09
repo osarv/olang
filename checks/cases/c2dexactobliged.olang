@@ -4,11 +4,11 @@
 # to be in that referent's scope - which is an equality the function's callers show; this one passes a list from a
 # block that closes first
 type ME<K, V> struct(key K, value V) {
-    Key mut K = key
-    Value mut V = value
+    Key K = key
+    Value V = value
 }
 type MS<K, V> struct(key K, value V) {
-    entry mut ME<K, V> = ME<K, V>(key, value)
+    entry ME<K, V> = ME<K, V>(key, value)
 }
 type MM<K, V> struct() {
     slot mut MS<K, V>& = null
@@ -20,7 +20,7 @@ fn (m mut MM<<K>, <V>>&) set(key K, value V) {
 fn main() ? {
     m := MM<I32, mut List<I32>&>()
     for i in range 2 {
-        l List<I32>& = List<I32>()
+        l mut List<I32>& = List<I32>()
         m.set(1, l)
     }
 }

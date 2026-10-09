@@ -1,7 +1,7 @@
 # check: fail error[G20]: K declares Eq - a constant parameter's type compares by its value alone
 # G20: a constant parameter's type declares no Eq - judged once every method is known, whatever order the declarations
 # come in (the type is declared after the generic using it here)
-type Box<N K> struct() { x mut I32 }
+type Box<N K> struct() { x I32 }
 type K extends I32
 fn (a K) Eq(b K) Bool { return true }
 fn (a K) Hash() I64 { return 0 }

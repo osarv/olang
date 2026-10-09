@@ -1,6 +1,6 @@
 # check: fail error[C2b]: a constructor gives no value
 # T29d: the parameter's final value is the result - a return would be a second way out
-type Percent I32(v mut I32) {
+type Percent I32(v I32) {
     if v > 100 { return 100 }
 }
 fn main() ? { }

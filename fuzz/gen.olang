@@ -76,38 +76,38 @@ fn quoted(t String&) String& {
 }
 
 type Gen struct(seed U64) {
-    s mut U64 = (seed * 6364136223846793005 + 1442695040888963407) | 1
+    s U64 = (seed * 6364136223846793005 + 1442695040888963407) | 1
     # whether a case may use an atomic method on a local (K1 performs them while compiling)
-    atomics mut Bool = true
+    atomics Bool = true
     # the variables in scope, from base to nv: a variable k is named x<k>
-    vt mut Array<I32, 4096>
-    vlen mut Array<I64, 4096>          # an array's length, -1 when it is not known
-    vmut mut Array<Bool, 4096>        # whether it may be assigned
-    vdep mut Array<Bool, 4096>        # whether it depends on a parameter (S8a)
-    vwalk mut Array<Bool, 4096>       # a List a loop is walking: pushing to it would never end (S9f)
-    base mut I64 = 0
-    nv mut I64 = 0
-    np mut I64 = 0                                  # the current function's parameters, from base
-    dep mut Bool = false                            # whether the expression being made read one that does
-    ci mut I64 = 0                                  # the case being made
-    nh mut I64 = 0                                  # its helper functions so far
-    hdepth mut I64 = 0                              # helpers being made inside each other
+    vt Array<I32, 4096>
+    vlen Array<I64, 4096>              # an array's length, -1 when it is not known
+    vmut Array<Bool, 4096>            # whether it may be assigned
+    vdep Array<Bool, 4096>            # whether it depends on a parameter (S8a)
+    vwalk Array<Bool, 4096>           # a List a loop is walking: pushing to it would never end (S9f)
+    base I64 = 0
+    nv I64 = 0
+    np I64 = 0                                      # the current function's parameters, from base
+    dep Bool = false                                # whether the expression being made read one that does
+    ci I64 = 0                                      # the case being made
+    nh I64 = 0                                      # its helper functions so far
+    hdepth I64 = 0                                  # helpers being made inside each other
     # this case's struct types: a field count and up to 4 field types each
-    ns mut I64 = 0
-    sn mut Array<I32, 4>
-    sf mut Array<I32, 16>
+    ns I64 = 0
+    sn Array<I32, 4>
+    sf Array<I32, 16>
     # this case's enum types: a case count (up to 4), a payload count per case (up to 2) and the payloads' types
-    ne mut I64 = 0
-    en mut Array<I32, 4>
-    epn mut Array<I32, 16>
-    ept mut Array<I32, 32>
+    ne I64 = 0
+    en Array<I32, 4>
+    epn Array<I32, 16>
+    ept Array<I32, 32>
     # this case's function types: a parameter type and a result type each
-    nl mut I64 = 0
-    lp mut Array<I32, 64>
-    lr mut Array<I32, 64>
-    errs mut Bool = false                           # this case has declared its error type, Err<i>
-    fallible mut Bool = false                       # the function being made declares it (so a try may pass it on)
-    inLambda mut Bool = false                       # a lambda's body is being made: a List, holding references, is not
+    nl I64 = 0
+    lp Array<I32, 64>
+    lr Array<I32, 64>
+    errs Bool = false                               # this case has declared its error type, Err<i>
+    fallible Bool = false                           # the function being made declares it (so a try may pass it on)
+    inLambda Bool = false                           # a lambda's body is being made: a List, holding references, is not
                                                     # captured (D16c)
     # what one case adds, read by Program
     decls mut String& = ""                          # its types and helpers, then the case itself
@@ -254,7 +254,7 @@ fn (g mut Gen&) intLit(t I32) String& {
 }
 
 fn (g mut Gen&) floatLit(t I32) String& {
-    body String&return = g.floatBody(t)
+    body mut String&return = g.floatBody(t)
     if g.chance(30) { return "(-" $body ")" }
     return body
 }
@@ -308,7 +308,7 @@ fn (g mut Gen&) fit(t I32, d I64) String& {
 
 # an expression of exactly type t that is not a literal
 fn (g mut Gen&) solid(t I32, d I64) String& {
-    e String&return = g.ex(t, d)
+    e mut String&return = g.ex(t, d)
     if isLit(e) { return g.nonLit(t) }
     return e
 }
@@ -431,7 +431,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         }
     }
     if k == 18 {
-        m String&return = g.matchVal(t, d)
+        m mut String&return = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
     if k == 19 { return g.fallibleCall(t, d) }
@@ -496,7 +496,7 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
     if k == 12 { return g.cond(t, d) }
     if k == 13 { return g.recur(t, d) }
     if k == 14 {
-        m String&return = g.matchVal(t, d)
+        m mut String&return = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
     if k == 15 { return g.fallibleCall(t, d) }
@@ -871,7 +871,7 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
 
 fn (g mut Gen&) block(n I64, d I64, ind String&) String& {
     save := g.nv
-    b String&return = g.stmts(n, d, ind)
+    b mut String&return = g.stmts(n, d, ind)
     g.nv = save
     return b
 }
@@ -1202,7 +1202,7 @@ fn (g mut Gen&) newStruct() String& {
         b.Push("f" $f " " $Prims[g.sf[k * 4 + f]])
     }
     b.Push(") {\n")
-    for f in range n { b.Push("    f" $f " mut\n") }
+    for f in range n { b.Push("    f" $f "\n") }
     b.Push("}\n")
     return b.ToString()
 }

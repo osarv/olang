@@ -2,7 +2,7 @@
 # D16d/O10c: compose builds its lambda in its result scope, so each function it captures must outlive where the result
 # lands - a closure made in a loop body does not outlive a variable declared before the loop
 type Counter struct() {
-    n mut I64 = 0
+    n I64 = 0
 }
 fn compose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
     return fn(x I64) I64 { return g(f(x)) }
@@ -11,7 +11,7 @@ fn id(x I64) I64 { return x }
 fn main() ? {
     keep fn(x I64) I64 = id
     for i in range 2 {
-        c Counter& = Counter()
+        c mut Counter& = Counter()
         g fn(x I64) I64 = fn(x I64) I64 {
             c.n++
             return x + c.n

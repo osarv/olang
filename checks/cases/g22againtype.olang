@@ -1,6 +1,6 @@
 # check: fail error[G22]: K was introduced already - write it 'K', not '<K>'
 # G22: a struct type's parameter list introduces its constants, so its fields write them bare
 type Ring<T, K I64> struct() {
-    items mut Array<T, <K>>
+    items Array<T, <K>>
 }
 fn main() ? { r := Ring<I32, 4>() }
