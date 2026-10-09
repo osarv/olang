@@ -369,6 +369,14 @@ because what it finds about structure feeds the refactor.
   S2 os.OnCrash, S3 __olang_dyncall over libffi, S4 os.RemoveAll/MkTemp/streaming Exec, S5 struct/enum allocations not
   rounded to the SIMD class (halves AST memory), S6 integer formatting in a base. Direction questions QA/QB in the
   ledger. chk3 being merged (wt-merge).
+- 18:45 CEST, decided (mine): `-i` stage 2 is NOT built in C. compiler/DESIGN.md's MIR evaluator serves both the
+  compile-time evaluator and `-i`, so stage 2 (compact values, scope-mirroring freeing, destructors) would be built
+  twice; the C `-i` stays stage 1 and the port's M8 is stage 2. For the port's own testing `-i` is not needed before
+  M8 (stage 0 builds the stage-1 compiler natively). The `-i bfrand.olang` 3.5GB fixture stays as it is.
+  After the 19:00 CEST reset: oann features agent (settling phase 3 fixed-point simulation for the PYNQ-Z2, implicit
+  GEMM convolution, BF16 training, attention through per-head Gemm); port P0 gaps agent (DESIGN.md S1-S4, S6; S5 after
+  poolfix - both touch the allocator); linalg attention kernels once poolfix lands; after perm merges, a small checker
+  batch (oann repro/genericctor, D13c List<Ticket> location, `return Node.Many(l.ToArray())` still O26).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
