@@ -1304,7 +1304,10 @@ exactly as often as `T(...)` is written. One that evaluates is pure, so how ofte
 value that is all zero bits is the zero fill (nothing runs), and any other is the constructor's value - a
 constant, or, where it holds references, a constructor call for each declaration, each with storage of its own.
 `Array<T>(n)` copies one value into every element, so a `T` whose zero value holds references is an error there:
-the elements would share it; such an array takes a fill or is built element by element.
+the elements would share it; such an array takes a fill or is built element by element. `Array<T>(0)`, its length
+the literal `0`, has no element and needs no zero value of `T`. The prelude's containers never ask for one: a `List`
+fills each new chunk with the element being pushed, and `ToArray`, an array's `Map` and `Filter` fill with an element,
+so a type with no zero value is an element of them as any other.
 
 **D14.** Storage for an array is set aside by building one: `Array<T>(n)` or `Array<T>(n, v)` (T8, E13a),
 written anywhere an expression may be. Like any value with no storage of its own it is built in the scope of

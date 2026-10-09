@@ -427,10 +427,7 @@ fn (l List<<T>>&) RunFrom(at I64) Array<<T>>&l ? Exhausted {
 # independent of the list, which may be discarded, or keep growing, without affecting it. Made filled with the first
 # element, which needs no zero value of T (D13c), as the chunks do not
 fn (l List<<T>>&) ToArray() mut Array<<T>>& {
-    if l.count == 0 {
-        none Array<<T>>&return             # an array's zero value is empty, whatever T is
-        return none
-    }
+    if l.count == 0 { return Array<<T>>(0) }         # no element, so no zero value of T is needed (D13c)
     out Array<<T>>&return = Array<<T>>(l.count, l.chunks[0][0])
     at I64 = 0
     for k in range l.nChunks {

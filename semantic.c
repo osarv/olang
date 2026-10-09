@@ -11472,7 +11472,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok, fill, *at.arrElem);
                 ListAdd(&alloc->args, &fill);
                 if (arrayHoldsExisting(alloc)) queueHereCheck(ctx, alloc); //T7: the fill lives where the array lands
-            } else {
+            } else if (!(sizeOp->isLiteral && sizeOp->intLiteralVal == 0)) { //"Array<T>(0)" has no element to zero
                 struct operand* zero = zeroValueFor(ctx, *at.arrElem, nameTok, true); //D13c: each element its zero
                 if (zero) ListAdd(&alloc->args, &zero);
             }
