@@ -352,25 +352,46 @@ char* nextTokPatternPart(char* pattern) {
     return NULL;
 }
 
-//true if word matches one of the literal alternatives described by pattern ($& ...), or the whole literal pattern itself
-bool tokRuleMatchesWord(char* pattern, char* word, int wordLen) {
-    if (pattern[0] == '$' && pattern[1] != '&') return false; //char-class rule, not a literal word
-    if (pattern[0] == '$') pattern = nextTokPatternPart(pattern); //skip past "$&"
+//the literal texts of tokRules, read out of the table once rather than at every token: the words a rule's pattern
+//lists - one literal, or the alternatives after "$&" - in table order, for tokenLookupWord; and the plain literal
+//patterns that do not begin with a letter, the operators and punctuation tokenizeOperator and canStartToken match.
+//Matching each token against the patterns themselves was most of the compiler's time on a small program
+struct litRule { char* text; int len; enum tokenType type; };
+bool isPlainLiteralPattern(char* pattern);
+static struct litRule litWords[2 * N_TOK_RULES], litOps[N_TOK_RULES];
+static int nLitWords = -1, nLitOps = 0;
 
-    while (pattern) {
-        char* next = nextTokPatternPart(pattern);
-        int partLen = next ? (int)(next - pattern -1) : (int)strlen(pattern);
-        if (partLen == wordLen && !strncmp(pattern, word, wordLen)) return true;
-        pattern = next;
+static void litRulesRead(void) {
+    if (nLitWords >= 0) return;
+    nLitWords = 0;
+    for (int i = 0; i < N_TOK_RULES; i++) {
+        char* pattern = tokRules[i].pattern;
+        if (isPlainLiteralPattern(pattern) && !isLetter(pattern[0])) {
+            litOps[nLitOps++] = (struct litRule){pattern, (int)strlen(pattern), tokRules[i].type};
+        }
+        if (pattern[0] == '$' && pattern[1] != '&') continue;
+        if (pattern[0] == '$') pattern = nextTokPatternPart(pattern);
+        for (; pattern; pattern = nextTokPatternPart(pattern)) {
+            char* next = nextTokPatternPart(pattern);
+            int len = next ? (int)(next - pattern -1) : (int)strlen(pattern);
+            if (nLitWords < 2 * N_TOK_RULES) litWords[nLitWords++] = (struct litRule){pattern, len, tokRules[i].type};
+        }
     }
-    return false;
 }
 
 enum tokenType tokenLookupWord(char* word, int wordLen) {
-    for (int i = 0; i < N_TOK_RULES; i++) {
-        if (tokRuleMatchesWord(tokRules[i].pattern, word, wordLen)) return tokRules[i].type;
+    litRulesRead();
+    for (int i = 0; i < nLitWords; i++) {
+        struct litRule r = litWords[i];
+        if (r.len == wordLen && r.text[0] == word[0] && !strncmp(r.text, word, wordLen)) return r.type;
     }
     return TOK_IDEN;
+}
+
+//the length of the operator rule r where the chars at startIdx begin with it, else 0
+static int litOpMatchLen(TokenCtx tc, int startIdx, struct litRule r) {
+    if (startIdx < 0 || startIdx + r.len > tc->chars.len) return 0;
+    return memcmp((char*)tc->chars.ptr + startIdx, r.text, r.len) ? 0 : r.len;
 }
 
 enum tokenType tokenizeIdentifier(TokenCtx tc) {
@@ -466,16 +487,6 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     return isFloat ? TOK_FLOAT_LIT : TOK_INT_LIT;
 }
 
-//returns the number of chars pattern matches starting at startIdx, or -1 if it doesn't match
-int tokPatternMatchLen(TokenCtx tc, int startIdx, char* pattern) {
-    int len = (int)strlen(pattern);
-    for (int i = 0; i < len; i++) {
-        if (startIdx +i >= tc->chars.len) return -1;
-        if (*(char*)ListGetIdx(&tc->chars, startIdx +i) != pattern[i]) return -1;
-    }
-    return len;
-}
-
 bool isPlainLiteralPattern(char* pattern) {
     //"$" introduces a character class ("$a", "$d", "$l"), so a pattern starting with it is not a literal -
     //except a LONE "$", which is the E11a operator itself: every class carries a selector after the "$",
@@ -488,9 +499,9 @@ bool isPlainLiteralPattern(char* pattern) {
 static bool canStartToken(TokenCtx tc) {
     char c = peekChar(tc, 0);
     if (isIdentifierBodyChar(c) || c == '\'' || c == '"' || c == ' ' || c == '\t' || c == '\n' || c == '#') return true;
-    for (int i = 0; i < N_TOK_RULES; i++) {
-        char* pattern = tokRules[i].pattern;
-        if (isPlainLiteralPattern(pattern) && !isLetter(pattern[0]) && tokPatternMatchLen(tc, tc->charIdx, pattern) > 0) return true;
+    litRulesRead();
+    for (int i = 0; i < nLitOps; i++) {
+        if (litOpMatchLen(tc, tc->charIdx, litOps[i]) > 0) return true;
     }
     return false;
 }
@@ -501,15 +512,12 @@ enum tokenType tokenizeOperator(TokenCtx tc) {
     enum tokenType bestType = TOK_NONE;
     int bestLen = 0;
 
-    for (int i = 0; i < N_TOK_RULES; i++) {
-        char* pattern = tokRules[i].pattern;
-        if (!isPlainLiteralPattern(pattern)) continue;
-        if (isLetter(pattern[0])) continue; //keywords are matched via tokenLookupWord
-
-        int len = tokPatternMatchLen(tc, startIdx, pattern);
+    litRulesRead();
+    for (int i = 0; i < nLitOps; i++) { //keywords are matched via tokenLookupWord
+        int len = litOpMatchLen(tc, startIdx, litOps[i]);
         if (len > bestLen) {
             bestLen = len;
-            bestType = tokRules[i].type;
+            bestType = litOps[i].type;
         }
     }
 

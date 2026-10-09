@@ -1,0 +1,11 @@
+import "std/io"
+n mut I64 = 3
+fn main() ? io.IoError {
+    b := Array<mut String&>(n, "cd")
+    b[0][0] = 'x'
+    try io.Print($b " " $(b[1] is b[2]) "\n")
+    c := Array<I32>(n, 7)
+    d := Array<mut Array<I32>&>(n, c)
+    d[0][1] = 9
+    try io.Print($d " " $(d[0] is d[1]) "\n")
+}

@@ -125,6 +125,22 @@ fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
     return false
 }
 
+# removes every key and its value. The slots are kept for the keys put next, and the buckets stay as many as they
+# were, so emptying a map and filling it again allocates nothing
+fn (m mut Map<<K>, <V>>&) Clear() {
+    for i in range m.buckets.Len() {
+        s mapSlot<<K>, <V>>&m = m.buckets[i]
+        for s != null {
+            after := s.next
+            s.next = m.free
+            m.free = s
+            s = after
+        }
+        m.buckets[i] = null
+    }
+    m.count = 0
+}
+
 # a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. It holds the
 # next slot itself, so each step follows one link rather than walking a chain from its start. The entry just given may
 # be removed while the walk goes on; any other change to the map during a walk leaves which entries the rest of it gives
@@ -137,6 +153,12 @@ type MapIter<K, V> struct(of Map<<K>, <V>>&) {
 }
 
 fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
+    try it.advance()
+    return it.given.entry
+}
+
+# on to the next slot, which becomes the one given - failing with Exhausted when every slot has been
+fn (it mut MapIter<<K>, <V>>&) advance() ? Exhausted {
     for it.slot == null {
         if it.bucket == it.m.buckets.Len() { error Exhausted.END }
         it.slot = it.m.buckets[it.bucket]
@@ -144,7 +166,31 @@ fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
     }
     it.given = it.slot
     it.slot = it.slot.next
-    return it.given.entry
 }
 
 fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }
+
+# the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToList()" for a List of
+# them. A walk of the map as Iter's is, under the same rule for changes made during it
+fn (m Map<<K>, <V>>&) Keys() MapKeyIter<<K>, <V>> { return MapKeyIter<<K>, <V>>(m) }
+
+# the values, one at a time, in the order Iter() gives the entries
+fn (m Map<<K>, <V>>&) Values() MapValueIter<<K>, <V>> { return MapValueIter<<K>, <V>>(m) }
+
+type MapKeyIter<K, V> struct(of Map<<K>, <V>>&) {
+    entries mut MapIter<<K>, <V>> = MapIter<<K>, <V>>(of)
+}
+
+fn (it mut MapKeyIter<<K>, <V>>&) Next() <K> ? Exhausted {
+    try it.entries.advance()
+    return it.entries.given.entry.Key
+}
+
+type MapValueIter<K, V> struct(of Map<<K>, <V>>&) {
+    entries mut MapIter<<K>, <V>> = MapIter<<K>, <V>>(of)
+}
+
+fn (it mut MapValueIter<<K>, <V>>&) Next() <V> ? Exhausted {
+    try it.entries.advance()
+    return it.entries.given.entry.Value
+}

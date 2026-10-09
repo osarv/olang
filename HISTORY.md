@@ -10182,3 +10182,178 @@ from their original form.
   type, reductions, the activations' error bounds, Solve and Inverse, ParallelRows), three globals baked while compiling
   and compared with the run time, all under `if TestBuild` so a program importing the module compiles none of them; a
   checks scenario (`linalg`) for the shape-mismatch abort, built and interpreted, and the `try` form.
+- **std gaps: a List that shrinks, text operations, `ParseFloat` in the prelude (M19d, T29c, E31, T35b, 2026-10-09).**
+  The coordinator's list from the usage study and the benchmarks: List `Pop/Clear/RemoveAt/Insert/Sort/List(n, fill)`,
+  Map `Keys/Values/Clear`, `Join`, `ToUpper/ToLower/Replace/Repeat`, a line reader over text, and `ParseFloat` moved out
+  of std/json into the prelude. Every detail below was decided here, under the delegation of details.
+  **List as a stack.** `Pop()`, `First()` and `Last()` fail with the default error on an empty list - the answer
+  `Map.Get` and `Find` already give for "missing"; `Exhausted` was considered and kept for the iterator protocol, where
+  loops take it themselves, so `for { x := try l.Pop() catch { break } }` is the work-list idiom. The chunked layout made
+  Pop cheap and raised one question: what to do with a chunk Pop empties. Dropping it would make a list that shrinks
+  and regrows across a chunk boundary allocate a fresh chunk each time (arena garbage, as nothing is freed), so the
+  List keeps a `made` count beside `nChunks`: chunks past `nChunks` wait, and `grow()` reuses the next one before making
+  another. The tail is left in place when it empties - stepping back to the full chunk before it only when one more is
+  popped - which keeps the invariant every reader relies on (every chunk before the tail is full) without touching
+  `ToArray`, `RunFrom` or `ListIter`. `Clear()` resets to the first chunk and keeps them all.
+  **RemoveAt and Insert** walk the elements after the position chunk by chunk (no per-element `highBit`), so they cost
+  the number of elements moved. A position out of range was the one real choice: unchecked like `l[i]` would corrupt
+  the count silently (and read past the chunks array), an error would put `try` on every call, so it is an `assert` -
+  checked once per call, as a slice's bounds are (E16b), stopping the program as Python's IndexError, Rust's panic and
+  Go's panic do. A failed assert prints only "assertion failed" today; a message on asserts is the user's open question.
+  `Sort(less)` copies the elements into one array, sorts it with `Array.Sort` and copies them back - checked to
+  compile for a `List<mut Node&>` whose elements hold `mut` references (the case `Array.Sort`'s comment once said a
+  scratch array could not serve; O25h's copy homes now carry it). `Reverse()` swaps through `At`/`SetAt`.
+  **`List<T>(n, fill)` could not be written, and why.** A type has exactly one constructor, and `List<T>()` must stay
+  valid, so `n` and `fill` would need defaults - and nothing can be the default of a type-variable parameter for every
+  `T`: G18 fits a literal default per call (`fill <T> = 0` fails `List<String&>()`), and an expression like
+  `Array<<T>>(1)[0]` is checked in the generic's own context, where it is a `<T>`, not the instantiation's type. The
+  second attempt, a constructor taking an array (`List(I32[1, 2, 3])`) and filling the chunks in its body, compiled for
+  numbers and failed for `List<listBag&>` (an existing test): copying the parameter's elements into the instance's
+  chunks is an O25 exactness error inside a constructor body, where the same store in a method (`PushAll`) is an
+  equality obligation checked at the call. So the constructor stayed `struct()`, and the shape went to arrays:
+  `a.ToList()` (the reverse of `ToArray()`), with `Array<T>(n, v).ToList()` for n copies, and an iterator default
+  `ToList()` beside `Map` and `Filter`. A `SortBy(key)` was not added: `Sort(fn(a, b) { return key(a) < key(b) })` is
+  one line, and arrays have only `Sort`.
+  **Map.** `Keys()`/`Values()` are iterators rather than arrays - nothing is allocated unless the caller asks, and every
+  iterator helper reaches them (`m.Keys().Count(f)`, `m.Keys().ToList()`). The first version wrapped a `MapIter` and
+  returned `(try it.entries.Next()).Key`; for `Map<String&, I64>` that was error[O10d] - the key, read out of the entry
+  `Next` returned by value, looked like it lived in the function's own scope. Walking the slots (a private
+  `MapIter.advance()`, which `Next` now uses too) and reading `it.entries.given.entry.Key` through the `&of` field gives
+  the key its true scope. `Clear()` moves every slot to the free list and keeps the bucket array, so a cleared map
+  fills again without allocating. `GetOr` was not added: `try m.Get(k) catch default v` is the idiom.
+  **Arrays and text.** `Count(sub)` for substrings was asked for, but every array already has `Count(keep)` - the
+  predicate count - and T29e forbids a declared array type redeclaring an inherited name, so `String.Count` could not
+  exist; it is `CountOf(sub)`, on every array, as `Contains` is. `Replace` and `Repeat` are array methods too, since a
+  `String` inherits them and gets `String`s back (T29f). `Replace` with an empty `old` was the edge case named: an error
+  would make `Replace` fallible and put `try` on every call for one degenerate input, so it follows Python and Go - the
+  empty run occurs at every position (`Find("")` is 0, `CountOf("")` is `Len() + 1`), and `"abc".Replace("", "-")` is
+  `"-a-b-c-"`. `Repeat(n)` gives nothing for n at most 0, as `Fixed` reads a negative n. `Lines()` is an iterator of
+  borrowed slices (no copying) with `io.Lines`' rules; keeping one is pushing it into a List living where the text does.
+  `Join` is on `Array<String&>` and `List<String&>` - the shape `Split` returns and the shape a builder of words has.
+  **`<` on text.** `String` gained `Less` (Compare < 0), so text orders with `<`. Writing the tests found that
+  `"b" >= s` failed with "'>=' takes numbers, found Array<Char>": an operator's method is looked up on its left operand,
+  and written text there stayed a raw array, where T29c already made it a `String` beside `==`. One minimal change in
+  `buildBinaryOp`: written text as an operator's operand is a `String` - consistent with T29c's "a `String` wherever
+  nothing adapts it".
+  **`ParseFloat` and `ShortestDecimal`.** The move was asked for as `String.ParseFloat() F64 ? ParseError`, which
+  fixed where it lives - a declared type's methods are declared in its own module, so `text.olang`. But json's
+  Schubfach (its number writer) reads the same 128-bit table of powers of ten as Eisel-Lemire, and a prelude file's
+  private names are invisible to json: either the 700-line table is written twice, or the writer moves too. It moved, as
+  a public primitive rather than a second copy of `$`: `F64.ShortestDecimal() (U64, I64) ?` gives the digits and the
+  exponent (trailing zeros stripped; a NaN or infinity fails), which any encoder lays out its own way - json lays them
+  out as `$` does. The reader's grammar is wider than JSON's (`+`, `.5`, `5.`, `inf`, `infinity`, `nan` in any case),
+  so `$x` reads back for every `x`; the slow path's `decimal.set` lost its `'-'` handling (the sign is passed apart).
+  Verified bit-identical with Python's `float()` on 360,000 inputs (random bit patterns printed four ways, random digit
+  strings with exponents -350..330, exact halfway points to 17 and 40 digits) and 50,000 more with signs, leading zeros
+  and invalid forms, and `-i` agreeing with the built program on 2,500. json now checks JSON's grammar and hands the
+  number's text to `ParseFloat`: scanning each decimal twice cost 44 -> 49ms on 400,000 mixed numbers, so a whole number
+  of at most 15 digits is computed in the checking pass (exactly an F64), which puts integer-only input at 47 -> 44ms.
+  **The tokenizer.** Measured with callgrind, the bigger prelude took a hello world's compile from 498M to 784M
+  instructions - and 70% of all of it was the tokenizer matching every identifier and operator against the rule
+  table's patterns (`nextTokPatternPart`, `strlen`, `tokRuleMatchesWord`) at every token, every file tokenized twice.
+  Reading the keywords and operators out of the table once, into two arrays compared by length and first byte, makes
+  it 450M - below where it started - with the emitted IR of `runner.olang`'s build identical byte for byte. The port
+  redesigns the tokenizer anyway; this was the smallest change that made the prelude's growth free. The new tests sit in
+  `std/prelude/tests/` (as Map's and Fixed's do), since a prelude file's `if TestBuild` block is still tokenized by
+  every program.
+  **Found on the way**: S18c caught two of my own wrong expectations in tests at compile time (an assert decided false
+  while compiling), which is the evaluator check working; and a `for line in it` over an iterator variable walks a copy,
+  leaving `it` where it was - as S9a specifies, so the test was rewritten to call `Next` directly.
+
+- **A differential fuzzer for the evaluator and the code generator (K1/K1a, K2, S18c, P1, P9, E33, T4/E26, T8, E28,
+  E10a, B2c, 2026-10-09).** The evaluator's review compared what it computes with what the run time computes by hand, on
+  programs someone thought of. A fuzzer compares them on programs nobody thought of: the coordinator's request, built in
+  a worktree beside the other batches.
+  **What it is.** `fuzz/gen.olang` is olang (the first program of its size written in the language for a tool): a seeded
+  generator writing programs whose every operation is defined, so any difference between two ways of running one is a
+  bug, never the program's. A divisor is a number in 1..8, a shift amount is masked into the width, a conversion that
+  could be out of range is under `try ... catch default`, a NaN's bits are never read, a literal always fits what it
+  meets (E4a, E6d), a local `if`'s condition reads a parameter (so S8a never calls it dead), and the generator keeps its
+  own table of the variables in scope with their types, mutability and whether they depend on a parameter. Each program
+  has thirty cases; a case is a function of a few parameters returning one value of a random type, computed three ways:
+  an immutable global initialized with it on literal arguments (K2 bakes it while compiling), the same call at run time
+  on mutable globals holding the same literals (so nothing folds it), and, in a second build, an assert that the case
+  renders as the first build printed it (S18c decides it while compiling). Inside, a case uses every numeric type,
+  wrapping arithmetic, comparison chains, `try (...) catch default`, conditionals, `match` values (several values per
+  case, guards, nested enum patterns), struct, enum, array and List values, `for` over ranges, arrays and Lists,
+  comprehensions, `$` renderings, `Bits`/`FromBits`, lambdas with captures, `defer`, `x in c`, atomic operations on
+  locals, statement `try`/`catch`, fallible helpers with error sets of their own (a final `if` on a parameter raising
+  one), and small recursion. `fuzz/fuzz.olang` (also olang, its workers `spawn`ed over a `std/chan` queue, everything
+  run under `nice`) builds each program at `-d`, runs it, checks each line's baked value against its run-time value,
+  then builds it with the asserts at `-b` (an assert decided false is a finding, and is dropped to see the rest), runs
+  that, interprets it with `-i`, and compares all three outputs. A finding keeps the program, the outputs and a program
+  of the one case in `build/fz/found/<seed>`. `make fuzz` runs it (not part of `make verify`); two fixed seeds are a
+  `checks/checks.olang` scenario, so the driver and the generator keep compiling. Its last runs checked 2,400 programs
+  (seeds 2000-4399, 71,880 cases, every one of their globals baked while compiling): the first 1,000 while the bugs
+  below were being fixed, the next 1,000 finding (9), and the final 400, on the finished compiler, nothing. Two findings
+  of the first 1,000 (seeds 2711 and 2883, a value differing under `-b`) did not reproduce on the finished compiler,
+  standalone or through the driver, and the compiler gives byte-identical IR for them run after run - most likely the
+  compiler being rebuilt under the run. Several hundred programs ran before those, while the generator grew.
+  **What it found.** Nine bugs, each a corpus test computing the value baked and at run time, and a reproducer in
+  `fuzz/repro`. (1) A local named like a method and initialized by calling it (`lit := g.lit(k)`) called the method
+  through the local, as though it held a function value: `cgNamedTarget` looked a plain function's name up among the
+  locals - a segfault. (2) A conditional of two text literals returned through a reference result (E28) was built in the
+  function's own scope and read after it closed. (3) A conditional whose values widen into the target (T6b) kept its own
+  type and stored a wider value into its slot: invalid IR. (4) `==` on a call's `String` value against a reference
+  (E10a) held the value in a local taking the callee's result scope, and crashed the code generator. (3) and (4) were
+  fixed on the main branch the same day, by the same changes, and the merge took those. (5) `Array<T>(n, v)` with a
+  literal `v` reaching a reference element stored the literal's fixed-length address (invalid IR), and the evaluator
+  copied `v` into every element where the run time has one instance in all of them (T8). Three were LLVM 18's, each
+  confirmed on a few lines of hand-written IR (kept beside the olang reproducer) and worked around: (6) at `-O0`
+  FastISel carries a `bfloat` live across a branch unwidened, so a BF16 computed before a `match` read back as garbage
+  under `-d` - `-d` now passes `-mllvm -fast-isel=false` (B2c); (7) InstCombine folds `fpext(sitofp i32 to half)` into
+  `sitofp` to the wider type whenever the integer has few significant bits, losing F16's overflow - `F16(98 << 24)` was
+  1644167168 where the evaluator said `inf` - so an integer reaches F16 through a double fenced with
+  `llvm.arithmetic.fence` (T4); (8) InstCombine takes a bitcast between `half` and `bfloat` for a no-op cast and merges
+  it with the conversion after it - `F16(x).Bits().BF16FromBits()` is two bitcasts through `i16` that it first merges
+  into one from `half` to `bfloat`, and then `fpext`, `fptosi` and the rest read the bits as `half`: 5 where 2048 was
+  meant, in both directions. A freeze between the bitcasts is pushed back through them, `llvm.ssa.copy` crashes the
+  backend, `llvm.arithmetic.fence.bf16` cannot be selected, so the integer passes through an empty `asm` on its way to a
+  16-bit float: no instruction, and opaque to every fold (E33). (9), LLVM 18's too, was found by the last run on the
+  finished compiler: InstCombine shrinks `fptrunc (op (fpext x) ...) to half` into the operation done in `half` whenever
+  `x`'s type has no more precision than `half` - and `bfloat` has less, but float's range, so `F16(F32(b) / F32(b))`
+  with `b` = 2^-126 narrowed `b` to 0 and divided 0 by 0. A BF16 now widens by its bits (zero-extended and shifted into
+  the top of an F32, then `fpext` if an F64 is wanted), which is exact for every value and payload, is what LLVM lowers
+  `fpext bfloat` to on x86 anyway, and leaves InstCombine nothing to take for a narrower type. The other direction was
+  checked and is not affected (`half` has more precision than `bfloat`, so nothing is shrunk into it). The generator's
+  own mistakes were fixed as they surfaced - a literal beside a narrower operand (E6d meets it at its own type), a
+  condition S8a calls dead, a `List` pushed to while a loop walks it (which never ends, S9f - found by the evaluator
+  running out of memory, below).
+  **The evaluator never ended some evaluations.** A loop with an empty body (`for x > 0 { }`) counted no steps, so a
+  global initialized by one hung the compiler; a loop allocating each turn made values faster than the step budget
+  counted them - a value is ~500 bytes and is never reclaimed during an evaluation (B3e) - and exhausted the machine's
+  memory first (the fuzzer's compile was killed). Each turn of a loop is a step now, and an evaluation may take 256MB
+  (`CT_MEM_BUDGET`), past which it is refused as one running too long is - the global then set at startup. The size is
+  mine: big enough for every evaluation the corpus makes, small enough that a compile with several runaway evaluations
+  stays under a gigabyte or two. The same budget answers a hole found beside it: an evaluated value is ~500 bytes per
+  element, so a global holding `Array<F32>(100000000)` - 400MB in the running program, an ordinary size for model
+  weights - took 50GB to evaluate and the compiler ran out of memory; an array whose elements alone would pass the
+  budget is now refused before any is made, and the global is set at startup. A check holds all three shapes (833MB).
+  **Atomics while compiling (K1/P9).** They were refused outright. No task runs beside an evaluation, so an atomic
+  operation is the plain one on its place - refused only where a write of that place would be (a global), and
+  `AtomicLoad` where a read would be (a mutable global). Under `-i` they were already performed.
+  **`abort` and `unreachable` (K1/K1a), the coordinator's call.** K1a refused statically any function containing either,
+  so a function with a `catch { unreachable }` - a guard for what cannot happen - was never evaluable, and nor was any
+  caller; since checker batch 2, every statement `match` covering every case of an enum reference holds one too (S13a: a
+  null reference matches no case), so no such function was evaluable and a `Str` written that way was an E11c error. The
+  synthesized ones now carry the match's (or the zero value's) token, so the note saying where an evaluation stopped has
+  a place, and a value match falling through every clause counts as reaching `unreachable`. They now stop an evaluation
+  only where reached, like a failing assert. Where a value is required - a global's initializer (K2, which runs at
+  startup anyway) or an assert decided while compiling (S18c) - reaching one is a compile-time error at the global or
+  the assert, `this global's initializer aborts the program` / `this assertion aborts the program`, with a note at the
+  `unreachable`; where evaluation is only attempted (a local `if`'s condition, S8b), the code is left to the run time.
+  `done` and `fail` stay refused: they end a test or the process, which only a running program has. **Mine**: a
+  guaranteed check failing - a slice out of range (E16b), an array length out of range (D14b), an array copied into
+  fixed storage of another length (C2e) - is the same class, since each aborts the program exactly as `abort` does; and
+  a global whose initializer reaches another aborting global is not reported again, so one abort is one error.
+  **Tasks while compiling (K1/P1), the coordinator's call.** K1a refused any function whose call graph started a task,
+  so a parallel matrix multiply was never evaluable, not even for 2x2. A `join` block's tasks now run in sequence: a
+  `spawn` binds its call's arguments and takes its targets' places where it is written (`ctCallBind`, split out of the
+  evaluator's call so that the binding and the running can happen apart), and when the block is left - by whichever way
+  (P1b), after its deferred code (S19), with a `return`'s value or an error in flight waiting - each task runs to
+  completion in spawn order, its result then stored (one target, or one per result, D8c). That is one of the orders the
+  running program may take, with every P8 edge holding in it, so a race-free program gets its run-time result; one whose
+  result depends on its tasks' order through atomics gets this order's. Nothing it models can deadlock: a lock or a
+  channel is an `extern`, refused already, and a task spinning on an atomic another would set runs out of the budget.
+  `-i` keeps refusing tasks - it performs `extern` calls, so a channel's mutex would be real and sequential tasks would
+  deadlock on it; threads there are its stage 3.

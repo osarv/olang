@@ -1,0 +1,26 @@
+# check: build
+# K1: an evaluation that never ends is refused once it runs past the step budget or the memory budget, and the global is
+# set at startup instead - a loop with an empty body used to hang the compiler (no step was counted per turn), and one
+# allocating each turn to exhaust its memory first (found by the differential fuzzer, fuzz/); and an array too long for
+# the evaluator to hold is refused before it is made (a 100M-element array took 50GB)
+fn spin(n I64) I64 {
+    x I64 = n
+    for x > 0 { }
+    return x
+}
+fn grow(n I64) I64 {
+    l := List<I64>()
+    l.Push(n)
+    for x in l { l.Push(x + 1) }
+    return l.Len()
+}
+fn big(n I64) I64 {
+    a := Array<F32>(n)
+    return a.Len()
+}
+Spun I64 = spin(1)
+Big I64 = big(100000000)
+Grown I64 = grow(1)
+fn main() ? {
+    if Spun + Grown + Big == 100000003 { done }
+}

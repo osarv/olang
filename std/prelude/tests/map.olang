@@ -277,3 +277,58 @@ test "removing the entry just given, during a walk" {
     assert seen == 100 and m.Len() == 50
     for e in m { assert e.Key % 2 == 1 and e.Value == e.Key }
 }
+
+# Keys and Values walk the map as Iter does, giving one part of each entry; ToList gathers either into a List
+test "Keys and Values, one part of every entry" {
+    m := Map<String&, I64>()
+    assert m.Keys().ToList().Len() == 0
+    for w in String&["pear", "fig", "apple", "kiwi"] { m.Put(w, w.Len()) }
+    ks := m.Keys().ToList()
+    ks.Sort(fn(a, b) { return a < b })
+    assert ks.Join(",") == "apple,fig,kiwi,pear"
+    total I64 = 0
+    for v in m.Values() { total += v }
+    assert total == 5 + 3 + 4 + 4
+    assert m.Keys().Count(fn(k) { return k.Len() == 4 }) == 2 and m.Values().All(fn(v) { return v >= 3 })
+    vs := m.Values().ToList()
+    vs.Sort(fn(a, b) { return a < b })
+    assert vs[0] == 3 and vs[3] == 5
+    n I64 = 0
+    for e in m { if e.Key in ks { n++ } }                      # the same entries Iter gives, in the same order
+    assert n == 4
+}
+
+# Clear empties the map and keeps its slots and buckets, so filling it again allocates nothing
+test "Clear empties a map, which fills again from its own slots" {
+    m := Map<I32, I32>()
+    for i in range 100 { m.Put(I32(i), I32(i) * 2) }
+    m.Clear()
+    assert m.Len() == 0 and 5 not in m and (try m.Get(5) catch default -1) == -1
+    for e in m { unreachable }
+    for k in m.Keys() { unreachable }
+    for i in range 150 { m.Put(I32(i), I32(i) + 1) }
+    assert m.Len() == 150 and (try m.Get(149) catch default -1) == 150 and (try m.Get(0) catch default -1) == 1
+    assert m.Remove(10) and not m.Remove(10) and m.Len() == 149
+    m.Clear()
+    m.Clear()                                                   # clearing an empty map is nothing
+    assert m.Len() == 0
+}
+
+# the same while compiling (K2): Keys, Values and Clear as the run time does them
+fn mapParts() I64 {
+    m := Map<I64, I64>()
+    for i in range 20 { m.Put(i, i * i) }
+    k I64 = 0
+    for x in m.Keys() { k += x }
+    v I64 = 0
+    for x in m.Values() { v += x }
+    m.Clear()
+    m.Put(7, 1)
+    return k * 100000 + v * 10 + m.Len()
+}
+mapPartsBaked := mapParts()
+
+test "Keys, Values and Clear, evaluated while compiling as at run time" {
+    assert mapPartsBaked == 190 * 100000 + 2470 * 10 + 1
+    assert mapParts() == mapPartsBaked
+}

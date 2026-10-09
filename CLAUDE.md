@@ -3622,6 +3622,69 @@ Go through this for every change to what olang means - a rule added, revised or 
   Batch-1 `Gemv` 3-5x a plain C dot loop; a 784-128-10 training step 2.4 ms against OpenBLAS's 0.4-0.8 and naive C's
   10-13. libmvec would vectorize `expf` but needs errno-free calls and gives up to 4 ulp, against X8's agreement
   between the evaluator and the run time; the olang approximations are the route taken.
+- **std gaps: a List that shrinks, text operations, `ParseFloat` in the prelude (M19d, T29c, E31, T35b, 2026-10-09, the
+  coordinator's list, details mine).** **List**: `Pop()`, `First()`, `Last()` fail with the default error when empty,
+  as `Map.Get` and `Find` do (`Exhausted` stays the iterator protocol's word); `Clear()`; `RemoveAt(i)` and `Insert(i,
+  x)` shift the elements after `i` chunk by chunk, costing their number; `Reverse()`; `Sort(less)` (stable: one
+  contiguous copy through `Array.Sort`); `Join(sep)` on a `List<String&>`. Storage still never moves: Pop and Clear keep
+  the chunks they empty (`made` past `nChunks`) for the Pushes that follow, so shrinking and regrowing allocates nothing.
+  **Decided (mine)**: an out-of-range `RemoveAt`/`Insert` position is a program mistake - an `assert`, checked once per
+  call like a slice's bounds - not an error every caller must `try` (Python, Rust and Go stop too); **no `List<T>(n,
+  fill)`** - a type has one constructor and `List<T>()` must stay, no default can be "the zero of `T`" (G18 fits a
+  default per call: `fill <T> = 0` breaks `List<String&>()`), and a constructor copying its argument's elements into the
+  instance's chunks is a C2d exactness error for elements that can be stored through - so every array has `ToList()`
+  (`Array<I32>(n, v).ToList()`, `I32[1, 2].ToList()`, the reverse of `ToArray()`) and every iterator a `ToList()`
+  default; no `SortBy` (`Sort(fn(a, b) { return key(a) < key(b) })` says it). **Map**: `Keys()`/`Values()` are
+  iterators (`MapKeyIter`/`MapValueIter`), so nothing is allocated unless asked (`m.Keys().ToList()`); `Clear()` moves
+  every slot to the free list and keeps the buckets; no `GetOr` (errors are errors). **Arrays, so `String` too**:
+  `CountOf(sub)` (non-overlapping; `Count` is the predicate count and an inherited name may not be redeclared, T29e),
+  `Replace(old, new)` (built once at its length; **an empty `old` inserts `new` at every position** - Python's and
+  Go's answer, consistent with `Find("")` at 0 and `Split("")` - rather than an error putting `try` on every Replace),
+  `Repeat(n)` (none for n at most 0, as `Fixed` reads n), `Reverse()`. **Text**: `TrimStart`/`TrimEnd` (borrows),
+  `ToUpper`/`ToLower` (ASCII, new text), `FindLast` (fails on a miss), `Lines()` (a `LineIter` of borrowed slices, by
+  `io.Lines`' rules), `Join(sep)` on `Array<String&>`, and `Less`, so `<` orders text bytewise and `words.Sort(fn(a, b) {
+  return a < b })` works. **Compiler change (minimal)**: written text as an operator's operand is a `String` (T29c/E31;
+  `"b" >= s` was "'>=' takes numbers, found Array<Char>"). **`String.ParseFloat() F64 ? ParseError`** moved from
+  std/json into `text.olang` (String's methods live in its module), with **`F64.ShortestDecimal() (U64, I64) ?`** -
+  json's Schubfach shares the 128-bit table, so it moved too rather than the table being written twice; json checks
+  JSON's grammar, then calls ParseFloat (whole numbers of 15 digits or fewer computed in that pass), and writes numbers
+  from ShortestDecimal. ParseFloat accepts `.5`, `5.`, a `+`, and `inf`/`infinity`/`nan` in any case (so `$x` reads
+  back); `EMPTY`/`INVALID`/`OVERFLOW`, an underflow being a zero of its sign. Bit-identical to Python's `float()` on
+  410,000 inputs, `-i` agreeing. Measured: JSON parse of 400,000 mixed numbers 44 -> 49ms (each decimal scanned twice),
+  whole numbers only 47 -> 44ms. **The tokenizer reads its keywords and operators out of the rule table once** (emitted
+  IR identical): the larger prelude took a hello world's compile from 498M to 784M instructions, most of it matching
+  each token against the patterns; 450M now. The new tests live in `std/prelude/tests/`, so no program tokenizes them.
+- **A differential fuzzer, and what it found (K1/K1a, K2, S18c, P1, P9, E33, T4/E26, T8, E28, E10a, B2c, 2026-10-09).**
+  `fuzz/gen.olang`, in olang, writes random programs defined by construction - every numeric type, wrapping arithmetic,
+  divisors in 1..8, in-range shifts, conversions (checked under `try`), comparison chains, `try (...) catch default`,
+  conditionals, `match` values with guards and nested patterns, structs, enums, arrays, Lists, loops, comprehensions,
+  `$`, `Bits`/`FromBits`, lambdas, `defer`, membership, atomics, fallible helpers and recursion - each case computed
+  three ways: an immutable global baked while compiling (K2), an assert decided while compiling (S18c), and the same
+  call at run time on mutable globals. `fuzz/fuzz.olang` builds each at `-d` and at `-b` and interprets it with `-i`; a
+  difference is a finding, its program and a one-case program kept in `build/fz/found/<seed>`. `make fuzz` (not in
+  verify; `SEED`/`COUNT`/`JOBS`/`CASES`), and two fixed seeds are a checks scenario. Its last runs checked 2,400
+  programs (71,880 cases, every global baked), the final 400 on the finished compiler finding nothing; several hundred
+  more ran while it was built. **Found and fixed**, reproducers in `fuzz/repro`: a local named like a method called the
+  method through itself (a segfault); a conditional of text literals was returned dangling (E28); a widening conditional
+  emitted invalid IR (T6b) and `==` on a call's `String` value crashed codegen (E10a) - both fixed on the main branch
+  the same day too; `Array<T>(n, v)` with a literal emitted invalid IR, and the evaluator copied a reference fill into
+  every element (T8); four LLVM 18 bugs, worked around - FastISel corrupts a `bfloat` live across a branch at `-O0`
+  (`-d` selects without it, B2c), InstCombine narrows a widened BF16 straight to F16 under a narrowing to F16, losing
+  bfloat's range (`F16(F32(b) / F32(b))` was NaN for b = 2^-126; a BF16 widens by an integer shift now, T4), InstCombine
+  folds `fpext(sitofp to half)` past F16's overflow (an integer reaches F16 through a fenced double, T4), and
+  InstCombine takes a bitcast between `half` and `bfloat` for a no-op, converting F16 bits made into a BF16 as F16 (an
+  empty asm keeps the two bitcasts apart, E33); and the evaluator hung on a loop with an empty body and exhausted the
+  machine's memory on one allocating each turn, before its step budget ended either (each turn is a step now, and an
+  evaluation has 256MB, K1) - and, found beside them, a global holding a 100M-element array took 50GB to evaluate (an
+  array too long for the budget is refused before it is made). **Decided (the coordinator's calls)**: an atomic
+  operation is evaluated as the plain operation on its place, refused only where a write of that place is - a global
+  (K1/P9); `abort` and `unreachable` stop an evaluation only where reached, so a `catch { unreachable }`, or the one
+  S13a puts in a statement match covering every case of an enum reference (for a null), no longer makes a function
+  unevaluable (K1a), and where a value is required reaching one is a compile-time error with a note at the place (K2,
+  S18c); a join's tasks run in sequence at the join, each to completion in spawn order, after the block's deferred code,
+  so a parallel computation bakes and decides asserts (K1) - `-i` still refuses tasks. **Decided (mine)**: a failing
+  guaranteed check (a slice out of range, an array length, a copy into fixed storage) is in the same abort class; a
+  global reached from another aborting one is reported once, at the first; the memory budget's size.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
