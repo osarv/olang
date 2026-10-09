@@ -15568,7 +15568,7 @@ static int lvaluePath(struct operand* op, struct operand** steps, int max) {
         if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return -1;
         op = *(struct operand**)ListGetIdx(&op->args, 0);
     }
-    if (op->opType != OPERATION_READ_VAR || !op->readVar) return -1;
+    if (steps[n - 1]->opType != OPERATION_READ_VAR || !steps[n - 1]->readVar) return -1; //deeper than max, or no variable
     for (int i = 0; i < n / 2; i++) { struct operand* t = steps[i]; steps[i] = steps[n - 1 - i]; steps[n - 1 - i] = t; }
     return n;
 }
@@ -15591,8 +15591,8 @@ static bool storageWithinPlace(struct operand* op, struct operand* p) {
 //S4d: arguments func's call, an enum case or an array literal borrows (E12c) into what it builds, while the value of an
 //assignment is built - one naming storage within a place the assignment writes over would leave the value holding a
 //reference to its own storage, written over in place (T11b): it takes the place's old value instead, as a temporary
-//copy built where one there would be. kept says whether what is built can keep argument j (a call's result, by its
-//body; an enum's payload and a literal's element always)
+//copy built where one there would be. Only where what is built can keep argument j: a call's result, as its body
+//says (calleeMayKeepArg), and an enum's payload or a literal's element always (keepsAll)
 static bool calleeMayKeepArg(struct var* m, int idx);
 static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll) {
     if (!ctx || !ctx->assignPlaces.len) return;
