@@ -2803,8 +2803,8 @@ only inside `test { }` blocks.
 D14b) each print a message naming what failed, to standard error.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
-values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert,
-and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
+values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, as is one
+whose evaluation reaches what aborts the program (K1), and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
@@ -4671,35 +4671,54 @@ error as they would at run time. It is **not** possible when evaluation would:
   global's own initializer (K2c);
 - call an `extern` function other than the C math library's (X8) - a call through a function value is evaluated when
   the function it reaches is, which is known only when the call is reached;
-- spawn or join, or end the test or the process (`done`, `fail`, `abort`, `unreachable`);
-- fail an `assert`, or let an error escape that no clause handles;
+- end the test or the process (`done`, `fail`);
+- let an error escape that no clause handles;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
   `-1`, shift by a count outside the type's width, convert a float the target cannot represent, or index
   outside an array - which evaluation refuses rather than giving a value the program never had (each is
   evaluated when written under `try`, E15a, where it is defined);
-- take a slice out of range without `try`, which aborts at run time (E16b);
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
-- run longer, or recurse deeper, than an implementation-defined budget - which is never a crash: evaluation that
-  would run out of the stack it runs on stops there, refused (under `-i`, with that message).
+- run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
+  a hang: evaluation that would run out of the stack it runs on stops there, refused (under `-i`, with that message),
+  and every turn of a loop counts toward the first.
 
 An atomic operation (P9) is evaluated as the plain operation on its place, since no task runs beside an evaluation:
 it reads or writes that place under the rules above, so one on a local or on what a local's references reach is
 evaluated, and one on a global is refused as any other write of it (or, for `AtomicLoad`, read of a mutable one) is.
 
+A `join` block's **tasks** (P1) are evaluated **in sequence**: a `spawn` binds its call's arguments, and takes its
+targets' places (P1g), where it is written, and when the block is left - by whichever way (P1b), after its deferred code
+(S19) - each task runs to completion in the order it was spawned, its result then stored. That is one of the orders
+the running program may take, with every edge P8 states holding in it, so a program free of data races (P8b) gets the
+result it gets at run time - one whose result depends on the order its tasks run in, through atomic operations, gets
+this order's. A task waiting for something only another task or the spawner after the join would do (spinning on an
+atomic) runs out of the budget below and is refused; a lock or a channel is reached through `extern` and is refused
+already.
+
+Reaching what **aborts the program** - `abort` (S16c), `unreachable` (S16d), an `assert` whose condition is false, or a
+guaranteed check failing (a slice out of range, E16b; an array length out of range, D14b; an array copied into fixed
+storage of another length, C2e) - ends the evaluation there, as it ends the program. Only reaching one does: a
+function holding one (a `catch { unreachable }` clause, say) is evaluated like any other until it does (K1a). Where a
+value is **required** - a global's initializer, which always runs (K2), or an `assert` checked while compiling (S18c) -
+reaching one is a compile-time error at the global or the assert, as a false assert is; where evaluation is only
+attempted (a local `if`'s condition, S8b), the code is left to the run time.
+
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
-refused.
+refused - tasks excepted, which `-i` does not run yet (B3e).
 
 **K1a.** Whether a call of a function can ever be evaluated is a property of the **function**, not of the
 arguments one call passes: a function whose body — or anything it calls, or the initializer of an
 immutable global it reads — contains an operation K1 excludes can never be, whichever path a particular
 call would take. A context that needs such a call evaluated reports that operation and where it is
-written.
+written. What aborts the program (`abort`, `unreachable`, `assert`, a guaranteed check) is not such an operation: it
+stops an evaluation only where it is reached (K1).
 
 **K2.** An **immutable global** whose initializer can be evaluated at compile time is: its value is
 part of the program as data, and nothing runs at startup to set it. Where the initializer cannot be, the
 global is set at startup (B5a) exactly as before - evaluation is attempted, never required, here - so
-whether it succeeds changes nothing a program can observe, except that such a global is also available
+whether it succeeds changes nothing a program can observe (one whose evaluation reaches what aborts the program would
+abort it at startup, and is a compile-time error instead, K1), except that such a global is also available
 wherever a compile-time value is needed (only a value holding no reference is available that way; see K2b
 for one that does).
 

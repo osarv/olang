@@ -11148,6 +11148,27 @@ test "E33: the bits of one 16-bit float made into the other are read as the othe
     assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
 }
 
+# K1/K1a: "unreachable" and "abort" stop an evaluation only where reached - a function holding one ("catch {
+# unreachable }", a guard for what cannot happen) is evaluated like any other, so its global is baked and its assert
+# decided; it used to be refused outright for holding one
+error fzErr {
+    BIG
+}
+fn fzChecked(x I32) I32 ? fzErr {
+    if x > 100 { error fzErr.BIG }
+    return x * 3
+}
+fn fzGuarded(x I32) I32 {
+    if x < 0 { unreachable }
+    if x > 1000 { abort }
+    return try fzChecked(x) catch { unreachable }
+}
+FzGuardedBaked I32 = fzGuarded(5)
+test "K1: a function holding unreachable or abort is evaluated until it reaches one" {
+    assert FzGuardedBaked == 15 and fzGuarded(5) == 15
+    assert fzGuarded(I32(fzRun) + 4) == 15
+}
+
 # K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
 # evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
 type fzCtr struct(n I32) {
@@ -11172,6 +11193,35 @@ FzAtomicsRead I32 = FzAtomicsGlobal.AtomicLoad()           # a mutable global: r
 test "K1/P9: atomic operations are evaluated while compiling, and agree with the run time" {
     assert FzAtomicsBaked == "8 11 99 5 5 251 U8[1, 251]" and fzAtomics(1) == FzAtomicsBaked
     assert fzAtomics(I32(fzRun)) == FzAtomicsBaked and FzAtomicsRead == 4
+}
+
+# K1/P1: a join's tasks are evaluated while compiling - each spawn's arguments and targets taken where it is written, and
+# every task run to completion at the join, in the order spawned, after the block's deferred code - so a parallel
+# computation bakes into a global and decides an assert, as the run time computes it in parallel; it was refused outright
+fn fzSquare(n I64) I64 { return n * n }
+fn fzDivMod(a I64, b I64) (I64, I64) { return a / b, a % b }
+type fzTally struct() {
+    v mut I64 = 0
+}
+fn fzAddTo(t mut fzTally&, n I64) { t.v.AtomicAdd(n) }
+fn fzTasks(n I64) String {
+    out := Array<I64>(n)
+    q I64 = 0
+    r I64 = 0
+    t fzTally& = fzTally()
+    join {
+        for i in range n { spawn out[i] = fzSquare(i + 1) }
+        spawn q, r = fzDivMod(n * 7, 5)
+        spawn fn() { t.v.AtomicAdd(100) }
+        for i in range n { spawn fzAddTo(t, i) }
+        defer { t.v.AtomicAdd(1000) }
+    }
+    return $out " " $q " " $r " " $t.v
+}
+FzTasksBaked String = fzTasks(4)
+test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time" {
+    assert FzTasksBaked == "I64[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
+    assert fzTasks(fzRun + 3) == FzTasksBaked
 }
 
 # E10/E10b/T29e/G19, from the prelude Map's tests: keys that rely on the hash the compiler supplies, or that a type
