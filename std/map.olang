@@ -257,6 +257,28 @@ test "E10b: an enum whose cases hold references hashes whichever case it holds" 
     assert LabelKeysBaked
 }
 
+# T29e/T29f/G19: a type extending I64 has I64's Hash, and an inherited method meets a trait as it answers a direct
+# call - so it is a key with nothing written; one declaring its own Eq declares its own Hash, replacing the base's
+type hExtId extends I64
+type hModId extends I64
+fn (a hModId) Eq(b hModId) Bool { return I64(a) % 100 == I64(b) % 100 }
+fn (a hModId) Hash() I64 { return I64(a) % 100 }
+fn (a hModId) Str() String { return "mod" $(I64(a) % 100) }
+fn extKeys() Bool {
+    m := Map<hExtId, I32>()
+    m.Put(hExtId(105), 1)
+    n := Map<hModId, I32>()
+    n.Put(hModId(105), 2)
+    plain Bool = try m.Get(hExtId(105)) catch default 0 == 1 and not (hExtId(5) in m)
+    return plain and try n.Get(hModId(205)) catch default 0 == 2 and $hModId(7) == "mod7"
+}
+ExtKeysBaked := extKeys()
+
+test "T29e/G19: a type extending a number is a key through its inherited Hash, or through its own" {
+    assert extKeys()
+    assert ExtKeysBaked
+}
+
 # MapIter holds the slot it is at, so a walk follows one link per entry, over chains of any length, with text keys
 # as with any other; and the evaluator walks it as the run time does (K2)
 fn walkedKeys() I64 {

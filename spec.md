@@ -823,7 +823,11 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 is declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<U8>`'s `Count`, and a
 `type Nums extends Array<I32>` sorts with `Sort`. An inherited method whose result is its receiver's own array
 type gives the declared type instead: a `String`'s `Filter` is a `String`. An inherited method is never overridden:
-declaring a method whose name an inherited one already has is a compile-time error.
+declaring a method whose name an inherited one already has is a compile-time error - except the protocol methods the
+compiler consults, `Eq`, `Hash` and `Str` (E10a, E10b, E11c), which a type extending its base may declare to replace
+its base's. An inherited method meets a trait (G19) exactly as it answers a direct call - except an inherited `Hash`
+beside an `Eq` the type declares itself, which could not agree with it: such a type declares its own `Hash` (E10b).
+The same holds for a number extending its base (T29f).
 
 **T29f (`extends`).** `type Name extends Base`, for a `Base` that is a numeric type or an array type, declares a type
 that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends

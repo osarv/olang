@@ -4158,8 +4158,10 @@ void checkMethodOverloads(struct semaModule* mod) {
             //about what "x.f" means - and a built-in type is declared by the language, whose methods are
             //the prelude's alone (M19d)
             if (!receiverIsBuiltin(*ra) && ra->owner != mod) { ErrMsgSemantic(a->tok, METHOD_ON_FOREIGN_TYPE); continue; }
-            //T29e: an inherited array method is not overridden - a declared array type naming one is an error
-            if (isDeclaredArray(*ra) && varGetMethodIn(mod, a->name, underlyingArray(*ra))) {
+            //T29e: an inherited method is not overridden - a type extending its base naming one is an error, except the
+            //protocol methods the compiler consults (E10a, E10b, E11c): a type's own Eq, Hash or Str replaces its base's
+            bool protocol = StrCmp(a->name, StrFromCStr("Eq")) || StrCmp(a->name, StrFromCStr("Hash")) || StrCmp(a->name, StrFromCStr("Str"));
+            if (isDeclaredArray(*ra) && !protocol && varGetMethodIn(mod, a->name, underlyingArray(*ra))) {
                 ErrMsgSemantic(a->tok, METHOD_CLASHES_INHERITED);
                 continue;
             }
@@ -5138,10 +5140,22 @@ bool typeIsSameModuloRefShape(struct type a, struct type b) {
 //T31: the function the concrete type `concrete` supplies for trait method `m`, or NULL if it supplies none. This is
 //M19's own lookup - the type's declaring module, by the method's name - so a trait is satisfied by exactly the methods
 //the type already has, and the coherence rule that only a type's own module may give it methods carries over untouched.
+static bool isDeclaredArray(struct type t);
+static struct type underlyingArray(struct type t);
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (concrete.bType == BASETYPE_INTERFACE) return NULL;
     struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
     if (!f || f->type.bType != BASETYPE_FUNC || f->type.isExtern) return NULL;
+    //T29e/T29f: a method an "extends" type inherits counts here as it does at a direct call - its receiver is the base,
+    //which the type is read as. Except Hash beside an Eq the type declares itself: only a Hash it declares can agree
+    //with that Eq (E10b)
+    struct type* fr = SemanticMethodReceiver(f);
+    if (fr && receiverIsBuiltin(*fr) && isDeclaredArray(concrete)) {
+        if (StrCmp(m->name, StrFromCStr("Hash")) && (VarGetMethod(concrete.owner, StrFromCStr("Eq"), concrete)
+                || VarGetMethod(concrete.owner, StrFromCStr("eq"), concrete))) return NULL;
+        concrete = underlyingArray(concrete);
+        concrete.extendsBase = false;
+    }
     //T35a: a method of a GENERIC type ("fn (b mut Box<<T>>&) Next() <T> ? Exhausted") is generic over that
     //type's variables, which the concrete receiver fixes - so it names one function after all: the one
     //instantiated for this receiver. A method with type variables the receiver does not determine still
@@ -5197,9 +5211,12 @@ static bool unifyThroughMethods(struct type iface, struct type concrete, struct 
         if (m->type.bType != BASETYPE_FUNC) continue;
         struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
         if (!f || f->type.bType != BASETYPE_FUNC || f->type.isExtern) return false;
+        struct type* fr = SemanticMethodReceiver(f);
+        struct type recvT = concrete; //T29f: an inherited method's receiver is the base
+        if (fr && receiverIsBuiltin(*fr) && isDeclaredArray(concrete)) { recvT = underlyingArray(concrete); recvT.extendsBase = false; }
         if (f->type.typeParams.len > 0) { //a generic type's method: the receiver fixes which instantiation
             struct list own = ListInit(sizeof(struct typeBinding));
-            if (!TypeUnify((*(struct var*)ListGetIdx(&f->type.vars, 0)).type, concrete, &own)) return false;
+            if (!TypeUnify((*(struct var*)ListGetIdx(&f->type.vars, 0)).type, recvT, &own)) return false;
             for (int j = 0; j < f->type.typeParams.len; j++) {
                 if (!bindingGet(&own, *(struct str*)ListGetIdx(&f->type.typeParams, j))) return false;
             }
