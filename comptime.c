@@ -338,6 +338,7 @@ static void ctExecBlock(struct ctState* st, struct list* block);
 
 //B3e: whether this thread's stack is nearly used up - its lowest address found once, from the thread's own attributes
 static _Thread_local uintptr_t ctStackLow; //0: not looked up yet, 1: not known
+static _Thread_local uintptr_t ctStackSpare;
 static bool ctStackNearEnd(void) {
     if (!ctStackLow) {
         pthread_attr_t a;
@@ -348,10 +349,13 @@ static bool ctStackNearEnd(void) {
             pthread_attr_destroy(&a);
         }
         if (!ctStackLow) ctStackLow = 1;
+        //where the compiler's own thread could not be made (a small address-space limit) it runs on the process's
+        //stack, which may be far smaller than the spare - then a quarter of it is kept free
+        ctStackSpare = size / 4 < CT_STACK_SPARE ? size / 4 : CT_STACK_SPARE;
     }
     char probe;
     uintptr_t at = (uintptr_t)&probe;
-    return ctStackLow > 1 && at > ctStackLow && at - ctStackLow < CT_STACK_SPARE;
+    return ctStackLow > 1 && at > ctStackLow && at - ctStackLow < ctStackSpare;
 }
 
 static bool ctStep(struct ctState* st, struct token tok) {
