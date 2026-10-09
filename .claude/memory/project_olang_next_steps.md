@@ -469,6 +469,9 @@ because what it finds about structure feeds the refactor.
   = settling open question 11, FastExp in the softmax). Running: rvfix, rv2fix, qc, s4cg, oann-p7.
 - 00:30 CEST: rvfix merged and pushed (e046142, its own verify on the merged code). qc and rv2fix told to merge
   master. Running: qc, rv2fix, s4cg, oann-p7.
+- 00:45 CEST: rv2fix merged and pushed (0a1a5df). Started wt-s4sem (study4 checker items + fuzz listalias/
+  trygenericindex + L9a fields), told to write adversarial UAF tests for each relaxation; RUN A SOUNDNESS REVIEW on its
+  diff before merging. Running: qc, s4cg, s4sem, oann-p7. Then the bootstrap/ move.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

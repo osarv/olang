@@ -201,6 +201,11 @@ rule and where it is recorded; the morning report lists them all, then they move
    literals adapts like a literal (linalg ActivationSlope at F32); O17a: a value whose references live outside its own
    storage cannot be held by reference (only lent as a call argument); for-in over one hands elements the references'
    scope.
+30. (wt-rv2fix, S4d) in an assignment over a value place, a value that borrows storage within the place (the place,
+   a field, an element of the same array, reached without a reference) takes the place's OLD value as a copy - so
+   `x = E.Neg(x)` no longer builds a cycle; only where what is built can keep the borrow (payload, held ctor arg, array
+   literal element, a call that can hand it back). Parallel assignment builds targets before values (n, e = 5, E.Lit(n)
+   gave Lit(5)). O17 lend checks decided after the fixed point; P2 for any computed callee; `Call` follows T22.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
