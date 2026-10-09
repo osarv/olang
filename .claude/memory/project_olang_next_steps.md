@@ -161,6 +161,19 @@ because what it finds about structure feeds the refactor.
   else "no"` (E28/D15); the evaluator performs atomics while compiling (K1 refuses them with no real reason - keep
   run-time coverage in the P9 tests through mut-global inputs). Fuzzer (wt-fuzz ready) once CPU allows. 09:15: isatom
   merged (b7e5fa4); errmsg resumed for phase 2.
+- 09:25: usage study (15 realistic programs, /home/user/review/study, repro/r01-r18): no use-after-free found; 11
+  bugs + 6 over-rejections. Handed: perfcg <- r01 COND literal invalid IR, r02 segfault on a borrowed conditional,
+  r18 digit file names; perfstd <- r04/r05 ListIter in the prelude, r12 Map of Lists iteration, r15 Bool.Hash, r17 Map
+  slot reuse. QUEUED as "checker batch 2" after errmsg phase 2 (semantic.c): r03 fields after a generic
+  self-reference unknown (refreshStructSnapshots through type args), r06 O25h copy of a reference-holding element
+  (swap/Sort/argmin unusable), r07 a catch block disabling := landing (O18c), r09 an I32 read from a List carrying a
+  scope, r16 cascades from one unknown type, G19 bodies still checked after a constraint error, `v := e; return v`
+  losing O13c bindings; over-rejections r08 List of Lists element as receiver/loop source, r10 compose(f, g), r11
+  rebuilding an enum field from its own payload, r13 Fold with a reference accumulator (O25a+D15 leave no spelling),
+  r14 Pair inference taking `mut`; Bool-payload match exhaustiveness; diagnostics: name the declaration to change
+  ("declare text where st lives"), text-join pieces ("write $x"), keyword field names, misplaced destruct. Then a
+  std-gaps agent: ParseFloat, Join, ToUpper/Replace/Repeat, a line reader, List Pop/Clear/Remove/Sort/List(n, fill),
+  a math module, Map Keys/Values/Clear.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

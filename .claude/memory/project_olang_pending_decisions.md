@@ -43,6 +43,20 @@ design. Do what you want") - nothing to decide until a GUI is written.
    expression whose type is determined; still not `null` or an untyped literal-only expression beyond today's rule)
    declares with that type? Default: D15 as is. Rec: relax - the operands' types are visible and every mainstream
    language infers here.
+4. (asked 2026-10-09, from the usage study) a local's reference permission: today a typed local is writable unless
+   its initializer is read-only, so `path String& = "x"` then `path = args[1]` (read-only) fails, and no read-only
+   local can be declared (D11a forbids `mut` on locals). Proposal: the written type decides, as for parameters and
+   fields - `x T& = ...` read-only, `x mut T& = ...` writable (that `mut` speaks about the referent; the binding is
+   always reassignable); `:=` copies the initializer's permission. Default: as today. Rec: yes.
+5. (asked 2026-10-09) a reassignable field holding a READ-ONLY reference cannot be written: a field's top `mut` means
+   both "reassignable" and "writable referent" (T25c), forcing `$x` copies (LRU value, Query.order). Options: (a)
+   `f mut String&` = reassignable + read-only, `f mut mut String&`-like spelling for both - ugly; (b) the top `mut`
+   on a field/global means the binding only and the reference's permission is written inside the type like an
+   element's (`f mut (mut String&)`); (c) leave it. Rec: decide together with 4 - make `mut` mean one thing per
+   position. Default: as today.
+6. (asked 2026-10-09) scripting: printing needs `try io.Print(...)` and every main `? io.IoError`. Add a prelude
+   `print`/`println` that aborts on a write failure (Rust's println! panics; Python's print raises)? Default: no.
+   Rec: yes - a failed write to stdout is not something a script handles.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
