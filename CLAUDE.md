@@ -1259,7 +1259,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `pthread_join` is gone as the completion signal, since a cached worker never exits.
   **P2a inverted and got simpler**: a worker does not exit, so its chunk pool persists and the next task
   on it reuses the chunks. The leak P2a existed to fix is gone by construction, and what is retained is
-  bounded by worker count rather than task count.
+  bounded by worker count rather than task count. (Since 2026-10-09 a parked worker keeps only 1MB of it, the
+  rest going to a pool every thread shares - O8b's entry.)
   **One collision worth remembering**: the runtime now declares `pthread_mutex_lock` and friends, and
   `chan.olang` declares some of the same symbols as `extern fn`. LLVM rejects a duplicate `declare`
   even when the signatures agree, so the runtime's declaration stands for both and `emitExternDecls`
@@ -1447,6 +1448,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   chunk returns to the pool of the thread that used it, and the one cross-thread path - a task's sub-arena
   spliced into its parent - is ordered by the `pthread_join` that precedes it. Making that pool global
   would need `__tsan_acquire`/`__tsan_release` on it, exactly as a new synchronisation primitive would.
+  (2026-10-09: a pool every thread shares now sits beside the per-thread ones, O8b - behind a `pthread` mutex,
+  which TSan intercepts, so it needs no annotation; `make race` still reports only the intentional race.)
 - **No `volatile`, and the reason is four separate reasons (X3b).** Raised as a candidate feature and
   rejected; `volatile` means "this access has a side effect the compiler cannot see", and there are exactly
   three ways such a thing could enter olang.
@@ -3742,6 +3745,21 @@ Go through this for every change to what olang means - a rule added, revised or 
   (mine)**: `GemmWorkspace<T>()` holds the packing panels (the F32 ones for F16/BF16/F8) and grows, where it lives, to the
   largest product given; `ws.Gemm(...)` packs into it, so a training step allocates nothing after its first; `Gemm`
   packs into a workspace of its own scope. oann's trainer: 793MB -> 57MB peak over three epochs, same losses.
+  **Parked workers share what they hold (O8b/P2a, the review of 2026-10-09's code, my design).** A cached idle worker
+  (up to 64, P1f) kept its whole pool - up to RAM/8 each - where only the next task to run on it could reach it: four
+  200MB tasks left 783MB with their workers, and the main thread mapped 200MB more for the same work. A worker whose task
+  has finished now keeps at most a **batch** (1MB, or a 64th of the bound under 512MB of memory) and moves the rest,
+  least recently given back first, into **one pool every thread shares** - the same `%olang.pool` shape and RAM/8
+  bound, behind a pthread mutex TSan intercepts - and does so **before** reporting the task done, so it is there for
+  whoever the join lets go on. A thread whose own pool has nothing that fits looks there before mapping, only when a
+  relaxed atomic says it holds anything, and takes a batch of that class at once (one lock a megabyte, not a chunk). A
+  retiring worker (P1f) still returns its pool to the system. The allocation and close fast paths are unchanged.
+  Measured: pool/01's main thread reuses a worker's chunk (978MB -> 783MB); the 100,000-task fan-out unchanged (0.85 ->
+  0.82s); repeated joins as fast or faster and smaller - the working set is what is live at once, no longer every
+  worker's pool (fills of 64KB-1MB arrays 3.9s -> 1.6s, 35 -> 20MB). Keeping 0 with no batching cost 1.6x on joins of
+  4KB-chunk tasks; kept and taken a batch at a time it is 0.9x. **`GemmWorkspace`'s panels at least double** when they
+  grow, so a product growing a step at a time replaces them logarithmically often and every panel it ever made is under
+  4x the largest need (pool/03: 17.5MB -> 8.1MB, below plain `Gemm`'s 9.8MB).
 - **Constant parameters and `Array<T, N>` (G20-G28, G16b, T7c/T7d, E32b; 2026-10-09, the user: "make the language
   generics take constants (and comp time expressions) as parameters ... Expand it across arrays too ... Array<T,
   size>") - BUILT the same day.** **Declaration**: a name

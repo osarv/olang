@@ -1,7 +1,10 @@
 # O8b: what the pool keeps is bounded - run with sysconf answering a machine of 8MB (sysconf.c, preloaded), so the
 # bound is 1MB. A phase holding 16MB at once gives all but the bound back to the system as it ends, least recently
 # given back first; an array larger than the bound goes back at once; and a loop whose arrays fit the bound keeps
-# taking the same chunks. Prints how far the resident set grew across each, in kB, and asserts it stayed within the bound
+# taking the same chunks. Then four tasks each hold 768KB, within their own threads' bounds: their workers park keeping
+# a 64th of the bound (16KB) and move the rest into the pool every thread shares, which is bounded as one thread's is -
+# so all but 1MB goes back to the system (it stayed with the parked workers, 3MB, when their pools were their own).
+# Prints how far the resident set grew across each, in kB, and asserts it stayed within the bound
 import "std/os"
 import "std/io"
 
@@ -22,6 +25,13 @@ fn hold(depth I64) F32 {
     return a[0] + hold(depth - 1)
 }
 
+# depth + 1 arrays of 128KB (a chunk each, mapped), all held at once and filled
+fn holdSmall(depth I64) F32 {
+    a := Array<F32>(32768, 1.0)
+    if depth == 0 { return a[32767] }
+    return a[0] + holdSmall(depth - 1)
+}
+
 fn scratch(n I64) F32 {
     a := Array<F32>(n, 2.0)
     return a[n - 1]
@@ -36,7 +46,13 @@ fn main() ? {
     afterBig := rssKb()
     for i in range 200 { s += scratch(32768) }      # 128KB each time, within the bound
     afterLoop := rssKb()
-    assert s == 1.0 + 32.0 + 2.0 + 200 * 2.0
-    try io.Print($(afterPhase - before) " " $(afterBig - afterPhase) " " $(afterLoop - afterBig) "\n")
+    out := Array<F32>(4)
+    join {
+        for t in range 4 { spawn out[t] = holdSmall(5) }
+    }
+    afterTasks := rssKb()
+    assert s == 1.0 + 32.0 + 2.0 + 200 * 2.0 and out[0] + out[1] + out[2] + out[3] == 24.0
+    try io.Print($(afterPhase - before) " " $(afterBig - afterPhase) " " $(afterLoop - afterBig) " " $(afterTasks - afterLoop) "\n")
     assert afterPhase - before < 2048 and afterBig - afterPhase < 1024 and afterLoop - afterBig < 1024
+    assert afterTasks - afterLoop < 2048
 }

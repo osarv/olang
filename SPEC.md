@@ -3229,11 +3229,12 @@ block's** arena (O2) — so such a value, and any destructor it registers, lives
 no longer. So does a temporary built for a spawned call with nowhere else to go, even where the `spawn` is written in a
 block nested inside the join. A task whose result must outlive the block says so the ordinary way, through a parameter or a spawn target living outside it.
 
-**P2a.** A task's chunk pool is **kept** on the worker that ran it, and the next task to run on that
-worker reuses it. Scope memory is pooled per thread (§8.7), so when a task's thread used to exit its
-chunks went with it — a leak proportional to the number of tasks that allocate. A worker does not exit
-(P1e), so that leak is gone by construction rather than by cleanup, and what is retained is bounded by
-the number of workers rather than by the number of tasks.
+**P2a.** A task's chunk pool is **kept** on the worker that ran it, up to the small part a waiting worker keeps
+(§8 O8b), and the next task to run on that worker reuses it; the rest goes where every thread reuses it. Scope memory
+is pooled per thread (§8.7), so when a task's thread used to exit its chunks went with it — a leak proportional to the
+number of tasks that allocate. A worker does not exit (P1e), so that leak is gone by construction rather than by
+cleanup, and what waiting workers retain is bounded by their number times that small part rather than by the number
+of tasks or the size of what they did.
 
 **P6.** A failing `assert` (§6.7 S18) on a task's thread always aborts the process; it is never the
 recoverable, per-test failure S18 describes, even under `-t`. A test's recovery point belongs to the
@@ -3287,9 +3288,10 @@ and `pthread_join` §6.8 is implemented with, and whatever a program itself reac
 ordering is P9's atomic methods, which lower to LLVM atomic instructions that ThreadSanitizer instruments
 and treats as edges directly. Since those are the only ways an olang program can establish ordering at
 all, the picture is complete. **Any synchronisation primitive added later must preserve that**: an LLVM
-atomic operation is understood, and anything establishing ordering by other means — including a change
-making the chunk pool (§8.7) shared rather than per-thread — must annotate itself, or correct code will be
-reported.
+atomic operation is understood, and anything establishing ordering by other means — a chunk pool (§8.7) shared
+between threads without a lock, say — must annotate itself, or correct code will be reported. The pool threads do
+share (§8 O8b) is guarded by a `pthread` mutex, which is intercepted like any other, so storage one thread reclaimed
+and another reuses is ordered for the detector exactly as it is for the program.
 
 `-r` is a whole-build mode rather than a per-file one, because the runtime (§8.7) is emitted
 `linkonce_odr` into every object: mixing an instrumented object with an uninstrumented one would leave the
@@ -3771,6 +3773,14 @@ allocation reuses kept storage of a suitable size whatever order it was reclaime
 loop's body or a function called again, settles at the memory one repetition needs rather than growing with the number
 of repetitions. What a thread keeps is bounded by an eighth of the machine's physical memory; storage reclaimed beyond
 the bound is returned to the operating system, what has gone longest unused first.
+
+A worker thread whose task has finished (§6.8 P1e) keeps no more than a small part of that while it waits for another
+task - 1MB, or a sixty-fourth of the bound where that is less - and the rest is kept where every thread can reuse it,
+under a bound of its own of the same size and returned to the operating system the same way; an allocation its own
+thread's storage cannot serve reuses that before asking the operating system for more. So what a finished task used is
+there for the thread that joined it, and what idle workers hold stays small however many there are. This happens before
+the task is reported finished (P1e), so it is in place by the time its `join` lets the spawner go on. A worker that
+retires (P1f) returns what it holds to the operating system instead.
 
 ### 8.4 The static scope check
 
