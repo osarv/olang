@@ -272,6 +272,10 @@ because what it finds about structure feeds the refactor.
   after transformers, clean room); then the bootstrap/ move + modest refactor with nothing else in flight; then, if
   all of that lands, start the port with the scanner (feedback_port_clean_design.md). Hard decisions: make them by
   PRINCIPLES.md, record each in CLAUDE.md/HISTORY.md, and list them numbered in the morning report.
+  The user, 15:40 CEST: "If you have time over, keep building out Oann adding relevant features" - spare capacity goes
+  to oann (after transformers: settling networks per docs/settling.md, clean room; then checkpoints (save/load
+  parameters), BF16 training, convolution via im2col, a tokenizer, data loaders; whatever the transformer work showed
+  missing), each oann agent beside the compiler work, not instead of it.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
