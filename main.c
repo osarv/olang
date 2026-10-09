@@ -316,7 +316,7 @@ static void defineFromArg(char* arg) {
     if (!eq) { fprintf(stderr, "olang: -D takes Name=value, got '%s'\n", arg); exit(EXIT_FAILURE); }
     *eq = '\0';
     if (!SyntaxDefineBuildConst(arg, eq + 1, false)) {
-        fprintf(stderr, "olang: -D %s: not an identifier, or defined twice (B10)\n", arg);
+        fprintf(stderr, "olang: -D %s: not an identifier, defined twice, or an integer beyond 64 bits (B10)\n", arg);
         exit(EXIT_FAILURE);
     }
 }

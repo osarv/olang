@@ -1,0 +1,14 @@
+# the helpers rendering a tuple are linkonce_odr, so their names must follow from the tuple's structure alone
+import "std/io"
+
+fn pair(n I64) (I64, String&) {
+    return n, "x"
+}
+
+fn triple(n I64) (I64, I64, F64) {
+    return n, n + 1, 0.5
+}
+
+fn main() ? io.IoError {
+    try io.Print($pair(1) " " $triple(2) "\n")
+}

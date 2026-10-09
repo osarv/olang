@@ -3066,6 +3066,33 @@ Go through this for every change to what olang means - a rule added, revised or 
   (O10b) are discharged only if its body was checked before the call - never for a generic instantiation or a function
   declared later - so `for i in range n { l.Push(Node(i)) }` or `m.Put($i, i)` builds the element in the loop's arena
   and stores it in the outer container (reproduced with the previous compiler).
+- **A review of the code generator, and what it fixed (2026-10-09).** A read-only review reproduced each finding with a
+  small program; this batch fixed those not about where a value lands (the scope work's). Decisions, mine: **(1) an
+  assignment is left to right (S4)** - the target's place (base, then index), then the value, then the store - and a
+  compound one evaluates its place once (`a[next()] += 5` calls `next` once) and its result must fit the target (`b +=
+  x`, b `U8`, x `I32`, is an error; the meeting rule used to rewrite the target into a conversion in place and crash
+  the compiler). Parallel assignment composes: every value before any target's place. The run time took the value
+  first and the evaluator the place, so a baked global disagreed with the same call at run time; both now read a
+  compound's target through a copy marked `placeOf`, answered from the place the statement computed. A spawn's target
+  likewise (P1g). **(2) D14b covers overflow**: a length whose byte count does not fit an `I64` is out of range, one
+  unsigned compare with the negative case (`OUT_OF_BOUNDS` under `try`); the allocator declining aborts with `out of
+  memory` (D14c), as a thread that will not start does. **(3) `return` in a test body is an error** naming `done` (S15) -
+  it emitted `ret void` in the harness's `i32 main`. **(4) A decimal literal above `I64`'s maximum is a `U64`** (L10/T6a,
+  what E4a's fold already gave), and one beyond 64 bits an error - `strtoll` saturated it; `-9223372036854775808` is
+  `I64`'s minimum. **(5) A struct over 128 bytes goes through memory**: a parameter is a pointer to the callee's own copy,
+  made before later arguments run; a result is written through a hidden first `ptr %out`; copies are `memcpy`. As LLVM
+  first-class aggregates a struct holding `Array<F32>(16384)` took clang 83s to build, now 3s; smaller aggregates'
+  IR is unchanged. **(6) A fallible call's result is stored in its own block** and read back: LLVM 18 at `-O0` carried
+  a `bfloat` inside an aggregate across a branch unwidened (a BF16 result read 0 under `-d`).
+  **Bugs fixed, all pre-existing**: spawn had a copy of the call lowering that had drifted (a constructor lost its
+  `%here`, a computed callee crashed the compiler) - it now shares `cgCallTargetAndArgs`; a `U8` index was
+  sign-extended (200 read element -56); a checked index evaluated its base twice; a fill with a struct stored its
+  address as the struct; `a := Array<T>(n)` allocated twice and copied - a fresh array is adopted; blocks inside match
+  values, guards and pattern tests had no arena (a hand-kept depth walker; slots are now made as blocks are emitted -
+  a loop leaked 966MB, now 2MB); text literals over 4096 bytes were cut; fixed buffers (argument lists, closure and
+  task environments, helper keys, payload spellings) are growable and type spellings fail loudly rather than
+  truncate; `linkonce_odr` helpers for anonymous structs and enums were named by heap address or a per-object counter,
+  now by structure. Not done: an enum with a huge payload is still moved as one LLVM value.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
