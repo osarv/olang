@@ -288,6 +288,15 @@ because what it finds about structure feeds the refactor.
   listzero (List needs no zero value; library errors reported at the program's use, B11). wt-tbare started (type
   variables bare after <T>, with a re-runnable migration script; oann migrated by it later). Running: native, oann
   transformers, oann settling, tbare. Next after tbare: the permissions batch.
+- 16:40 CEST (14:40 UTC): oann phase 3 pushed (957c4b2): transformer ops/layers/training/generation with a KV cache,
+  numpy agreement over 40 steps, tiny Shakespeare 2,000 steps val 1.806, 554 ms/step (products 83% at ~11 GFLOPS),
+  checkpoints (raw), its own copy of the workspace Gemm in kernels.olang (stopgap: delete once oann's compiler has
+  linalg.GemmWorkspace). Started oann phase 3b (BPE tokenizer, safetensors, Conv2d/MaxPool via im2col + MNIST CNN).
+  QUEUED oann catch-up after tbare lands: move oannc2 to master, run tbare's migration script on oann, adopt
+  linalg.GemmWorkspace (delete kernels.olang), check C2e/privacy/print fallout. QUEUED compiler items from oann:
+  repro/ctorunstored (O26 over-rejects a constructor only reading a reference argument), repro/capturedfn (a lambda
+  capturing a function value keeps an indirect call per element - 3.1 vs 0.55 ns). linalg wants (after native lands):
+  batched causal-aware strided Gemm for attention (~3x on attention), Gemm with bias+activation epilogue.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
