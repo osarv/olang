@@ -68,12 +68,13 @@ each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choic
 kernels shared so an eager tape can be added - olang's arenas make a per-step tape cheap: one scope per step);
 transformers first after the MNIST MLP; optimizers: plain AdamW AND "AdamW with the regularisation of orthonormal
 projection as (I - alpha x x^T)".
-11. (asked 2026-10-09) what exactly is the orthonormal-projection AdamW? Readings: (a) a decoupled regularizer per
-   weight matrix applied after the AdamW step, W <- (I - a W W^T) W (penalizing large singular values; Newton-Schulz
-   with a = 0.5 and an extra 0.5 W pushes toward orthonormal); (b) projecting each parameter vector's Adam update,
-   u <- (I - a x x^T) u with x the (normalized) weight row - AdamP-like, removing the radial component. Also: does it
-   replace weight decay or add to it, and which parameters (weight matrices only, not biases/norms)? Default: build
-   plain AdamW first; the variant waits for the answer. Rec: (a) if the goal is near-orthonormal weights.
+11. (asked 2026-10-09; the user: the regularizer is from "Nested Learning: The Illusion of Deep Learning
+   Architectures", Behrouz et al., NeurIPS 2025) my reading, to confirm: the paper's delta rule / Delta Gradient
+   Descent - for a linear layer y = W x, W <- W (I - a x x^T) - lr * (AdamW update), where x is the layer's INPUT (the
+   key), not the weights; per batch W <- W - (a/B) (W X^T) X (two GEMMs, as cheap as a forward pass), optionally
+   normalized by ||x||^2 per sample (the unofficial implementation's default). Open: normalized or not; replaces
+   weight decay or adds to it; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
+   container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
