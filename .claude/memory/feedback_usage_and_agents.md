@@ -41,3 +41,7 @@ container, so have agents commit as they finish.
 ~15GB, so two full `make test`/`make verify` runs at once can be OOM-killed. Tell agents to run only targeted tests
 while others are verifying, and run full verifies one at a time (I run the merged one). The scratchpad is shared too: an agent's log there was
 overwritten by another's - tell agents to write logs inside their own worktree (e.g. build/verify.log).
+
+**Plan upgraded 2026-10-09 ~07:09 UTC** (the user: "You have a lot more usage now" - after asking about Max 5x vs 20x):
+both windows read 0 right after, the five-hour one resetting at 12:00. On the old plan four agents spent a window in
+~80 minutes; measure again before assuming the new rate, and keep pacing by rate_limit_event.
