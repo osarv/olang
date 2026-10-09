@@ -9236,4 +9236,9 @@ from their original form.
   `F32`'s. A scalar `F16`/`BF16` parameter is still refused - libffi has no half-precision type.
   **Found on the way, not fixed (not this batch's)**: `x := "abc" if c else "no"` is rejected - neither literal adapts to
   the other's length (E28); writing `String(...)` around one works. Reading a global `List` or `Map` (`G.Len()`,
-  `1 in GM`) was rejected by O25e while this was written; the statements/scopes batch, merged first, fixed that.
+  `1 in GM`) was rejected by O25e while this was written; the statements/scopes batch, merged first, fixed that. That
+  batch's D16a change - a lambda finalized against its target before anything asks where it lives - in turn made O1b's
+  check see `EvF = fn(x I32) I32 { return x + k }` as a lambda that "lives in a scope that closes first": a lambda
+  capturing only values is a temporary (D16d), built in the program's scope like any temporary stored into a global,
+  and the check now says so (verified: the closure is allocated from `@__olang_prog_scope`, and one capturing a local
+  reference is still rejected).
