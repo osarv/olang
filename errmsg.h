@@ -72,6 +72,9 @@ struct type;
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
+    X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
+    X(ERR_DESTRUCT_IN_BODY,             "C7",    "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") \
+    X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
     X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
     X(ERR_ERROR_AFTER_QUESTION,         "R15",   "'?' alone is the default error - write '?', or name the types: '? IoError'") \
@@ -139,6 +142,7 @@ struct type;
     X(ERR_TRAIT_NOT_A_TYPE,             "T30",   "%t is a trait - a constraint on a type variable, never the type of a value") \
     X(ERR_ENUM_CASE_IN_USE,             "T17",   "enum case %n is already declared") \
     X(ERR_DECLARED_TWICE,               "",      "%n is declared twice") \
+    X(ERR_FIELD_HAS_PARAM_NAME,         "C2a",   "field %n has a parameter's name - write it bare to take the parameter's value, or name it apart") \
     X(ERR_TRAIT_METHOD_GENERIC,         "T35",   "trait method %n may not be generic in a type of its own") \
     X(ERR_CTOR_FIELD_NO_VALUE,          "C4",    "field %n names no parameter of the constructor - give it a value, with '=' or ':='") \
     X(ERR_ARRAY_PARAM_BY_VALUE,         "D9a",   "array parameter %n is passed by reference - write %t&") \
@@ -177,6 +181,7 @@ struct type;
     X(ERR_METHOD_IN_USE,                "M21",   "%t already has a method %S in this module") \
     X(ERR_UNDERSCORE_DECLARED,          "D8c",   "'_' discards a value and names nothing, so it cannot be declared") \
     X(ERR_SHADOWS_GLOBAL,               "D3a",   "%n is already declared in this module - a name means one thing in it") \
+    X(ERR_SHADOWS_FUNCTION,             "D3a",   "%n names a function of this module - a name means one thing in it, so name this apart") \
     X(ERR_SHADOWS_BUILD_CONST,          "D3a",   "%n is a build constant - choose another name") \
     X(ERR_SHADOWS_TYPE,                 "D3a",   "%n is a type's name - choose another") \
     X(ERR_TYPE_HAS_NO_CONSTRUCTOR,      "",      "type %n has no constructor - an enum's values are its cases") \
@@ -236,6 +241,7 @@ struct type;
     X(ERR_IMMUTABLE,                    "D9",    "%S is not 'mut', so it cannot be written") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
     X(ERR_NEG_LITERAL_TOO_LARGE,        "L10",   "-%n is below I64's minimum") \
@@ -327,6 +333,7 @@ struct type;
     X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable, so 'mut' says nothing here - remove it") \
     X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'try c[i] = v' checks against Len, and %t has neither TrySetAt nor Len") \
     X(ERR_NOT_A_STATEMENT,              "S3",    "this computes a value and discards it - only a call, '++' or '--' stands alone") \
+    X(ERR_JOIN_NEXT_LINE,               "S3, E11b", "text on a line of its own does nothing - a join continues onto the next line only inside parentheses") \
     X(ERR_CONDITION_CONSTANT,           "S8a",   "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") \
     X(ERR_RANGE_NOT_INT,                "S9b",   "a range's bounds and step are integers, found %t") \
     X(ERR_RANGE_STEP,                   "S9b",   "a range only counts upward, so its step is positive") \

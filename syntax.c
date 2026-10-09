@@ -4237,8 +4237,104 @@ static void skipTopItem(SyntaxCtx sc, int start) {
 
 //a syntax error the bare "expected X, found Y" would leave a reader puzzling over, said in terms of what was probably
 //meant - reported here, or false where the plain report says it best
+//a word the language keeps for itself - a keyword, or the literal true, false or null
+static bool isKeywordTok(struct token t) {
+    return t.type != TOK_IDEN && t.type != TOK_NONE && t.str.len > 0 && isLetter(t.str.ptr[0]);
+}
+
+static bool isOperandEndTok(enum tokenType t) {
+    return t == TOK_IDEN || t == TOK_PAREN_C || t == TOK_SQUARE_C || t == TOK_INT_LIT || t == TOK_FLOAT_LIT
+           || t == TOK_CHAR_LIT || t == TOK_BOOL_LIT || t == TOK_NULL_LIT;
+}
+
+//the first token of the postfix operand ending at last - "a.b(c)[d]" from its "]" - or a NONE token where it is
+//not one (a rendering's "$" before it makes it a join piece already)
+static struct token operandStartBefore(struct token last) {
+    struct token t = last;
+    for (int guard = 0; guard < 256; guard++) {
+        if (t.type == TOK_PAREN_C || t.type == TOK_SQUARE_C) {
+            enum tokenType closer = t.type, opener = t.type == TOK_PAREN_C ? TOK_PAREN_O : TOK_SQUARE_O;
+            int depth = 0;
+            for (; t.type != TOK_NONE; t = TokenBefore(t)) {
+                if (t.type == closer) depth++;
+                else if (t.type == opener && --depth == 0) break;
+            }
+            if (t.type == TOK_NONE) return t;
+            struct token b = TokenBefore(t);
+            if (b.lineNr == t.lineNr && (b.type == TOK_IDEN || b.type == TOK_PAREN_C || b.type == TOK_SQUARE_C)) { t = b; continue; }
+        } else if (isOperandEndTok(t.type)) {
+            struct token b = TokenBefore(t);
+            if (b.type == TOK_DOT) {
+                struct token bb = TokenBefore(b);
+                if (bb.type == TOK_IDEN || bb.type == TOK_PAREN_C || bb.type == TOK_SQUARE_C) { t = bb; continue; }
+            }
+        } else return (struct token){0};
+        return TokenBefore(t).type == TOK_STR_OF ? (struct token){0} : t;
+    }
+    return (struct token){0};
+}
+
+//the last token of the postfix operand starting at first - "a.b(c)[d]" from its "a"
+static struct token operandEndAfter(struct token first) {
+    struct token t = first;
+    for (int guard = 0; guard < 256; guard++) {
+        if (t.type == TOK_PAREN_O || t.type == TOK_SQUARE_O) {
+            enum tokenType opener = t.type, closer = t.type == TOK_PAREN_O ? TOK_PAREN_C : TOK_SQUARE_C;
+            int depth = 0;
+            for (; t.type != TOK_NONE; t = TokenAfter(t)) {
+                if (t.type == opener) depth++;
+                else if (t.type == closer && --depth == 0) break;
+            }
+            if (t.type == TOK_NONE) return first;
+        }
+        struct token n = TokenAfter(t);
+        if (n.lineNr != t.lineNr) return t;
+        if (n.type == TOK_DOT && TokenAfter(n).type == TOK_IDEN) { t = TokenAfter(n); continue; }
+        if (n.type == TOK_PAREN_O || n.type == TOK_SQUARE_O) { t = n; continue; }
+        return t;
+    }
+    return t;
+}
+
+//E11b: "f(x "a")", "f("a" x)" - a value beside text with no "$": the hint shows the rendering to write
+static bool joinPieceHint(struct token from, struct token to) {
+    if (from.type == TOK_NONE || to.type == TOK_NONE || from.owner != to.owner || from.lineNr != to.lineNr) return false;
+    struct str text = Str(from.str.ptr, (int)(to.str.ptr + to.str.len - from.str.ptr));
+    if (text.len <= 0 || text.len > 60) text = from.str;
+    ErrSyntax(from, ERR_JOIN_PIECE, text);
+    return true;
+}
+
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
+    //"done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    if (isKeywordTok(prev) && prev.lineNr == found.lineNr && TokenBefore(prev).lineNr < prev.lineNr
+        && (found.type == TOK_MUT || found.type == TOK_ASS_INFER || found.type == TOK_ASS || found.type == TOK_COMMA
+            || (found.type == TOK_IDEN && (prev.type == TOK_DONE || prev.type == TOK_FAIL || prev.type == TOK_BREAK
+                                           || prev.type == TOK_CONTINUE || prev.type == TOK_ABORT || prev.type == TOK_UNREACHABLE
+                                           || prev.type == TOK_JOIN)))) {
+        ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
+        return true;
+    }
+    //"fn join(", "x I32, done I32" - a keyword where a name was wanted
+    if (isKeywordTok(found) && found.type != TOK_MUT && expected && (!strcmp(expected, TokenStrFromType(TOK_IDEN))
+                                            || (TokenAfter(found).lineNr == found.lineNr
+                                                && (TokenAfter(found).type == TOK_IDEN || TokenAfter(found).type == TOK_MUT
+                                                    || TokenAfter(found).type == TOK_ASS_INFER)))) {
+        ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
+        return true;
+    }
+    //"type T struct() { ... destruct { } }" - a destructor follows the constructor's body (C7)
+    if (found.type == TOK_DESTRUCT) {
+        ErrSyntax(found, ERR_DESTRUCT_IN_BODY);
+        return true;
+    }
+    //E11b: a value joined to text has to be rendered - "pretty(t) \"\\n\"" or "\"n=\" n"
+    if ((found.type == TOK_STR_LIT || found.type == TOK_STR_OF) && prev.lineNr == found.lineNr && isOperandEndTok(prev.type)
+        && joinPieceHint(operandStartBefore(prev), prev)) return true;
+    if (prev.type == TOK_STR_LIT && prev.lineNr == found.lineNr
+        && (isOperandEndTok(found.type) || found.type == TOK_PAREN_O) && found.type != TOK_PAREN_C && found.type != TOK_SQUARE_C
+        && joinPieceHint(found, operandEndAfter(found))) return true;
     //"f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line (L18a)
     if ((found.type == TOK_PAREN_C || found.type == TOK_SQUARE_C) && prev.type == TOK_COMMA && prev.lineNr == found.lineNr) {
         ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);

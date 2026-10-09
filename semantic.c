@@ -4595,7 +4595,11 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
 //name in a condition knowing whether it is a local or a global without knowing the scopes.
 static void rejectShadowing(struct semaModule* mod, struct str name, struct token tok) {
     if (!mod || (name.len && name.ptr[0] == '$')) return;
-    if (VarGetList(&mod->vars, name)) Err(tok, ERR_SHADOWS_GLOBAL, tok);
+    struct var* g = VarGetList(&mod->vars, name);
+    if (g) {
+        Err(tok, g->isFuncDecl ? ERR_SHADOWS_FUNCTION : ERR_SHADOWS_GLOBAL, tok);
+        if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
+    }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
 }
@@ -12256,7 +12260,8 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (!exprCanStandAsStatement(op) && !op->type.unknown) Err(op->tok, ERR_NOT_A_STATEMENT);
+    //...text on a line of its own most often meant to continue the join on the line before (E11b)
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) Err(op->tok, OperandIsWrittenText(op) ? ERR_JOIN_NEXT_LINE : ERR_NOT_A_STATEMENT);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;
@@ -15587,7 +15592,12 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         }
         //a bare pun declares no local of its own: the same-named parameter already carries both the name
         //and the value, and re-declaring it would collide with it (VAR_NAME_IN_USE) for no gain
-        if (!isPun) {
+        //C2a: a field with a parameter's name - the parameter's value is taken by writing the field bare
+        struct var* clash = !isPun ? scopeFindLocal(&ctorScope, field->name) : NULL;
+        if (clash) {
+            Err(field->tok, ERR_FIELD_HAS_PARAM_NAME, field->tok);
+            Note(clash->tok, NOTE_DECLARED_HERE, clash->tok);
+        } else if (!isPun) {
             struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, field->type, true);
             local->scopeBindings = field->scopeBindings;
             struct statement decl = (struct statement){0};

@@ -839,3 +839,13 @@ struct token TokenBefore(struct token t) {
     }
     return (struct token){0};
 }
+
+//the token just after t in its own file's stream, or a TOK_NONE token - only for diagnostics, as TokenBefore
+struct token TokenAfter(struct token t) {
+    TokenCtx tc = t.owner;
+    if (!tc) return (struct token){0};
+    for (int i = 0; i + 1 < tc->tokens.len; i++) {
+        if (((struct token*)ListGetIdx(&tc->tokens, i))->tokId == t.tokId) return *(struct token*)ListGetIdx(&tc->tokens, i +1);
+    }
+    return (struct token){0};
+}
