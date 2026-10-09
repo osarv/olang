@@ -153,6 +153,16 @@ Then the port (a redesign, see feedback_port_clean_design.md): C compiler frozen
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
+- **FPGA support, for spiking neural networks** (the user, 2026-10-09: "I want FPGA support for spiking neural network
+  implementations"; after self-hosting, as a second backend of the olang compiler). Route: high-level synthesis of a
+  compiler-checked subset - fixed-width integers and minifloats, fixed-size arrays, bounded loops/comprehensions,
+  match/enums, generics, compile-time evaluation for constant tables; no run-time allocation, recursion, function
+  values, extern or text - emitted as LLVM IR or MLIR for an HLS flow (CIRCT, AMD's open Vitis HLS front end, Bambu);
+  `join`/`spawn` and channels as parallel units/dataflow. What SNNs need on top (to design then): arbitrary bit widths
+  (`U<12>`-like) and fixed-point types with saturating arithmetic (membrane potentials, Q formats), event streams for
+  spikes (address-event routing), weights in on-chip memory, time-stepped leaky integrate-and-fire updates. The other
+  route - a circuit-describing library run by the compile-time evaluator emitting Verilog (Chisel/Clash style) - kept
+  as the alternative for timing-critical parts.
 - Serialization (JSON and a compact binary encoder in std, walking fields - never a memory dump) on top of
   compile-time reflection (one generic iterating a type's fields, like `match <T>`); also restores what removing
   struct literals lost - rebuilding a valid value without its validating constructor.
