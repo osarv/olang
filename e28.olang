@@ -1,6 +1,0 @@
-import "std/io"
-run mut I64 = 1
-fn main() ? io.IoError {
-    x := "abc" if run > 0 else "no"
-    try io.Print(x "\n")
-}

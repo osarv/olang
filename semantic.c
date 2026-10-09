@@ -11351,9 +11351,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 landCall(rhs, lv, ld);
         }
         //O1b: a global, and everything reached from it, lives in the program's scope - which nothing a function holds
-        //outlives, so what is stored there is built there or already lives there
+        //outlives, so what is stored there is built there (a temporary - a lambda capturing only values too, D16d) or
+        //already lives there
         if (intoGlobal && ctx->hasOwnScope && !rhs->isNullLiteral && (rhs->type.structMAlloc || OperandIsLvalue(rhs))
-                && !storageInProgram(rhs))
+                && !argIsFreshTemp(rhs) && !storageInProgram(rhs))
             ErrMsgSemantic(rhs->tok, GLOBAL_HOLDS_SHORTER);
         //O22: the target's tag may still be a scope variable of the TYPE it is a field of - resolution
         //found no binding because the container arrived as a parameter and was built somewhere else. This
