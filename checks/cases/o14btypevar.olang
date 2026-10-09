@@ -1,0 +1,15 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O14b: a generic returning its parameter where the result was written as a type variable - instantiated at a reference
+# it hands back the argument's own storage, so where the result lands must not outlive that argument. y outlives n,
+# which dies each iteration; before, the result was taken for a fresh temporary and the assignment was accepted
+type Node struct(v I64) {
+    v
+}
+fn id(x <T>) <T> { return x }
+fn main() ? {
+    y Node& = Node(0)
+    for i in range 3 {
+        n Node& = Node(i)
+        y = id(n)
+    }
+}

@@ -241,6 +241,7 @@ when an instance's scope closes (C7a)"
 #define ENUM_ARG_OUTLIVED "this enum value holds a reference to existing storage in its payload, and a payload lives where the value does - so here it would outlive what the reference points at, or, where that can itself hold references, live somewhere other than exactly where it does (T17c). Build the value where that storage lives ('v E&x = ...', 'E.Case&x(...)', a result 'E&x'), or keep it in that block"
 #define ENUM_ARGS_DISAGREE "this enum value's payload holds references to existing storage in two different scopes, and a payload lives in one place - where the value does (T17c). Build what it holds in one scope"
 #define CTOR_ARG_OUTLIVED "this value was constructed from a reference to existing storage, stored in a field that lives with the instance - so the instance holds that reference, and here it would outlive what the reference points at (C2d). Build the instance where that storage lives ('T&x(...)'), or give the field the parameter's scope ('f T&p = p')"
+#define CTOR_FIELD_ARG_OUTLIVED "this instance holds a reference to storage it was constructed from, in a field written '&p' - which keeps that storage's own scope, so the instance may live shorter than it, never longer - and here it would outlive that storage, leaving the field pointing at a scope that has closed (C2d). Keep the instance no longer than what it refers to: declare it in that storage's block, or build it where that storage lives ('T&x(...)')"
 #define SCOPE_ARGS_DISAGREE "two arguments are in different scopes where this signature requires one - one parameter is written as living where the other does ('&p'), so the values passed for them must share a scope"
 #define OBLIGATION_ORIGIN_NOTE "the called function requires it because of this statement in its body"
 #define SCOPE_OBLIGATION_UNMET "this call needs one of the target's scopes to outlive another, and \
@@ -333,6 +334,7 @@ void ErrMsgBufferFlush(void);
 void ErrMsgBufferDiscard(void);
 void ErrMsgMuteStart(void);
 void ErrMsgMuteEnd(void);
+bool ErrMsgMuted(void); //inside a muted stretch: nothing reported now would be seen
 void ErrMsgFile(struct str fileName, char* errMsg);
 void ErrMsgSyntax(struct token tok, char* errMsg);
 int ErrMsgGetNSyntaxErrors();

@@ -8646,3 +8646,106 @@ from their original form.
   pure function of the type - an anonymous struct by its fields' keys, length-prefixed so no two structures spell one
   key - and serves both; a function type's key is its full spelling, which a 1200-byte buffer could also cut. The check
   builds a program twice from clean and compares the helper names.
+
+- **A call is held to its callee's whole body; a temporary is built where its obligation says; per-instance scopes
+  follow a value (O10c, O18b/O18c, O23/O23a, O13c, O14b, C2d, 2026-10-09).** The use-after-free the recursive-enums
+  work left as "found, not fixed": a callee's scope obligations (O10b) were consulted at a call only if the callee's
+  body had been checked before it. Bodies are checked in declaration order, module by module, and generic
+  instantiations after every module - so an instantiation, or a function declared after its caller or in a module
+  checked later, owed nothing at its calls. Reproduced on the compiler before the change, each read back after the
+  arena was churned: `for i in range 10 { l.Push(Node(i)) }` then summing the list gave 7770 for 45; `m.Put($i, i)` in
+  a loop then looking every key up gave 6024 for 45; a method and a plain function declared after `main`, each
+  storing its argument into a `Bag`, gave 1554 for 44. std/map's own test (`for i in range 200 { m.Put($i, i) }`,
+  commented "renderings, built where the map lives") had the shape and never noticed: its asserts are decided while
+  compiling (S18c), where the evaluator reclaims nothing.
+  **Completeness.** A function's obligations are part of its signature (O10b says so), so the fix is that a call sees
+  them: `ensureBodyChecked` checks a callee's body - an ordinary function, method or instantiation - at its first
+  call, in the middle of the caller's statement. A body check reads and leaves state in globals (the substitution
+  context, the method scope, the statement's pending discharges, the comprehension and prebuilt-argument context, the
+  scope-tag context ...), so each is set aside around it; nesting is capped (48) so an unbounded instantiation chain
+  still reaches G17's drain. Global initializers are built before bodies and keep that order (a body checked then
+  could read a global whose type is not finished, a bug fixed once already). What remains partial - a call inside a
+  cycle of calls, a call in a global initializer, a call to a constructor whose body is built later - is recorded,
+  with how many of the callee's obligations it was held to, and `dischargeLateObligations` holds it to the rest once
+  every body is checked; discharging can oblige the caller further, so it runs to a fixed point (finite: pairs of one
+  signature's scopes). Calls made while errors are muted (typing probes) are not recorded and defer nothing - the
+  for-in's probe of a generic `Next` used to leave its obligations owed, to be reported, unmuted, at the statement's
+  end. A `checks/cases` program shows a cycle the late pass alone catches.
+  **Placement (O18b, O18c).** Completeness alone turned the silent bug into compile errors - `l.Push(Node(i))` is
+  reasonable code, and the error was right only about where the node was built. O18a put a temporary argument where
+  the call stands; now a scope variable no argument determines, which the callee's obligations require to outlive one
+  the call does determine, is bound to that one, and the temporary is built there. Codegen needed nothing: it already
+  builds a temporary argument, and passes the hidden scope, by the parameter's binding. A text rendering, a join,
+  `Array<T>(n)`, a comprehension, a capturing lambda and `null` no longer "determine" a scope at the call's block as if
+  they were existing storage (they made their scope variables look settled where nothing was). Never a variable the
+  result names - that follows the result - and never the program's scope or a derived one. And `x := f()`, which takes
+  its initializer's scope anyway, lands a still-free result scope at the shortest scope the callee's obligations say
+  must outlive it (O18c), so `w := it.Next()` lives where the collection lives rather than in the loop body.
+  **Precision (O23a, O13c, O14b), the part the reverted prototype lacked.** With obligations complete, `for w in ws {
+  mine.Push(w) }` over two lists in one block was rejected: the element came out of `ListIter.Next` at the iterator's
+  scope (O23's fallback through its `&of` field), and the hidden iterator lives in the for-in's own block. What is
+  true is that the element lives where the list does, and three pieces carry that. *O23a*: a field `&V` read through a
+  parameter `p` reads at a **derived scope** of the function - a scope variable no caller passes, standing for "where
+  the argument for p bound V". It outlives every block of the body and relates to other scopes by obligation (it is
+  `varIsOwnParam` for the checker), nothing is built into it (codegen, which has no such scope, passes the parameter's
+  own wherever one reaches a hidden argument), and a call resolves it from the argument's own bindings - or, for an
+  argument that is the caller's parameter, the caller's derived scope; else the argument's own scope, which is O23's
+  old underestimate. So `ListIter.Next`'s obligation reads "the list's scope outlives the result", not "the
+  iterator's". *O13c*: a call's result carries the per-instance bindings its callee's returned value had, translated to
+  the call - `Iter()` returns `ListIter(l)`, so `it := ws.Iter()` knows `of` is bound to `ws`'s scope, exactly as
+  `it := ListIter(ws)` would - and a result borrowed from a parameter (`Node&it`) that every return gives from one
+  derived scope lives where that resolves, so a hand-written, non-generic iterator works as `List`'s does. *O14b*:
+  `Next() <T>` instantiated at `String&` had no result scope at all - its result was untagged, taken for a fresh
+  temporary wherever it was put. It now has one, like any built result, and returning existing storage into it
+  records an obligation (equality where something can be stored through it) instead of O14's error, since a generic
+  has no borrowed form to write. That last change also closed a bug of its own (below). A `List` of references to a
+  struct with `mut` reference fields still cannot hand its elements out: `Next` holds the element in a local first,
+  and a local cannot hold a storable referent read through a field whose scope is the caller's (C2d) - unchanged.
+  **Nothing is built into a derived scope**, and that had to be enforced at every place a build could reach one, since
+  a local may now take one (`v := it.chunk[i]`): a result landing there lands where it was read through instead (the
+  run-time scope codegen passes for it), a callee that may build into a parameter (it can write it, or its borrowed
+  result names it) is handed that scope too, and a temporary initializing or assigned to a place living in a derived
+  scope, or a scope argument naming one, is the C2d error. Before, such a local took the container's scope, which is
+  where a build lands at run time, so nothing could be misplaced - the new precision is what made the rule necessary.
+  The bodies checked on demand had one trap of their own: a call made while errors are muted (a probe) must not check
+  its callee's body there, or that body's own errors are swallowed for good - the first version did exactly that,
+  and a rejected program compiled.
+  **How far the tracking goes (decided):** a value's per-instance bindings are known where it is built - a
+  constructor call, or a call whose result bindings are known - and follow it through `:=` locals and the for-in's
+  hidden locals; through a parameter they are a derived scope; anywhere else (a field of a field not initialized from
+  the value, an element read out of an array of structs) O23's container scope stands. No new syntax: a derived scope
+  cannot be written, `r := w.inner` takes one.
+  **One collision on the way, and why the answer is a block or nothing.** O18c first landed every `:=` value result by
+  its obligations and set the local's value home there. Borrowing such a local for a reference parameter then binds
+  the parameter's scope to the home (O17) while the borrow check compares the local's own storage - a block - against
+  it, and a block never outlives a scope variable: `for y in l` inside a method on `l` failed. A value local landed in
+  a scope variable keeps no home; one landed in a block keeps it, as `:=` always did. **That first answer was too
+  coarse and a realistic program found it**: reading a reference out of such a local at its block meant
+  `for e in m { into.Put(e.Key, e.Value) }` and `for e in m { return e.Key }` with `m` a parameter were rejected -
+  the very shape the work was for, moved into a function. The two questions valueHome answered as one are now
+  apart: a local so landed keeps where its *references* were put (`refsHome`), which a reference field read
+  through it - and O20's fit walk - uses, while its own *storage*, which borrowing it hands over, stays its block.
+  `checks/cases/o18cstorage` pins the second half (returning a reference to the entry itself is still an error).
+  **Found and fixed on the way, all pre-existing, all reproduced with an arena churn on the previous compiler:**
+  (1) a generic result written `<T>` and instantiated at a reference was untagged - `fn id(x <T>) <T>` and `y = id(n)`
+  with `n` dying each iteration compiled and read 777 for 42 (O14b); (2) a field written `&p` read through a local
+  lost which block its binding named - `v := View(inner)` inside a loop, `keep = v.n` outside it, read as the
+  function's outermost block, compiled and read 777 (bindings now carry their depth through member reads and
+  `RefExactScope`); (3) a method writing a `&p` field of its receiver was checked against the receiver's own scope
+  (O23's fallback) while callers read the field at its construction binding, so `bi.Set(n)` could put a node from the
+  iterator's block where an outer box's storage was claimed (777 for 42) - the write is now checked against the
+  derived scope, which callers resolve; (4) an instance could outlive what its `&p` field referred to - `bi = View(inner)`
+  out of a loop, then read (777 for 42); C2d excused such an argument from the instance entirely ("not held against
+  the instance"), and it is now held to outlive it, never exactly, with a diagnostic of its own. That last cost two
+  corpus tests their shape: `holderFieldChecked` built `d` in the result scope while its right field referred into a
+  block (both of its arguments are in the result scope now), and `narrows` named its container's scope for a `&p`
+  field's referent (`r := w.inner` now).
+  **What was checked:** the List and Map shapes, a doubly nested block, text pushed in a loop, a method, a function
+  and a generic each declared after their caller, `StringBuilder` in a loop, elements of one list pushed into another
+  through the iterator (from an inner block too), a hand-written iterator, and a global baked through the same pushes
+  (K2, agreeing with the run time) - in shared.olang and std/map.olang, each read back after churning the arena, the
+  five in shared.olang failing on the previous compiler (calls given mutable globals, since a call given constants is
+  decided while compiling); `checks/cases` `o14btypevar`, `o23adepth`, `o23awrite`, `o23abuild`, `c2dfieldoutlives`,
+  `o18cstorage` and `o10ccycle` (the last caught only by the late pass); and a graph builder, a pairwise loop and two
+  maps copied through parameters, written as a user would and run under `-b` and `-i`; the whole corpus and std
+  otherwise unchanged.

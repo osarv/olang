@@ -1,0 +1,19 @@
+# check: fail a reference never narrows
+# O2a/O23a: a field written "&p" read through a local reads at the block its argument lives in - which depth that is was
+# dropped on the way through the member, so v.n read as the function's outermost block and keep took a reference into
+# the loop body's arena
+type Node struct(v I64) {
+    v
+}
+type View struct(of mut Node&) {
+    n mut Node&of = of
+}
+fn main() ? {
+    base Node& = Node(0)
+    keep Node&base = Node(0)
+    for i in range 3 {
+        inner Node& = Node(i)
+        v := View(inner)
+        keep = v.n
+    }
+}

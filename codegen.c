@@ -979,6 +979,7 @@ char* cgScopeSlotAt(struct cgCtx* ctx, int depth) {
 }
 
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
+    scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
     char* addr = cgLookupVarAddr(ctx, scopeParam);
     char* loaded = cgNewTmp(ctx);

@@ -3062,7 +3062,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   calls, so `return match e { ... => Add(fold(a), fold(b)) }` built the subtree in the function's own scope; a call
   building into a scope variable a global determined (`H = f(G)`, f borrowing from its argument) built in the caller's
   scope - now the program's (`@__olang_global_scope`); temporaries for a payload or argument were built at the current
-  block rather than at their binding's depth. **Found, not fixed (a design question)**: a callee's scope obligations
+  block rather than at their binding's depth. **Found, not fixed (a design question; fixed 2026-10-09, next entry)**: a callee's scope obligations
   (O10b) are discharged only if its body was checked before the call - never for a generic instantiation or a function
   declared later - so `for i in range n { l.Push(Node(i)) }` or `m.Put($i, i)` builds the element in the loop's arena
   and stores it in the outer container (reproduced with the previous compiler).
@@ -3093,6 +3093,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   task environments, helper keys, payload spellings) are growable and type spellings fail loudly rather than
   truncate; `linkonce_odr` helpers for anonymous structs and enums were named by heap address or a per-object counter,
   now by structure. Not done: an enum with a huge payload is still moved as one LLVM value.
+- **A call is held to its callee's whole body; a temporary is built where its obligation says; per-instance scopes
+  follow a value (O10c, O18b/O18c, O23/O23a, O13c, O14b, C2d, 2026-10-09).** The use-after-free the recursive-enums work
+  found: a callee's obligations (O10b) were consulted only if its body had been checked before the call - never for an
+  instantiation or a function declared later - so `for i in range n { l.Push(Node(i)) }` built each node in the loop
+  body's arena and stored it in the outer list, and `m.Put($i, i)` did the same with text (std/map's own test had the
+  shape; its asserts were decided while compiling, where nothing is reclaimed). Three parts. **(1) Completeness**: a
+  call checks its callee's body first (`ensureBodyChecked`, the globals a body check uses set aside around it), and
+  once every body is checked, calls that saw part of a set - inside a cycle, in a global initializer, of a constructor
+  built later - are held to the rest (`dischargeLateObligations`, a fixed point). **(2) Placement**: O18b - a temporary
+  passed for a scope variable the callee requires to outlive one the call determines is bound there and built there
+  (the node where the list lives); O18c - `x := f()` lands a free result scope at the shortest scope the callee's
+  obligations say must outlive it. **(3) Precision**, without which the reverted prototype rejected `for w in ws {
+  mine.Push(w) }`: O23a - a field `&V` of a parameter `p` reads at a *derived scope* of the function, "where the
+  argument for p bound V": related and obligated like a scope variable, never built into, resolved at every call from
+  the argument's own per-instance bindings (else the argument's own scope, O23's underestimate); O13c - a call's result
+  carries the per-instance bindings its callee's returned value had (so `it := l.Iter()` knows its iterator reads `l`),
+  and a borrowed result returned from a derived scope lives where that resolves (a hand-written iterator works too);
+  O14b - a result written as a type variable that became a reference has a result scope, and returning existing
+  storage into it is an obligation, not O14's error. **Decided (mine)**: how far per-instance tracking goes - locals
+  initialized by a constructor, or by a call whose result bindings are known, the for-in's hidden locals, and
+  parameters through derived scopes; anywhere else O23's fallback stands. A value local whose result landed by its
+  obligations in a scope variable keeps where its references were put (a reference read out of it has that scope)
+  but not as its storage's scope, which borrowing it hands over and which stays its block. **Found and fixed on the way, all pre-existing use-after-frees**: a generic `<T>` result
+  instantiated at a reference was untagged and taken for a fresh temporary (`y = id(n)` with `n` dying each iteration
+  compiled); a field read through a local lost which block its binding named (read as the function's outermost);
+  a method writing a `&p` field of its receiver was checked against the receiver's scope while callers read the
+  field at its construction binding, so the binding could be falsified; and an instance could outlive what its `&p`
+  field referred to - C2d now holds such an argument to outlive the instance, never exactly. Also: the for-in's typing
+  probe left obligations owed after its muted errors. Corpus: two scope tests migrated (an instance may not outlive its
+  `&p` referent; a local naming its container's scope for a `&p` field's referent narrows it now).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

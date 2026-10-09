@@ -3370,6 +3370,11 @@ or mutually recursive function's obligation set is the least fixed point of O10b
 exists and is reached in finitely many steps: obligations are pairs drawn from that one signature's own
 finite set of scope variables.
 
+Every call is held to its callee's **whole** obligation set, wherever the callee's body is written - later in the same
+module, in a module checked later, or as a generic's instantiation (G16) - and, within a cycle of calls, to the set
+the fixed point above reaches: the obligations are part of the signature, so the order the program is checked in
+decides nothing.
+
 **O10d.** *Unsatisfiable relations.* A required `X outlives Y` where `Y` is a scope variable and `X` is one of
 the function's own block scopes is not an obligation and is never deferred to a caller: no binding a caller
 could choose changes it. It is a compile-time error in the body itself, reported there, and is worth telling
@@ -3449,11 +3454,26 @@ value where it dangles. Accordingly:
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it, since no function's code allocates into the program's scope.
 
-**O23.** Where a field's scope tag cannot be resolved through its container's bindings — the container arrived
-as a parameter, so the binding stayed with whoever constructed it — the field reads at the **container's**
-scope, which for a parameter is its scope variable (O4b). This is an underestimate and never a claim: every
-value that can reach the field was required to outlive the container's construction scope (O13a, O20, O22),
-which in turn outlives wherever the container now sits.
+**O23.** Where a field's scope tag cannot be resolved through its container's bindings and the container is not a
+parameter of the function (O23a), the field reads at the **container's** scope. This is an underestimate and never a
+claim: every value that can reach the field was required to outlive the container (C2d, O20, O22), which in turn
+outlives wherever the container now sits.
+
+**O23a (derived scopes).** A **per-instance** binding - the scope a constructor-bearing value's field written `&p`, or
+a bare one, was bound to where the value was built (C2d) - is carried with the value: through a local initialized
+from it (O25a), through a call's result (O13c), and through the hidden locals of a `for ... in` (S9a). Where the
+container is a **parameter** `p` of the function, the binding was made by whoever built the argument, so a field of
+it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
+for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
+of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
+nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
+build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
+scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
+referent lives, or a scope argument naming one, is a compile-time error. At each call it
+is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
+parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
+Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
+from.
 
 **O22.** An assignment whose target's scope tag resolves to a scope variable of the **type** of a parameter —
 the container arrived as a parameter, so the binding was made wherever it was constructed — records a
@@ -3497,7 +3517,8 @@ returning a temporary, or by naming it: `&return` (O26).
 
 - for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
   result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
-  borrowed form (`T&p`), and so is one into the function's own storage, which closes at the return;
+  borrowed form (`T&p`) - but for a function value (O14a) and a result written as a type variable (O14b) - and so is
+  one into the function's own storage, which closes at the return;
 - for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
   (O10b). A temporary is built in `p`'s scope.
@@ -3508,6 +3529,14 @@ is ever written through a function value (D16d), so such a return needs only tha
 result scope; it is an obligation of the function (O10b), and every call checks it once the result has landed
 (O18a). `fn id(f fn() I32) fn() I32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
 where `y`'s closure lives in a block `keep` outlives.
+
+**O14b.** A built result whose type was written as a **type variable** (G1) - and became a reference, or a value
+holding references, by instantiation - is the other exception: there is no borrowed form to write for it (`<T>&p`
+would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
+that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
+obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) <T> {
+return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
+`y`.
 
 **O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
 function (O13): `n Node&return = Node(1, null)` declares a local living where the result will be put, and
@@ -3535,6 +3564,19 @@ of the returning function's own block scopes, the return is a compile-time error
 reference to storage that dies at the return, arriving through a binding the signature never mentions. Only a
 binding actually recorded on the returned value is judged; a value returned with no binding of its own — a
 parameter handed straight back out — is not, since its scopes were bound by whoever built it.
+
+**O13c (what a result carries).** A function's body decides, for the value it returns, two things a call adds to its
+result where every `return` agrees:
+
+- the **per-instance bindings** of the returned value's type (O23a) that are scopes of the function: a call's result
+  carries each, resolved through the call, so `it := l.Iter()` knows its iterator's `&of` field reads where `l`
+  lives, as `it := ListIter(l)` would;
+- for a result **borrowed** from a parameter (`T&p`), the derived scope (O23a) every `return` gave a value in: the
+  call's result then lives where that resolves to - the referent of the argument's own field - rather than where
+  the argument does, which it outlives.
+
+A function whose body is not wholly checked (in a cycle of calls, O10c) adds nothing, and a call falls back to its
+signature.
 
 ### 8.6 Binding scope variables at a call
 
@@ -3568,11 +3610,26 @@ as a temporary is built where it lands (E12c):
 | several targets of a destructuring (S4b) | their one scope, where they all agree; otherwise the caller's own block, where the call stands |
 | anywhere else (an operand, an expression statement) | the caller's own block, where the call stands |
 
-A temporary argument for a reference parameter is placed by the same table, as the result of a call would be.
-The callee's obligations that involve the result scope (O10b) are discharged once the statement holding the
-call has been checked, against the scope the result landed in. Where several destructured targets disagree,
+A temporary argument for a reference parameter is placed by the same table, as the result of a call would be - except
+where O18b places it. The callee's obligations that involve the result scope (O10b) are discharged once the statement
+holding the call has been checked, against the scope the result landed in. Where several destructured targets disagree,
 the fallback to the caller's block makes any target outliving that block fail the ordinary check, so the
 disagreement is reported rather than resolved by guessing.
+
+**O18b (a temporary goes where it must live).** A scope variable no argument determines - what is passed for it is a
+temporary (O17) - which the callee's obligations (O10b) require to outlive a scope this call does determine, is bound to
+that scope, and the temporary is built there: `l.Push(Node(i))` in a loop builds the node where `l` lives, since `Push`
+requires its element to outlive the list, and the loop body's own scope would close under it. A variable the result
+names follows the result (O18a) instead, and nothing is built this way into the program's scope (O1b) or into a derived
+scope (O23a).
+
+**O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
+the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
+where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
+value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
+not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
+out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
+stays its block.
 
 **O19.** Binding is per call. In `fn take(v Vec<I32>&) Point&`, `v`'s scope is determined by the argument
 and the result scope lands or is supplied: `take&x(v)` builds the result where `x` lives, `take(v)` where it
@@ -3656,16 +3713,19 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 - a field written `&p`, naming a reference parameter, lives where that parameter's argument lives, and one
   written `&f` where an earlier field `f` does (O4a). The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
-  receiving such a value as a parameter does not know that binding, so it may read, walk and repoint through
-  the field but not **build** through it: a temporary stored into the field or anything reached through it, or
-  the field passed for a parameter the callee may build into, is a compile-time error there (O23);
+  receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
+  each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
+  temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
+  may build into, is a compile-time error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a).
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
 be exactly it when something can be stored through the argument (O25g, O25c). An argument for a parameter a field names
-(`&p`) is not held against the instance: that field keeps the argument's own scope.
+(`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
+be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
+had closed while the instance could still be read.
 A violation is a compile-time error at that point.
 
 ```

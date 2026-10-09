@@ -515,14 +515,16 @@ fn dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& 
     return d.left.inner
 }
 
-# three levels of forwarding (Holder's "box", DualWrapped's "left", WrappedPoint's "inner")
+# three levels of forwarding (Holder's "box", DualWrapped's "left", WrappedPoint's "inner"). Both of d's arguments are
+# in the result scope: an instance may not outlive what a field written "&p" refers into (C2d), so d could be there
+# only with r there too - and through h.box, d's own field bindings are read at d's scope (O23)
 type Holder struct(b DualWrapped&) {
     box DualWrapped&b = b
 }
 
 fn holderFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
     l WrappedPoint&return = WrappedPoint(Point(leftX, leftY))
-    r WrappedPoint& = WrappedPoint(Point(rightX, rightY))
+    r WrappedPoint&return = WrappedPoint(Point(rightX, rightY))
     d DualWrapped&return = DualWrapped(l, r)
     h Holder& = Holder(d)
     return h.box.left.inner
@@ -5774,9 +5776,10 @@ type Wrap2 struct(i mut Crate2&) {
     inner mut Crate2&i = i
 }
 
-# a local naming where it lives - here where w does, which is where its field's referent is read at (O23)
+# a local taking where the field's referent lives - where w's argument for "i" was, a scope of this function's own
+# standing for that binding, resolved at each call (O23a); "r Crate2&w" would narrow it to w's
 fn narrows(w Wrap2&) I32 {
-    r Crate2&w = w.inner
+    r := w.inner
     return r.v
 }
 
@@ -9563,4 +9566,175 @@ test "a spawned constructor and a spawned computed call run as their calls do" {
         spawn k = cgPick()(21)
     }
     assert r.v == 5 and k == 42
+}
+
+# ---- O10b/O18b: a callee's obligations, known before its call, build a temporary where it must live ----
+# a callee's body is checked before its first call (a generic's instantiation, a function declared later), so every
+# call is held to what the body requires - and a temporary passed for a scope the callee requires to outlive the
+# container's is built where the container lives. Each value is read back after churning the arena, which a node
+# built in the loop body's arena (reclaimed every iteration) would not survive.
+type ObNode struct(v I64) {
+    v
+}
+
+fn obChurn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)        # built where keep lives, so all of them stay: many chunks are taken
+        t += keep[3]
+    }
+    return t
+}
+
+test "O18b: List.Push of a temporary in a loop builds it where the list lives" {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range 10 {
+        l.Push(ObNode(i))
+        scratch Array<I64>& = Array<I64>(8, 999)    # the loop body's arena is used, then reclaimed
+        scratch[0] = 5
+    }
+    obChurn()
+    s I64 = 0
+    for n in l { s += n.v }
+    assert s == 45
+}
+
+test "O18b: a temporary pushed from a doubly nested block, and text pushed in a loop" {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range 4 {
+        for j in range 3 {
+            if j != i { l.Push(ObNode(i * 10 + j)) }
+        }
+    }
+    words List<String&>& = List<String&>()
+    for i in range 5 { words.Push($i "-" $(i * i)) }
+    obChurn()
+    s I64 = 0
+    for n in l { s += n.v }
+    assert s == 159 and l.Len() == 9
+    assert words[3] == "3-9" and words[4] == "4-16"
+}
+
+# a method and a plain function declared after their caller, each storing its argument into its first parameter
+type ObBag struct() {
+    first mut ObNode& = null
+    second mut ObNode& = null
+}
+
+fn obFill(n I64) I64 {
+    b ObBag& = ObBag()
+    for i in range n {
+        b.obPut(ObNode(i + 40))
+        if i == 0 { obPut2(b, ObNode(2)) }
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    obChurn()
+    return b.first.v + b.second.v
+}
+
+fn (b mut ObBag&) obPut(n mut ObNode&) { b.first = n }
+fn obPut2(b mut ObBag&, n mut ObNode&) { b.second = n }
+
+# a generic declared after its caller, storing a temporary it is handed
+fn obKeepAll(n I64) I64 {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range n {
+        obKeep(l, ObNode(i))
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    obChurn()
+    s I64 = 0
+    for x in l { s += x.v }
+    return s
+}
+
+fn obKeep(l mut List<<T>>&, x <T>) { l.Push(x) }
+
+# mutable, so a call given them is run - one given constants would be decided while compiling (S18c), where nothing
+# is reclaimed
+obThree mut I64 = 3
+obSix mut I64 = 6
+
+test "O10b: a method, a function and a generic declared after their caller" {
+    assert obFill(obThree) == 44
+    assert obKeepAll(obSix) == 15
+}
+
+test "StringBuilder in a loop: the text is copied in, so nothing it is given needs to outlive it" {
+    sb StringBuilder& = StringBuilder()
+    for i in range 4 { sb.Push($i) }
+    obChurn()
+    assert sb.ToString() == "0123"
+}
+
+# ---- O23a/O13c: an iterator reads where its collection lives ----
+# "for w in ws" holds ws.Iter() in a hidden local: the iterator records where ws lives (O13c), its Next returns an
+# element at that scope (O23a, O14b), so each element can be pushed into another list as long-lived as ws
+test "O23a: elements of one list pushed into another, through the iterator" {
+    ws List<ObNode&>& = List<ObNode&>()
+    for i in range 5 { ws.Push(ObNode(i * 2)) }
+    mine List<ObNode&>& = List<ObNode&>()
+    for w in ws { mine.Push(w) }
+    n := ObNode(100)
+    if mine.Len() == 5 {
+        for w in ws { mine.Push(w) }              # from an inner block too: the elements are ws's, not the loop's
+        mine.Push(n)
+    }
+    obChurn()
+    s I64 = 0
+    for m in mine { s += m.v }
+    assert s == 140 and mine.Len() == 11
+}
+
+# a hand-written collection and iterator, not generic: Next borrows from the iterator ("ObNode&it"), and every return
+# reads the bag's own storage through the iterator's "&of" field - so a call's result is where the bag lives (O13c)
+type ObItems struct() {
+    items mut Array<ObNode&>& = Array<ObNode&>(8)
+    n mut I64 = 0
+}
+fn (b mut ObItems&) Add(x ObNode&) {
+    b.items[b.n] = x
+    b.n++
+}
+type ObItemsIter struct(of ObItems&) {
+    bag ObItems&of = of
+    i mut I64 = 0
+}
+fn (it mut ObItemsIter&) Next() ObNode&it ? Exhausted {
+    if it.i == it.bag.n { error Exhausted.END }
+    v := it.bag.items[it.i]
+    it.i++
+    return v
+}
+fn (b ObItems&) Iter() ObItemsIter { return ObItemsIter(b) }
+
+test "O13c: a hand-written iterator's elements live where its collection does" {
+    src ObItems& = ObItems()
+    for i in range 3 { src.Add(ObNode(i + 1)) }
+    dst ObItems& = ObItems()
+    for x in src { dst.Add(x) }
+    obChurn()
+    assert dst.n == 3 and dst.items[0].v + dst.items[1].v + dst.items[2].v == 6
+}
+
+# K2: a global computed while compiling through the same pushes - the evaluator and the run time agree
+fn obListSum(n I64) I64 {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range n { l.Push(ObNode(i * 3)) }
+    mine List<ObNode&>& = List<ObNode&>()
+    for w in l { mine.Push(w) }
+    s I64 = 0
+    for m in mine { s += m.v }
+    return s
+}
+
+ObListSumBaked := obListSum(6)
+
+test "O18b/O23a: the same pushes computed while compiling and at run time" {
+    assert ObListSumBaked == 45
+    assert obListSum(6) == ObListSumBaked
+    assert obListSum(obSix) == ObListSumBaked
 }
