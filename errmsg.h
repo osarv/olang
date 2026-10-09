@@ -242,6 +242,7 @@ struct type;
     X(ERR_IMMUTABLE,                    "D9",    "%S is not 'mut', so it cannot be written") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
@@ -461,6 +462,12 @@ void ErrMsgFinishCompilation();
 //every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
 void ErrMsgPushContext(struct token tok, char* msg);
 void ErrMsgPopContext(void);
+//B11: an error in the standard library's code, met while it is checked for one of the program's uses of it (a generic
+//instantiated with the program's types), is reported at that use - the innermost open context in the program's own
+//files - with a note at the library's line. isLibrary says which files are the library's.
+void ErrMsgSetLibraryTest(bool (*isLibrary)(struct str file));
+//...the same for an error reported later, once the contexts are closed: where it is to be reported, if not at `at`
+bool ErrMsgProgramUse(struct token at, struct token* use);
 //K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
 void ErrMsgBufferStart(void);
 void ErrMsgBufferFlush(void);

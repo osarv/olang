@@ -5696,7 +5696,7 @@ static int numericFamilyRank(struct type t, int* family);
 bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
 static void operandWidenInPlace(struct operand* op, struct type t);
 //D13c: a zero value a constructor gives - the call, where it is needed, and what needs it (an array's fill, or not)
-struct zeroRec { struct operand* call; struct token tok; bool forArray; };
+struct zeroRec { struct operand* call; struct token tok; bool forArray; struct token use; bool moved; };
 static struct list zeroRecs;
 
 //D13c: a value type with a constructor - its zero value is that constructor's, not zero bits
@@ -5753,7 +5753,8 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
 static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct token tok, bool forArray) {
     if (!typeHasZeroCtor(t)) return NULL;
     struct operand* call = zeroCtorCall(ctx, t, tok, 0);
-    struct zeroRec r = { call, tok, forArray };
+    struct zeroRec r = { call, tok, forArray, tok, false };
+    r.moved = ErrMsgProgramUse(tok, &r.use); //B11: reported at the program's use of library code that needs it
     ListAdd(&zeroRecs, &r);
     return call;
 }
@@ -16716,8 +16717,20 @@ static void noteWhy(struct token at, struct token whyTok) {
     if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
 }
 
+//B11: whether a file is the standard library's - the prelude or std/ - whose errors met for a use of its code by the
+//program are reported at that use (ErrMsgSetLibraryTest)
+static bool isLibraryFile(struct str file) {
+    for (int i = 0; i < allModules.len; i++) {
+        struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
+        if (!StrCmp(m->fileName, file)) continue;
+        return m->identity.len > 4 && !strncmp(m->identity.ptr, "std/", 4);
+    }
+    return false;
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
+    ErrMsgSetLibraryTest(isLibraryFile);
     nextBodyId = 0; //S8b: every attempt rebuilds every body
     fixedCacheReset();
     bodiesPhase = false; //O10b
@@ -16873,10 +16886,14 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             r->call->catchClauses = clauses;
             if (ok) {
                 if (CtIsZero(val)) r->call->zeroBits = true;
-                else if (r->forArray && !CtIsPlainData(val)) Err(r->tok, ERR_ZERO_VALUE_SHARED, &r->call->type);
+                else if (r->forArray && !CtIsPlainData(val)) {
+                    Err(r->use, ERR_ZERO_VALUE_SHARED, &r->call->type);
+                    if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
+                }
                 continue;
             }
-            Err(r->tok, ERR_NO_ZERO_VALUE, &r->call->type, why);
+            Err(r->use, ERR_NO_ZERO_VALUE, &r->call->type, why);
+            if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
             noteWhy(r->tok, whyTok);
         }
         CtReset();

@@ -400,6 +400,29 @@ void ErrMsgPushContext(struct token tok, char* msg) {
 }
 void ErrMsgPopContext(void) { if (errContextDepth > 0) errContextDepth--; }
 
+static bool (*libraryFile)(struct str file);
+void ErrMsgSetLibraryTest(bool (*isLibrary)(struct str file)) { libraryFile = isLibrary; }
+static bool inLibrary(struct where w) { return libraryFile && w.file.len && libraryFile(w.file); }
+
+//B11: when w is in the standard library, the innermost open context in the program's own files - the use of the
+//library's code that w was met for - or -1. The library cannot be changed where it is used; the program's types can
+static int programUse(struct where w) {
+    if (!inLibrary(w)) return -1;
+    int top = errContextDepth < ERR_CONTEXT_MAX ? errContextDepth : ERR_CONTEXT_MAX;
+    for (int i = top - 1; i >= 0; i--) {
+        if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
+        if (!inLibrary(whereOf(errContexts[i].tok))) return i;
+    }
+    return -1;
+}
+
+bool ErrMsgProgramUse(struct token at, struct token* use) {
+    int i = programUse(whereOf(at));
+    if (i < 0) return false;
+    *use = errContexts[i].tok;
+    return true;
+}
+
 //counts an error, and says whether it is to be written (it is not while muted)
 static bool countError(bool syntax) {
     nErrors++;
@@ -422,11 +445,17 @@ static FILE* startError(struct where w, const char* rule) {
     return f;
 }
 
-//the end of an error's record: its source, and the notes saying what it was reported inside
-static void endError(FILE* f, struct where w) {
+//the end of an error's record: its source, and the notes saying what it was reported inside. An error met in the
+//library and reported at the program's use of it (programUse, the context `use`) says where it was met, and only the
+//contexts from that use outward
+static void endError(FILE* f, struct where w, int use, struct where met) {
     fputc('\n', f);
     putExcerpt(f, w);
     int top = errContextDepth < ERR_CONTEXT_MAX ? errContextDepth : ERR_CONTEXT_MAX;
+    if (use >= 0) {
+        noteText(met, diags[NOTE_IN_LIBRARY].fmt);
+        if (use < top) top = use + 1;
+    }
     for (int i = top - 1, shown = 0; i >= 0 && shown < ERR_CONTEXT_SHOWN; i--) {
         if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
         noteText(whereOf(errContexts[i].tok), errContexts[i].msg);
@@ -459,9 +488,12 @@ static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
         scopeGroupSeen = true;
     }
     if (!countError(syntax)) return;
+    int use = programUse(w);
+    struct where met = w;
+    if (use >= 0) w = whereOf(errContexts[use].tok);
     FILE* f = startError(w, diags[d].rule);
     putMessage(f, diags[d].fmt, ap);
-    endError(f, w);
+    endError(f, w, use, met);
 }
 
 void Err(struct token at, enum diag d, ...) {

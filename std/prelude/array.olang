@@ -74,11 +74,16 @@ fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) I64 {
     return n
 }
 
-# a new array of f applied to every element, in order
+# a new array of f applied to every element, in order. Made filled with the first result rather than with U's zero value,
+# so a U without one (D13c) maps as any other
 fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
-    out := Array<<U>>(a.Len())
-    for i, x in a {
-        out[i] = f(x)
+    if a.Len() == 0 {
+        none Array<<U>>                    # an array's zero value is empty, whatever U is
+        return none
+    }
+    out := Array<<U>>(a.Len(), f(a[0]))
+    for i in range 1, a.Len() {
+        out[i] = f(a[i])
     }
     return out
 }
@@ -91,7 +96,11 @@ fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
         marks[i] = keep(x)
         if marks[i] { n++ }
     }
-    out := Array<<T>>(n)
+    if n == 0 {
+        none Array<<T>>                    # an array's zero value is empty, whatever T is
+        return none
+    }
+    out := Array<<T>>(n, a[0])            # filled with an element rather than T's zero value, which T may not have (D13c)
     j I64 = 0
     for i, x in a {
         if marks[i] {

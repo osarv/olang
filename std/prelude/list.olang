@@ -36,7 +36,7 @@ firstChunkLog I64 = 3
 firstChunk I64 = 8
 
 fn (l mut List<<T>>&) Push(x <T>) {
-    if l.used == l.room { l.grow() }
+    if l.used == l.room { l.grow(x) }
     l.tail[l.used] = x
     l.used++
     l.count++
@@ -53,7 +53,7 @@ fn (l mut List<<T>>&) PushAll(a Array<<T>>&) {
     }
     from I64 = 0
     for from < a.Len() {
-        if l.used == l.room { l.grow() }
+        if l.used == l.room { l.grow(a[from]) }
         n I64 = a.Len() - from
         if l.room - l.used < n { n = l.room - l.used }
         for j in range n { l.tail[l.used + j] = a[from + j] }
@@ -64,8 +64,10 @@ fn (l mut List<<T>>&) PushAll(a Array<<T>>&) {
 }
 
 # a new tail, twice the size of the last - the one made before, when Pop or Clear left it; the array of chunks doubles
-# when it has no room for another
-fn (l mut List<<T>>&) grow() {
+# when it has no room for another. A new chunk is filled with fill, the element about to be pushed, rather than with
+# T's zero value: no slot is read before it is written, and an element type whose constructor cannot run on zeros has
+# no zero value at all (D13c) - a List of such values is as ordinary as any other
+fn (l mut List<<T>>&) grow(fill <T>) {
     if l.nChunks < l.made {
         l.tail = l.chunks[l.nChunks]
     } else {
@@ -76,7 +78,7 @@ fn (l mut List<<T>>&) grow() {
             for k in range l.made { more[k] = l.chunks[k] }
             l.chunks = more
         }
-        l.chunks[l.made] = Array<<T>>(firstChunk << l.made)
+        l.chunks[l.made] = Array<<T>>(firstChunk << l.made, fill)
         l.tail = l.chunks[l.made]
         l.made++
     }
@@ -422,9 +424,14 @@ fn (l List<<T>>&) RunFrom(at I64) Array<<T>>&l ? Exhausted {
 }
 
 # the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
-# independent of the list, which may be discarded, or keep growing, without affecting it
+# independent of the list, which may be discarded, or keep growing, without affecting it. Made filled with the first
+# element, which needs no zero value of T (D13c), as the chunks do not
 fn (l List<<T>>&) ToArray() mut Array<<T>>& {
-    out Array<<T>>&return = Array<<T>>(l.count)
+    if l.count == 0 {
+        none Array<<T>>&return             # an array's zero value is empty, whatever T is
+        return none
+    }
+    out Array<<T>>&return = Array<<T>>(l.count, l.chunks[0][0])
     at I64 = 0
     for k in range l.nChunks {
         c := l.chunks[k]
