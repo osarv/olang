@@ -124,7 +124,7 @@ because what it finds about structure feeds the refactor.
   (`expected I32, found F64`) instead of generic prose - a table of ids with rule and format string, ErrMsg calls take
   arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
   notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
-  characters, ~470 call sites, no arguments.
+  characters, ~470 call sites, no arguments. The user approved this plan ("Yes do that", 2026-10-09).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
