@@ -6204,6 +6204,8 @@ struct checkCtx {
                        //even though only the former also sets func (see the field above); false for a
                        //global initializer, which has no enclosing scope at all
     struct syntax* incDecRoot; //S3a: the one expression an increment may be - a statement's whole expression
+    struct syntax* clauseLastStmt; //R11: the last statement of a catch clause's block in value position - a value left
+                                   //there is said to be no clause's value (one error, with the default to write)
     bool buildingTarget; //E31: building an assignment's target - "x[i]" there may name only SetAt
     bool checkingTry; //E31: building what a "try" checks (not a written call's arguments, not a nested try) - an
                       //operator, index or slice on a declared type calls its Try form here
@@ -10042,6 +10044,31 @@ static void ensureBodyChecked(struct var* func);
 //writes - unified with the parameter's own function type, so a variable only those reach is bound by them; a type that
 //does not agree binds nothing (FinalizeLambda reports it)
 struct pendingLambda { struct syntax* node; struct checkCtx ctx; };
+static void syntaxTokensInto(struct syntax* n, struct list* out);
+//T7a: whether a generic's body holds its type variable v in an array or a struct - names it bare as a type argument
+//("Array<U>(n)", "Pair<U, V>"), where an array value bound to v would be an array held by value inside another
+static bool syntaxHoldsVarAsTypeArg(struct syntax* n, struct str v) {
+    if (n->type == SNTX_TYPE_ARGS) {
+        for (int i = 0; i < n->parts.len; i++) {
+            struct syntaxPart* p = ListGetIdx(&n->parts, i);
+            if (p->isToken) continue;
+            struct list toks = ListInit(sizeof(struct token));
+            syntaxTokensInto(p->sntx, &toks);
+            bool bare = toks.len == 1 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN
+                        && StrCmp(strFromTok(*(struct token*)ListGetIdx(&toks, 0)), v);
+            ListDestroy(toks);
+            if (bare) return true;
+        }
+    }
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&n->parts, i);
+        if (!p->isToken && syntaxHoldsVarAsTypeArg(p->sntx, v)) return true;
+    }
+    return false;
+}
+static bool genericHoldsVarInAggregate(struct var* f, struct str v) {
+    return f->bodySyntax && syntaxHoldsVarAsTypeArg(f->bodySyntax, v);
+}
 static void unifyLambdaWritten(struct operand* arg, struct type paramT, struct list* bindings) {
     struct pendingLambda* pl = arg->pendingLambda;
     if (!pl || paramT.bType != BASETYPE_FUNC) return;
@@ -10162,6 +10189,14 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type* bound = bindingGet(&bindings, c->name);
             if (bound && c->varConstraint && TypeIsGeneric(*c->varConstraint)) unifyThroughMethods(*c->varConstraint, *bound, &bindings);
         }
+        //T7a: each lambda's written result, before it is checked (below)
+        struct list lambdaRets = ListInit(sizeof(struct syntax*));
+        for (int i = 0; i < args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+            struct syntax* sig = arg->pendingLambda ? firstPartOfType(((struct pendingLambda*)arg->pendingLambda)->node, SNTX_FUNC_SIG) : NULL;
+            struct syntax* retNode = sig ? firstPartOfType(sig, SNTX_RET_TYPE) : NULL;
+            ListAdd(&lambdaRets, &retNode);
+        }
         //D16a: a lambda takes what the other arguments fixed - its parameters' types - and its result then binds
         //what only it reaches
         for (int i = 0; ok && i < args.len; i++) {
@@ -10181,6 +10216,23 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 Err(tok, ERR_REF_TYPEVAR_NOT_AGGREGATE, bt, pt.name);
                 ok = false;
             }
+        }
+        //T7a: a lambda's written result binding a variable the generic holds in an array or a struct - "nums.Map(fn(n I64)
+        //String { ... })" puts a String value in an Array<U> - is said at the lambda's result, where the fix is, rather
+        //than inside the generic's body, and the call is not instantiated
+        for (int i = 0; ok && i < args.len; i++) {
+            struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            struct syntax* retNode = *(struct syntax**)ListGetIdx(&lambdaRets, i);
+            if (!retNode || paramT.bType != BASETYPE_FUNC || !paramT.hasRetType) continue;
+            struct type prt = *paramT.retType;
+            struct type* bt = prt.bType == BASETYPE_TYPEVAR && !prt.structMAlloc ? bindingGet(&bindings, prt.name) : NULL;
+            if (!bt || bt->bType != BASETYPE_ARRAY || bt->structMAlloc || !bt->arrMalloc || bt->unknown) continue;
+            if (!genericHoldsVarInAggregate(func, prt.name)) continue;
+            Err(firstTokAnywhere(retNode), ERR_LAMBDA_RESULT_HELD, prt.name, bt, bt);
+            struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, unknownTypeStandIn());
+            bad->readVar = func;
+            bad->args = args;
+            return bad;
         }
         //G19: what the constraints bind, and whether each holds - reported here, at the call
         if (ok && !checkTypeConstraints(&func->type.typeConstraints, &bindings, tok)) {
@@ -13373,6 +13425,7 @@ static bool catchMatchCovered(struct list* seen, struct catchMatch* m) {
 //falls through to after the statement, and a default has nothing to give its value to. Whatever no clause
 //names propagates, exactly as from a plain try - with or without defaults - so the only way to handle every
 //error is to say so, with an item-less "catch".
+static bool clauseValueReported; //R11: the value ending the clause being built was reported as such (ERR_CLAUSE_LAST_VALUE)
 static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct operand* callOp, struct list* errors,
                               bool valuePos, struct type* rt, struct token tok, struct list* out) {
     *out = ListInit(sizeof(struct catchClause));
@@ -13399,17 +13452,37 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
             for (int i = 0; i < cc.matches.len; i++) ListAdd(&seen, ListGetIdx(&cc.matches, i));
         }
         struct syntax* blk = firstPartOfType(cn, SNTX_BLOCK);
+        bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
+        bool valueLeft = false; //R11: "catch { log(); -1 }" - the block's last line is a value, which a clause never gives
         if (blk) {
             cc.hasBlock = true;
+            struct syntax* prevLast = ctx->clauseLastStmt;
+            bool prevReported = clauseValueReported;
+            struct list bs = allPartsOfType(blk, SNTX_STMNT);
+            struct syntax* last = bs.len ? *(struct syntax**)ListGetIdx(&bs, bs.len - 1) : NULL;
+            ctx->clauseLastStmt = valuePos && !hasDefault && last && last->parts.len ? partSntx(last, 0) : NULL;
+            clauseValueReported = false;
             cc.block = buildBlock(ctx, blk);
+            valueLeft = clauseValueReported;
+            ctx->clauseLastStmt = prevLast;
+            clauseValueReported = prevReported;
         }
-        bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
         if (!valuePos) {
             if (hasDefault) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_IN_STATEMENT);
         } else {
             bool leaves = blk && blockLeavesValue(&cc.block);
             if (hasDefault && leaves) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_DEAD);
-            if (!hasDefault && !leaves) Err(cc.tok, ERR_CATCH_MUST_LEAVE);
+            if (!hasDefault && !leaves && !valueLeft) {
+                //B5b: "os.Exit(2)" ends the program, but as an ordinary call - D10a cannot see it leave
+                struct statement* lastSt = cc.block.len ? ListGetIdx(&cc.block, cc.block.len - 1) : NULL;
+                struct var* lf = lastSt && lastSt->sType == STATEMENT_EXPR && lastSt->op && lastSt->op->opType == OPERATION_FUNCCALL
+                                 ? lastSt->op->readVar : NULL;
+                bool exits = lf && (StrCmp(lf->name, StrFromCStr("Exit"))
+                                    || (lf->type.isExtern && (StrCmp(lf->name, StrFromCStr("exit"))
+                                                              || StrCmp(lf->name, StrFromCStr("_exit"))
+                                                              || StrCmp(lf->name, StrFromCStr("abort")))));
+                Err(exits ? lastSt->op->tok : cc.tok, exits ? ERR_CATCH_EXIT_NOT_LEAVE : ERR_CATCH_MUST_LEAVE);
+            }
             if (hasDefault && !leaves) {
                 if (!rt) {
                     Err(cc.tok, ERR_DEFAULT_NO_VALUE);
@@ -16656,7 +16729,19 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = prevRoot;
     //...text on a line of its own most often meant to continue the join on the line before (E11b)
     if (!exprCanStandAsStatement(op) && !op->type.unknown) {
-        if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
+        if (s == ctx->clauseLastStmt) { //R11: a value ending a catch clause's block is meant as the clause's value
+            struct list toks = ListInit(sizeof(struct token));
+            syntaxTokensInto(e, &toks);
+            struct str text = StrFromCStr("v");
+            if (toks.len) {
+                struct token a = *(struct token*)ListGetIdx(&toks, 0);
+                struct token b = *(struct token*)ListGetIdx(&toks, toks.len - 1);
+                int n = (int)(b.str.ptr + b.str.len - a.str.ptr);
+                if (a.owner == b.owner && a.lineNr == b.lineNr && n > 0 && n <= 40) text = Str(a.str.ptr, n);
+            }
+            Err(op->tok, ERR_CLAUSE_LAST_VALUE, text);
+            clauseValueReported = true;
+        } else if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
         else Err(op->tok, ERR_NOT_A_STATEMENT);
     }
     struct statement stmt = (struct statement){0};
@@ -19648,7 +19733,21 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
             if (!t) continue;
             struct type want = rt.isTuple ? (*(struct var*)ListGetIdx(&rt.vars, i)).type : rt;
-            if (!TypeIsSame(t->type, want)) { Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type); fits = false; }
+            if (!TypeIsSame(t->type, want)) {
+                //a reference slot for a value result - an array element held by reference (T7a): the call can build
+                //its result there instead, which its signature says ("Array<I64>&")
+                struct type asRef = want;
+                asRef.structMAlloc = true;
+                if (!want.structMAlloc && t->type.structMAlloc && typeConvertsBetweenValueAndReference(want, t->type)
+                        && !rt.isTuple && TypeIsSame(asRef, t->type)) {
+                    struct type shown = t->type;
+                    shown.scopeParam = NULL;
+                    struct str fname = call->readVar->name;
+                    for (int k = 0; k < fname.len; k++) if (fname.ptr[k] == '$') { fname.len = k; break; } //G16: as written
+                    Err(t->tok, ERR_SPAWN_RESULT_AS_REF, &want, &t->type, fname, &shown);
+                } else Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type);
+                fits = false;
+            }
             if (!OperandIsMutableLvalue(t)) fits = false;
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {

@@ -171,6 +171,7 @@ struct type;
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
+    X(ERR_LAMBDA_RESULT_HELD,           "T7a",   "this result binds %S to %t, which the call holds in an array, where an array is held by reference - write the result as %t&") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
     X(ERR_TYPE_VAR_WRITTEN_AGAIN,       "G8b",   "%S was introduced already - write it '%S', not '<%S>'") \
     X(ERR_TYPE_VAR_BEFORE_INTRO,        "G8b",   "%n is introduced later in this signature - its first use is written '<%S>'") \
@@ -364,6 +365,8 @@ struct type;
     X(ERR_DEFAULT_IN_STATEMENT,         "R11",   "a try written as a statement gives no value, so it takes no default") \
     X(ERR_DEFAULT_DEAD,                 "R11",   "this clause's block always leaves, so its default is never the value - remove it") \
     X(ERR_CATCH_MUST_LEAVE,             "R11",   "a clause here leaves, or gives the value with 'default v'") \
+    X(ERR_CATCH_EXIT_NOT_LEAVE,         "R11, B5b", "a call that ends the program is not a leave - write 'unreachable' after it") \
+    X(ERR_CLAUSE_LAST_VALUE,            "R11",   "a block's last value is not the clause's value - write '} default %S' after the block") \
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
     X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
@@ -459,6 +462,7 @@ struct type;
     X(ERR_SPAWN_FUNC_TOO_SHORT,         "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") \
     X(ERR_SPAWN_RESULT_VOID,            "P1g",   "this call returns nothing to bind - drop the target") \
     X(ERR_SPAWN_RESULT_TYPE,            "P1g",   "a spawn target has exactly the call's type %t, found %t - convert after the join") \
+    X(ERR_SPAWN_RESULT_AS_REF,          "P1g",   "a spawn target has exactly the call's type %t, found %t - declare '%S' to give %t, built where its result lands") \
     X(ERR_SPAWN_RESULT_TOO_SHORT,       "P1g",   "this target closes before the join does - declare it at the join's level or wider") \
     X(ERR_SPAWN_RESULTS_DISAGREE,       "P1g",   "these targets live in different scopes, and the results are built in one") \
     /* ---- lambdas ---- */ \
