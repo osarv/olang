@@ -1,0 +1,2016 @@
+# linalg - dense linear algebra on Matrix<T>, the operand of numeric and neural-network code: matrix products, element
+# operations, reductions, random fills, linear systems.
+#
+# A Matrix<T> is two-dimensional and row-major, with a row stride: element (r, c) is Data[r * Stride + c]. Rows are the
+# samples of a batch and columns their features; structure beyond two dimensions belongs to the operation that needs
+# it, which takes it as parameters and interprets a row itself - a convolution told C, H and W lowers to im2col into a
+# workspace matrix and one product; attention keeps each head as a column block (ColRange, a strided view) and runs
+# its products on those views. Transposition is likewise a parameter of the products (Gemm's transA and transB, or
+# m.T() in an expression), never a layout: A^T B and A B^T read A and B where they are.
+#
+# A matrix is a VIEW - its shape, its stride and a slice of storage - so copying one copies the view, never the
+# elements (Clone does that), and one made over existing storage (View, RowRange, ColRange, Block) allocates nothing.
+# Matrix<F32>(rows, cols) is a new zero-filled matrix, built where it lands like any other value (O18a).
+#
+# Two kinds of operation, and the difference is what a loop pays:
+# - forms with a DESTINATION write into a matrix (or array) the caller already has and allocate nothing but Gemm's
+#   packing panels, in its own scope: Gemm, Gemv, Ger, Ger2, Map/Map2/Map3, Add, Sub, Scale, AddScaled, AddRow,
+#   AddOuterDifference, AddScaledMasked, Clamp, Fill, Copy, Convert, NormalizeRows, RowSoftmax, the row and column
+#   reductions (RowSums, RowMax, RowMaxAbs, RowAbsSums, RowNorms, ArgMaxRows, ColumnSums, ColumnAbsSums) and the
+#   random fills. A training step is written with these.
+# - operators and the rest (a + b, a @ b, a.T() @ b, -a, m.Exp(), Clone) build a new matrix each time - for scripts,
+#   and anywhere a result is wanted once. Note that "a += b" is "a = a + b" (E31): a new matrix, not an in-place add;
+#   a.Add(b) is the in-place one.
+#
+# Shapes are checked once per operation, never per element: a mismatch aborts, as an out-of-range slice does, and
+# under try - try (a + b), try (a @ b) - it is the error ShapeError.MISMATCH instead. Every check is one of the
+# functions in the "shapes" section, so that when dimensions move into the type (Matrix<T, R, C>, each a constant or
+# known at run time) they move in one place. Element access (Get, Set) is unchecked, as an array index is (E16).
+#
+# Element types: every numeric type. F16 and BF16 are stored as they are and computed in F32 where it matters - the
+# products accumulate in F32 and round once, and so do the sums - and the F8 types (F8E4M3, F8E5M2) are storage that
+# the products and conversions read. Integer arithmetic wraps (E6c).
+#
+# Threads: Gemm takes a thread count (1 unless given - linalg.Cores() is the machine's), and splits a product large
+# enough to be worth it over that many tasks, by rows of the result, so the result does not depend on the count.
+# ParallelRows gives the same splitting to the row-wise kernels a caller writes itself. The count is a parameter rather
+# than a setting: a global the program can change would keep every product from being computed while compiling (K1).
+
+import "std/math"
+import "std/rand"
+
+extern fn sysconf(name I32) I64
+
+# a shape that does not fit the operation - two operands of different shapes, a product whose inner dimensions differ
+error ShapeError {
+    MISMATCH
+}
+
+# a linear system with no unique solution
+error SolveError {
+    SINGULAR
+}
+
+# ---- the matrix ----
+
+# a Rows x Cols matrix: over data (from the element at its start, row r at r * stride) when it is given, and over new,
+# zero-filled storage when it is not. stride defaults to Cols, which makes the rows contiguous
+type Matrix<T> struct(Rows I64, Cols I64, data mut Array<<T>>& = null, stride I64 = 0) {
+    Rows
+    Cols
+    Stride I64 = stride if stride > 0 else Cols
+    assert Rows >= 0 and Cols >= 0 and Stride >= Cols
+    assert data == null or Rows == 0 or data.Len() >= (Rows - 1) * Stride + Cols
+    Data mut Array<<T>>& = data if data != null else Array<<T>>(Rows * Cols)
+}
+
+# a rows x cols matrix over the caller's storage, starting at data[offset], row r at offset + r * stride (stride
+# defaults to cols) - the way to lay matrices out in an arena the caller owns. It allocates nothing; writing it writes
+# data
+fn View(data mut Array<<T>>&, offset I64, rows I64, cols I64, stride I64 = 0) Matrix<<T>> {
+    s I64 = stride if stride > 0 else cols
+    n I64 = (rows - 1) * s + cols if rows > 0 else 0
+    return Matrix<<T>>(rows, cols, data[offset:offset + n], s)
+}
+
+# a rows x cols matrix with every element v
+fn Full(rows I64, cols I64, v <T>) Matrix<<T>> {
+    m Matrix<<T>>&return = Matrix<<T>>(rows, cols, null)
+    m.Fill(v)
+    return m
+}
+
+# a matrix holding the given rows, which must all have one length: linalg.FromRows(Array<F64>&[F64[1, 2], F64[3, 4]])
+fn FromRows(rows Array<Array<<T>>&>&) Matrix<<T>> {
+    cols I64 = rows[0].Len() if rows.Len() > 0 else 0
+    m Matrix<<T>>&return = Matrix<<T>>(rows.Len(), cols, null)
+    for r, row in rows {
+        assert row.Len() == cols
+        for c in range cols { m.Data[r * m.Stride + c] = row[c] }
+    }
+    return m
+}
+
+# the element at row r, column c - unchecked, as an array index is (E16)
+fn (m Matrix<<T>>&) Get(r I64, c I64) <T> { return m.Data[r * m.Stride + c] }
+
+# sets the element at row r, column c - unchecked
+fn (m Matrix<<T>>&) Set(r I64, c I64, v <T>) { m.Data[r * m.Stride + c] = v }
+
+# row i as an array view of its Cols elements: writing it writes the matrix. Out of range aborts (E16b)
+fn (m Matrix<<T>>&) Row(i I64) mut Array<<T>>&m { return m.Data[i * m.Stride:i * m.Stride + m.Cols] }
+
+# whether the rows follow one another with no gap, so the elements are one run of Rows * Cols in Data
+fn (m Matrix<<T>>&) Contiguous() Bool { return m.Stride == m.Cols or m.Rows <= 1 }
+
+# ---- shapes: every check an operation makes, in one place ----
+
+fn sameShape(a Matrix<<T>>&, b Matrix<<U>>&) Bool { return a.Rows == b.Rows and a.Cols == b.Cols }
+
+# whether r is a row of m's width: a 1 x m.Cols matrix
+fn rowShape(m Matrix<<T>>&, r Matrix<<T>>&) Bool { return r.Rows == 1 and r.Cols == m.Cols }
+
+# whether c (m x n) can hold op(a) op(b): op(a) is m x k and op(b) k x n
+fn productShape(c Matrix<<T>>&, a Matrix<<T>>&, transA Bool, b Matrix<<T>>&, transB Bool) Bool {
+    am I64 = a.Cols if transA else a.Rows
+    ak I64 = a.Rows if transA else a.Cols
+    bk I64 = b.Cols if transB else b.Rows
+    bn I64 = b.Rows if transB else b.Cols
+    return ak == bk and c.Rows == am and c.Cols == bn
+}
+
+# whether lo .. hi is a range within 0 .. n
+fn rangeShape(lo I64, hi I64, n I64) Bool { return 0 <= lo and lo <= hi and hi <= n }
+
+# ---- views: none of these allocates ----
+
+# rows lo .. hi (hi not included), sharing m's storage
+fn (m Matrix<<T>>&) RowRange(lo I64, hi I64) Matrix<<T>> {
+    assert rangeShape(lo, hi, m.Rows)
+    return View(m.Data, lo * m.Stride, hi - lo, m.Cols, m.Stride)
+}
+
+# columns lo .. hi, sharing m's storage: a view whose stride is wider than its rows
+fn (m Matrix<<T>>&) ColRange(lo I64, hi I64) Matrix<<T>> {
+    assert rangeShape(lo, hi, m.Cols)
+    return View(m.Data, lo, m.Rows, hi - lo, m.Stride)
+}
+
+# the rows x cols block whose first element is (r, c), sharing m's storage
+fn (m Matrix<<T>>&) Block(r I64, c I64, rows I64, cols I64) Matrix<<T>> {
+    assert rangeShape(r, r + rows, m.Rows) and rangeShape(c, c + cols, m.Cols)
+    return View(m.Data, r * m.Stride + c, rows, cols, m.Stride)
+}
+
+# the same elements in row-major order as a rows x cols matrix, sharing m's storage - so m must be contiguous, and
+# rows * cols its size
+fn (m Matrix<<T>>&) Reshape(rows I64, cols I64) Matrix<<T>> {
+    assert m.Contiguous() and rows * cols == m.Rows * m.Cols
+    return View(m.Data, 0, rows, cols, cols)
+}
+
+# m transposed, as an operand of the products: a.T() @ b is A^T B, read where A is. It is not a matrix of its own -
+# Clone() makes one
+type Transposed<T> struct(of Matrix<<T>>&) {
+    M Matrix<<T>>&of = of
+}
+
+fn (m Matrix<<T>>&) T() Transposed<<T>> { return Transposed<<T>>(m) }
+
+# the transpose as a matrix of its own: Cols x Rows, new storage
+fn (t Transposed<<T>>&) Clone() Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(t.M.Cols, t.M.Rows, null)
+    out.Copy(t)
+    return out
+}
+
+# ---- element kernels: one pass, in row order, a function value applied to each element ----
+#
+# Each writes its destination and allocates nothing. The function is a lambda written at the call, which is inlined
+# into the loop (a function value's code is a value the optimizer follows, T21), so dst.Map2(a, b, fn(x, y) { return
+# x * y }) runs as the loop written out would. A destination may be one of the operands itself - each element is read
+# before it is written - but not another view overlapping one.
+
+# dst = f(a), element by element
+fn (dst Matrix<<T>>&) Map(a Matrix<<T>>&, f fn(x <T>) <T>) {
+    assert sameShape(dst, a)
+    if dst.Contiguous() and a.Contiguous() {
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i]) }
+        return
+    }
+    for r in range dst.Rows {
+        d I64 = r * dst.Stride
+        x I64 = r * a.Stride
+        for c in range dst.Cols { dst.Data[d + c] = f(a.Data[x + c]) }
+    }
+}
+
+# dst = f(a, b), element by element
+fn (dst Matrix<<T>>&) Map2(a Matrix<<T>>&, b Matrix<<T>>&, f fn(x <T>, y <T>) <T>) {
+    assert sameShape(dst, a) and sameShape(dst, b)
+    if dst.Contiguous() and a.Contiguous() and b.Contiguous() {
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i]) }
+        return
+    }
+    for r in range dst.Rows {
+        d I64 = r * dst.Stride
+        x I64 = r * a.Stride
+        y I64 = r * b.Stride
+        for c in range dst.Cols { dst.Data[d + c] = f(a.Data[x + c], b.Data[y + c]) }
+    }
+}
+
+# dst = f(a, b, c), element by element - a fused update of three operands, an optimizer's step say
+fn (dst Matrix<<T>>&) Map3(a Matrix<<T>>&, b Matrix<<T>>&, c Matrix<<T>>&, f fn(x <T>, y <T>, z <T>) <T>) {
+    assert sameShape(dst, a) and sameShape(dst, b) and sameShape(dst, c)
+    if dst.Contiguous() and a.Contiguous() and b.Contiguous() and c.Contiguous() {
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i], c.Data[i]) }
+        return
+    }
+    for r in range dst.Rows {
+        d I64 = r * dst.Stride
+        x I64 = r * a.Stride
+        y I64 = r * b.Stride
+        z I64 = r * c.Stride
+        for k in range dst.Cols { dst.Data[d + k] = f(a.Data[x + k], b.Data[y + k], c.Data[z + k]) }
+    }
+}
+
+# every element v
+fn (m Matrix<<T>>&) Fill(v <T>) { m.Map(m, fn(x) { return v }) }
+
+# the identity: ones on the diagonal, zeros elsewhere
+fn (m Matrix<<T>>&) SetIdentity() {
+    z <T>
+    m.Fill(z)
+    for i in range lesser(m.Rows, m.Cols) { m.Data[i * m.Stride + i] = 1 }
+}
+
+# m = src, element by element - src a matrix of m's shape, or a transposed one (src.T())
+fn (m Matrix<<T>>&) Copy(src <U>) {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { m.Map(src, fn(x) { return x }) }
+        case Transposed<<T>>, Transposed<<T>>& {
+            s := src.M
+            assert m.Rows == s.Cols and m.Cols == s.Rows
+            # in blocks of 32 x 32, so both sides stay in the cache whichever way they are walked
+            for r0 in range 0, m.Rows, 32 {
+                for c0 in range 0, m.Cols, 32 {
+                    for r in range r0, lesser(r0 + 32, m.Rows) {
+                        for c in range c0, lesser(c0 + 32, m.Cols) { m.Data[r * m.Stride + c] = s.Data[c * s.Stride + r] }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# m += x
+fn (m Matrix<<T>>&) Add(x Matrix<<T>>&) { m.Map2(m, x, fn(a, b) { return a + b }) }
+
+# m -= x
+fn (m Matrix<<T>>&) Sub(x Matrix<<T>>&) { m.Map2(m, x, fn(a, b) { return a - b }) }
+
+# m *= k
+fn (m Matrix<<T>>&) Scale(k <T>) { m.Map(m, fn(a) { return a * k }) }
+
+# m += alpha * x - BLAS's axpy
+fn (m Matrix<<T>>&) AddScaled(x Matrix<<T>>&, alpha <T>) { m.Map2(m, x, fn(a, b) { return a + alpha * b }) }
+
+# every row += bias, a 1 x Cols matrix: a layer's bias added to a batch, read where it is
+fn (m Matrix<<T>>&) AddRow(bias Matrix<<T>>&) {
+    assert rowShape(m, bias)
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { m.Data[d + c] = m.Data[d + c] + bias.Data[c] }
+    }
+}
+
+# m += alpha (a b^T - c d^T) in one pass - the contrastive update of two phases (a learning rule comparing a free
+# state with a nudged one), with neither outer product made. It is computed factored, as a (b - d)^T + (a - c) d^T,
+# so that two nearly equal phases do not cancel: the differences are taken first, element by element
+fn (m Matrix<<T>>&) AddOuterDifference(a Array<<T>>&, b Array<<T>>&, c Array<<T>>&, d Array<<T>>&, alpha <T>) {
+    assert a.Len() == m.Rows and c.Len() == m.Rows and b.Len() == m.Cols and d.Len() == m.Cols
+    for r in range m.Rows {
+        o I64 = r * m.Stride
+        ar <T> = alpha * a[r]
+        dr <T> = alpha * (a[r] - c[r])
+        for k in range m.Cols { m.Data[o + k] = m.Data[o + k] + (ar * (b[k] - d[k]) + dr * d[k]) }
+    }
+}
+
+# m = min(max(m, lo), hi), element by element - a cap on every weight
+fn (m Matrix<<T>>&) Clamp(lo <T>, hi <T>) { m.Map(m, fn(x) { return lo if x < lo else (hi if x > hi else x) }) }
+
+# m += alpha g where mask is not zero, element by element: sparse connectivity, frozen weights
+fn (m Matrix<<T>>&) AddScaledMasked(g Matrix<<T>>&, alpha <T>, mask Matrix<U8>&) {
+    assert sameShape(m, g) and sameShape(m, mask)
+    z <T>
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        x I64 = r * g.Stride
+        k I64 = r * mask.Stride
+        for c in range m.Cols { m.Data[d + c] = m.Data[d + c] + (alpha * g.Data[x + c] if mask.Data[k + c] != 0 else z) }
+    }
+}
+
+# ---- new matrices: the operators, for scripts and one-off results ----
+#
+# Each builds its result where it lands (O18a). A matrix operand must have the receiver's shape; a scalar operand is
+# of the element type exactly - a literal does not adapt through the operator's generic operand, so an F32 matrix is
+# scaled by m * F32(0.5), or in place by m.Scale(0.5)
+
+fn (a Matrix<<T>>&) Plus(b <U>) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Cols, null)
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { out.Map2(a, b, fn(x, y) { return x + y }) }
+        case <T> { out.Map(a, fn(x) { return x + b }) }
+    }
+    return out
+}
+
+fn (a Matrix<<T>>&) Minus(b <U>) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Cols, null)
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { out.Map2(a, b, fn(x, y) { return x - y }) }
+        case <T> { out.Map(a, fn(x) { return x - b }) }
+    }
+    return out
+}
+
+# element by element (the Hadamard product) - the matrix product is "@"
+fn (a Matrix<<T>>&) Mul(b <U>) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Cols, null)
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { out.Map2(a, b, fn(x, y) { return x * y }) }
+        case <T> { out.Map(a, fn(x) { return x * b }) }
+    }
+    return out
+}
+
+fn (a Matrix<<T>>&) Div(b <U>) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Cols, null)
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { out.Map2(a, b, fn(x, y) { return x / y }) }
+        case <T> { out.Map(a, fn(x) { return x / b }) }
+    }
+    return out
+}
+
+fn (a Matrix<<T>>&) Neg() Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Cols, null)
+    out.Map(a, fn(x) { return -x })
+    return out
+}
+
+# the checked forms: what try (a + b) calls, failing with ShapeError.MISMATCH where the operator would abort
+fn (a Matrix<<T>>&) TryPlus(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if not sameShape(a, b) { error ShapeError.MISMATCH } }
+        nomatch { }
+    }
+    return a + b
+}
+
+fn (a Matrix<<T>>&) TryMinus(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if not sameShape(a, b) { error ShapeError.MISMATCH } }
+        nomatch { }
+    }
+    return a - b
+}
+
+fn (a Matrix<<T>>&) TryMul(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if not sameShape(a, b) { error ShapeError.MISMATCH } }
+        nomatch { }
+    }
+    return a * b
+}
+
+fn (a Matrix<<T>>&) TryDiv(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if not sameShape(a, b) { error ShapeError.MISMATCH } }
+        nomatch { }
+    }
+    return a / b
+}
+
+# a copy with storage of its own, contiguous
+fn (m Matrix<<T>>&) Clone() Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(m.Rows, m.Cols, null)
+    out.Copy(m)
+    return out
+}
+
+# f applied to every element, into a new matrix
+fn (m Matrix<<T>>&) Mapped(f fn(x <T>) <T>) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(m.Rows, m.Cols, null)
+    out.Map(m, f)
+    return out
+}
+
+# the floating-point functions of std/math, element by element, into a new matrix
+fn (m Matrix<<T>>&) Exp() Matrix<<T>> { return m.Mapped(fn(x) { return math.Exp(x) }) }
+fn (m Matrix<<T>>&) Log() Matrix<<T>> { return m.Mapped(fn(x) { return math.Log(x) }) }
+fn (m Matrix<<T>>&) Tanh() Matrix<<T>> { return m.Mapped(fn(x) { return math.Tanh(x) }) }
+fn (m Matrix<<T>>&) Sqrt() Matrix<<T>> { return m.Mapped(fn(x) { return math.Sqrt(x) }) }
+fn (m Matrix<<T>>&) Abs() Matrix<<T>> { return m.Mapped(fn(x) { return math.Abs(x) }) }
+
+fn lesser(a I64, b I64) I64 { return a if a < b else b }
+# ---- matrix multiplication ----
+#
+# Gemm computes C = alpha * op(A) op(B) + beta * C, where op(X) is X or its transpose, for row-major matrices held in
+# arrays with a row stride: element (i, j) of a matrix with stride ld is x[i * ld + j]. It is the one kernel every
+# product in this module goes through.
+#
+# The algorithm is the one BLAS libraries use (Goto's, as in BLIS): C is computed in blocks sized for the caches -
+# KC rows of B by NC columns packed into a contiguous panel that stays in the L3 (or L2) cache, MC rows of A by KC
+# packed into one that stays in L2 - and each block by a micro-kernel computing an MR x NR tile of C entirely in
+# registers, one rank-1 update per step of k, reading both panels in the order they were packed. Packing is also
+# where the transposes are applied and where F16 and BF16 are widened to F32, so the micro-kernel only ever sees
+# contiguous panels of its own accumulation type. Edges are padded with zeros in the panels; a partial tile is
+# written back through a full one.
+#
+# The micro-kernels are written with LITERAL tile sizes, never named constants: an immutable global is emitted as a
+# mutable LLVM global, so the per-module optimizer cannot see its value, and the tile loops are then neither fully
+# unrolled nor the accumulators kept in registers - measured at 10.8 against 17.5 GFLOPS. Each accumulator is read
+# and written only at constant positions, which is what lets LLVM keep all of them in registers.
+
+kc I64 = 256          # the depth of a panel - k per block
+mc I64 = 128         # the rows of A per block - a multiple of the tiles' 4 rows
+nc I64 = 2040         # the columns of B per block - a multiple of every tile's columns
+
+# the number of cores the machine has online, from the C library (84 is glibc's _SC_NPROCESSORS_ONLN on Linux) - the
+# usual thread count for Gemm and ParallelRows
+fn Cores() I64 {
+    n := sysconf(84)
+    return n if n > 0 else 1
+}
+
+# x as a D, rounded or wrapped as a conversion D(x) does (T4) - from or to an F8 type through F64, the F8 types' own
+# way in and out
+fn Cast(x <S>, like <D>) <D> {
+    match <S> {
+        case F8E4M3, F8E5M2 { return Cast(x.F64(), like) }
+        nomatch {
+            return match <D> {
+                case F8E4M3 => F8E4M3(F64(x))
+                case F8E5M2 => F8E5M2(F64(x))
+                case F16 => F16(x)
+                case BF16 => BF16(x)
+                case F32 => F32(x)
+                case F64 => F64(x)
+                case I8 => I8(x)
+                case I16 => I16(x)
+                case I32 => I32(x)
+                case I64 => I64(x)
+                case U8 => U8(x)
+                case U16 => U16(x)
+                case U32 => U32(x)
+                case U64 => U64(x)
+            }
+        }
+    }
+}
+
+# a tile of accumulators, kept in registers by the micro-kernels (an inline array, indexed only at constants)
+type tile<A> struct() {
+    v mut Array<<A>> = Array<<A>>(48)
+}
+
+# A[i0 : i0 + rows, p0 : p0 + depth] (or of A's transpose) packed into ap as panels of mr rows: panel r holds, for
+# each k, the mr values of rows r * mr ... r * mr + mr - 1 of column k; rows past the end are zeros
+fn packA(transA Bool, a Array<<T>>&, lda I64, i0 I64, p0 I64, rows I64, depth I64, mr I64, ap mut Array<<A>>&) {
+    z <A>
+    for r in range 0, rows, mr {
+        base I64 = r * depth
+        for k in range depth {
+            for i in range mr {
+                v <A> = z
+                if r + i < rows {
+                    v = Cast(a[(p0 + k) * lda + i0 + r + i] if transA else a[(i0 + r + i) * lda + p0 + k], z)
+                }
+                ap[base + k * mr + i] = v
+            }
+        }
+    }
+}
+
+# B[p0 : p0 + depth, j0 : j0 + cols] (or of B's transpose) packed into bp as panels of nr columns
+fn packB(transB Bool, b Array<<T>>&, ldb I64, p0 I64, j0 I64, depth I64, cols I64, nr I64, bp mut Array<<A>>&) {
+    z <A>
+    for c in range 0, cols, nr {
+        base I64 = c * depth
+        for k in range depth {
+            for j in range nr {
+                v <A> = z
+                if c + j < cols {
+                    v = Cast(b[(j0 + c + j) * ldb + p0 + k] if transB else b[(p0 + k) * ldb + j0 + c + j], z)
+                }
+                bp[base + k * nr + j] = v
+            }
+        }
+    }
+}
+
+# the micro-kernels: C[i, j] = alpha * sum over k of ap[k][i] * bp[k][j] + beta * C[i, j] for one MR x NR tile, where
+# rows and cols say how much of the tile is inside C. beta == 0 never reads C, so C may hold anything (BLAS's rule).
+# 4 x 12 for four-lane element types (F32 and smaller: 12 accumulator registers of an SSE machine's 16), 4 x 6 for
+# two-lane ones (F64, I64)
+fn micro4x12(depth I64, ap Array<<A>>&, ao I64, bp Array<<A>>&, bo I64, alpha <A>, beta <A>, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    acc := tile<<A>>()
+    for k in range depth {
+        for i in range 4 {
+            ai := ap[ao + k * 4 + i]
+            for j in range 12 { acc.v[i * 12 + j] += ai * bp[bo + k * 12 + j] }
+        }
+    }
+    # the accumulators leave the registers in row order, which is also what lets the vectorizer group them by rows
+    out := tile<<A>>()
+    for i in range 4 {
+        for j in range 12 { out.v[i * 12 + j] = acc.v[i * 12 + j] }
+    }
+    storeTile(out, 12, alpha, beta, c, co, ldc, rows, cols)
+}
+
+fn micro4x6(depth I64, ap Array<<A>>&, ao I64, bp Array<<A>>&, bo I64, alpha <A>, beta <A>, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    acc := tile<<A>>()
+    for k in range depth {
+        for i in range 4 {
+            ai := ap[ao + k * 4 + i]
+            for j in range 6 { acc.v[i * 6 + j] += ai * bp[bo + k * 6 + j] }
+        }
+    }
+    # the accumulators leave the registers in row order, which is also what lets the vectorizer group them by rows
+    out := tile<<A>>()
+    for i in range 4 {
+        for j in range 6 { out.v[i * 6 + j] = acc.v[i * 6 + j] }
+    }
+    storeTile(out, 6, alpha, beta, c, co, ldc, rows, cols)
+}
+
+# C[i, j] = alpha * t[i, j] + beta * C[i, j] for the rows x cols part of a tile held in t, row stride ts
+fn storeTile(t tile<<A>>&, ts I64, alpha <A>, beta <A>, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+    like <T>
+    if beta == 0 {
+        for i in range rows {
+            for j in range cols { c[co + i * ldc + j] = Cast(alpha * t.v[i * ts + j], like) }
+        }
+        return
+    }
+    for i in range rows {
+        for j in range cols { c[co + i * ldc + j] = Cast(alpha * t.v[i * ts + j] + beta * Cast(c[co + i * ldc + j], alpha), like) }
+    }
+}
+
+# the columns of the tile for accumulation type A: 12 for four-lane types, 6 for two-lane ones
+fn tileCols(z <A>) I64 {
+    return match <A> {
+        case F64, I64, U64 => 6
+        nomatch => 12
+    }
+}
+
+# rows i0 .. i1 of C for one packed block of B: each task's share of a product, packing A's rows into its own ap
+fn gemmRows(transA Bool, a Array<<T>>&, lda I64, i0 I64, i1 I64, p0 I64, depth I64, cols I64, alpha <A>, ap mut Array<<A>>&, bp Array<<A>>&, beta <A>, c mut Array<<T>>&, ldc I64, j0 I64) {
+    nr := tileCols(alpha)
+    for ic in range i0, i1, mc {
+        rows I64 = lesser(mc, i1 - ic)
+        packA(transA, a, lda, ic, p0, rows, depth, 4, ap)
+        for jr in range 0, cols, nr {
+            for ir in range 0, rows, 4 {
+                co I64 = (ic + ir) * ldc + j0 + jr
+                match <A> {
+                    case F64, I64, U64 {
+                        micro4x6(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(4, rows - ir), lesser(nr, cols - jr))
+                    }
+                    nomatch {
+                        micro4x12(depth, ap, ir * depth, bp, jr * depth, alpha, beta, c, co, ldc, lesser(4, rows - ir), lesser(nr, cols - jr))
+                    }
+                }
+            }
+        }
+    }
+}
+
+# a product this small (m n k, the multiply-adds) is computed by gemmDirect: packing would cost more than it saves
+smallProduct I64 = 64 * 64 * 64
+
+# a small product, in the element type and without packing: each row of C updated from rows of B (the i-k-j loop,
+# vectorized along the rows) - B not transposed
+fn gemmDirect(transA Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64) {
+    z <T>
+    for i in range m {
+        ci I64 = i * ldc
+        if beta == z {
+            for j in range n { c[ci + j] = z }
+        } else if beta != 1 {
+            for j in range n { c[ci + j] = beta * c[ci + j] }
+        }
+        for p in range k {
+            aip <T> = alpha * (a[p * lda + i] if transA else a[i * lda + p])
+            bp I64 = p * ldb
+            for j in range n { c[ci + j] = c[ci + j] + aip * b[bp + j] }
+        }
+    }
+}
+
+# out[i * os] = alpha * sum over p < len of M(i, p) v[p] + beta * out[i * os] for i < rows, where M(i, p) is
+# mat[i * rs + p * cs] and v[p] is vec[p * vs]: a matrix-vector product in either orientation. Rows of M that are
+# contiguous (cs = 1) with a contiguous v are dot products in lanes; columns of M that are contiguous (rs = 1) are
+# added in, scaled, one after another
+fn gemv(rows I64, len I64, alpha <T>, mat Array<<T>>&, rs I64, cs I64, vec Array<<T>>&, vs I64, beta <T>, out mut Array<<T>>&, os I64) {
+    z <T>
+    if cs == 1 and vs == 1 {
+        for i in range rows {
+            d <T> = alpha * dotRun(mat, i * rs, vec, 0, len, z)
+            out[i * os] = d if beta == z else d + beta * out[i * os]
+        }
+        return
+    }
+    for i in range rows {
+        out[i * os] = z if beta == z else beta * out[i * os]
+    }
+    if rs == 1 and os == 1 {
+        for p in range len {
+            vp <T> = alpha * vec[p * vs]
+            col I64 = p * cs
+            for i in range rows { out[i] = out[i] + vp * mat[col + i] }
+        }
+        return
+    }
+    for i in range rows {
+        acc <T> = z
+        for p in range len { acc = acc + mat[i * rs + p * cs] * vec[p * vs] }
+        out[i * os] = out[i * os] + alpha * acc
+    }
+}
+
+# Gemm in accumulation type A (the type of z)
+fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64, z <A>) {
+    al := Cast(alpha, z)
+    be := Cast(beta, z)
+    nr := tileCols(z)
+    if k == 0 {
+        for i in range m {
+            for j in range n { c[i * ldc + j] = Cast(be * Cast(c[i * ldc + j], z), alpha) if be != 0 else Cast(z, alpha) }
+        }
+        return
+    }
+    if m <= 4 or n == 1 {
+        match <T> {
+            case F16, BF16, F8E4M3, F8E5M2 { }
+            nomatch {
+                # vectors times a matrix (a batch of up to four), or a matrix times a vector: no packing and no
+                # threads, one pass over the matrix per vector
+                if m <= 4 {
+                    # c's row i: c[i, j] = alpha * sum over p of x[p] B(p, j), x being a's row i (column, if transA)
+                    for i in range m {
+                        x := a[i:] if transA else a[i * lda:]
+                        gemv(n, k, alpha, b, ldb if transB else 1, 1 if transB else ldb, x, lda if transA else 1, beta, c[i * ldc:], 1)
+                    }
+                } else {
+                    # c's one column: c[i] = alpha * sum over p of A(i, p) y[p], y being b's one column (row, if transB)
+                    gemv(m, k, alpha, a, 1 if transA else lda, lda if transA else 1, b, 1 if transB else ldb, beta, c, ldc)
+                }
+                return
+            }
+        }
+    }
+    if m * n * k <= smallProduct and not transB {
+        match <T> {
+            case F16, BF16, F8E4M3, F8E5M2 { }
+            nomatch {
+                gemmDirect(transA, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+                return
+            }
+        }
+    }
+    depthMax I64 = lesser(k, kc)
+    colsMax I64 = lesser((n + nr - 1) / nr * nr, nc)
+    bp := Array<<A>>(depthMax * colsMax)
+    # tasks: each takes a run of rows, a multiple of 4; small products stay on the calling thread
+    tasks I64 = lesser(threads, (m + 3) / 4)
+    if m * n * k < 2000000 { tasks = 1 }
+    share I64 = ((m + tasks - 1) / tasks + 3) / 4 * 4
+    # the panels of A: each task's own, made once for the whole product
+    panel I64 = lesser(mc, share) * depthMax
+    ap := Array<<A>>(tasks * panel)
+    for jc in range 0, n, nc {
+        cols I64 = lesser(nc, n - jc)
+        for pc in range 0, k, kc {
+            depth I64 = lesser(kc, k - pc)
+            packB(transB, b, ldb, pc, jc, depth, cols, nr, bp)
+            bt <A> = be if pc == 0 else Cast(1, z)
+            if tasks == 1 {
+                gemmRows(transA, a, lda, 0, m, pc, depth, cols, al, ap, bp, bt, c, ldc, jc)
+            } else {
+                join {
+                    for t in range tasks {
+                        lo I64 = t * share
+                        hi I64 = lesser(m, lo + share)
+                        if lo < hi { spawn gemmRows(transA, a, lda, lo, hi, pc, depth, cols, al, ap[t * panel:(t + 1) * panel], bp, bt, c, ldc, jc) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# C = alpha * op(A) op(B) + beta * C on arrays: an m x k op(A), a k x n op(B) and an m x n C, each row-major with a
+# row stride (lda, ldb, ldc) - op(A) is A, or A's transpose when transA, so A is then stored k x m
+fn gemm(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64) {
+    if m == 0 or n == 0 { return }
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 { gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, F32(0)) }
+        nomatch {
+            z <T>
+            gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, z)
+        }
+    }
+}
+
+# ---- products of matrices and vectors ----
+
+# c = alpha * op(a) op(b) + beta * c, where op(x) is x or, when its flag is set, x's transpose - read where x is, never
+# transposed in memory. beta = 1 accumulates (a gradient's second contribution, with no temporary); beta = 0 never
+# reads c, so c may hold anything. c must not overlap a or b. Allocates only the panels the product packs into, in
+# its own scope; a large product is split over up to threads tasks. alpha and beta are F64, so a literal is written as
+# it is whatever the element type; each is converted to it once
+fn Gemm(c Matrix<<T>>&, a Matrix<<T>>&, transA Bool, b Matrix<<T>>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) {
+    assert productShape(c, a, transA, b, transB)
+    k I64 = a.Rows if transA else a.Cols
+    like <T>
+    gemm(transA, transB, c.Rows, c.Cols, k, Cast(alpha, like), a.Data, a.Stride, b.Data, b.Stride, Cast(beta, like), c.Data, c.Stride, threads)
+}
+
+# y = alpha * op(a) x + beta * y, for vectors x and y: a matrix-vector product, a's rows dotted with x (trans false)
+# or a's columns (trans true) - no packing, no threads, nothing allocated; beta = 0 never reads y. A batch of up to
+# four rows through Gemm takes the same path
+fn Gemv(y mut Array<<T>>&, a Matrix<<T>>&, trans Bool, x Array<<T>>&, alpha F64 = 1, beta F64 = 0) {
+    m I64 = a.Cols if trans else a.Rows
+    k I64 = a.Rows if trans else a.Cols
+    assert y.Len() == m and x.Len() == k
+    like <T>
+    gemm(trans, false, m, 1, k, Cast(alpha, like), a.Data, a.Stride, x, 1, Cast(beta, like), y, 1, 1)
+}
+
+# a = alpha * x y^T + beta * a, for vectors x (a.Rows elements) and y (a.Cols): a rank-1 update (BLAS's ger, which
+# accumulates - beta 1 - as these do unless told otherwise) - a local learning rule's outer product, in one pass with
+# no temporary; beta = 0 never reads a, and beta below 1 decays what is there
+fn Ger(a Matrix<<T>>&, x Array<<T>>&, y Array<<T>>&, alpha F64 = 1, beta F64 = 1) {
+    assert x.Len() == a.Rows and y.Len() == a.Cols
+    like <T>
+    al := Cast(alpha, like)
+    be := Cast(beta, like)
+    for r in range a.Rows {
+        d I64 = r * a.Stride
+        xr <T> = al * x[r]
+        if beta == 0.0 {
+            for c in range a.Cols { a.Data[d + c] = xr * y[c] }
+        } else if beta == 1.0 {
+            for c in range a.Cols { a.Data[d + c] = a.Data[d + c] + xr * y[c] }
+        } else {
+            for c in range a.Cols { a.Data[d + c] = be * a.Data[d + c] + xr * y[c] }
+        }
+    }
+}
+
+# a = alpha * (x1 y1^T + x2 y2^T) + beta * a: a decayed rank-2 update in one pass - an eligibility trace, say
+fn Ger2(a Matrix<<T>>&, x1 Array<<T>>&, y1 Array<<T>>&, x2 Array<<T>>&, y2 Array<<T>>&, alpha F64 = 1, beta F64 = 1) {
+    assert x1.Len() == a.Rows and x2.Len() == a.Rows and y1.Len() == a.Cols and y2.Len() == a.Cols
+    like <T>
+    al := Cast(alpha, like)
+    be := Cast(beta, like)
+    for r in range a.Rows {
+        d I64 = r * a.Stride
+        p <T> = al * x1[r]
+        q <T> = al * x2[r]
+        for c in range a.Cols { a.Data[d + c] = be * a.Data[d + c] + (p * y1[c] + q * y2[c]) }
+    }
+}
+
+# a @ b, the matrix product - b a matrix, or a transposed one (a @ b.T() is A B^T)
+fn (a Matrix<<T>>&) MatMul(b <U>) Matrix<<T>> {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& {
+            out Matrix<<T>>&return = Matrix<<T>>(a.Rows, b.Cols, null)
+            Gemm(out, a, false, b, false)
+            return out
+        }
+        case Transposed<<T>>, Transposed<<T>>& {
+            out Matrix<<T>>&return = Matrix<<T>>(a.Rows, b.M.Rows, null)
+            Gemm(out, a, false, b.M, true)
+            return out
+        }
+    }
+}
+
+# a.T() @ b, A^T B, and a.T() @ b.T()
+fn (a Transposed<<T>>&) MatMul(b <U>) Matrix<<T>> {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& {
+            out Matrix<<T>>&return = Matrix<<T>>(a.M.Cols, b.Cols, null)
+            Gemm(out, a.M, true, b, false)
+            return out
+        }
+        case Transposed<<T>>, Transposed<<T>>& {
+            out Matrix<<T>>&return = Matrix<<T>>(a.M.Cols, b.M.Rows, null)
+            Gemm(out, a.M, true, b.M, true)
+            return out
+        }
+    }
+}
+
+# what try (a @ b) calls: ShapeError.MISMATCH where the inner dimensions differ
+fn (a Matrix<<T>>&) TryMatMul(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if a.Cols != b.Rows { error ShapeError.MISMATCH } }
+        case Transposed<<T>>, Transposed<<T>>& { if a.Cols != b.M.Cols { error ShapeError.MISMATCH } }
+    }
+    return a @ b
+}
+
+fn (a Transposed<<T>>&) TryMatMul(b <U>) Matrix<<T>> ? ShapeError {
+    match <U> {
+        case Matrix<<T>>, Matrix<<T>>& { if a.M.Rows != b.Rows { error ShapeError.MISMATCH } }
+        case Transposed<<T>>, Transposed<<T>>& { if a.M.Rows != b.M.Cols { error ShapeError.MISMATCH } }
+    }
+    return a @ b
+}
+
+# x y^T for two vectors: an x.Len() x y.Len() matrix
+fn Outer(x Array<<T>>&, y Array<<T>>&) Matrix<<T>> {
+    out Matrix<<T>>&return = Matrix<<T>>(x.Len(), y.Len(), null)
+    for r in range x.Len() {
+        xr := x[r]
+        d I64 = r * out.Stride
+        for c in range y.Len() { out.Data[d + c] = xr * y[c] }
+    }
+    return out
+}
+
+# ---- reductions ----
+#
+# A sum runs in the accumulation type (F32 for F16, BF16 and the F8 types, the element type otherwise) and in eight
+# lanes - eight partial sums, combined pairwise at the end - which is what lets it run in vector registers, since
+# floating-point addition may not be reordered behind the program's back; the lanes also keep the rounding error of a
+# long sum near that of pairwise summation. The order is fixed, so a sum is the same on every run.
+
+type lanes<A> struct() {
+    v mut Array<<A>> = Array<<A>>(16)
+}
+
+# the eight lanes added up pairwise. The loops filling lanes read and write them only at constant positions, which
+# lets them live in vector registers; here they are first copied out in order into a second set, kept in memory, which
+# is what makes the vectorizer group them four or eight to a register by position (with no copy it pairs them two to
+# a register)
+fn (l lanes<<A>>&) total() <A> {
+    out := lanes<<A>>()
+    for i in range 8 { out.v[i] = l.v[i] }
+    return out.sum(8)
+}
+
+fn (l mut lanes<<A>>&) sum(n I64) <A> {
+    h I64 = n / 2
+    for h >= 1 {
+        for i in range h { l.v[i] = l.v[i] + l.v[i + h] }
+        h = h / 2
+    }
+    return l.v[0]
+}
+
+# the sum of x[from .. from + n] - the one loop every sum is: lane j takes elements j, j + 8, ...
+fn sumRun(x Array<<T>>&, from I64, n I64, z <A>) <A> {
+    acc := lanes<<A>>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8 { acc.v[j] = acc.v[j] + Cast(x[from + i + j], z) }
+    }
+    rest <A> = z
+    for i in range whole, n { rest = rest + Cast(x[from + i], z) }
+    return acc.total() + rest
+}
+
+# the sum of x[i] * y[i] over a run, in the same lanes
+fn dotRun(x Array<<T>>&, xf I64, y Array<<T>>&, yf I64, n I64, z <A>) <A> {
+    acc := lanes<<A>>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8 { acc.v[j] = acc.v[j] + Cast(x[xf + i + j], z) * Cast(y[yf + i + j], z) }
+    }
+    rest <A> = z
+    for i in range whole, n { rest = rest + Cast(x[xf + i], z) * Cast(y[yf + i], z) }
+    return acc.total() + rest
+}
+
+fn sumIn(m Matrix<<T>>&, z <A>) <A> {
+    if m.Contiguous() { return sumRun(m.Data, 0, m.Rows * m.Cols, z) }
+    s <A> = z
+    for r in range m.Rows { s = s + sumRun(m.Data, r * m.Stride, m.Cols, z) }
+    return s
+}
+
+fn dotIn(a Matrix<<T>>&, b Matrix<<T>>&, z <A>) <A> {
+    if a.Contiguous() and b.Contiguous() { return dotRun(a.Data, 0, b.Data, 0, a.Rows * a.Cols, z) }
+    s <A> = z
+    for r in range a.Rows { s = s + dotRun(a.Data, r * a.Stride, b.Data, r * b.Stride, a.Cols, z) }
+    return s
+}
+
+# the sum of every element
+fn (m Matrix<<T>>&) Sum() <T> {
+    like <T>
+    return match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(sumIn(m, F32(0)), like)
+        nomatch => sumIn(m, like)
+    }
+}
+
+# the mean of every element - for a float matrix
+fn (m Matrix<<T>>&) Mean() <T> {
+    like <T>
+    return match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(sumIn(m, F32(0)) / F32(m.Rows * m.Cols), like)
+        nomatch => sumIn(m, like) / Cast(m.Rows * m.Cols, like)
+    }
+}
+
+# the sum of the products of corresponding elements - the Frobenius inner product; two vectors' dot product when
+# both are one row
+fn (a Matrix<<T>>&) Dot(b Matrix<<T>>&) <T> {
+    assert sameShape(a, b)
+    like <T>
+    return match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(dotIn(a, b, F32(0)), like)
+        nomatch => dotIn(a, b, like)
+    }
+}
+
+# the Frobenius norm: the square root of the sum of the squares - for a float matrix
+fn (m Matrix<<T>>&) Norm() <T> {
+    like <T>
+    return match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(math.Sqrt(dotIn(m, m, F32(0))), like)
+        nomatch => math.Sqrt(dotIn(m, m, like))
+    }
+}
+
+# the Euclidean distance between a and b - the norm of a - b, with no difference made: a residual's size
+fn (a Matrix<<T>>&) Distance(b Matrix<<T>>&) <T> {
+    assert sameShape(a, b)
+    like <T>
+    return match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(math.Sqrt(distanceIn(a, b, F32(0))), like)
+        nomatch => math.Sqrt(distanceIn(a, b, like))
+    }
+}
+
+fn distanceIn(a Matrix<<T>>&, b Matrix<<T>>&, z <A>) <A> {
+    s <A> = z
+    for r in range a.Rows {
+        acc := lanes<<A>>()
+        x I64 = r * a.Stride
+        y I64 = r * b.Stride
+        whole I64 = a.Cols - a.Cols % 8
+        for i in range 0, whole, 8 {
+            for j in range 8 {
+                e <A> = Cast(a.Data[x + i + j], z) - Cast(b.Data[y + i + j], z)
+                acc.v[j] = acc.v[j] + e * e
+            }
+        }
+        rest <A> = z
+        for i in range whole, a.Cols {
+            e <A> = Cast(a.Data[x + i], z) - Cast(b.Data[y + i], z)
+            rest = rest + e * e
+        }
+        s = s + acc.total() + rest
+    }
+    return s
+}
+
+# the largest absolute difference between corresponding elements - a residual's size in the max norm, with no
+# difference made; a NaN if either holds one
+fn (a Matrix<<T>>&) MaxAbsDifference(b Matrix<<T>>&) <T> {
+    assert sameShape(a, b)
+    z <T>
+    best <T> = z
+    for r in range a.Rows {
+        x I64 = r * a.Stride
+        y I64 = r * b.Stride
+        for c in range a.Cols { best = math.Max(best, math.Abs(a.Data[x + c] - b.Data[y + c])) }
+    }
+    return best
+}
+
+# the largest absolute value of an element - the max norm; 0 for an empty matrix
+fn (m Matrix<<T>>&) MaxAbs() <T> {
+    z <T>
+    best <T> = z
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { best = math.Max(best, math.Abs(m.Data[d + c])) }
+    }
+    return best
+}
+
+# the largest element, and the smallest - a NaN if any element is one (std/math's Max and Min); for a matrix with
+# at least one element
+fn (m Matrix<<T>>&) Max() <T> {
+    best <T> = m.Data[0]
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { best = math.Max(best, m.Data[d + c]) }
+    }
+    return best
+}
+
+fn (m Matrix<<T>>&) Min() <T> {
+    best <T> = m.Data[0]
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { best = math.Min(best, m.Data[d + c]) }
+    }
+    return best
+}
+
+# out[r] = the sum of row r, for every row: out has Rows elements
+fn (m Matrix<<T>>&) RowSums(out mut Array<<T>>&) {
+    assert out.Len() == m.Rows
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 { rowSumsIn(m, out, F32(0)) }
+        nomatch {
+            z <T>
+            rowSumsIn(m, out, z)
+        }
+    }
+}
+
+fn rowSumsIn(m Matrix<<T>>&, out mut Array<<T>>&, z <A>) {
+    like <T>
+    for r in range m.Rows { out[r] = Cast(sumRun(m.Data, r * m.Stride, m.Cols, z), like) }
+}
+
+# out[r] = the largest absolute value in row r - each row's max norm (a residual's, per row)
+fn (m Matrix<<T>>&) RowMaxAbs(out mut Array<<T>>&) {
+    assert out.Len() == m.Rows
+    z <T>
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        best <T> = z
+        for c in range m.Cols { best = math.Max(best, math.Abs(m.Data[d + c])) }
+        out[r] = best
+    }
+}
+
+# out[r] = the sum of the absolute values in row r
+fn (m Matrix<<T>>&) RowAbsSums(out mut Array<<T>>&) {
+    assert out.Len() == m.Rows
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 { rowAbsSumsIn(m, out, F32(0)) }
+        nomatch {
+            z <T>
+            rowAbsSumsIn(m, out, z)
+        }
+    }
+}
+
+fn rowAbsSumsIn(m Matrix<<T>>&, out mut Array<<T>>&, z <A>) {
+    like <T>
+    for r in range m.Rows {
+        acc := lanes<<A>>()
+        d I64 = r * m.Stride
+        whole I64 = m.Cols - m.Cols % 8
+        for i in range 0, whole, 8 {
+            for j in range 8 { acc.v[j] = acc.v[j] + math.Abs(Cast(m.Data[d + i + j], z)) }
+        }
+        rest <A> = z
+        for i in range whole, m.Cols { rest = rest + math.Abs(Cast(m.Data[d + i], z)) }
+        out[r] = Cast(acc.total() + rest, like)
+    }
+}
+
+# out[r] = the Euclidean norm of row r
+fn (m Matrix<<T>>&) RowNorms(out mut Array<<T>>&) {
+    assert out.Len() == m.Rows
+    like <T>
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 {
+            for r in range m.Rows { out[r] = Cast(math.Sqrt(dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, F32(0))), like) }
+        }
+        nomatch {
+            for r in range m.Rows { out[r] = math.Sqrt(dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, like)) }
+        }
+    }
+}
+
+# every row divided by its Euclidean norm, in place; a row of zeros stays zeros
+fn (m Matrix<<T>>&) NormalizeRows() {
+    like <T>
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        n <T> = math.Sqrt(dotRun(m.Data, d, m.Data, d, m.Cols, like))
+        if n == like { continue }
+        inv <T> = 1.0 / n
+        for c in range m.Cols { m.Data[d + c] = m.Data[d + c] * inv }
+    }
+}
+
+# dst's row r = the softmax of src's row r over temperature: exp((x - max) / t) normalised to sum 1, row by row - the
+# policy over a block of columns (src a ColRange view), one pass to the maximum and one to the exponentials. dst may
+# be src
+fn (dst Matrix<<T>>&) RowSoftmax(src Matrix<<T>>&, temperature <T>) {
+    assert sameShape(dst, src)
+    like <T>
+    inv <T> = 1.0 / temperature
+    for r in range src.Rows {
+        s I64 = r * src.Stride
+        d I64 = r * dst.Stride
+        top <T> = src.Data[s]
+        for c in range 1, src.Cols { top = math.Max(top, src.Data[s + c]) }
+        total <T> = like
+        for c in range src.Cols {
+            e <T> = math.Exp((src.Data[s + c] - top) * inv)
+            dst.Data[d + c] = e
+            total = total + e
+        }
+        scale <T> = 1.0 / total
+        for c in range dst.Cols { dst.Data[d + c] = dst.Data[d + c] * scale }
+    }
+}
+
+# out[r] = the largest element of row r - a NaN if the row holds one
+fn (m Matrix<<T>>&) RowMax(out mut Array<<T>>&) {
+    assert out.Len() == m.Rows
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        best <T> = m.Data[d]
+        for c in range 1, m.Cols { best = math.Max(best, m.Data[d + c]) }
+        out[r] = best
+    }
+}
+
+# out[r] = the column of row r's largest element, the first one where several are equal, and the first NaN where
+# the row holds one - each row's class, for a matrix of scores
+fn (m Matrix<<T>>&) ArgMaxRows(out mut Array<I32>&) {
+    assert out.Len() == m.Rows
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        at I64 = 0
+        best <T> = m.Data[d]
+        for c in range 1, m.Cols {
+            if best != best { break }
+            x := m.Data[d + c]
+            if x > best or x != x {
+                best = x
+                at = c
+            }
+        }
+        out[r] = I32(at)
+    }
+}
+
+# out (1 x Cols) = the sums of m's columns + beta * out: a bias's gradient, summed over the batch. Sixty-four columns
+# at a time, every row added into lanes held on the stack, so nothing is allocated and the adds are vector adds
+fn (m Matrix<<T>>&) ColumnSums(out Matrix<<T>>&, beta F64 = 0) {
+    assert rowShape(m, out)
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 { columnSumsIn(m, out, beta, F32(0)) }
+        nomatch {
+            z <T>
+            columnSumsIn(m, out, beta, z)
+        }
+    }
+}
+
+type colLanes<A> struct(z <A>) {
+    v mut Array<<A>> = Array<<A>>(64)
+}
+
+fn columnSumsIn(m Matrix<<T>>&, out Matrix<<T>>&, beta F64, z <A>) {
+    like <T>
+    b := Cast(beta, z)
+    acc := colLanes<<A>>(z)
+    for c0 in range 0, m.Cols, 64 {
+        w I64 = lesser(64, m.Cols - c0)
+        for j in range 64 { acc.v[j] = z }
+        for r in range m.Rows {
+            d I64 = r * m.Stride + c0
+            for j in range w { acc.v[j] = acc.v[j] + Cast(m.Data[d + j], z) }
+        }
+        for j in range w {
+            s <A> = acc.v[j]
+            if beta != 0.0 { s = s + b * Cast(out.Data[c0 + j], z) }
+            out.Data[c0 + j] = Cast(s, like)
+        }
+    }
+}
+
+# ---- activations that vectorize ----
+#
+# std/math's Exp and Tanh are the C library's (X8): within about an ulp and the same while compiling, but a call per
+# element, so a loop over them does not vectorize. These are written in olang from arithmetic and bit operations
+# only, so a Map with one of them inlined runs in vector registers - in F32, 14 instructions an element for FastExp
+# and 17 for FastTanh, against the C library's 39 for exp and 129 for tanh. Each is generic over F32 and F64 and
+# computed in its own type. Their errors, measured against the C library at two million points spread over
+# [-100, 100]: FastExp's relative error under 3e-7 in F32 and 6e-16 in F64 (about 2.5 ulp); FastTanh's and
+# FastSigmoid's absolute error under 2e-7 in F32 and 3e-16 in F64 (near zero FastTanh's relative error is larger).
+# Beyond the range of the type FastExp gives infinity or zero (a result below the smallest normal number is zero), a
+# NaN gives a NaN, and the others saturate to their limits.
+
+# e to the power x: x = k ln 2 + r with |r| <= ln 2 / 2, e^r by its Taylor series (to r^6 in F32, r^12 in F64), and
+# 2^k made from its bits
+fn FastExp(x <T>) <T> {
+    return match <T> {
+        case F32 => fastExp32(x)
+        case F64 => fastExp64(x)
+    }
+}
+
+fn fastExp32(x F32) F32 {
+    t F32 = x if x > -87.33654 else -87.33654
+    t = t if t < 88.72283 else 88.72283
+    # k, the nearest whole number to t / ln 2, by adding 1.5 * 2^23 (whose last bits then hold k) and taking it away
+    kb F32 = t * 1.44269504 + 12582912.0
+    k F32 = kb - 12582912.0
+    ki U32 = kb.Bits() - U32(0x4B400000)
+    r F32 = t - k * 0.693145751953125 - k * 1.428606765330187e-06
+    p F32 = 1.0 + r * (1.0 + r * (0.5 + r * (0.16666667 + r * (0.041666668 + r * (0.008333334 + r * 0.0013888889)))))
+    # 2^k from its bits - as 2^(k - 1) * 2 for k > 0, so that 2^128 never has to be made
+    up Bool = k > 0.0
+    scale F32 = ((ki - (U32(1) if up else U32(0)) + 127) << 23).F32FromBits()
+    two F32 = 2.0 if up else 1.0
+    e F32 = p * scale * two
+    e = e if x < 88.72283 else infinity32
+    e = e if x > -87.33654 else 0.0
+    return e if x == x else x
+}
+
+fn fastExp64(x F64) F64 {
+    t F64 = x if x > -708.3964185322641 else -708.3964185322641
+    t = t if t < 709.782712893384 else 709.782712893384
+    kb F64 = t * 1.4426950408889634 + 6755399441055744.0        # 1.5 * 2^52
+    k F64 = kb - 6755399441055744.0
+    ki U64 = kb.Bits() - U64(0x4338000000000000)
+    r F64 = t - k * 0.6931471803691238 - k * 1.9082149292705877e-10
+    p F64 = 1.0 + r * (1.0 + r * (0.5 + r * (0.16666666666666666 + r * (0.041666666666666664 + r * (0.008333333333333333
+        + r * (0.001388888888888889 + r * (1.984126984126984e-4 + r * (2.48015873015873e-5 + r * (2.7557319223985893e-6
+        + r * (2.755731922398589e-7 + r * (2.505210838544172e-8 + r * 2.08767569878681e-9)))))))))))
+    up Bool = k > 0.0
+    scale F64 = ((ki - (U64(1) if up else U64(0)) + 1023) << 52).F64FromBits()
+    e F64 = p * scale * (2.0 if up else 1.0)
+    e = e if x < 709.782712893384 else math.Inf
+    e = e if x > -708.3964185322641 else 0.0
+    return e if x == x else x
+}
+
+infinity32 F32 = F32(math.Inf)
+
+# the hyperbolic tangent: 1 - 2 / (e^(2|x|) + 1), with x's sign. |x| is held below the point past which tanh rounds
+# to 1 in the type (10 in F32, 20 in F64), so that e^(2|x|) stays finite; a NaN is not held and gives a NaN
+fn FastTanh(x <T>) <T> {
+    a <T> = math.Abs(x)
+    limit <T> = match <T> {
+        case F32 => 10.0
+        case F64 => 20.0
+    }
+    a = limit if a > limit else a
+    v <T> = 1.0 - 2.0 / (FastExp(a + a) + 1.0)
+    return math.CopySign(v, x)
+}
+
+# the logistic function 1 / (1 + e^-x)
+fn FastSigmoid(x <T>) <T> {
+    return 1.0 / (1.0 + FastExp(-x))
+}
+
+# ---- conversions between element types ----
+
+# dst = src with every element converted to dst's element type, rounded or wrapped as a conversion does (T4)
+fn (dst Matrix<<T>>&) Convert(src Matrix<<S>>&) {
+    assert sameShape(dst, src)
+    like <T>
+    for r in range dst.Rows {
+        d I64 = r * dst.Stride
+        s I64 = r * src.Stride
+        for c in range dst.Cols { dst.Data[d + c] = Cast(src.Data[s + c], like) }
+    }
+}
+
+# the matrix with its elements converted, into a new matrix
+fn (m Matrix<<T>>&) ToF64() Matrix<F64> {
+    out Matrix<F64>&return = Matrix<F64>(m.Rows, m.Cols, null)
+    out.Convert(m)
+    return out
+}
+
+fn (m Matrix<<T>>&) ToF32() Matrix<F32> {
+    out Matrix<F32>&return = Matrix<F32>(m.Rows, m.Cols, null)
+    out.Convert(m)
+    return out
+}
+
+fn (m Matrix<<T>>&) ToF16() Matrix<F16> {
+    out Matrix<F16>&return = Matrix<F16>(m.Rows, m.Cols, null)
+    out.Convert(m)
+    return out
+}
+
+fn (m Matrix<<T>>&) ToBF16() Matrix<BF16> {
+    out Matrix<BF16>&return = Matrix<BF16>(m.Rows, m.Cols, null)
+    out.Convert(m)
+    return out
+}
+
+# ---- random fills, from the caller's generator (std/rand), so that one seed decides a whole run ----
+
+# every element drawn uniformly from [lo, hi), in row order
+fn (m Matrix<<T>>&) FillUniform(r mut rand.Rand&, lo F64, hi F64) {
+    like <T>
+    for i in range m.Rows {
+        d I64 = i * m.Stride
+        for c in range m.Cols { m.Data[d + c] = Cast(r.Uniform(lo, hi), like) }
+    }
+}
+
+# every element drawn from the normal distribution with this mean and standard deviation, in row order
+fn (m Matrix<<T>>&) FillNormal(r mut rand.Rand&, mean F64, sd F64) {
+    like <T>
+    for i in range m.Rows {
+        d I64 = i * m.Stride
+        for c in range m.Cols { m.Data[d + c] = Cast(mean + sd * r.Normal(), like) }
+    }
+}
+
+# out (1 x Cols) = the sums of the absolute values of m's columns
+fn (m Matrix<<T>>&) ColumnAbsSums(out Matrix<<T>>&) {
+    assert rowShape(m, out)
+    z <T>
+    out.Fill(z)
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { out.Data[c] = out.Data[c] + math.Abs(m.Data[d + c]) }
+    }
+}
+
+# every element 1 with probability p and 0 otherwise: a connectivity mask, or dropout's
+fn (m Matrix<<T>>&) FillBernoulli(r mut rand.Rand&, p F64) {
+    like <T>
+    one := Cast(1.0, like)
+    for i in range m.Rows {
+        d I64 = i * m.Stride
+        for c in range m.Cols { m.Data[d + c] = one if r.Float() < p else like }
+    }
+}
+
+# every element +scale or -scale with equal probability: random signs, for a random projection or a feedback matrix
+fn (m Matrix<<T>>&) FillSigns(r mut rand.Rand&, scale F64 = 1) {
+    like <T>
+    up := Cast(scale, like)
+    down := Cast(-scale, like)
+    for i in range m.Rows {
+        d I64 = i * m.Stride
+        for c in range m.Cols { m.Data[d + c] = up if r.Next() >> 63 == 1 else down }
+    }
+}
+
+# ---- threads ----
+
+# runs body over 0 .. rows split into consecutive runs, one task each, in parallel: body(lo, hi) for each run. Runs
+# are at least grain rows (fewer when there are fewer rows), at most threads of them; when there would be one, body
+# runs on the calling thread with no task at all. The runs do not overlap and cover every row once, so a body writing
+# only its own rows needs no synchronisation
+fn ParallelRows(rows I64, grain I64, threads I64, body fn(lo I64, hi I64)) {
+    tasks I64 = lesser(threads, rows / (grain if grain > 0 else 1))
+    if tasks <= 1 {
+        body(0, rows)
+        return
+    }
+    share I64 = (rows + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo I64 = t * share
+            hi I64 = lesser(rows, lo + share)
+            if lo < hi { spawn body(lo, hi) }
+        }
+    }
+}
+
+# ---- rendering and equality ----
+
+# the elements as rows of brackets, as numpy prints an array:
+#   [[1, 2, 3],
+#    [4, 5, 6]]
+# with only the first and last three rows, and columns, of a dimension longer than ten (the rest as "...")
+fn (m Matrix<<T>>&) Str() String {
+    b := StringBuilder()
+    b.PushChar('[')
+    for r in range m.Rows {
+        if m.Rows > 10 and r >= 3 and r < m.Rows - 3 {
+            if r == 3 { b.Push(",\n ...") }
+            continue
+        }
+        if r > 0 { b.Push(",\n ") }
+        b.PushChar('[')
+        for c in range m.Cols {
+            if m.Cols > 10 and c == 3 { b.Push(", ...") }
+            if m.Cols > 10 and c >= 3 and c < m.Cols - 3 { continue }
+            if c > 0 { b.Push(", ") }
+            b.Push($m.Data[r * m.Stride + c])
+        }
+        b.PushChar(']')
+    }
+    b.PushChar(']')
+    return b.ToString()
+}
+
+# the same shape and equal elements, compared as "==" compares them - so a matrix holding a NaN is equal to nothing
+fn (a Matrix<<T>>&) Eq(b Matrix<<T>>&) Bool {
+    if not sameShape(a, b) { return false }
+    for r in range a.Rows {
+        x I64 = r * a.Stride
+        y I64 = r * b.Stride
+        for c in range a.Cols {
+            if a.Data[x + c] != b.Data[y + c] { return false }
+        }
+    }
+    return true
+}
+
+# agrees with Eq: the shape and every element - a float by its bits, with -0 taken as 0, since the two are equal
+fn (m Matrix<<T>>&) Hash() I64 {
+    h I64 = m.Rows * 1099511628211 + m.Cols
+    for r in range m.Rows {
+        d I64 = r * m.Stride
+        for c in range m.Cols { h = h * 1099511628211 + elementHash(m.Data[d + c]) }
+    }
+    return h
+}
+
+fn elementHash(x <T>) I64 {
+    return match <T> {
+        case F64 => 0 if x == 0 else I64(x.Bits())
+        case F32, F16, BF16 => 0 if x == 0 else I64(x.Bits())
+        case F8E4M3, F8E5M2 => 0 if x.F64() == 0 else I64(x.Bits)
+        nomatch => x.Hash()
+    }
+}
+
+# ---- linear systems ----
+
+# the x with a x = b, for a square a and any number of right-hand sides (b's columns), by LU decomposition with
+# partial pivoting (Gaussian elimination choosing the largest pivot in each column) - for a float matrix. A pivot of
+# zero means a has no inverse: SolveError.SINGULAR. a and b are not changed
+fn Solve(a Matrix<<T>>&, b Matrix<<T>>&) Matrix<<T>> ? SolveError {
+    assert a.Rows == a.Cols and b.Rows == a.Rows
+    x Matrix<<T>>&return = Matrix<<T>>(b.Rows, b.Cols, null)
+    x.Copy(b)
+    lu := a.Clone()
+    try solveInPlace(lu, x)
+    return x
+}
+
+# the inverse of a square float matrix: Solve with the identity
+fn (a Matrix<<T>>&) Inverse() Matrix<<T>> ? SolveError {
+    assert a.Rows == a.Cols
+    x Matrix<<T>>&return = Matrix<<T>>(a.Rows, a.Rows, null)
+    x.SetIdentity()
+    lu := a.Clone()
+    try solveInPlace(lu, x)
+    return x
+}
+
+# x = lu^-1 x, overwriting lu with its LU factors and x with the solution
+fn solveInPlace(lu Matrix<<T>>&, x Matrix<<T>>&) ? SolveError {
+    n I64 = lu.Rows
+    for k in range n {
+        p I64 = k
+        for i in range k + 1, n {
+            if math.Abs(lu.Get(i, k)) > math.Abs(lu.Get(p, k)) { p = i }
+        }
+        if lu.Get(p, k) == 0 { error SolveError.SINGULAR }
+        if p != k {
+            swapRows(lu, p, k)
+            swapRows(x, p, k)
+        }
+        pivot := lu.Get(k, k)
+        kr := lu.Row(k)
+        xk := x.Row(k)
+        for i in range k + 1, n {
+            f <T> = lu.Get(i, k) / pivot
+            if f == 0 { continue }
+            lr := lu.Row(i)
+            for j in range k + 1, n { lr[j] = lr[j] - f * kr[j] }
+            xi := x.Row(i)
+            for j in range x.Cols { xi[j] = xi[j] - f * xk[j] }
+        }
+    }
+    # back substitution, the last row first
+    i I64 = n - 1
+    for i >= 0 {
+        xi := x.Row(i)
+        li := lu.Row(i)
+        for k in range i + 1, n {
+            xk := x.Row(k)
+            for j in range x.Cols { xi[j] = xi[j] - li[k] * xk[j] }
+        }
+        for j in range x.Cols { xi[j] = xi[j] / li[i] }
+        i--
+    }
+}
+
+fn swapRows(m Matrix<<T>>&, p I64, q I64) {
+    rp := m.Row(p)
+    rq := m.Row(q)
+    for j in range m.Cols { rp[j], rq[j] = rq[j], rp[j] }
+}
+
+# ---- tests ----
+#
+# under TestBuild, so that a program importing this module compiles none of it
+if TestBuild {
+
+    # a matrix of the numbers from start, one apart, in row order
+    fn counting(rows I64, cols I64, start F64) Matrix<F64> {
+        m Matrix<F64>&return = Matrix<F64>(rows, cols, null)
+        for i in range rows * cols { m.Data[i] = start + F64(i) }
+        return m
+    }
+
+    # op(a) op(b) the plain way, for checking Gemm: element (i, j) a sum in order over p
+    fn referenceProduct(a Matrix<<T>>&, transA Bool, b Matrix<<T>>&, transB Bool) Matrix<F64> {
+        m I64 = a.Cols if transA else a.Rows
+        k I64 = a.Rows if transA else a.Cols
+        n I64 = b.Rows if transB else b.Cols
+        out Matrix<F64>&return = Matrix<F64>(m, n, null)
+        for i in range m {
+            for j in range n {
+                s F64 = 0.0
+                for p in range k {
+                    x F64 = F64(a.Get(p, i) if transA else a.Get(i, p))
+                    y F64 = F64(b.Get(j, p) if transB else b.Get(p, j))
+                    s += x * y
+                }
+                out.Set(i, j, s)
+            }
+        }
+        return out
+    }
+
+    # the small computations below are made while compiling (K2): views, element kernels, reductions and rendering are
+    # all evaluable, so these globals are data in the program - and each is checked against the same computation at run
+    # time in a test
+    fn smallSum() F64 {
+        a := counting(3, 4, 1.0)
+        b := a.ColRange(1, 3)
+        c := b + b
+        c.AddRow(Full(1, 2, 0.5))
+        return c.Sum()
+    }
+    bakedSmallSum F64 = smallSum()
+    bakedRendered String& = $counting(2, 3, 0.0)
+    fn solvedSmall() F64 {
+        x := try Solve(counting(2, 2, 1.0), Full(2, 1, 1.0)) catch SolveError { return -1.0 }
+        return x.Get(1, 0)
+    }
+    bakedSolved F64 = solvedSmall()
+
+    test "the compile-time values are the run time's" {
+        assert bakedSmallSum == smallSum() and bakedSmallSum == 81.0
+        assert bakedRendered == $counting(2, 3, 0.0) and bakedRendered == "[[0, 1, 2],\n [3, 4, 5]]"
+        assert bakedSolved == solvedSmall() and bakedSolved == 1.0
+    }
+
+    test "a new matrix is zeros; a view shares its storage, and writing it writes the matrix" {
+        m := Matrix<F32>(3, 4)
+        assert m.Rows == 3 and m.Cols == 4 and m.Stride == 4 and m.Sum() == 0.0 and m.Contiguous()
+        for i in range 12 { m.Data[i] = F32(i) }
+        rows := m.RowRange(1, 3)
+        assert rows.Rows == 2 and rows.Get(0, 0) == 4.0 and rows.Contiguous()
+        cols := m.ColRange(1, 3)
+        assert cols.Cols == 2 and cols.Stride == 4 and cols.Get(2, 1) == 10.0 and not cols.Contiguous()
+        cols.Fill(-1.0)
+        assert m.Get(0, 1) == -1.0 and m.Get(2, 2) == -1.0 and m.Get(2, 3) == 11.0 and m.Get(1, 0) == 4.0
+        block := m.Block(1, 2, 2, 2)
+        block.Set(1, 1, 99.0)
+        assert m.Get(2, 3) == 99.0
+        r := m.Row(2)
+        r[0] = 7.0
+        assert m.Get(2, 0) == 7.0 and r.Len() == 4
+        flat := m.Reshape(2, 6)
+        assert flat.Get(1, 5) == 99.0 and flat.Rows == 2
+        # over the caller's storage
+        store := Array<F64>(10)
+        v := View(store, 2, 2, 3, 4)
+        v.Fill(1.0)
+        assert store[2] == 1.0 and store[4] == 1.0 and store[5] == 0.0 and store[6] == 1.0 and store[8] == 1.0
+        assert store[9] == 0.0 and store[0] == 0.0
+        copy := v.Clone()
+        copy.Fill(2.0)
+        assert store[2] == 1.0 and copy.Contiguous()
+    }
+
+    test "element operators, in-place forms and Map" {
+        a := counting(2, 3, 1.0)
+        b := Full(2, 3, 2.0)
+        assert (a + b).Get(1, 2) == 8.0 and (a - b).Get(0, 0) == -1.0 and (a * b).Get(1, 0) == 8.0
+        assert (a / b).Get(0, 1) == 1.0 and (-a).Get(1, 1) == -5.0 and (a * 3.0).Get(1, 2) == 18.0 and (a + 0.5).Get(0, 0) == 1.5
+        c := a.Clone()
+        c.Add(b)
+        c.Sub(a)
+        assert c == b
+        c.Scale(0.5)
+        c.AddScaled(a, 2.0)
+        assert c.Get(1, 2) == 13.0
+        d := Matrix<F64>(2, 3)
+        d.Map(a, fn(x) { return x * x })
+        assert d.Get(1, 2) == 36.0
+        d.Map2(a, b, fn(x, y) { return x - y })
+        assert d.Get(0, 0) == -1.0
+        d.Map3(a, b, a, fn(x, y, z) { return x * y + z })
+        assert d.Get(1, 2) == 18.0
+        # in place: the destination is an operand
+        d.Map(d, fn(x) { return x + 1.0 })
+        assert d.Get(1, 2) == 19.0
+        e := a.Exp()
+        assert e.Get(0, 0) == math.Exp(1.0) and a.Sqrt().Get(1, 0) == 2.0 and a.Log().Get(0, 0) == 0.0
+        assert (-a).Abs() == a and a.Tanh().Get(0, 0) == math.Tanh(1.0)
+        i := Matrix<F32>(3, 3)
+        i.SetIdentity()
+        assert i.Sum() == 3.0 and i.Get(1, 1) == 1.0 and i.Get(0, 1) == 0.0
+    }
+
+    test "a row is added to every row, and outer products are added in place" {
+        m := counting(3, 2, 0.0)
+        bias := counting(1, 2, 10.0)
+        m.AddRow(bias)
+        assert m.Get(0, 0) == 10.0 and m.Get(2, 1) == 16.0
+        w := Matrix<F64>(2, 3)
+        x := F64[1.0, 2.0]
+        y := F64[3.0, 4.0, 5.0]
+        Ger(w, x, y, 2.0, 1.0)
+        assert w.Get(1, 2) == 20.0 and w.Get(0, 0) == 6.0
+        w.AddOuterDifference(x, y, x, y, 1.0)
+        assert w.Get(1, 2) == 20.0
+        w.AddOuterDifference(x, y, F64[3.0, 4.0], F64[1.0, 2.0, 0.0], 1.0)
+        assert w.Get(0, 1) == 6.0 and w.Get(1, 2) == 30.0 and w.Get(1, 0) == 14.0
+    }
+
+    # whether try (a op b) failed with ShapeError.MISMATCH - op 0 is +, 1 is -, 2 is @, 3 is a.T() @ b.T()
+    fn shapeFails(a Matrix<F32>&, b Matrix<F32>&, op I64) Bool {
+        if op == 0 { try (a + b) catch ShapeError.MISMATCH { return true } }
+        if op == 1 { try (a - b) catch ShapeError.MISMATCH { return true } }
+        if op == 2 { try (a @ b) catch ShapeError.MISMATCH { return true } }
+        if op == 3 { try (a.T() @ b.T()) catch ShapeError.MISMATCH { return true } }
+        return false
+    }
+
+    test "shapes that do not fit are an error under try" {
+        a := Matrix<F32>(2, 3)
+        b := Matrix<F32>(3, 2)
+        assert shapeFails(a, b, 0) and shapeFails(a, b, 1) and shapeFails(a, a, 2) and shapeFails(a, a, 3)
+        assert not shapeFails(a, a, 0) and not shapeFails(b, b, 1) and not shapeFails(a, b, 2) and not shapeFails(a, b, 3)
+        s := try (a + a) catch ShapeError { unreachable }
+        assert s.Rows == 2 and s.Cols == 3
+    }
+
+    test "Gemm against the plain sum, every transpose, alpha and beta, across block boundaries" {
+        r := rand.Rand(5)
+        for size in range 3 {
+            m I64 = I64[3, 37, 300][size]
+            n I64 = I64[5, 29, 270][size]
+            k I64 = I64[7, 41, 517][size]
+            for form in range 4 {
+                transA Bool = form % 2 == 1
+                transB Bool = form >= 2
+                a := Matrix<F64>(k, m) if transA else Matrix<F64>(m, k)
+                b := Matrix<F64>(n, k) if transB else Matrix<F64>(k, n)
+                a.FillUniform(r, -1.0, 1.0)
+                b.FillUniform(r, -1.0, 1.0)
+                want := referenceProduct(a, transA, b, transB)
+                c := Matrix<F64>(m, n)
+                Gemm(c, a, transA, b, transB)
+                assert c.Distance(want) < 1e-9 * F64(k)
+                # beta = 1 accumulates, beta = 0 never reads what is there, alpha scales
+                c.Fill(1.0)
+                Gemm(c, a, transA, b, transB, 2.0, 1.0)
+                twice := want * 2.0 + 1.0
+                assert c.Distance(twice) < 1e-9 * F64(k)
+                c.Fill(math.NaN)
+                Gemm(c, a, transA, b, transB, 1.0, 0.0)
+                assert c.Distance(want) < 1e-9 * F64(k)
+                # threads change nothing
+                d := Matrix<F64>(m, n)
+                Gemm(d, a, transA, b, transB, 1.0, 0.0, 4)
+                assert d == c
+            }
+        }
+    }
+
+    test "the product operators, and products of views" {
+        a := counting(2, 3, 0.0)
+        b := counting(3, 2, 1.0)
+        c := a @ b
+        assert c.Get(0, 0) == 13.0 and c.Get(1, 1) == 52.0
+        assert (a @ a.T()).Get(0, 1) == 14.0 and (a.T() @ a).Get(2, 2) == 29.0 and (b.T() @ a.T()) == c.T().Clone()
+        big := counting(4, 5, 0.0)
+        left := big.ColRange(1, 4)
+        right := big.Block(0, 1, 3, 2)
+        assert left @ right == left.Clone() @ right.Clone()
+        # a vector times a matrix, and a matrix times a vector, both ways round
+        x := counting(1, 3, 1.0)
+        w := counting(2, 3, 0.0)
+        y := x @ w.T()
+        assert y.Get(0, 0) == 8.0 and y.Get(0, 1) == 26.0
+        col := w @ x.Reshape(3, 1)
+        assert col.Get(1, 0) == 26.0
+        z := Matrix<F64>(1, 3)
+        Gemm(z, x.RowRange(0, 1).Reshape(1, 3), false, counting(3, 3, 0.0), false)
+        assert z.Get(0, 2) == 1.0 * 2.0 + 2.0 * 5.0 + 3.0 * 8.0
+        o := Outer(F64[1.0, 2.0], F64[3.0, 4.0, 5.0])
+        assert o.Rows == 2 and o.Get(1, 2) == 10.0
+    }
+
+    test "products in every element type: F16, BF16 and F8 computed in F32, integers wrapping" {
+        a := counting(3, 4, 1.0)
+        b := counting(4, 2, -3.0)
+        want := a @ b
+        assert (a.ToF32() @ b.ToF32()).ToF64() == want
+        assert (a.ToF16() @ b.ToF16()).ToF64() == want
+        assert (a.ToBF16() @ b.ToBF16()).ToF64() == want
+        ai := Matrix<I32>(3, 4)
+        ai.Convert(a)
+        bi := Matrix<I32>(4, 2)
+        bi.Convert(b)
+        ci := ai @ bi
+        assert ci.Get(2, 1) == I32(want.Get(2, 1))
+        a8 := Matrix<F8E4M3>(3, 4)
+        a8.Convert(a)
+        b8 := Matrix<F8E4M3>(4, 2)
+        b8.Convert(Full(4, 2, 0.5))
+        c8 := Matrix<F32>(3, 2)
+        c32 := Matrix<F32>(3, 2)
+        out8 := Matrix<F8E4M3>(3, 2)
+        Gemm(out8, a8, false, b8, false)
+        c8.Convert(out8)
+        Gemm(c32, a.ToF32(), false, Full(4, 2, F32(0.5)), false)
+        assert c8.Get(0, 0) == c32.Get(0, 0) and c8.Get(0, 0) == 5.0
+        # an F16 sum many times beyond F16's own precision, accumulated in F32
+        ones := Full(1, 4096, F16(1.0))
+        assert ones.Sum() == 4096.0 and ones.Dot(ones) == 4096.0
+    }
+
+    test "sums, means, norms and extremes" {
+        m := counting(3, 4, 1.0)
+        assert m.Sum() == 78.0 and m.Mean() == 6.5 and m.Max() == 12.0 and m.Min() == 1.0
+        assert m.Dot(m) == 650.0 and m.Norm() == math.Sqrt(650.0) and m.MaxAbs() == 12.0
+        assert m.Distance(m) == 0.0 and m.Distance(m + 1.0) == math.Sqrt(12.0) and m.MaxAbsDifference(m * 2.0) == 12.0
+        rows := Array<F64>(3)
+        m.RowSums(rows)
+        assert rows[0] == 10.0 and rows[2] == 42.0
+        maxes := Array<F64>(3)
+        m.RowMax(maxes)
+        assert maxes[1] == 8.0
+        cols := Full(1, 4, 100.0)
+        m.ColumnSums(cols)
+        assert cols.Get(0, 0) == 15.0 and cols.Get(0, 3) == 24.0
+        m.ColumnSums(cols, 1.0)
+        assert cols.Get(0, 3) == 48.0
+        wide := counting(2, 150, 0.0)
+        wcols := Matrix<F64>(1, 150)
+        wide.ColumnSums(wcols)
+        assert wcols.Get(0, 149) == 149.0 + 299.0 and wcols.Get(0, 70) == 70.0 + 220.0
+        scores := counting(2, 3, 0.0)
+        scores.Set(0, 1, 9.0)
+        scores.Set(1, 0, 5.0)
+        classes := Array<I32>(2)
+        scores.ArgMaxRows(classes)
+        assert classes[0] == 1 and classes[1] == 0
+        scores.Set(1, 2, math.NaN)
+        scores.ArgMaxRows(classes)
+        assert classes[1] == 2 and math.IsNan(scores.Max())
+        # a strided view sums only its own elements
+        assert m.ColRange(1, 3).Sum() == 2.0 + 3.0 + 6.0 + 7.0 + 10.0 + 11.0
+        # a long sum in lanes: exact here, since every partial sum is an integer
+        long := counting(1, 1001, 0.0)
+        assert long.Sum() == 500500.0
+    }
+
+    test "random fills are reproducible from the seed" {
+        r := rand.Rand(42)
+        a := Matrix<F32>(100, 100)
+        a.FillNormal(r, 1.0, 2.0)
+        mean := a.Mean()
+        sd F32 = (a - mean).Norm() / 100.0
+        assert mean > 0.9 and mean < 1.1 and sd > 1.9 and sd < 2.1
+        again := rand.Rand(42)
+        b := Matrix<F32>(100, 100)
+        b.FillNormal(again, 1.0, 2.0)
+        assert a == b
+        u := Matrix<F64>(50, 50)
+        u.FillUniform(r, -1.0, 3.0)
+        assert u.Min() >= -1.0 and u.Max() < 3.0 and u.Mean() > 0.9 and u.Mean() < 1.1
+    }
+
+    test "conversions round as a conversion does" {
+        m := Full(2, 2, 1.0 / 3.0)
+        f := m.ToF32()
+        assert f.Get(1, 1) == F32(1.0 / 3.0)
+        h := m.ToF16()
+        assert h.Get(0, 0) == F16(1.0 / 3.0)
+        bf := m.ToBF16()
+        assert bf.Get(0, 1) == BF16(1.0 / 3.0)
+        back := Matrix<F64>(2, 2)
+        back.Convert(bf)
+        assert back.Get(0, 1) == F64(BF16(1.0 / 3.0))
+    }
+
+    test "rendering, equality and hashing" {
+        m := counting(2, 2, 0.5)
+        assert $m == "[[0.5, 1.5],\n [2.5, 3.5]]"
+        long := counting(12, 1, 0.0)
+        assert $long == "[[0],\n [1],\n [2],\n ...,\n [9],\n [10],\n [11]]"
+        wide := counting(1, 12, 0.0)
+        assert $wide == "[[0, 1, 2, ..., 9, 10, 11]]"
+        assert m == m.Clone() and m != m * 2.0 and m != counting(1, 4, 0.5)
+        assert m.Hash() == m.Clone().Hash()
+        z := Full(1, 1, 0.0)
+        nz := Full(1, 1, -0.0)
+        assert z == nz and z.Hash() == nz.Hash()
+        seen := Map<Matrix<F64>, I64>()
+        seen.Put(m, 1)
+        assert m.Clone() in seen
+    }
+
+    test "Solve and Inverse" {
+        a := counting(3, 3, 1.0)
+        a.Set(2, 2, 10.0)
+        x := counting(3, 2, 0.0)
+        b := a @ x
+        got := try Solve(a, b) catch SolveError { unreachable }
+        assert got.MaxAbsDifference(x) < 1e-12
+        inv := try a.Inverse() catch SolveError { unreachable }
+        id := Matrix<F64>(3, 3)
+        id.SetIdentity()
+        assert (a @ inv).MaxAbsDifference(id) < 1e-12
+        singular := Full(3, 3, 2.0)
+        failed Bool = false
+        try Solve(singular, b) catch SolveError.SINGULAR { failed = true }
+        assert failed
+    }
+
+    test "ParallelRows covers every row once" {
+        m Matrix<I64>& = Matrix<I64>(1000, 1)
+        ParallelRows(1000, 10, 4, fn(lo, hi) {
+            for i in range lo, hi { m.Set(i, 0, m.Get(i, 0) + 1) }
+        })
+        assert m.Sum() == 1000 and m.Min() == 1 and m.Max() == 1
+        small Matrix<I64>& = Matrix<I64>(5, 1)
+        ParallelRows(5, 10, 4, fn(lo, hi) {
+            for i in range lo, hi { small.Set(i, 0, I64(hi - lo)) }
+        })
+        assert small.Sum() == 25
+    }
+
+    test "matrix-vector products both ways round, of views too, and products of one to four rows" {
+        r := rand.Rand(7)
+        for size in range 2 {
+            rows I64 = I64[64, 256][size]
+            cols I64 = I64[64, 128][size]
+            a := Matrix<F64>(rows, cols)
+            a.FillUniform(r, -1.0, 1.0)
+            x := Matrix<F64>(cols, 1)
+            x.FillUniform(r, -1.0, 1.0)
+            want := referenceProduct(a, false, x, false)
+            y := Array<F64>(rows, math.NaN)
+            Gemv(y, a, false, x.Data)
+            for i in range rows { assert math.Abs(y[i] - want.Get(i, 0)) < 1e-13 * F64(cols) }
+            # a's columns: y = 2 a^T u + y
+            u := Matrix<F64>(rows, 1)
+            u.FillUniform(r, -1.0, 1.0)
+            wantT := referenceProduct(a, true, u, false)
+            yt := Array<F64>(cols, 1.0)
+            Gemv(yt, a, true, u.Data, 2.0, 1.0)
+            for j in range cols { assert math.Abs(yt[j] - (2.0 * wantT.Get(j, 0) + 1.0)) < 1e-13 * F64(rows) }
+            # a view: its rows are not contiguous with each other
+            v := a.ColRange(1, cols - 1)
+            xv := Matrix<F64>(cols - 2, 1)
+            xv.Fill(1.0)
+            wantV := referenceProduct(v, false, xv, false)
+            yv := Array<F64>(rows)
+            Gemv(yv, v, false, xv.Data)
+            for i in range rows { assert math.Abs(yv[i] - wantV.Get(i, 0)) < 1e-13 * F64(cols) }
+            wantVT := referenceProduct(v, true, u, false)
+            yvt := Array<F64>(cols - 2)
+            Gemv(yvt, v, true, u.Data)
+            for j in range cols - 2 { assert math.Abs(yvt[j] - wantVT.Get(j, 0)) < 1e-13 * F64(rows) }
+        }
+        # a batch of one to four rows through Gemm takes the same path, every transpose
+        for m in range 1, 5 {
+            for form in range 4 {
+                transA Bool = form % 2 == 1
+                transB Bool = form >= 2
+                a := Matrix<F32>(37, m) if transA else Matrix<F32>(m, 37)
+                b := Matrix<F32>(29, 37) if transB else Matrix<F32>(37, 29)
+                a.FillUniform(r, -1.0, 1.0)
+                b.FillUniform(r, -1.0, 1.0)
+                c := Full(m, 29, F32(1.0))
+                Gemm(c, a, transA, b, transB, 1.0, 1.0)
+                want := referenceProduct(a, transA, b, transB) + 1.0
+                assert c.ToF64().MaxAbsDifference(want) < 1e-5
+            }
+        }
+    }
+
+    test "rank-1 and rank-2 updates, accumulating, decayed or replacing" {
+        x := F64[1.0, 2.0]
+        y := F64[3.0, 4.0, 5.0]
+        w := counting(2, 3, 0.0)
+        Ger(w, x, y)
+        assert w.Get(1, 2) == 5.0 + 10.0 and w.Get(0, 0) == 3.0
+        Ger(w, x, y, 2.0, 0.5)
+        assert w.Get(1, 2) == 0.5 * 15.0 + 2.0 * 2.0 * 5.0
+        w.Fill(math.NaN)
+        Ger(w, x, y, 1.0, 0.0)
+        assert w == Outer(x, y)
+        u := counting(2, 3, 1.0)
+        Ger2(u, x, y, F64[1.0, -1.0], F64[1.0, 1.0, 1.0], 1.0, 0.9)
+        assert u.Get(1, 2) == 0.9 * 6.0 + (10.0 - 1.0) and u.Get(0, 0) == 0.9 + (3.0 + 1.0)
+        f := Matrix<F32>(2, 3)
+        Ger(f, F32[1.0, 2.0], F32[3.0, 4.0, 5.0], 0.5)
+        assert f.Get(1, 2) == 5.0
+    }
+
+    test "clamps, masked updates and random masks" {
+        m := counting(2, 3, -2.0)
+        m.Clamp(-1.0, 2.0)
+        assert m.Min() == -1.0 and m.Max() == 2.0 and m.Get(0, 2) == 0.0 and m.Get(1, 0) == 1.0 and m.Get(0, 0) == -1.0
+        mask := Matrix<U8>(2, 3)
+        mask.Set(0, 1, 1)
+        mask.Set(1, 2, 1)
+        w := Matrix<F64>(2, 3)
+        w.AddScaledMasked(Full(2, 3, 1.0), 0.5, mask)
+        assert w.Sum() == 1.0 and w.Get(0, 1) == 0.5 and w.Get(1, 2) == 0.5
+        r := rand.Rand(3)
+        b := Matrix<U8>(100, 100)
+        b.FillBernoulli(r, 0.3)
+        ones := b.ToF64().Sum()
+        assert ones > 2700.0 and ones < 3300.0 and b.Max() == 1 and b.Min() == 0
+        signs := Matrix<F32>(10, 10)
+        signs.FillBernoulli(r, 1.0)
+        assert signs.Sum() == 100.0
+    }
+
+    test "row reductions, normalised rows and the softmax of rows" {
+        m := counting(2, 3, -2.0)
+        out := Array<F64>(2)
+        m.RowMaxAbs(out)
+        assert out[0] == 2.0 and out[1] == 3.0
+        m.RowAbsSums(out)
+        assert out[0] == 3.0 and out[1] == 6.0
+        m.RowNorms(out)
+        assert out[0] == math.Sqrt(5.0) and out[1] == math.Sqrt(14.0)
+        cs := Matrix<F64>(1, 3)
+        counting(2, 3, -4.0).ColumnAbsSums(cs)
+        assert cs.Get(0, 0) == 5.0 and cs.Get(0, 1) == 3.0 and cs.Get(0, 2) == 3.0
+        n := m.Clone()
+        n.NormalizeRows()
+        n.RowNorms(out)
+        assert math.Abs(out[0] - 1.0) < 1e-15 and math.Abs(out[1] - 1.0) < 1e-15
+        zero := Matrix<F64>(1, 3)
+        zero.NormalizeRows()
+        assert zero.Sum() == 0.0
+        # a block of columns, in place, over a temperature: what is outside the block is untouched
+        s := counting(2, 4, 0.0)
+        block := s.ColRange(1, 4)
+        block.RowSoftmax(block, 2.0)
+        assert s.Get(0, 0) == 0.0 and s.Get(1, 0) == 4.0
+        sums := Array<F64>(2)
+        block.RowSums(sums)
+        assert math.Abs(sums[0] - 1.0) < 1e-15 and math.Abs(sums[1] - 1.0) < 1e-15
+        want F64 = math.Exp(-1.0) / (math.Exp(-1.0) + math.Exp(-0.5) + 1.0)
+        assert math.Abs(s.Get(0, 1) - want) < 1e-15 and math.Abs(s.Get(1, 1) - want) < 1e-15
+        p := Matrix<F32>(2, 3)
+        p.RowSoftmax(m.ToF32(), 1.0)
+        assert p.Get(0, 2) > p.Get(0, 1) and math.Abs(p.Sum() - 2.0) < 1e-6
+    }
+
+    # the largest errors of FastExp (relative, where e^x is a normal number), FastTanh and FastSigmoid (absolute) against
+    # the C library's, at n points spread over [-100, 100]
+    fn fastErrors(like <T>, n I64) (F64, F64, F64) {
+        tiny F64 = match <T> {
+            case F32 => 1.1754943508222875e-38
+            case F64 => 2.2250738585072014e-308
+        }
+        worstExp, worstTanh, worstSig := 0.0, 0.0, 0.0
+        for i in range n {
+            x <T> = Cast(-100.0 + 200.0 * F64(i) / F64(n - 1), like)
+            want F64 = F64(math.Exp(x))
+            if want > tiny and math.IsFinite(want) { worstExp = math.Max(worstExp, math.Abs(F64(FastExp(x)) - want) / want) }
+            worstTanh = math.Max(worstTanh, math.Abs(F64(FastTanh(x)) - F64(math.Tanh(x))))
+            worstSig = math.Max(worstSig, math.Abs(F64(FastSigmoid(x)) - 1.0 / (1.0 + math.Exp(-F64(x)))))
+        }
+        return worstExp, worstTanh, worstSig
+    }
+
+    test "the fast activations: their errors against the C library, and their limits" {
+        e32, t32, s32 := fastErrors(F32(0), 20001)
+        assert e32 < 3e-7 and t32 < 2e-7 and s32 < 2e-7
+        e64, t64, s64 := fastErrors(F64(0), 20001)
+        assert e64 < 6e-16 and t64 < 3e-16 and s64 < 3e-16
+        assert math.IsInf(FastExp(F32(89.0))) and FastExp(F32(-88.0)) == 0.0 and math.IsNan(FastExp(F32(math.NaN)))
+        assert math.IsInf(FastExp(710.0)) and FastExp(-709.0) == 0.0 and FastExp(0.0) == 1.0 and FastExp(F32(0.0)) == 1.0
+        assert FastTanh(F32(50.0)) == 1.0 and FastTanh(-50.0) == -1.0 and FastTanh(0.0) == 0.0
+        assert FastSigmoid(F32(-1000.0)) == 0.0 and FastSigmoid(1000.0) == 1.0 and FastSigmoid(0.0) == 0.5
+        m := counting(2, 2, -1.0).ToF32()
+        e := Matrix<F32>(2, 2)
+        e.Map(m, fn(x) { return FastExp(x) })
+        assert math.Abs(F64(e.Get(1, 1)) - math.Exp(2.0)) < 1e-6 * math.Exp(2.0)
+    }
+
+    test "Cast converts as a conversion does, the 8-bit floats included" {
+        assert Cast(2.75, F32(0)) == F32(2.75) and Cast(F32(-1.5), I32(0)) == -1 and Cast(300, U8(0)) == 44
+        assert Cast(Cast(1.5, F8E4M3(0.0)), 0.0) == 1.5 and Cast(F16(0.5), BF16(0)) == BF16(0.5)
+    }
+}

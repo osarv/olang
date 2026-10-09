@@ -10114,6 +10114,74 @@ from their original form.
   **Study, after**: every scope workaround in graph, inventory, lru, pipeline, report, widgets and wordfreq reverts and
   the program prints what it printed before; report's `sum.biggest = s.item` stays a copy for a T25b reason (a `mut`
   field of reference type is a writable reference, and the item text is read-only).
+- **`std/linalg` and `std/rand` (2026-10-09).** The user wants oann - their neural-network library, a rough C prototype
+  - rewritten in olang, with a matrix library that is "efficient" and "the base for all operations and operands". Built
+  in `std/linalg.olang` and `std/rand.olang`, benchmarked by `bench/gemm.sh`. **The shape of the API.** Two-dimensional
+  was the user's call, after weighing a tensor ("Matrix cuz then we don't interpret data in two places"); with it went
+  general broadcasting, which an N-d tensor needs and a matrix does not - `AddRow` adds a 1 x Cols bias to every row,
+  and nothing else broadcasts. A `Matrix<T>` is a view: `Rows`, `Cols`, `Stride` and `Data`, a `mut Array<T>&`, so views
+  (`RowRange`, `ColRange`, `Block`, `Reshape`, `View` over a caller's array) share storage and a transpose is a
+  parameter of the products (`Gemm`'s flags, or `m.T()` - a `Transposed<T>` that the `@` operator reads where it is).
+  Every kernel takes the matrix's (rows, cols, stride) rather than assuming contiguity, and every shape check is one
+  function in one section, so const generics (`Matrix<T, R, C>`, designed in parallel as G20-G28) can move the checks
+  into the type in one place. The destination forms are what a training loop uses and allocate nothing but `Gemm`'s
+  packing panels, in its own scope; the operators exist for scripts. `a += b` on matrices is `a = a + b` (E31) - a new
+  matrix every time - which is the one trap for a numeric user; the header says to write `a.Add(b)`. **The GEMM, and
+  three things that decided its speed.** Goto's algorithm as BLIS writes it: B packed into KC x NC panels of NR columns,
+  A into MC x KC panels of MR rows, an MR x NR micro-kernel. (1) The accumulators must be read and written only at
+  constant indices: a tile held in an inline array (`type tile<A>`, C2e) and indexed by a loop variable stays in memory,
+  while the same tile with every index a constant is split into scalars by SROA and lives in registers - so the
+  micro-kernel copies its accumulators into a second tile before the write-back loop. (2) The tile sizes are literals:
+  written as immutable globals (`MR I64 = 4`), the per-module optimizer could not see their values - an immutable global
+  is emitted `global`, not `constant` (bench/repro/linalg_global_constant) - and the kernel ran at 10.8 GFLOPS against
+  17.5 with literals; LTO folds the value later, too late for the kernel's shape. (3) Tile shapes were measured rather
+  than taken from a BLAS: 4 x 12 for F32 (and every 4-byte type), 4 x 6 for F64, chosen against kernels from 3 x 16 to 8
+  x 16 at the SSE2 baseline's 16 vector registers. F16/BF16/F8 are widened to F32 while packing, so the micro-kernel
+  only ever sees its accumulation type. Small products (below 64^3, untransposed B) take a direct i-k-j loop, and one to
+  four rows or one column take a matrix-vector path with no packing - `Gemv` is that path. **Results** (bench/README.md
+  has the tables): olang's `Gemm` is level with or ahead of the same algorithm written in C, so the language costs
+  nothing here; OpenBLAS is 5-7x ahead single-threaded because it runs AVX-512 with FMA, and olang builds for baseline
+  x86-64 and never contracts `a*b + c`. Relinking olang's IR with `-march=native` buys little, because the 4 x 12 tile
+  is sized for 4-wide vectors. That is a direction for the compiler, not the library: a native target (and tile sizes
+  chosen per target - a build constant could select them), and an opt-in contraction. **Settling networks** - networks
+  that iterate to an equilibrium and learn with local free/nudged-phase rules - asked for a second set of kernels, all
+  built: batch-1 matrix-vector products both ways round (`Gemv`: olang's dot form, eight partial sums in lanes, is 3-5x
+  a plain C dot loop, which clang keeps scalar; the axpy form is level with C), rank-1 and decayed rank-2 updates
+  (`Ger`, `Ger2`), the contrastive update `m += alpha (a b^T - c d^T)` computed factored as `a (b - d)^T + (a - c) d^T`
+  so that two nearly equal phases do not cancel (`AddOuterDifference`), row and column reductions (`RowMaxAbs`,
+  `RowAbsSums`, `RowNorms`, `NormalizeRows`, `ColumnAbsSums`), a row softmax with a temperature over a view
+  (`RowSoftmax`), masked updates and clamps (`AddScaledMasked`, `Clamp`), Bernoulli and random-sign fills
+  (`FillBernoulli`, `FillSigns`), and activations that vectorize. **The activations.** `std/math`'s Exp and Tanh are
+  calls into the C library (X8), declared so that LLVM keeps them calls, which is what makes the compile-time evaluator
+  and the run time agree - and a call per element keeps a Map from vectorizing (tanhf is about 129 instructions an
+  element). `FastExp` (Cody-Waite reduction, 2^k from the bits of 1.5 * 2^23 + t log2 e, a Taylor polynomial of degree 6
+  in F32 and 12 in F64, 2^(k-1) * 2 so that 2^128 is never made), `FastTanh` and `FastSigmoid` on top of it are olang
+  arithmetic and bit operations (E33's `Bits`), so they vectorize and the evaluator computes them exactly as the run
+  time does. Measured against the C library at two million points: relative 2.5e-7 / 4.7e-16 for exp, absolute 1.5e-7 /
+  2.2e-16 for tanh, 9.2e-8 / 2.2e-16 for the sigmoid (F32 / F64), stated in the module with margin; and 14 / 17 / 16
+  instructions an element in F32 against the C library's 39 (exp) and 129 (tanh). **libmvec was assessed as the
+  compiler-level alternative and not taken**: clang maps `expf` to glibc's `_ZGVbN4v_expf` (about 15 instructions an
+  element; 8-wide with AVX2) only for calls that may not set errno, which X8 deliberately does not declare, its results
+  are within 4 ulp rather than the scalar function's, so the evaluator would compute a different number than the
+  program, and clang 18 maps no `tanhf` at all. It would suit an opt-in fast-math mode, if the language ever wants one.
+  **Found while building it** (all reproduced at the batch's base, e563dc7, and worked around in the module; four were
+  fixed by the scope batch merged before this one, 0d5162d, and their reproducers dropped): a value built in the result
+  scope could not be borrowed for a read-only method call, error[O10d]; `null` passed for a constructor's reference
+  parameter made a function returning a new instance look as if it returned its own storage, error[O26] - so `return x +
+  x` failed, and every allocating function builds its result in a reference local in the result scope (`out
+  Matrix<T>&return = ...`, which can now be simplified); a constructor reference parameter defaulting to `null` was
+  error[O10d] at the default when built with `&return`; a type variable's default did not adapt (`alpha <T> = 1` was
+  error[E12]). A fifth is now a rule rather than a bug: passing such a result-scope value to a `mut` receiver whose type
+  has a `mut` reference field is error[O17], since the callee could store through it into the wrong scope - which is why
+  linalg's receivers are read-only `Matrix<T>&` even where they write elements, legal by T25b's shallow permission but
+  saying less than a `mut` would. Still open: an immutable global is emitted as a mutable LLVM global
+  (`bench/repro/linalg_global_constant.olang`). Friction, not bugs: no message on an `assert`, so a shape mismatch
+  aborts with "assertion failed" only; `Cast` had to be written as a `match <D>` over every numeric type, there being no
+  generic conversion; a literal does not adapt through an operator's generic operand, so an F32 matrix is scaled by `m *
+  F32(0.5)`. **Tests**: twenty corpus tests (every product shape and transpose against a plain sum, views, every element
+  type, reductions, the activations' error bounds, Solve and Inverse, ParallelRows), three globals baked while compiling
+  and compared with the run time, all under `if TestBuild` so a program importing the module compiles none of them; a
+  checks scenario (`linalg`) for the shape-mismatch abort, built and interpreted, and the `try` form.
 - **A differential fuzzer for the evaluator and the code generator (K1/K1a, K2, S18c, P1, P9, E33, T4/E26, T8, E28,
   E10a, B2c, 2026-10-09).** The evaluator's review compared what it computes with what the run time computes by hand, on
   programs someone thought of. A fuzzer compares them on programs nobody thought of: the coordinator's request, built in
