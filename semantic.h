@@ -83,6 +83,11 @@ struct type {
     //O4a: the tag was written as "&x" naming a variable living in a block - scopeParam is then NULL and
     //scopeDepth is that block's, and the tag is a written one, not a bare one to be inferred (O25a)
     bool scopeWritten;
+    //O11/O12: a local reference whose referent lives in a scope not known here - a meet of alternatives that disagree
+    //(S13c), or what it was read from was not traced. scopeParam is then NULL and scopeDepth its own block, an
+    //underestimate good for reading; RefExactScope reports it as SCOPE_AMBIGUOUS, so nothing is built into it or
+    //stored through it, and it determines no scope a callee could build into
+    bool scopeUnknown;
 
     //BASETYPE_STRUCT, only when declared "struct(params) { ... }" - see the report. `vars` above still
     //holds the actual fields (in declaration order); these describe the constructor/destructor built
@@ -270,6 +275,8 @@ struct var {
     struct token tok;
     bool mut; //local variables are mutable by default
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
+    bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
+                       //element is constant data, which lives as long as the program
     bool inProgram;    //O1b: a local whose referent - or, for a value, whose references - live in the program's scope
     //O25a: a value local holding references, declared with ":=", lives where its initializer built them - a
     //scope variable, or a block (valueHome NULL, at valueHomeDepth)

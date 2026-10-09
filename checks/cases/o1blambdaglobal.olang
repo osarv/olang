@@ -1,0 +1,23 @@
+# check: fail a global lives as long as the program
+# O1b/D16d: a lambda capturing a reference lives where it does - storing it in a global needs what it captured to live
+# in the program's scope, which a by-value parameter's payload does not (it used to be taken for the program's own)
+type Node struct(v I32) {
+    v mut
+}
+type Box enum {
+    Has(n Node&)
+    No
+}
+GF mut fn() I32 = null
+fn stash(b Box) {
+    match b {
+        case Box.Has(n) { GF = fn() { return n.v } }
+        nomatch { }
+    }
+}
+fn main() ? {
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Box.Has(inner))
+    }
+}

@@ -22,3 +22,6 @@ judgment about what's architecturally cleaner without flagging the disagreement 
 confirmation. Keep code changes tight: no leftover cruft, no unnecessary intermediate states, consistent
 naming/section-header conventions matching the surrounding file (e.g. the `// ---- section ----` style
 already used in semantic.c). Keep my own responses concise too, not padded.
+
+**Files (the user, 2026-10-09):** "splitting files is overrated. I prefer long files if they all do the same thing.
+Only split where modularisation is a thing." Never split a file for its length; split only at a real module boundary.

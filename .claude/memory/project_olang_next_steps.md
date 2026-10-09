@@ -125,6 +125,22 @@ because what it finds about structure feeds the refactor.
   arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
   notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
   characters, ~470 call sites, no arguments. The user approved this plan ("Yes do that", 2026-10-09).
+- 07:15 (plan upgraded; the user: "add more agents, we wanna speed things up"): six agents. Fixing: tfix, efix
+  (resumed), sfix. New: wt-isatom (`a is b` + atomic methods + D3a for type names), wt-tfork (-t runs each file in a
+  forked child, so the suite's peak RSS is one file's - unblocks parallel verifies). A lexer-port spike was started
+  and stopped at once (the user: "Don't do the self hosting yet ... finish the bug fixes and refactor first"). Error-message remake waits for tfix
+  (it is adding an "instantiated from" note to errmsg.c).
+- **Decided 2026-10-09 (the user: "Yes keep it modest. Also give the C compiler its own directory. From now on we just
+  bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current compiler binary is lost."):**
+  the refactor is MODEST (move the C compiler into its own directory `bootstrap/`, dead code and stale comments, NO
+  splitting for size - the user: "splitting files is overrated. I prefer long files if they all do the same thing.
+  Only split where modularisation is a thing" (e.g. the ~900 lines of runtime IR inside codegen.c are a separate
+  thing; semantic.c stays one file), -t memory, the error-message remake - no deep restructuring, since the port is a redesign). After the
+  port the C compiler is frozen as stage 0 and new compiler work happens in olang. Re-bootstrap (my design): no
+  committed binaries; `make bootstrap` builds the C stage 0, uses it to build the olang compiler, which rebuilds
+  itself (stage 2 == stage 3 checked). The olang compiler's own source stays compilable by stage 0; when it needs a
+  feature stage 0 lacks, the last commit stage 0 can build is recorded in `bootstrap/CHAIN` and `make bootstrap` walks
+  that chain (Go's and Rust's approach), so a lost binary is always rebuildable from C plus the repo.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
@@ -133,10 +149,20 @@ because what it finds about structure feeds the refactor.
   (interfaces, scope names, O10e...); unify hand-kept duplicate walkers (structContainsBareScopeField). One agent per
   file at a time; the makefile gets the new files.
 Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
-Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
+Then the port (a redesign, see feedback_port_clean_design.md): C compiler frozen as stage 0, module by module, acceptance = the test suite plus per-stage diffs where cheap (was: identical normalized IR),
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
+- **FPGA support, for spiking neural networks** (the user, 2026-10-09: "I want FPGA support for spiking neural network
+  implementations"; after self-hosting, as a second backend of the olang compiler). Route: high-level synthesis of a
+  compiler-checked subset - fixed-width integers and minifloats, fixed-size arrays, bounded loops/comprehensions,
+  match/enums, generics, compile-time evaluation for constant tables; no run-time allocation, recursion, function
+  values, extern or text - emitted as LLVM IR or MLIR for an HLS flow (CIRCT, AMD's open Vitis HLS front end, Bambu);
+  `join`/`spawn` and channels as parallel units/dataflow. What SNNs need on top (to design then): arbitrary bit widths
+  (`U<12>`-like) and fixed-point types with saturating arithmetic (membrane potentials, Q formats), event streams for
+  spikes (address-event routing), weights in on-chip memory, time-stepped leaky integrate-and-fire updates. The other
+  route - a circuit-describing library run by the compile-time evaluator emitting Verilog (Chisel/Clash style) - kept
+  as the alternative for timing-critical parts.
 - Serialization (JSON and a compact binary encoder in std, walking fields - never a memory dump) on top of
   compile-time reflection (one generic iterating a type's fields, like `match <T>`); also restores what removing
   struct literals lost - rebuilding a valid value without its validating constructor.

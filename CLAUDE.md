@@ -39,6 +39,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_no_claude_attribution.md
 @.claude/memory/feedback_no_runtime_checks.md
 @.claude/memory/feedback_numbered_questions.md
+@.claude/memory/feedback_port_clean_design.md
 @.claude/memory/feedback_record_flagged_decisions.md
 @.claude/memory/feedback_style_form_conciseness.md
 @.claude/memory/feedback_surface_and_fix_bugs.md
@@ -3203,6 +3204,32 @@ Go through this for every change to what olang means - a rule added, revised or 
   text in its own closed scope - the next scope to take a chunk wrote over it; stack overflows from import strings or
   root paths longer than `PATH_MAX`. **Skipped**: T7a errors of `Pair(1, "x")` reported inside the prelude (the types
   agent's "instantiated from" note covers it).
+- **The statements and scopes, hardened from a review (O4b/O14c, O12, O18a/O18b, O23, O25c/O25e, O1b, R9a, S13c, E28,
+  T25c/T25d, P2, 2026-10-09).** A read-only review of the checker's statements and §8 reproduced ten holes, most of them
+  use-after-frees, and seven over-rejections; all are fixed, each with a check or a corpus test read back after an
+  arena churn. **Decided (the coordinator's calls)**: a by-value parameter holding references has a scope variable of
+  its own for them (O4b), and returning them is an obligation (O14c) - it used to read as the program's scope, so
+  `keep = id(Holder(inner))` and a payload pushed out of an enum parameter compiled; a global argument binds a
+  callee's scope variable to the program's scope (O25e relaxed, O18b may build there), so `G.Len()`, `G[0]`, `1 in GM`
+  and `GL.Push(Leaf(i))` work; a conditional or match of a reference and new values of its referent type is the
+  reference type, the new ones built where it lands (E28). **Decided (mine)**: a scope that is not known - match
+  alternatives binding one name from different scopes, anything untraced - is read and walked but never equals an exact
+  scope, never determines a scope a callee may build into, and is never a scope argument (O12; "unnamed" used to be
+  taken for the program's and trusted); alternatives **meet** (S13c: writable only if all are); a `catch default` is
+  judged where the result lands, at the statement's end (R9a); a field, element, slice or `as` payload of a call's
+  built result lands where the read is put, and an array literal or fill, a constructor call or an enum case passed on
+  lands with what it is built from and is checked where it lands for the storage it holds (O18a, O25c, C2d, T17c);
+  destructured results land at their targets; storing into a `&p` field through a path whose per-instance binding is
+  not known (an element, another instance's field) is unverifiable (O23, O11); a task's arguments must last until the
+  join in everything they hold (P2); a conditional, match, `as` or `try c[i]` gives the permission its values have
+  (T25c); an element of a static literal walked by for-in is static (T25d); an instance given as a function value
+  (`Call`) is not returned from its own scope (E31/O14). **Found on the way, all pre-existing**: destructured results
+  were built in the statement's block and stored into outer targets; arrays holding existing references were returned
+  or stored past them; constructor arguments were never C2d-checked where the call landed (`l.Push(Wrap(inner))`); a
+  lambda stored in a global skipped O1b (a segfault); `Array<T>(n, fill)` with a temporary fill stored a stack address
+  in every element; constant text in a read-only array literal was copied into the block rather than being the static
+  data, so `for nm in String&["a", "b"] { m.Put(nm, 1) }` could not be written. **Not fixed** (recorded limit): an `At` result in operand position whose element type has `mut`
+  reference fields still asks an exact scope it cannot show.
 - **`is` replaces `same`, and the atomic builtins are methods (E10c, E32, P9, D2, D3a, 2026-10-09; the user: "I don't
   like built-ins very much", then "Yes, do both").** `a is b` is identity - true when two references (or two function
   values) of one type name one instance, whatever `Eq` says - and `a is not b` its negation, as `x is not Shape.Circle`

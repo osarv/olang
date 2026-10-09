@@ -1,0 +1,16 @@
+# check: fail this writes through a read-only reference
+# T25c: a conditional or match is writable only if every value it can give is
+type Node struct(v I32) {
+    v mut
+}
+fn f2(p mut Node&, q Node&, c Bool) {
+    (p if c else q).v = 92
+}
+fn f3(p mut Node&, q Node&, k I32) {
+    (match k { case 1 => p  nomatch => q }).v = 93
+}
+fn main() ? {
+    b Node& = Node(2)
+    f2(Node(0), b, false)
+    f3(Node(0), b, 5)
+}
