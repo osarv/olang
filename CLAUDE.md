@@ -3240,6 +3240,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   `checks/checks.olang` (156s, one file), so two at a time would save ~45s (estimated from per-file times) for ~5.7GiB;
   it would also need buffered output and atomic object writes (two files importing one module build one object path).
   `-b`/`-c`/`-i` build one program; what they accumulate is within it (B9c's attempts are never freed).
+- **A review of the type checker, and what it fixed (T4, T7, T16, T25c, T27, T29, T29a, T29e, T31, G1, G4, G7, G10c,
+  G12, G16a, G17, G19, C2e, E10a, E10b, E13b, E14, E28, M6a, M12, M20, R17, 2026-10-09).** A read-only review of the
+  types/modules/generics half of semantic.c reproduced each finding; all are fixed, each with a corpus test or a check.
+  **Decisions (the coordinator's)**: a type may be declared over a primitive, an array or another declared one of those
+  and takes none of its constructor, destructor, `extends` or generic identity; over a struct, enum, trait or generic
+  instance it is an error (T29). Inherited methods meet traits as they answer calls, and an extending type may declare
+  its own `Eq`, `Hash` and `Str` (T29e). Two anonymous enums are one type exactly when their cases and payload types
+  agree (T27). **Decisions (mine)**: **a conversion names its argument's storage** (T29a) - `String(b)` is `b`'s bytes,
+  written where `b` may be and lent for as long as it lives, so `h.s = String(local)` now aliases where it copied, and a
+  view of an inline field is a slice of it; **instantiation names are injective** (G16a) - every type spelled by structure
+  with bracketed compound forms, a reference's permission and a declared array's identity included, no length limit, and
+  a symbol longer than 120 characters spelled as its beginning and a 128-bit hash; **G17** fires at a type nesting 48 deep,
+  once; an inline field's length is decided **per instantiation** (C2e); a **generic constructor binds an array value as a
+  reference** (`Pair(1, "x")` is a `Pair<I32, String&>`, G10c); **only a capitalized `Eq`** takes over `==`, as only `Str`
+  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree); `x.f(args)` on a field calls the
+  function value it holds (E13b); a type variable may not be named after a type (G1); a type-parameter list is only for a
+  struct or a trait (section 12); a method meeting a trait agrees in each parameter's `mut` and permission (T31); a
+  generic call may leave off defaulted parameters (E14); a constraint reached by substitution is checked where the
+  instantiation was asked for, and its body is then not checked (G19); errors inside an instantiation carry a note saying
+  where it was asked for and with what (G16). **Bugs fixed**: the supplied enum `Hash` read every case's payload (abort);
+  a `Call` adapter and a conversion each let a read-only reference be written through; a type holding itself through an
+  inline array hung the compiler; G4 was never enforced; the R17 statement form demanded a signature; `x as T&` and an
+  element marker crashed; a compound assignment skipped T29f; several one-error cascades (private names, unknown methods,
+  wrong type-argument counts, `G12`). Full list in HISTORY.md.
+
 - **`is` replaces `same`, and the atomic builtins are methods (E10c, E32, P9, D2, D3a, 2026-10-09; the user: "I don't
   like built-ins very much", then "Yes, do both").** `a is b` is identity - true when two references (or two function
   values) of one type name one instance, whatever `Eq` says - and `a is not b` its negation, as `x is not Shape.Circle`
@@ -3257,8 +3282,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   the target's type"; all eight integer types (P9 still said `U8`/`I32`/`I64`, from before T4); `null is null` is an
   error (no type between them). Lowering is unchanged - `is` is the `==` of two references, the atomics the same
   operations - so codegen, the evaluator and `-i` needed nothing; K1 still refuses an atomic while compiling. Found on
-  the way: an unknown method or function left a placeholder that added "discards a value" (S3) and, in an `assert`/
-  `if`/`for` condition, "operand must be a boolean" - one error now; P8b still said olang has no atomic operations.
+  the way: an unknown function in an `assert`/`if`/`for` condition added "operand must be a boolean" - one error now
+  (the unknown method's "discards a value" was fixed alongside by the type checker's review); P8b still said olang has
+  no atomic operations.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

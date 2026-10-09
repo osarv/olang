@@ -1,0 +1,9 @@
+# check: fail a declared type is a new name over a number or an array
+# T29: a type declared over a struct would be a copy keeping half of what made the struct itself - one error
+# also: compilation failed with 1 error
+type P struct(x I32) { x }
+type Q P
+fn main() ? {
+  q := Q(3)
+  r := q.x
+}

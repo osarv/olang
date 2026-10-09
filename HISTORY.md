@@ -9138,6 +9138,90 @@ from their original form.
   independent builds in separate directories, which `join`/`spawn` could fan out - not in the driver.
   `-b`, `-c` and `-i` build one program each, so nothing accumulates across programs; what accumulates within one build
   is B9c's attempts, each a full re-analysis whose predecessor is never freed - a matter for the checker.
+- **A review of the type checker, and what it fixed (2026-10-09).** The second read-only review of the overnight plan
+  covered the types/modules/generics half of semantic.c; its reproducers are in /home/user/review/types. Every finding was
+  reproduced on the current compiler before it was fixed, and each fix has a corpus test (with a baked global or a
+  decided assert beside it where the evaluator is involved) or a `checks/cases` program; the findings that need several
+  modules are one test in checks.olang over `checks/fixtures/cases`.
+  **The enum `Hash` the compiler supplies aborted** (E10b) for any value of an enum with a reference-holding case: the
+  payload of each case was read with `as` into a hidden local of the outer sequence, so every case's `as` ran for every
+  value, ahead of the test that chose the case. Each case now holds its own reads, as `buildEquality` already did - which
+  is the shape a token enum used as a `Map` key in the self-hosted compiler will have.
+  **Two ways a read-only reference was written through.** A value whose `Call` takes a `mut` parameter was accepted as a
+  function value whose parameter is read-only (T22's comparison ignored `mut` and the outermost permission there), and a
+  `Call` writing its receiver could be made from a read-only reference. And a nominal conversion was treated as a fresh
+  value: `w(String(b))` with `b` read-only wrote `b`, and `-b` and `-i` disagreed for an immutable global. The decision,
+  stated in T29a: a conversion **names its argument's storage**. It is now built as the argument itself - a variable, a
+  field, an element or a slice - read under the declared type's name (`viaConversion`), so permission, lifetime, borrowing,
+  codegen and the evaluator all treat it as that storage with nothing of their own; an inline field is lent as a slice.
+  Two consequences: `h.s = String(local)` aliases where it copied (and is rejected where `local` dies first), and a
+  conversion is no place an assignment may name. A value declaration from one still copies.
+  **A struct holding itself through an inline array field hung the compiler** (T16): `typeHoldsByValue` stopped at every
+  array, and `TypeHoldsReferences` then recursed forever. It descends into an inline array now, and the three walkers over
+  `TypeValueChildren` are bounded for the attempt in which an inline field's length is still undecided.
+  **Instantiation names were not injective** (G16a): every function type and tuple spelled "t", permission was left out,
+  and a declared array type spelled as the array it was over - so `id(dbl)` and `id(half)` were one symbol, and
+  `List<Node&>`/`List<mut Node&>` one type. `typeShortName` now spells every type by structure with bracketed compound
+  forms (`A-...-e`, `F-...-f`, `T-...-u`, `G-mod.Name$...-g`, `-r`/`-w` for a reference's permission), has no length limit,
+  and codegen writes a name part longer than 120 characters as its beginning and a 128-bit hash, so every fixed buffer a
+  symbol is written into holds it and two names never share one. **G17** never fired, because truncated names collided
+  first; it now fires at a type nesting 48 deep, reported once, for functions and for a type whose field instantiates it
+  with a bigger argument (that one recursed inside `instantiateType` with no round counter).
+  **G4 was never enforced**: the check counted every `<T>` in the signature - the result's included - as appearing in a
+  parameter. It consults the enclosing declaration's variables only, and the result then recovers as the unknown type.
+  **C2e**: an inline field's decision was keyed by where the field is written, so every instantiation of a generic type
+  shared the first one's length; it is keyed by the type's name too, and applied when each instantiation is made.
+  **E14**: a generic call required every argument, defaults included. **G1**: `<P>` with `P` a declared type (or a
+  primitive) was a fresh variable; it is an error, reported once where first written. **D15**: `h := k.Hash()` was
+  rejected where the supplied Hash lowered to a sequence (`suppliedCall`).
+  **T29: a type over a declared type** copied that type wholesale - constructor, `extends`, destructor, generic identity -
+  so `type Pct2 Pct` ran Pct's constructor and returned a Pct, `type B A` with A extending I32 extended too, and
+  `type Q P` over a struct produced invalid IR. Decided (the coordinator): over a primitive, an array or another declared
+  one of those it is a new name over the representation and takes none of that; over a struct, enum, trait or generic
+  instance it is an error naming the alternative.
+  **M12/M6a/E32/S13b**: a case after `is`/`as` and in a pattern was matched by its last two identifiers, so another
+  module's same-named enum matched, an unknown alias was ignored and a private case was accepted. One resolver
+  (`resolveCaseOf`) now walks the alias chain, requires the very enum (owner and name) and checks both names' privacy.
+  **T29f**: `p += 10` on a non-extending declared number skipped the rule (and the constructor) `p = p + 10` met; a
+  compound assignment is built through the binary operator's own builder.
+  **T29e/G19**: a type extending `I64` had `I64`'s `Hash` for a direct call but not for `Hashable`, so it was no `Map` key,
+  and declaring `Eq` and `Hash` on it was "an inherited method"; the receiver is now read as the base for an inherited
+  method, an inherited `Hash` beside the type's own `Eq` does not count (E10b), and `Eq`/`Hash`/`Str` may replace the
+  base's. **Section 12**: `type Opt<T> enum` was accepted and half worked; a parameter list on anything but a struct or a
+  trait is an error. **T27**: any two anonymous enums were one type; they are one when their cases and payload types
+  agree, and a declared enum never fits an anonymous one. **M20**: a lambda's parameter could reuse an import alias.
+  **T4**: `type I32 struct()` was accepted and then resolved inconsistently. **G19/E23/E33**: a supplied `Len` or bit
+  method met no constraint. **Prelude**: the list test's `KV` was exported, so no program could declare a `KV`.
+  **E13b**: `a.f(21)` on a function-valued field said a method may not share a field's name; since a method may not, the
+  spelling has one meaning, and it now calls the value the field holds (as `(a.f)(21)` does).
+  **Diagnostics**: errors inside an instantiation now carry a note - "instantiated here, with T = Bool" - at the call or
+  type that asked for it, through a context stack in errmsg.c (three levels shown), which also makes an error inside the
+  prelude's code (`List.Push`) say which use it came from. A constraint reached by substitution is checked where the
+  instantiation was asked for, and an instantiation whose constraints fail, or a pattern (arguments still variables), no
+  longer has its body checked - g19sub had two errors inside the generic before the real one. A generic constructor binds
+  a variable an array value reached to a reference to it (G10c, mine), so `Pair(1, "x")` is a `Pair<I32, String&>` rather
+  than an error inside pair.olang. One-error cascades closed: a private type (resolved as `I32`), a private enum case
+  (`==` mismatch), a private error word (an uncaught-error report beside it), an unknown method as a statement (S3), a
+  wrong type-argument count, a named element marker ("no such variable" for a parameter in scope), a type over a struct
+  or instance, a generic enum, a primitive-named type; a private method is called a method; a generic function used as
+  a value reports G12 (the message existed and nothing used it); calling an enum type says it has no constructor rather
+  than suggesting its own name; messages still spelling `U8[]&`, `T[N]`, `type Text U8[]` and "interface" were reworded
+  (the module-collision message too, superseded by the driver review's own, which made `a_b` and `a/b` two prefixes);
+  the type speller writes `Array<T>`.
+  **PLAUSIBLE items, confirmed and fixed**: `TypeSubstitute` decided "changed" ignoring permission (now strict); a key
+  type with a private `eq` compared with `eq` in its own module and structurally in `std/map`, so `K(1) == K(11)` held
+  where the map missed - decided (mine) that only a capitalized `Eq` takes over `==`, as only `Str` renders (E11c's own
+  reasoning: equality belongs to the type); trait satisfaction ignored a parameter's `mut` and permission (T31).
+  **Not confirmed**: `OperandNominalConversion` probing with `OperandFitsType`, which may mutate its operand - no
+  program showed it; most argument shapes now take the storage path and do not probe at all.
+  **Found on the way, all pre-existing, fixed**: R17 did not reach the try *statement*, so `try f() catch E.A { }` in a
+  bare-`?` function demanded `E` in its signature; `x as T.Case&` crashed the compiler (a bare marker read as a named
+  one); calling an enum type suggested its own name; `"red" if c else "blue"` and `I32[1] if k else I32[1, 2]` were
+  type mismatches for differing lengths (E28: two texts are Strings, two array literals arrays); a payload-less enum case
+  written as a chain could not be a receiver (`Color.Red.Hash()` was "unknown namespace").
+  **Found, not fixed (another agent's area)**: under `-i` an error leaving a bare-`?` function keeps its original name
+  ("unhandled error: Err.Loud") where the built program reports the default error ("unhandled error") - the evaluator does
+  not re-encode at the R17 boundary; and `-i` cannot call through a `Call` adapter.
 - **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
   the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
   both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day
@@ -9189,7 +9273,7 @@ from their original form.
   an atomic counter and two identities, compared byte for byte with the built program.
   **Found on the way.** Making `same` and `atomicAdd` unknown names showed two cascades, both pre-existing: an unknown
   method (`a.Foo()`) left an `int` literal behind, which as a statement added S3's "computes a value and then discards
-  it"; and an unknown function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean"
-  (the stand-in type had been taught to meet operator requirements, not conditions). Both now leave the unknown
-  stand-in, and a condition does not judge it. And P8b still said "olang has no atomic operations, so no access is
+  it" (fixed the same way, in parallel, by the type checker's review - the two fixes merged as one); and an unknown
+  function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean" (the stand-in type
+  had been taught to meet operator requirements, not conditions). A condition no longer judges the stand-in. And P8b still said "olang has no atomic operations, so no access is
   atomic", written before P9; it now says only P9's methods are atomic.

@@ -1,0 +1,16 @@
+# check: fail only a struct type (or a trait) takes type parameters
+# section 12: an enum is never generic - reported at its declaration, once
+# also: compilation failed with 1 error
+type Opt<T> enum {
+  None
+  Some(v <T>)
+}
+fn show(o Opt<I32>) I32 {
+  match o {
+    case Opt.Some(v) { return v }
+    nomatch { return 0 }
+  }
+}
+fn main() ? {
+  n := show(Opt.None)
+}

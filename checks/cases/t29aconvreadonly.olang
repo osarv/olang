@@ -1,0 +1,7 @@
+# check: fail this reference is read-only, and this place wants a writable one
+# T29a/T25c: "String(b)" is b's bytes under another name - writable only where b is
+fn w(s mut String&) { s[0] = 'Z' }
+fn touch(b Array<U8>&) {
+  w(String(b))
+}
+fn main() ? { }

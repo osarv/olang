@@ -284,12 +284,34 @@ void ErrMsgFile(struct str fileName, char* errMsg) {
     syntaxErrorHeader(NO_LINE_NR, fileName, err);
 }
 
+//what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while a
+//context is open carries a note pointing at it, innermost first, so an error in shared generic code says which use
+//of it was being checked
+#define ERR_CONTEXT_MAX 32
+#define ERR_CONTEXT_SHOWN 3
+static struct { struct token tok; char* msg; } errContexts[ERR_CONTEXT_MAX];
+static int errContextDepth;
+void ErrMsgPushContext(struct token tok, char* msg) {
+    if (errContextDepth < ERR_CONTEXT_MAX) {
+        errContexts[errContextDepth].tok = tok;
+        errContexts[errContextDepth].msg = msg;
+    }
+    errContextDepth++;
+}
+void ErrMsgPopContext(void) { if (errContextDepth > 0) errContextDepth--; }
+
+void ErrMsgSemanticNote(struct token tok, char* msg);
 void ErrMsgSemantic(struct token tok, char* errMsg) {
     struct str fileName = TokenGetFileName(tok.owner);
     struct str err = StrFromCStr(errMsg);
     syntaxErrorHeader(tok.lineNr, fileName, err);
-    if (tok.type == TOK_NONE) return;
-    printTokErrorLineOneTok(tok);
+    if (tok.type != TOK_NONE) printTokErrorLineOneTok(tok);
+    int top = errContextDepth < ERR_CONTEXT_MAX ? errContextDepth : ERR_CONTEXT_MAX;
+    for (int i = top - 1, shown = 0; i >= 0 && shown < ERR_CONTEXT_SHOWN; i--) {
+        if (!errContexts[i].msg || errContexts[i].tok.type == TOK_NONE) continue;
+        ErrMsgSemanticNote(errContexts[i].tok, errContexts[i].msg);
+        shown++;
+    }
 }
 
 //a note attached to the error just reported: not an error of its own, so it counts nothing

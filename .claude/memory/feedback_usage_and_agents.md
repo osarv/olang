@@ -66,5 +66,8 @@ re-verified only when its code differs from a verified tip; (3) split work by fi
 touches-everything changes (error messages, the bootstrap/ move, the refactor) when nothing else is in flight; (4)
 before starting an agent, look at the verify queue (`pgrep -af "flock /home/user/verify.lock"`) and the load average -
 a queue of 2+ means start light work, not compiler work; (5) merge finished batches promptly so I am not the
-bottleneck. Once the -t per-file child processes land (wt-tfork), re-measure the suite's peak; if two full verifies fit
-in RAM, use two lock files as a two-slot semaphore.
+bottleneck. The -t per-file child processes landed (fc1ddcc, 2026-10-09): a full make verify now peaks at ~3.2GB (was ~11-12GB), and
+the agents' memory cgroup is ~14.3GB, so `/home/user/vlock CMD` (a script outside the repo - recreate it if the container
+is new: three flock slots, the first being /home/user/verify.lock) allows three full verifies at once. Only for branches
+that include fc1ddcc; checks/checks.olang alone is 156s of the ~240s suite (fanning its builds out with join/spawn is
+the next lever).

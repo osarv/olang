@@ -1,0 +1,10 @@
+# check: fail the value on the left has no method of this name
+# G16a: Box<String> and Box<Array<Char>> are two instantiations, so an Array<Char> field has no String method
+type Box<T> struct(v <T>&) { v }
+fn main() ? {
+  s := "hello"
+  a := Box<String>(s)
+  raw Array<Char> = Char['x', 'y']
+  b := Box<Array<Char>>(raw)
+  t := b.v.Trim()
+}

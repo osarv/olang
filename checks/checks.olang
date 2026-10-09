@@ -566,3 +566,29 @@ test "the code generator's review fixes, as whole builds" {
     assert sh(dir, "rm -rf build && \"$OLANG\" -b tuples.olang > out.txt 2>&1 && " $names " | cmp -s first.txt -") == 0
     assert sh(dir, "./build/tuples > out.txt") == 0 and outOf(dir) == "(1, \"x\") (2, 3, 0.5)\n" or failed("tuples output", dir)
 }
+
+# a review of the type checker (2026-10-09): what only several modules show. A case named after "is", "as" or in a
+# pattern is resolved through its alias chain and is the case of that module's own enum, visible from here; and a
+# name refused across the boundary - a private case, error word, method or type, an alias reused by a lambda - is one
+# error, not the start of several
+fn oneError(dir String&, prog String&, want String&) Bool {
+    if sh(dir, "\"$OLANG\" -b " $prog ".olang > out.txt 2>&1") == 0 { return failed($prog " compiled", dir) }
+    out := outOf(dir)
+    return out.Contains(want) and out.Contains("compilation failed with 1 error\n") or failed($prog ": expected one '" $want "'", dir)
+}
+test "the type checker's review fixes, across modules" {
+    dir := fresh("cases")
+    os.Run("cp -r checks/fixtures/cases/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0 or failed("good", dir)
+    assert outOf(dir) == "14 1 3 true 4\n" or failed("good output", dir)
+    assert oneError(dir, "isother", "after 'is' or 'as' on an enum value comes one of its cases")
+    assert oneError(dir, "matchother", "this is not that enum")
+    assert oneError(dir, "isprivate", "this enum case is private")
+    assert oneError(dir, "matchprivate", "this enum case is private")
+    assert oneError(dir, "isnoalias", "unknown namespace")
+    assert oneError(dir, "privcase", "this enum case is private")
+    assert oneError(dir, "privword", "this error word is private")
+    assert oneError(dir, "privmethod", "this method is private")
+    assert oneError(dir, "privtype", "this type is private")
+    assert oneError(dir, "lambdaalias", "this name is already an import alias")
+}

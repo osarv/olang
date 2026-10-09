@@ -1,0 +1,4 @@
+# check: fail only a struct type (or a trait) takes type parameters
+# section 12: nor is a declared array type
+type Arr<T> Array<<T>>
+fn main() ? { }

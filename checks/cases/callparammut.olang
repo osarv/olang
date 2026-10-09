@@ -1,0 +1,14 @@
+# check: fail this value's type doesn't match the target's declared type
+# T22/T25c: a Call writing through its parameter does not stand for a function type that only reads its own - else a
+# read-only reference would be written through the function value
+type Node struct(v I32) { v mut }
+type Writer struct() {
+  hits mut I32 = 0
+}
+fn (w Writer&) Call(n mut Node&) { n.v = 99 }
+fn apply(f fn(n Node&), n Node&) { f(n) }
+fn look(n Node&) {
+  w := Writer()
+  apply(w, n)
+}
+fn main() ? { }

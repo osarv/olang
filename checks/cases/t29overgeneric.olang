@@ -1,0 +1,11 @@
+# check: fail a declared type is a new name over a number or an array
+# T29: nor over a generic type's instance - a struct holding one as a field is the way
+# also: compilation failed with 1 error
+type Names List<String&>
+fn (n mut Names&) AddTwo() {
+  n.Push("a")
+}
+fn main() ? {
+  n := Names()
+  n.AddTwo()
+}

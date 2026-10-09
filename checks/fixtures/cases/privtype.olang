@@ -1,0 +1,4 @@
+# M6: a private type named across the boundary is one error - its uses are not also wrong
+import "lib"
+fn f(h lib.hid) I32 { return h.x }
+fn main() ? { }
