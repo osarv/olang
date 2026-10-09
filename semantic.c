@@ -1730,6 +1730,8 @@ struct type* instantiateType(struct type* generic, struct list* bindings); //G8a
 static void assignImplicitParamScopes(struct type* ft);
 static void finishResultScope(struct type* t, struct token tok);
 static void finishTypeVarResult(struct type* t, struct token tok);
+static void funcTypeVarResultObligations(struct type* t);
+bool valueRefsAdmitStores(struct type t);
 void refreshStructSnapshots(struct type* t);
 
 static bool typeIsDeclaredStruct(struct type t);
@@ -1809,8 +1811,10 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
             assignImplicitParamScopes(&t);
             //O14b/T25b: a result written as a type variable has the permission its argument was written with
             if (t.hasRetType && !t.resultScope) {
-                if (retWasVar) finishTypeVarResult(&t, (struct token){0});
-                else finishResultScope(&t, (struct token){0});
+                if (retWasVar) {
+                    finishTypeVarResult(&t, (struct token){0});
+                    funcTypeVarResultObligations(&t);
+                } else finishResultScope(&t, (struct token){0});
             }
         }
         return t;
@@ -3577,6 +3581,32 @@ static void finishResultScope(struct type* t, struct token tok) {
     //a scope written on the result that no parameter names is the result scope too (the named form)
     if (!t->resultScope && t->retType->scopeParam && !scopeNamedByParam(t, t->retType->scopeParam))
         t->resultScope = t->retType->scopeParam;
+}
+
+//O14b/T22a: a function VALUE type whose result is a type variable bound to a reference (or a value holding them) - a
+//callback's "fn(acc <U>, x <T>) <U>" - may be given a function handing back one of its arguments (O14b), so the type
+//itself says what such a function may require: that each argument outlive the result scope, and be exactly it where
+//something can be stored through it. A call through a value of the type is held to that, as a direct call is held to
+//its callee's obligations (O10c), and a function requiring no more than that may be such a value (T22a)
+static void funcTypeVarResultObligations(struct type* t) {
+    struct var* R = t->resultScope;
+    if (!R || !t->resultViaTypeVar) return;
+    t->scopeObligations = ListInit(sizeof(struct scopeObligation));
+    for (int i = 0; i < t->vars.len; i++) {
+        struct var* p = ListGetIdx(&t->vars, i);
+        struct var* sv = p->type.scopeParam;
+        if (!sv || canonicalVar(sv) == canonicalVar(R)) continue;
+        struct scopeObligation o = (struct scopeObligation){0};
+        o.longer = sv;
+        o.shorter = R;
+        ListAdd(&t->scopeObligations, &o);
+        bool exact = p->type.structMAlloc ? RefNarrowingMatters(p->type) : valueRefsAdmitStores(p->type);
+        if (exact) {
+            o.longer = R;
+            o.shorter = sv;
+            ListAdd(&t->scopeObligations, &o);
+        }
+    }
 }
 
 //O14b: finishResultScope for an instantiation's result that was a type variable - the same result scope, but with the
@@ -7191,7 +7221,8 @@ static void noteMakeWhere(struct checkCtx* ctx, struct operand* shortArg, struct
     struct var* with = livesWithVar(ctx, longArg);
     if (!made || !with || canonicalVar(made) == canonicalVar(with) || !made->tok.owner) return;
     struct str withName = canonicalVar(with)->name;
-    if (withName.len && withName.ptr[0] == '$') return; //a name the compiler made, which the program cannot write
+    //a name the compiler made, which the program cannot write
+    if ((withName.len && withName.ptr[0] == '$') || (made->name.len && made->name.ptr[0] == '$')) return;
     struct operand* init = made->declInit;
     if (init && heldResult(init)) init = heldResult(init);
     if (init && init->opType == OPERATION_FUNCCALL && init->readVar && !opIsCtorCall(init)) {
@@ -14910,12 +14941,12 @@ static bool blockAlwaysExits(struct list* block) {
 struct pendingLambda { struct syntax* node; struct checkCtx ctx; };
 static struct list allLambdas; //struct var*
 static struct list funcValueUses; //struct funcValueUse - T22a, checked once every body is
-struct funcValueUse { struct var* f; struct token tok; };
+struct funcValueUse { struct var* f; struct token tok; bool viaTypeVarResult; };
 
 struct list* SemanticAllLambdas(void) { return &allLambdas; }
 
 static void noteFuncValueUse(struct var* f, struct token tok) {
-    struct funcValueUse u = { f, tok };
+    struct funcValueUse u = { f, tok, false };
     ListAdd(&funcValueUses, &u);
 }
 
@@ -14923,7 +14954,14 @@ static void noteFuncValueUse(struct var* f, struct token tok) {
 static void checkFuncValueUses(void) {
     for (int i = 0; i < funcValueUses.len; i++) {
         struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
-        if (canonicalVar(u->f)->type.scopeObligations.len > 0) Err(u->tok, ERR_FUNC_VALUE_OBLIGATIONS, canonicalVar(u->f)->name);
+        struct var* f = canonicalVar(u->f);
+        bool covered = u->viaTypeVarResult && f->type.resultScope; //...by the type-variable result's own (O14b)
+        for (int k = 0; covered && k < f->type.scopeObligations.len; k++) {
+            struct scopeObligation* o = ListGetIdx(&f->type.scopeObligations, k);
+            covered = !o->shorterViaParam && (canonicalVar(o->shorter) == canonicalVar(f->type.resultScope)
+                                              || canonicalVar(o->longer) == canonicalVar(f->type.resultScope));
+        }
+        if (f->type.scopeObligations.len > 0 && !covered) Err(u->tok, ERR_FUNC_VALUE_OBLIGATIONS, f->name);
     }
 }
 
@@ -15265,6 +15303,9 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         }
     }
     noteFuncValueUse(L, kw);
+    //O14b: written for a callback whose result is a type variable, it may require what that type does (T22a)
+    if (exp && exp->resultViaTypeVar && funcValueUses.len)
+        ((struct funcValueUse*)ListGetIdx(&funcValueUses, funcValueUses.len - 1))->viaTypeVarResult = true;
 }
 
 static bool blockLeavesValue(struct list* block) {

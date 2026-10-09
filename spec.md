@@ -658,7 +658,13 @@ callee's own list (§7).
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation.
+as a value is a compile-time error naming the obligation. The exception is a function type whose result is written as
+a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc <U>, x <T>) <U>`):
+such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
+outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
+through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
+such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
+best })` keeps the longest element.
 
 ### 2.8 Scopes
 
@@ -731,7 +737,10 @@ no `mut` (D11a): its own top-level reference is writable unless what initializes
 the local is read-only too (writing through it is the error, where it is written); `x := e` gives it `e`'s type,
 permission included. A function's **built** result (§8 O13, a reference type naming no parameter) is writable,
 since it is new storage only the caller holds; a result **borrowed** from a parameter (`T&p`) is read-only
-unless written `mut T&p`.
+unless written `mut T&p`. A result written as a **type variable** (`<U>`) is neither: it may hand back existing
+storage (O14b), so it has the permission its type argument has - in a function type too, a callback's
+`fn(acc <U>, x <T>) <U>` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
+type with a result of its own (`fn(a String&, w String&) String& { ... }`) has the expected type's.
 
 **T25c (converting permission).** A writable reference converts to a read-only one wherever a value is
 assigned, passed or returned (E12); a read-only one never converts to a writable one, which is a compile-time
@@ -1175,8 +1184,10 @@ A lambda's parameters and locals may not reuse the name of a variable it could c
 **D16d (where a lambda lives).** A lambda's value is a reference to what it captured (T21). One capturing no
 reference is built where it lands, as any temporary is (E12c). One capturing references lives where they do:
 in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
-made in. Every rule for a reference (§8) then decides where it may be stored, passed and returned, so it can
-never be called after something it captured is gone. A function named as a value captures nothing and fits
+made in; one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
+instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is
+another of its scope variables, as returning a parameter's function value is (O14a). Every rule for a reference (§8)
+then decides where it may be stored, passed and returned, so it can never be called after something it captured is gone. A function named as a value captures nothing and fits
 anywhere. Nothing is written through a function value itself, so it need only outlive where it is put: the
 exactness O25 requires of a reference does not apply to one.
 
@@ -3610,13 +3621,18 @@ value where it dangles. Accordingly:
 - **O25a.** A local's type says where it lives, and an initializer never changes that: `x T&` lives in its
   block (O2), `x T&y` where `y` does, `x T&return` in the result scope (O26). An initializer that already lives
   somewhere must live in exactly that scope; a temporary is built there. `x := e` writes no scope, and takes
-  `e`'s exact scope — the one way a local adopts where its value lives.
+  `e`'s exact scope — the one way a local adopts where its value lives. A type written as a **bare type variable**
+  (`acc <U> = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
+  references, the local takes its initializer's scope as `:=` does - generic code has no other spelling for "a local
+  where this parameter's referent lives", and writing `:=` there is not allowed (D15). A local declared from a field
+  read through a parameter takes the derived scope it reads at (O23a), exact for what it is.
 - **O25b.** Assigning to a reference local or parameter requires the value's exact scope to be that target's
   exact scope; between two of the function's scope variables that is an equality obligation on its callers
   (O10c).
 - **O25c.** Storing an existing reference into a reference-holding **slot** — a field, element or payload —
   requires the value's exact scope to be the slot's whenever something can be stored through it (O25g).
-  Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced. An array's
+  Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced - and a referent
+  in the program's scope (a global's, constant data - an element of a static literal, T25d) outlives every slot. An array's
   elements are its slots and live where the array does, so an array literal or `Array<T>(n, v)` built here holding
   existing references is checked where the array **lands** (O18a) - returned, assigned or passed on - not where it
   is written.
@@ -3640,10 +3656,18 @@ value where it dangles. Accordingly:
   outlive. A reference to plain data is the simplest such case.
 - **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
-  its initializer's are when it is a copy of one that already lives somewhere - while the local's own storage is its
-  block. Assigning such a value from one that already lives somewhere requires the source's references to outlive the
-  target's, and to be exactly in its scope where something can be stored through one of them (O25g). So a value built
-  in a loop body is reclaimed with the iteration, and keeping it past the body means building it where it is kept.
+  its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
+  or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), the program's scope for a
+  copy of a global's - while the local's own storage is its block. That is a claim, as a reference local's scope is:
+  assigning such a value from one that already lives somewhere requires the source's references to outlive the
+  target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
+  one of them (O25g); a temporary assigned to it, or into a field or element of it, is built where its references are.
+  So a value built in a loop body is reclaimed with the iteration, keeping it past the body means building it where it
+  is kept, and `t := a[i]; a[i] = a[j]; a[j] = t` swaps two elements of a parameter's array. Returning such a value (O14c)
+  whose references live in one of the function's own blocks is a compile-time error - a copy, an array or anything read
+  out of one included - except a struct or enum built here, which is judged by what its constructor bound (O13a); a
+  store of references into such a value afterwards puts them where the value's own references are, which its bindings
+  then say.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it: the program's scope is reached through a global or a call's binding, never through a local's own tag.
@@ -3767,7 +3791,9 @@ tagged field) carries whatever those were bound to where the value was built. If
 of the returning function's own block scopes, the return is a compile-time error: the value hands back a
 reference to storage that dies at the return, arriving through a binding the signature never mentions. Only a
 binding actually recorded on the returned value is judged; a value returned with no binding of its own — a
-parameter handed straight back out — is not, since its scopes were bound by whoever built it.
+parameter handed straight back out — is not, since its scopes were bound by whoever built it. A loop's body runs again
+after itself, so a return in it is judged by every binding an assignment anywhere in the same loop gives the local - one
+written after the return included - where the local is declared outside the loop.
 
 **O13c (what a result carries).** A function's body decides, for the value it returns, two things a call adds to its
 result where every `return` agrees:
@@ -3838,7 +3864,11 @@ where those are ordered here and none is the program's or a derived one - otherw
 value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
 not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
-stays its block.
+stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
+`for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
+`inner := adj[a]` followed by the call or the loop. A statement nested in another - in a catch clause's block, a
+lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
+`n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.
 
 **O19.** Binding is per call. In `fn take(v Vec<I32>&) Point&`, `v`'s scope is determined by the argument
 and the result scope lands or is supplied: `take&x(v)` builds the result where `x` lives, `take(v)` where it
@@ -3937,7 +3967,9 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
-be exactly it when something can be stored through the argument (O25g, O25c). An argument for a parameter a field names
+be exactly it when something can be stored through the argument (O25g, O25c) - which, where the two are scope variables
+of the function the result lands in, is an equality its callers show (O10c), whether the instance holds one such
+argument or several from different scopes. An argument for a parameter a field names
 (`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
 be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
 had closed while the instance could still be read.
@@ -4315,6 +4347,13 @@ the same form with `note` in place of `error[RULE]`, followed by its source. The
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+A statement reports at most **one error about where something lives** - a rule of §8, C2d's or T17c's - since a scope
+found wrong is wrong for every check that reads it after, and the first says what to change; a statement nested in it
+(a clause's block, a lambda's body) is one of its own. Where such an error is about an argument or a value made in a
+block of this function that closes too soon, and the place it has to live is where another variable lives, a note at
+the local it was made as - following what it was read or borrowed from - says to make it there:
+`'text' is made here, in a block that closes first - make it where 'st' lives: 'ReadFile&st(...)'`, or, for one not
+made by a call, to declare it there (`'c Counter&ok = ...'`).
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 

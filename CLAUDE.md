@@ -3477,6 +3477,37 @@ Go through this for every change to what olang means - a rule added, revised or 
   (`e Entry = Entry(k, v)`) was checked against whatever was being built when the pending checks next ran - it lands in
   the instance now (C2d). Decided (mine): the API names (`Update`, `RunFrom`, `Fixed`, `Now`/`Since`/`Wall`), and that
   `RunFrom` is a protocol method the compiler recognises by shape, as `Len` and `At` are.
+- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, D16d, C2d,
+  O25c, T25b, B11, 2026-10-09).** From a study that wrote 15 programs and marked every workaround. **Copies (O25h)**: a
+  value holding references copied from existing storage keeps them where the source's are, typed or `:=` (it was the
+  copy's block, so `t := a[i]; a[i] = a[j]; a[j] = t`, a parallel swap, `Sort` on records holding text, `for wc in recs
+  { out.Push(wc.word) }` and an argmin `best = x` were rejected); that home (`refsHome`, now with a depth and the program's
+  scope) is a claim like a reference's scope - assignments are held to it and temporaries assigned into it built there.
+  **Decided (mine)**: a copy's home is its references' only, never its storage's (borrowing a copy hands over its
+  block). **Other over-rejections fixed**: a catch block's statements flushed the enclosing statement's pending
+  discharges, so `n := try m.Get(k) catch { error }` never landed (now each statement flushes its own); a call result
+  passed on as an argument or walked by for-in (`adj[a].Push(v)`, `for x in adj[a]`) lands by its obligations as `:=`
+  does (O18c); a number read out of a call carried that call's scope bindings, tainting a later call it indexed
+  (`v I32 = q[0]; g.adj[v]`); `v := e; return v` with `e` a parameter's `&p` field was refused as building through it -
+  a derived scope (O23a) is exact for what it is; a lambda returned where it is made, capturing several scopes, is built
+  in the result scope with each capture an obligation (D16d - `compose(f, g)`); an enum field's case rebuilt from its own
+  payload (r11) follows from the copy home; a static literal's elements stored into a longer-lived array (a program-scope
+  referent outlives every non-exact slot, O25c); one exact C2d binding between two scope variables is an equality
+  obligation as several were (the prelude's `Map.add` now rebuilds a reused slot's entry whole). **r13, the decision
+  given**: a local written as a bare type variable (`acc <U> = init`) takes its initializer's scope (O25a); and a
+  type-variable result has its argument's permission in a function type too (T25b), so a lambda's result meets it.
+  **Use-after-frees found on the way, all pre-existing**: returning an element of a local array, or a local array, whose
+  elements' references live in the function's block (now O26 - a struct or enum built here is still judged by its
+  bindings); a field store into a constructed local then a return judged by the stale construction binding (the store
+  now rebinds); a return inside a loop judged before a later reassignment in the same loop (O13a: each such return is
+  judged again by every assignment in its loop); a copy of a global's element reassigned a local value and stored back
+  (the program claim was a flag nothing enforced). **Diagnostics (B11, mine)**: one error about where something lives
+  per statement, and a note at the local the offending value was made as naming the fix (`make it where 'st' lives:
+  'ReadFile&st(...)'`, `'c Counter&ok = ...'`). **Not done**: a lambda returning one of its reference parameters through
+  `Fold`'s callback is still T22a (its obligations cannot be checked through a function value - recorded); r14's
+  permission inference (a local's writable reference binds a type variable writable) is the type checker's. Study: every
+  scope workaround reverts and the programs give the same output; report's `sum.biggest = s.item` is left by T25b (a
+  `mut` field of a reference type is a writable reference).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

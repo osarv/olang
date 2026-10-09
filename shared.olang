@@ -11341,7 +11341,36 @@ test "O25h: an enum field's case rebuilt from its own payload" {
     assert k == "sbKind.Button(\"1OK\", 2)"
 }
 
-# O25a: a local written as a bare type variable takes its initializer's scope, so Fold's accumulator can be a reference
+# O25a/O14b/T22a: a local written as a bare type variable takes its initializer's scope, so Fold's accumulator can be a
+# reference; and a lambda handing back one of its arguments fits Fold's callback, whose type-variable result says each
+# argument outlives the result - which Fold, and each call through the callback, is held to
+type sbTextIt struct(of Array<String&>&) {
+    a Array<String&>&of = of
+    i mut I64 = 0
+}
+fn (it mut sbTextIt&) Next() String&it ? Exhausted {
+    if it.i == it.a.Len() { error Exhausted.END }
+    it.i++
+    return it.a[it.i - 1]
+}
+fn sbLongest(n I64) String& {
+    words := List<String&>()
+    arr := Array<String&>(3)
+    for i in range 3 {
+        full String&words = $(n * 10) "abcd"
+        t String&words = full[:I64(i) * 2 + 1]
+        words.Push(t)
+        arr[i] = t
+    }
+    a := words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
+    b := sbTextIt(arr).Fold(arr[0], fn(best, w) { return best if best.Len() >= w.Len() else w })
+    sbChurn()
+    return $a "/" $b
+}
+test "O14b/T22a: Fold keeping one of its elements" {
+    r := $sbLongest(sbRun)
+    assert r == "10abc/10abc"
+}
 test "O25a: Fold with a reference accumulator" {
     words := List<String&>()
     for i in range 3 { words.Push($(i + sbRun) "x") }

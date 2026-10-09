@@ -9854,3 +9854,66 @@ from their original form.
   in the instance, where every call already holds that instance to the parameter's argument (spec C2d says so). (5)
   and (6) surfaced when a module importing `shared.olang` and `geom/rect` built `mapSlot<Tag&, I32>`'s constructor in a
   different order from every earlier build; the corpus pins the shape (`TagCount`) and a non-generic one.
+
+- **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, D16d, C2d,
+  O25c, T25b, B11, 2026-10-09).** A study wrote fifteen realistic programs (a word counter, a graph, an LRU cache, a key
+  file tool, widgets, a report, a pipeline, ...) as a programmer would and marked each workaround the checker forced,
+  with a minimized reproducer for each. This batch took the scope ones.
+  **Copies.** O25h said a copy of a value holding references keeps them where its initializer's are, and only the typed
+  declaration did it - setting `valueHome`, which is also what borrowing the local hands over, so a borrowed copy claimed
+  the source's scope for its own block storage. `t := a[i]`, the hidden locals of a parallel assignment and a for-in's
+  copy of an element left the references in the copy's block, which rejected the swap through a temporary, `a[i], a[j] =
+  a[j], a[i]`, the prelude's `Sort` on records holding text (its `sortSwap`), `for wc in recs { rare.Push(wc.word) }` and
+  an argmin `best = x`. Now every copy - typed or `:=`, a held value, a loop's element - records where its references
+  are (`refsHome`, given a block depth and a program flag), never its storage's. Making it a home made it a claim, and a
+  claim has to be kept: an assignment to the local, or into a field or element of it, is held to the claim (the O25h
+  check compared against the target's storage before), and a temporary assigned there is built where the claim says.
+  That closed a hole in the old program flag: `best := G[0]; best = WC(...); G[1] = best` built the new text in the
+  function's scope and stored it into the global, because `inProgram` was set at the declaration and never checked
+  again (reproduced: the global's text read `999999999` after a churn). A copy of a global's element now claims the
+  program's scope through the same home, and what is assigned to it is built there.
+  **Returns.** O14c's check skipped a value whose references live in the function's own blocks ("judged by what built
+  it"), and for a copy nothing had built it: `return a[0]` from a local array whose elements' text was made in the
+  function, or `return a` for the array itself, returned freed text (reproduced). That is an error now (O26), except a
+  struct or enum built here, which O13a judges by its constructor's bindings - and those had two holes of their own,
+  both reproduced: a field store after construction (`e := H(s); e.r = $n; return e`) left the bindings saying `s`'s scope
+  while `e.r` pointed into the block; and a return inside a loop was judged by the bindings of the first iteration while
+  a reassignment later in the loop (`e = H($n)`) reached it on the next. A field store now rebinds the local's bindings to
+  where its references are, and each return in a loop of a local declared outside it is judged again, once the loop's
+  body is built, by every binding an assignment in that loop gave it.
+  **Landing.** `n := try c.index.Get(k) catch { error }` was rejected where `n := try c.index.Get(k)` was accepted: the
+  pending discharges of a statement were flushed at the end of *every* statement, including the `error` inside the
+  catch block, before the declaration around it had landed the call (O18c). Each statement now flushes only what it
+  queued. The same landing O18c gives `:=` now applies to a call's result passed on as an argument for a parameter with
+  a scope, and to one a for-in walks - `adj[a].Push(v)` and `for x in adj[a]` were rejected while `inner := adj[a]` was
+  accepted; after the merge with the run-wise walk (S9f) the walked case needed the landing at the collection's borrow.
+  **Smaller.** A number read out of a call (`v I32 = queue[0]`) carried the call's scope bindings, and passing it to
+  another call of the same function (`g.adj[v]`) merged them in as that call's own (`g.adj[v + 0]` worked) - a value
+  holding no reference now carries none. A `:=` local from a parameter's `&p` field (`v := it.chunk[it.i]` in ListIter)
+  was refused as "building through a field whose scope is not known" - a derived scope (O23a) is known; only the
+  container fallback is an underestimate (the `c2dbuildlocal` case moved to an array element, where it still applies,
+  and `o25derived` pins the narrowing). A lambda capturing two function parameters (`compose`) lived in the function's
+  block and could not be returned; returned where it is made it is built in the result scope, each captured scope an
+  obligation to outlive it (D16d, as O14a for one). Rebuilding an enum field's case from its own payload reference (the
+  widgets program) follows from the copy home of the hidden local the match holds. A static literal's elements stored
+  into a longer-lived array were O20 - an unnamed referent is the program's scope since O4b, which outlives every
+  non-exact slot. And the coordinator's report from the std batch: one exact C2d instance binding between two of a
+  function's scope variables was a plain error while two candidates recorded the equality as obligations; both are the
+  obligation now, so the prelude's `Map.add` rebuilds a reused slot's entry whole.
+  **r13, decided by the coordinator**: `acc <U> = init` in `Fold` put `acc` in its block (O25a) and `acc := init` is not
+  allowed (D15); a local whose written type is a bare type variable now takes its initializer's scope. Making the
+  reference accumulator usable needed a T25b detail as well: a function type's result written as a type variable
+  (`fn(acc <U>, x <T>) <U>`) was made writable as a built result is, so a lambda returning a read-only element could not
+  match; it now has the type argument's permission, as an instantiated function's own type-variable result already had.
+  What stays: a lambda handing back one of its reference parameters records an obligation, which T22a forbids for a
+  function value - checking it through a value of a type-variable result would need the function type itself to carry
+  "each argument outlives the result" and calls through values to discharge it; recorded, not built.
+  **Diagnostics.** The study found three or four errors per cause and none naming the fix. A statement now reports one
+  error about where something lives (a scope found wrong is wrong for every check after it), and where the cause is an
+  argument made in a block that closes too soon, a note at the local it was made as - following slices, borrowed
+  results and locals copied from one another back to the call or declaration that made it - says what to write:
+  `'text' is made here, in a block that closes first - make it where 'st' lives: 'ReadFile&st(...)'`. Four check cases
+  pinned a second error in one statement; they now pin the first and that the second is not reported.
+  **Study, after**: every scope workaround in graph, inventory, lru, pipeline, report, widgets and wordfreq reverts and
+  the program prints what it printed before; report's `sum.biggest = s.item` stays a copy for a T25b reason (a `mut`
+  field of reference type is a writable reference, and the item text is read-only).
