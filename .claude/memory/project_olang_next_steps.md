@@ -132,8 +132,10 @@ because what it finds about structure feeds the refactor.
   (it is adding an "instantiated from" note to errmsg.c).
 - **Decided 2026-10-09 (the user: "Yes keep it modest. Also give the C compiler its own directory. From now on we just
   bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current compiler binary is lost."):**
-  the refactor is MODEST (move the C compiler into its own directory `bootstrap/`, split the huge files, dead code and
-  stale comments, -t memory, the error-message remake - no deep restructuring, since the port is a redesign). After the
+  the refactor is MODEST (move the C compiler into its own directory `bootstrap/`, dead code and stale comments, NO
+  splitting for size - the user: "splitting files is overrated. I prefer long files if they all do the same thing.
+  Only split where modularisation is a thing" (e.g. the ~900 lines of runtime IR inside codegen.c are a separate
+  thing; semantic.c stays one file), -t memory, the error-message remake - no deep restructuring, since the port is a redesign). After the
   port the C compiler is frozen as stage 0 and new compiler work happens in olang. Re-bootstrap (my design): no
   committed binaries; `make bootstrap` builds the C stage 0, uses it to build the olang compiler, which rebuilds
   itself (stage 2 == stage 3 checked). The olang compiler's own source stays compilable by stage 0; when it needs a
