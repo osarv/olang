@@ -194,6 +194,13 @@ rule and where it is recorded; the morning report lists them all, then they move
    home; O17 by what the callee's body keeps (a fixed point after all bodies); R11 by-value defaults holding references
    when the default builds everything it holds. Limits recorded: r06 (obligations can't tell storage from contents),
    r10 (G11 one scope for chunks and element referents).
+29. (wt-rvfix) review1's eight fixed: RunOnStack in a task uses the task's program-scope stand-in; building through
+   a by-value parameter's reference field builds in its O4b scope (decided by the parameter's type); `==` on
+   self-referential types is one function per type, evaluator/-i stop on cyclic data (depth limit 2000 compiling,
+   100,000 -i); every program links -ldl; comdats for runtime globals; `type Nest Array<Nest&>` an error; conditional of
+   literals adapts like a literal (linalg ActivationSlope at F32); O17a: a value whose references live outside its own
+   storage cannot be held by reference (only lent as a call argument); for-in over one hands elements the references'
+   scope.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
