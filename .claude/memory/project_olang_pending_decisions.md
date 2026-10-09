@@ -213,6 +213,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    accept read-only copies; a function used as a value may not have a parameter that needs writable; std/linalg's
    destination forms take `mut` (views keep read-only receivers). Left: a view of a read-only copy (`x.Block().Fill`)
    still writes - views are a known hole of shallow permission, recorded.
+32. (wt-s4cg) a null read traps (T2b, `null_pointer_is_valid` on every function; +0.02%, text +0.78%); a Send on a
+   closed channel stops the program (as Go panics), `Recv` now `? ChanError` (CLOSED), `for v in c` ends at the close;
+   `os.ExecUntil`, `os.Start`/Process, `Exec(dir)`; `-i` runs joins sequentially; B10c: an immutable top-level global
+   (outside std) of a -D-able type is a default `-D` replaces. REVERSES a consequence the user confirmed (2026-10-0x,
+   S8a): `Verbose := false; if Verbose` is configuration now (S8b decides it), no longer a dead-branch error -
+   tell the user.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
