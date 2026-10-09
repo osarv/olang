@@ -2518,6 +2518,7 @@ struct type TypeTuple(struct list* elems);
 //T7: "Array<T>" - the one array type a program writes. It is built in rather than declared anywhere, and
 //unlike a declared generic its argument may carry a bare reference marker ("Array<Point&>", an array of
 //references), since an element reference always lives in its array's own scope
+static struct token markerNameIn(struct syntax* t);
 struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, struct token nameTok, struct list* scopeParams) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_ARRAY;
@@ -2528,8 +2529,20 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
     if (!argsNode) { ErrMsgSemantic(nameTok, MISSING_TYPE_ARGS); return t; }
     struct list argNodes = allSyntaxParts(argsNode);
     if (argNodes.len != 1) { ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT); return t; }
-    *t.arrElem = resolveTypeExpr(mod, *(struct syntax**)ListGetIdx(&argNodes, 0), scopeParams);
-    if (t.arrElem->scopeParam) ErrMsgSemantic(firstTokAnywhere(argsNode), NAMED_SCOPE_ON_ELEMENT);
+    //an element's marker naming a variable is the one error - not also whether that variable is visible here
+    struct syntax* elemNode = *(struct syntax**)ListGetIdx(&argNodes, 0);
+    struct token named = markerNameIn(elemNode);
+    if (named.type == TOK_IDEN) {
+        ErrMsgMuteStart();
+        *t.arrElem = resolveTypeExpr(mod, elemNode, scopeParams);
+        ErrMsgMuteEnd();
+        ErrMsgSemantic(named, NAMED_SCOPE_ON_ELEMENT);
+        t.arrElem->scopeParam = NULL;
+        t.arrElem->scopeWritten = false;
+    } else {
+        *t.arrElem = resolveTypeExpr(mod, elemNode, scopeParams);
+        if (t.arrElem->scopeParam) ErrMsgSemantic(firstTokAnywhere(argsNode), NAMED_SCOPE_ON_ELEMENT);
+    }
     //T7a: an array's storage lives apart from the value naming it, so copying an array of arrays would copy
     //the inner arrays' names and share their storage - an element array is written as a reference
     if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc) ErrMsgSemantic(firstTokAnywhere(argsNode), ARRAY_NESTED_BY_VALUE);
@@ -2658,7 +2671,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     struct list argNodes = allSyntaxParts(argsNode);
     if (argNodes.len != found->typeParams.len) {
         ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
-        return *found;
+        return unknownTypeStandIn(); //one error: what it is used for is not also a mismatch
     }
     struct list bindings = ListInit(sizeof(struct typeBinding));
     for (int i = 0; i < argNodes.len; i++) {
@@ -9045,8 +9058,7 @@ static struct token markerNameIn(struct syntax* t) {
         struct syntaxPart* p = partAt(t, i);
         if (p->isToken) continue;
         if (p->sntx->type == SNTX_ELEM_REF_MARKER || p->sntx->type == SNTX_REF_MARKER) {
-            struct token n = firstTokOfType(p->sntx, TOK_IDEN);
-            if (n.type == TOK_IDEN) return n;
+            if (hasTokOfType(p->sntx, TOK_IDEN)) return firstTokOfType(p->sntx, TOK_IDEN); //a bare "&" names nothing
         } else {
             struct token n = markerNameIn(p->sntx);
             if (n.type == TOK_IDEN) return n;
@@ -10114,6 +10126,11 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 }
                 struct var* v = lookupVar(ctx, tok);
                 if (!v) return unknownPlaceholder(tok); //keeps checking the rest of the file
+                //G12: a generic function names a family, not one function to point at
+                if (v->isFuncDecl && v->type.bType == BASETYPE_FUNC && v->type.typeParams.len) {
+                    ErrMsgSemantic(tok, GENERIC_NOT_A_VALUE);
+                    return unknownPlaceholder(tok);
+                }
                 if (v->isFuncDecl) noteFuncValueUse(v, tok); //T22a
                 return OperandReadVar(v, tok);
             }
