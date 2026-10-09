@@ -574,6 +574,8 @@ struct operand {
     bool litCtorPending; //T29d: a literal entering a type with a constructor - recorded to be run while compiling
     bool litFoldedAway;  //E4a: part of a literal-only expression folded into the one literal holding its value - no
                           //longer in the program, so nothing deferred about it (a shift's amount, E8a) applies
+    bool suppliedCall;  //E10b: the value a compiler-supplied method gives ("k.Hash()" lowered to the parts' hashes) - its
+                        //type is that method's result, as a call's is (D15)
     bool viaConversion; //T29a: a variable, field, element or slice read under a declared array type's name ("String(b)")
                         //- the argument's own storage, lent as it is, but no place an assignment may name
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in

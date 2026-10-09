@@ -247,7 +247,8 @@ fn labelKeys() Bool {
     got Bool = try m.Get(hLabel.Named("ab")) catch default 0 == 1 and try m.Get(hLabel.Pos(5, 6)) catch default 0 == 2
     rest Bool = try m.Get(hLabel.Unnamed) catch default 0 == 3 and not (hLabel.Pos(5, 7) in m)
     u := hLabel.Unnamed
-    return got and rest and u.Hash() != hLabel.Named("ab").Hash()
+    h := hTagged("ab", hPt(1, 2)).Hash()           # D15: a supplied Hash names its type as a call does
+    return got and rest and u.Hash() != hLabel.Named("ab").Hash() and h == hTagged("ab", hPt(1, 2)).Hash()
 }
 LabelKeysBaked := labelKeys()
 

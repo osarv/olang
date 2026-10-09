@@ -5766,7 +5766,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
     //the atomic builtins that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
     //while "n := l.Len()" on a List compiled
-    if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST) return true;
+    if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST || op->suppliedCall) return true;
     if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
     //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
     if (op->opType == OPERATION_SEQ && op->args.len)
@@ -8497,7 +8497,9 @@ static struct operand* buildAutoHash(struct checkCtx* ctx, struct operand* x, st
             r = hashCombine(r, hashOf(ctx, OperandMember(NULL, hx, f->name, tok), tok, seq), tok);
         }
         if (!r) r = int64Literal(0, tok);
-        return seqResult(seq, r);
+        r = seqResult(seq, r);
+        r->suppliedCall = true;
+        return r;
     }
     //an enum: the last case needs no test - if no earlier one holds, it does
     for (int i = v.vars.len - 1; i >= 0; i--) {
@@ -8522,7 +8524,9 @@ static struct operand* buildAutoHash(struct checkCtx* ctx, struct operand* x, st
         r = cond;
     }
     if (!r) r = int64Literal(0, tok);
-    return seqResult(seq, r);
+    r = seqResult(seq, r);
+    r->suppliedCall = true;
+    return r;
 }
 
 //E30: "a < b <= c" - the comparisons joined by "and", each sharing its middle operand, which is built (and
