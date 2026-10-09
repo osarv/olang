@@ -149,6 +149,7 @@ struct type;
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
     X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
+    X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "<%S> is a type variable, so its cases are types") \
     X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
@@ -213,7 +214,7 @@ struct type;
     X(ERR_SCOPE_MAY_NOT_OUTLIVE,        "O10",   "this reference lives in a scope that may not outlive where it is put") \
     X(ERR_OWN_CANNOT_OUTLIVE,           "O10d",  "this value lives in this function's own scope, which closes first") \
     X(ERR_OWN_FROM_BARE_REF_PARAM,      "O10d",  "this value lives in this function's own scope, so it cannot satisfy anything longer-lived") \
-    X(ERR_ARRAY_SIZE_MISMATCH,          "C2e",   "this array's length differs from that of the fixed storage it is copied into") \
+    X(ERR_ARRAY_SIZE_MISMATCH,          "T7d",   "%t does not fit %t - a fixed length is part of the type") \
     X(ERR_LITERAL_RANGE,                "T6",    "%n does not fit %t") \
     X(ERR_ELEM_REF_SHAPE,               "T25a",  "expected %t, found %t - they differ in whether the elements are references") \
     X(ERR_TYPE_MISMATCH,                "E12",   "expected %t, found %t") \
@@ -423,7 +424,6 @@ struct type;
     X(ERR_CATCH_NOT_PRODUCED,           "R14",   "the call does not fail with %t") \
     X(ERR_TRY_CATCH_ON_SLICE,           "R10",   "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") \
     /* ---- decided while compiling ---- */ \
-    X(ERR_INLINE_SIZE_UNKNOWN,          "C2e",   "this field's length cannot be computed while compiling, so it cannot be stored inline - hold it as %t&") \
     X(ERR_EMPTY_DESTRUCTOR,             "C7a",   "this destructor does nothing - remove it") \
     X(ERR_LITERAL_CTOR_FAILS,           "T29d",  "this literal enters %t through its constructor, which does not run on it while compiling: %s") \
     X(ERR_ZERO_VALUE_SHARED,            "D13c",  "%t's zero value holds references, which a fill would share - give a fill, or build the elements") \
@@ -479,6 +479,11 @@ void ErrMsgFinishCompilation();
 //every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
 void ErrMsgPushContext(struct token tok, char* msg);
 void ErrMsgPopContext(void);
+//G27: the contexts open now, to report an error found later as though inside them (NULL when none is)
+struct errContextSaved;
+struct errContextSaved* ErrMsgSaveContext(void);
+void ErrMsgPushSaved(struct errContextSaved* s);
+void ErrMsgPopSaved(struct errContextSaved* s);
 //K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
 void ErrMsgBufferStart(void);
 void ErrMsgBufferFlush(void);

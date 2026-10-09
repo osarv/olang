@@ -1,7 +1,7 @@
 # check: fail error[T16]: W cannot hold itself by value
-# T16/C2e: the same through an enum payload holding a struct with an inline array of the enum
+# T16/T7c: the same through an enum payload holding a struct with a fixed-length array of the enum
 type W struct() {
-  a Array<E> = Array<E>(2)
+  a Array<E, 2>
 }
 type E enum {
   Leaf

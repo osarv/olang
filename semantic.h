@@ -357,10 +357,6 @@ struct var {
                                 //initializing operand at declaration time (see buildVarDeclStmnt), so a
                                 //later read of this var carries the same map its initializer had - see
                                 //the report on extending the static scope checker past one function's frame
-    //C2e, constructor fields only: 1 when an "Array<T>(n)" field is stored inline because n was computed at
-    //compile time (its type is then the fixed-length T[n]); 2 while n is still to be computed (see
-    //inlinePendings) - it is held in the arena until then, and T7a is not judged yet
-    int inlineState;
     //C2d: this is a constructor type's instance-scope variable (struct type.hereVar). A value with no
     //binding for it simply was not built from existing storage, so it carries no constraint - unlike an
     //ordinary scope variable, whose missing binding means nothing is known
@@ -462,9 +458,6 @@ struct statement {
     //VAR_DECL only: the local a constructor field declares (C2a). Its unnamed-scope references are built
     //in the scope the instance lands in (C2d), which the constructor receives as a hidden parameter
     bool ctorField;
-    //VAR_DECL only: a declared-size array with no fill is its type's zero value rather than uninitialized
-    //(an inline "Array<T>(n)" field, C2e - every "Array<T>(n)" is zero-filled)
-    bool zeroFill;
     struct operand* forInit;     //FOR only: the loop variable's initial value expression
     struct statement* forPost;   //FOR only: the post clause - an assignment or an S3 expression statement
     bool breakOuter;             //FOR only (S9f): the counted loop over one run of a for-in walking a collection run by
@@ -811,7 +804,7 @@ struct list* SemanticAllInstantiations(void);
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
-                       struct token site; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+                       struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
 int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this

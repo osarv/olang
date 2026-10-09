@@ -4815,7 +4815,18 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             if (!typeIsByRef(op->type)) return "zeroinitializer";
             char* slot = cgNewTmp(ctx);
             fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
-            fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+            if (cgViaMemory(op->type)) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(op->type));
+            else fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+            //T7c: an Array<T, N> whose elements' zero value a constructor gives - each element that value, unless it was
+            //found to be zero bits while compiling
+            struct operand* fill = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+            if (fill && !fill->zeroBits && op->type.bType == BASETYPE_ARRAY && op->type.arrLen) {
+                struct type elemT = *op->type.arrElem;
+                char* fv = cgValueForTarget(ctx, fill, elemT, NULL);
+                char count[32];
+                snprintf(count, sizeof(count), "%lld", op->type.arrLen->intLiteralVal);
+                cgFillLoop(ctx, elemT, slot, count, fv);
+            }
             return slot;
         }
         case OPERATION_COMPREHENSION: return cgComprehension(ctx, op);
@@ -5231,15 +5242,12 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         return;
     }
     if (!s->op) {
-        //D15b: a declared-size array ("T[N]" here - "T[expr]" always carries its allocation in s->op) is
-        //left uninitialized, which is the reason for writing a size and no value at all. Everything else
-        //is its zero value, null included (D15a/T2a).
-        //...but only when the declaration really reserves the array's own storage. A REFERENCE to a
-        //declared-size array ("T[N]&") is one pointer, so D15b's reason for skipping - that zeroing costs
-        //time proportional to the length - does not apply, and skipping left a wild pointer that "== null"
-        //reported as non-null and that faulted on the first write through it. Its zero value is null
-        //(T2a), and storing it is one instruction.
-        if (s->var.type.bType == BASETYPE_ARRAY && !s->var.type.arrMalloc && !s->var.type.structMAlloc && !s->zeroFill) return;
+        //D13: no initializer is the zero value, null included (T2a) - an Array<T, N>'s elements too (T7c): nothing in
+        //the language is left uninitialized. A large one is cleared as memory - LLVM handles a huge aggregate store badly
+        if (cgViaMemory(s->var.type)) {
+            fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(s->var.type));
+            return;
+        }
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, cgZeroValue(s->var.type), slot);
         return;
     }

@@ -400,6 +400,22 @@ void ErrMsgPushContext(struct token tok, char* msg) {
 }
 void ErrMsgPopContext(void) { if (errContextDepth > 0) errContextDepth--; }
 
+//G27: the contexts open now, kept to report an error found later - once the program has checked - as found inside them
+struct errContextSaved { int n; struct token toks[ERR_CONTEXT_MAX]; char* msgs[ERR_CONTEXT_MAX]; };
+struct errContextSaved* ErrMsgSaveContext(void) {
+    if (!errContextDepth) return NULL;
+    struct errContextSaved* s = MallocOrCrash(sizeof(*s));
+    s->n = errContextDepth < ERR_CONTEXT_MAX ? errContextDepth : ERR_CONTEXT_MAX;
+    for (int i = 0; i < s->n; i++) { s->toks[i] = errContexts[i].tok; s->msgs[i] = errContexts[i].msg; }
+    return s;
+}
+void ErrMsgPushSaved(struct errContextSaved* s) {
+    for (int i = 0; s && i < s->n; i++) ErrMsgPushContext(s->toks[i], s->msgs[i]);
+}
+void ErrMsgPopSaved(struct errContextSaved* s) {
+    for (int i = 0; s && i < s->n; i++) ErrMsgPopContext();
+}
+
 //counts an error, and says whether it is to be written (it is not while muted)
 static bool countError(bool syntax) {
     nErrors++;

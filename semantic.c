@@ -2147,7 +2147,11 @@ static struct list pendingInstances; //int: indices into instantiations whose bo
 //the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
 //further generics, so they queue here and drain alongside the function ones.
-struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; };
+struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; int chain; };
+//G17: how many instantiations, each requiring the next, led to the one whose body is being checked - a constant argument
+//that keeps changing ("grow" at <N> asking for "grow" at <N> + 1) never nests a type deeper, so this is what stops it
+#define INSTANTIATION_CHAIN_LIMIT 1000
+static int instChain;
 //G19: a written type's constraints, met while signatures are still being resolved, wait until every signature is - a
 //method that makes a type satisfy one may be declared in a module whose signatures come later ("Map<b.Key&, I32>" in a
 //module resolved before b, whose Key has its Hash; or a prelude file before text.olang's String.Hash)
@@ -2431,6 +2435,8 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.bindings = *bindings;
     inst.specialized = spec;
     inst.site = instSite;
+    inst.chain = instChain + 1;
+    if (inst.chain > INSTANTIATION_CHAIN_LIMIT) { reportUnbounded(generic->tok); tooDeep = true; }
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
     //G17: its body would only instantiate a deeper one. G19: nor is the body of a method of an instantiation whose
@@ -2438,8 +2444,8 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     bool unmet = false;
     for (int i = 0; i < spec->type.vars.len && !unmet; i++)
         unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
-    if (unmet) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
-    else if (!tooDeep) ListAdd(&pendingInstances, &idx);
+    if (unmet || tooDeep) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
+    else ListAdd(&pendingInstances, &idx);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -2565,7 +2571,6 @@ static void checkHoldsItself(struct type* t) {
     }
 }
 
-static void applyInlineDecisions(struct type* spec);
 struct type* instantiateType(struct type* generic, struct list* bindings) {
     struct str name = instantiationNameFor(generic->name, &generic->typeParams, bindings);
     for (int i = 0; i < typeInstantiations.len; i++) {
@@ -2604,7 +2609,6 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //to emit. Keeping typeParams non-empty is what makes codegen skip it (G16) and what stops its
     //constructor being emitted with a field whose type is still a variable.
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
-    if (!argsStillGeneric) applyInlineDecisions(spec); //C2e
     refreshStructSnapshots(spec);
 
     //D13/D14a re-checked against the SUBSTITUTED field types. The generic's own declaration cannot answer
@@ -2667,7 +2671,9 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         p.spec = spec;
         p.bindings = *bindings;
         p.site = instSite;
-        ListAdd(&pendingTypeInsts, &p);
+        p.chain = instChain + 1;
+        if (p.chain > INSTANTIATION_CHAIN_LIMIT) reportUnbounded(generic->tok); //G17
+        else ListAdd(&pendingTypeInsts, &p);
     }
     return spec;
 }
@@ -3129,6 +3135,43 @@ static struct type constUndecided(struct type slot, struct token tok) {
     return p;
 }
 
+//G24: does a constant argument read a constant variable these bindings (or, with none, the instantiation being checked)
+//leave unbound - one evaluation would need, so that it is a pattern until they are bound, whatever it calls
+static bool constArgReadsUnbound(struct syntax* s, struct list* bindings) {
+    if (!s) return false;
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
+        struct str n = strFromTok(firstTokOfType(s, TOK_IDEN));
+        struct list* b = bindings ? bindings : currentBindings;
+        struct type* bt = b ? bindingGet(b, n) : NULL;
+        if (!bt) return true;
+        if (bt->bType == BASETYPE_CONST) return !bt->constKnown;
+        return TypeIsGeneric(*bt); //a type variable bound to a type is bound once that type is known
+    }
+    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && constArgReadsUnbound(partSntx(s, i), bindings)) return true;
+    return false;
+}
+
+//G22: the first constant variable a constant argument reads that no declaration in scope has - a token of type TOK_NONE
+//when every one is
+static struct token constArgUnknownVar(struct syntax* s) {
+    if (!s) return (struct token){0};
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
+        struct token t = firstTokOfType(s, TOK_IDEN);
+        struct str n = strFromTok(t);
+        if (currentBindings && bindingGet(currentBindings, n)) return (struct token){0};
+        if (currentConstVars && bindingGet(currentConstVars, n)) return (struct token){0};
+        for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
+            if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), n)) return (struct token){0};
+        return t;
+    }
+    for (int i = 0; i < s->parts.len; i++) {
+        if (partAt(s, i)->isToken) continue;
+        struct token t = constArgUnknownVar(partSntx(s, i));
+        if (t.type != TOK_NONE) return t;
+    }
+    return (struct token){0};
+}
+
 //G21: a constant argument written for the constant parameter whose type is `slot` - a constant variable written whole
 //("<N>", the variable itself), a value computed now, or a pattern computed per instantiation
 static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, struct type slot, struct str genericName,
@@ -3172,6 +3215,8 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
         Err(firstTokAnywhere(node), ERR_CONST_ARG_IS_TYPE, genericName, paramName, genericName);
         return bad;
     }
+    struct token unknownVar = constArgUnknownVar(node);
+    if (unknownVar.type != TOK_NONE) { Err(unknownVar, ERR_CONST_VAR_UNKNOWN, strFromTok(unknownVar)); return bad; }
     struct cfCtx c = (struct cfCtx){0};
     c.mod = mod;
     struct cfVal v = (struct cfVal){0};
@@ -3180,6 +3225,7 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
         Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
         return bad;
     }
+    if (r == CF_DEFER && constArgReadsUnbound(node, NULL)) r = CF_PATTERN; //"twice(<N>)" in a generic's signature
     if (r == CF_PATTERN) {
         struct type p = (struct type){0};
         p.bType = BASETYPE_CONST;
@@ -3221,7 +3267,7 @@ static bool constPatternValue(struct type p, struct list* bindings, long long* o
     c.substituting = true;
     struct cfVal v = (struct cfVal){0};
     enum cfRes r = cfExpr(&c, p.constExpr, &v);
-    if (r == CF_PATTERN) return false;
+    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, bindings))) return false;
     *out = 0;
     if (r == CF_OK) {
         if (!constFits(*p.constOf, v.i)) Err(p.tok, ERR_CONST_ARG_RANGE, v.i, p.constOf);
@@ -3324,7 +3370,7 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
     //T7a: an array's storage lives apart from the value naming it, so copying an array of arrays would copy
     //the inner arrays' names and share their storage - an element array is written as a reference. A fixed-length
     //one (T7c) holds its elements in itself, and is held by value as any value is
-    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc && t.arrElem->arrMalloc)
+    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc && t.arrElem->arrMalloc && !t.arrElem->unknown)
         Err(firstTokAnywhere(argsNode), ERR_ARRAY_NESTED_BY_VALUE, t.arrElem);
     //T7c: "Array<T, N>" - the length a constant argument of type I64
     if (argNodes.len == 2) {
@@ -3592,43 +3638,10 @@ long long parseIntLiteralChecked(char* buf, bool* tooLarge) {
     return (long long)u;
 }
 
-long long parseIntLiteralText(char* buf) {
-    bool tooLarge;
-    return parseIntLiteralChecked(buf, &tooLarge);
-}
-
 //L10: is this literal's text decimal - not a hex or binary bit pattern (L10a/L10c)
 static bool intLiteralIsDecimal(struct str text) {
     return !(text.len > 1 && text.ptr[0] == '0' && (text.ptr[1] == 'x' || text.ptr[1] == 'X' || text.ptr[1] == 'b'
                                                     || text.ptr[1] == 'B'));
-}
-
-//attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
-//negated by a single leading unary '-') - used for compile-time-length array sizes, which must be known at compile time
-bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
-    bool negate = false;
-    while (true) {
-        if (s->type == SNTX_EXPR_PRIMARY) {
-            if (s->parts.len != 1 || !partAt(s, 0)->isToken || partAt(s, 0)->tok.type != TOK_INT_LIT) return false;
-            struct token tok = partAt(s, 0)->tok;
-            char buf[tok.str.len +1];
-            memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
-            buf[tok.str.len] = '\0';
-            *out = parseIntLiteralText(buf);
-            if (negate) *out = -*out;
-            return true;
-        }
-        if (s->type == SNTX_EXPR_UNARY && s->parts.len == 2) {
-            struct syntax* opNode = partSntx(s, 0);
-            struct token opTok = partAt(opNode, 0)->tok;
-            if (opTok.type != TOK_SUB || negate) return false; //only a single leading '-' is supported
-            negate = true;
-            s = partSntx(s, 1);
-            continue;
-        }
-        if (s->parts.len != 1 || partAt(s, 0)->isToken) return false;
-        s = partSntx(s, 0);
-    }
 }
 
 //true if t is - or contains, at any depth through plain embedded array elements - a struct that declares
@@ -3869,70 +3882,6 @@ void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, s
 bool paramTypeNamesScope(struct type pt, struct var* sv);
 
 struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, struct token nameTok, struct list* scopeParams);
-bool tryEvalConstIntExpr(struct syntax* s, long long* out);
-//C2e: an "Array<T>(n)" constructor field is stored inline when n can be computed at compile time. The layout
-//has to be settled before any body is checked while n may need checked bodies to compute, so - as B9c does
-//for conditions - an attempt that meets an undecided n checks the program with that field in the arena,
-//computes n afterwards, and the next attempt lays the field out with the answer. Keyed by where the field's
-//name is written - file, line and name - which every attempt reads identically, and by the type it is a field of:
-//each instantiation of a generic type decides its own, since n may depend on the type's arguments.
-struct inlineDecision { struct str file; int line; struct str name; struct str typeName; long long n; }; //n < 0: arena
-static struct list inlineDecisions;
-struct inlinePending { struct str file; int line; struct str name; struct str typeName; struct operand* sizeOp; };
-static struct list inlinePendings;
-
-static struct inlineDecision* inlineDecisionFor(struct token tok, struct str typeName) {
-    struct str f = TokenGetFileName(tok.owner);
-    for (int i = 0; i < inlineDecisions.len; i++) {
-        struct inlineDecision* d = ListGetIdx(&inlineDecisions, i);
-        if (d->line == tok.lineNr && StrCmp(d->name, tok.str) && StrCmp(d->typeName, typeName) && StrCmp(d->file, f)) return d;
-    }
-    return NULL;
-}
-
-//C2e: a field n elements long, stored in the instance itself - the arena array type it would have, laid out inline
-static void inlineFieldType(struct var* v, struct type rt, long long n) {
-    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
-    *lenOp = (struct operand){0};
-    lenOp->type = TypeVanilla(BASETYPE_INT64);
-    lenOp->isLiteral = true;
-    lenOp->intLiteralVal = n;
-    v->type = rt;
-    v->type.arrMalloc = false;
-    v->type.arrLen = lenOp;
-    v->inlineState = 1;
-}
-
-//C2e: an instantiation's own decisions for the fields its generic left undecided
-static void applyInlineDecisions(struct type* spec) {
-    for (int i = 0; i < spec->vars.len; i++) {
-        struct var* v = ListGetIdx(&spec->vars, i);
-        if (v->inlineState != 2 || v->type.bType != BASETYPE_ARRAY) continue;
-        struct inlineDecision* d = inlineDecisionFor(v->tok, spec->name);
-        if (!d) continue;
-        if (d->n >= 0) inlineFieldType(v, v->type, d->n);
-        else v->inlineState = 3;
-    }
-}
-
-//"Array<T>(size[, fill])" as written, through any single-child wrapping: its type-args and size nodes
-static bool syntaxIsArrayCtorCall(struct syntax* s, struct syntax** targs, struct syntax** size) {
-    while (s && s->type != SNTX_EXPR_PRIMARY) {
-        if (s->parts.len != 1 || partAt(s, 0)->isToken) return false;
-        s = partSntx(s, 0);
-    }
-    if (!s) return false;
-    struct syntax* name = firstPartOfType(s, SNTX_NAME);
-    struct syntax* call = firstPartOfType(s, SNTX_EXPR_CALL);
-    if (!name || !call || name->parts.len != 1) return false;
-    if (!StrCmp(strFromTok(partAt(name, 0)->tok), StrFromCStr("Array"))) return false;
-    *targs = firstPartOfType(call, SNTX_TYPE_ARGS);
-    struct list args = allPartsOfType(firstPartOfType(call, SNTX_EXPR_ARGS), SNTX_EXPR);
-    if (!*targs || args.len < 1 || args.len > 2) return false;
-    *size = *(struct syntax**)ListGetIdx(&args, 0);
-    return true;
-}
-
 static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, struct syntax* ctorNode);
 void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax* ctorNode) {
     //this runs lazily, in the middle of resolving something else - another type's fields, a signature - so
@@ -4022,25 +3971,6 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
                                  //field specifically
             //T25c: a field written "mut" holds a writable reference, which a read-only parameter is not
             if (fieldDeclMut && TypeIsPermRef(v.type) && !v.type.refMut) Err(fieldNameTok, ERR_READ_ONLY_TO_WRITABLE);
-        }
-        //C2e: "m Array<T>(n)" written as a value field, with n computed at compile time, is n elements stored
-        //in the instance itself
-        struct syntax* arrTargs = NULL;
-        struct syntax* arrSize = NULL;
-        struct syntax* fieldRhs = firstPartOfType(f, SNTX_EXPR);
-        bool valueArrayType = !typeExprNode || (v.type.bType == BASETYPE_ARRAY && v.type.arrMalloc && !v.type.structMAlloc);
-        if (fieldRhs && valueArrayType && syntaxIsArrayCtorCall(fieldRhs, &arrTargs, &arrSize)) {
-            long long n = -1;
-            struct inlineDecision* d = inlineDecisionFor(fieldNameTok, t->name);
-            bool known = tryEvalConstIntExpr(arrSize, &n);
-            if (!known && d) { n = d->n; known = true; }
-            if (known && n >= 0) {
-                inlineFieldType(&v, builtinArrayType(mod, arrTargs, fieldNameTok, &t->scopeVars), n);
-            } else if (!known) {
-                v.inlineState = 2;
-            } else {
-                v.inlineState = 3; //decided: n cannot be computed, so the field stays in the arena
-            }
         }
         ListAdd(&t->vars, &v);
         ListAdd(&t->ctorFieldSyntax, &f);
@@ -6534,6 +6464,8 @@ static struct list zeroRecs;
 
 //D13c: a value type with a constructor - its zero value is that constructor's, not zero bits
 static bool typeHasZeroCtor(struct type t) {
+    //T7c: a fixed-length array's zero value is its elements', where theirs is a constructor's
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc && t.arrLen && t.arrElem) return typeHasZeroCtor(*t.arrElem);
     if (t.structMAlloc || t.isTuple || !t.ctorFunc || TypeIsGeneric(t)) return false;
     return t.bType == BASETYPE_STRUCT || (t.hasCtor && TypeIsNumeric(t));
 }
@@ -6552,7 +6484,7 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
         struct var* p = ListGetIdx(&ctor->type.vars, i);
         struct operand* a;
         if (p->defaultVal) a = defaultArgFor(p);
-        else if (typeHasZeroCtor(p->type) && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
+        else if (typeHasZeroCtor(p->type) && p->type.bType != BASETYPE_ARRAY && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
         else if (TypeIsNullable(p->type)) a = OperandNullLiteral(tok);
         else {
             a = operandNew(tok, OPERATION_ZERO, p->type);
@@ -6584,6 +6516,14 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
 //NULL for a type whose zero value is zero bits by definition
 static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct token tok, bool forArray) {
     if (!typeHasZeroCtor(t)) return NULL;
+    //T7c/D13c: an Array<T, N> - each of its N elements the elements' zero value
+    if (t.bType == BASETYPE_ARRAY) {
+        struct operand* fill = zeroValueFor(ctx, *t.arrElem, tok, true);
+        struct operand* z = operandNew(tok, OPERATION_ZERO, t);
+        z->type.scopeDepth = ctx ? ctx->blockDepth : 0;
+        if (fill) ListAdd(&z->args, &fill);
+        return z;
+    }
     struct operand* call = zeroCtorCall(ctx, t, tok, 0);
     struct zeroRec r = { call, tok, forArray };
     ListAdd(&zeroRecs, &r);
@@ -6989,7 +6929,7 @@ static enum diag ownOutliveDiag(struct operand* op, struct var* func) {
 void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
     else if (fit == TYPE_FIT_SCOPE_OWN) Err(tok, ERR_OWN_CANNOT_OUTLIVE);
-    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH);
+    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
@@ -7023,6 +6963,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //E11a/E11b: a rendering or a join is always byte[], and the "$" or the quotes say so where it is written
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
+    if (op->opType == OPERATION_ZERO && op->type.bType == BASETYPE_ARRAY) return true; //T8: "Array<T, N>()" too
     if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
     if (op->opType == OPERATION_AS) return true; //E32: "x as T" names its type
     if (op->opType == OPERATION_MATCH) { //S12b: when each value would, as a conditional's (E28)
@@ -8376,6 +8317,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     if (func->type.typeParams.len != 0) {
         struct list bindings = ListInit(sizeof(struct typeBinding));
         struct list numBound = ListInit(sizeof(struct str)); //T6b: variables a numeric argument bound
+        unifyConstMismatch.set = false; //G24
         //E14: trailing parameters with defaults may be left off, and a "default" written in a slot binds nothing -
         //the parameter's own default fits the instantiation like any argument
         int requiredG = func->type.vars.len;
@@ -8475,7 +8417,11 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         }
         if (!ok) {
             if (args.len < requiredG || args.len > func->type.vars.len) reportArgCount(args, tok, requiredG, func->type.vars.len, func->isMethod); //D8d too
-            else if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
+            else if (unifyConstMismatch.set && unifyConstMismatch.runtimeLength) { //G24/E32b
+                Err(tok, ERR_CONST_VAR_NOT_IN_TYPE, &unifyConstMismatch.arrayType);
+            } else if (unifyConstMismatch.set) { //G24: one constant variable, two values
+                Err(tok, ERR_CONST_VAR_MISMATCH, unifyConstMismatch.name, unifyConstMismatch.a, unifyConstMismatch.b);
+            } else if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
                 Err(tok, ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, func->type.retType->name, func->type.retType->name);
             } else Err(tok, ERR_TYPE_ARGS_NOT_INFERABLE, func->name);
             struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
@@ -8813,7 +8759,7 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     //known there is nothing to defer - an out-of-range constant is an error at the point it is written
     //rather than undefined behaviour when it is reached. Free, and it covers every literal index into a
     //fixed-size array.
-    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen) {
+    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
         long long n = base->type.arrLen->intLiteralVal;
         if (index->intLiteralVal < 0 || index->intLiteralVal >= n) {
             Err(index->tok, ERR_INDEX_OUT_OF_RANGE, index->intLiteralVal, n);
@@ -12049,6 +11995,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         //diagnostic for whatever the name turns out to be.
         struct type recvType = recvVar ? recvVar->type : (struct type){0};
         for (int i = recvStart; recvVar && i +1 < nameIdens.len; i++) {
+            //a value whose type is unknown was reported where its type was written - or is decided next attempt (G21):
+            //what is called on it is unknown too, and says nothing more
+            if (recvType.unknown) {
+                buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+                return unknownPlaceholder(nameTok);
+            }
             struct token fTok = *(struct token*)ListGetIdx(&nameIdens, i);
             struct var* f = recvType.bType == BASETYPE_STRUCT ? VarGetList(&recvType.vars, strFromTok(fTok)) : NULL;
             if (!f) { recvVar = NULL; break; }
@@ -12079,6 +12031,16 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list aArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(aArgs);
             ctx->allowFallibleCall = allowedArr;
+            //T8: "Array<T, N>()" - N elements, each T's zero value; a fill is a copy into one
+            if (!at.arrMalloc) {
+                if (aArgs.len) { Err(firstTokAnywhere(firstPartOfType(callNode, SNTX_EXPR_ARGS)), ERR_FIXED_ARRAY_CALL); return unknownPlaceholder(nameTok); }
+                if (at.unknown) return unknownPlaceholder(nameTok);
+                struct operand* z = zeroValueFor(ctx, at, nameTok, false);
+                if (z) return z;
+                z = operandNew(nameTok, OPERATION_ZERO, at);
+                z->type.scopeDepth = ctx->blockDepth;
+                return z;
+            }
             if (aArgs.len < 1 || aArgs.len > 2) { reportArgCount(aArgs, nameTok, 1, 2, 0); return OperandIntLiteral(nameTok); }
             struct operand* sizeOp = *(struct operand**)ListGetIdx(&aArgs, 0);
             if (!OperandIsInt(sizeOp)) Err(sizeOp->tok, ERR_ARRAY_LENGTH_NOT_INT, &sizeOp->type);
@@ -15289,6 +15251,59 @@ static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* a
     return m;
 }
 
+//G26: "match <N>" - a constant variable's value picks the case, per instantiation: only the chosen arm is checked and
+//compiled, as G14 says of a type match's
+static int constCaseMatches(struct checkCtx* ctx, struct syntax* alt, struct type bound) {
+    struct cfCtx c = (struct cfCtx){0};
+    c.mod = ctx->mod;
+    struct cfVal v = (struct cfVal){0};
+    enum cfRes r = cfExpr(&c, alt, &v);
+    if (r == CF_ERROR) { Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(alt), ERR_CONST_ARG_NOT_COMPUTABLE, c.why); return -1; }
+    struct type of = *bound.constOf;
+    if (r != CF_OK) { //a call: evaluated as the expression it is
+        if (alt->type != SNTX_EXPR) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
+        struct operand* op = buildExprFromSyntax(ctx, alt);
+        reportTypeFit(OperandFitsType(ctx->func, op, of), op->tok, op, of);
+        struct ctVal* val = NULL;
+        const char* why = NULL;
+        if (!CtEvaluate(op, of, &val, NULL, &why, NULL)) { Err(op->tok, ERR_CONST_ARG_NOT_COMPUTABLE, why ? why : ""); return -1; }
+        return val->i == bound.constVal;
+    }
+    bool kindOk = of.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
+                : of.bType == BASETYPE_CHOICE ? (v.kind == CF_ENUM && TypeIsSame(*v.enumType, of))
+                : v.kind == CF_INT;
+    if (!kindOk) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
+    return v.i == bound.constVal;
+}
+static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* arm, struct token tok);
+static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct type bound, struct token opTok,
+                                             bool asValue) {
+    struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
+    struct syntax* chosen = NULL;
+    for (int i = 0; i < cases.len && !chosen; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        struct syntax* guard = firstPartOfType(c, SNTX_CASE_GUARD);
+        if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
+        for (int k = 0; k < c->parts.len && !chosen; k++) {
+            struct syntaxPart* p = partAt(c, k);
+            if (p->isToken || (p->sntx->type != SNTX_EXPR && p->sntx->type != SNTX_TYPE_EXPR)) continue;
+            if (constCaseMatches(ctx, p->sntx, bound) == 1) chosen = c;
+        }
+    }
+    if (!chosen) chosen = firstPartOfType(s, SNTX_STMNT_NOMATCH);
+    if (asValue) {
+        if (!chosen) Err(opTok, ERR_TYPE_MATCH_UNCOVERED, &bound);
+        return typeMatchValueArm(ctx, chosen, opTok);
+    }
+    if (!chosen) return buildEmptyIfStmnt(ctx, opTok); //nothing is compiled for this instantiation, as an if none of whose branches is chosen
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_IF;
+    stmt.op = typeMatchAlwaysTrue(opTok);
+    struct operand* none = NULL;
+    buildCaseBody(ctx, chosen, false, &stmt.block, &none);
+    return stmt;
+}
+
 struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode, bool asValue) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
@@ -15298,6 +15313,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
     struct str vname = strFromTok(firstTokOfType(varNode, TOK_IDEN));
     struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
     if (!bound) { Err(opTok, ERR_UNKNOWN_TYPE_VAR, vname); return buildEmptyIfStmnt(ctx, opTok); }
+    if (bound->bType == BASETYPE_CONST) return buildConstMatchStmnt(ctx, s, *bound, opTok, asValue);
     struct type operandT = *bound;
 
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
@@ -15308,6 +15324,8 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
         if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
         //S13c: "case I32, I64 { }" - any one of the types selects the arm
         struct list caseTypeNodes = allPartsOfType(c, SNTX_TYPE_EXPR);
+        struct syntax* valueAlt = firstPartOfType(c, SNTX_EXPR);
+        if (valueAlt) Err(firstTokAnywhere(valueAlt), ERR_TYPE_MATCH_VALUE_CASE, vname);
         bool hit = false;
         for (int k = 0; k < caseTypeNodes.len && !hit; k++) {
             struct type caseT = resolveTypeExpr(ctx->mod, *(struct syntax**)ListGetIdx(&caseTypeNodes, k),
@@ -16710,13 +16728,13 @@ struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
 //every if/do-while condition already goes through
 //S18c: every assert, with the body it is in, checked at compile time once the program has checked cleanly
-struct assertRec { struct operand* op; int bodyId; bool inTest; };
+struct assertRec { struct operand* op; int bodyId; bool inTest; struct errContextSaved* where; };
 static struct list assertRecs;
 
 struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
-    struct assertRec r = { cond, ctx->bodyId, ctx->inTest };
+    struct assertRec r = { cond, ctx->bodyId, ctx->inTest, ErrMsgSaveContext() }; //G27: in an instantiation, says which
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSERT;
@@ -17001,7 +17019,10 @@ void checkInstantiationBody(struct instantiation* inst) {
     struct semaModule* savedScope = SemanticMethodScope;
     SemanticMethodScope = inst->generic->type.owner; //M22: the generic's code sees the generic's imports
     ErrMsgPushContext(inst->site, instantiationNote(&inst->generic->type.typeParams, &inst->bindings)); //G16
+    int prevChain = instChain;
+    instChain = inst->chain; //G17
     checkInstantiationBodyIn(inst, spec);
+    instChain = prevChain;
     ErrMsgPopContext();
     SemanticMethodScope = savedScope;
     spec->bodyState = 2;
@@ -17084,7 +17105,10 @@ void drainTypeInstantiations(void) {
             currentBindings = &p->bindings;
             struct type* origin = p->spec->genericOrigin;
             ErrMsgPushContext(p->site, origin ? instantiationNote(&origin->typeParams, &p->bindings) : NULL); //G16
+            int prevChain = instChain;
+            instChain = p->chain; //G17
             buildTypeBodies(p->spec->owner, p->spec);
+            instChain = prevChain;
             ErrMsgPopContext();
             currentBindings = saved; //restored, not nulled: instantiations can nest
         }
@@ -17188,19 +17212,8 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         //D13b's element fill. The only thing a field does that a local does not is outlive the call.
         struct operand* fieldOp;
         struct operand* fillValue = NULL;
-        if (rhsNode && field->inlineState == 1) {
-            //C2e: stored inline - the allocation the call would make is the field's own storage, zeroed or
-            //filled in place
-            struct operand* alloc = buildExprFromSyntax(&cctx, rhsNode);
-            fieldOp = NULL;
-            if (alloc->opType == OPERATION_SIZED_ARRAY_ALLOC && alloc->args.len > 1) fillValue = *(struct operand**)ListGetIdx(&alloc->args, 1);
-        } else if (rhsNode) {
+        if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
-            if (field->inlineState == 2 && fieldOp->opType == OPERATION_SIZED_ARRAY_ALLOC) {
-                struct inlinePending ip = { TokenGetFileName(field->tok.owner), field->tok.lineNr, field->name, t->name,
-                                            *(struct operand**)ListGetIdx(&fieldOp->args, 0) };
-                ListAdd(&inlinePendings, &ip);
-            }
             if (typeExprNode) {
                 reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok, fieldOp, field->type);
             } else { // ":=" - type read straight off the rhs (D15)
@@ -17254,15 +17267,13 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
             decl.op = fieldOp;
             decl.fillValue = fillValue;
             decl.ctorField = true;
-            decl.zeroFill = field->inlineState == 1 && !fillValue;
             StatementAdd(&t->ctorFunc->codeBlock, decl);
             fieldOp = OperandReadVar(local, field->tok);
         }
-        //T7a: a field holding an array by value would be shared, not copied, when the instance is
-        if (field->type.bType == BASETYPE_ARRAY && field->type.arrMalloc && !field->type.structMAlloc
-                && field->inlineState != 2) {
-            Err(field->tok, field->inlineState == 0 ? ERR_ARRAY_NESTED_BY_VALUE : ERR_INLINE_SIZE_UNKNOWN, &field->type);
-        }
+        //T7a: a field holding an array by value would be shared, not copied, when the instance is - unless its length is
+        //its type's (T7c), and its elements are in the instance itself
+        if (field->type.bType == BASETYPE_ARRAY && field->type.arrMalloc && !field->type.structMAlloc && !field->type.unknown)
+            Err(field->tok, ERR_ARRAY_NESTED_BY_VALUE, &field->type);
         ListAdd(&fieldArgs, &fieldOp);
     }
     struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
@@ -17600,6 +17611,51 @@ static void noteWhy(struct token at, struct token whyTok) {
     if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
 }
 
+//G21: a constant argument that needed evaluation proper - a call, a global computed by one - computed now that the
+//program has checked: built as an expression in its module, with the constant variables it reads bound as the
+//instantiation that asked for it binds them, and evaluated as a value of its parameter's type
+static void decideConstArg(struct constArgPend* p) {
+    struct constArgDecision d = { p->key, 0, false, NULL };
+    struct checkCtx ctx = {0};
+    ctx.mod = p->mod;
+    struct list* prevB = currentBindings;
+    struct semaModule* prevScope = SemanticMethodScope;
+    currentBindings = p->bindings.len ? &p->bindings : NULL;
+    SemanticMethodScope = p->mod;
+    ErrMsgMuteStart();
+    int before = ErrMsgGetNErrors();
+    struct syntax* n = p->node;
+    while ((n->type == SNTX_CONST_ARG || n->type == SNTX_TYPE_EXPR) && n->parts.len == 1 && !partAt(n, 0)->isToken) n = partSntx(n, 0);
+    struct operand* op = NULL;
+    if (n->type == SNTX_TYPE_REF) { //a name written alone: a global, of this module or another's
+        struct list idens = allTokOfType(firstPartOfType(n, SNTX_NAME), TOK_IDEN);
+        struct token last = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+        struct semaModule* m = idens.len > 1 ? resolveAliasChain(p->mod, idens, 1) : p->mod;
+        struct var* v = m ? VarGetList(&m->vars, strFromTok(last)) : NULL;
+        if (v && !v->isFuncDecl) op = OperandReadVar(v, last);
+    } else {
+        op = buildExprFromSyntax(&ctx, n);
+    }
+    while (SemanticHasPendingInstantiations()) {
+        semaDrainInstantiations();
+        drainTypeInstantiations();
+    }
+    bool clean = op && ErrMsgGetNErrors() == before && !op->type.unknown;
+    bool fits = clean && OperandFitsType(NULL, op, p->slot) == TYPE_FIT_OK;
+    ErrMsgMuteEnd();
+    currentBindings = prevB;
+    SemanticMethodScope = prevScope;
+    if (!clean) d.why = "it does not check as an expression of the module it is written in";
+    else if (!fits) d.why = "it is not a value of the parameter's type";
+    else {
+        struct ctVal* val = NULL;
+        const char* why = NULL;
+        if (CtEvaluate(op, p->slot, &val, NULL, &why, NULL)) { d.ok = true; d.n = val->i; }
+        else d.why = why ? why : "it cannot be evaluated while compiling";
+    }
+    ListAdd(&constArgDecisions, &d);
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     nextBodyId = 0; //S8b: every attempt rebuilds every body
@@ -17610,7 +17666,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
     literalShifts = ListInit(sizeof(struct operand*)); //E4a
     zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
-    inlinePendings = ListInit(sizeof(struct inlinePending)); //C2e
+    constArgPends = ListInit(sizeof(struct constArgPend)); //G21
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     bareErrorType = (struct type){0};
@@ -17775,14 +17831,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 }
             }
         }
-        //C2e: an "Array<T>(n)" field whose n was undecided this attempt - computed now, laid out next attempt
-        for (int i = 0; i < inlinePendings.len; i++) {
-            struct inlinePending* p = ListGetIdx(&inlinePendings, i);
-            struct ctVal* val = NULL;
-            struct inlineDecision d = { p->file, p->line, p->name, p->typeName, -1 };
-            if (CtEvaluate(p->sizeOp, TypeVanilla(BASETYPE_INT64), &val, NULL, NULL, NULL) && val->i >= 0) d.n = val->i;
-            ListAdd(&inlineDecisions, &d);
-        }
+        //G21: a constant argument evaluation proper had to decide - computed now, used next attempt
+        for (int i = 0; i < constArgPends.len; i++) decideConstArg(ListGetIdx(&constArgPends, i));
         //D8a: every default that is not a literal must be computable now
         for (int i = 0; i < defaultRecs.len; i++) {
             struct defaultRec* r = ListGetIdx(&defaultRecs, i);
@@ -17806,7 +17856,11 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, NULL, NULL, NULL,
                               fixedLocalInit, bodyStmts(r->bodyId))) continue;
             if (v->i) r->op->ctProven = true;
-            else Err(r->op->tok, ERR_ASSERT_FALSE);
+            else {
+                ErrMsgPushSaved(r->where); //G27/G16b: the instantiation it was false for
+                Err(r->op->tok, ERR_ASSERT_FALSE);
+                ErrMsgPopSaved(r->where);
+            }
         }
     }
 
@@ -17898,14 +17952,14 @@ static bool decidePendingConditions(void) {
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     SyntaxResetConditionDecisions();
-    inlineDecisions = ListInit(sizeof(struct inlineDecision)); //C2e
+    constArgDecisions = ListInit(sizeof(struct constArgDecision)); //G21
     for (int attempt = 0; ; attempt++) {
         SyntaxClearPendingConditions();
         ErrMsgBufferStart();
-        int decidedBefore = inlineDecisions.len;
+        int constBefore = constArgDecisions.len;
         struct semaModule* root = analyzeOnce(fileName, requireMain);
-        //C2e: a field size computed this attempt changes a layout, so the program is checked again with it
-        bool layoutChanged = inlineDecisions.len > decidedBefore;
+        //G21: a constant argument computed this attempt changes the types written with it, so the program is checked again
+        bool layoutChanged = constArgDecisions.len > constBefore;
         struct list* pending = SyntaxPendingConditions();
         if (pending->len == 0 && !layoutChanged) { ErrMsgBufferFlush(); return root; }
         //each attempt decides the conditions it met, and a decided branch can hold further ones - bounded,

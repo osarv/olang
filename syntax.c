@@ -1751,8 +1751,19 @@ struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
     addTok(s, kw);
     while (true) {
         struct syntax* alt = NULL;
-        if (typeMatch) alt = parseTypeExpr(sc);
-        else {
+        if (typeMatch) {
+            //G26: "match <N>" over a constant variable takes values - "case 0", "case Layout.RowMajor" - read as a type
+            //where they parse as one, and the checker reads them by the variable's kind
+            int at = TokenGetCursor(sc->tc);
+            int mark = TokenEditMark(sc->tc);
+            alt = parseTypeExpr(sc);
+            enum tokenType next = peekTok(sc).type;
+            if (!alt || (next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW)) {
+                TokenSetCursor(sc->tc, at);
+                TokenEditRewind(sc->tc, mark);
+                alt = parseExprNoCond(sc);
+            }
+        } else {
             int at = TokenGetCursor(sc->tc);
             alt = parseCasePattern(sc);
             enum tokenType next = peekTok(sc).type;

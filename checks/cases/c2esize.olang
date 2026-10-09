@@ -1,7 +1,0 @@
-# check: fail error[C2e]: this array's length differs from that of the fixed storage it is copied into
-# C2e: two known lengths that differ are a compile-time error, never a truncation or a padding
-type M struct() { a mut Array<I32> = Array<I32>(3) }
-test "never runs" {
-    m M = M()
-    m.a = I32[1, 2]
-}

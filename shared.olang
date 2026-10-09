@@ -8164,25 +8164,25 @@ test "E11b: a returned join survives later allocations" {
     assert joinBare(d)
 }
 
-# ---- C2e: an "Array<T>(n)" field whose n is computed at compile time is stored in the instance ----
+# ---- T7c: a fixed-length array field holds its elements in the instance (what C2e's inline fields became) ----
 
 C2eSide I32 = 4
 fn c2eSquare(x I32) I32 { return x * x }
 
 type C2eBlock struct(seed I32) {
-    m mut Array<F32> = Array<F32>(16)           # a literal size
-    b := Array<I32>(C2eSide * 2, 7)                     # a constant global, with a fill
-    c mut Array<I64> = Array<I64>(c2eSquare(3))       # a call, computed by the compile-time evaluator
+    m mut Array<F32, 16>                                      # a literal length
+    b Array<I32, C2eSide * 2> = Array<I32>(C2eSide * 2, 7)    # a constant global, filled by a copy
+    c mut Array<I64, c2eSquare(3)>                            # a call, computed by the compile-time evaluator
     k mut I32 = seed
 }
 
-test "C2e: inline array fields have the length their constructor call computed" {
+test "T7c: fixed-length array fields have the length their type computes" {
     x C2eBlock = C2eBlock(1)
     assert x.m.Len() == 16 and x.b.Len() == 8 and x.c.Len() == 9
     assert x.b[7] == 7 and x.c[8] == 0
 }
 
-test "C2e: copying an instance copies its inline arrays - nothing is shared" {
+test "T7c: copying an instance copies its fixed-length arrays - nothing is shared" {
     x C2eBlock = C2eBlock(1)
     y C2eBlock = x
     y.m[0] = 2.5
@@ -8196,7 +8196,7 @@ fn c2eFill(x mut C2eBlock&, n I32) {
     x.c = v                                               # a run-time length, checked once against 9
 }
 
-test "C2e: an array of a run-time length fits fixed storage of its length" {
+test "T7d: an array of a run-time length fits fixed storage of its length" {
     x C2eBlock& = C2eBlock(1)
     c2eFill(x, 9)
     assert x.c[8] == 3
@@ -8208,13 +8208,13 @@ fn c2eTotal(a Array<F32>&) F32 {
     return t
 }
 
-test "C2e: an inline field is borrowed as an ordinary array" {
+test "T7d: a fixed-length field is borrowed as an ordinary array" {
     x C2eBlock& = C2eBlock(1)
     x.m[3] = 1.5
     assert c2eTotal(x.m) == 1.5
 }
 
-# C2e: each instantiation of a generic type decides its own inline length - it may depend on the type's arguments
+# T7c/G21: each instantiation of a generic type computes its own length - it may depend on the type's arguments
 fn c2eCap(a Array<<T>>&) I64 {
     match <T> {
         case I32 { return 2 }
@@ -8222,7 +8222,7 @@ fn c2eCap(a Array<<T>>&) I64 {
     }
 }
 type C2eBuf<T> struct() {
-    data Array<<T>> = Array<<T>>(c2eCap(Array<<T>>(0)))
+    data Array<<T>, c2eCap(Array<<T>>(0))>
 }
 fn c2eGenLens() I64 {
     b := C2eBuf<F64>()
@@ -8231,7 +8231,7 @@ fn c2eGenLens() I64 {
 }
 C2eGenBaked := c2eGenLens()
 
-test "C2e: each instantiation of a generic type has its own inline length" {
+test "T7c: each instantiation of a generic type has its own fixed length" {
     assert c2eGenLens() == 25
     assert C2eGenBaked == 25
 }

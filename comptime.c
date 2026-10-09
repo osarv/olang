@@ -1768,7 +1768,19 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (!node) return NULL; //a checked index's own failure is taken by ctEval
             return node;
         }
-        case OPERATION_ZERO: return ctZero(op->type); //D13c
+        case OPERATION_ZERO: { //D13c
+            //T7c: an Array<T, N> whose elements' zero value a constructor gives - N copies of it
+            if (op->args.len && op->type.bType == BASETYPE_ARRAY && op->type.arrLen) {
+                struct ctVal* fill = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+                if (!fill) return NULL;
+                struct ctVal* a = ctNew(CT_AGG, op->type);
+                a->n = (int)op->type.arrLen->intLiteralVal;
+                a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
+                for (int i = 0; i < a->n; i++) a->elems[i] = ctCopy(ctDeref(fill));
+                return a;
+            }
+            return ctZero(op->type);
+        }
         case OPERATION_FUNCCALL: {
             struct ctVal* r = ctCall(st, op);
             if (!r && op->isTried && st->flow == CF_ERROR) {

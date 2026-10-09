@@ -1,0 +1,7 @@
+# check: fail error[T7d]: Array<I32, 2> does not fit Array<I32, 3> - a fixed length is part of the type
+# T7d: two known lengths that differ are a compile-time error, never a truncation or a padding
+type M struct() { a mut Array<I32, 3> }
+test "never runs" {
+    m M = M()
+    m.a = I32[1, 2]
+}

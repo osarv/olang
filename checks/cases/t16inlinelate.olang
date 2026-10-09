@@ -1,9 +1,9 @@
 # check: fail error[T16]: N cannot hold itself by value
-# T16/C2e: the same when the inline length is computed only once the program has checked
+# T16/T7c/G21: the same when the length is computed only once the program has checked
 fn two() I64 { return 2 }
 type N struct() {
   v mut I32 = 0
-  kids Array<N> = Array<N>(two())
+  kids Array<N, two()>
 }
 fn main() ? {
   n := N()
