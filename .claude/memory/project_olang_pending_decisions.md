@@ -142,6 +142,8 @@ rule and where it is recorded; the morning report lists them all, then they move
    instance hold it; a constructor's top level allocates into the instance's scope (oann's ctorpush UAF).
 13. (wt-chk3, C2d) a `:=` reference field takes its initializer's scope (`x := text.Trim()` is `x String&text`).
 14. (wt-chk3, E28) a conditional or match of references lives where its values share a scope.
+15. (wt-poolfix, O8b/P2a) a parked worker keeps at most a 1MB batch of its chunk pool and moves the rest into one pool
+   all threads share (locked, RAM/8 bound); a thread finding nothing that fits takes a batch from it before mapping.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
