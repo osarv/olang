@@ -4,6 +4,8 @@
 # accumulators in registers before the link - 10.8 against 17.5 GFLOPS with the literals written in (LTO's globalopt
 # folds the value later, too late for the kernel's shape). The micro-kernels use literals. See the emitted IR:
 # grep Tile build/linalg_global_constant.main.ll
+# Fixed (K2): such a global is a constant, and an importer declares it available_externally with its value - std/linalg's
+# micro-kernel with its bounds in named globals measured 7.0 GFLOPS before and 16.6 after, as with the literals.
 Tile I64 = 12
 
 fn main() ? {

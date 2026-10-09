@@ -564,15 +564,15 @@ void ErrUsage(enum diag d, ...) {
 
 // ---- B11a: a rule's text ----
 
-//spec.md, beside the standard library: both are found from where the compiler itself is (B3)
+//SPEC.md, beside the standard library: both are found from where the compiler itself is (B3)
 static char* specPath(void) {
     static char buf[PATH_MAX];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 16);
-    if (n <= 0) return "spec.md";
+    if (n <= 0) return "SPEC.md";
     buf[n] = '\0';
     char* slash = strrchr(buf, '/');
     if (slash) *slash = '\0';
-    strcat(buf, "/../spec.md");
+    strcat(buf, "/../SPEC.md");
     return buf;
 }
 

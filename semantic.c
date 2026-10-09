@@ -5212,7 +5212,13 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         //rendering belong to the type, not to one module's view of it: a private "eq" would make "==" in the declaring
         //module and in a Map from another disagree about the same two values
         if (priv && (!strcmp(sh->name, "Str") || !strcmp(sh->name, "Eq"))) continue;
-        if (a->type.vars.len != sh->operands + 1) Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
+        //E31: At and SetAt (and their checked forms) take one index or several - "m[i, j]" is At(i, j)
+        bool indexes = !strcmp(sh->name, "At") || !strcmp(sh->name, "SetAt") || !strcmp(sh->name, "TryAt")
+                       || !strcmp(sh->name, "TrySetAt");
+        if (indexes && a->type.vars.len < sh->operands + 1)
+            Err(a->tok, ERR_OPERATOR_ARITY_MIN, sh->name, sh->operands, a->type.vars.len - 1);
+        else if (!indexes && a->type.vars.len != sh->operands + 1)
+            Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
@@ -6159,16 +6165,18 @@ enum litValueFail { LIT_VALUE_OK, LIT_VALUE_NONE, LIT_VALUE_ZERO_DIV };
 //LIT_VALUE_NONE where it has no value any type could hold - an integer beyond 128 bits, a finite float computation
 //reaching an infinity - and LIT_VALUE_ZERO_DIV for an integer divided by zero, which OperandBinary already reported.
 //A float divided by zero is an infinity or a NaN (E6a), which are values; a NaN is the one LLVM folds 0.0 / 0.0 to.
-static enum litValueFail literalExprValue(struct operand* op, struct litValue* out) {
+//L10a: with unsignedPatterns, a hexadecimal or binary literal is worth its bits read unsigned - what it is worth adapting
+//to an unsigned type - and otherwise its I64 reading
+static enum litValueFail literalExprValueAs(struct operand* op, struct litValue* out, bool unsignedPatterns) {
     if (op->isLiteral) {
         out->isFloat = TypeIsFloat(op->type);
         if (out->isFloat) out->f = op->floatLiteralVal;
-        else out->i = intLiteralExact(op);
+        else out->i = unsignedPatterns && op->bitPattern ? (litWide)(unsigned long long)op->intLiteralVal : intLiteralExact(op);
         return LIT_VALUE_OK;
     }
     struct litValue a = {0}, b = {0};
-    enum litValueFail r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 0), &a);
-    if (r == LIT_VALUE_OK && op->args.len > 1) r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 1), &b);
+    enum litValueFail r = literalExprValueAs(*(struct operand**)ListGetIdx(&op->args, 0), &a, unsignedPatterns);
+    if (r == LIT_VALUE_OK && op->args.len > 1) r = literalExprValueAs(*(struct operand**)ListGetIdx(&op->args, 1), &b, unsignedPatterns);
     if (r != LIT_VALUE_OK) return r;
     enum operation o = op->opType;
     if (TypeIsFloat(op->type)) {
@@ -6219,13 +6227,16 @@ static enum litValueFail literalExprValue(struct operand* op, struct litValue* o
     out->i = v;
     return LIT_VALUE_OK;
 }
+static enum litValueFail literalExprValue(struct operand* op, struct litValue* out) {
+    return literalExprValueAs(op, out, false);
+}
 
 //E4a: op, a literal-only expression, becomes - in place - the one literal holding its value, typed as that literal
 //would be written (T6a: I32, else I64, else U64 for a value only it holds; F64 for a float). A value no literal can
 //hold leaves op as it was.
-static enum litValueFail literalExprFold(struct operand* op) {
+static enum litValueFail literalExprFoldAs(struct operand* op, bool unsignedPatterns) {
     struct litValue v;
-    enum litValueFail r = literalExprValue(op, &v);
+    enum litValueFail r = literalExprValueAs(op, &v, unsignedPatterns);
     if (r != LIT_VALUE_OK) return r;
     struct operand* lit;
     if (v.isFloat) {
@@ -6243,6 +6254,7 @@ static enum litValueFail literalExprFold(struct operand* op) {
     *op = *lit;
     return LIT_VALUE_OK;
 }
+static enum litValueFail literalExprFold(struct operand* op) { return literalExprFoldAs(op, false); }
 
 //E4a: what a fold replaced - every node below saved, the tree op was before it became a literal - is gone from the
 //program, so a check deferred to the end (a shift's amount, E8a) no longer applies to it
@@ -6280,6 +6292,8 @@ bool numericLiteralFits(struct operand* lit, struct type to) {
     if (!TypeIsNumeric(lit->type) || !TypeIsNumeric(to)) return false;
     if (TypeIsFloat(lit->type)) return TypeIsFloat(to) && floatValueFitsType(lit->floatLiteralVal, to);
     if (TypeIsFloat(to)) return floatValueFitsType(literalAsFloat(lit, to), to);
+    if (lit->bitPattern && PrimInfo(to.bType)->kind == 'u') //L10a: its bits, read unsigned
+        return intLiteralFitsIntType((litWide)(unsigned long long)lit->intLiteralVal, to);
     return intLiteralFitsIntType(intLiteralExact(lit), to);
 }
 
@@ -6288,7 +6302,8 @@ bool numericLiteralFits(struct operand* lit, struct type to) {
 static bool operandAdaptLiteral(struct operand* op, struct type to) {
     if (!TypeIsNumeric(to) || !operandOnlyNumericLiterals(op)) return false;
     struct operand saved = *op;
-    if (!op->isLiteral && literalExprFold(op) != LIT_VALUE_OK) return false;
+    bool toUnsigned = TypeIsInt(to) && PrimInfo(to.bType)->kind == 'u';
+    if (!op->isLiteral && literalExprFoldAs(op, toUnsigned) != LIT_VALUE_OK) return false;
     if (!numericLiteralFits(op, to)) { *op = saved; return false; }
     markFoldedAway(&saved);
     if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op, to);
@@ -6800,7 +6815,8 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //would - "b U8 = 1 + 2", "f F32 = 0.5 * 2.0"; it is an error only where that value does not fit (or has none)
     if (!op->isLiteral && TypeIsNumeric(target) && operandOnlyNumericLiterals(op)) {
         struct operand saved = *op;
-        enum litValueFail why = literalExprFold(op);
+        //L10a: a hexadecimal or binary literal's bits read unsigned where the target is unsigned
+        enum litValueFail why = literalExprFoldAs(op, TypeIsInt(target) && PrimInfo(target.bType)->kind == 'u');
         if (why == LIT_VALUE_ZERO_DIV) return TYPE_FIT_OK; //reported where the division was built (E6a)
         enum typeFit r = why == LIT_VALUE_OK ? OperandFitsType(func, op, target) : TYPE_FIT_LITERAL_EXPR;
         //judged by its value either way - one that does not fit, or has none, is that error, not also a shift's (E8a)
@@ -9750,7 +9766,9 @@ struct operand* OperandIntLiteral(struct token tok) {
     //gives a literal-only expression folding to such a value. A hex or binary literal is a bit pattern (L10a): its
     //64 bits read as an I64, so 0xFFFFFFFFFFFFFFFF is -1
     if (tooLarge) Err(tok, ERR_INT_LITERAL_TOO_LARGE, tok);
-    return OperandIntLiteralValue(tok, value, !tooLarge && value < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str));
+    struct operand* op = OperandIntLiteralValue(tok, value, !tooLarge && value < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str));
+    op->bitPattern = !intLiteralIsDecimal(tok.str);
+    return op;
 }
 
 //an integer literal whose value is already known - a -D build constant's (B10) - typed as T6a types its literal: a U64
@@ -11001,23 +11019,29 @@ static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* 
     return x;
 }
 
-//E31: "c[i]" on a declared type - At; under "try", TryAt when declared, else At after checking i against Len()
-static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct operand* idx, struct token sq) {
+//E31: "c[i]" on a declared type - At; under "try", TryAt when declared, else At after checking i against Len(). "c[i, j]"
+//passes every index to At (or TryAt): a check derived from Len has one position to check, so several need TryAt declared
+static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base, struct list idxs, struct token sq) {
     const char* atName = operatorFor(ctx, base->type, "At", sq);
-    if (!atName) return OperandIntLiteral(sq);
+    if (!atName) return unknownPlaceholder(sq); //reported: what is read from it says nothing more
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
+    if (derived && idxs.len > 1) {
+        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TryAt");
+        derived = false;
+    }
     if (derived) {
         const char* lenName = operatorMethodName(ctx, base->type, "Len");
         if (!lenName) Err(sq, ERR_TRY_INDEX_NEEDS_LEN, &base->type);
         else {
             base = heldOnce(ctx, base, sq, "col", &seq);
-            idx = asParam(ctx, base->type, atName, 1, idx);
+            struct operand* idx = asParam(ctx, base->type, atName, 1, *(struct operand**)ListGetIdx(&idxs, 0));
             struct operand* len = operatorCall(ctx, base, NULL, lenName, sq);
             idx = operandBounds(idx, OperandIntLiteral(sq), len, false, sq);
+            *(struct operand**)ListGetIdx(&idxs, 0) = idx;
         }
     }
-    struct operand* call = operatorCall(ctx, base, idx, atName, sq);
+    struct operand* call = operatorCallArgs(ctx, base, idxs, atName, sq);
     if (!derived) call->isAtCall = true;
     return finishSeq(seq, call);
 }
@@ -11027,7 +11051,7 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
 static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base, struct operand* lo, struct operand* hi,
                                       struct token sq) {
     const char* slName = operatorFor(ctx, base->type, "Slice", sq);
-    if (!slName) return OperandIntLiteral(sq);
+    if (!slName) return unknownPlaceholder(sq);
     const char* lenName = operatorMethodName(ctx, base->type, "Len");
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
@@ -11082,23 +11106,35 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             else if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
             else result = OperandUnary(result, OPERATION_POSTFIX_DEC, p->tok);
         } else if (p->sntx->type == SNTX_EXPR_INDEX) {
-            struct syntax* idxExprNode = firstPartOfType(p->sntx, SNTX_EXPR);
-            struct operand* idx = buildExprFromSyntax(ctx, idxExprNode);
+            //E31: "x[i, j]" - several indices, each passed to At (or SetAt) in order; an array takes one
+            struct list idxs = ListInit(sizeof(struct operand*));
+            for (int j = 0; j < p->sntx->parts.len; j++) {
+                struct syntaxPart* q = partAt(p->sntx, j);
+                if (q->isToken || q->sntx->type != SNTX_EXPR) continue;
+                struct operand* x = buildExprFromSyntax(ctx, q->sntx);
+                ListAdd(&idxs, &x);
+            }
+            struct operand* idx = *(struct operand**)ListGetIdx(&idxs, 0);
             //E31: "x[i]" on a type declaring At - or, under "try", TryAt
             struct token sq = firstTokOfType(p->sntx, TOK_SQUARE_O);
             bool hasAt = operatorMethodName(ctx, result->type, "At") || tryOperatorName(ctx, result->type, "At");
             bool hasSet = operatorMethodName(ctx, result->type, "SetAt") || tryOperatorName(ctx, result->type, "SetAt");
             if (result->type.bType != BASETYPE_ARRAY && hasAt) {
-                result = buildIndexCall(ctx, result, idx, sq);
+                result = buildIndexCall(ctx, result, idxs, sq);
             } else if (result->type.bType != BASETYPE_ARRAY && hasSet) {
                 //a type that only stores: "x[i]" is a place for SetAt, and nothing to read (E31)
                 if (!(asTarget && i == s->parts.len - 1)) Err(sq, ERR_AT_UNDECLARED, &result->type);
                 struct operand* place = operandNew(sq, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
                 ListAdd(&place->args, &result);
-                ListAdd(&place->args, &idx);
+                ListAddList(&place->args, idxs);
                 place->isAtCall = true;
                 result = place;
-            } else result = OperandIndex(result, idx, sq);
+            } else {
+                //E16: an array has one position per element - several indices are a type's At (E31)
+                if (idxs.len > 1 && result->type.bType == BASETYPE_ARRAY)
+                    Err((*(struct operand**)ListGetIdx(&idxs, 1))->tok, ERR_ARRAY_ONE_INDEX, &result->type);
+                result = OperandIndex(result, idx, sq);
+            }
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
             //either bound may be absent; the colon's own position is what says which side a present one
             //sits on (see parseExprIndex)
@@ -12791,6 +12827,9 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
             *unnamed = op->readVar->scopeUnnamed || v->scopeUnnamed;
             return true;
         }
+        //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
+        //storage this call keeps for its whole length: its own copy, or the caller's when it may not write it
+        if (isParam && !op->type.structMAlloc) { *outDepth = 1; return true; }
         if (isParam) { *outVar = SCOPE_AMBIGUOUS; return true; } //a caller's scope with no variable to name it
         *outDepth = op->type.scopeDepth;
         *unnamed = op->readVar->scopeUnnamed || v->scopeUnnamed;
@@ -13376,7 +13415,9 @@ static enum tokenType compoundBinTokType(enum operation compoundOp) {
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     if (target->args.len < 2) return (struct statement){0}; //an At call that failed, reported where it is written
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
-    struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
+    //E31: every index the place was written with ("x[i, j] = v" is SetAt(i, j, v)), in order
+    struct list idxs = ListInit(sizeof(struct operand*));
+    for (int k = 1; k < target->args.len; k++) ListAdd(&idxs, ListGetIdx(&target->args, k));
     //under "try" (E31): TrySetAt when declared, else SetAt after checking i against Len()
     const char* setName = operatorFor(ctx, base->type, "SetAt", opTok);
     if (!setName) {
@@ -13384,6 +13425,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
         return (struct statement){0};
     }
     bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
+    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TrySetAt"); derived = false; }
     const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
     if (derived && !lenName) { Err(opTok, ERR_TRY_SETAT_NEEDS_LEN, &base->type); derived = false; }
     bool isCompound = false;
@@ -13392,7 +13434,10 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
     struct operand* value = rhs;
     if (isCompound || derived) {
         if (!(base->opType == OPERATION_READ_VAR)) base = OperandReadVar(holdInHidden(ctx, base, opTok, "base", &pre), opTok);
-        if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) idx = OperandReadVar(holdInHidden(ctx, idx, opTok, "idx", &pre), opTok);
+        for (int k = 0; k < idxs.len; k++) {
+            struct operand** ip = ListGetIdx(&idxs, k);
+            if (!((*ip)->isLiteral || (*ip)->opType == OPERATION_READ_VAR)) *ip = OperandReadVar(holdInHidden(ctx, *ip, opTok, "idx", &pre), opTok);
+        }
     }
     if (isCompound) {
         //"x[i] += v" reads x[i] first, through At
@@ -13401,18 +13446,21 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             Err(opTok, ERR_AT_UNDECLARED, &base->type);
             return (struct statement){0};
         }
-        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok) : operatorCall(ctx, base, idx, atName, opTok);
+        struct list readIdxs = ListInit(sizeof(struct operand*));
+        ListAddList(&readIdxs, idxs);
+        struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, readIdxs, opTok) : operatorCallArgs(ctx, base, readIdxs, atName, opTok);
         if (!cur) return (struct statement){0}; //reported
         struct token binTok = opTok;
         binTok.type = compoundBinTokType(compoundOp);
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
     }
     if (derived) {
-        idx = asParam(ctx, base->type, setName, 1, idx);
+        struct operand* idx = asParam(ctx, base->type, setName, 1, *(struct operand**)ListGetIdx(&idxs, 0));
         idx = operandBounds(idx, OperandIntLiteral(opTok), operatorCall(ctx, base, NULL, lenName, opTok), false, opTok);
+        *(struct operand**)ListGetIdx(&idxs, 0) = idx;
     }
     struct list args = ListInit(sizeof(struct operand*));
-    ListAdd(&args, &idx);
+    ListAddList(&args, idxs);
     ListAdd(&args, &value);
     struct statement call = (struct statement){0};
     call.sType = STATEMENT_EXPR;
@@ -14708,6 +14756,15 @@ static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
     return m;
 }
 
+//S9d: whether t's At (or only its TryAt) takes one position - a type indexed by several ("m[i, j]", E31) is not walked
+//by position
+static bool atTakesOneIndex(struct checkCtx* ctx, struct type t) {
+    const char* at = operatorMethodName(ctx, t, "At");
+    if (!at) at = tryOperatorName(ctx, t, "At");
+    struct var* m = at ? methodNamedOn(t, at) : NULL;
+    return m && m->type.vars.len == 2;
+}
+
 //S9d/S9f: the type of the hidden borrow of a collection the loop walks - its own type as a reference, its scope still
 //to be taken from the collection (O25a). The scope its declared type wrote ("&y", a parameter's own) is not where the
 //borrow lives, and kept it would stop the borrow adopting anything, leaving it at the loop's block - an element pushed
@@ -14954,8 +15011,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             ListAdd(&pre, &r);
         }
     } else if (!forInMethod(src->type, "Next") && !forInMethod(src->type, "Iter")
-               && (operatorMethodName(&wctx, src->type, "At") || tryOperatorName(&wctx, src->type, "At"))
-               && operatorMethodName(&wctx, src->type, "Len")) {
+               && atTakesOneIndex(&wctx, src->type) && operatorMethodName(&wctx, src->type, "Len")) {
         //S9d: a type with At and Len - and neither a Next nor an Iter of its own, either of which says how it wants
         //to be walked (a List walked by position would work out each element's chunk again, where its iterator
         //holds the chunk it is in) - is walked as an array is: a counted loop over
@@ -16997,17 +17053,46 @@ struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
 //every if/do-while condition already goes through
 //S18c: every assert, with the body it is in, checked at compile time once the program has checked cleanly
-struct assertRec { struct operand* op; int bodyId; bool inTest; struct errContextSaved* where; };
+struct assertRec { struct operand* op; struct operand* msg; int bodyId; bool inTest; struct errContextSaved* where; };
 static struct list assertRecs;
 
+//S18c/S18a: a false assert's error carries its message, when the message can be computed while compiling as well
+static bool assertFalseWithMessage(struct assertRec* r) {
+    if (!r->msg) return false;
+    struct ctVal* m = NULL;
+    if (!CtEvaluateIn(r->msg, r->msg->type, &m, NULL, NULL, NULL, fixedLocalInit, bodyStmts(r->bodyId))) return false;
+    while (m && m->kind == CT_REF) m = m->target;
+    if (!m || m->kind != CT_AGG) return false;
+    char* text = MallocOrCrash((size_t)m->n + 1);
+    for (int i = 0; i < m->n; i++) text[i] = (char)m->elems[i]->i;
+    text[m->n] = '\0';
+    Err(r->op->tok, ERR_ASSERT_FALSE_MESSAGE, text);
+    return true;
+}
+
 struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    struct list exprs = allPartsOfType(s, SNTX_EXPR);
+    struct operand* cond = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 0));
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
-    struct assertRec r = { cond, ctx->bodyId, ctx->inTest, ErrMsgSaveContext() }; //G27: in an instantiation, says which
+    //S18a: "assert cond, message" - text (a literal, a join, "$x", a String), written as a String value
+    struct operand* msg = NULL;
+    if (exprs.len > 1) {
+        msg = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 1));
+        struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+        if (textT && OperandIsWrittenText(msg)) {
+            struct type tv = *textT;
+            tv.structMAlloc = false;
+            msg = OperandNominalConversion(tv, msg, msg->tok);
+        }
+        if (!msg->type.unknown && !(TypeIsByteArray(msg->type) && msg->type.arrMalloc))
+            Err(msg->tok, ERR_ASSERT_MESSAGE_NOT_TEXT, &msg->type);
+    }
+    struct assertRec r = { cond, msg, ctx->bodyId, ctx->inTest, ErrMsgSaveContext() }; //G27: in an instantiation, says which
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSERT;
     stmt.op = cond;
+    stmt.assertMsg = msg;
     return stmt;
 }
 
@@ -18150,7 +18235,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (v->i) r->op->ctProven = true;
             else {
                 ErrMsgPushSaved(r->where); //G27/G16b: the instantiation it was false for
-                Err(r->op->tok, ERR_ASSERT_FALSE);
+                if (!assertFalseWithMessage(r)) Err(r->op->tok, ERR_ASSERT_FALSE);
                 ErrMsgPopSaved(r->where);
             }
         }

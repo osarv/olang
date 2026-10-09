@@ -70,6 +70,7 @@ struct type;
     X(ERR_TWO_POINTS,                   "L12",   "a number has at most one decimal point") \
     /* ---- syntax ---- */ \
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
+    X(ERR_BLOCK_NOT_CLOSED,             "",      "the block opened on line %d has no '}' - found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
@@ -186,6 +187,9 @@ struct type;
     X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
     /* ---- methods and operators ---- */ \
     X(ERR_OPERATOR_ARITY,               "E31",   "%s's parameters besides its receiver: expected %d, found %d") \
+    X(ERR_OPERATOR_ARITY_MIN,           "E31",   "%s's parameters besides its receiver: expected at least %d, found %d") \
+    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'try' on several indices needs %t to declare %s - a check derived from Len checks one position") \
+    X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
     X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
@@ -434,6 +438,8 @@ struct type;
     X(ERR_NO_ZERO_VALUE,                "D13c",  "%t has no zero value, so this needs one - its constructor does not run on zeros while compiling: %s") \
     X(ERR_DEFAULT_NOT_COMPUTABLE,       "D8a",   "a default is computed while compiling, and this one cannot be: %s") \
     X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
+    X(ERR_ASSERT_FALSE_MESSAGE,         "S18c",  "this assertion is false, evaluated while compiling: %s") \
+    X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
