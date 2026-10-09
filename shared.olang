@@ -8399,6 +8399,18 @@ test "T29d: a primitive type's constructor checks the way in, and arithmetic kee
     assert (try pctCheck(-5) catch default -1) == -1
 }
 
+# T29: a type declared over a declared number is a new name over the same representation - it takes none of the
+# other's constructor, "extends" or methods, so "Pct2(150)" is 150 and a literal enters it unchecked
+type Pct2 Pct
+Pct2Lit Pct2 = 170
+fn pct2Of(n I32) I32 { return I32(Pct2(n)) }
+
+test "T29: a type over a declared number does not take its constructor" {
+    k I32 = ctRuntimeZero
+    assert pct2Of(150 + k) == 150 and I32(Pct2Lit) == 170
+    assert pct2Of(150) == 150
+}
+
 # D15: ":=" takes a field read - the field's declared type, and where its referent lives (O25a) - which is how
 # a cursor starts
 fn oSumFrom(l OxN&) I32 {

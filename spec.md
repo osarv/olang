@@ -764,6 +764,12 @@ of `I32` remain the same type.
 
 Nominality is what gives a named type an identity to attach methods to (§4.4 M19).
 
+A type may be declared over a primitive, an array, or another declared type over one of those (`type Pct2 Pct`):
+it is then a new name over the same representation and takes **none** of the other type's constructor (T29d),
+destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a trait or a generic type's instance
+(`type Names List<String&>`) is a compile-time error - such a type has no representation apart from its identity; a
+struct holding it as a field is the way to name one.
+
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
 constructor, written after the type on the same line: `type Percent I32(v mut I32) [? errors] { ... }`.
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The

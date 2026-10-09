@@ -3871,6 +3871,25 @@ void resolveTypeDecl(struct type* t) {
         struct str name = t->name;
         struct token tok = t->tok;
         struct semaModule* ownerSave = t->owner;
+        //T29: over another declared type, the new one is a new name over the same representation - a number's or an
+        //array's - and takes none of what made the other one itself: its constructor, destructor, "extends" or generic
+        //identity. A struct, enum or trait (or a generic type's instance) has no representation apart from its
+        //identity, so a type over one is an error rather than a copy keeping half of it
+        bool overDeclared = resolved.owner && resolved.name.len && !resolved.unknown;
+        if (overDeclared && (resolved.genericOrigin || resolved.bType == BASETYPE_STRUCT || resolved.bType == BASETYPE_CHOICE
+                || resolved.bType == BASETYPE_INTERFACE || resolved.bType == BASETYPE_ERROR)) {
+            ErrMsgSemantic(firstTokAnywhere(typeExprNode), DECLARED_OVER_AGGREGATE);
+            resolved.unknown = true; //kept in shape, and fitting anything, so its uses add nothing to the one error
+        }
+        if (overDeclared) {
+            resolved.hasCtor = false;
+            resolved.ctorFunc = NULL;
+            resolved.hasDestruct = false;
+            resolved.destructFunc = NULL;
+            resolved.extendsBase = false;
+            resolved.genericOrigin = NULL;
+            resolved.typeArgs = ListInit(sizeof(struct type));
+        }
         *t = resolved;
         t->name = name;
         t->tok = tok;
@@ -4466,7 +4485,12 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
         if (t) {
             struct var* ctor = ctorTargetFor(ctx, t, targsNode, tok);
             if (ctor) return ctor;
-            if (t->hasCtor) return NULL; //already reported
+            if (t->hasCtor || t->unknown) return NULL; //already reported
+            if (t->bType == BASETYPE_STRUCT || t->bType == BASETYPE_CHOICE || t->bType == BASETYPE_INTERFACE
+                    || t->bType == BASETYPE_ERROR) {
+                ErrMsgSemantic(tok, TYPE_HAS_NO_CONSTRUCTOR);
+                return NULL;
+            }
         }
         if (moduleHasMethodNamed(ctx->mod, name)) ErrMsgSemantic(tok, METHOD_CALLED_AS_FUNCTION);
         else reportUnknownName(ctx->mod, tok, "unknown function or type", true, "nothing of this name is declared here, in this module or in the prelude");
@@ -9152,8 +9176,8 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 struct operand* mc = buildMethodCall(ctx, result, memberTok, argsNode,
                                                      ListInit(sizeof(struct syntax*)), &mReported);
                 if (mc) { result = mc; continue; }
-                ErrMsgSemantic(memberTok, unknownMethodMsg(result, memberTok));
-                result = OperandIntLiteral(memberTok);
+                if (!result->type.unknown) ErrMsgSemantic(memberTok, unknownMethodMsg(result, memberTok));
+                result = unknownPlaceholder(memberTok); //one error: not also a discarded value, or a mismatch
                 continue;
             }
             result = OperandMember(ctx->mod, result, strFromTok(memberTok), memberTok);
@@ -10107,9 +10131,9 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                                                  firstPartOfType(callNode, SNTX_EXPR_ARGS), scopeArgNodes, &mReported);
             if (mc) return mc;
             //M20 means a value is never also an import alias, so there is no other reading to fall back to
-            if (!mReported) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
+            if (!mReported && !recvOp->type.unknown) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
             buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
-            return OperandIntLiteral(nameTok);
+            return unknownPlaceholder(nameTok); //one error: not also a discarded value, or a mismatch
         }
         //T7: "Array<T>(n)" / "Array<T>(n, v)" - n elements, each the element type's zero value or v
         if (nameIdens.len == 1 && StrCmp(strFromTok(nameTok), StrFromCStr("Array")) && !typeNamed(ctx->mod, strFromTok(nameTok))) {
