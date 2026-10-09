@@ -1770,6 +1770,55 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     return v;
 }
 
+//E12c/O16: a temporary - a constructor's instance, a value a call returned, an enum value - promoted into a reference:
+//fresh storage in scopeVal, the value built and stored there. The storage is bumped BEFORE the value is built, so an
+//instance comes before whatever its own arguments build: "Node(tree(d - 1), tree(d - 1))" lays a tree out parent
+//first, in the order a walk from the root reads it, where building first put every subtree ahead of its root. Which
+//address an instance gets is not observable; its destructor is registered once its constructor has completed (O16),
+//exactly as before, so destructors still run in the order O15 gives. A value whose building fails leaves its slot to
+//the scope, reclaimed when that closes.
+static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
+    char storTy[256];
+    llvmType(op->type, storTy, sizeof(storTy));
+    char* heap = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
+    char* prev = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = scopeVal;
+    char* v = cgValue(ctx, op);
+    ctx->targetScopeOverride = prev;
+    if (cgViaMemory(op->type)) {
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
+                TypeGetSize(op->type));
+    } else {
+        char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
+        if (typeIsByRef(op->type)) {
+            loaded = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        }
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
+    }
+    cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
+    return heap;
+}
+
+//op's value stored into dstAddr, a slot of type dstT: cgValueForTarget then cgStoreInto, except where the value is new
+//storage the target simply takes - a fresh array adopted (cgAdoptsFresh), a temporary promoted into a reference
+//(cgPromote, its slot bumped before it is built)
+static void cgStoreOperand(struct cgCtx* ctx, struct type dstT, struct operand* op, char* dstAddr, char* scopeOverride,
+                           bool dstHoldsLiveValue, bool dstIsElem) {
+    if (typeNeedsMallocPromotion(dstT, op->type) && !cgIsBorrow(dstT, op->type, OperandIsLvalue(op))) {
+        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", cgPromote(ctx, op, scopeVal), dstAddr);
+        return;
+    }
+    char* val = cgValueForTarget(ctx, op, dstT, scopeOverride);
+    if (cgAdoptsFresh(dstT, op, dstHoldsLiveValue)) {
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s%s\n", val, dstAddr, dstHoldsLiveValue ? cgTbaa(dstT, dstIsElem) : "");
+        return;
+    }
+    cgStoreInto(ctx, dstT, op->type, val, dstAddr, scopeOverride, dstHoldsLiveValue, OperandIsLvalue(op), dstIsElem);
+}
+
 //true once this object has already written `sym`; records it otherwise. See cgCtx.emittedSyms.
 static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym) {
     for (int i = 0; i < ctx->emittedSyms.len; i++) {
@@ -1820,28 +1869,7 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         return loaded;
     }
     if (typeNeedsMallocPromotion(dstT, op->type)) {
-        char storTy[256];
-        llvmType(op->type, storTy, sizeof(storTy));
-        char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
-        char* prev = ctx->targetScopeOverride;
-        ctx->targetScopeOverride = scopeVal;
-        char* v = cgValue(ctx, op);
-        ctx->targetScopeOverride = prev;
-        char* heap = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
-        char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
-        if (cgViaMemory(op->type)) {
-            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
-                    TypeGetSize(op->type));
-        } else {
-            if (typeIsByRef(op->type)) {
-                loaded = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
-            }
-            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
-        }
-        cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
-        return heap;
+        return cgPromote(ctx, op, scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth));
     }
     //E11a/E11b: rendered or joined text is a temporary built in the TARGET's scope - at a return, the result
     //type's; at an argument, the parameter's. Only stores and declarations did this, so "return $a $b"
@@ -2091,9 +2119,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             //promoted into (ctx->targetScopeOverride, threaded in by cgValueForTarget/cgBoundaryValue) -
             //an explicitly-tagged "&name" field ignores it and resolves its own named scope as usual
             char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
-            char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
-            if (cgAdoptsFresh(fieldT, arg, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", fieldVal, fieldAddr);
-            else cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
+            cgStoreOperand(ctx, fieldT, arg, fieldAddr, fieldScope, false, false);
         }
         return slot;
     }
@@ -2115,9 +2141,7 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             continue;
         }
         char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
-        char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
-        if (cgAdoptsFresh(elemT, arg, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", elemVal, elemAddr);
-        else cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope, false, OperandIsLvalue(arg), true);
+        cgStoreOperand(ctx, elemT, arg, elemAddr, elemScope, false, true);
     }
     return slot;
 }
@@ -2155,8 +2179,7 @@ static char* cgChoiceValue(struct cgCtx* ctx, struct operand* op) {
             //C2d: a payload the checker never landed lives where the value is being built into, as a constructor's does
             char* fieldScope = fieldT.scopeParam && SemanticBindingIsLanding(op, fieldT.scopeParam) && ctx->targetScopeOverride
                                ? ctx->targetScopeOverride : cgResolveParamScopeOverride(ctx, NULL, op, fieldT);
-            char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
-            cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
+            cgStoreOperand(ctx, fieldT, arg, fieldAddr, fieldScope, false, false);
         }
     }
     char* loaded = cgNewTmp(ctx);
@@ -3437,9 +3460,7 @@ char* cgCond(struct cgCtx* ctx, struct operand* op) {
     for (int b = 1; b <= 2; b++) {
         cgLabel(ctx, b == 1 ? thenLbl : elseLbl);
         struct operand* v = *(struct operand**)ListGetIdx(&op->args, b);
-        char* where = cgArmScope(ctx, v, op->type);
-        char* val = cgValueForTarget(ctx, v, op->type, where);
-        cgStoreInto(ctx, op->type, v->type, val, slot, where, false, OperandIsLvalue(v), false);
+        cgStoreOperand(ctx, op->type, v, slot, cgArmScope(ctx, v, op->type), false, false);
         cgBr(ctx, endLbl);
     }
     cgLabel(ctx, endLbl);
@@ -5155,11 +5176,7 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     char* prev = ctx->targetScopeOverride;
     if (here) ctx->targetScopeOverride = here;
     char* scope = here && !s->var.type.scopeParam ? here : NULL;
-    char* rhs = cgValueForTarget(ctx, s->op, s->var.type, scope);
-    //T7/E12c: an array the initializer makes itself was just built in this declaration's own scope (cgValueForTarget
-    //lands it where the copy would go) - the declaration adopts it (cgAdoptsFresh)
-    if (cgAdoptsFresh(s->var.type, s->op, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", rhs, slot);
-    else cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, scope, false, OperandIsLvalue(s->op), false);
+    cgStoreOperand(ctx, s->var.type, s->op, slot, scope, false, false);
     ctx->targetScopeOverride = prev;
 }
 
@@ -5190,17 +5207,10 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     char* addr = cgAddr(ctx, s->target);
     char* outerPlace = s->target->cgPlace;
     s->target->cgPlace = addr;
-    char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
-    s->target->cgPlace = outerPlace;
     //T7/E12c: a reference field or element given a fresh array ("l.chunks[k] = Array<T>(n)") repoints at it - built
-    //in the target's scope by cgValueForTarget, it is not copied into another (cgAdoptsFresh)
-    if (cgAdoptsFresh(s->target->type, s->op, true)) {
-        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s%s\n", val, addr,
-                cgTbaa(s->target->type, s->target->opType == OPERATION_INDEX));
-        return;
-    }
-    cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride, true, OperandIsLvalue(s->op),
-                s->target->opType == OPERATION_INDEX);
+    //in the target's scope, it is not copied into another (cgStoreOperand)
+    cgStoreOperand(ctx, s->target->type, s->op, addr, scopeOverride, true, s->target->opType == OPERATION_INDEX);
+    s->target->cgPlace = outerPlace;
 }
 
 void cgIf(struct cgCtx* ctx, struct statement* s) {
@@ -5343,9 +5353,7 @@ char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
 
 //one value case's value into the slot
 static void cgMatchStore(struct cgCtx* ctx, struct operand* v, char* slot, struct type resultT) {
-    char* where = cgArmScope(ctx, v, resultT);
-    char* val = cgValueForTarget(ctx, v, resultT, where);
-    cgStoreInto(ctx, resultT, v->type, val, slot, where, false, OperandIsLvalue(v), false);
+    cgStoreOperand(ctx, resultT, v, slot, cgArmScope(ctx, v, resultT), false, false);
 }
 
 static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT) {
@@ -6356,6 +6364,8 @@ void emitScopeRuntime(FILE* out) {
         "  store i64 %zeroed, ptr %freshptr.n\n"
         "  ret ptr %new\n"
         "}\n\n"
+        "", out);
+    fputs(
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
         //doesn't have room
         "define linkonce_odr noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) {\n"
@@ -6380,6 +6390,9 @@ void emitScopeRuntime(FILE* out) {
         "  %aln = select i1 %a64, i64 64, i64 %alnA\n"
         "  %alnm1 = sub i64 %aln, 1\n"
         "  %alnmask = sub i64 0, %aln\n"
+        //every offset is a multiple of 8 already (every size is), so an 8-aligned allocation - which is every one under
+        //32 bytes, decided while compiling where the size is known - takes the offset as it is
+        "  %round = icmp ugt i64 %aln, 8\n"
         "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
         "  %head = load ptr, ptr %headptr\n"
         "  %headnull = icmp eq ptr %head, null\n"
@@ -6390,10 +6403,18 @@ void emitScopeRuntime(FILE* out) {
         "  %cscapptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 2\n"
         "  %cscap = load i64, ptr %cscapptr\n"
         "  %csup = add i64 %csused, %alnm1\n"
-        "  %csaligned = and i64 %csup, %alnmask\n"
+        "  %csrounded = and i64 %csup, %alnmask\n"
+        "  %csaligned = select i1 %round, i64 %csrounded, i64 %csused\n"
         "  %remaining = sub i64 %cscap, %csaligned\n"
         "  %fits = icmp uge i64 %remaining, %size\n"
-        "  br i1 %fits, label %alloc, label %needchunk\n"
+        "  br i1 %fits, label %bump, label %needchunk\n"
+        //the common case, complete in itself: the offset just computed, bumped
+        "bump:\n"
+        "  %dataptr = getelementptr %olang.chunk, ptr %head, i32 1\n"
+        "  %result = getelementptr i8, ptr %dataptr, i64 %csaligned\n"
+        "  %newused = add i64 %csaligned, %size\n"
+        "  store i64 %newused, ptr %csusedptr\n"
+        "  ret ptr %result\n"
         "needchunk:\n"
         "  %newchunk = call ptr @__olang_new_chunk(i64 %size)\n"
         "  %oldhead = load ptr, ptr %headptr\n"
@@ -6403,22 +6424,18 @@ void emitScopeRuntime(FILE* out) {
         //first chunk in this scope: it is the tail, and stays the tail for the scope's whole life, since
         //every later chunk is prepended ahead of it
         "  %wasempty = icmp eq ptr %oldhead, null\n"
-        "  br i1 %wasempty, label %settail, label %alloc\n"
+        "  br i1 %wasempty, label %settail, label %first\n"
         "settail:\n"
         "  %tailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
         "  store ptr %newchunk, ptr %tailptr\n"
-        "  br label %alloc\n"
-        "alloc:\n"
-        "  %curhead = load ptr, ptr %headptr\n"
-        "  %curusedptr = getelementptr %olang.chunk, ptr %curhead, i32 0, i32 1\n"
-        "  %curused0 = load i64, ptr %curusedptr\n"
-        "  %curup = add i64 %curused0, %alnm1\n"
-        "  %curused = and i64 %curup, %alnmask\n"
-        "  %dataptr = getelementptr %olang.chunk, ptr %curhead, i32 1\n"
-        "  %result = getelementptr i8, ptr %dataptr, i64 %curused\n"
-        "  %newused = add i64 %curused, %size\n"
-        "  store i64 %newused, ptr %curusedptr\n"
-        "  ret ptr %result\n"
+        "  br label %first\n"
+        //a chunk from __olang_new_chunk is empty (its offset 0) and its data area 64-aligned, so this allocation is its
+        //first bytes, whatever alignment it wants
+        "first:\n"
+        "  %ncusedptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 1\n"
+        "  store i64 %size, ptr %ncusedptr\n"
+        "  %ncdata = getelementptr %olang.chunk, ptr %newchunk, i32 1\n"
+        "  ret ptr %ncdata\n"
         "}\n\n", out);
     fputs(
         //D13c: size bytes of ZEROS from scope - an "Array<T>(n)" with no fill. Bumped as any allocation is, then cleared -
