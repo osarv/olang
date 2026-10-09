@@ -88,6 +88,27 @@ fn poke() I64 {
 Poked I64 = poke()
 After I64 = Hold.a[1]
 
+type Counter struct(start I32) {
+    n mut I32 = start
+}
+fn (c mut Counter&) Call(x I32) I32 {
+    c.n += x
+    return c.n
+}
+type Scale struct(k I32) {
+    k
+}
+fn (s Scale) Call(x I32) I32 { return s.k * x }
+fn apply(f fn(x I32) I32, v I32) I32 { return f(v) }
+fn twice(f fn(x I32) I32, v I32) I32 { return f(f(v)) }
+fn adapters(k I32) String {
+    c := Counter(10)
+    a := apply(c, k)
+    f fn(x I32) I32 = c
+    b I32 = f(k) + f(k)
+    return $a " " $b " " $c.n " " $twice(Scale(k + 1), 5) " " $same(f, f)
+}
+
 extern fn memcpy(d Array<BF16>, s Array<BF16>, n I64) I64
 extern fn memset(p Array<F16>, c I32, n I64) I64
 
@@ -112,4 +133,5 @@ fn main() ? io.IoError {
     k := Array<BF16>(3)
     m I64 = memset(h, 0, 2) + memcpy(k, BF16[0.5, 1.5, 2.5], 4)
     try io.Print($h " " $k "\n")
+    try io.Print($adapters(I32(run) + 1) "\n")
 }

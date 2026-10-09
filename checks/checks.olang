@@ -608,6 +608,9 @@ test "the evaluator, the run time and -i agree" {
     assert sh(dir, "\"$OLANG\" -b -d bfrand.olang > out.txt 2>&1 && ./build/bfrand.debug > d.txt 2>&1") == 0 or failed("bfrand -d", dir)
     assert sh(dir, "\"$OLANG\" -i bfrand.olang > i.txt 2>&1") == 0 or failed("bfrand -i", dir)
     assert sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0 or failed("bfrand output", dir)
+    assert sh(dir, "\"$OLANG\" -b r17.olang > out.txt 2>&1") == 0 or failed("r17", dir)
+    assert sh(dir, "./build/r17 > b.txt 2>&1") == 1 and sh(dir, "\"$OLANG\" -i r17.olang > i.txt 2>&1") == 1
+    assert sh(dir, "printf 'before\\nunhandled error\\n' | cmp -s - b.txt && cmp -s b.txt i.txt") == 0 or failed("r17 output", dir)
     assert sh(dir, "\"$OLANG\" -b share.olang > out.txt 2>&1 && ./build/share") == 0 or failed("share", dir)
     ll String& = " build/share.main.ll"
     assert sh(dir, "grep -q '^@share_B = global ptr @share_A.k[0-9]*$'" $ll) == 0

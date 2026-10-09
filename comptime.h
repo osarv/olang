@@ -19,6 +19,8 @@ struct ctVal {
     struct ctVal** elems; //CT_AGG
     struct ctVal* target; //CT_REF (an interface value too: the instance it names)
     struct var* fn;       //CT_FUNC: the function a function value names
+    bool callAdapter;     //CT_FUNC, E31: a value whose type declares Call, standing for a function value - fn is its Call,
+                          //elems[0] a reference to the instance it calls it on
     struct ctVal* viewOf; //CT_AGG, an array that is a slice (E16a): the array whose storage it is part of, starting
     int viewOff;          //at element viewOff - a view shares that array's element nodes
 };

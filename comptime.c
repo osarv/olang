@@ -468,6 +468,8 @@ static bool ctMarkWritable(struct ctVal* v, struct type t, bool w, int depth) {
         rt.structMAlloc = false;
         return ctMarkWritable(v->target, rt, t.refMut, depth + 1);
     }
+    if (v->kind == CT_FUNC && v->callAdapter && v->fn && v->fn->type.vars.len && v->n) //E31: what Call's receiver may write
+        return ctMarkWritable(v->elems[0], ((struct var*)ListGetIdx(&v->fn->type.vars, 0))->type, false, depth + 1);
     if (v->kind == CT_FUNC) { //a closure: what its captures may write
         bool any = false;
         for (int i = 0; v->fn && i < v->n && i < v->fn->lambdaCaptures.len; i++) {
@@ -1235,6 +1237,11 @@ static void ctDepOp(struct ctDeps* d, struct operand* op) {
             break;
         default: break;
     }
+    //E31: a value whose type declares Call may stand for a function value - its Call is named as one
+    if (op->type.bType == BASETYPE_STRUCT || op->type.bType == BASETYPE_CHOICE) {
+        struct var* call = SemanticCallOf(op->type);
+        if (call && !ctListHas(&d->named, call)) ListAdd(&d->named, &call);
+    }
     ctDepOp(d, op->callee);
     ctDepBlock(d, &op->comprBody);
     for (int i = 0; i < op->args.len; i++) ctDepOp(d, *(struct operand**)ListGetIdx(&op->args, i));
@@ -1383,9 +1390,19 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         return ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
 
     struct list locals = ListInit(sizeof(struct ctLocal));
-    for (int i = 0; i < func->type.vars.len && i < op->args.len; i++) {
+    //E31: through a Call adapter, Call's receiver is the instance the adapter holds, and the call's arguments are the rest
+    int recv = through && through->callAdapter && func->type.vars.len ? 1 : 0;
+    if (recv) {
+        struct var* p = ListGetIdx(&func->type.vars, 0);
+        struct ctVal* node = ctNew(CT_INT, p->type);
+        *node = *(ctIsRef(p->type) ? through->elems[0] : ctCopy(ctDeref(through->elems[0])));
+        if (ctIsRef(p->type)) node->type = p->type;
+        struct ctLocal l = { p->name, node };
+        ListAdd(&locals, &l);
+    }
+    for (int i = recv; i < func->type.vars.len && i - recv < op->args.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
-        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i - recv);
         struct ctVal* v = ctFitBoundary(st, a, p->type);
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
@@ -1421,6 +1438,13 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     st->mod = savedMod;
     //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
     if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
+    //R17: through a bare "?" function, any error leaves as that function's own default error, its one word
+    struct type* generic = SemanticGenericErrorType();
+    if (st->flow == CF_ERROR && generic && func->type.errors.len == 1
+            && TypeIsSame(**(struct type**)ListGetIdx(&func->type.errors, 0), *generic)) {
+        st->errType = *generic;
+        st->errWord = 0;
+    }
     if (st->flow == CF_RETURN) {
         st->flow = CF_NORMAL;
         struct ctVal* r = st->ret;
@@ -1972,6 +1996,28 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
 //node itself (borrowing an lvalue, or a fresh node for a temporary), a value target takes an independent
 //copy, and a numeric literal adapts to the target's numeric type
 static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type dst) {
+    //E31: a value whose type declares Call, where a function value is wanted - the instance it calls Call on is the
+    //very one where it has storage (a reference, or an lvalue borrowed), else a copy, as the generated adapter's is
+    if (dst.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && !op->isNullLiteral && SemanticCallMatches(op->type, dst)) {
+        struct ctVal* inst;
+        if (ctIsRef(op->type)) {
+            inst = ctEval(st, op);
+            if (!inst) return NULL;
+            if (inst->kind == CT_NULL) return ctFail(st, op->tok, "it calls Call through a null reference");
+        } else {
+            struct ctVal* node = OperandIsLvalue(op) ? ctLvalue(st, op, false) : ctEval(st, op);
+            if (!node) return NULL;
+            inst = ctNew(CT_REF, op->type);
+            inst->target = OperandIsLvalue(op) ? ctDeref(node) : ctCopy(ctDeref(node));
+        }
+        struct ctVal* f = ctNew(CT_FUNC, dst);
+        f->fn = SemanticCallOf(op->type);
+        f->callAdapter = true;
+        f->n = 1;
+        f->elems = MallocOrCrash(sizeof(struct ctVal*));
+        f->elems[0] = inst;
+        return f;
+    }
     if (ctIsRef(dst)) {
         if (op->isNullLiteral) return ctNew(CT_NULL, dst);
         if (ctIsRef(op->type)) { //already a reference: the same node (repoint, S4a)
