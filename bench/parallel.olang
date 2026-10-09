@@ -1,0 +1,48 @@
+# parallel: the longest Collatz chain below n, the starting values split among tasks (every tasks-th one to each, so
+# the work balances), joined, and the tasks' answers combined - spawn and join against C's pthreads
+import "std/io"
+import "std/os"
+
+# the length of the Collatz chain from x down to 1
+fn steps(x mut I64) I64 {
+    s I64 = 0
+    for x != 1 {
+        x = x / 2 if x % 2 == 0 else 3 * x + 1
+        s++
+    }
+    return s
+}
+
+# the start, among first, first + stride, ... below n, with the longest chain (the smallest such start on a tie)
+fn longest(first I64, stride I64, n I64) (I64, I64) {
+    best, bestLen I64
+    for x in range first, n, stride {
+        len := steps(x)
+        if len > bestLen {
+            best = x
+            bestLen = len
+        }
+    }
+    return best, bestLen
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 1000
+    tasks I64 = 4
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 2 { tasks = try args[2].ParseInt() }
+    best := Array<I64>(tasks)
+    lens := Array<I64>(tasks)
+    join {
+        for t in range tasks { spawn best[t], lens[t] = longest(t + 1, tasks, n) }
+    }
+    answer, answerLen I64
+    for t in range tasks {
+        if lens[t] > answerLen or (lens[t] == answerLen and best[t] < answer) {
+            answer = best[t]
+            answerLen = lens[t]
+        }
+    }
+    try io.Print($answer " " $answerLen "\n")
+}

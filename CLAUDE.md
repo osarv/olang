@@ -3309,6 +3309,28 @@ Go through this for every change to what olang means - a rule added, revised or 
   its own 1GB thread evaluated nothing. Corpus: a section comparing each
   baked global with the run time, a checks scenario comparing a program built, built `-d` and interpreted, and the
   cycle errors as cases.
+- **Benchmarks against C (2026-10-09).** `bench/`: ten programs written twice - idiomatic olang and idiomatic C, same
+  algorithm, byte-identical output - built with the flags olang builds its own output with (`clang -O3 -flto`) and timed
+  interleaved by `bench/run.sh` (not part of `make verify`/`make test`; `-n` adds `-march=native`). olang/C, medians of
+  two runs: nbody 0.93-1.00, spectral-norm 1.37-1.44, mandelbrot 0.98-0.99, fannkuch 0.91-1.02, binary-trees 0.20
+  against malloc/free and 1.27-1.32 against a hand-written C arena, k-nucleotide 1.36-1.49, matmul F32 0.86-0.94,
+  `List` push 3.2-3.3, `for x in List` 4.7-4.8, `for x in Array` 0.94-1.04, `Iter().Fold` with a capturing lambda
+  10-13, parallel (4 tasks) 0.91-1.08, text (`$n`, `Split`, `ParseInt`) 2.3-2.5. **Principle 2 holds for loops over
+  arrays and numbers and for allocation; the gaps are in the abstractions above them**, each diagnosed from the
+  optimized IR, confirmed by an experiment and given a reproducer in `bench/repro/` (bench/README.md has the detail):
+  (1) a capturing lambda's code pointer is reloaded from its arena closure before every indirect call, which may write
+  anything, so the call is never devirtualized or inlined - `!invariant.load` on the two closure loads by hand brings
+  Fold to the hand loop (1.93s to 0.19s); (2) a fresh `Array<T>(n)` stored into a reference field or element is
+  allocated twice and copied (`cgStoreInto`'s value-to-reference array branch; `List.grow`, `Map.grow`), and D13c
+  zero-fills every List chunk before `Push` overwrites it; (3) `ListIter.Next` folds the chunk change into every step,
+  so `for x in l` never vectorizes; (4) `$n` calls snprintf twice (measure, then write) and `Find` builds a checked
+  slice per position; (5) E6c's wrapping arithmetic emits no `nsw`, so `/ 2` of a product stays a signed divide -
+  `nsw` by hand puts spectral-norm at C's speed; a language trade-off (Rust and Go pay it too), not a bug; (6) `Map`
+  counts with `Get` then `Put`, two lookups; (7) constructor arguments are allocated before the instance, laying
+  trees out in post-order against a pre-order walk, and the arena's fast path runs 44% more instructions than a C bump
+  allocator. Where olang wins it is the arena: binary-trees 5x faster than malloc/free in 54% of the memory, and
+  matmul's arrays 64-byte aligned (O8a) where glibc gives 16. Found on the way: `x I64 = 1 << s` shifts an `I32`
+  (E8a; 256 for `s = 40`) though `x I64 = 1 << 40` works. No compiler change was made.
 - **`is` replaces `same`, and the atomic builtins are methods (E10c, E32, P9, D2, D3a, 2026-10-09; the user: "I don't
   like built-ins very much", then "Yes, do both").** `a is b` is identity - true when two references (or two function
   values) of one type name one instance, whatever `Eq` says - and `a is not b` its negation, as `x is not Shape.Circle`

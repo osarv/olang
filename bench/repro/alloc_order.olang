@@ -1,0 +1,49 @@
+# A constructor's arguments are evaluated before its instance is allocated, so Node(tree(d - 1), tree(d - 1)) puts
+# both subtrees in the arena before their parent: a tree is laid out in post-order, and a pre-order walk then runs
+# against memory order. Building the parent first and filling it in lays the same tree out in pre-order and walks
+# faster (binary-trees 18: 0.49s against 0.43s; a C arena allocating children first 0.47s, parent first - as C is
+# written - 0.38s). Here: "alloc_order args 14 2000" against "alloc_order parentfirst 14 2000". Bump-allocating the
+# instance before evaluating the arguments would give "args" the second layout with nothing changed in the source.
+import "std/io"
+import "std/os"
+
+type Node struct(left mut Node&, right mut Node&) {
+    left mut
+    right mut
+}
+
+fn byArgs(depth I64) Node& {
+    if depth == 0 { return Node(null, null) }
+    return Node(byArgs(depth - 1), byArgs(depth - 1))        # children allocated first
+}
+
+fn parentFirst(depth I64) Node& {
+    n Node&return = Node(null, null)                        # parent allocated first
+    if depth == 0 { return n }
+    n.left = parentFirst(depth - 1)
+    n.right = parentFirst(depth - 1)
+    return n
+}
+
+fn check(n Node&) I64 {
+    if n.left == null { return 1 }
+    return 1 + check(n.left) + check(n.right)
+}
+
+# many trees, each built, walked once and dropped at the end of its iteration - binary-trees' inner loop
+fn walk(depth I64, times I64, parentFirstOrder Bool) I64 {
+    total I64 = 0
+    for i in range times {
+        t := parentFirst(depth) if parentFirstOrder else byArgs(depth)
+        total += check(t)
+    }
+    return total
+}
+
+fn main() ? {
+    args := os.Args()
+    mode := args[1]
+    depth := try args[2].ParseInt()
+    times := try args[3].ParseInt()
+    try io.Print($walk(depth, times, mode == "parentfirst") "\n")
+}

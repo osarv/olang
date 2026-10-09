@@ -1,0 +1,29 @@
+# mandelbrot: the Mandelbrot set as a portable bitmap, one bit per pixel (the Benchmarks Game's output format) -
+# F64 arithmetic in a tight escape loop, and bits packed into bytes
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 200
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    rowBytes I64 = (n + 7) / 8
+    bits := Array<U8>(rowBytes * n)
+    for y in range n {
+        ci F64 = 2.0 * F64(y) / F64(n) - 1.0
+        for x in range n {
+            cr F64 = 2.0 * F64(x) / F64(n) - 1.5
+            zr, zi, tr, ti F64
+            for k in range 50 {
+                if tr + ti > 4.0 { break }
+                zi = 2.0 * zr * zi + ci
+                zr = tr - ti + cr
+                tr = zr * zr
+                ti = zi * zi
+            }
+            if tr + ti <= 4.0 { bits[y * rowBytes + x / 8] |= U8(128) >> U8(x % 8) }
+        }
+    }
+    try io.Print("P4\n" $n " " $n "\n")
+    try io.Write(io.Stdout, bits)
+}

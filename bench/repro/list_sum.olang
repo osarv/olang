@@ -1,0 +1,21 @@
+# "for x in l" over a List never vectorizes: ListIter.Next is one element at a time, with the chunk change folded
+# into every step ("if it.i == it.room { next chunk }"), so the loop LLVM sees has a data-dependent exit in its body
+# and stays scalar. Summing 100,000 I64 8,000 times: over the List 0.87s, over an Array 0.20s, C's array 0.18s.
+# The fix is a chunk-wise walk - an outer loop over chunks and an inner counted loop over each - which is what the
+# array case already is.
+# See it: repro/opt.sh list_sum, then  grep -n "xor" build/list_sum.opt.ll  (scalar i64 only, no vector xor/add)
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    passes := try args[2].ParseInt()
+    l := List<I64>()
+    for i in range n { l.Push(i * 7) }
+    total I64 = 0
+    for p in range passes {
+        for x in l { total += x ^ p }
+    }
+    try io.Print($total "\n")
+}
