@@ -1,5 +1,5 @@
-# check: fail a reference never narrows
-# also: error[O10]: this reference lives in a scope that may not outlive where it is put
+# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# never: a reference never narrows
 # D8c/O18a: results destructured into new locals land in the loop body's block - a reference from there cannot be
 # stored into the outer keep
 type Node struct(v I32) {

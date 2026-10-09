@@ -14801,6 +14801,9 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
             Err(kw, ERR_LAMBDA_SIGNATURE, exp);
             *t.retType = lambdaOwnType(*exp->retType);
         }
+        //T25b: a written built result is writable, which a read-only one expected - a result written as a type variable
+        //bound read-only (O14b) - takes as it is: what is handed over may only be read
+        else if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType) && !exp->retType->refMut) t.retType->refMut = false;
         if (exp && !exp->hasRetType) Err(kw, ERR_LAMBDA_SIGNATURE, exp);
     } else if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType)) {
         t.hasRetType = true;
