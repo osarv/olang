@@ -1,4 +1,4 @@
-# check: fail this expression is built only from literals
+# check: fail error[E4a]: this literal expression's value does not fit F64
 # E4a: a float literal-only expression is computed in F64, and one whose finite operands overflow to an infinity has no
 # value - even for an F64 target
 fn main() ? {

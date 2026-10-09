@@ -1,4 +1,4 @@
-# check: fail these two numbers do not meet
+# check: fail error[T6b]: I32 and F64 do not meet
 # T6b: integers and floats are separate families - nothing flows between them implicitly
 fn main() ? {
     a I32 = 3

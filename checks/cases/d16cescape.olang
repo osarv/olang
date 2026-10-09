@@ -1,4 +1,4 @@
-# check: fail own scope cannot satisfy
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
 # D16d: a lambda capturing a local reference lives where that local's referent does, so it cannot be returned
 type Point struct(x I32) { x mut }
 fn leak() fn(n I32) I32 {

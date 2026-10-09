@@ -1,4 +1,4 @@
-# check: fail this type does not extend its base
+# check: fail error[T29f]: Meters does not extend its base, so it takes no '+'
 # T29f: without "extends", I32's arithmetic does not make a Meters - declare Plus, or extend I32
 type Meters I32
 fn main() ? {

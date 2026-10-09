@@ -1,4 +1,4 @@
-# check: fail so it is written under 'try', as 'try T[e for x in c]'
+# check: fail error[E27, S9e]: this comprehension's own calls can fail
 # S9e: a comprehension over an iterator whose Next can fail
 error E {
     X

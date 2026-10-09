@@ -1,5 +1,5 @@
 # check: fail a reference never narrows
-# also: not provably at least as long-lived
+# also: error[O10]: this reference lives in a scope that may not outlive where it is put
 # S13c/O12: alternatives binding one name from payloads in different scopes - x's scope is not known, so it cannot be
 # stored where either one's would go (it used to take the first alternative's, outer's, and keep pointed at inner)
 type Node struct(v I32) {

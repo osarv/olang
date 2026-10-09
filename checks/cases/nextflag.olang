@@ -1,4 +1,4 @@
-# check: fail a value, and fails with Exhausted once there are no more
+# check: fail error[S9a]: It& cannot be walked
 # S9a: running out is an error, not a flag - a Next giving a value and a Bool is not an iterator
 type It struct() {
     i mut I32 = 0

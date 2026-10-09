@@ -1,4 +1,4 @@
-# check: fail computes a value and then discards it
+# check: fail error[S3]: this computes a value and discards it
 # P9/S3: AtomicLoad only reads, so standing alone it is a discarded value
 fn main() ? {
     x I32 = 1

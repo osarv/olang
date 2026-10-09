@@ -1,4 +1,4 @@
-# check: fail this case carries nothing, so there is nothing for 'as' to give
+# check: fail error[E32]: case B carries nothing for 'as' to give
 # E32: as on a case with no payload
 type T enum {
     A(v I32)

@@ -1,4 +1,4 @@
-# check: fail nowhere for a value
+# check: fail error[R11]: a try written as a statement gives no value, so it takes no default
 error E {
     A
     B

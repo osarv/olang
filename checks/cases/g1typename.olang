@@ -1,4 +1,4 @@
-# check: fail a type variable may not be named after a type
+# check: fail error[G1]: type variable 'P' is named after a type
 # G1: "<P>" with P a declared type would read as parameterizing over a concrete type - one error, where it is first
 # written
 # also: compilation failed with 1 error

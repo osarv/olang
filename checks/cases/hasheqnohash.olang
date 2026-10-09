@@ -1,4 +1,4 @@
-# check: fail Lbl does not satisfy the constraint Hashable on K: it has no method Hash that fits
+# check: fail error[G19, E10b]: Lbl does not satisfy the constraint Hashable on K: it has no Hash
 # E10b: a type declaring Eq gets no Hash from the compiler - only a Hash it declares can agree with its Eq
 type Lbl struct(n I32) {
     n

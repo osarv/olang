@@ -1,4 +1,4 @@
-# check: fail mutable global
+# check: fail is mutable, so a top-level condition cannot read it
 error E { X }
 Level mut I32 = 1
 if Level == 1 {

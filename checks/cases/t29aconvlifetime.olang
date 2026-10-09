@@ -1,4 +1,4 @@
-# check: fail this stores a reference to storage that does not live as long as the container
+# check: fail error[O20]: the container outlives what this refers to
 # T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary
 type Holder struct() {
   s mut String& = null

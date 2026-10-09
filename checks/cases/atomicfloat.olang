@@ -1,4 +1,4 @@
-# check: fail the atomic operations are methods of the integer types only
+# check: fail error[P9]: the atomic operations are methods of the integer types, and F64 is none
 # P9: atomicity is a property of one machine word - a float has no atomic operations
 fn main() ? {
     f F64 = 1.0

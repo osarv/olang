@@ -1,4 +1,4 @@
-# check: fail and that failed: it writes a global
+# check: fail error[T29d]: this literal enters Counted through its constructor, which does not run on it while compiling: it writes a global, which the running program would then not see written
 # T29d: the constructor a literal enters through runs while compiling, so it must be computable then
 Made mut I32 = 0
 type Counted I32(v I32) {

@@ -1,4 +1,4 @@
-# check: fail this string literal is never closed - the file ends first
+# check: fail error[L14]: unterminated string literal
 # L14: the end of the file inside a string literal is an error, not a read past the end of the file
 fn main() ? {
     x := "abc

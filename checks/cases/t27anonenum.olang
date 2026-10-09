@@ -1,4 +1,4 @@
-# check: fail this value's type doesn't match the target's declared type
+# check: fail error[E12]: expected enum { A B }, found enum { X Y Z }
 # T27: two anonymous enums are one type only with the same cases in the same order - "X Y Z" is not "A B"
 fn f(x enum {
   A

@@ -1,4 +1,4 @@
-# check: fail does not satisfy the constraint Hashable on K: it has no method Hash that fits
+# check: fail error[G19, E10b]: Id does not satisfy the constraint Hashable on K: it has no Hash
 # E10b/T29e: a type extending I64 that declares Eq must declare Hash too - the inherited one cannot agree with its Eq
 type Id extends I64
 fn (a Id) Eq(b Id) Bool { return I64(a) % 100 == I64(b) % 100 }

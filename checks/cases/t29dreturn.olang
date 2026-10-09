@@ -1,4 +1,4 @@
-# check: fail a constructor never returns a value of its own
+# check: fail error[C2b]: a constructor gives no value
 # T29d: the parameter's final value is the result - a return would be a second way out
 type Percent I32(v mut I32) {
     if v > 100 { return 100 }

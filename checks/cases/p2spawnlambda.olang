@@ -1,4 +1,4 @@
-# check: fail Declare the captured variable outside the join block
+# check: fail error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
 # P2/D16e: a spawned lambda capturing a loop body's reference - the advice names the captured variable, not a reference
 # to the join's own storage
 type Node struct(v I32) {

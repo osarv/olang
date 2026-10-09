@@ -1,4 +1,4 @@
-# check: fail these two numbers do not meet
+# check: fail error[T6b]: F16 and BF16 do not meet
 # T6b: F16 and BF16 each keep something the other loses - neither flows into the other
 fn main() ? {
     a F16 = 1

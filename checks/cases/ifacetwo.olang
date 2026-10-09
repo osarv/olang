@@ -1,4 +1,4 @@
-# check: fail this type satisfies two traits that each declare a default of this name
+# check: fail error[M19e]: two traits P satisfies both declare a default 'Shout'
 # M19e: a default two satisfied traits both declare cannot be chosen between
 type Named trait {
     Name() I32

@@ -1311,15 +1311,18 @@ void CtOrderGlobals(void) {
                     int seen = -1;
                     for (int p = 0; p < len; p++) if (path[p] == cur) seen = p;
                     if (seen >= 0) {
-                        char buf[1200];
-                        int w = snprintf(buf, sizeof(buf), "%s:", seen == len - 1 ? GLOBAL_INIT_READS_ITSELF : GLOBALS_INIT_CYCLE);
-                        for (int p = seen; p <= len && w < (int)sizeof(buf); p++) {
-                            struct var* gv = *(struct var**)ListGetIdx(&gs, p < len ? path[p] : path[seen]);
-                            w += snprintf(buf + w, sizeof(buf) - (size_t)w, "%s %.*s", p > seen ? " ->" : "", gv->name.len, gv->name.ptr);
+                        struct var* first = *(struct var**)ListGetIdx(&gs, path[seen]);
+                        if (seen == len - 1) Err(first->tok, ERR_GLOBAL_READS_ITSELF, first->name, first->name);
+                        else {
+                            char buf[1200];
+                            int w = 0;
+                            buf[0] = '\0';
+                            for (int p = seen; p <= len && w < (int)sizeof(buf); p++) {
+                                struct var* gv = *(struct var**)ListGetIdx(&gs, p < len ? path[p] : path[seen]);
+                                w += snprintf(buf + w, sizeof(buf) - (size_t)w, "%s%.*s", p > seen ? " -> " : "", gv->name.len, gv->name.ptr);
+                            }
+                            Err(first->tok, ERR_GLOBALS_CYCLE, buf);
                         }
-                        char* msg = MallocOrCrash(strlen(buf) + 1);
-                        strcpy(msg, buf);
-                        ErrMsgSemantic((*(struct var**)ListGetIdx(&gs, path[seen]))->tok, msg);
                         //its members are set in declaration order, and the rest ordered on - another cycle is its own error
                         for (int p = seen; p < len; p++) { placed[path[p]] = true; ListAdd(&mod->globalOrder, ListGetIdx(&gs, path[p])); done++; }
                         len = -1;

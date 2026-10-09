@@ -1,4 +1,4 @@
-# check: fail unexpected token ')', expected 'expression'
+# check: fail expected an expression, found ')'
 # a failed operand leaves what it read - "f(-)" was "f()", the "-" dropped
 fn f() I32 { return 7 }
 fn main() ? {

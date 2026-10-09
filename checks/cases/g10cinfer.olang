@@ -1,4 +1,4 @@
-# check: fail inferred from the constructor
+# check: fail error[G10c]: the type arguments of Tagged cannot be inferred from these arguments
 # G10c: a type argument no constructor parameter mentions cannot be inferred - write the list
 type Tagged<T> struct(n I32) { n }
 fn main() ? {

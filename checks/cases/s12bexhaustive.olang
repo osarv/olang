@@ -1,4 +1,4 @@
-# check: fail does not cover every case
+# check: fail error[S13a]: case A of S is not covered
 # S12b/S13a: a match used as a value over an enum covers every case, counting only unguarded clauses
 type S enum {
     A(x I32)

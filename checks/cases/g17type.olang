@@ -1,4 +1,4 @@
-# check: fail this generic's instantiation requires an ever-growing set of further instantiations
+# check: fail error[G17]: this generic's instantiations never end
 # G17: a generic type whose field instantiates it with a bigger argument
 type Grow<T> struct() {
   next mut Grow<Array<<T>>&>& = null
