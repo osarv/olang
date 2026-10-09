@@ -5199,16 +5199,18 @@ enum litValueFail { LIT_VALUE_OK, LIT_VALUE_NONE, LIT_VALUE_ZERO_DIV };
 //LIT_VALUE_NONE where it has no value any type could hold - an integer beyond 128 bits, a finite float computation
 //reaching an infinity - and LIT_VALUE_ZERO_DIV for an integer divided by zero, which OperandBinary already reported.
 //A float divided by zero is an infinity or a NaN (E6a), which are values; a NaN is the one LLVM folds 0.0 / 0.0 to.
-static enum litValueFail literalExprValue(struct operand* op, struct litValue* out) {
+//L10a: with unsignedPatterns, a hexadecimal or binary literal is worth its bits read unsigned - what it is worth adapting
+//to an unsigned type - and otherwise its I64 reading
+static enum litValueFail literalExprValueAs(struct operand* op, struct litValue* out, bool unsignedPatterns) {
     if (op->isLiteral) {
         out->isFloat = TypeIsFloat(op->type);
         if (out->isFloat) out->f = op->floatLiteralVal;
-        else out->i = intLiteralExact(op);
+        else out->i = unsignedPatterns && op->bitPattern ? (litWide)(unsigned long long)op->intLiteralVal : intLiteralExact(op);
         return LIT_VALUE_OK;
     }
     struct litValue a = {0}, b = {0};
-    enum litValueFail r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 0), &a);
-    if (r == LIT_VALUE_OK && op->args.len > 1) r = literalExprValue(*(struct operand**)ListGetIdx(&op->args, 1), &b);
+    enum litValueFail r = literalExprValueAs(*(struct operand**)ListGetIdx(&op->args, 0), &a, unsignedPatterns);
+    if (r == LIT_VALUE_OK && op->args.len > 1) r = literalExprValueAs(*(struct operand**)ListGetIdx(&op->args, 1), &b, unsignedPatterns);
     if (r != LIT_VALUE_OK) return r;
     enum operation o = op->opType;
     if (TypeIsFloat(op->type)) {
@@ -5259,13 +5261,16 @@ static enum litValueFail literalExprValue(struct operand* op, struct litValue* o
     out->i = v;
     return LIT_VALUE_OK;
 }
+static enum litValueFail literalExprValue(struct operand* op, struct litValue* out) {
+    return literalExprValueAs(op, out, false);
+}
 
 //E4a: op, a literal-only expression, becomes - in place - the one literal holding its value, typed as that literal
 //would be written (T6a: I32, else I64, else U64 for a value only it holds; F64 for a float). A value no literal can
 //hold leaves op as it was.
-static enum litValueFail literalExprFold(struct operand* op) {
+static enum litValueFail literalExprFoldAs(struct operand* op, bool unsignedPatterns) {
     struct litValue v;
-    enum litValueFail r = literalExprValue(op, &v);
+    enum litValueFail r = literalExprValueAs(op, &v, unsignedPatterns);
     if (r != LIT_VALUE_OK) return r;
     struct operand* lit;
     if (v.isFloat) {
@@ -5283,6 +5288,7 @@ static enum litValueFail literalExprFold(struct operand* op) {
     *op = *lit;
     return LIT_VALUE_OK;
 }
+static enum litValueFail literalExprFold(struct operand* op) { return literalExprFoldAs(op, false); }
 
 //E4a: what a fold replaced - every node below saved, the tree op was before it became a literal - is gone from the
 //program, so a check deferred to the end (a shift's amount, E8a) no longer applies to it
@@ -5320,6 +5326,8 @@ bool numericLiteralFits(struct operand* lit, struct type to) {
     if (!TypeIsNumeric(lit->type) || !TypeIsNumeric(to)) return false;
     if (TypeIsFloat(lit->type)) return TypeIsFloat(to) && floatValueFitsType(lit->floatLiteralVal, to);
     if (TypeIsFloat(to)) return floatValueFitsType(literalAsFloat(lit, to), to);
+    if (lit->bitPattern && PrimInfo(to.bType)->kind == 'u') //L10a: its bits, read unsigned
+        return intLiteralFitsIntType((litWide)(unsigned long long)lit->intLiteralVal, to);
     return intLiteralFitsIntType(intLiteralExact(lit), to);
 }
 
@@ -5328,7 +5336,8 @@ bool numericLiteralFits(struct operand* lit, struct type to) {
 static bool operandAdaptLiteral(struct operand* op, struct type to) {
     if (!TypeIsNumeric(to) || !operandOnlyNumericLiterals(op)) return false;
     struct operand saved = *op;
-    if (!op->isLiteral && literalExprFold(op) != LIT_VALUE_OK) return false;
+    bool toUnsigned = TypeIsInt(to) && PrimInfo(to.bType)->kind == 'u';
+    if (!op->isLiteral && literalExprFoldAs(op, toUnsigned) != LIT_VALUE_OK) return false;
     if (!numericLiteralFits(op, to)) { *op = saved; return false; }
     markFoldedAway(&saved);
     if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op, to);
@@ -5829,7 +5838,8 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //would - "b U8 = 1 + 2", "f F32 = 0.5 * 2.0"; it is an error only where that value does not fit (or has none)
     if (!op->isLiteral && TypeIsNumeric(target) && operandOnlyNumericLiterals(op)) {
         struct operand saved = *op;
-        enum litValueFail why = literalExprFold(op);
+        //L10a: a hexadecimal or binary literal's bits read unsigned where the target is unsigned
+        enum litValueFail why = literalExprFoldAs(op, TypeIsInt(target) && PrimInfo(target.bType)->kind == 'u');
         if (why == LIT_VALUE_ZERO_DIV) return TYPE_FIT_OK; //reported where the division was built (E6a)
         enum typeFit r = why == LIT_VALUE_OK ? OperandFitsType(func, op, target) : TYPE_FIT_LITERAL_EXPR;
         //judged by its value either way - one that does not fit, or has none, is that error, not also a shift's (E8a)
@@ -8754,7 +8764,9 @@ struct operand* OperandIntLiteral(struct token tok) {
     //gives a literal-only expression folding to such a value. A hex or binary literal is a bit pattern (L10a): its
     //64 bits read as an I64, so 0xFFFFFFFFFFFFFFFF is -1
     if (tooLarge) Err(tok, ERR_INT_LITERAL_TOO_LARGE, tok);
-    return OperandIntLiteralValue(tok, value, !tooLarge && value < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str));
+    struct operand* op = OperandIntLiteralValue(tok, value, !tooLarge && value < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str));
+    op->bitPattern = !intLiteralIsDecimal(tok.str);
+    return op;
 }
 
 //an integer literal whose value is already known - a -D build constant's (B10) - typed as T6a types its literal: a U64

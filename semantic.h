@@ -586,6 +586,8 @@ struct operand {
     bool isLiteral;
     struct var* readVar; //valid for OPERATION_READ_VAR and as the lvalue base for INC/DEC
     long long intLiteralVal;
+    bool bitPattern; //L10a: a hexadecimal or binary literal - a bit pattern, whose value is unsigned where it adapts to
+                     //an unsigned type (0xFFFFFFFFFFFFFFFF a U64's maximum) and its I64 reading otherwise (-1)
     double floatLiteralVal; //valid for float literals only
     struct str memberName; //valid for OPERATION_MEMBER
     bool memberMut;        //valid for OPERATION_MEMBER: the FIELD's own mutability (C3), separate from

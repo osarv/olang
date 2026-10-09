@@ -127,13 +127,18 @@ saturated or wrapped - and so is a hexadecimal or binary one needing more than 6
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
-denotes a **bit pattern**, so the full width of `I64` is writable: `0xFFFFFFFFFFFFFFFF` is `-1`.
+denotes a **bit pattern** of at most 64 bits. Adapting to an unsigned type (T6) it is worth those bits read unsigned, so
+it fits any unsigned type wide enough to hold the pattern - `x U64 = 0x9E3779B97F4A7C15`, `0xFFFFFFFFFFFFFFFF` as
+`U64`'s maximum; everywhere else it is worth its `I64` reading, so the full width of `I64` is writable:
+`0xFFFFFFFFFFFFFFFF` is `-1` in an `I64` and does not fit an `I32`. A literal-only expression (E4a) built from such
+literals is computed from the same reading: `u U64 = 0xFF00000000000000 | 0xFF` holds the unsigned value, `i I64 = ...`
+the signed one.
 
 A leading `0` on a decimal literal is **not** an octal prefix — `07` is seven. C's bare-`0` octal is
 widely held to be a mistake, and there is no octal syntax at all.
 
 **L10c.** `bin-int ::= ( "0b" | "0B" ) bin-digit { digit-sep bin-digit }`, where `bin-digit` is `0` or
-`1`. At least one digit is required.
+`1`. At least one digit is required. A binary literal is a bit pattern exactly as a hexadecimal one is (L10a).
 
 A character that is a digit or a letter immediately after a `0x` or `0b` literal's digits is an error,
 rather than the start of the next token: `0b12` is a mistake in the literal, not a binary `1` beside a
@@ -415,7 +420,7 @@ own type (E6d).
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
 `I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
-hexadecimal or binary literal is a bit pattern, read as an `I64`, L10a), `F64` for a float literal,
+hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned type, L10a), `F64` for a float literal,
 `Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it - a type variable only
 literals reach (G9a), a `-D` build constant (B10). It follows that an
