@@ -332,3 +332,52 @@ test "Keys, Values and Clear, evaluated while compiling as at run time" {
     assert mapPartsBaked == 190 * 100000 + 2470 * 10 + 1
     assert mapParts() == mapPartsBaked
 }
+
+# a Map is a handle, as a List is: a copy of a Map value is another name for the same map - a key removed through one is
+# gone from the other, and its count with it - and Clone() is the copy with storage of its own, walked in the same order
+fn mapCopies() I64 {
+    m := Map<String&, I64>()
+    for k in String&["a", "b", "c", "d", "e", "f", "g"] { m.Put(k, 1) }
+    n := m
+    assert n.Remove("a")
+    assert m.Len() == 6 and not m.Has("a") and m.Keys().ToList().Len() == 6
+    c := m.Clone()
+    c.Put("z", 26)
+    m.Put("b", 2)
+    assert c.Len() == 7 and m.Len() == 6 and (try c.Get("b") catch default -1) == 1 and (try m.Get("b") catch default -1) == 2
+    order := m.Keys().ToList()                    # the clone walks in the order the map does
+    same I64 = 0
+    for i, k in c.Keys().ToList() {
+        if i < order.Len() and k == order[i] { same++ }
+    }
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())   # one map, two names (T8)
+    parts[0].Put("x", 1)
+    assert parts[1].Len() == 1 and "x" in parts[1]
+    return same * 100 + c.Len() * 10 + m.Len()
+}
+mapCopiesBaked := mapCopies()
+
+test "a copy of a Map value names the same map, and Clone makes another" {
+    assert mapCopiesBaked == 6 * 100 + 70 + 6
+    assert mapCopies() == mapCopiesBaked
+}
+
+test "a Map's Clone outlives the map it copies" {
+    kept := Map<I64, I64>()
+    if kept.Len() == 0 {
+        src := Map<I64, I64>()
+        for i in range 100 { src.Put(i, i * 3) }
+        kept = src.Clone()
+        src.Put(1000, 1)
+        assert src.Remove(5)
+    }
+    t I64 = 0
+    for i in range 300 {
+        p := Array<I64>(64, I64(i))
+        t += p[0]
+    }
+    assert t > 0 and kept.Len() == 100 and (try kept.Get(5) catch default -1) == 15 and 1000 not in kept
+    s I64 = 0
+    for e in kept { s += e.Value }
+    assert s == 3 * 4950
+}

@@ -11,8 +11,8 @@ fn (a Array<<T>>&) Has(x T) Bool {
     return false
 }
 
-# whether the two hold equal elements in the same order - what "==" on two array values is when an element type
-# declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
+# whether the two hold equal elements in the same order - what "==" on two arrays, values or references, is when an
+# element type declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
 fn (a Array<<T>>&) Equal(b Array<T>&) Bool {
     if a.Len() != b.Len() { return false }
     for i in range a.Len() {

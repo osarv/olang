@@ -173,6 +173,8 @@ struct cgCtx {
     //S19: the deferred code registered in the blocks currently open, innermost last (struct cgDefer)
     struct list defers;
     int dbgStmtLine, dbgStmtFile; //B2e: the statement being emitted, to locate what follows deferred code again
+    struct statement* checkStmt;  //S18a: the innermost written statement being emitted - where a guaranteed check
+                                  //made with no operand of its own to point at (a copy into fixed storage) failed
     //S18b/P1d: the runtime unwind chain's nodes - one %olang.unwind per block depth plus one for the
     //body's own scope, all alloca'd in the entry block beside the scope headers they describe. Their
     //`prev` and `scope` fields never change within a frame, so they are filled in once there and a block
@@ -1554,6 +1556,8 @@ static char* cgValueSlot(struct cgCtx* ctx, struct type t, const char* ty) {
 //code it is made for, so its loads never alias a program's fields or elements (see cgClosureType)
 static const char* cgCaptureTbaa = ", !tbaa !28";
 
+static char* cgCheckMsg(struct cgCtx* ctx, struct operand* op, const char* what);
+
 static const char* cgTbaa(struct type t, bool elem) {
     switch (t.bType) {
         case BASETYPE_BOOL: return elem ? ", !tbaa !31" : ", !tbaa !21";
@@ -1596,7 +1600,8 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", bad, badLbl, okLbl);
         ctx->terminated = true;
         cgLabel(ctx, badLbl);
-        fputs("  call void @__olang_check_failed(ptr @__olang_msg_arrayfit)\n", ctx->fnOut);
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n",
+                cgCheckMsg(ctx, NULL, "array length does not match its fixed storage"));
         cgBr(ctx, okLbl);
         cgLabel(ctx, okLbl);
         fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n",
@@ -1956,10 +1961,13 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
     //assignment since E12c; a call boundary never did, and cgValue's loaded pointer was handed straight to
     //a parameter expecting the aggregate - invalid IR, caught the moment a method-style call put a
     //reference receiver against a by-value first parameter.
-    //structs only: D9a forbids a by-value array parameter, so a struct is the only thing that can be a
-    //by-value target here - and including arrays wrongly caught E12's T[N]& -> T[] widening, which keeps
-    //the pointer and materialises a length rather than loading anything
-    if (!dstT.structMAlloc && op->type.structMAlloc && (dstT.bType == BASETYPE_STRUCT || dstT.bType == BASETYPE_CHOICE)
+    //D9a forbids a by-value array parameter, so at a call a struct or an enum is the only by-value target here; a
+    //RESULT may be a fixed array value too (T7d: "fn f(a Array<T, N>&) Array<T, N> { return a }"), whose reference is
+    //the same pointer to the same "[N x T]" storage. A run-time-length array is left out on either side: E12's
+    //Array<T, N>& -> Array<T> widening keeps the pointer and materialises a length rather than loading anything
+    bool fixedArrays = dstT.bType == BASETYPE_ARRAY && !dstT.arrMalloc && !op->type.arrMalloc;
+    if (!dstT.structMAlloc && op->type.structMAlloc
+            && (dstT.bType == BASETYPE_STRUCT || dstT.bType == BASETYPE_CHOICE || fixedArrays)
             && op->type.bType == dstT.bType) {
         char* refPtr = cgValue(ctx, op);
         char ty[256];
@@ -2663,6 +2671,35 @@ static char* cgChoiceEqFn(struct cgCtx* ctx, struct type t) {
     return sym;
 }
 
+//E10c: "a is b" - the same instance. For a reference to an array that is the same storage, from the same element, over
+//the same length - two descriptors naming one buffer from one start - so a[:2] is not a[:3]; any other reference, or a
+//function value, is cgDeepEq's own identity
+static char* cgIdentityEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
+    if (t.bType == BASETYPE_ARRAY && t.arrMalloc) {
+        char* pa = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pa, aVal);
+        char* pb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pb, bVal);
+        char* na = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", na, aVal);
+        char* nb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", nb, bVal);
+        char* eqP = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqP, pa, pb);
+        char* eqN = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", eqN, na, nb);
+        char* eq = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", eq, eqP, eqN);
+        return eq;
+    }
+    if (t.bType == BASETYPE_ARRAY) { //a fixed array's reference: the pointer
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", r, aVal, bVal);
+        return r;
+    }
+    return cgDeepEq(ctx, t, aVal, bVal);
+}
+
 char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     if (t.bType == BASETYPE_STRUCT && !t.structMAlloc) {
         char storTy[256];
@@ -2683,26 +2720,50 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         }
         return acc;
     }
-    //T11 gone: the MARKER decides, for either length kind. A marked compile-time-length array is a bare
-    //ptr and falls through to the pointer leaf below (identity, as for a marked struct); a marked
-    //runtime-length one is { i64, ptr }, which no icmp accepts. E10: its identity is the same storage AND the same
-    //length - two descriptors naming one buffer from one start, over as many elements - so a[:2] is not a[:3]
-    if (t.bType == BASETYPE_ARRAY && t.arrMalloc && t.structMAlloc) {
-        char* pa = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pa, aVal);
-        char* pb = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pb, bVal);
-        char* na = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", na, aVal);
-        char* nb = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", nb, bVal);
-        char* eqP = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqP, pa, pb);
-        char* eqN = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, %s\n", eqN, na, nb);
-        char* eq = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", eq, eqP, eqN);
-        return eq;
+    //E10: two array references compare the arrays they name - lengths, then elements by this same rule - except that a
+    //null equals only a null. Either length kind: a marked run-time-length array is { i64, ptr }, a marked fixed one the
+    //bare pointer to its "[N x T]", which is exactly what the value comparison below takes. Branching on the null
+    //test, the result goes through a slot
+    if (t.bType == BASETYPE_ARRAY && t.structMAlloc) {
+        char* pa = aVal;
+        char* pb = bVal;
+        if (t.arrMalloc) {
+            pa = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pa, aVal);
+            pb = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", pb, bVal);
+        }
+        char* nullA = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", nullA, pa);
+        char* nullB = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", nullB, pb);
+        char* anyNull = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = or i1 %s, %s\n", anyNull, nullA, nullB);
+        char* slot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca i1\n", slot);
+        int id = ctx->lblCtr++;
+        char nullLbl[32], valLbl[32], endLbl[32];
+        snprintf(nullLbl, sizeof(nullLbl), "refeq.null.%d", id);
+        snprintf(valLbl, sizeof(valLbl), "refeq.val.%d", id);
+        snprintf(endLbl, sizeof(endLbl), "refeq.end.%d", id);
+        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", anyNull, nullLbl, valLbl);
+        ctx->terminated = true;
+        cgLabel(ctx, nullLbl);
+        char* both = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", both, nullA, nullB);
+        fprintf(ctx->fnOut, "  store i1 %s, ptr %s\n", both, slot);
+        cgBr(ctx, endLbl);
+        cgLabel(ctx, valLbl);
+        struct type vt = t;
+        vt.structMAlloc = false;
+        vt.refMut = false;
+        char* veq = cgDeepEq(ctx, vt, aVal, bVal);
+        fprintf(ctx->fnOut, "  store i1 %s, ptr %s\n", veq, slot);
+        cgBr(ctx, endLbl);
+        cgLabel(ctx, endLbl);
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load i1, ptr %s\n", r, slot);
+        return r;
     }
     if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc) {
         char storTy[256];
@@ -2885,7 +2946,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
     //== and != are structural for struct/array types (cgDeepEq), not raw pointer identity - a <>-indirect
     //struct is the one exception, where identity is the actual intended meaning of "=="  (see cgDeepEq)
     if (op->opType == OPERATION_EQ || op->opType == OPERATION_NEQ) {
-        char* eq = cgDeepEq(ctx, a->type, av, bv);
+        char* eq = op->identity ? cgIdentityEq(ctx, a->type, av, bv) : cgDeepEq(ctx, a->type, av, bv);
         if (op->opType == OPERATION_EQ) return eq;
         fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", r, eq);
         return r;
@@ -3565,7 +3626,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     if (op->checkRoot) cgCheckFailed(ctx, op->checkRoot, okLbl, negLbl, "OUT_OF_BOUNDS", NULL); //R20
     else {
         cgLabel(ctx, negLbl);
-        fputs("  call void @__olang_check_failed(ptr @__olang_msg_arraylen)\n", ctx->fnOut);
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", cgCheckMsg(ctx, op, "array length out of range"));
         cgBr(ctx, okLbl);
         cgLabel(ctx, okLbl);
     }
@@ -3728,7 +3789,7 @@ static void cgComprRealloc(struct cgCtx* ctx, int d, char* room) {
     char lbl[40];
     snprintf(lbl, sizeof(lbl), "compr.big.%d", id);
     cgLabel(ctx, lbl);
-    fputs("  call void @__olang_check_failed(ptr @__olang_msg_arraylen)\n", ctx->fnOut);
+    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", cgCheckMsg(ctx, NULL, "array length out of range"));
     snprintf(lbl, sizeof(lbl), "compr.room.%d", id);
     cgBr(ctx, lbl);
     cgLabel(ctx, lbl);
@@ -3821,7 +3882,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
 static void cgBoundsFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, char* badLbl) {
     //an index or slice inside "try (...)" fails through that try (R20)
     struct operand* root = op->checkRoot && op->checkRoot != op ? op->checkRoot : op;
-    cgCheckFailed(ctx, root, okLbl, badLbl, "OUT_OF_BOUNDS", "@__olang_msg_slice");
+    cgCheckFailed(ctx, root, okLbl, badLbl, "OUT_OF_BOUNDS", cgCheckMsg(ctx, op, "slice bounds out of range"));
 }
 
 //a check written with "try" failed with BuiltinError.word: the catch clauses take it, or it propagates under
@@ -3944,7 +4005,8 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
         snprintf(badLbl, sizeof(badLbl), "as.bad.%d", id);
         fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
         ctx->terminated = true;
-        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID", "@__olang_msg_as");
+        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID",
+                      cgCheckMsg(ctx, op, "'as' named what the value is not"));
     }
     //the payload: in place behind a reference, else spilled - then its one field, or all of them as several results
     //(a tuple of the same layout)
@@ -5895,6 +5957,20 @@ static char* cgCheckWhere(struct cgCtx* ctx, struct statement* s, const char* wh
     return cgGlobalStringConst(ctx, text);
 }
 
+//S18a: a guaranteed check's message - a slice out of range, an array length out of range, an 'as' that does not hold, a
+//copy into fixed storage of another length - says where it failed, as a written assert does: "FILE:LINE: what" at the
+//operand's own token when it has one, else at the statement being emitted
+static char* cgCheckMsg(struct cgCtx* ctx, struct operand* op, const char* what) {
+    if (op && op->tok.owner && op->tok.lineNr > 0) {
+        struct str file = TokenGetFileName(op->tok.owner);
+        size_t n = (size_t)file.len + strlen(what) + 32;
+        char* text = MallocOrCrash(n);
+        snprintf(text, n, "%.*s:%d: %s\n", file.len, file.ptr, op->tok.lineNr, what);
+        return cgGlobalStringConst(ctx, text);
+    }
+    return cgCheckWhere(ctx, ctx->checkStmt, what, "\n");
+}
+
 void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable) {
     char* msg = cgCheckWhere(ctx, s, isUnreachable ? "reached unreachable code" : "aborted", "\n");
     fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", msg);
@@ -5996,7 +6072,15 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     cgLabel(ctx, endLbl);
 }
 
+static void cgStatementIn(struct cgCtx* ctx, struct statement* s);
 void cgStatement(struct cgCtx* ctx, struct statement* s) {
+    struct statement* prev = ctx->checkStmt;
+    if (s->line > 0 && s->file.len) ctx->checkStmt = s; //a statement the compiler made keeps the written one's place
+    cgStatementIn(ctx, s);
+    ctx->checkStmt = prev;
+}
+
+static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
     if (ctx->debug && s->line > 0) { //B2e
         ctx->dbgStmtLine = s->line;
         ctx->dbgStmtFile = cgDbgFileId(ctx, s->file);
@@ -6640,11 +6724,7 @@ void emitRuntimeDecls(FILE* out) {
         //each check names what actually failed - they all used to print "assertion failed", including the
         //two that are not assertions. NUL-terminated, which the old one was not: it was exactly 17 bytes
         //for 16 characters plus a newline, so fputs/printf read past the end of the array looking for one.
-        "@__olang_msg_slice = linkonce_odr unnamed_addr constant [27 x i8] c\"slice bounds out of range\\0A\\00\"\n"
-        "@__olang_msg_as = linkonce_odr unnamed_addr constant [34 x i8] c\"'as' named what the value is not\\0A\\00\"\n"
-        "@__olang_msg_arraylen = linkonce_odr unnamed_addr constant [27 x i8] c\"array length out of range\\0A\\00\"\n"
         "@__olang_msg_oom = linkonce_odr unnamed_addr constant [15 x i8] c\"out of memory\\0A\\00\"\n"
-        "@__olang_msg_arrayfit = linkonce_odr unnamed_addr constant [47 x i8] c\"array length does not match its fixed storage\\0A\\00\"\n"
         "@__olang_msg_spawn = linkonce_odr unnamed_addr constant [22 x i8] c\"could not start task\\0A\\00\"\n"
         "@__olang_msg_stack = linkonce_odr unnamed_addr constant [42 x i8] c\"could not start a thread with that stack\\0A\\00\"\n"
         "\n"
