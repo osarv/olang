@@ -4,7 +4,7 @@
 
 # whether x is one of the elements - what "x in a" asks (E29). Compared with "==", so by the element type's Eq
 # where it declares one (E10a): text is found by what it says, not by where it is stored.
-fn (a Array<<T>>&) Has(x <T>) Bool {
+fn (a Array<<T>>&) Has(x T) Bool {
     for y in a {
         if y == x { return true }
     }
@@ -13,7 +13,7 @@ fn (a Array<<T>>&) Has(x <T>) Bool {
 
 # whether the two hold equal elements in the same order - what "==" on two array values is when an element type
 # declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
-fn (a Array<<T>>&) Equal(b Array<<T>>&) Bool {
+fn (a Array<<T>>&) Equal(b Array<T>&) Bool {
     if a.Len() != b.Len() { return false }
     for i in range a.Len() {
         if a[i] != b[i] { return false }
@@ -32,7 +32,7 @@ fn (a Array<<T>>&) HashElements() I64 {
 
 # whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
 # a substring, for text. The empty run occurs in everything.
-fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {
+fn (a Array<<T>>&) Contains(sub Array<T>&) Bool {
     for i in range a.Len() - sub.Len() + 1 {
         j I64 = 0
         for j < sub.Len() and a[i + j] == sub[j] { j++ }
@@ -42,7 +42,7 @@ fn (a Array<<T>>&) Contains(sub Array<<T>>&) Bool {
 }
 
 # true when keep holds for at least one element
-fn (a Array<<T>>&) Any(keep fn(x <T>) Bool) Bool {
+fn (a Array<<T>>&) Any(keep fn(x T) Bool) Bool {
     for x in a {
         if keep(x) { return true }
     }
@@ -50,7 +50,7 @@ fn (a Array<<T>>&) Any(keep fn(x <T>) Bool) Bool {
 }
 
 # true when keep holds for every element - so for none, of an empty array
-fn (a Array<<T>>&) All(keep fn(x <T>) Bool) Bool {
+fn (a Array<<T>>&) All(keep fn(x T) Bool) Bool {
     for x in a {
         if not keep(x) { return false }
     }
@@ -59,7 +59,7 @@ fn (a Array<<T>>&) All(keep fn(x <T>) Bool) Bool {
 
 # the index of the first element keep holds for - failing with the default error when keep holds for none, so a miss
 # is never read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
-fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) I64 ? {
+fn (a Array<<T>>&) FindIndex(keep fn(x T) Bool) I64 ? {
     for i, x in a {
         if keep(x) { return i }
     }
@@ -67,7 +67,7 @@ fn (a Array<<T>>&) FindIndex(keep fn(x <T>) Bool) I64 ? {
 }
 
 # how many elements keep holds for
-fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) I64 {
+fn (a Array<<T>>&) Count(keep fn(x T) Bool) I64 {
     n I64 = 0
     for x in a {
         if keep(x) { n++ }
@@ -77,9 +77,9 @@ fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) I64 {
 
 # a new array of f applied to every element, in order. Made filled with the first result rather than with U's zero value,
 # so a U without one (D13c) maps as any other
-fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
-    if a.Len() == 0 { return Array<<U>>(0) }         # no element, so no zero value of U is needed (D13c)
-    out := Array<<U>>(a.Len(), f(a[0]))
+fn (a Array<<T>>&) Map(f fn(x T) <U>) Array<U> {
+    if a.Len() == 0 { return Array<U>(0) }           # no element, so no zero value of U is needed (D13c)
+    out := Array<U>(a.Len(), f(a[0]))
     for i in range 1, a.Len() {
         out[i] = f(a[i])
     }
@@ -87,15 +87,15 @@ fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
 }
 
 # a new array of the elements keep holds for, in order. keep runs once per element
-fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
+fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
     marks := Array<Bool>(a.Len())
     n I64 = 0
     for i, x in a {
         marks[i] = keep(x)
         if marks[i] { n++ }
     }
-    if n == 0 { return Array<<T>>(0) }               # no element, so no zero value of T is needed (D13c)
-    out := Array<<T>>(n, a[0])            # filled with an element rather than T's zero value, which T may not have (D13c)
+    if n == 0 { return Array<T>(0) }                 # no element, so no zero value of T is needed (D13c)
+    out := Array<T>(n, a[0])              # filled with an element rather than T's zero value, which T may not have (D13c)
     j I64 = 0
     for i, x in a {
         if marks[i] {
@@ -107,8 +107,8 @@ fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
 }
 
 # the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
-fn (a Array<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
-    acc <U> = init
+fn (a Array<<T>>&) Fold(init <U>, f fn(acc U, x T) U) U {
+    acc U = init
     for x in a {
         acc = f(acc, x)
     }
@@ -117,7 +117,7 @@ fn (a Array<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
 
 # how many times sub occurs in it as a contiguous run - counted from the start, occurrences not overlapping, so "aaaa"
 # holds "aa" twice. The empty run occurs at every position, before each element and after the last: Len() + 1 times
-fn (a Array<<T>>&) CountOf(sub Array<<T>>&) I64 {
+fn (a Array<<T>>&) CountOf(sub Array<T>&) I64 {
     if sub.Len() == 0 { return a.Len() + 1 }
     n I64 = 0
     i I64 = 0
@@ -137,9 +137,9 @@ fn (a Array<<T>>&) CountOf(sub Array<<T>>&) I64 {
 # a new array with every occurrence of the run old - counted from the start, not overlapping, as CountOf counts them -
 # replaced by the run new: "a-b-c".Replace("-", ", ") is "a, b, c". The empty run occurs at every position, so an empty
 # old puts new before each element and after the last. Built at its exact length, once
-fn (a Array<<T>>&) Replace(old Array<<T>>&, new Array<<T>>&) Array<<T>> {
+fn (a Array<<T>>&) Replace(old Array<T>&, new Array<T>&) Array<T> {
     n := a.CountOf(old)
-    out := Array<<T>>(a.Len() + n * (new.Len() - old.Len()))
+    out := Array<T>(a.Len() + n * (new.Len() - old.Len()))
     w I64 = 0
     i I64 = 0
     for i <= a.Len() {
@@ -164,9 +164,9 @@ fn (a Array<<T>>&) Replace(old Array<<T>>&, new Array<<T>>&) Array<<T>> {
 }
 
 # a new array of n copies of the elements, one after another - empty for n of 0 or below: "ab".Repeat(3) is "ababab"
-fn (a Array<<T>>&) Repeat(n I64) Array<<T>> {
+fn (a Array<<T>>&) Repeat(n I64) Array<T> {
     k I64 = n if n > 0 else 0
-    out := Array<<T>>(a.Len() * k)
+    out := Array<T>(a.Len() * k)
     for r in range k {
         for i, x in a { out[r * a.Len() + i] = x }
     }
@@ -188,8 +188,8 @@ fn (a mut Array<<T>>&) Reverse() {
 
 # a new List - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToList()", or n copies of one value,
 # "Array<I32>(n, v).ToList()". The reverse of List's ToArray
-fn (a Array<<T>>&) ToList() List<<T>>& {
-    out List<<T>>&return = List<<T>>()
+fn (a Array<<T>>&) ToList() List<T>& {
+    out List<T>&return = List<T>()
     out.PushAll(a)
     return out
 }
@@ -197,7 +197,7 @@ fn (a Array<<T>>&) ToList() List<<T>>& {
 # sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not
 # order keep their order. It allocates nothing - elements only ever swap places, so it sorts an array of
 # references exactly as it sorts numbers: insertion-sorted blocks, merged by rotation (Go's sort.Stable)
-fn (a mut Array<<T>>&) Sort(less fn(x <T>, y <T>) Bool) {
+fn (a mut Array<<T>>&) Sort(less fn(x T, y T) Bool) {
     n I64 = a.Len()
     block I64 = 20
     lo I64 = 0
@@ -225,7 +225,7 @@ fn sortSwap(a mut Array<<T>>&, i I64, j I64) {
     a[j] = t
 }
 
-fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x <T>, y <T>) Bool) {
+fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x T, y T) Bool) {
     for i in range lo + 1, hi {
         j I64 = i
         for j > lo and less(a[j], a[j - 1]) {
@@ -236,7 +236,7 @@ fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x <T>, y <T>) Bool) 
 }
 
 # merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
-fn sortMerge(a mut Array<<T>>&, lo I64, m I64, hi I64, less fn(x <T>, y <T>) Bool) {
+fn sortMerge(a mut Array<<T>>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
     if m - lo == 1 {
         i I64 = m
         j I64 = hi
@@ -298,19 +298,19 @@ fn sortRotate(a mut Array<<T>>&, lo I64, m I64, hi I64) {
 
 # a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
 # as it takes a List or a Map. "for x in a" does not go through it: an array is walked directly.
-type ArrayIter<T> struct(of Array<<T>>&) {
-    arr Array<<T>>&of = of
+type ArrayIter<T> struct(of Array<T>&) {
+    arr Array<T>&of = of
     i mut I64 = 0
 }
 
-fn (it mut ArrayIter<<T>>&) Next() <T> ? Exhausted {
+fn (it mut ArrayIter<<T>>&) Next() T ? Exhausted {
     if it.i >= it.arr.Len() { error Exhausted.END }
     it.i++
     return it.arr[it.i - 1]
 }
 
 # a fresh position at the array's start - each call its own, so loops never disturb each other
-fn (a Array<<T>>&) Iter() ArrayIter<<T>> { return ArrayIter<<T>>(a) }
+fn (a Array<<T>>&) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program

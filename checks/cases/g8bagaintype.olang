@@ -1,0 +1,11 @@
+# check: fail error[G8b]: T was introduced already - write it 'T', not '<T>'
+# G8b: a type's parameter list introduces its variables - a field, the constructor and the destructor write them bare
+# also: compilation failed with 1 error
+type Box<T> struct(v T) {
+    v
+    w <T> = v
+}
+fn main() ? {
+    b := Box(1)
+    c := Box(2.5)
+}

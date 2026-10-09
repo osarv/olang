@@ -173,6 +173,6 @@ test "calling across the worker/runner import cycle" {
 
 # G16: instantiated from runner.olang, whose bodies are checked before this module's - the case that used
 # to hand the instantiation an empty body and return a zero value silently
-fn GenericEcho(x <T>) <T> {
+fn GenericEcho(x <T>) T {
     return x
 }

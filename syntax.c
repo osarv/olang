@@ -2564,6 +2564,16 @@ bool nameIsPrimitiveTypeName(struct syntax* name) {
     return false;
 }
 
+//G8b: a single name the current top-level item introduced as a generic's variable and no local of it has - "T" after
+//"<T>" (or a type's "<T>" parameter list) - which names a type wherever a type's name would ("T[a, b]", "x is T")
+static bool nameIsGenericVar(SyntaxCtx sc, struct syntax* name) {
+    if (name->parts.len != 1) return false;
+    struct str n = ((struct syntaxPart*)ListGetIdx(&name->parts, 0))->tok.str;
+    for (int i = 0; i < sc->localNames.len; i++) if (StrCmp(*(struct str*)ListGetIdx(&sc->localNames, i), n)) return false;
+    for (int i = 0; i < sc->genericNames.len; i++) if (StrCmp(*(struct str*)ListGetIdx(&sc->genericNames, i), n)) return true;
+    return false;
+}
+
 //"NAME [ ARR_LIT_ARGS ]" - array literal tail. `name` is already parsed and confirmed by the caller
 //(parseExprPrimary) to be a known type or a primitive name before this is ever reached - see the report
 //for why that's what makes this safe to commit to hard, the same reasoning choice values
@@ -2849,7 +2859,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 }
                 TokenSetCursor(sc->tc, save);
                 TokenEditRewind(sc->tc, mark); //"a < B >> c": the ">>" a type-argument list split is a shift again
-            } else if (after.type == TOK_BTWSE_AND && nameIsKnownType(sc, name)) {
+            } else if (after.type == TOK_BTWSE_AND && (nameIsKnownType(sc, name) || nameIsGenericVar(sc, name))) {
                 //"Handle&[...]" - an array literal whose ELEMENT type is a reference. Only committed once
                 //a "[" is confirmed to follow the marker: a bare "Handle&" in expression position is not a
                 //literal at all, and "x & y" must still parse as bitwise-and, so this backtracks cleanly
@@ -2870,7 +2880,8 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                     return parseFail(sc, start);
                 }
                 TokenSetCursor(sc->tc, save);
-            } else if (after.type == TOK_SQUARE_O && (nameIsKnownType(sc, name) || nameIsPrimitiveTypeName(name))) {
+            } else if (after.type == TOK_SQUARE_O && (nameIsKnownType(sc, name) || nameIsPrimitiveTypeName(name)
+                                                      || nameIsGenericVar(sc, name))) {
                 //"NAME [ ... ]" is structurally identical to indexing ("variable[index]") now that array
                 //literals no longer restate a size/length-kind suffix before the value list - see
                 //parseArrayLiteralTail. Committed the same way struct literals are: name being a known
@@ -3186,7 +3197,8 @@ static bool isRightNamesType(SyntaxCtx sc, struct syntax* t) {
     if (head->isToken || head->sntx->type != SNTX_NAME) return true; //"<T>"
     struct syntax* name = head->sntx;
     if (name->parts.len == 1 && StrCmp(((struct syntaxPart*)ListGetIdx(&name->parts, 0))->tok.str, StrFromCStr("Array"))) return true;
-    return nameIsPrimitiveTypeName(name) || nameIsKnownType(sc, name) || trailingWordFollowsKnownType(sc, name);
+    return nameIsPrimitiveTypeName(name) || nameIsKnownType(sc, name) || trailingWordFollowsKnownType(sc, name)
+           || nameIsGenericVar(sc, name);
 }
 
 struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {

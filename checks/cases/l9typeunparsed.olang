@@ -9,7 +9,7 @@ type A enum {
 type B enum {
     One(destruct I64)
 }
-type Box<T> struct(v <T>) {
+type Box<T> struct(v T) {
     v
     destruct I64
 }

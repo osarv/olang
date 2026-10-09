@@ -1,6 +1,6 @@
-# check: fail error[G23]: <T> is a type variable, not a value
+# check: fail error[G23]: T is a type variable, not a value
 # G23: only a constant variable is a value
-fn typeAsValue(a <T>) I64 { return <T> }
+fn typeAsValue(a <T>) I64 { return T }
 fn main() ? {
     r := typeAsValue(3)
 }

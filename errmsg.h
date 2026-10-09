@@ -151,7 +151,7 @@ struct type;
     X(ERR_CONST_VAR_TWO_TYPES,          "G22",   "%S fills constant parameters of two types, %t and %t") \
     X(ERR_CONST_VAR_CONSTRAINED,        "G22",   "a constant variable takes no constraint - %S's type is its parameter's, or one written '<N I64>' where it is introduced") \
     X(ERR_CONST_VAR_AS_TYPE,            "G22",   "%S is a constant, not a type") \
-    X(ERR_TYPE_VAR_AS_VALUE,            "G23",   "<%S> is a type variable, not a value") \
+    X(ERR_TYPE_VAR_AS_VALUE,            "G23",   "%S is a type variable, not a value") \
     X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable %S appears in no parameter's type as a whole argument, so no call can infer it") \
     X(ERR_CONST_VAR_MISMATCH,           "G24",   "%S is %l by one argument and %l by another") \
     X(ERR_CONST_VAR_NOT_IN_TYPE,        "G24, E32b", "%t's length is known only at run time - view it with 'x as Array<T, N>&'") \
@@ -162,13 +162,14 @@ struct type;
     X(ERR_VAR_BEFORE_INTRO,             "G22",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is a constant variable of this declaration - a name means one thing, so name this apart") \
     X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
-    X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "<%S> is a type variable, so its cases are types") \
+    X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "%S is a type variable, so its cases are types") \
     X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
-    X(ERR_TYPE_VAR_WRITTEN_BARE,        "G8b",   "type variable %n is written in angle brackets everywhere: '<%S>'") \
+    X(ERR_TYPE_VAR_WRITTEN_AGAIN,       "G8b",   "%S was introduced already - write it '%S', not '<%S>'") \
+    X(ERR_TYPE_VAR_BEFORE_INTRO,        "G8b",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_TYPE_ARG_NAMED_SCOPE,         "G11",   "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") \
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
@@ -183,7 +184,7 @@ struct type;
     X(ERR_DEFAULT_NOT_TRAILING,         "D8a",   "%n has no default, but a parameter before it does - defaulted parameters come last") \
     X(ERR_SCOPE_DECL,                   "O3",    "a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives") \
     X(ERR_TYPE_VAR_NAMES_TYPE,          "G1",    "type variable %n is named after a type - choose a name no type has, as '<T>'") \
-    X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable <%S> appears in no parameter's type, so no call can infer it") \
+    X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable %S appears in no parameter's type, so no call can infer it") \
     X(ERR_EXTERN_TYPE,                  "X2",    "%t cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") \
     X(ERR_MUT_ON_VALUE_TYPE,            "T25b",  "'mut' makes a reference writable, and %t is no reference") \
     X(ERR_PRIM_CTOR_NOT_PRIMITIVE,      "T29d",  "only a type over a primitive has a constructor written this way - a struct writes 'struct(params) { ... }'") \
@@ -257,7 +258,7 @@ struct type;
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
-    X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '<%S>&' - only a struct, an enum or an array can") \
+    X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '%S&' - only a struct, an enum or an array can") \
     X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
     X(ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, "G10c",  "the type arguments of %S cannot be inferred from these arguments - write them: %S<...>(...)") \
     X(ERR_DEFAULT_ARG_NO_DEFAULT,       "E14a",  "parameter %S declares no default, so 'default' cannot stand in for it") \
@@ -285,6 +286,7 @@ struct type;
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
+    X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
     X(ERR_NEG_LITERAL_TOO_LARGE,        "L10",   "-%n is below I64's minimum") \
@@ -396,7 +398,7 @@ struct type;
     X(ERR_ARROW_IN_STATEMENT,           "S12b",  "'=>' gives a value, which only a match used as a value takes - a statement's case runs a block") \
     X(ERR_CASE_BLOCK_STAYS,             "S12b",  "this block can finish without leaving - give the value with '=> v'") \
     X(ERR_GUARD_NOT_BOOL,               "S13e",  "a guard is a Bool, found %t") \
-    X(ERR_UNKNOWN_TYPE_VAR,             "",      "unknown type variable <%S>") \
+    X(ERR_UNKNOWN_TYPE_VAR,             "",      "unknown type variable %S") \
     X(ERR_TYPE_MATCH_GUARD,             "S13e",  "a type match chooses its case while compiling, so it takes no guard - test the value inside the case") \
     X(ERR_TYPE_MATCH_UNCOVERED,         "G15",   "no case covers %t, which this generic is instantiated with - add one, or 'nomatch'") \
     X(ERR_MATCH_VALUE_TYPES,            "S12b",  "every value of this match is %t, found %t") \

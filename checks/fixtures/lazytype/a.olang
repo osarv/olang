@@ -1,0 +1,8 @@
+# a generic type b.olang's signature reaches before this module's types are resolved, and one of b's this module's
+# signature reaches: each resolves in a context of its own, its fields' "T" its own variable (G8b)
+import "b"
+type Wrap<T> struct(v T) {
+    v
+    Twin T = v
+}
+fn ReadB(x b.Pack<<T>>&) T { return x.Copy }

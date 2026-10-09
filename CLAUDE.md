@@ -697,7 +697,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   never **introduces**, so a misspelled type stays "unknown type" instead of silently making the
   declaration generic; a variable appearing only inside type-args is written `<T>` there.
   **Superseded by G8b (the user's call): a type variable is `<T>` EVERYWHERE, type arguments included -
-  `Cell<<T>>`, `Pair<<K>, <V>>`** - and a bare name is always a declared type. The old middle ground (bare
+  `Cell<<T>>`, `Pair<<K>, <V>>`** - and a bare name is always a declared type. (Superseded in turn 2026-10-09: a
+  variable is written `<T>` once, where it is introduced, and `T` after - G8b, near the end.) The old middle ground (bare
   `T` resolves, only-in-type-args needs `<T>` written `Cell< <T> >`) made one variable two spellings, and
   the space was lexical noise. `<<` opening a type-argument list and `>>` closing one after a variable are
   split into angle brackets only while a type-argument list is being parsed, and `<<` is joined back if
@@ -3756,8 +3757,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   rest of the signature (`b Array<<T>, N>&`, `Array<<T>, N + M>`) and the body (`for i in range N`, `match N`,
   `N.Hash()`). `<N>` again is an error saying to write `N`; a bare `N` before the introduction is one too. A value of its
   type that does not adapt like a literal. (The first build wrote `<N>` everywhere, G8b's rule; replaced the same day.)
-  The rule is meant for type variables as well and is built behind one switch (`bareTypeVars` in semantic.c): until
-  it is flipped, a type variable is `<T>` everywhere (G8b).
+  The rule was meant for type variables as well and was built behind one switch (`bareTypeVars` in semantic.c); type
+  variables follow it since the same day (G8b, the entry below).
   **Inference binds by value only** (an `Array<F32, 3>` binds `N` = 3; two values for one variable is an error at the
   call, so a matmul shape mismatch is a compile error); an expression (`<N> + <M>`) is computed, never solved for -
   which sidesteps Rust's `generic_const_exprs` problem, since olang checks each instantiation anyway. **Identity** by
@@ -3828,7 +3829,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   note at the library's line. **Found on the way**: an array filled from a by-value parameter holding references was
   judged by the parameter's slot, and O25c's exactness between two of a function's scope variables was an error, not an
   obligation (both over-rejections, closed soundly); a capitalized `Str`/`Eq`/`Less` declaring errors pointed at a
-  `TryStr` that does not exist. Not fixed: a type-variable array literal (`<T>[...]`, E19's grammar) does not parse.
+  `TryStr` that does not exist. Not fixed: a type-variable array literal (`<T>[...]`, E19's grammar) does not parse
+  (fixed the same day by G8b's bare variables: `T[a, b]`, below).
 - **Builds are for this machine; `-a TARGET` names another (B12/B12a/B12b/B12c, B10a, X8, K1, 2026-10-09, the user:
   "by default compilation is always for the machine you are on. To cross compile, use the -arch= ... syntax").** The
   flag is **`-a`**, not `-arch=`: B1, the user's own rule of one character per flag (theirs to object to). Every
@@ -3859,6 +3861,27 @@ Go through this for every change to what olang means - a rule added, revised or 
   brings, measured**: a hand-tiled kernel whose rows are not whole vectors (oann's copy of linalg's old 4 x 12 F32
   kernel) is SLP-vectorized across rows with gathers - 3x slower native (5.1-5.4 s an epoch) than at 256 bits (1.8 s);
   tile by `TargetVectorBits`. Kept 512 for that price: the tuned width costs GEMM 1.4-1.5x and plain loops up to 1.3x.
+- **A generic's variable is written `<T>` once and `T` after (G8b, G1-G3, G6-G8, G11, G13, G19, G22, E19, E32,
+  2026-10-09, the user: "can we make Ts appear as T after being given as generics with <T>?").** A variable is
+  **introduced** once - by a type's parameter list (so its constraints, constructor, fields, destructor and a trait's
+  method signatures write it bare: `type Map<K Hashable<K>, V>`), or in a function by its first `<T>` read left to
+  right (receiver, parameters, results), which carries any constraint (`<T Shape>`) - and written bare everywhere after,
+  in the signature and the body: `fn (l List<<T>>&) Push(x T)`, `fn max(a <T>, b T) T`, `Array<T>(n)`, `match T`.
+  Replaces G8b's `<T>` everywhere; constants already followed the rule (G22) and type variables sat behind a switch.
+  `<T>` again is `error[G8b]` saying to write `T`, reported **once, at the declaration** (a syntax walk,
+  `writtenAgainIn`) rather than once per instantiation - which made G22's constant case one error too; a bare `T`
+  before its introduction says so with a note at the `<T>`; a bare name nothing introduced is a type's name as always
+  (an unknown type keeps its suggestion). **Decided (mine)**: a variable named after a type (G1's one error) is the
+  variable wherever its declaration writes it, where bare it used to be the type - a second error; a trait's method
+  signature introduces none of the trait's variables; a bare type variable stands wherever a type's name may - `T[a,
+  b]` is an array literal of its elements (the `<T>[...]` E19 admitted never parsed) and `x is T` is `is`'s type form,
+  the parser reading the item's introduced names minus its locals; `return T` is G23's error. `T(x)` - converting or
+  constructing through a variable - stays unsupported, as `<T>(x)` was. **Migration** by `tools/bare_typevars.py`,
+  kept and re-runnable (for oann, and after merges): 859 occurrences on 618 lines in 42 files - std (linalg 379, map 92,
+  math 81, list 46, array 41, iterator 29), shared.olang, checks, bench - trailing comments' columns kept, cases whose
+  point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
+  on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`
+  spelling (`typeExprIsBareTypeVar`), so the prelude's `acc U = init` in `Fold` failed O25 - it reads `U` now.
 - **A returned local lives where the result goes; what a constructor holds (O26a, O13a, C2d, C2g, E28, L18b, M23, T29f,
   D16d, 2026-10-09; O26a the coordinator's decision for the user's review, details mine).** From a usage study that wrote a
   front end in olang. **O26a**: a value local the function returns - `return l`, `return b.items`, parenthesized, an arm

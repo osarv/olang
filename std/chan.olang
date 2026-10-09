@@ -44,7 +44,7 @@ extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 type Chan<T> struct(cap I32) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
-    data mut Array<<T>>& = Array<<T>>(1 if cap == 0 else cap)
+    data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
     head mut I64 = 0
     tail mut I64 = 0
     count mut I64 = 0
@@ -65,7 +65,7 @@ fn Init(c mut Chan<<T>>&) {
 }
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
-fn place(c mut Chan<<T>>&, v <T>) I64 {
+fn place(c mut Chan<<T>>&, v T) I64 {
     c.data[c.tail] = v
     c.tail = (c.tail + 1) % c.data.Len()
     c.count = c.count + 1
@@ -75,7 +75,7 @@ fn place(c mut Chan<<T>>&, v <T>) I64 {
 }
 
 # the oldest value out of the ring, the lock held and the ring not empty
-fn take(c mut Chan<<T>>&) <T> {
+fn take(c mut Chan<<T>>&) T {
     v := c.data[c.head]
     c.head = (c.head + 1) % c.data.Len()
     c.count = c.count - 1
@@ -87,7 +87,7 @@ fn take(c mut Chan<<T>>&) <T> {
 # blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
 # taken. "while" is spelled as a do-loop guarded by a re-check, since a condition variable may wake spuriously and the
 # count must be re-read under the lock either way.
-fn Send(c mut Chan<<T>>&, v <T>) {
+fn Send(c mut Chan<<T>>&, v T) {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == c.data.Len() {
@@ -102,7 +102,7 @@ fn Send(c mut Chan<<T>>&, v <T>) {
 }
 
 # blocks while the channel is empty, then takes the oldest value
-fn Recv(c mut Chan<<T>>&) <T> {
+fn Recv(c mut Chan<<T>>&) T {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == 0 {
@@ -118,7 +118,7 @@ fn Recv(c mut Chan<<T>>&) <T> {
 # rendezvous channel, while the value has not been taken yet: it is withdrawn, so a value either reached a Recv or
 # was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
 # (cancel.WakeAt).
-fn SendUntil(c mut Chan<<T>>&, v <T>, tok cancel.Token&) ? cancel.Stopped {
+fn SendUntil(c mut Chan<<T>>&, v T, tok cancel.Token&) ? cancel.Stopped {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() {
@@ -147,7 +147,7 @@ fn SendUntil(c mut Chan<<T>>&, v <T>, tok cancel.Token&) ? cancel.Stopped {
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty
-fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) <T> ? cancel.Stopped {
+fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) T ? cancel.Stopped {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == 0 {

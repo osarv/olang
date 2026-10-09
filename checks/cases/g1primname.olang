@@ -2,6 +2,6 @@
 # G1: nor after a primitive, or a generic type's own parameter after a declared type
 # also: compilation failed with 2 error
 type P struct(x I32) { x }
-type Box<P> struct(v <P>) { v }
+type Box<P> struct(v P) { v }
 fn g(a <I32>) I32 { return 1 }
 fn main() ? { }
