@@ -477,6 +477,28 @@ static void cgParamTy(struct type t, char* buf, size_t n) {
     else llvmType(t, buf, n);
 }
 
+//D16: a function value crosses a call as its two words, code then environment - never as the { ptr, ptr } pair it is
+//everywhere else. An aggregate argument hides a constant code pointer from LLVM's inliner, which credits a call that
+//turns an indirect call direct only when it can see the callee: a capture-free lambda's pair is a constant and was
+//seen, a capturing one's (built around its environment) was not, so an algorithm taking it - linalg's Map - stayed out
+//of line wherever its caller was large, and called the lambda once per element (bench/repro/capturedvalue.olang).
+//The x86-64 calling convention passes the pair in the same two registers either way
+static bool cgParamSplit(struct type t) { return t.bType == BASETYPE_FUNC && !cgViaMemory(t); }
+
+//parameter k as a parameter list writes it - "TY %argK", a function value "ptr %argKc, ptr %argKe" - and, being the
+//same text, as an adapter forwarding it writes the argument; unnamed, the types alone
+static void cgParamEntry(struct cgBuf* b, struct type t, int k, bool named) {
+    if (cgParamSplit(t)) {
+        if (named) cgBufAdd(b, "ptr %%arg%dc, ptr %%arg%de", k, k);
+        else cgBufAdd(b, "ptr, ptr");
+        return;
+    }
+    char pty[256];
+    cgParamTy(t, pty, sizeof(pty));
+    if (named) cgBufAdd(b, "%s %%arg%d", pty, k);
+    else cgBufAdd(b, "%s", pty);
+}
+
 /* the actual LLVM return type of a function, accounting for its declared error set (see the report for
  * the design). A fallible function (errors.len > 0) wraps its success type in { i32 code, T payload }
  * (code 0 == success, payload only meaningful then), or is a bare i32 code when it has no success type
@@ -1789,12 +1811,12 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         bool outFirst = cgRetViaMemory(call->type);
         fprintf(ctx->out, "define linkonce_odr %s %s(%sptr %%closure", retTy, adapter, outFirst ? "ptr %out, " : "");
         for (int k = 0; k < dstT.scopeVars.len; k++) fprintf(ctx->out, ", ptr %%sarg%d", k);
+        struct cgBuf params = {0};
         for (int k = 0; k < dstT.vars.len; k++) {
-            char pty[256];
-            cgParamTy(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
-            fprintf(ctx->out, ", %s %%arg%d", pty, k);
+            cgBufAdd(&params, ", ");
+            cgParamEntry(&params, ((struct var*)ListGetIdx(&dstT.vars, k))->type, k, true);
         }
-        fputs(") {\nentry:\n", ctx->out);
+        fprintf(ctx->out, "%s) {\nentry:\n", params.len ? cgBufStr(&params) : "");
         fputs("  %inst = load ptr, ptr %closure, !tbaa !28\n"
               "  %sp = getelementptr { ptr, ptr }, ptr %closure, i32 0, i32 1\n  %iscope = load ptr, ptr %sp, !tbaa !28\n", ctx->out);
         struct cgBuf args = {0};
@@ -1815,9 +1837,8 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
             cgBufAdd(&args, "%s%s %%rv", args.len ? ", " : "", recvTy);
         }
         for (int k = 0; k < dstT.vars.len; k++) {
-            char pty[256];
-            cgParamTy(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
-            cgBufAdd(&args, ", %s %%arg%d", pty, k);
+            cgBufAdd(&args, "%s", args.len ? ", " : "");
+            cgParamEntry(&args, ((struct var*)ListGetIdx(&dstT.vars, k))->type, k, true);
         }
         char* argsText = cgBufStr(&args);
         if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", callSym, argsText);
@@ -2351,7 +2372,28 @@ static char* cgCheckedIntArith(struct cgCtx* ctx, struct operand* op, char* inst
 }
 
 //a float that is neither NaN nor infinite: x - x is 0 exactly then
+static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide);
+static char* cgBF16Arith(struct cgCtx* ctx, const char* instr, char* av, char* bv);
+
+//a float compare; a BF16's operands are widened to F32 first (a shift each, exact), so no bfloat value reaches LLVM's
+//selection - which, on a target without AVX512-BF16 (B12c), promotes the bfloat values feeding a compare to F32 and
+//can round one back through a call of __truncsfbf2. A constant operand ("0.0") is written as it is, an F32 constant
+static char* cgFcmp(struct cgCtx* ctx, const char* pred, const char* ty, char* a, char* b) {
+    if (!strcmp(ty, "bfloat")) {
+        a = cgWidenBF16(ctx, a, "float");
+        if (strcmp(b, "0.0")) b = cgWidenBF16(ctx, b, "float");
+        ty = "float";
+    }
+    char* r = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = fcmp %s %s %s, %s\n", r, pred, ty, a, b);
+    return r;
+}
+
 static char* cgIsFinite(struct cgCtx* ctx, char* ty, char* v) {
+    if (!strcmp(ty, "bfloat")) { //T4: asked of the exact F32 widening - a BF16 operation would be a call (cgNarrowBF16)
+        v = cgWidenBF16(ctx, v, "float");
+        ty = "float";
+    }
     char* d = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fsub %s %s, %s\n", d, ty, v, v);
     char* f = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp oeq %s %s, 0.0\n", f, ty, d);
     return f;
@@ -2360,7 +2402,7 @@ static char* cgIsFinite(struct cgCtx* ctx, char* ty, char* v) {
 //R20: a float result - infinite from finite operands is OVERFLOW, NaN from non-NaN operands INVALID
 static void cgCheckFloatResult(struct cgCtx* ctx, struct operand* op, char* ty, char* av, char* bv, char* r) {
     char* rFin = cgIsFinite(ctx, ty, r);
-    char* rNan = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp uno %s %s, %s\n", rNan, ty, r, r);
+    char* rNan = cgFcmp(ctx, "uno", ty, r, r);
     char* aFin = cgIsFinite(ctx, ty, av);
     char* bFin = bv ? cgIsFinite(ctx, ty, bv) : "true";
     char* both = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", both, aFin, bFin);
@@ -2369,9 +2411,9 @@ static void cgCheckFloatResult(struct cgCtx* ctx, struct operand* op, char* ty, 
     char* inf = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", inf, rInf, notNan);
     char* ovf = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ovf, inf, both);
     cgFailIf(ctx, op, ovf, "OVERFLOW");
-    char* aOrd = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp ord %s %s, %s\n", aOrd, ty, av, av);
+    char* aOrd = cgFcmp(ctx, "ord", ty, av, av);
     char* bOrd = "true";
-    if (bv) { bOrd = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = fcmp ord %s %s, %s\n", bOrd, ty, bv, bv); }
+    if (bv) bOrd = cgFcmp(ctx, "ord", ty, bv, bv);
     char* ords = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", ords, aOrd, bOrd);
     char* inv = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", inv, rNan, ords);
     cgFailIf(ctx, op, inv, "INVALID");
@@ -2387,7 +2429,13 @@ char* cgUnaryOp(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_NOT: fprintf(ctx->fnOut, "  %s = xor i1 %s, true\n", r, v); return r;
         case OPERATION_BTWSE_INV: fprintf(ctx->fnOut, "  %s = xor %s %s, -1\n", r, ty, v); return r;
         case OPERATION_MINUS:
-            if (TypeIsFloat(a->type)) fprintf(ctx->fnOut, "  %s = fneg %s %s\n", r, ty, v);
+            if (!strcmp(ty, "bfloat")) { //T4: the sign bit flipped - "fneg bfloat" is a call too (cgNarrowBF16)
+                char* bits = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = bitcast bfloat %s to i16\n", bits, v);
+                char* flip = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = xor i16 %s, -32768\n", flip, bits);
+                fprintf(ctx->fnOut, "  %s = bitcast i16 %s to bfloat\n", r, flip);
+            } else if (TypeIsFloat(a->type)) fprintf(ctx->fnOut, "  %s = fneg %s %s\n", r, ty, v);
             else if (op->checkRoot) return cgCheckedIntArith(ctx, op, "sub", a->type, "0", v); //R20
             else fprintf(ctx->fnOut, "  %s = sub %s 0, %s\n", r, ty, v);
             return r;
@@ -2406,9 +2454,13 @@ char* cgIncDec(struct cgCtx* ctx, struct operand* op, bool prefix, bool inc) {
     char* oldVal = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load %s, ptr %s%s\n", oldVal, ty, addr, tbaa);
     bool isF = TypeIsFloat(target->type);
-    char* newVal = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", newVal, isF ? (inc ? "fadd" : "fsub") : (inc ? "add" : "sub"),
-        ty, oldVal, isF ? "1.0" : "1");
+    char* newVal;
+    if (!strcmp(ty, "bfloat")) newVal = cgBF16Arith(ctx, inc ? "fadd" : "fsub", oldVal, "0xR3F80"); //1.0
+    else {
+        newVal = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", newVal, isF ? (inc ? "fadd" : "fsub") : (inc ? "add" : "sub"),
+            ty, oldVal, isF ? "1.0" : "1");
+    }
     fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", ty, newVal, addr, tbaa);
     return prefix ? newVal : oldVal;
 }
@@ -2835,9 +2887,9 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
     //scalar leaf, including <>-indirect struct references (spelled "ptr")
     char ty[256];
     llvmType(t, ty, sizeof(ty));
-    bool isF = TypeIsFloat(t);
+    if (TypeIsFloat(t)) return cgFcmp(ctx, "oeq", ty, aVal, bVal);
     char* r = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = %s %s %s %s, %s\n", r, isF ? "fcmp" : "icmp", isF ? "oeq" : "eq", ty, aVal, bVal);
+    fprintf(ctx->fnOut, "  %s = icmp eq %s %s, %s\n", r, ty, aVal, bVal);
     return r;
 }
 
@@ -2881,9 +2933,9 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
             return cgCheckedIntArith(ctx, op, op->opType == OPERATION_ADD ? "add" : op->opType == OPERATION_SUB ? "sub" : "mul",
                                      a->type, av, bv);
         if (op->opType == OPERATION_DIV || op->opType == OPERATION_MOD) {
-            char* z = cgNewTmp(ctx);
-            if (isF) fprintf(ctx->fnOut, "  %s = fcmp oeq %s %s, 0.0\n", z, aty, bv);
-            else fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv);
+            char* z;
+            if (isF) z = cgFcmp(ctx, "oeq", aty, bv, "0.0");
+            else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
             cgFailIf(ctx, op, z, "DIVIDE_BY_ZERO");
             if (!isF && !isU) { //the most negative value by -1: the true quotient is one past the maximum
                 char minv[32];
@@ -2903,10 +2955,14 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
         }
         if (isF && (op->opType == OPERATION_ADD || op->opType == OPERATION_SUB || op->opType == OPERATION_MUL
                     || op->opType == OPERATION_DIV)) {
-            char* fr = cgNewTmp(ctx);
             char* fi = op->opType == OPERATION_ADD ? "fadd" : op->opType == OPERATION_SUB ? "fsub"
                      : op->opType == OPERATION_MUL ? "fmul" : "fdiv";
-            fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", fr, fi, aty, av, bv);
+            char* fr;
+            if (!strcmp(aty, "bfloat")) fr = cgBF16Arith(ctx, fi, av, bv);
+            else {
+                fr = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", fr, fi, aty, av, bv);
+            }
             cgCheckFloatResult(ctx, op, aty, av, bv, fr);
             return fr;
         }
@@ -2938,6 +2994,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_BTSFT_R: instr = isU ? "lshr" : "ashr"; break;
         default: break;
     }
+    if (instr && !strcmp(aty, "bfloat")) return cgBF16Arith(ctx, instr, av, bv);
     if (instr) {
         fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", r, instr, aty, av, bv);
         return r;
@@ -2960,7 +3017,8 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_GRE: pred = isF ? "oge" : (isU ? "uge" : "sge"); break;
         default: ErrorBugFound(); return NULL;
     }
-    fprintf(ctx->fnOut, "  %s = %s %s %s %s, %s\n", r, isF ? "fcmp" : "icmp", pred, aty, av, bv);
+    if (isF) return cgFcmp(ctx, pred, aty, av, bv);
+    fprintf(ctx->fnOut, "  %s = icmp %s %s %s, %s\n", r, pred, aty, av, bv);
     return r;
 }
 
@@ -3074,10 +3132,11 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
         if (outFirst) cgBufAdd(&args, "ptr %%out");
         for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&args, "%sptr %%sarg%d", args.len ? ", " : "", k);
         for (int k = 0; k < f->type.vars.len; k++) {
-            char pty[256];
-            cgParamTy(((struct var*)ListGetIdx(&f->type.vars, k))->type, pty, sizeof(pty));
-            cgBufAdd(&params, ", %s %%arg%d", pty, k);
-            cgBufAdd(&args, "%s%s %%arg%d", args.len ? ", " : "", pty, k);
+            struct type pt = ((struct var*)ListGetIdx(&f->type.vars, k))->type;
+            cgBufAdd(&params, ", ");
+            cgParamEntry(&params, pt, k, true);
+            cgBufAdd(&args, "%s", args.len ? ", " : "");
+            cgParamEntry(&args, pt, k, true);
         }
         fprintf(ctx->out, "%s) {\nentry:\n", cgBufStr(&params));
         char* argsText = cgBufStr(&args);
@@ -3186,6 +3245,14 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                 && argOp->readVar->lambdaCaptures.len && SemanticParamTransient(func, i))
             argOp->cgEnvOnStack = true;
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
+        if (cgParamSplit(paramT)) { //D16: its two words (cgParamSplit)
+            char* code;
+            char* clo;
+            code = cgFnCode(ctx, av, &clo);
+            cgArgAdd(args, "ptr", code);
+            cgArgAdd(args, "ptr", clo);
+            continue;
+        }
         char aty[256];
         llvmType(paramT, aty, sizeof(aty));
         cgArgAdd(args, aty, av);
@@ -3452,6 +3519,50 @@ static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide) {
     return d;
 }
 
+//an F32 narrowed to a BF16: rounded to nearest, ties to even, a NaN kept with the top of its payload and made quiet -
+//the bits "fptrunc float to bfloat" gives, worked out in integers on the float's own bits. LLVM 18 lowers that fptrunc
+//to a call of __truncsfbf2 on every x86 target without AVX512-BF16 or AVX-NE-CONVERT, and B12c takes those away
+//(they flush subnormals), so it was a call per element that no loop vectorized; this is eleven integer instructions
+//that do. Bit for bit the same, so the evaluator, which rounds the F32's value once (MinifloatFrom), still agrees
+static char* cgNarrowBF16(struct cgCtx* ctx, char* f) {
+    char* u = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast float %s to i32\n", u, f);
+    char* hi = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", hi, u);
+    char* lsb = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = and i32 %s, 1\n", lsb, hi);
+    char* bias = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = add i32 %s, 32767\n", bias, lsb);
+    char* sum = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = add i32 %s, %s\n", sum, u, bias);
+    char* rnd = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", rnd, sum);
+    char* quiet = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = or i32 %s, 64\n", quiet, hi);
+    char* mag = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = and i32 %s, 2147483647\n", mag, u);
+    char* nan = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ugt i32 %s, 2139095040\n", nan, mag);
+    char* w = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = select i1 %s, i32 %s, i32 %s\n", w, nan, quiet, rnd);
+    char* t = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = trunc i32 %s to i16\n", t, w);
+    char* b = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast i16 %s to bfloat\n", b, t);
+    return b;
+}
+
+//BF16 arithmetic as LLVM's own promotion does it - both operands widened to F32 (exact), the operation there, the
+//result narrowed once - but with the widening and narrowing above, so nothing of it is a call. One rounding of an F32
+//result is the correctly rounded BF16 result for + - * / (24 >= 2 * 8 + 2), which is what the evaluator computes
+static char* cgBF16Arith(struct cgCtx* ctx, const char* instr, char* av, char* bv) {
+    char* wa = cgWidenBF16(ctx, av, "float");
+    char* wb = cgWidenBF16(ctx, bv, "float");
+    char* r = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = %s float %s, %s\n", r, instr, wa, wb);
+    return cgNarrowBF16(ctx, r);
+}
+
 static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to, char* val) {
     char fromTy[16], toTy[16];
     llvmType(from, fromTy, sizeof(fromTy));
@@ -3464,11 +3575,13 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
         if (fb == tb) { //F16 <-> BF16
             char* wide = from.bType == BASETYPE_BF16 ? cgWidenBF16(ctx, val, "float") : cgNewTmp(ctx);
             if (from.bType != BASETYPE_BF16) fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
+            if (!strcmp(toTy, "bfloat")) return cgNarrowBF16(ctx, wide);
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = fptrunc float %s to %s\n", r, wide, toTy);
             return r;
         }
         if (tb > fb && from.bType == BASETYPE_BF16) return cgWidenBF16(ctx, val, toTy);
+        if (!strcmp(toTy, "bfloat") && !strcmp(fromTy, "float")) return cgNarrowBF16(ctx, val);
         instr = tb > fb ? "fpext" : "fptrunc";
     } else if (fromF) instr = TypeIsUnsigned(to) ? "fptoui" : "fptosi";
     else if (toF && to.bType == BASETYPE_BF16) { //T4: rounded once, by the runtime's own conversion
@@ -5078,15 +5191,24 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             llvmType(op->type, to, sizeof(to));
             //LLVM 18's InstCombine takes a bitcast between half and bfloat for a no-op cast, so it merges
             //F16 bits made into a BF16 (or the reverse) with the conversion that follows: fpext, fptosi and
-            //the rest then read the bits as the other type (fuzz/repro/bf16bitcastfold.ll). An empty asm
-            //on the integer keeps the two bitcasts apart; it emits no instruction.
-            if (op->type.bType == BASETYPE_F16 || op->type.bType == BASETYPE_BF16) {
+            //the rest then read the bits as the other type (fuzz/repro/bf16bitcastfold.ll). That needs a half
+            //on one side of the i16 and a bfloat on the other, and only an F16's bits put a half beside an i16
+            //(a BF16's are also widened and narrowed through one, cgWidenBF16/cgNarrowBF16) - so an empty asm on
+            //the integer of every F16 bitcast, and of no other, keeps the two apart. It emits no instruction, but
+            //no loop vectorizes through it, which is why a BF16's bits are left plain
+            bool toHalf = !strcmp(to, "half"), fromHalf = !strcmp(from, "half");
+            if (toHalf) {
                 char* opaque = cgNewTmp(ctx);
                 fprintf(ctx->fnOut, "  %s = call i16 asm \"\", \"=r,0\"(i16 %s)\n", opaque, v);
                 v = opaque;
             }
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = bitcast %s %s to %s\n", r, from, v, to);
+            if (fromHalf) {
+                char* opaque = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = call i16 asm \"\", \"=r,0\"(i16 %s)\n", opaque, r);
+                r = opaque;
+            }
             return r;
         }
         case OPERATION_READ_VAR: case OPERATION_INDEX: case OPERATION_MEMBER: {
@@ -9520,12 +9642,11 @@ void cgEmitParamList(FILE* out, struct var* func, bool named) {
     bool dtor = cgIsDtor(func);
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
-        char pty[256];
-        if (dtor) snprintf(pty, sizeof(pty), "ptr");
-        else cgParamTy(p->type, pty, sizeof(pty));
         bool first = (i == 0 && !anyScope && !ctor);
-        fprintf(out, "%s%s", first ? "" : ", ", pty);
-        if (named) fprintf(out, " %%arg%d", i);
+        struct cgBuf b = {0};
+        if (dtor) cgBufAdd(&b, named ? "ptr %%arg%d" : "ptr", i);
+        else cgParamEntry(&b, p->type, i, named);
+        fprintf(out, "%s%s", first ? "" : ", ", cgBufStr(&b));
     }
 }
 
@@ -9688,8 +9809,15 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         char* slot = cgDeclareLocal(ctx, p->name, p->type);
         fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, pty);
         //%argN is already the real boundary-form value (aggregate or scalar) - store it directly, unlike
-        //cgStoreInto's by-ref branch which expects our internal ptr-to-storage convention
-        fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
+        //cgStoreInto's by-ref branch which expects our internal ptr-to-storage convention. A function value comes as
+        //its two words (cgParamSplit), paired again here
+        if (cgParamSplit(p->type)) {
+            char* half = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } undef, ptr %%arg%dc, 0\n", half, i);
+            char* pair = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = insertvalue { ptr, ptr } %s, ptr %%arg%de, 1\n", pair, half, i);
+            fprintf(ctx->fnOut, "  store { ptr, ptr } %s, ptr %s\n", pair, slot);
+        } else fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
         cgDbgVar(ctx, slot, p->name, p->type, func->tok.lineNr, i + 1);
         if (p->paramWritten && !p->type.structMAlloc && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc) ListAdd(&ownCopies, &i);
     }

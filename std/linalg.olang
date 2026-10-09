@@ -1010,8 +1010,18 @@ fn tileChoice(m I64, n I64, mr I64, wideCols I64, thinCols I64, mayExchange Bool
     return thin, false
 }
 
-# a product this small (m n k, the multiply-adds) is computed by gemmDirect: packing would cost more than it saves
-smallProduct I64 = 64 * 64 * 64
+# whether a product of m x k by k x n is computed by gemmDirect rather than packed: one so small that the packed path's
+# own costs outweigh what it saves - at most smallProduct multiply-adds - or a result of fewer than twelve rows, each at
+# least four vectors long, against a right operand that stays in the cache (k n at most 65536 elements): the direct
+# loop then runs along the rows at full width, where a tile would be mostly padding. Measured against the packed path
+# on AVX-512, AVX2 and SSE (bench/README.md). The bound this replaced, 64^3 multiply-adds of any shape, made a product
+# as small as attention's 64 x 32 x 64 two to three times slower than packing it on AVX-512, and only the shapes above
+# ever came out ahead
+smallProduct I64 = 1024
+
+fn computedDirectly(m I64, n I64, k I64, z <T>) Bool {
+    return m * n * k <= smallProduct or (m < 12 and n >= 4 * vectorLanes(z) and k * n <= 65536)
+}
 
 # a small product, in the element type and without packing: each row of C updated from rows of B (the i-k-j loop,
 # vectorized along the rows) - B not transposed
@@ -1264,7 +1274,7 @@ fn productIn(m I64, n I64, k I64, a <SA>, transA Bool, b <SB>, transB Bool, alph
                                 epilogueRegion(c, ldc, 0, m, 0, n, ep, z)
                                 return
                             }
-                            if m * n * k <= smallProduct and not transB {
+                            if not transB and computedDirectly(m, n, k, z) {
                                 gemmDirect(transA, m, n, k, alpha, a.d, a.ld, b.d, b.ld, beta, c, ldc)
                                 epilogueRegion(c, ldc, 0, m, 0, n, ep, z)
                                 return
@@ -2802,6 +2812,35 @@ if TestBuild {
                 d := Matrix<F64>(m, n)
                 Gemm(d, a, transA, b, transB, 1.0, 0.0, 4)
                 assert d == c
+            }
+        }
+    }
+
+    # computedDirectly: the shapes either side of each of its bounds, every element a small integer so that both paths'
+    # sums are exact and so equal
+    test "products either side of the direct path's bounds are the plain sum" {
+        shapes := I64[8, 8, 8, 10, 10, 10, 11, 11, 11, 5, 64, 64, 11, 64, 64, 12, 64, 64, 8, 32, 32, 64, 32, 64, 5, 1024, 64,
+                      5, 1025, 64, 7, 64, 3]
+        for s in range shapes.Len() / 3 {
+            m I64 = shapes[3 * s]
+            k I64 = shapes[3 * s + 1]
+            n I64 = shapes[3 * s + 2]
+            for transA in Bool[false, true] {
+                a := Matrix<F32>(k, m) if transA else Matrix<F32>(m, k)
+                b := Matrix<F32>(k, n)
+                for i in range a.Data.Len() { a.Data[i] = F32(i * 5 % 7 - 3) }
+                for i in range b.Data.Len() { b.Data[i] = F32(i * 3 % 5 - 2) }
+                want := referenceProduct(a, transA, b, false)
+                c := Matrix<F32>(m, n)
+                Gemm(c, a, transA, b, false)
+                assert c.ToF64() == want, "the product " $m "x" $k "x" $n
+                ai := Matrix<I32>(a.Rows, a.Cols)
+                ai.Convert(a)
+                bi := Matrix<I32>(k, n)
+                bi.Convert(b)
+                ci := Matrix<I32>(m, n)
+                Gemm(ci, ai, transA, bi, false)
+                assert ci.ToF64() == want, "the integer product " $m "x" $k "x" $n
             }
         }
     }

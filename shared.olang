@@ -6843,6 +6843,21 @@ test "K1: compile-time evaluation keeps a parameter's repoint local and an argum
     assert (try ktOuterArg() catch default 9) == 9
 }
 
+# K1/R10: the same through the statement form - "try ktTake(try ktRaise()) catch { ... }" handles ktTake's errors only;
+# ktRaise's leaves the function through the argument's own try. The evaluator let the statement's clauses take it, so
+# a baked global and an assert said 3 where the program said 9 (found by the fuzzer, seed 551)
+fn ktOuterStmt() I32 ? MathError {
+    x I32 = 1
+    try ktTake(try ktRaise()) catch MathError.DIV_BY_ZERO { x = 2 } catch { x = 3 }
+    return x
+}
+KtBypassStmt I32 = try ktOuterStmt() catch default 9
+
+test "K1: an argument's own try leaves the function past a try statement's clauses, while compiling too" {
+    assert KtBypassStmt == 9
+    assert (try ktOuterStmt() catch default 9) == 9
+}
+
 # B9c: a top-level condition the token evaluator cannot decide - a call, a global computed by one - is
 # decided by compile-time evaluation, and a branch it chooses may hold another such condition
 fn ccPage() I32 {
@@ -9228,6 +9243,50 @@ test "D16e: a spawned lambda captures its loop's variables per task" {
     assert out[7].n == 21 and sums[5] == 30
 }
 
+# D16b/E13b: a lambda called where it is written has no expected type - its written signature says what the call takes
+# and gives (it was checked only after the call, against an empty placeholder: "expected 0 arguments", no result)
+fn lamCalledHere(k I64) I64 { return fn(a I64) I64 { return a * k }(3) }
+LamCalledHereBaked I64 = lamCalledHere(5)
+
+test "D16b: a lambda called where it is written" {
+    assert lamCalledHere(4 + I64(ctRuntimeZero)) == 12 and LamCalledHereBaked == 15
+    x := fn() I64 { return 7 }()
+    assert x == 7
+}
+
+# D16e/P2: a lambda called where it is spawned - "spawn fn(k I64) { ... }(10)" - is the spawned lambda with arguments:
+# its closure is made at the spawn and lasts until the join. It used to be built in the loop body, which closed - and
+# was reused by the next iteration - while the task ran. Capturing two parameters' references puts a lambda where
+# neither lives, the block it is made in, so the uncalled form was refused outright; spawned, it is the join block
+fn lamSpawnCalled(a Array<I64>&, c mut Array<I64>&, n I64) {
+    join {
+        for t in range n {
+            spawn fn(k I64) {
+                for i in range 16 { c[t * 16 + i] = a[t] * k }
+            }(10)
+            spawn fn() { c[n * 16 + t] = a[t] }
+            churnArena()                            # what the next iteration's closures would be built over
+        }
+    }
+}
+fn lamSpawnCalledSum(n I64) I64 {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i + 1 }
+    c := Array<I64>(17 * n)
+    lamSpawnCalled(a, c, n)
+    for t in range n {
+        for i in range 16 { assert c[t * 16 + i] == (t + 1) * 10 }
+    }
+    return c.Fold(I64(0), fn(acc, x) { return acc + x })
+}
+LamSpawnCalledBaked I64 = lamSpawnCalledSum(8)
+
+test "D16e: a lambda called where it is spawned keeps its captures until the join" {
+    for round in range 20 { assert lamSpawnCalledSum(8 + I64(ctRuntimeZero)) == 5796 }
+    assert LamSpawnCalledBaked == 5796
+    assert churnArena() == 2469000
+}
+
 # T29e/T29f: a declared array type extending its base inherits every array method - text counts, maps and searches
 # like any array
 type LamNums extends Array<I32>
@@ -11325,6 +11384,42 @@ FzReinterpBaked String = fzReinterp(5)
 test "E33: the bits of one 16-bit float made into the other are read as the other" {
     assert FzReinterpBaked == "2050 2048 2048 2.312 2.3125 2 4100 true" and fzReinterp(5) == FzReinterpBaked
     assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
+}
+
+# T4: an F32 narrowed to a BF16 - "BF16(x)", and every BF16 operation, which is computed in F32 and narrowed once - is
+# integer arithmetic on the F32's bits, inline, where it was a call of __truncsfbf2 per element (with AVX512-BF16 off,
+# B12c, LLVM 18 has no other lowering): to nearest, ties to even, through the subnormals and into infinity, a NaN kept
+# and made quiet. Decided while compiling (an assert, a baked global) and computed at run time, the same bits
+fn bfNarrowRight(one U32) Bool {
+    ins := U32[0x3F808000, 0x3F818000, 0x3F80FFFF, 0x3F808001, 0x00008000, 0x00018000, 0x007FFFFF, 0x00000001,
+               0x7F7F7FFF, 0x7F7F8000, 0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0x80000000, 0xBF808000, 0x80018000]
+    want := U16[0x3F80, 0x3F82, 0x3F81, 0x3F81, 0x0000, 0x0002, 0x0080, 0x0000,
+                0x7F7F, 0x7F80, 0x7F80, 0xFF80, 0x7F80, 0x8000, 0xBF80, 0x8002]
+    for i, u in ins {
+        if BF16((u * one).F32FromBits()).Bits() != want[i] { return false }
+    }
+    a := BF16(1.0 * F32(one)) + BF16(0.00390625)    # 1 + 2^-8, exact in F32: a tie, to even
+    b := BF16(1.0078125 * F32(one)) + BF16(0.00390625)
+    c := BF16(3.0 * F32(one)) / BF16(7.0)
+    d := -BF16(2.5 * F32(one))
+    e := BF16(255.0 * F32(one))
+    e++
+    f := BF16(F16(0.333251953125) * F16(one))       # an F16 narrowed through F32
+    return (a.Bits() == 0x3F80 and b.Bits() == 0x3F82 and c.Bits() == 0x3EDB and d.Bits() == 0xC020
+        and e.Bits() == 0x4380 and f.Bits() == 0x3EAB)
+}
+BfNarrowBaked := bfNarrowRight(1)
+
+test "T4: an F32 narrows to a BF16 inline, rounded once, ties to even" {
+    assert bfNarrowRight(1)
+    assert BfNarrowBaked and bfNarrowRight(U32(fzRun))
+    one U32 = U32(fzRun)
+    # a NaN stays a NaN - one whose payload is all in the bits narrowing drops included; which NaN is unspecified
+    # (E33a), and the code generator keeps the top of the payload and makes it quiet, as __truncsfbf2 did
+    for u in U32[0x7F800001, 0xFFC12345, 0x7FA00000, 0x7FFFFFFF] {
+        b := BF16((u * one).F32FromBits())
+        assert b != b
+    }
 }
 
 # T4/T6b: a BF16 widened, computed on and narrowed to F16 is computed as written - at -O3 LLVM 18 narrowed the BF16

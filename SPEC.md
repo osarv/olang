@@ -1302,7 +1302,8 @@ the result type and the error list. Whatever the lambda writes must agree with i
 function (§12) supplies what its type arguments already fix; a type variable reached only through the
 lambda's result is then inferred from it, as from any argument (G9).
 
-**D16b.** Without an expected type, every parameter's type must be written, and the result and errors not
+**D16b.** Without an expected type - a lambda called where it is written (`fn(x I64) I64 { return x * 2 }(3)`, E13b) has
+none - every parameter's type must be written, and the result and errors not
 written are taken from the body: the result is the type of the first `return`'s value - text is a `String`
 (T29c) and a numeric literal its own type - or none when the body returns no value; the errors are those its
 `error` statements and uncaught `try`s produce, in the order they first appear, and a plain `error` makes it
@@ -1338,7 +1339,10 @@ where its captures are seen through: a function value it captured is then known 
 
 **D16e (spawning a lambda).** `spawn fn() { ... }` starts a task running the lambda's body (§6.8 P1). The lambda
 takes no parameters; its captures are made when the `spawn` runs, so a loop spawning one per iteration hands
-each task its own copy of the loop's variables.
+each task its own copy of the loop's variables. A lambda called where it is spawned, `spawn fn(k I64) { ... }(10)`, is
+the same task with arguments: its captures are made when the `spawn` runs and it lives as the uncalled form does.
+Either way the lambda lives until the join (P2): where D16d would put it in the block it is made in because what it
+captured lives in several scopes, it is built in the join block when each of those lasts until the join.
 
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
@@ -3339,8 +3343,9 @@ leave the `join` block until every task started in it has finished, so it provab
 free — an argument must live at least as long as the `join` block itself, which an argument declared in a
 block *inside* the join does not. Such a spawn is rejected. The same holds for a function value a task is a
 call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
-through it is rejected. A spawned lambda (D16e) is instead built to last until the join, and the references it
-captured must outlive the join block on the same terms as an argument. The same holds for everything an argument
+through it is rejected. A spawned lambda (D16e), called where it is written or not, is instead built to last until the join, and the
+references it captured must outlive the join block on the same terms as an argument. A function value computed for the
+call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise. The same holds for everything an argument
 **holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
 built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
 last until the join. Each task gets its own scope, as any
