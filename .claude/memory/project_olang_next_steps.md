@@ -475,6 +475,11 @@ because what it finds about structure feeds the refactor.
 - 01:00 CEST: qc merged and pushed (999ae6c, its own verify). oann breaks on it until migrated (perm_mut adds ~54 mut):
   oann-p7 told to migrate as its last step against /home/user/wt/oannc3 (master 999ae6c) and point the makefile there.
   Running: s4cg, s4sem, oann-p7.
+- 01:20 CEST: s4cg merged and pushed (a9fdf1b, verified). Started wt-boot: C sources into bootstrap/ (build/out
+  stays), runtime IR into bootstrap/runtime.c, dead code + stale comments outside semantic.c (semantic.c after s4sem),
+  `make bootstrap`, bootstrap/README.md; acceptance = identical normalized IR + verify. Running: s4sem, oann-p7,
+  review3 (rvfix/rv2fix/qc soundness), boot. NEXT when boot lands and s4sem is reviewed + merged: start the port, M1
+  scanner (and M2 diagnostics), C compiler fixes only (QB).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
