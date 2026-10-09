@@ -3364,6 +3364,28 @@ test "the default error: an untyped catch catches it" {
     assert result == -99
 }
 
+# R17: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
+# "?" function as its own failure, as an uncaught "try" expression's does
+error R17Err {
+    Loud
+    Quiet
+}
+fn r17Fail(n I32) ? R17Err {
+    if n == 1 { error R17Err.Quiet }
+    error R17Err.Loud
+}
+fn r17Partial(n I32) I32 ? {
+    try r17Fail(n) catch R17Err.Quiet { return 1 }
+    return 2
+}
+fn r17Both() I32 { return (try r17Partial(1) catch default 7) * 10 + (try r17Partial(2) catch default 9) }
+R17Baked := r17Both()
+
+test "R17: a try statement catching part of what its call can fail with, in a bare '?' function" {
+    assert r17Both() == 19
+    assert R17Baked == 19
+}
+
 test "an undetermined scope variable binds to the caller's own scope" {
     p Point& = makePoint(3, 4)
     assert p.x == 3
