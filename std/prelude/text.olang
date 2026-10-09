@@ -244,234 +244,239 @@ fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
 # growing, without affecting it
 fn (b StringBuilder&) ToString() mut String& { return String(b.chars.ToArray()) }
 
-test "Eq compares contents, and == goes through it; same asks for one instance" {
-    a String& = "hello"
-    bytes := Array<U8>(5, 'x')
-    bytes[0] = 'h'
-    bytes[1] = 'e'
-    bytes[2] = 'l'
-    bytes[3] = 'l'
-    bytes[4] = 'o'
-    b := String(bytes)        # bytes become text by naming them so (T29c)
-    assert a.Eq(b)
-    assert a.Eq("hello")
-    assert not a.Eq("hell")
-    assert not a.Eq("hellO")
-    assert "".Eq("")
-    assert ("x = " $42).Eq("x = 42")        # a rendering is text like any other
-    c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
-    d String& = "hello"
-    assert a == c and c == "hello" and "hello" == d and a != "hell"
-    assert a is a and a is not c    # E10c: identity, whatever Eq says
-    n String& = null
-    assert n == null and n != a and a != n
-}
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
 
-test "Compare orders bytewise, a prefix first" {
-    assert "abc".Compare("abc") == 0
-    assert "abc".Compare("abd") == -1
-    assert "abd".Compare("abc") == 1
-    assert "ab".Compare("abc") == -1
-    assert "abc".Compare("ab") == 1
-    assert "".Compare("a") == -1
-}
-
-test "prefixes, suffixes and searching" {
-    s := "hello, world"
-    assert s.StartsWith("hello")
-    assert not s.StartsWith("world")
-    assert s.EndsWith("world")
-    assert s.StartsWith("")
-    assert not "hi".StartsWith("high")
-    assert (try s.FindByte(',') catch default -1) == 5
-    assert (try s.FindByte('z') catch default -1) == -1
-    assert (try s.Find("world") catch default -1) == 7
-    assert (try s.Find("o") catch default -1) == 4
-    assert (try s.Find("") catch default -1) == 0
-    assert (try s.Find("worlds") catch default -1) == -1
-    assert (try s.Find("hello, world!") catch default -1) == -1        # longer than the text
-    assert (try "aab".Find("ab") catch default -1) == 1                # a false start, then the match
-    assert (try "".Find("") catch default -1) == 0 and (try "".Find("a") catch default -1) == -1
-    missed := false
-    try s.Find("xyz") catch { missed = true }
-    assert missed
-    assert s.Contains("lo, w")
-    assert not "".Contains("a")
-}
-
-test "Trim borrows the receiver's storage" {
-    assert "  padded \t\n".Trim().Eq("padded")
-    assert "bare".Trim().Eq("bare")
-    assert "   ".Trim().Eq("")
-    assert "".Trim().Eq("")
-}
-
-# the result of a fallible call can be bound only where there is a signature to propagate through, so the
-# checks live in a helper, as io.olang's do
-fn checkParses(t String&, want I64) ? ParseError {
-    got I64 = try t.ParseInt()
-    assert got == want
-}
-
-# each of these lets exactly one word through and swallows the other two, so a test - which must catch
-# everything it tries - can still tell which word a failure was
-fn onlyEmpty(t String&) ? ParseError {
-    try t.ParseInt() catch ParseError.INVALID + ParseError.OVERFLOW { }
-}
-
-fn onlyInvalid(t String&) ? ParseError {
-    try t.ParseInt() catch ParseError.EMPTY + ParseError.OVERFLOW { }
-}
-
-fn onlyOverflow(t String&) ? ParseError {
-    try t.ParseInt() catch ParseError.EMPTY + ParseError.INVALID { }
-}
-
-test "ParseInt reads decimals across the whole I64 range" {
-    ok Bool = true
-    try checkParses("0", 0) catch ParseError { ok = false }
-    try checkParses("42", 42) catch ParseError { ok = false }
-    try checkParses("-17", -17) catch ParseError { ok = false }
-    try checkParses("+8", 8) catch ParseError { ok = false }
-    try checkParses("9223372036854775807", 9223372036854775807) catch ParseError { ok = false }
-    try checkParses("-9223372036854775808", -9223372036854775807 - 1) catch ParseError { ok = false }
-    assert ok
-}
-
-test "ParseInt names what was wrong" {
-    e Bool = false
-    try onlyEmpty("") catch ParseError { e = true }
-    assert e
-    i Bool = false
-    try onlyInvalid("12a") catch ParseError { i = true }
-    assert i
-    i = false
-    try onlyInvalid("-") catch ParseError { i = true }
-    assert i
-    i = false
-    try onlyInvalid(" 1") catch ParseError { i = true }  # no surrounding space: Trim first
-    assert i
-    o Bool = false
-    try onlyOverflow("9223372036854775808") catch ParseError { o = true }
-    assert o
-    o = false
-    try onlyOverflow("-9223372036854775809") catch ParseError { o = true }
-    assert o
-    o = false
-    try onlyOverflow("99999999999999999999") catch ParseError { o = true }
-    assert o
-    o = false
-    try onlyOverflow("12") catch ParseError { o = true }
-    assert not o
-}
-
-# T29c: text written in the program is a String wherever one is wanted - declared from, called on, passed
-fn takesBytes(b Array<U8>&) I64 { return b.Len() }
-
-test "T29c: written text is a String, and a String is still its bytes" {
-    s := "  hi  "                        # ":=" from text declares a String
-    assert s.Trim().Eq("hi")             # so it has text's methods
-    r := $42 "!"                         # a rendering and a join are text too
-    assert r.Eq("42!")
-    assert s[2:4].Eq("hi")               # a slice of text is text
-    assert takesBytes(s) == 6            # and text goes wherever bytes are wanted
-    raw := Array<U8>(2, 'z')
-    assert String(raw).Eq("zz")          # bytes become text only by saying so
-}
-
-test "equal text hashes equally, whatever storage holds it" {
-    assert "ab".Hash() == String(U8['a', 'b']).Hash()
-    assert "ab".Hash() != "ba".Hash()
-}
-
-test "Split gives the pieces between separators, borrowed from the text" {
-    p := "a,b,,c".Split(",")
-    assert p.Len() == 4
-    assert p[0].Eq("a") and p[1].Eq("b") and p[2].Eq("") and p[3].Eq("c")
-    q := ",x,".Split(",")
-    assert q.Len() == 3 and q[0].Eq("") and q[1].Eq("x") and q[2].Eq("")
-    assert "none".Split(",").Len() == 1 and "none".Split(",")[0].Eq("none")
-    e := "".Split(",")
-    assert e.Len() == 1 and e[0].Eq("")
-    w := "one::two::three".Split("::")
-    assert w.Len() == 3 and w[1].Eq("two") and w[2].Eq("three")
-    b := "abc".Split("")
-    assert b.Len() == 3 and b[0].Eq("a") and b[2].Eq("c")
-    n I32 = 0
-    for piece in "1 2 3".Split(" ") {
-        n = n + I32(try piece.ParseInt() catch default 0)
+if TestBuild {
+    test "Eq compares contents, and == goes through it; same asks for one instance" {
+        a String& = "hello"
+        bytes := Array<U8>(5, 'x')
+        bytes[0] = 'h'
+        bytes[1] = 'e'
+        bytes[2] = 'l'
+        bytes[3] = 'l'
+        bytes[4] = 'o'
+        b := String(bytes)        # bytes become text by naming them so (T29c)
+        assert a.Eq(b)
+        assert a.Eq("hello")
+        assert not a.Eq("hell")
+        assert not a.Eq("hellO")
+        assert "".Eq("")
+        assert ("x = " $42).Eq("x = 42")        # a rendering is text like any other
+        c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
+        d String& = "hello"
+        assert a == c and c == "hello" and "hello" == d and a != "hell"
+        assert a is a and a is not c    # E10c: identity, whatever Eq says
+        n String& = null
+        assert n == null and n != a and a != n
     }
-    assert n == 6
-}
 
-# the same searching and splitting, computed while compiling (K2): a miss is the same error there as at run time
-fn splitShape() I64 {
-    p := "x::y::::z".Split("::")
-    q := "1 22 333".Split(" ")
-    found I64 = (try "hello".Find("ll") catch default -1) * 10 + (try "hello".Find("lo!") catch default -1)
-    return p.Len() * 100000 + p[2].Len() * 10000 + q.Len() * 1000 + q[2].Len() * 100 + found
-}
-
-splitShapeBaked := splitShape()
-
-test "Split and Find, evaluated while compiling as at run time" {
-    assert splitShapeBaked == 400000 + 0 + 3000 + 300 + 19
-    assert splitShape() == splitShapeBaked
-    one := "a b  c ".Split(" ")              # a one-byte separator: adjacent ones and one at the end
-    assert one.Len() == 5 and one[1] == "b" and one[2] == "" and one[3] == "c" and one[4] == ""
-}
-
-test "a StringBuilder gathers text and hands it back as one String" {
-    b := StringBuilder()
-    assert b.Len() == 0 and b.ToString() == ""
-    b.Push("define i32 @f")
-    b.PushChar('(')
-    b.Push($42)                          # a value goes in as its rendering
-    b.PushChar(')')
-    assert b.Len() == 17
-    s := b.ToString()
-    assert s == "define i32 @f(42)"
-    b.Push(" {")                         # the String handed back is a copy: the builder keeps growing apart from it
-    assert s == "define i32 @f(42)" and b.ToString() == "define i32 @f(42) {"
-    long := StringBuilder()
-    for i in range 1000 {
-        long.Push("ab")
-        long.PushChar('c')
+    test "Compare orders bytewise, a prefix first" {
+        assert "abc".Compare("abc") == 0
+        assert "abc".Compare("abd") == -1
+        assert "abd".Compare("abc") == 1
+        assert "ab".Compare("abc") == -1
+        assert "abc".Compare("ab") == 1
+        assert "".Compare("a") == -1
     }
-    t := long.ToString()
-    assert t.Len() == 3000 and t[0] == 'a' and t[2] == 'c' and t[2997] == 'a' and t[2999] == 'c'
-    assert t.EndsWith("abcabc") and t.Split("c").Len() == 1001
-}
 
-# the same, built while compiling (K2): the evaluator runs the builder as the run time does
-fn builtText() String& {
-    b := StringBuilder()
-    for i in range 3 {
-        b.Push($i)
-        b.PushChar(',')
+    test "prefixes, suffixes and searching" {
+        s := "hello, world"
+        assert s.StartsWith("hello")
+        assert not s.StartsWith("world")
+        assert s.EndsWith("world")
+        assert s.StartsWith("")
+        assert not "hi".StartsWith("high")
+        assert (try s.FindByte(',') catch default -1) == 5
+        assert (try s.FindByte('z') catch default -1) == -1
+        assert (try s.Find("world") catch default -1) == 7
+        assert (try s.Find("o") catch default -1) == 4
+        assert (try s.Find("") catch default -1) == 0
+        assert (try s.Find("worlds") catch default -1) == -1
+        assert (try s.Find("hello, world!") catch default -1) == -1        # longer than the text
+        assert (try "aab".Find("ab") catch default -1) == 1                # a false start, then the match
+        assert (try "".Find("") catch default -1) == 0 and (try "".Find("a") catch default -1) == -1
+        missed := false
+        try s.Find("xyz") catch { missed = true }
+        assert missed
+        assert s.Contains("lo, w")
+        assert not "".Contains("a")
     }
-    b.Push("end")
-    return b.ToString()
-}
 
-builtBaked := builtText()
+    test "Trim borrows the receiver's storage" {
+        assert "  padded \t\n".Trim().Eq("padded")
+        assert "bare".Trim().Eq("bare")
+        assert "   ".Trim().Eq("")
+        assert "".Trim().Eq("")
+    }
 
-test "a StringBuilder, evaluated while compiling as at run time" {
-    assert builtBaked == "0,1,2,end"
-    assert builtText() == builtBaked
-}
+    # the result of a fallible call can be bound only where there is a signature to propagate through, so the
+    # checks live in a helper, as io.olang's do
+    fn checkParses(t String&, want I64) ? ParseError {
+        got I64 = try t.ParseInt()
+        assert got == want
+    }
 
-# mutable, so the check below is made at run time, where the arena is - and the reason it exists: ToString's text is
-# built through the conversion String(...), and the call inside it used to land in ToString's own scope, closed by its
-# return, so the next scope to take a chunk - here scribble's own - wrote over the text
-churnBytes mut I64 = 100
-fn scribble(n I64) I64 {
-    a := Array<Char>(n, 'z')
-    return a.Len()
-}
-test "a StringBuilder's text lives where the caller keeps it" {
-    b := StringBuilder()
-    b.Push("import \"std/io\"\n")
-    t := b.ToString()
-    assert scribble(churnBytes) == churnBytes and t == "import \"std/io\"\n"
+    # each of these lets exactly one word through and swallows the other two, so a test - which must catch
+    # everything it tries - can still tell which word a failure was
+    fn onlyEmpty(t String&) ? ParseError {
+        try t.ParseInt() catch ParseError.INVALID + ParseError.OVERFLOW { }
+    }
+
+    fn onlyInvalid(t String&) ? ParseError {
+        try t.ParseInt() catch ParseError.EMPTY + ParseError.OVERFLOW { }
+    }
+
+    fn onlyOverflow(t String&) ? ParseError {
+        try t.ParseInt() catch ParseError.EMPTY + ParseError.INVALID { }
+    }
+
+    test "ParseInt reads decimals across the whole I64 range" {
+        ok Bool = true
+        try checkParses("0", 0) catch ParseError { ok = false }
+        try checkParses("42", 42) catch ParseError { ok = false }
+        try checkParses("-17", -17) catch ParseError { ok = false }
+        try checkParses("+8", 8) catch ParseError { ok = false }
+        try checkParses("9223372036854775807", 9223372036854775807) catch ParseError { ok = false }
+        try checkParses("-9223372036854775808", -9223372036854775807 - 1) catch ParseError { ok = false }
+        assert ok
+    }
+
+    test "ParseInt names what was wrong" {
+        e Bool = false
+        try onlyEmpty("") catch ParseError { e = true }
+        assert e
+        i Bool = false
+        try onlyInvalid("12a") catch ParseError { i = true }
+        assert i
+        i = false
+        try onlyInvalid("-") catch ParseError { i = true }
+        assert i
+        i = false
+        try onlyInvalid(" 1") catch ParseError { i = true }  # no surrounding space: Trim first
+        assert i
+        o Bool = false
+        try onlyOverflow("9223372036854775808") catch ParseError { o = true }
+        assert o
+        o = false
+        try onlyOverflow("-9223372036854775809") catch ParseError { o = true }
+        assert o
+        o = false
+        try onlyOverflow("99999999999999999999") catch ParseError { o = true }
+        assert o
+        o = false
+        try onlyOverflow("12") catch ParseError { o = true }
+        assert not o
+    }
+
+    # T29c: text written in the program is a String wherever one is wanted - declared from, called on, passed
+    fn takesBytes(b Array<U8>&) I64 { return b.Len() }
+
+    test "T29c: written text is a String, and a String is still its bytes" {
+        s := "  hi  "                        # ":=" from text declares a String
+        assert s.Trim().Eq("hi")             # so it has text's methods
+        r := $42 "!"                         # a rendering and a join are text too
+        assert r.Eq("42!")
+        assert s[2:4].Eq("hi")               # a slice of text is text
+        assert takesBytes(s) == 6            # and text goes wherever bytes are wanted
+        raw := Array<U8>(2, 'z')
+        assert String(raw).Eq("zz")          # bytes become text only by saying so
+    }
+
+    test "equal text hashes equally, whatever storage holds it" {
+        assert "ab".Hash() == String(U8['a', 'b']).Hash()
+        assert "ab".Hash() != "ba".Hash()
+    }
+
+    test "Split gives the pieces between separators, borrowed from the text" {
+        p := "a,b,,c".Split(",")
+        assert p.Len() == 4
+        assert p[0].Eq("a") and p[1].Eq("b") and p[2].Eq("") and p[3].Eq("c")
+        q := ",x,".Split(",")
+        assert q.Len() == 3 and q[0].Eq("") and q[1].Eq("x") and q[2].Eq("")
+        assert "none".Split(",").Len() == 1 and "none".Split(",")[0].Eq("none")
+        e := "".Split(",")
+        assert e.Len() == 1 and e[0].Eq("")
+        w := "one::two::three".Split("::")
+        assert w.Len() == 3 and w[1].Eq("two") and w[2].Eq("three")
+        b := "abc".Split("")
+        assert b.Len() == 3 and b[0].Eq("a") and b[2].Eq("c")
+        n I32 = 0
+        for piece in "1 2 3".Split(" ") {
+            n = n + I32(try piece.ParseInt() catch default 0)
+        }
+        assert n == 6
+    }
+
+    # the same searching and splitting, computed while compiling (K2): a miss is the same error there as at run time
+    fn splitShape() I64 {
+        p := "x::y::::z".Split("::")
+        q := "1 22 333".Split(" ")
+        found I64 = (try "hello".Find("ll") catch default -1) * 10 + (try "hello".Find("lo!") catch default -1)
+        return p.Len() * 100000 + p[2].Len() * 10000 + q.Len() * 1000 + q[2].Len() * 100 + found
+    }
+
+    splitShapeBaked := splitShape()
+
+    test "Split and Find, evaluated while compiling as at run time" {
+        assert splitShapeBaked == 400000 + 0 + 3000 + 300 + 19
+        assert splitShape() == splitShapeBaked
+        one := "a b  c ".Split(" ")              # a one-byte separator: adjacent ones and one at the end
+        assert one.Len() == 5 and one[1] == "b" and one[2] == "" and one[3] == "c" and one[4] == ""
+    }
+
+    test "a StringBuilder gathers text and hands it back as one String" {
+        b := StringBuilder()
+        assert b.Len() == 0 and b.ToString() == ""
+        b.Push("define i32 @f")
+        b.PushChar('(')
+        b.Push($42)                          # a value goes in as its rendering
+        b.PushChar(')')
+        assert b.Len() == 17
+        s := b.ToString()
+        assert s == "define i32 @f(42)"
+        b.Push(" {")                         # the String handed back is a copy: the builder keeps growing apart from it
+        assert s == "define i32 @f(42)" and b.ToString() == "define i32 @f(42) {"
+        long := StringBuilder()
+        for i in range 1000 {
+            long.Push("ab")
+            long.PushChar('c')
+        }
+        t := long.ToString()
+        assert t.Len() == 3000 and t[0] == 'a' and t[2] == 'c' and t[2997] == 'a' and t[2999] == 'c'
+        assert t.EndsWith("abcabc") and t.Split("c").Len() == 1001
+    }
+
+    # the same, built while compiling (K2): the evaluator runs the builder as the run time does
+    fn builtText() String& {
+        b := StringBuilder()
+        for i in range 3 {
+            b.Push($i)
+            b.PushChar(',')
+        }
+        b.Push("end")
+        return b.ToString()
+    }
+
+    builtBaked := builtText()
+
+    test "a StringBuilder, evaluated while compiling as at run time" {
+        assert builtBaked == "0,1,2,end"
+        assert builtText() == builtBaked
+    }
+
+    # mutable, so the check below is made at run time, where the arena is - and the reason it exists: ToString's text is
+    # built through the conversion String(...), and the call inside it used to land in ToString's own scope, closed by its
+    # return, so the next scope to take a chunk - here scribble's own - wrote over the text
+    churnBytes mut I64 = 100
+    fn scribble(n I64) I64 {
+        a := Array<Char>(n, 'z')
+        return a.Len()
+    }
+    test "a StringBuilder's text lives where the caller keeps it" {
+        b := StringBuilder()
+        b.Push("import \"std/io\"\n")
+        t := b.ToString()
+        assert scribble(churnBytes) == churnBytes and t == "import \"std/io\"\n"
+    }
 }

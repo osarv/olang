@@ -307,404 +307,409 @@ fn (l List<<T>>&) Has(x <T>) Bool {
     return false
 }
 
-test "an empty list" {
-    l List<I32>& = List<I32>()
-    assert l.Len() == 0
-    a Array<I32>& = l.ToArray()
-    assert a.Len() == 0
-}
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
 
-test "pushes survive many chunk boundaries, in order" {
-    l List<I64>& = List<I64>()
-    for i in range 1000 {
-        l.Push(I64(i) * 3)
-    }
-    l.Push(7)        # a literal adapts to the list's own T (G9a)
-    assert l.Len() == 1001
-    a Array<I64>& = l.ToArray()
-    assert a.Len() == 1001
-    for i in range 1000 {
-        assert a[i] == I64(i) * 3
-    }
-    assert a[1000] == 7
-}
-
-test "ToArray is a copy, independent of the list" {
-    l List<I32>& = List<I32>()
-    l.Push(1)
-    l.Push(2)
-    a Array<I32>& = l.ToArray()
-    a[0] = 99
-    l.Push(3)
-    b Array<I32>& = l.ToArray()
-    assert b[0] == 1
-    assert a.Len() == 2
-    assert b.Len() == 3
-}
-
-# a test's own type - private, so the prelude names nothing a program might want to call its own
-type listKV struct(k I32, v I32) {
-    k
-    v
-}
-
-test "a list of structs" {
-    l List<listKV>& = List<listKV>()
-    for i in range 20 {
-        l.Push(listKV(i, i * i))
-    }
-    a Array<listKV>& = l.ToArray()
-    assert a[19].v == 361
-}
-
-# ToArray's result is built where it lands, whatever the list's own scope - an outer list flattens into an inner
-# block's array freely
-test "an outer list flattened into an inner block" {
-    l List<I32>& = List<I32>()
-    l.Push(1)
-    l.Push(2)
-    if l.Len() == 2 {
+if TestBuild {
+    test "an empty list" {
+        l List<I32>& = List<I32>()
+        assert l.Len() == 0
         a Array<I32>& = l.ToArray()
+        assert a.Len() == 0
+    }
+
+    test "pushes survive many chunk boundaries, in order" {
+        l List<I64>& = List<I64>()
+        for i in range 1000 {
+            l.Push(I64(i) * 3)
+        }
+        l.Push(7)        # a literal adapts to the list's own T (G9a)
+        assert l.Len() == 1001
+        a Array<I64>& = l.ToArray()
+        assert a.Len() == 1001
+        for i in range 1000 {
+            assert a[i] == I64(i) * 3
+        }
+        assert a[1000] == 7
+    }
+
+    test "ToArray is a copy, independent of the list" {
+        l List<I32>& = List<I32>()
+        l.Push(1)
+        l.Push(2)
+        a Array<I32>& = l.ToArray()
+        a[0] = 99
+        l.Push(3)
+        b Array<I32>& = l.ToArray()
+        assert b[0] == 1
         assert a.Len() == 2
-        assert a[1] == 2
+        assert b.Len() == 3
     }
-}
 
-test "a List is iterable: every loop over it gets its own position" {
-    l List<I64>& = List<I64>()
-    for i in range 20 { l.Push(i) }        # crosses two chunks (8, then 16)
-    sum I64 = 0
-    for x in l { sum += x }
-    assert sum == 190
-    again I64 = 0
-    for x in l { again += x }              # a second loop starts from the beginning
-    assert again == 190
-    pairs I64 = 0
-    for a in l { for b in l { if a == b { pairs++ } } }        # nested loops keep separate positions
-    assert pairs == 20
-    for x in List<I32>() { unreachable }        # an empty list yields nothing
-}
+    # a test's own type - private, so the prelude names nothing a program might want to call its own
+    type listKV struct(k I32, v I32) {
+        k
+        v
+    }
 
-# G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
-# references into it and copies nothing
-fn wordsOf(t String&) List<String&>&t {
-    out List<String&>&t = List<String&>()
-    start I64 = 0
-    for i in range t.Len() + 1 {
-        if i == t.Len() or t[i] == ' ' {
-            if i > start { out.Push(t[start:i]) }
-            start = i + 1
+    test "a list of structs" {
+        l List<listKV>& = List<listKV>()
+        for i in range 20 {
+            l.Push(listKV(i, i * i))
+        }
+        a Array<listKV>& = l.ToArray()
+        assert a[19].v == 361
+    }
+
+    # ToArray's result is built where it lands, whatever the list's own scope - an outer list flattens into an inner
+    # block's array freely
+    test "an outer list flattened into an inner block" {
+        l List<I32>& = List<I32>()
+        l.Push(1)
+        l.Push(2)
+        if l.Len() == 2 {
+            a Array<I32>& = l.ToArray()
+            assert a.Len() == 2
+            assert a[1] == 2
         }
     }
-    return out
-}
 
-test "a List of references: the words of a line, as slices of it" {
-    line String& = "to be or not"
-    ws := wordsOf(line)
-    assert ws.Len() == 4
-    n := 0
-    for w in ws { n++ }
-    assert n == 4
-    arr := ws.ToArray()
-    assert arr[0].Eq("to") and arr[3].Eq("not")
-}
-
-# a list held by value and pushed to from inside a loop: the call borrows the list (E12c), so its chunks are
-# built where the list lives - they used to be built in the loop's own block and freed with it
-fn listChurn() I64 {
-    t I64 = 0
-    for i in range 2000 {
-        p := Array<I64>(4, I64(i) + 7777)
-        t = t + p[0]
+    test "a List is iterable: every loop over it gets its own position" {
+        l List<I64>& = List<I64>()
+        for i in range 20 { l.Push(i) }        # crosses two chunks (8, then 16)
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 190
+        again I64 = 0
+        for x in l { again += x }              # a second loop starts from the beginning
+        assert again == 190
+        pairs I64 = 0
+        for a in l { for b in l { if a == b { pairs++ } } }        # nested loops keep separate positions
+        assert pairs == 20
+        for x in List<I32>() { unreachable }        # an empty list yields nothing
     }
-    return t
-}
 
-test "pushing from inside a loop builds where the list lives" {
-    l := List<I64>()
-    for i in range 100 { l.Push(i) }
-    assert listChurn() > 0
-    sum I64 = 0
-    for x in l { sum = sum + x }
-    assert sum == 4950
-}
-
-test "a list's elements, walked through a lambda" {
-    l List<I32>& = List<I32>()
-    for i in range 20 { l.Push(I32(i)) }
-    limit I32 = 15
-    assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
-    assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
-    assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 190
-    big := l.Iter().Filter(fn(x) { return x >= limit })
-    assert big.Len() == 5 and big.ToArray()[0] == 15
-    halves := l.Iter().Map(fn(x) { return F64(x) / 2.0 })
-    assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
-}
-
-# E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
-# 100 and doubles, so 250 elements grow it twice
-test "a comprehension walks a List" {
-    l List<I32>& = List<I32>()
-    for i in range 250 { l.Push(i) }
-    evens := I32[x for x in l if x % 2 == 0]
-    assert evens.Len() == 125
-    assert evens[124] == 248
-    all := I32[x for x in l]
-    assert all.Len() == 250 and all[249] == 249
-}
-
-test "membership in a List" {
-    l List<I32>& = List<I32>()
-    l.Push(4)
-    l.Push(9)
-    assert 9 in l
-    assert 5 not in l
-}
-
-# E31: "l[i]" and "l[i] = x" reach any position directly - the chunk is worked out from i, not searched for - on
-# both sides of every chunk boundary
-test "indexing a List" {
-    l List<I64>& = List<I64>()
-    for i in range 1000 { l.Push(I64(i) * 3) }
-    for i in range 1000 { assert l[i] == I64(i) * 3 }
-    assert l[0] == 0 and l[7] == 21 and l[8] == 24 and l[23] == 69 and l[24] == 72 and l[999] == 2997
-    l[8] = -1                # the first element of the second chunk
-    l[7] = -2                # the last of the first
-    l[999] += 3
-    assert l[8] == -1 and l[7] == -2 and l[999] == 3000
-    assert l.Len() == 1000   # storing replaces, it never appends
-    sum I64 = 0
-    for x in l { sum += x }  # the iterator sees what was stored
-    assert sum == 1498500 - 25 - 23 + 3
-    one List<I32>& = List<I32>()
-    one.Push(5)
-    one[0] = 6
-    assert one[0] == 6 and one.Len() == 1
-}
-
-# E31a: a List has no TryAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
-# with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
-test "a checked index into a List" {
-    l List<I32>& = List<I32>()
-    for i in range 20 { l.Push(I32(i)) }
-    assert (try l[19] catch default -1) == 19
-    assert (try l[20] catch default -1) == -1
-    assert (try l[-1] catch default -1) == -1
-    missed := false
-    try l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
-    assert missed and l.Len() == 20
-    try l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
-    assert l[3] == 30
-    e List<I32>& = List<I32>()
-    assert (try e[0] catch default 7) == 7
-}
-
-# a List of structs and of references indexes like any other
-test "indexing a List of structs and of references" {
-    kv List<listKV>& = List<listKV>()
-    for i in range 30 { kv.Push(listKV(I32(i), I32(i) * 2)) }
-    assert kv[17].v == 34
-    kv[17] = listKV(0, 99)       # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
-    assert kv[17].v == 99 and kv[17].k == 0
-    line String& = "to be or not"
-    ws := wordsOf(line)
-    assert ws[1] == "be" and ws[3] == "not"
-    mine List<String&>& = List<String&>()
-    for w in ws { mine.Push(w) }
-    mine[1] = line[6:8]
-    assert mine[1] == "or" and ws[1] == "be"
-}
-
-# PushAll adds a whole array, filling the tail and starting new chunks as Push would
-test "PushAll appends an array across chunk boundaries" {
-    l List<I32>& = List<I32>()
-    l.Push(-1)
-    l.PushAll(I32[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])         # fills the first chunk and spills into the second
-    big := Array<I32>(100)
-    for i in range 100 { big[i] = I32(i) + 10 }
-    l.PushAll(big)
-    l.PushAll(Array<I32>(0))                              # nothing to add
-    assert l.Len() == 111
-    for i in range 111 { assert l[i] == I32(i) - 1 }
-    a := l.ToArray()
-    assert a.Len() == 111 and a[0] == -1 and a[110] == 109
-    t List<Char>& = List<Char>()
-    t.PushAll("abc")                                      # text is an Array<Char>, so it goes in as one
-    t.Push('d')
-    assert String(t.ToArray()) == "abcd"
-}
-
-# the iterator holds the chunk it is in rather than searching for it from the start at every step, so a walk is a
-# load per element whatever the length; two walks, nested, still keep separate positions
-test "walking a long List" {
-    l List<I64>& = List<I64>()
-    for i in range 100000 { l.Push(i) }
-    sum I64 = 0
-    for x in l { sum += x }
-    assert sum == 4999950000
-    n I64 = 0
-    for i, x in l {
-        assert x == i
-        n++
-    }
-    assert n == 100000
-    it := l.Iter()
-    assert (try it.Next() catch default -1) == 0 and (try it.Next() catch default -1) == 1
-    l2 List<I32>& = List<I32>()
-    for i in range 9 { l2.Push(I32(i)) }
-    pairs I32 = 0
-    for a in l2 { for b in l2 { if a == b { pairs++ } } }
-    assert pairs == 9
-}
-
-# S9d: a type's own Iter wins over At and Len, so "for x in l", a comprehension, the iterator helpers and generic code
-# that knows a List only as Indexable all walk it through its iterator - which the checks confirm in the code
-# generated (checks.olang, "a List is walked by its iterator") - and Indexable's default Iter changes nothing for it
-fn indexedTotal(c <C Indexable<<T>>>&) I64 {
-    s I64 = 0
-    for x in c { s += x }
-    return s
-}
-
-test "a List with At is still walked by its own iterator" {
-    l List<I32>& = List<I32>()
-    for i in range 50 { l.Push(I32(i)) }
-    sum I32 = 0
-    for x in l { sum += x }
-    assert sum == 1225
-    assert indexedTotal(l) == 1225
-    assert I32[x for x in l if x >= 40].Len() == 10
-    assert l.Iter().Count(fn(x) { return x % 10 == 0 }) == 5
-    it ListIter<I32> = l.Iter()                         # List's own Iter, not Indexable's IndexIter
-    assert (try it.Next() catch default -1) == 0
-}
-
-# the same, computed while compiling (K2, S18c): the evaluator runs indexing, PushAll and the iterator as the
-# run time does
-fn listIndexed() I64 {
-    l := List<I64>()
-    for i in range 40 { l.Push(i) }
-    l.PushAll(I64[100, 200])
-    l[8] = 1000
-    l[41] += 1
-    s I64 = 0
-    for i in range l.Len() { s += l[i] }
-    for x in l { s += x }
-    return s + (try l[42] catch default 7)
-}
-
-listIndexedBaked := listIndexed()
-
-test "indexing a List, evaluated while compiling as at run time" {
-    assert listIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
-    assert listIndexed() == listIndexedBaked
-    assert listIndexed() == 4153
-}
-
-# S9f: "for x in l" walks a List run by run - a counted loop over each chunk's slice - with every loop rule as before:
-# a break leaves the whole loop, a continue goes on to the next element, the index counts across chunks, a return
-# leaves from inside, and an element pushed while the loop runs is walked too
-fn listRuns(n I64) I64 {
-    l := List<I64>()
-    for i in range n { l.Push(i) }
-    firstBig I64 = -1
-    for i, x in l {
-        assert i == x
-        if x > 20 {
-            firstBig = x
-            break                              # leaves the loop over the runs, not just this run
+    # G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
+    # references into it and copies nothing
+    fn wordsOf(t String&) List<String&>&t {
+        out List<String&>&t = List<String&>()
+        start I64 = 0
+        for i in range t.Len() + 1 {
+            if i == t.Len() or t[i] == ' ' {
+                if i > start { out.Push(t[start:i]) }
+                start = i + 1
+            }
         }
+        return out
     }
-    odd I64 = 0
-    for x in l {
-        if x % 2 == 0 { continue }
-        odd += x
-    }
-    grown I64 = 0
-    for x in l {
-        if x < 3 { l.Push(100 + x) }          # walked later in this same loop
-        grown += x
-    }
-    return firstBig * 1000000 + odd * 100 + grown - (n * (n - 1) / 2 + 303)
-}
 
-fn firstOver(l List<I64>&, limit I64) I64 ? {
-    for x in l {
-        if x > limit { return x }
+    test "a List of references: the words of a line, as slices of it" {
+        line String& = "to be or not"
+        ws := wordsOf(line)
+        assert ws.Len() == 4
+        n := 0
+        for w in ws { n++ }
+        assert n == 4
+        arr := ws.ToArray()
+        assert arr[0].Eq("to") and arr[3].Eq("not")
     }
-    error
-}
 
-listRunsBaked := listRuns(40)
-
-test "S9f: a List is walked run by run, and every loop rule holds" {
-    assert listRuns(40) == listRunsBaked
-    assert listRunsBaked == 21 * 1000000 + 400 * 100
-    l := List<I64>()
-    for i in range 100 { l.Push(i * 2) }
-    assert (try firstOver(l, 150) catch default -1) == 152
-    assert (try firstOver(l, 500) catch default -1) == -1
-    pairs I64 = 0
-    for a in l { for b in l { if a == b { pairs++ } } }      # nested loops over one list keep their own places
-    assert pairs == 100
-    sq := I64[x * x for x in l if x < 10]                    # a comprehension walks it too
-    assert sq.Len() == 5 and sq[4] == 64
-    for x in List<I32>() { unreachable }
-}
-
-# the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Any or
-# All stopped at - so Next goes on from there - or at the end
-test "S9f: ListIter's helpers walk run by run and leave the iterator where Next would" {
-    l := List<I64>()
-    for i in range 50 { l.Push(i) }
-    it := l.Iter()
-    assert (try it.Next() catch default -1) == 0
-    assert it.Any(fn(x) { return x == 30 })
-    assert (try it.Next() catch default -1) == 31
-    assert not it.All(fn(x) { return x < 40 })
-    assert (try it.Next() catch default -1) == 41
-    assert it.Count(fn(x) { return x % 2 == 0 }) == 4        # 42 44 46 48
-    assert (try it.Next() catch default -1) == -1
-    assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 1225
-    assert l.Iter().Map(fn(x) { return x * 2 }).Len() == 50 and l.Iter().Filter(fn(x) { return x >= 45 }).Len() == 5
-    assert l.Iter().All(fn(x) { return x < 50 }) and not l.Iter().Any(fn(x) { return x > 49 })
-    l.Push(50)                                               # an exhausted iterator sees what is pushed after
-    assert (try it.Next() catch default -1) == 50
-}
-
-# elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
-# iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
-type listBag struct() {
-    items List<I64>& = List<I64>()
-}
-type listItem struct(n I64) {
-    n
-}
-fn listFind(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-    for f in l {
-        if f.First == key { return f.Second }
+    # a list held by value and pushed to from inside a loop: the call borrows the list (E12c), so its chunks are
+    # built where the list lives - they used to be built in the loop's own block and freed with it
+    fn listChurn() I64 {
+        t I64 = 0
+        for i in range 2000 {
+            p := Array<I64>(4, I64(i) + 7777)
+            t = t + p[0]
+        }
+        return t
     }
-    error
-}
-fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-    for f in l.Iter() {
-        if f.First == key { return f.Second }
+
+    test "pushing from inside a loop builds where the list lives" {
+        l := List<I64>()
+        for i in range 100 { l.Push(i) }
+        assert listChurn() > 0
+        sum I64 = 0
+        for x in l { sum = sum + x }
+        assert sum == 4950
     }
-    error
-}
-test "S9f: a List of references, walked by every route" {
-    bags := List<listBag&>()
-    bags.Push(listBag())
-    bags.Push(listBag())
-    s I64 = 0
-    for b in bags { s += b.items.Len() + 1 }
-    for b in bags.Iter() { s += b.items.Len() + 1 }
-    assert s == 4 and bags.Iter().Count(fn(b) { return b.items.Len() == 0 }) == 2
-    m := List<Pair<String&, listItem&>>()
-    k String& = "x"
-    m.Push(Pair<String&, listItem&>(k, listItem(4)))
-    assert (try listFind(m, "x") catch { unreachable }).n == 4
-    assert (try listFindIter(m, "x") catch { unreachable }).n == 4
+
+    test "a list's elements, walked through a lambda" {
+        l List<I32>& = List<I32>()
+        for i in range 20 { l.Push(I32(i)) }
+        limit I32 = 15
+        assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
+        assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
+        assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 190
+        big := l.Iter().Filter(fn(x) { return x >= limit })
+        assert big.Len() == 5 and big.ToArray()[0] == 15
+        halves := l.Iter().Map(fn(x) { return F64(x) / 2.0 })
+        assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
+    }
+
+    # E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
+    # 100 and doubles, so 250 elements grow it twice
+    test "a comprehension walks a List" {
+        l List<I32>& = List<I32>()
+        for i in range 250 { l.Push(i) }
+        evens := I32[x for x in l if x % 2 == 0]
+        assert evens.Len() == 125
+        assert evens[124] == 248
+        all := I32[x for x in l]
+        assert all.Len() == 250 and all[249] == 249
+    }
+
+    test "membership in a List" {
+        l List<I32>& = List<I32>()
+        l.Push(4)
+        l.Push(9)
+        assert 9 in l
+        assert 5 not in l
+    }
+
+    # E31: "l[i]" and "l[i] = x" reach any position directly - the chunk is worked out from i, not searched for - on
+    # both sides of every chunk boundary
+    test "indexing a List" {
+        l List<I64>& = List<I64>()
+        for i in range 1000 { l.Push(I64(i) * 3) }
+        for i in range 1000 { assert l[i] == I64(i) * 3 }
+        assert l[0] == 0 and l[7] == 21 and l[8] == 24 and l[23] == 69 and l[24] == 72 and l[999] == 2997
+        l[8] = -1                # the first element of the second chunk
+        l[7] = -2                # the last of the first
+        l[999] += 3
+        assert l[8] == -1 and l[7] == -2 and l[999] == 3000
+        assert l.Len() == 1000   # storing replaces, it never appends
+        sum I64 = 0
+        for x in l { sum += x }  # the iterator sees what was stored
+        assert sum == 1498500 - 25 - 23 + 3
+        one List<I32>& = List<I32>()
+        one.Push(5)
+        one[0] = 6
+        assert one[0] == 6 and one.Len() == 1
+    }
+
+    # E31a: a List has no TryAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
+    # with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
+    test "a checked index into a List" {
+        l List<I32>& = List<I32>()
+        for i in range 20 { l.Push(I32(i)) }
+        assert (try l[19] catch default -1) == 19
+        assert (try l[20] catch default -1) == -1
+        assert (try l[-1] catch default -1) == -1
+        missed := false
+        try l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
+        assert missed and l.Len() == 20
+        try l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
+        assert l[3] == 30
+        e List<I32>& = List<I32>()
+        assert (try e[0] catch default 7) == 7
+    }
+
+    # a List of structs and of references indexes like any other
+    test "indexing a List of structs and of references" {
+        kv List<listKV>& = List<listKV>()
+        for i in range 30 { kv.Push(listKV(I32(i), I32(i) * 2)) }
+        assert kv[17].v == 34
+        kv[17] = listKV(0, 99)       # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
+        assert kv[17].v == 99 and kv[17].k == 0
+        line String& = "to be or not"
+        ws := wordsOf(line)
+        assert ws[1] == "be" and ws[3] == "not"
+        mine List<String&>& = List<String&>()
+        for w in ws { mine.Push(w) }
+        mine[1] = line[6:8]
+        assert mine[1] == "or" and ws[1] == "be"
+    }
+
+    # PushAll adds a whole array, filling the tail and starting new chunks as Push would
+    test "PushAll appends an array across chunk boundaries" {
+        l List<I32>& = List<I32>()
+        l.Push(-1)
+        l.PushAll(I32[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])         # fills the first chunk and spills into the second
+        big := Array<I32>(100)
+        for i in range 100 { big[i] = I32(i) + 10 }
+        l.PushAll(big)
+        l.PushAll(Array<I32>(0))                              # nothing to add
+        assert l.Len() == 111
+        for i in range 111 { assert l[i] == I32(i) - 1 }
+        a := l.ToArray()
+        assert a.Len() == 111 and a[0] == -1 and a[110] == 109
+        t List<Char>& = List<Char>()
+        t.PushAll("abc")                                      # text is an Array<Char>, so it goes in as one
+        t.Push('d')
+        assert String(t.ToArray()) == "abcd"
+    }
+
+    # the iterator holds the chunk it is in rather than searching for it from the start at every step, so a walk is a
+    # load per element whatever the length; two walks, nested, still keep separate positions
+    test "walking a long List" {
+        l List<I64>& = List<I64>()
+        for i in range 100000 { l.Push(i) }
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 4999950000
+        n I64 = 0
+        for i, x in l {
+            assert x == i
+            n++
+        }
+        assert n == 100000
+        it := l.Iter()
+        assert (try it.Next() catch default -1) == 0 and (try it.Next() catch default -1) == 1
+        l2 List<I32>& = List<I32>()
+        for i in range 9 { l2.Push(I32(i)) }
+        pairs I32 = 0
+        for a in l2 { for b in l2 { if a == b { pairs++ } } }
+        assert pairs == 9
+    }
+
+    # S9d: a type's own Iter wins over At and Len, so "for x in l", a comprehension, the iterator helpers and generic code
+    # that knows a List only as Indexable all walk it through its iterator - which the checks confirm in the code
+    # generated (checks.olang, "a List is walked by its iterator") - and Indexable's default Iter changes nothing for it
+    fn indexedTotal(c <C Indexable<<T>>>&) I64 {
+        s I64 = 0
+        for x in c { s += x }
+        return s
+    }
+
+    test "a List with At is still walked by its own iterator" {
+        l List<I32>& = List<I32>()
+        for i in range 50 { l.Push(I32(i)) }
+        sum I32 = 0
+        for x in l { sum += x }
+        assert sum == 1225
+        assert indexedTotal(l) == 1225
+        assert I32[x for x in l if x >= 40].Len() == 10
+        assert l.Iter().Count(fn(x) { return x % 10 == 0 }) == 5
+        it ListIter<I32> = l.Iter()                         # List's own Iter, not Indexable's IndexIter
+        assert (try it.Next() catch default -1) == 0
+    }
+
+    # the same, computed while compiling (K2, S18c): the evaluator runs indexing, PushAll and the iterator as the
+    # run time does
+    fn listIndexed() I64 {
+        l := List<I64>()
+        for i in range 40 { l.Push(i) }
+        l.PushAll(I64[100, 200])
+        l[8] = 1000
+        l[41] += 1
+        s I64 = 0
+        for i in range l.Len() { s += l[i] }
+        for x in l { s += x }
+        return s + (try l[42] catch default 7)
+    }
+
+    listIndexedBaked := listIndexed()
+
+    test "indexing a List, evaluated while compiling as at run time" {
+        assert listIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
+        assert listIndexed() == listIndexedBaked
+        assert listIndexed() == 4153
+    }
+
+    # S9f: "for x in l" walks a List run by run - a counted loop over each chunk's slice - with every loop rule as before:
+    # a break leaves the whole loop, a continue goes on to the next element, the index counts across chunks, a return
+    # leaves from inside, and an element pushed while the loop runs is walked too
+    fn listRuns(n I64) I64 {
+        l := List<I64>()
+        for i in range n { l.Push(i) }
+        firstBig I64 = -1
+        for i, x in l {
+            assert i == x
+            if x > 20 {
+                firstBig = x
+                break                              # leaves the loop over the runs, not just this run
+            }
+        }
+        odd I64 = 0
+        for x in l {
+            if x % 2 == 0 { continue }
+            odd += x
+        }
+        grown I64 = 0
+        for x in l {
+            if x < 3 { l.Push(100 + x) }          # walked later in this same loop
+            grown += x
+        }
+        return firstBig * 1000000 + odd * 100 + grown - (n * (n - 1) / 2 + 303)
+    }
+
+    fn firstOver(l List<I64>&, limit I64) I64 ? {
+        for x in l {
+            if x > limit { return x }
+        }
+        error
+    }
+
+    listRunsBaked := listRuns(40)
+
+    test "S9f: a List is walked run by run, and every loop rule holds" {
+        assert listRuns(40) == listRunsBaked
+        assert listRunsBaked == 21 * 1000000 + 400 * 100
+        l := List<I64>()
+        for i in range 100 { l.Push(i * 2) }
+        assert (try firstOver(l, 150) catch default -1) == 152
+        assert (try firstOver(l, 500) catch default -1) == -1
+        pairs I64 = 0
+        for a in l { for b in l { if a == b { pairs++ } } }      # nested loops over one list keep their own places
+        assert pairs == 100
+        sq := I64[x * x for x in l if x < 10]                    # a comprehension walks it too
+        assert sq.Len() == 5 and sq[4] == 64
+        for x in List<I32>() { unreachable }
+    }
+
+    # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Any or
+    # All stopped at - so Next goes on from there - or at the end
+    test "S9f: ListIter's helpers walk run by run and leave the iterator where Next would" {
+        l := List<I64>()
+        for i in range 50 { l.Push(i) }
+        it := l.Iter()
+        assert (try it.Next() catch default -1) == 0
+        assert it.Any(fn(x) { return x == 30 })
+        assert (try it.Next() catch default -1) == 31
+        assert not it.All(fn(x) { return x < 40 })
+        assert (try it.Next() catch default -1) == 41
+        assert it.Count(fn(x) { return x % 2 == 0 }) == 4        # 42 44 46 48
+        assert (try it.Next() catch default -1) == -1
+        assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 1225
+        assert l.Iter().Map(fn(x) { return x * 2 }).Len() == 50 and l.Iter().Filter(fn(x) { return x >= 45 }).Len() == 5
+        assert l.Iter().All(fn(x) { return x < 50 }) and not l.Iter().Any(fn(x) { return x > 49 })
+        l.Push(50)                                               # an exhausted iterator sees what is pushed after
+        assert (try it.Next() catch default -1) == 50
+    }
+
+    # elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
+    # iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
+    type listBag struct() {
+        items List<I64>& = List<I64>()
+    }
+    type listItem struct(n I64) {
+        n
+    }
+    fn listFind(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
+        for f in l {
+            if f.First == key { return f.Second }
+        }
+        error
+    }
+    fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
+        for f in l.Iter() {
+            if f.First == key { return f.Second }
+        }
+        error
+    }
+    test "S9f: a List of references, walked by every route" {
+        bags := List<listBag&>()
+        bags.Push(listBag())
+        bags.Push(listBag())
+        s I64 = 0
+        for b in bags { s += b.items.Len() + 1 }
+        for b in bags.Iter() { s += b.items.Len() + 1 }
+        assert s == 4 and bags.Iter().Count(fn(b) { return b.items.Len() == 0 }) == 2
+        m := List<Pair<String&, listItem&>>()
+        k String& = "x"
+        m.Push(Pair<String&, listItem&>(k, listItem(4)))
+        assert (try listFind(m, "x") catch { unreachable }).n == 4
+        assert (try listFindIter(m, "x") catch { unreachable }).n == 4
+    }
 }

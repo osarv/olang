@@ -679,17 +679,16 @@ fn enumwords(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0, "no payload of words", dir)
 }
 
-# S9d: a type's own Iter wins over At and Len - a List, which has all three, is still walked by its iterator: by
-# "for ... in", by a comprehension, by an iterator helper and in generic code constrained by Indexable, none of which
-# calls At
-test "a List is walked by its iterator, not by At" { assert passed("listloop") }
+# S9f/S9d: a List, which has RunFrom, Iter, At and Len, is walked run by run - by "for ... in", by a comprehension and
+# in generic code constrained by Indexable - and its iterator's helpers walk its chunks; none of them calls At
+test "a List is walked run by run, not by At" { assert passed("listloop") }
 
 fn listloop(r mut report&) ? Failed {
     dir := fresh("listloop")
     os.Run("cp checks/fixtures/listloop/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop") == 0, "listloop", dir)
-    try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.ListIter.I16.Next.I16' build/loop.main.ll") == 0,
-                 "no call of Next", dir)
+    try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.RunFrom.I16' build/loop.main.ll") == 0,
+                 "no call of RunFrom", dir)
     try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.At.I16' build/loop.main.ll") != 0,
                  "a call of At", dir)
 }

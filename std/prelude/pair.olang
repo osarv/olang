@@ -12,39 +12,44 @@ type Pair<A, B> struct(First <A>, Second <B>) {
 # Two pairs compare with "==" part by part (E10), each part by its own Eq where it declares one.
 fn (p Pair<<A>, <B>>&) Hash() I64 { return p.First.Hash() * 1099511628211 + p.Second.Hash() }
 
-test "a pair holds its two values, its types inferred" {
-    p := Pair(1, I64(2))
-    assert p.First == 1 and p.Second == 2
-    s String& = "hi"
-    q := Pair(s, 3)
-    assert q.First == "hi" and q.Second == 3
-}
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
 
-test "pairs compare and hash by their parts" {
-    a := Pair(1, 2)
-    b := Pair(1, 2)
-    c := Pair(2, 1)
-    assert a == b and a != c
-    assert a.Hash() == b.Hash() and a.Hash() != c.Hash()
-}
+if TestBuild {
+    test "a pair holds its two values, its types inferred" {
+        p := Pair(1, I64(2))
+        assert p.First == 1 and p.Second == 2
+        s String& = "hi"
+        q := Pair(s, 3)
+        assert q.First == "hi" and q.Second == 3
+    }
 
-test "a pair of things with no Hash is still a pair" {
-    x := Pair(I32[1, 2], 3)
-    assert x.First[1] == 2
-}
+    test "pairs compare and hash by their parts" {
+        a := Pair(1, 2)
+        b := Pair(1, 2)
+        c := Pair(2, 1)
+        assert a == b and a != c
+        assert a.Hash() == b.Hash() and a.Hash() != c.Hash()
+    }
 
-# G10c/T7b: a struct holds an array by reference, so written text or an array given to Pair makes it a Pair of a
-# reference - the text built where the pair lands, a variable's array borrowed
-fn pairOfText(k I32) Bool {
-    p := Pair(1 + k, "x")
-    s String = "ab"
-    q := Pair(k, s)
-    s[0] = 'z'
-    return p.Second == "x" and q.Second == "zb"
-}
-PairOfTextBaked := pairOfText(0)
+    test "a pair of things with no Hash is still a pair" {
+        x := Pair(I32[1, 2], 3)
+        assert x.First[1] == 2
+    }
 
-test "a pair of written text holds a reference to it" {
-    assert pairOfText(0)
-    assert PairOfTextBaked
+    # G10c/T7b: a struct holds an array by reference, so written text or an array given to Pair makes it a Pair of a
+    # reference - the text built where the pair lands, a variable's array borrowed
+    fn pairOfText(k I32) Bool {
+        p := Pair(1 + k, "x")
+        s String = "ab"
+        q := Pair(k, s)
+        s[0] = 'z'
+        return p.Second == "x" and q.Second == "zb"
+    }
+    PairOfTextBaked := pairOfText(0)
+
+    test "a pair of written text holds a reference to it" {
+        assert pairOfText(0)
+        assert PairOfTextBaked
+    }
 }

@@ -25,14 +25,14 @@ fn (n U32) Hash() I64 { return mixHash(n) }
 fn (n U64) Hash() I64 { return mixHash(I64(n)) }
 
 
-test "equal keys hash equally, and nearby integers spread" {
-    assert I32(7).Hash() == I32(7).Hash()
-    assert I64(1).Hash() != I64(2).Hash()
-    assert true.Hash() == true.Hash() and true.Hash() != false.Hash()
-}
-
 # a Bool's hash, so a struct or enum with a Bool part is a key too (E10b)
 fn (b Bool) Hash() I64 {
     if b { return mixHash(1) }
     return mixHash(0)
+}
+
+test "equal keys hash equally, and nearby integers spread" {
+    assert I32(7).Hash() == I32(7).Hash()
+    assert I64(1).Hash() != I64(2).Hash()
+    assert true.Hash() == true.Hash() and true.Hash() != false.Hash()
 }
