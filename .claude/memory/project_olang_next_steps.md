@@ -264,6 +264,14 @@ because what it finds about structure feeds the refactor.
 - QUEUED small fix: D13c's "no zero value" error for `List<Ticket>` (a constructor with an effect) is reported inside
   std/prelude/list.olang with the user's line only as a note - report it at the user's `List<Ticket>` (the type
   argument) naming `List<Ticket&>` as the fix. Goes with the next checker batch.
+- 15:35 CEST: THE USER IS AWAY UNTIL TOMORROW (2026-10-10): "keep going and make some hard decisions yourself if they
+  come up. I won't be available." Overnight plan, in order, paced at the five-hour cap with a send_later just after
+  each reset: merge chunkpool, langb, constgen, native, oann transformers as they finish; then (a) T-bare migration,
+  (b) the permissions batch, (c) a small checker batch (List<Ticket> D13c location, oann repro listzero/ctordefault),
+  in sequence since all three rewrite semantic.c and the corpus, with light work beside them (oann settling networks
+  after transformers, clean room); then the bootstrap/ move + modest refactor with nothing else in flight; then, if
+  all of that lands, start the port with the scanner (feedback_port_clean_design.md). Hard decisions: make them by
+  PRINCIPLES.md, record each in CLAUDE.md/HISTORY.md, and list them numbered in the morning report.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
