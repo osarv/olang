@@ -48,6 +48,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/user_olang_direction.md
 @.claude/memory/user_olang_natural_language.md
 @.claude/memory/user_dictation.md
+@.claude/memory/user_timezone.md
 @.claude/memory/project_olang_concurrency_gaps.md
 @.claude/memory/project_olang_next_steps.md
 @.claude/memory/project_olang_open_language_gaps.md

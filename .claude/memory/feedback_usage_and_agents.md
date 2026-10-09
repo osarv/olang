@@ -76,3 +76,12 @@ the next lever).
 `apt-get update && apt-get install -y libclang-rt-18-dev` fixes it for a session (verified: the suite under -r reports
 exactly the one intentional race, shared.readOut). The user was asked to add that line to the environment's setup
 script so new sessions have it; if a new session lacks it, install it again.
+
+**Correction (the user, 2026-10-09 15:10 CEST): "Aim to have used all compute by the week's end. The 70 percent rule is
+about expected uptime, not desired usage."** The goal is the weekly window at 100% when it resets; 0.7 is only the
+expected fraction of the remaining hours the session is actually working, used to set the pace. **And the five-hour
+window caps the pace**: measured 12:03-13:03 UTC, five-hour +19%/h against weekly +5%/h - about 3.8 five-hour points per
+weekly point - so running flat out at the five-hour limit (20%/h) is ~5.3% of the week per hour. With 72% of the week
+left and 15h to go, that cap binds: the most usable is the cap held continuously. So: keep the five-hour window
+landing at ~100% right at each of its resets (more agents early in a window, trimmed as it nears the limit), keep
+working through the night with a send_later armed just after each reset, and recompute the ratio as readings come in.
