@@ -72,8 +72,8 @@ projection as (I - alpha x x^T)".
    Architectures", Behrouz et al., NeurIPS 2025) my reading, to confirm: the paper's delta rule / Delta Gradient
    Descent - for a linear layer y = W x, W <- W (I - a x x^T) - lr * (AdamW update), where x is the layer's INPUT (the
    key), not the weights; per batch W <- W - (a/B) (W X^T) X (two GEMMs, as cheap as a forward pass), optionally
-   normalized by ||x||^2 per sample (the unofficial implementation's default). Open: normalized or not; replaces
-   weight decay or adds to it; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
+   normalized by ||x||^2 per sample (the unofficial implementation's default). The user (2026-10-09): "It replaces the weight
+   decay I think" - so the term REPLACES AdamW's weight decay in this variant. Still open: normalized or not; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
    container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
 12. (asked 2026-10-09, const generics design - wt-constgen becd37f, spec only) run-time dimensions: in the library
    (`Dynamic I64 = -1`; Matrix stores rows/cols when a dimension is Dynamic; `Matrix<F32, Dynamic, 784> @
