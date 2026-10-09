@@ -1,0 +1,52 @@
+# check: run
+# O26a: a local is moved into the result scope only when a returned value can hold what it holds - read as an argument
+# or receiver of a call that can keep it. A parser holding text made in this block, whose parse builds a new tree, or a
+# helper whose result holds nothing of its argument, leaves the local (and the text it refers to) in its block
+type Ast enum {
+    Leaf(v I64)
+    Pair(a Ast&, b Ast&)
+}
+type Parser struct(src String&) {
+    src
+    pos I64 = 0
+}
+fn (p mut Parser&) parse() Ast& {
+    p.pos++
+    return Ast.Pair(Ast.Leaf(p.src.Len()), Ast.Leaf(p.pos))
+}
+fn (p Parser&) describe() String& {
+    return $p.src.Len() "!"
+}
+fn Parse(n I64) Ast& {
+    src := $n $n $n
+    p := Parser(src)
+    return p.parse()
+}
+fn Desc(n I64) String& {
+    src := $n $n
+    p := Parser(src)
+    return p.describe()
+}
+fn wrapLen(p Parser&) Ast& { return Ast.Leaf(p.src.Len()) }
+fn Wrapped(n I64) Ast& {
+    src := $n
+    p := Parser(src)
+    return wrapLen(p)
+}
+fn main() ? {
+    a := Parse(12)
+    d := Desc(7)
+    w := Wrapped(5)
+    churn()
+    assert $a == "Ast.Pair(Ast.Leaf(6), Ast.Leaf(1))" and d == "2!" and $w == "Ast.Leaf(1)"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
+}

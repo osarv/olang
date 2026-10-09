@@ -1,7 +1,10 @@
-# check: fail error[E31]: Plus's parameters besides its receiver: expected 1, found 2
-# E31: an operator method's shape
+# check: fail error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
+# E31: an operator method's shape - one of another number of parameters is an ordinary method, and the operator says so
 type V struct(x I32) {
     x
 }
 fn (a V) Plus(b V, c V) V { return a }
-fn main() ? { }
+fn main() ? {
+    s := V(1).Plus(V(2), V(3))
+    t := V(1) + V(2)
+}

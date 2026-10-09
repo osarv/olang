@@ -4160,7 +4160,8 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
         rdSpellSigB(t, b);
         return;
     }
-    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, "<%.*s>", t.name.len, t.name.ptr); return; }
+    //G8b: a diagnostic writes a variable as the program does once it is introduced - bare, "T", never "<T>" again
+    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, rdForDiag ? "%.*s" : "<%.*s>", t.name.len, t.name.ptr); return; }
     if (t.isTuple) {
         cgBufAdd(b, "(");
         for (int i = 0; i < t.vars.len; i++) {
@@ -5369,8 +5370,9 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     //O26a: a value the function returns lives where its result is put - its own storage too, so a reference to it, or
     //into it, that something built here keeps is never left pointing into this frame
     char* resultHere = NULL;
-    if (s->var.storeInResult && ctx->curFunc && ctx->curFunc->type.resultScope) {
-        resultHere = cgResolveScope(ctx, ctx->curFunc->type.resultScope, 0);
+    struct var* home = s->var.valueHome ? s->var.valueHome : ctx->curFunc ? ctx->curFunc->type.resultScope : NULL;
+    if (s->var.storeInResult && ctx->curFunc && home) {
+        resultHere = cgResolveScope(ctx, home, 0); //the result scope, or a borrowed result's parameter scope (O26a)
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", slot, resultHere,
                 TypeGetSize(s->var.type));
     } else if (s->ctorField && ctx->ctorHere && !cgIsReference(s->var.type) && canonicalVar(&s->var)->slotBorrowed) {
@@ -8876,6 +8878,9 @@ void cgEmitForeignFuncDecls(FILE* out, struct semaModule* emitMod) {
             if (t->ctorFunc) cgEmitFuncDecl(out, t->ctorFunc);
             if (t->destructFunc) cgEmitFuncDecl(out, t->destructFunc);
         }
+        //G10d: a generic constructor's instantiations - the type's destructor is the type's own, declared with it
+        struct list* twins = SemanticAllCtorTwins();
+        for (int i = 0; i < twins->len; i++) cgEmitFuncDecl(out, (*(struct type**)ListGetIdx(twins, i))->ctorFunc);
     }
     struct list* all = SemanticAllModules();
     for (int m = 0; m < all->len; m++) {
@@ -9118,6 +9123,12 @@ void cgEmitAllFunctions(struct cgCtx* ctx, struct semaModule* emitMod) {
         if (t->typeParams.len != 0) continue; //G8a: still a pattern - see emitStructTypeDefs
         if (t->ctorFunc) cgFunction(ctx, t->owner, t->ctorFunc, true);
         if (t->destructFunc) cgFunction(ctx, t->owner, t->destructFunc, true);
+    }
+    //G10d: each instantiation of a constructor generic over a type that is not (its destructor is the type's own)
+    struct list* twins = SemanticAllCtorTwins();
+    for (int i = 0; i < twins->len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(twins, i);
+        cgFunction(ctx, t->owner, t->ctorFunc, true);
     }
 }
 

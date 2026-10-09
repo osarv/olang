@@ -1,6 +1,7 @@
 # check: fail error[E31]: Len gives an I64
-# also: note: 'len' is Len's private spelling, held to Len's shape
-# M6b: a lowercase helper spelling a protocol method is held to its shape - and the error says why, since its name does not
+# also: note: 'len' is Len's private spelling with Len's parameters, so it is held to its shape
+# M6b: a lowercase helper spelling a protocol method, with its parameters, is held to its shape - and the error says why,
+# since its name does not
 type Node struct(v I32) {
     v
 }

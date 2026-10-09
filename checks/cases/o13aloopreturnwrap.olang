@@ -1,7 +1,7 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# O13a: a loop body runs again after itself, so a return in it sees what the loop assigns the local later - here text
-# made in this function's own block. It used to be judged by the first iteration's binding alone, and returned freed
-# storage. A local returned itself lives in the result scope (O26a, o13aloopreturn.olang); one inside another does not
+# check: run
+# O13a/O26a: a loop body runs again after itself, so a return in it sees what the loop assigns the local later; the
+# local is returned inside another value, so it lives where the result goes and so does what is assigned to it - read
+# back after an arena churn. It used to be built in this block, a compile-time error (O26)
 type H struct(r String&) {
     r
 }
@@ -18,5 +18,16 @@ fn mk(n I64, s String&) W {
 }
 fn main() ? {
     w := mk(12, "x")
-    assert w.h.r.Len() > 0
+    churn()
+    assert w.h.r == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
 }
