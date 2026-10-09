@@ -1,0 +1,15 @@
+# check: run
+# a local sharing a method's name, or another module's function's, is not what "x.f()" or "m.F()" calls: codegen
+# looked the callee up among the locals by name and called the local as a function value - garbage, or a crash
+import "std/os"
+type box struct(n I64) {
+    n mut
+}
+fn (a box&) count() I64 { return a.n + 1 }
+fn main() ? {
+    a := box(os.Args().Len() + 40)
+    count := a.count()
+    assert count == 42
+    Args := os.Args()
+    assert Args.Len() == 1
+}

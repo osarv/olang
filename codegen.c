@@ -176,6 +176,7 @@ struct cgCtx {
     struct list unwindPool;
     char* ownUnwindNode;
     bool emitUnwind;
+    bool floatText; //E11a: a float is rendered - the object carries @__olang_fmt_float (emitFloatTextRuntime)
     //every "alloca" goes here rather than where it is written, so all of them land in the function's
     //ENTRY block. An alloca inside a loop body allocates a fresh slot per iteration and the stack grows
     //without bound - O2 records exactly this trap for scope headers, which were hoisted for that reason;
@@ -2824,7 +2825,8 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
     //only a local or parameter holding a function value is called through the local of its name: a declared function
-    //or method shares no namespace with locals (a method has its own, M19), so "lit := g.lit(t)" calls the method
+    //or method shares no namespace with locals (a method has its own, M19; D3a is per module, so another module's
+    //function may share one too), so "lit := g.lit(t)" calls the method
     struct cgLocal* local = func->owner ? NULL : cgFindLocal(ctx, func->name);
     if (local || func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
         char g[256];
@@ -4194,6 +4196,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
         enum floatKind fk = t.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : t.bType == BASETYPE_F16 ? FLOAT_KIND_F16
                           : t.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_float(ptr %s, i64 %s, double %s, i32 %d)\n", k, p, cap, wide, (int)fk);
+        ctx->floatText = true;
     } else {
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, wide);
     }
@@ -5466,7 +5469,7 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
 //S12-S14: the checker has built each alternative's test and its bindings' reads over the held value, so this lays out
 //only the order: the value held, then per case each alternative's test - the first to hold fills the clause's
 //bindings its own way - then the guard, then the block. An alternative or guard that fails falls to the next case.
-void cgAbortLike(struct cgCtx* ctx, bool isUnreachable);
+void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable);
 static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT);
 void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL, (struct type){0}); }
 
@@ -5549,7 +5552,7 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
     if (s->hasNomatch) {
         if (slot && s->nomatchValue) cgMatchStore(ctx, s->nomatchValue, slot, resultT);
         else cgBlock(ctx, &s->nomatchBlock);
-    } else if (slot) cgAbortLike(ctx, true); //S12b: every case is covered, so this is not reached - checked, not assumed
+    } else if (slot) cgAbortLike(ctx, s, true); //S12b: every case is covered, so this is not reached - checked, not assumed
     cgBr(ctx, endLbl);
     cgLabel(ctx, endLbl);
     cgPopScope(ctx);
@@ -5718,9 +5721,24 @@ void cgDone(struct cgCtx* ctx, struct statement* s) {
 //S16c/S16d: both go through the same path a failed check does - abort with a message outside a test,
 //recoverable inside one, exactly as "assert(false)" already behaved. That is the point: "abort" is
 //assert(false) with its intent stated, and "unreachable" states a different intent again.
-void cgAbortLike(struct cgCtx* ctx, bool isUnreachable) {
-    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n",
-            isUnreachable ? "@__olang_msg_unreach" : "@__olang_msg_abort");
+//S18a: where a written check failed, as its message's prefix - "FILE:LINE: what" and then sep ("\n", or ": " before a
+//message of the program's own). A statement the compiler made has no line of its own, and says only what failed
+static char* cgCheckWhere(struct cgCtx* ctx, struct statement* s, const char* what, const char* sep) {
+    char* text;
+    if (s && s->line > 0 && s->file.len) {
+        size_t n = (size_t)s->file.len + strlen(what) + strlen(sep) + 32;
+        text = MallocOrCrash(n);
+        snprintf(text, n, "%.*s:%d: %s%s", s->file.len, s->file.ptr, s->line, what, sep);
+    } else {
+        text = MallocOrCrash(strlen(what) + strlen(sep) + 1);
+        sprintf(text, "%s%s", what, sep);
+    }
+    return cgGlobalStringConst(ctx, text);
+}
+
+void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable) {
+    char* msg = cgCheckWhere(ctx, s, isUnreachable ? "reached unreachable code" : "aborted", "\n");
+    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", msg);
     fputs("  unreachable\n", ctx->fnOut);
     ctx->terminated = true;
 }
@@ -5746,7 +5764,14 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", notc, failLbl, okLbl);
     ctx->terminated = true;
     cgLabel(ctx, failLbl);
-    fputs("  call void @__olang_check_failed(ptr @__olang_msg_assert)\n", ctx->fnOut);
+    //S18a: its location, and the program's own message - evaluated here, only when the check has failed
+    if (s->assertMsg) {
+        char* where = cgCheckWhere(ctx, s, "assertion failed", ": ");
+        char* text = cgValue(ctx, s->assertMsg);
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed_text(ptr %s, { i64, ptr } %s)\n", where, text);
+    } else {
+        fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", cgCheckWhere(ctx, s, "assertion failed", "\n"));
+    }
     cgBr(ctx, okLbl);
     cgLabel(ctx, okLbl);
 }
@@ -5833,8 +5858,8 @@ void cgStatement(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_DO: cgDo(ctx, s); return;
         case STATEMENT_MATCH: cgMatch(ctx, s); return;
         case STATEMENT_RET: cgRet(ctx, s); return;
-        case STATEMENT_ABORT: cgAbortLike(ctx, false); return;
-        case STATEMENT_UNREACHABLE: cgAbortLike(ctx, true); return;
+        case STATEMENT_ABORT: cgAbortLike(ctx, s, false); return;
+        case STATEMENT_UNREACHABLE: cgAbortLike(ctx, s, true); return;
         case STATEMENT_BREAK: cgBreakOrContinue(ctx, true); return;
         case STATEMENT_CONTINUE: cgBreakOrContinue(ctx, false); return;
         case STATEMENT_JOIN: cgJoin(ctx, s); return;
@@ -6211,6 +6236,40 @@ static char* cgGlobalConstInit(struct var* v, const char* gname, FILE* aux) {
     return init;
 }
 
+//K2: another module's immutable global baked as plain data, which no writable reference reaches - its value, to be
+//declared "available_externally": the global is still that module's (nothing is emitted for it here), but this object's
+//optimizer reads its value at every load before the link. A generic's instantiation lives in the root object (B3d), so
+//a library kernel's bounds held in the library's named globals were unknown where the kernel was optimized - unrolled
+//and register-allocated only with the literals written in (std/linalg's GEMM, 7 against 16.6 GFLOPS). NULL when the
+//value needs storage of its own (an array's elements), or its own module would not bake it (cgDecideBakes)
+static char* cgExternConstInit(struct var* v) {
+    if (v->mut || !v->constVal || CtNodeWritable(v->constVal)) return NULL;
+    struct list nodes = ListInit(sizeof(struct ctVal*));
+    CtReachableNodes(v->constVal, &nodes);
+    bool own = true;
+    for (int j = 0; j < nodes.len && own; j++) {
+        struct var* owner = CtNodeOwner(*(struct ctVal**)ListGetIdx(&nodes, j));
+        if (owner && owner != v) own = false;
+    }
+    ListDestroy(nodes);
+    if (!own) return NULL;
+    struct list savedNodes = cgAuxNodes;
+    FILE* savedOut = cgAuxOut;
+    const char* savedBase = cgAuxBase;
+    int savedCtr = cgAuxCtr;
+    cgAuxNodes = ListInit(sizeof(struct cgAuxNode));
+    cgAuxOut = NULL;
+    cgAuxBase = "@dry";
+    char* init = cgConstInit(v->constVal, v->type);
+    if (cgAuxNodes.len) init = NULL; //storage of its own, which only its module defines
+    ListDestroy(cgAuxNodes);
+    cgAuxNodes = savedNodes;
+    cgAuxOut = savedOut;
+    cgAuxBase = savedBase;
+    cgAuxCtr = savedCtr;
+    return init;
+}
+
 void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
     cgBakedFor = NULL; //a new object: its own decisions
     cgDecideBakes(emitMod);
@@ -6227,7 +6286,12 @@ void emitGlobalDecls(FILE* out, struct semaModule* emitMod) {
             //P1: one module, one object. Another module's global is a reference to storage that object
             //defines, never a second definition of it - two would be a duplicate symbol at link time.
             char* init = mod == emitMod ? cgGlobalConstInit(v, name, out) : NULL;
-            if (mod == emitMod) fprintf(out, "%s = global %s %s\n", name, ty, init ? init : "zeroinitializer");
+            //K2: an immutable global baked while compiling, which no writable reference reaches, is never written -
+            //a constant, so the optimizer reads its value at every load before the link (a GEMM kernel's tile bounds,
+            //held in named globals, were neither unrolled nor kept in registers while it was a mutable global)
+            bool ro = init && !v->mut && !CtNodeWritable(v->constVal ? v->constVal : v->bakeVal);
+            if (mod == emitMod) fprintf(out, "%s = %s %s %s\n", name, ro ? "constant" : "global", ty, init ? init : "zeroinitializer");
+            else if ((init = cgExternConstInit(v))) fprintf(out, "%s = available_externally constant %s %s\n", name, ty, init);
             else fprintf(out, "%s = external global %s\n", name, ty);
         }
     }
@@ -6308,6 +6372,7 @@ void emitExternDecls(FILE* out) {
 
 void emitScopeRuntime(FILE* out);
 void emitOsRuntime(FILE* out);
+static void emitFloatTextRuntime(FILE* out);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
  * to a test harness's recovery point (when @__olang_jmp_target is set) or hard-abort (outside test mode,
@@ -6368,6 +6433,9 @@ void emitRuntimeDecls(FILE* out) {
         "declare i32 @pthread_cond_broadcast(ptr)\n"
         "declare i32 @setjmp(ptr) returns_twice\n"
         "@stderr = external global ptr\n"
+        "@stdout = external global ptr\n"
+        "declare i64 @fwrite(ptr, i64, i64, ptr)\n"
+        "declare i32 @fputc(i32, ptr)\n"
         "declare void @longjmp(ptr, i32) noreturn\n"
         "\n"
         //initialexec, not the default general-dynamic: LLVM's default lowers every access to a
@@ -6384,14 +6452,11 @@ void emitRuntimeDecls(FILE* out) {
         //each check names what actually failed - they all used to print "assertion failed", including the
         //two that are not assertions. NUL-terminated, which the old one was not: it was exactly 17 bytes
         //for 16 characters plus a newline, so fputs/printf read past the end of the array looking for one.
-        "@__olang_msg_assert = linkonce_odr unnamed_addr constant [18 x i8] c\"assertion failed\\0A\\00\"\n"
         "@__olang_msg_slice = linkonce_odr unnamed_addr constant [27 x i8] c\"slice bounds out of range\\0A\\00\"\n"
         "@__olang_msg_as = linkonce_odr unnamed_addr constant [34 x i8] c\"'as' named what the value is not\\0A\\00\"\n"
         "@__olang_msg_arraylen = linkonce_odr unnamed_addr constant [27 x i8] c\"array length out of range\\0A\\00\"\n"
         "@__olang_msg_oom = linkonce_odr unnamed_addr constant [15 x i8] c\"out of memory\\0A\\00\"\n"
         "@__olang_msg_arrayfit = linkonce_odr unnamed_addr constant [47 x i8] c\"array length does not match its fixed storage\\0A\\00\"\n"
-        "@__olang_msg_abort = linkonce_odr unnamed_addr constant [9 x i8] c\"aborted\\0A\\00\"\n"
-        "@__olang_msg_unreach = linkonce_odr unnamed_addr constant [26 x i8] c\"reached unreachable code\\0A\\00\"\n"
         "@__olang_msg_spawn = linkonce_odr unnamed_addr constant [22 x i8] c\"could not start task\\0A\\00\"\n"
         "\n"
         //S16a: "done" and "fail" end the innermost thing that can end - the current test if one is
@@ -6420,15 +6485,43 @@ void emitRuntimeDecls(FILE* out) {
         //invariant. Under a test it is recoverable, exactly as S18 says.
         "define linkonce_odr void @__olang_check_failed(ptr %msg) {\n"
         "entry:\n"
+        "  %stream = call ptr @__olang_check_stream()\n"
+        "  call i32 @fputs(ptr %msg, ptr %stream)\n"
+        "  call void @__olang_check_end()\n"
+        "  unreachable\n"
+        "}\n\n"
+        , out);
+    fputs(
+        //S18a: "assert cond, message" - its location's prefix, then the program's own text and a line end
+        "define linkonce_odr void @__olang_check_failed_text(ptr %where, { i64, ptr } %text) {\n"
+        "entry:\n"
+        "  %stream = call ptr @__olang_check_stream()\n"
+        "  call i32 @fputs(ptr %where, ptr %stream)\n"
+        "  %len = extractvalue { i64, ptr } %text, 0\n"
+        "  %data = extractvalue { i64, ptr } %text, 1\n"
+        "  call i64 @fwrite(ptr %data, i64 1, i64 %len, ptr %stream)\n"
+        "  call i32 @fputc(i32 10, ptr %stream)\n"
+        "  call void @__olang_check_end()\n"
+        "  unreachable\n"
+        "}\n\n"
+        //where a failed check says what failed: stderr outside a test - not printf: stdout is block-buffered whenever
+        //it is not a terminal, so abort() discarded the message exactly when the output was being captured, and the
+        //unhandled-error path writes there too - and stdout inside one, beside the "FAIL - " line the harness prints
+        "define linkonce_odr ptr @__olang_check_stream() {\n"
+        "entry:\n"
+        "  %tgt = load ptr, ptr @__olang_jmp_target\n"
+        "  %isnull = icmp eq ptr %tgt, null\n"
+        "  %errs = load ptr, ptr @stderr\n"
+        "  %outs = load ptr, ptr @stdout\n"
+        "  %stream = select i1 %isnull, ptr %errs, ptr %outs\n"
+        "  ret ptr %stream\n"
+        "}\n\n"
+        "define linkonce_odr void @__olang_check_end() {\n"
+        "entry:\n"
         "  %tgt = load ptr, ptr @__olang_jmp_target\n"
         "  %isnull = icmp eq ptr %tgt, null\n"
         "  br i1 %isnull, label %hard, label %soft\n"
         "hard:\n"
-        //stderr, not printf: stdout is block-buffered whenever it is not a terminal, so abort() discarded
-        //the message exactly when the output was being captured. The same stream the unhandled-error path
-        //already writes to.
-        "  %errs = load ptr, ptr @stderr\n"
-        "  call i32 @fputs(ptr %msg, ptr %errs)\n"
         "  call void @abort()\n"
         "  unreachable\n"
         "soft:\n"
@@ -6827,115 +6920,6 @@ void emitScopeRuntime(FILE* out) {
         "  ret bfloat %r\n"
         "}\n\n"
         "", out);
-    fputs(
-        //E11a: a float as the shortest text reading back as it in its own type (kind: 0 F64, 1 F32, 2 F16, 3 BF16 -
-        //enum floatKind). FloatShortest (util.c) is the same algorithm in C, which the evaluator renders with, so the
-        //two give identical text: the fewest digits p for which "%.*e" (p - 1) reads back, rounded to the type, as v;
-        //then laid out as "%.17g" would - positional for a decimal exponent in [-4, 17), "d.ddde+XX" otherwise. An
-        //infinity or a NaN is "%.17g"'s own. v - v is 0 exactly when v is finite.
-        "@__olang_fmt_e = linkonce_odr unnamed_addr constant [5 x i8] c\"%.*e\\00\"\n"
-        "@__olang_fmt_s = linkonce_odr unnamed_addr constant [3 x i8] c\"%s\\00\"\n"
-        "@__olang_fmt_fpad = linkonce_odr unnamed_addr constant [15 x i8] c\"%.*s%c%.*s%.*s\\00\"\n"
-        "@__olang_fmt_fmid = linkonce_odr unnamed_addr constant [16 x i8] c\"%.*s%c%.*s.%.*s\\00\"\n"
-        "@__olang_fmt_fsmall = linkonce_odr unnamed_addr constant [17 x i8] c\"%.*s0.%.*s%c%.*s\\00\"\n"
-        "@__olang_fmt_minus = linkonce_odr unnamed_addr constant [2 x i8] c\"-\\00\"\n"
-        "@__olang_fmt_zeros = linkonce_odr unnamed_addr constant [20 x i8] c\"0000000000000000000\\00\"\n"
-        "define linkonce_odr i64 @__olang_fmt_float(ptr %buf, i64 %cap, double %v, i32 %kind) {\n"
-        "entry:\n"
-        "  %e = alloca [40 x i8]\n"
-        "  %vv = fsub double %v, %v\n"
-        "  %fin = fcmp oeq double %vv, 0.0\n"
-        "  br i1 %fin, label %try, label %special\n"
-        //every NaN renders as "nan": snprintf would print the sign, which for a NaN an operation made is unspecified
-        //(E33a) - LLVM folds 0/0 to +NaN where x86 computes -NaN
-        "special:\n"
-        "  %isnan = fcmp uno double %v, %v\n"
-        "  %w = select i1 %isnan, double 0x7FF8000000000000, double %v\n"
-        "  %ns = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %w)\n"
-        "  %ns64 = sext i32 %ns to i64\n"
-        "  ret i64 %ns64\n"
-        "try:\n"
-        "  %p = phi i32 [ 1, %entry ], [ %p1, %next ]\n"
-        "  %pm1 = sub i32 %p, 1\n"
-        "  %ne = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %e, i64 40, ptr @__olang_fmt_e, i32 %pm1, double %v)\n"
-        "  %back = call double @strtod(ptr %e, ptr null)\n"
-        "  switch i32 %kind, label %r64 [ i32 1, label %r32 i32 2, label %r16 i32 3, label %rb16 ]\n"
-        "r32:\n"
-        "  %t32 = fptrunc double %back to float\n"
-        "  %w32 = fpext float %t32 to double\n"
-        "  br label %cmp\n"
-        "r16:\n"
-        "  %t16 = fptrunc double %back to half\n"
-        "  %w16 = fpext half %t16 to double\n"
-        "  br label %cmp\n"
-        "rb16:\n"
-        "  %tb16 = fptrunc double %back to bfloat\n"
-        "  %wb16 = fpext bfloat %tb16 to double\n"
-        "  br label %cmp\n"
-        "r64:\n"
-        "  br label %cmp\n"
-        "cmp:\n"
-        "  %r = phi double [ %w32, %r32 ], [ %w16, %r16 ], [ %wb16, %rb16 ], [ %back, %r64 ]\n"
-        "  %same = fcmp oeq double %r, %v\n"
-        "  %last = icmp sge i32 %p, 17\n"
-        "  %stop = or i1 %same, %last\n"
-        "  br i1 %stop, label %found, label %next\n"
-        "next:\n"
-        "  %p1 = add i32 %p, 1\n"
-        "  br label %try\n"
-        //e is "[-]d[.ddd]e+XX" with p digits: the sign, the first digit, the rest from s + 2, the exponent after the e
-        "found:\n"
-        "  %c0 = load i8, ptr %e\n"
-        "  %neg = icmp eq i8 %c0, 45\n"
-        "  %negi = zext i1 %neg to i32\n"
-        "  %neg64 = zext i1 %neg to i64\n"
-        "  %s = getelementptr i8, ptr %e, i64 %neg64\n"
-        "  %d1 = load i8, ptr %s\n"
-        "  %d1i = zext i8 %d1 to i32\n"
-        "  %rest = getelementptr i8, ptr %s, i64 2\n"
-        "  %onedig = icmp eq i32 %p, 1\n"
-        "  %p64 = sext i32 %p to i64\n"
-        "  %pp1 = add i64 %p64, 1\n"
-        "  %eoff = select i1 %onedig, i64 1, i64 %pp1\n"
-        "  %eat = getelementptr i8, ptr %s, i64 %eoff\n"
-        "  %xat = getelementptr i8, ptr %eat, i64 1\n"
-        "  %x64 = call i64 @strtol(ptr %xat, ptr null, i32 10)\n"
-        "  %x = trunc i64 %x64 to i32\n"
-        "  %xlo = icmp slt i32 %x, -4\n"
-        "  %xhi = icmp sge i32 %x, 17\n"
-        "  %sci = or i1 %xlo, %xhi\n"
-        "  br i1 %sci, label %wsci, label %fixed\n"
-        "wsci:\n"
-        "  %n1 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_s, ptr %e)\n"
-        "  br label %out\n"
-        "fixed:\n"
-        "  %pad = icmp sge i32 %x, %pm1\n"
-        "  br i1 %pad, label %wpad, label %notpad\n"
-        "wpad:\n"
-        "  %z = sub i32 %x, %pm1\n"
-        "  %n2 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fpad, i32 %negi, "
-            "ptr @__olang_fmt_minus, i32 %d1i, i32 %pm1, ptr %rest, i32 %z, ptr @__olang_fmt_zeros)\n"
-        "  br label %out\n"
-        "notpad:\n"
-        "  %pos = icmp sge i32 %x, 0\n"
-        "  br i1 %pos, label %wmid, label %wsmall\n"
-        "wmid:\n"
-        "  %xs = sext i32 %x to i64\n"
-        "  %tail = getelementptr i8, ptr %rest, i64 %xs\n"
-        "  %tn = sub i32 %pm1, %x\n"
-        "  %n3 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fmid, i32 %negi, "
-            "ptr @__olang_fmt_minus, i32 %d1i, i32 %x, ptr %rest, i32 %tn, ptr %tail)\n"
-        "  br label %out\n"
-        "wsmall:\n"
-        "  %nz = sub i32 -1, %x\n"
-        "  %n4 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fsmall, i32 %negi, "
-            "ptr @__olang_fmt_minus, i32 %nz, ptr @__olang_fmt_zeros, i32 %d1i, i32 %pm1, ptr %rest)\n"
-        "  br label %out\n"
-        "out:\n"
-        "  %n = phi i32 [ %n1, %wsci ], [ %n2, %wpad ], [ %n3, %wmid ], [ %n4, %wsmall ]\n"
-        "  %n64 = sext i32 %n to i64\n"
-        "  ret i64 %n64\n"
-        "}\n\n", out);
     fputs(
         //E11a: appends n bytes at dst+at, or nothing while a rendering is only being measured (dst null)
         "define linkonce_odr void @__olang_rd_put(ptr %dst, i64 %at, ptr %src, i64 %n) {\n"
@@ -7386,6 +7370,475 @@ void emitScopeRuntime(FILE* out) {
         "done:\n"
         "  ret void\n"
         "}\n\n", out);
+}
+
+//E11a: a float's text (@__olang_fmt_float and what it needs, the powers of ten among them) - written only into an object
+//that renders a float, since the powers alone are 11KB of data no other object reads
+static void emitFloatTextRuntime(FILE* out) {
+    fputs(
+        //E11a: a float's text by trying - the fewest digits p for which "%.*e" (p - 1) reads back, rounded to the type,
+        //as v; then laid out as "%.17g" would. An infinity or a NaN is "%.17g"'s own. v - v is 0 exactly when v is
+        //finite. Up to seventeen tries, so @__olang_fmt_float (below) computes the digits directly and comes here only
+        //for the tiniest values, where the two agree - floatShortestByTries in util.c is this in C
+        "@__olang_fmt_e = linkonce_odr unnamed_addr constant [5 x i8] c\"%.*e\\00\"\n"
+        "@__olang_fmt_s = linkonce_odr unnamed_addr constant [3 x i8] c\"%s\\00\"\n"
+        "@__olang_fmt_fpad = linkonce_odr unnamed_addr constant [15 x i8] c\"%.*s%c%.*s%.*s\\00\"\n"
+        "@__olang_fmt_fmid = linkonce_odr unnamed_addr constant [16 x i8] c\"%.*s%c%.*s.%.*s\\00\"\n"
+        "@__olang_fmt_fsmall = linkonce_odr unnamed_addr constant [17 x i8] c\"%.*s0.%.*s%c%.*s\\00\"\n"
+        "@__olang_fmt_minus = linkonce_odr unnamed_addr constant [2 x i8] c\"-\\00\"\n"
+        "@__olang_fmt_zeros = linkonce_odr unnamed_addr constant [20 x i8] c\"0000000000000000000\\00\"\n"
+        "define linkonce_odr i64 @__olang_fmt_float_tries(ptr %buf, i64 %cap, double %v, i32 %kind) {\n"
+        "entry:\n"
+        "  %e = alloca [40 x i8]\n"
+        "  %vv = fsub double %v, %v\n"
+        "  %fin = fcmp oeq double %vv, 0.0\n"
+        "  br i1 %fin, label %try, label %special\n"
+        //every NaN renders as "nan": snprintf would print the sign, which for a NaN an operation made is unspecified
+        //(E33a) - LLVM folds 0/0 to +NaN where x86 computes -NaN
+        "special:\n"
+        "  %isnan = fcmp uno double %v, %v\n"
+        "  %w = select i1 %isnan, double 0x7FF8000000000000, double %v\n"
+        "  %ns = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_g, double %w)\n"
+        "  %ns64 = sext i32 %ns to i64\n"
+        "  ret i64 %ns64\n"
+        "try:\n"
+        "  %p = phi i32 [ 1, %entry ], [ %p1, %next ]\n"
+        "  %pm1 = sub i32 %p, 1\n"
+        "  %ne = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %e, i64 40, ptr @__olang_fmt_e, i32 %pm1, double %v)\n"
+        "  %back = call double @strtod(ptr %e, ptr null)\n"
+        "  switch i32 %kind, label %r64 [ i32 1, label %r32 i32 2, label %r16 i32 3, label %rb16 ]\n"
+        "r32:\n"
+        "  %t32 = fptrunc double %back to float\n"
+        "  %w32 = fpext float %t32 to double\n"
+        "  br label %cmp\n"
+        "r16:\n"
+        "  %t16 = fptrunc double %back to half\n"
+        "  %w16 = fpext half %t16 to double\n"
+        "  br label %cmp\n"
+        "rb16:\n"
+        "  %tb16 = fptrunc double %back to bfloat\n"
+        "  %wb16 = fpext bfloat %tb16 to double\n"
+        "  br label %cmp\n"
+        "r64:\n"
+        "  br label %cmp\n"
+        "cmp:\n"
+        "  %r = phi double [ %w32, %r32 ], [ %w16, %r16 ], [ %wb16, %rb16 ], [ %back, %r64 ]\n"
+        "  %same = fcmp oeq double %r, %v\n"
+        "  %last = icmp sge i32 %p, 17\n"
+        "  %stop = or i1 %same, %last\n"
+        "  br i1 %stop, label %found, label %next\n"
+        "next:\n"
+        "  %p1 = add i32 %p, 1\n"
+        "  br label %try\n"
+        //e is "[-]d[.ddd]e+XX" with p digits: the sign, the first digit, the rest from s + 2, the exponent after the e
+        "found:\n"
+        "  %c0 = load i8, ptr %e\n"
+        "  %neg = icmp eq i8 %c0, 45\n"
+        "  %negi = zext i1 %neg to i32\n"
+        "  %neg64 = zext i1 %neg to i64\n"
+        "  %s = getelementptr i8, ptr %e, i64 %neg64\n"
+        "  %d1 = load i8, ptr %s\n"
+        "  %d1i = zext i8 %d1 to i32\n"
+        "  %rest = getelementptr i8, ptr %s, i64 2\n"
+        "  %onedig = icmp eq i32 %p, 1\n"
+        "  %p64 = sext i32 %p to i64\n"
+        "  %pp1 = add i64 %p64, 1\n"
+        "  %eoff = select i1 %onedig, i64 1, i64 %pp1\n"
+        "  %eat = getelementptr i8, ptr %s, i64 %eoff\n"
+        "  %xat = getelementptr i8, ptr %eat, i64 1\n"
+        "  %x64 = call i64 @strtol(ptr %xat, ptr null, i32 10)\n"
+        "  %x = trunc i64 %x64 to i32\n"
+        "  %xlo = icmp slt i32 %x, -4\n"
+        "  %xhi = icmp sge i32 %x, 17\n"
+        "  %sci = or i1 %xlo, %xhi\n"
+        "  br i1 %sci, label %wsci, label %fixed\n"
+        "wsci:\n"
+        "  %n1 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_s, ptr %e)\n"
+        "  br label %out\n"
+        "fixed:\n"
+        "  %pad = icmp sge i32 %x, %pm1\n"
+        "  br i1 %pad, label %wpad, label %notpad\n"
+        "wpad:\n"
+        "  %z = sub i32 %x, %pm1\n"
+        "  %n2 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fpad, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %d1i, i32 %pm1, ptr %rest, i32 %z, ptr @__olang_fmt_zeros)\n"
+        "  br label %out\n"
+        "notpad:\n"
+        "  %pos = icmp sge i32 %x, 0\n"
+        "  br i1 %pos, label %wmid, label %wsmall\n"
+        "wmid:\n"
+        "  %xs = sext i32 %x to i64\n"
+        "  %tail = getelementptr i8, ptr %rest, i64 %xs\n"
+        "  %tn = sub i32 %pm1, %x\n"
+        "  %n3 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fmid, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %d1i, i32 %x, ptr %rest, i32 %tn, ptr %tail)\n"
+        "  br label %out\n"
+        "wsmall:\n"
+        "  %nz = sub i32 -1, %x\n"
+        "  %n4 = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_fsmall, i32 %negi, "
+            "ptr @__olang_fmt_minus, i32 %nz, ptr @__olang_fmt_zeros, i32 %d1i, i32 %pm1, ptr %rest)\n"
+        "  br label %out\n"
+        "out:\n"
+        "  %n = phi i32 [ %n1, %wsci ], [ %n2, %wpad ], [ %n3, %wmid ], [ %n4, %wsmall ]\n"
+        "  %n64 = sext i32 %n to i64\n"
+        "  ret i64 %n64\n"
+        "}\n\n", out);
+    fputs("@__olang_pow10m = linkonce_odr unnamed_addr constant [1392 x i64] [", out);
+    for (int i = 0; i < 1392; i++) fprintf(out, "%si64 %lld", i ? ", " : "", (long long)FloatPow10[i]);
+    fputs("]\n", out);
+    fputs(
+        //E11a: Schubfach (Giulietti) - FloatSchubfach (util.c) written in IR, with the same powers of ten, so the run
+        //time and the evaluator compute the same digits. The rounded-to-odd top bits of g * cp, g = g1 * 2^63 + g0:
+        "define linkonce_odr i64 @__olang_rop(i64 %g1, i64 %g0, i64 %cp) {\n"
+        "entry:\n"
+        "  %g0w = zext i64 %g0 to i128\n"
+        "  %cpw = zext i64 %cp to i128\n"
+        "  %x = mul i128 %g0w, %cpw\n"
+        "  %xs = lshr i128 %x, 64\n"
+        "  %x1 = trunc i128 %xs to i64\n"
+        "  %g1w = zext i64 %g1 to i128\n"
+        "  %y = mul i128 %g1w, %cpw\n"
+        "  %ys = lshr i128 %y, 64\n"
+        "  %y1 = trunc i128 %ys to i64\n"
+        "  %y0 = trunc i128 %y to i64\n"
+        "  %y0s = lshr i64 %y0, 1\n"
+        "  %z = add i64 %y0s, %x1\n"
+        "  %z63 = lshr i64 %z, 63\n"
+        "  %vbp = add i64 %y1, %z63\n"
+        "  %zm = and i64 %z, 9223372036854775807\n"
+        "  %zp = add i64 %zm, 9223372036854775807\n"
+        "  %st = lshr i64 %zp, 63\n"
+        "  %r = or i64 %vbp, %st\n"
+        "  ret i64 %r\n"
+        "}\n\n"
+        , out);
+    fputs(
+        //the shortest decimal f * 10^e in the rounding interval of c * 2^q (p significant bits, qmin the subnormals'
+        //exponent), the closest to it of those - { f, e, true } - else, for the tiniest c, { _, _, false }
+        "define linkonce_odr { i64, i32, i1 } @__olang_shortest(i64 %c, i32 %q, i32 %p, i32 %qmin) {\n"
+        "entry:\n"
+        "  %tiny = icmp ult i64 %c, 8\n"
+        "  br i1 %tiny, label %fail, label %go\n"
+        "go:\n"
+        "  %out = and i64 %c, 1\n"
+        "  %cb = shl i64 %c, 2\n"
+        "  %cbr = add i64 %cb, 2\n"
+        "  %pm1 = sub i32 %p, 1\n"
+        "  %pm1w = zext i32 %pm1 to i64\n"
+        "  %pow = shl i64 1, %pm1w\n"
+        "  %ispow = icmp eq i64 %c, %pow\n"
+        "  %notmin = icmp ne i32 %q, %qmin\n"
+        "  %lop = and i1 %ispow, %notmin\n"
+        "  %q64 = sext i32 %q to i64\n"
+        "  %qk = mul i64 %q64, 661971961083\n"
+        "  %qk2 = sub i64 %qk, 274743187321\n"
+        "  %kin = select i1 %lop, i64 %qk2, i64 %qk\n"
+        "  %k = ashr i64 %kin, 41\n"
+        "  %cbl1 = sub i64 %cb, 2\n"
+        "  %cbl2 = sub i64 %cb, 1\n"
+        "  %cbl = select i1 %lop, i64 %cbl2, i64 %cbl1\n"
+        "  %nk = sub i64 0, %k\n"
+        "  %hk = mul i64 %nk, 913124641741\n"
+        "  %hk2 = ashr i64 %hk, 38\n"
+        "  %h0 = add i64 %q64, %hk2\n"
+        "  %h = add i64 %h0, 2\n"
+        "  %rowa = sub i64 348, %k\n"
+        "  %row = shl i64 %rowa, 1\n"
+        "  %hp = getelementptr [1392 x i64], ptr @__olang_pow10m, i64 0, i64 %row\n"
+        "  %hi = load i64, ptr %hp\n"
+        "  %row1 = add i64 %row, 1\n"
+        "  %lp = getelementptr [1392 x i64], ptr @__olang_pow10m, i64 0, i64 %row1\n"
+        "  %lo = load i64, ptr %lp\n"
+        "  %gh0 = lshr i64 %hi, 2\n"
+        "  %lo2 = lshr i64 %lo, 2\n"
+        "  %hi62 = shl i64 %hi, 62\n"
+        "  %gl0 = or i64 %lo2, %hi62\n"
+        "  %gl = add i64 %gl0, 1\n"
+        "  %glz = icmp eq i64 %gl, 0\n"
+        "  %ghc = zext i1 %glz to i64\n"
+        "  %gh = add i64 %gh0, %ghc\n"
+        "  %gh1 = shl i64 %gh, 1\n"
+        "  %gl63 = lshr i64 %gl, 63\n"
+        "  %g1 = or i64 %gh1, %gl63\n"
+        "  %g0 = and i64 %gl, 9223372036854775807\n"
+        "  %cbh = shl i64 %cb, %h\n"
+        "  %cblh = shl i64 %cbl, %h\n"
+        "  %cbrh = shl i64 %cbr, %h\n"
+        "  %vb = call i64 @__olang_rop(i64 %g1, i64 %g0, i64 %cbh)\n"
+        "  %vbl = call i64 @__olang_rop(i64 %g1, i64 %g0, i64 %cblh)\n"
+        "  %vbr = call i64 @__olang_rop(i64 %g1, i64 %g0, i64 %cbrh)\n"
+        "  %vblo = add i64 %vbl, %out\n"
+        "  %s = lshr i64 %vb, 2\n"
+        "  %big = icmp uge i64 %s, 10\n"
+        "  br i1 %big, label %ten, label %one\n"
+        //one digit fewer: the multiples of ten either side of v
+        "ten:\n"
+        "  %s10 = udiv i64 %s, 10\n"
+        "  %sp10 = mul i64 %s10, 10\n"
+        "  %tp10 = add i64 %sp10, 10\n"
+        "  %sp4 = shl i64 %sp10, 2\n"
+        "  %upin = icmp ule i64 %vblo, %sp4\n"
+        "  %tp4 = shl i64 %tp10, 2\n"
+        "  %tp4o = add i64 %tp4, %out\n"
+        "  %wpin = icmp ule i64 %tp4o, %vbr\n"
+        "  %both = and i1 %upin, %wpin\n"
+        "  br i1 %both, label %fail, label %ten2\n"
+        "ten2:\n"
+        "  %either = or i1 %upin, %wpin\n"
+        "  br i1 %either, label %tenok, label %one\n"
+        "tenok:\n"
+        "  %ften = select i1 %upin, i64 %sp10, i64 %tp10\n"
+        "  br label %found\n"
+        "one:\n"
+        "  %t = add i64 %s, 1\n"
+        "  %s4 = shl i64 %s, 2\n"
+        "  %uin = icmp ule i64 %vblo, %s4\n"
+        "  %t4 = shl i64 %t, 2\n"
+        "  %t4o = add i64 %t4, %out\n"
+        "  %win = icmp ule i64 %t4o, %vbr\n"
+        "  %st = add i64 %s, %t\n"
+        "  %st2 = shl i64 %st, 1\n"
+        "  %cmp = sub i64 %vb, %st2\n"
+        "  %clt = icmp slt i64 %cmp, 0\n"
+        "  %ceq = icmp eq i64 %cmp, 0\n"
+        "  %so = and i64 %s, 1\n"
+        "  %se = icmp eq i64 %so, 0\n"
+        "  %ctie = and i1 %ceq, %se\n"
+        "  %low1 = or i1 %clt, %ctie\n"
+        "  %ok1 = or i1 %uin, %win\n"
+        "  %oneof = xor i1 %uin, %win\n"
+        "  %pick = select i1 %oneof, i1 %uin, i1 %low1\n"
+        "  %fone = select i1 %pick, i64 %s, i64 %t\n"
+        "  br i1 %ok1, label %found, label %fail\n"
+        "found:\n"
+        "  %f = phi i64 [ %ften, %tenok ], [ %fone, %one ]\n"
+        "  %k32 = trunc i64 %k to i32\n"
+        "  %r0 = insertvalue { i64, i32, i1 } undef, i64 %f, 0\n"
+        "  %r1 = insertvalue { i64, i32, i1 } %r0, i32 %k32, 1\n"
+        "  %r2 = insertvalue { i64, i32, i1 } %r1, i1 true, 2\n"
+        "  ret { i64, i32, i1 } %r2\n"
+        "fail:\n"
+        "  ret { i64, i32, i1 } { i64 0, i32 0, i1 false }\n"
+        "}\n\n"
+        , out);
+    fputs(
+        //E11a: a float as the shortest text reading back as it in its own type (kind: 0 F64, 1 F32, 2 F16, 3 BF16 -
+        //enum floatKind): its significand and exponent in that type, Schubfach's digits, then laid out as "%.17g" lays
+        //a number out - positional for a decimal exponent in [-4, 17), "d.ddde+XX" otherwise. For the tiniest values,
+        //and an infinity or a NaN, @__olang_fmt_float_tries. snprintf's contract:
+        //the length is returned, and with a buffer of cap bytes as much as fits is written, then a NUL
+        "define linkonce_odr i64 @__olang_fmt_float(ptr %buf, i64 %cap, double %v, i32 %kind) {\n"
+        "entry:\n"
+        "  %d = alloca [24 x i8]\n"
+        "  %o = alloca [48 x i8]\n"
+        "  %vv = fsub double %v, %v\n"
+        "  %fin = fcmp oeq double %vv, 0.0\n"
+        "  br i1 %fin, label %finite, label %tries\n"
+        "tries:\n"
+        "  %tn = call i64 @__olang_fmt_float_tries(ptr %buf, i64 %cap, double %v, i32 %kind)\n"
+        "  ret i64 %tn\n"
+        "finite:\n"
+        "  %bits = bitcast double %v to i64\n"
+        "  %neg = icmp slt i64 %bits, 0\n"
+        "  %negi = zext i1 %neg to i64\n"
+        "  store i8 45, ptr %o\n"
+        "  %isz = fcmp oeq double %v, 0.0\n"
+        "  br i1 %isz, label %zero, label %parts\n"
+        "zero:\n"
+        "  %oz0 = getelementptr i8, ptr %o, i64 %negi\n"
+        "  store i8 48, ptr %oz0\n"
+        "  %zlen = add i64 %negi, 1\n"
+        "  br label %copy\n"
+        "parts:\n"
+        "  switch i32 %kind, label %k64 [ i32 1, label %k32 i32 2, label %k16 i32 3, label %kb16 ]\n"
+        "k64:\n"
+        "  %e64s = lshr i64 %bits, 52\n"
+        "  %e64 = and i64 %e64s, 2047\n"
+        "  %m64 = and i64 %bits, 4503599627370495\n"
+        "  br label %kc\n"
+        "k32:\n"
+        "  %f32 = fptrunc double %v to float\n"
+        "  %b32 = bitcast float %f32 to i32\n"
+        "  %b32w = zext i32 %b32 to i64\n"
+        "  %e32s = lshr i64 %b32w, 23\n"
+        "  %e32 = and i64 %e32s, 255\n"
+        "  %m32 = and i64 %b32w, 8388607\n"
+        "  br label %kc\n"
+        "k16:\n"
+        "  %f16 = fptrunc double %v to half\n"
+        "  %b16 = bitcast half %f16 to i16\n"
+        "  %b16w = zext i16 %b16 to i64\n"
+        "  %e16s = lshr i64 %b16w, 10\n"
+        "  %e16 = and i64 %e16s, 31\n"
+        "  %m16 = and i64 %b16w, 1023\n"
+        "  br label %kc\n"
+        "kb16:\n"
+        "  %fb16 = fptrunc double %v to bfloat\n"
+        "  %bb16 = bitcast bfloat %fb16 to i16\n"
+        "  %bb16w = zext i16 %bb16 to i64\n"
+        "  %eb16s = lshr i64 %bb16w, 7\n"
+        "  %eb16 = and i64 %eb16s, 255\n"
+        "  %mb16 = and i64 %bb16w, 127\n"
+        "  br label %kc\n"
+        , out);
+    fputs(
+        //the type's exponent field, its fraction, its implicit bit, its bias plus its fraction's width, the
+        //subnormals' exponent and its precision
+        "kc:\n"
+        "  %ex = phi i64 [ %e64, %k64 ], [ %e32, %k32 ], [ %e16, %k16 ], [ %eb16, %kb16 ]\n"
+        "  %mn = phi i64 [ %m64, %k64 ], [ %m32, %k32 ], [ %m16, %k16 ], [ %mb16, %kb16 ]\n"
+        "  %impl = phi i64 [ 4503599627370496, %k64 ], [ 8388608, %k32 ], [ 1024, %k16 ], [ 128, %kb16 ]\n"
+        "  %off = phi i64 [ 1075, %k64 ], [ 150, %k32 ], [ 25, %k16 ], [ 134, %kb16 ]\n"
+        "  %qmin = phi i32 [ -1074, %k64 ], [ -149, %k32 ], [ -24, %k16 ], [ -133, %kb16 ]\n"
+        "  %prec = phi i32 [ 53, %k64 ], [ 24, %k32 ], [ 11, %k16 ], [ 8, %kb16 ]\n"
+        "  %sub = icmp eq i64 %ex, 0\n"
+        "  %cn = or i64 %mn, %impl\n"
+        "  %c = select i1 %sub, i64 %mn, i64 %cn\n"
+        "  %ex1 = select i1 %sub, i64 1, i64 %ex\n"
+        "  %q64 = sub i64 %ex1, %off\n"
+        "  %q = trunc i64 %q64 to i32\n"
+        "  %r = call { i64, i32, i1 } @__olang_shortest(i64 %c, i32 %q, i32 %prec, i32 %qmin)\n"
+        "  %ok = extractvalue { i64, i32, i1 } %r, 2\n"
+        "  br i1 %ok, label %strip, label %tries\n"
+        "strip:\n"
+        "  %f0 = extractvalue { i64, i32, i1 } %r, 0\n"
+        "  %e0 = extractvalue { i64, i32, i1 } %r, 1\n"
+        "  br label %sloop\n"
+        "sloop:\n"
+        "  %f = phi i64 [ %f0, %strip ], [ %fq, %sdiv ]\n"
+        "  %e = phi i32 [ %e0, %strip ], [ %e1, %sdiv ]\n"
+        "  %fq = udiv i64 %f, 10\n"
+        "  %fr = mul i64 %fq, 10\n"
+        "  %zr = icmp eq i64 %fr, %f\n"
+        "  br i1 %zr, label %sdiv, label %digits\n"
+        "sdiv:\n"
+        "  %e1 = add i32 %e, 1\n"
+        "  br label %sloop\n"
+        , out);
+    fputs(
+        //d holds the n digits; x is the decimal exponent of the first
+        "digits:\n"
+        "  %n64 = call i64 @__olang_fmt_u64(ptr %d, i64 %f)\n"
+        "  %n = trunc i64 %n64 to i32\n"
+        "  %nm1 = sub i32 %n, 1\n"
+        "  %x = add i32 %e, %nm1\n"
+        "  %xlo = icmp slt i32 %x, -4\n"
+        "  %xhi = icmp sge i32 %x, 17\n"
+        "  %sci = or i1 %xlo, %xhi\n"
+        "  br i1 %sci, label %wsci, label %fixed\n"
+        "wsci:\n"
+        "  %o1 = getelementptr i8, ptr %o, i64 %negi\n"
+        "  %d0 = load i8, ptr %d\n"
+        "  store i8 %d0, ptr %o1\n"
+        "  %w1 = add i64 %negi, 1\n"
+        "  %many = icmp sgt i32 %n, 1\n"
+        "  br i1 %many, label %sfrac, label %sexp\n"
+        "sfrac:\n"
+        "  %o2 = getelementptr i8, ptr %o, i64 %w1\n"
+        "  store i8 46, ptr %o2\n"
+        "  %w2 = add i64 %w1, 1\n"
+        "  %o3 = getelementptr i8, ptr %o, i64 %w2\n"
+        "  %d1 = getelementptr i8, ptr %d, i64 1\n"
+        "  %nm164 = zext i32 %nm1 to i64\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %o3, ptr %d1, i64 %nm164, i1 false)\n"
+        "  %w3 = add i64 %w2, %nm164\n"
+        "  br label %sexp\n"
+        "sexp:\n"
+        "  %ws = phi i64 [ %w1, %wsci ], [ %w3, %sfrac ]\n"
+        "  %oe = getelementptr i8, ptr %o, i64 %ws\n"
+        "  store i8 101, ptr %oe\n"
+        "  %xneg = icmp slt i32 %x, 0\n"
+        "  %sgn = select i1 %xneg, i8 45, i8 43\n"
+        "  %ws1 = add i64 %ws, 1\n"
+        "  %osg = getelementptr i8, ptr %o, i64 %ws1\n"
+        "  store i8 %sgn, ptr %osg\n"
+        "  %ws2 = add i64 %ws, 2\n"
+        "  %xn = sub i32 0, %x\n"
+        "  %ax = select i1 %xneg, i32 %xn, i32 %x\n"
+        "  %ax64 = zext i32 %ax to i64\n"
+        "  %small = icmp ult i32 %ax, 10\n"
+        "  br i1 %small, label %epad, label %enum\n"
+        "epad:\n"
+        "  %oz = getelementptr i8, ptr %o, i64 %ws2\n"
+        "  store i8 48, ptr %oz\n"
+        "  %ws3 = add i64 %ws2, 1\n"
+        "  br label %enum\n"
+        "enum:\n"
+        "  %wx = phi i64 [ %ws2, %sexp ], [ %ws3, %epad ]\n"
+        "  %ox = getelementptr i8, ptr %o, i64 %wx\n"
+        "  %nx = call i64 @__olang_fmt_u64(ptr %ox, i64 %ax64)\n"
+        "  %wend1 = add i64 %wx, %nx\n"
+        "  br label %copy\n"
+        "fixed:\n"
+        "  %pad = icmp sge i32 %x, %nm1\n"
+        "  br i1 %pad, label %wpad, label %notpad\n"
+        , out);
+    fputs(
+        //the digits, then x + 1 - n zeros
+        "wpad:\n"
+        "  %op = getelementptr i8, ptr %o, i64 %negi\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %op, ptr %d, i64 %n64, i1 false)\n"
+        "  %wp = add i64 %negi, %n64\n"
+        "  %zc = sub i32 %x, %nm1\n"
+        "  %zc64 = zext i32 %zc to i64\n"
+        "  %oz2 = getelementptr i8, ptr %o, i64 %wp\n"
+        "  call void @llvm.memset.p0.i64(ptr %oz2, i8 48, i64 %zc64, i1 false)\n"
+        "  %wend2 = add i64 %wp, %zc64\n"
+        "  br label %copy\n"
+        "notpad:\n"
+        "  %pos = icmp sge i32 %x, 0\n"
+        "  br i1 %pos, label %wmid, label %wsmall\n"
+        //the first x + 1 digits, a point, the rest
+        "wmid:\n"
+        "  %x1 = add i32 %x, 1\n"
+        "  %x164 = zext i32 %x1 to i64\n"
+        "  %om = getelementptr i8, ptr %o, i64 %negi\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %om, ptr %d, i64 %x164, i1 false)\n"
+        "  %wm = add i64 %negi, %x164\n"
+        "  %odot = getelementptr i8, ptr %o, i64 %wm\n"
+        "  store i8 46, ptr %odot\n"
+        "  %wm1 = add i64 %wm, 1\n"
+        "  %rest = sub i64 %n64, %x164\n"
+        "  %drest = getelementptr i8, ptr %d, i64 %x164\n"
+        "  %om2 = getelementptr i8, ptr %o, i64 %wm1\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %om2, ptr %drest, i64 %rest, i1 false)\n"
+        "  %wend3 = add i64 %wm1, %rest\n"
+        "  br label %copy\n"
+        //"0.", then -x - 1 zeros, then the digits
+        "wsmall:\n"
+        "  %os = getelementptr i8, ptr %o, i64 %negi\n"
+        "  store i8 48, ptr %os\n"
+        "  %wsa = add i64 %negi, 1\n"
+        "  %osd = getelementptr i8, ptr %o, i64 %wsa\n"
+        "  store i8 46, ptr %osd\n"
+        "  %wsb = add i64 %negi, 2\n"
+        "  %zs = sub i32 -1, %x\n"
+        "  %zs64 = zext i32 %zs to i64\n"
+        "  %osz = getelementptr i8, ptr %o, i64 %wsb\n"
+        "  call void @llvm.memset.p0.i64(ptr %osz, i8 48, i64 %zs64, i1 false)\n"
+        "  %wsc = add i64 %wsb, %zs64\n"
+        "  %osdg = getelementptr i8, ptr %o, i64 %wsc\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %osdg, ptr %d, i64 %n64, i1 false)\n"
+        "  %wend4 = add i64 %wsc, %n64\n"
+        "  br label %copy\n"
+        "copy:\n"
+        "  %len = phi i64 [ %zlen, %zero ], [ %wend1, %enum ], [ %wend2, %wpad ], [ %wend3, %wmid ], [ %wend4, %wsmall ]\n"
+        "  %hasbuf = icmp ne ptr %buf, null\n"
+        "  %hascap = icmp ne i64 %cap, 0\n"
+        "  %wr = and i1 %hasbuf, %hascap\n"
+        "  br i1 %wr, label %write, label %done\n"
+        "write:\n"
+        "  %capm1 = sub i64 %cap, 1\n"
+        "  %fits = icmp ult i64 %len, %cap\n"
+        "  %cnt = select i1 %fits, i64 %len, i64 %capm1\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %o, i64 %cnt, i1 false)\n"
+        "  %nul = getelementptr i8, ptr %buf, i64 %cnt\n"
+        "  store i8 0, ptr %nul\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret i64 %len\n"
+        "}\n\n"
+        "", out);
 }
 
 //a number of `bytes` bytes at `off` in the struct at %base, as an i64 named %name - sign- or zero-extended as the C
@@ -7908,6 +8361,10 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
         }
     }
+    //D9: a "mut" parameter holding a run-time-length array by value - a generic's, instantiated with one (D9a) - is the
+    //callee's own copy, as a struct's is: it was handed the caller's { length, storage } pair, and writing through that
+    //changed the caller's array (or faulted on a constant one)
+    struct list ownCopies = ListInit(sizeof(int));
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         if (cgIsDtor(func)) { //C9: the instance itself, in place - its storage is where the pointer passed points
@@ -7935,6 +8392,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         //cgStoreInto's by-ref branch which expects our internal ptr-to-storage convention
         fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
         cgDbgVar(ctx, slot, p->name, p->type, func->tok.lineNr, i + 1);
+        if (p->mut && !p->type.structMAlloc && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc) ListAdd(&ownCopies, &i);
     }
 
     //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the
@@ -7944,6 +8402,15 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", ownScope);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
+    for (int k = 0; k < ownCopies.len; k++) {
+        struct var* p = ListGetIdx(&func->type.vars, *(int*)ListGetIdx(&ownCopies, k));
+        struct cgLocal* l = cgFindLocal(ctx, p->name);
+        char* cur = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load { i64, ptr }, ptr %s\n", cur, l->llvmVal);
+        char* mine = cgCopyRuntimeLengthArray(ctx, p->type, cur, ownScope, NULL);
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", mine, l->llvmVal);
+    }
+    ListDestroy(ownCopies);
     //O2: the body IS a block, and the checker counts it as depth 1 (buildBlock). This path emits its
     //statements directly rather than through cgBlock, so the depth has to be set to match or every
     //nested block lands one level too shallow and never gets an arena of its own.
@@ -8380,6 +8847,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
         cgEmitLambdasOf(&ctx, NULL, mod, true); //D16: those written in its tests
     }
     cgEmitFuncValues(&ctx);
+    if (ctx.floatText) emitFloatTextRuntime(out);
 
     fflush(fnOut);
     fwrite(fnBuf, 1, fnSize, out);

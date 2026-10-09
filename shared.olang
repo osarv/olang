@@ -11935,3 +11935,145 @@ test "O25h/O10c: pairs holding text and nodes pushed where their list lives" {
     r := $last.First $last.Second.v
     assert r == "2k20"
 }
+
+# L10a: a hexadecimal or binary literal is a bit pattern - read unsigned where it adapts to an unsigned type, so one with
+# the top bit set fits U64 (it did not: its I64 reading is negative), and as an I64 otherwise. Baked and decided while
+# compiling (K2, S18c), and the same computed at run time from a mutable global.
+HexGolden U64 = 0x9E3779B97F4A7C15
+HexMask U64 = 0xFF00000000000000 | 0xFF
+HexSeen mut U64 = 0
+fn hexMix(x U64) U64 { return x * 0x9E3779B97F4A7C15 }
+test "L10a: a hex or binary literal with its top bit set fits U64" {
+    assert HexGolden == hexMix(1) and $HexGolden == "11400714819323198485" and $HexMask == "18374686479671623935"
+    m U64 = 0xFFFFFFFFFFFFFFFF
+    s I64 = 0xFFFFFFFFFFFFFFFF
+    b U64 = 0b1000000000000000000000000000000000000000000000000000000000000001
+    assert m == U64(0) - 1 and s == -1 and b == (0x8000000000000000 | 1) and HexMask > 0xFEFFFFFFFFFFFFFF
+    t I64 = 0xFF00000000000000 | 0xFF
+    assert t < 0
+    HexSeen = HexSeen + 1
+    assert hexMix(HexSeen) == HexGolden and HexSeen + 0x8000000000000000 == 0x8000000000000001
+    assert $(HexSeen * 0xFFFFFFFFFFFFFFFF) == "18446744073709551615"
+}
+
+# O10d: a generic's by-value parameter bound to a run-time-length array - text a literal bound to String - is storage
+# this call keeps, so borrowing it for a call ("a == key" calls String's Eq, "takes(key)") is ordinary; it was "lives in
+# this function's own scope, which closes first". And D9: a "mut" one is the callee's own copy, as a struct's is - it
+# wrote through to the caller's array at run time while the evaluator copied it
+fn gvTakes(a String&) I64 { return a.Len() }
+fn gvEq(a String&, key <K>) Bool { return a == key }
+fn gvPass(key <K>) I64 { return gvTakes(key) }
+fn gvBump(x mut <K>) I64 {
+    x[0] = 'z'
+    return x.Len()
+}
+fn gvBumpNums(x mut <K>) I64 {
+    x[0] = 9
+    return x[0] + x.Len()
+}
+GvSeen mut I64 = 0
+GvBaked I64 = gvPass("abc") + gvBump("hey")
+test "a generic's by-value array parameter: borrowed for a call, and its own copy when mut" {
+    assert gvEq("x", "x") and not gvEq("x", "y") and gvPass("abcd") == 4 and GvBaked == 6
+    GvSeen = GvSeen + 1
+    s String = $GvSeen "bc"
+    assert gvEq("1bc", s) and gvPass(s) == 3
+    assert gvBump(s) == 3 and s == "1bc"
+    n := I64[GvSeen, 2]
+    assert gvBumpNums(n) == 11 and n[0] == 1
+    m Array<I64> = Array<I64>(3, GvSeen)
+    assert gvBumpNums(m) == 12 and m[0] == 1
+}
+
+# E31: an index with several operands - "m[i, j]" calls At(i, j), "m[i, j] = v" SetAt(i, j, v), "m[i, j] += v" both with
+# the indices evaluated once, and under "try" the checked forms of the same arity. Baked while compiling (K2) and
+# computed at run time, which agree
+type mxGrid struct(rows I64, cols I64) {
+    rows
+    cols
+    cells mut Array<I64>& = Array<I64>(rows * cols)
+}
+fn (g mxGrid&) At(i I64, j I64) I64 { return g.cells[i * g.cols + j] }
+fn (g mxGrid&) SetAt(i I64, j I64, v I64) { g.cells[i * g.cols + j] = v }
+fn (g mxGrid&) TryAt(i I64, j I64) I64 ? BuiltinError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+    return g[i, j]
+}
+fn (g mxGrid&) TrySetAt(i I64, j I64, v I64) ? BuiltinError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+    g[i, j] = v
+}
+MxCalls mut I64 = 0
+fn mxNext() I64 {
+    MxCalls = MxCalls + 1
+    return MxCalls
+}
+fn mxTrace(n I64) I64 {
+    g := mxGrid(n, n)
+    for i in range n { for j in range n { g[i, j] = i * 10 + j } }
+    g[1, 1] += 100
+    t I64 = 0
+    for i in range n { t = t + g[i, i] }
+    return t + (try g[n, 0] catch default -1000)
+}
+MxBaked I64 = mxTrace(3)
+test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
+    assert MxBaked == 33 + 100 - 1000 and mxTrace(MxCalls + 3) == MxBaked
+    g := mxGrid(2, 2)
+    g[mxNext(), mxNext() - 2] = 5                           # indices left to right: [1, 0]
+    assert MxCalls == 2 and g[1, 0] == 5
+    g[mxNext() - 2, 0] *= 3
+    assert MxCalls == 3 and g[1, 0] == 15
+    try g[1, 1] = 4 catch { fail }
+    try g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
+    assert MxCalls == 0 and g[1, 1] == 4 and (try g[-1, 0] catch default 7) == 7
+}
+
+# S18a: "assert cond, message" - the message (any text: a literal, a join, "$x", a String a call gives) is evaluated
+# only when the assert fails, so one that holds never runs it
+AsMsgCalls mut I64 = 0
+fn asMsg(i I64) String {
+    AsMsgCalls = AsMsgCalls + 1
+    return "message " $i
+}
+test "S18a: an assert's message is evaluated only when it fails" {
+    for i in range AsMsgCalls + 3 {
+        assert i < 3, asMsg(i)
+        assert i >= 0, "i is " $i
+        assert AsMsgCalls == 0, $asMsg(i) " " $AsMsgCalls
+    }
+    assert(AsMsgCalls == 0), "the message ran " $AsMsgCalls " times"
+}
+
+# E11a: a float's text is computed directly (Schubfach) rather than by up to seventeen snprintf/strtod tries - the
+# shortest that reads back, the closest of those, as the prelude's F64.ShortestDecimal gives - here the smallest
+# subnormals (still by the tries), powers of two (whose interval is lopsided: 2^-1017 and the BF16 2^-119 are a digit
+# shorter than the nearest decimal of their length would be), the largest, and the narrow types' edges; baked while
+# compiling (K2, FloatShortest) and rendered at run time (@__olang_fmt_float), identically
+RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.2250738585072014e-308 9.223372036854776e+18 "
+                  "9.332636185032189e-302 7.120236347223045e-307 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 "
+                  "99999999999999980 "
+                  "1e-45 4e-45 1.1754944e-38 1.7014118e+38 3.4028235e+38 7.888609e-31 16777216 0.1 "
+                  "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 1.51e-36 ")
+fn rsText(z U64) String {
+    s := StringBuilder()
+    for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000,
+                 0x0060000000000000] {
+        s.Push($((b + z).F64FromBits()) " ")
+    }
+    for x in F64[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
+    for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($((b + U32(z)).F32FromBits()) " ") }
+    for x in F32[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
+    for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($((b + U16(z)).F16FromBits()) " ") }
+    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($((b + U16(z)).BF16FromBits()) " ") }
+    return s.ToString()
+}
+RsBaked String = rsText(0)
+RsZero mut U64 = 0
+test "E11a: a float's text, computed directly, is the shortest that reads back - while compiling and at run time" {
+    assert RsBaked == RsWant, RsBaked
+    assert rsText(RsZero) == RsWant, rsText(RsZero)
+    assert $F64(5e-324) == "5e-324" and $F32(1e-45) == "1e-45" and $(0.1 + 0.2) == "0.30000000000000004"
+    f, e := try (0x0060000000000000 + RsZero).F64FromBits().ShortestDecimal() catch { unreachable }
+    assert $f "e" $e == "7120236347223045e-322"         # the prelude's digits are $'s
+}
