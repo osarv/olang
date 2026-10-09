@@ -1217,6 +1217,25 @@ test "O15: nested instances built into a reference destruct in reverse construct
     assert OrderLog == 4123
 }
 
+# C11/D15: ":=" of a type that declares a destructor declares the reference "x T&" would - a local, a constructor field,
+# a global - so the instance is registered where it lives and destructed when that scope closes. It used to declare a
+# value, which registered nothing: the destructor never ran
+fn orderedLocal(k I64) I64 {
+    p := OrderedRes(k + 5, null)
+    return p.id
+}
+type OrderedHolder struct(k I64) {
+    r := OrderedRes(k, null)
+}
+OrderedGlobal := OrderedRes(9, null)
+
+test "C11/D15: := of a destructor-declaring type declares its reference, and the instance is destructed" {
+    OrderLog = 0
+    assert orderedLocal(I64(ctRuntimeZero)) == 5 and OrderLog == 5
+    h := OrderedHolder(I64(ctRuntimeZero) + 6)
+    assert h.r.id == 6 and OrderedGlobal.id == 9 and OrderLog == 5
+}
+
 # a constructor-declaring type is buildable BOTH ways (C6): "Type(...)" runs the constructor, "Type{...}"
 # assembles it field by field, positionally, in field-declaration order like any other struct literal.
 # The two forms are deliberately kept apart rather than folded into one: a literal is visibly infallible

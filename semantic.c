@@ -6034,7 +6034,15 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);
         return *textT;
     }
-    return declaredArrayType(rhs->type);
+    //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
+    //built where the declaration lives and registered there. A value took it in, and its destructor never ran
+    struct type t = declaredArrayType(rhs->type);
+    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
+        t.structMAlloc = true;
+        t.refMut = OperandGivesWritable(rhs);
+        reportTypeFit(OperandFitsType(func, rhs, t), rhs->tok, rhs, t);
+    }
+    return t;
 }
 
 bool OperandIsLvalue(struct operand* op) {
