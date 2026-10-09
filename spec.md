@@ -4400,9 +4400,9 @@ calls again.
 uses, such as `exit` or `strlen`) refers to that very function: it is not a second definition, and declaring it is not
 an error.
 
-**X8 (the C math library).** An `extern fn` declaring one of the C math library's functions below, under its C name and
-with its prototype - every parameter and the result `F64`, or every one `F32` for the name with `f` after it (`sqrtf`)
-- is that function, and the language knows what it does:
+**X8 (the C math library).** An `extern fn` declaring one of the C math library's functions below, under its C name
+and with its prototype - every parameter and the result `F64`, or every one `F32` for the name with `f` after it
+(`sqrtf`) - is that function, and the language knows what it does:
 
 | | Functions (parameters) |
 |---|---|
