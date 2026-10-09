@@ -419,6 +419,10 @@ because what it finds about structure feeds the refactor.
   (oann onto master 472373d: perm migration, repro hygiene, GemmBatch attention, GemmPatches conv) - it predates the
   List/Map handle change; move oann's compiler again after. Found, not fixed: `type Nest Array<Nest&>` accepted but
   unbuildable ("expected Nest&, found Nest&") - for the next checker batch.
+- 22:05 CEST: chk4 merged and pushed (77689b1, its own verify on the same code). oann's genericctor and operatornames
+  repros fixed (oann-up deletes them). Started at 21:50: a read-only review of tonight's merges (/home/user/review/tonight)
+  and wt-fuzz2 (fuzzer extended to tonight's features). Running: s3scope, cgfix3, oann-up, review, fuzz2.
+  After s3scope and cgfix3 merge: the bootstrap/ move + modest refactor (no other compiler agent then).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
