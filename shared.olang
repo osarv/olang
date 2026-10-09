@@ -11134,6 +11134,20 @@ test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
     assert fzF16Of(I32(fzRun) + 97) == FzF16OfBaked and F16(I32(fzRun) << 15) == 32768.0
 }
 
+# E33: F16 bits made into a BF16, or BF16 bits into an F16, are converted as the type they were made into - at -O3
+# LLVM 18 merged the two bitcasts into one between half and bfloat, then read it as the type the bits came from in the
+# conversion after it: 5 for every value here (fuzz/repro/bf16bitcastfold.olang, .ll)
+fn fzReinterp(x I32) String {
+    hb := F16(x).Bits().BF16FromBits()
+    bh := BF16(x).Bits().F16FromBits()
+    return $hb " " $F64(hb) " " $I32(hb) " " $bh " " $F64(bh) " " $I32(bh) " " $(hb + hb) " " $(bh < F16(3))
+}
+FzReinterpBaked String = fzReinterp(5)
+test "E33: the bits of one 16-bit float made into the other are read as the other" {
+    assert FzReinterpBaked == "2050 2048 2048 2.312 2.3125 2 4100 true" and fzReinterp(5) == FzReinterpBaked
+    assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
+}
+
 # K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
 # evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
 type fzCtr struct(n I32) {

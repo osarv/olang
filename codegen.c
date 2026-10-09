@@ -4819,6 +4819,15 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             char from[64], to[64];
             llvmType(src->type, from, sizeof(from));
             llvmType(op->type, to, sizeof(to));
+            //LLVM 18's InstCombine takes a bitcast between half and bfloat for a no-op cast, so it merges
+            //F16 bits made into a BF16 (or the reverse) with the conversion that follows: fpext, fptosi and
+            //the rest then read the bits as the other type (fuzz/repro/bf16bitcastfold.ll). An empty asm
+            //on the integer keeps the two bitcasts apart; it emits no instruction.
+            if (op->type.bType == BASETYPE_F16 || op->type.bType == BASETYPE_BF16) {
+                char* opaque = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = call i16 asm \"\", \"=r,0\"(i16 %s)\n", opaque, v);
+                v = opaque;
+            }
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = bitcast %s %s to %s\n", r, from, v, to);
             return r;
