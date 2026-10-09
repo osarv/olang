@@ -88,6 +88,7 @@ struct cgLoop {
     char contLbl[32];
     int slotsAtEntry;
     int depthAtEntry; //S19: the depth of the block holding the loop - a jump leaves every block deeper than it
+    bool breakOuter;  //S9f: a run's counted loop - a "break" in it leaves the loop around it too
 };
 
 //S19: one piece of deferred code, registered when emission passes its "defer": the depth of the block it belongs
@@ -5180,6 +5181,7 @@ static void cgUnwindToLoop(struct cgCtx* ctx, struct cgLoop* lp) {
 void cgBreakOrContinue(struct cgCtx* ctx, bool isBreak) {
     if (ctx->loops.len == 0) return; //rejected in the checker (S11); nothing sensible to emit
     struct cgLoop* lp = ListGetIdx(&ctx->loops, ctx->loops.len - 1);
+    if (isBreak && lp->breakOuter && ctx->loops.len >= 2) lp = ListGetIdx(&ctx->loops, ctx->loops.len - 2); //S9f
     cgUnwindToLoop(ctx, lp);
     cgBr(ctx, isBreak ? lp->breakLbl : lp->contLbl);
 }
@@ -5221,6 +5223,7 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     snprintf(lp.contLbl, sizeof(lp.contLbl), "%s", postLbl);
     lp.slotsAtEntry = ctx->blockSlots.len;
     lp.depthAtEntry = ctx->blockDepth;
+    lp.breakOuter = s->breakOuter;
     ListAdd(&ctx->loops, &lp);
 
     cgLabel(ctx, bodyLbl);

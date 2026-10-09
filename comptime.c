@@ -2255,7 +2255,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 if (s->op && !ctTruth(st, s->op)) break;
                 if (st->flow != CF_NORMAL) break;
                 ctExecBlock(st, &s->block);
-                if (st->flow == CF_BREAK) { st->flow = CF_NORMAL; break; }
+                if (st->flow == CF_BREAK) { if (!s->breakOuter) st->flow = CF_NORMAL; break; } //S9f: the run loop's break ends the loop around it too
                 if (st->flow == CF_CONTINUE) st->flow = CF_NORMAL;
                 if (st->flow != CF_NORMAL) break;
                 if (s->forPost) ctExec(st, s->forPost);

@@ -124,8 +124,8 @@ fn (l mut List<<T>>&) SetAt(i I64, x <T>) {
 
 # a position in a List - handed out fresh by Iter(), so the list keeps none and every loop gets its own: two
 # loops over one list, nested or one after the other, never disturb each other. It holds the chunk it is in, so
-# each step is a load and a few compares; "for x in l" walks a List through it rather than through At (S9d: a
-# type's own Iter wins over At and Len).
+# each step is a load and a few compares. "for x in l" walks a List run by run rather than through it (S9f); generic
+# code over Iterator<T> takes it.
 type ListIter<T> struct(of List<<T>>&) {
     list List<<T>>&of = of
     chunk mut Array<<T>>&of = null        # the chunk holding the next element; null before the first
@@ -148,8 +148,126 @@ fn (it mut ListIter<<T>>&) Next() <T> ? Exhausted {
     return it.chunk[it.i - 1]
 }
 
+# moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
+# that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
+fn (it mut ListIter<<T>>&) enter() ? Exhausted {
+    if it.at == it.list.count { error Exhausted.END }
+    if it.i == it.room {
+        it.chunk = it.list.chunks[it.k]
+        it.room = it.chunk.Len()
+        it.k++
+        it.i = 0
+    }
+}
+
+# where the run from i ends: the chunk's end, or the list's
+fn (it ListIter<<T>>&) runEnd() I64 {
+    if it.list.count - it.at < it.room - it.i { return it.i + it.list.count - it.at }
+    return it.room
+}
+
 # the elements in the order they were pushed, through an iterator (S9c) - what generic code over Iterator<T> takes
 fn (l List<<T>>&) Iter() ListIter<<T>> { return ListIter<<T>>(l) }
+
+# the iterator helpers (Iterator, M19e), each walking the rest of the list run by run - a counted loop over a slice of
+# each chunk, as "for x in l" is (S9f) - and leaving the iterator where Next would have: just past the element Any or All
+# stopped at, or at the end
+
+# true when keep holds for at least one remaining element
+fn (it mut ListIter<<T>>&) Any(keep fn(x <T>) Bool) Bool {
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for j, x in run {
+            if keep(x) {
+                it.i += j + 1
+                it.at += j + 1
+                return true
+            }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return false
+}
+
+# true when keep holds for every remaining element - so for none, when there are none
+fn (it mut ListIter<<T>>&) All(keep fn(x <T>) Bool) Bool {
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for j, x in run {
+            if not keep(x) {
+                it.i += j + 1
+                it.at += j + 1
+                return false
+            }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return true
+}
+
+# how many remaining elements keep holds for
+fn (it mut ListIter<<T>>&) Count(keep fn(x <T>) Bool) I64 {
+    c I64 = 0
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            if keep(x) { c++ }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return c
+}
+
+# every remaining element folded into one, starting from init
+fn (it mut ListIter<<T>>&) Fold(init <U>, f fn(acc <U>, x <T>) <U>) <U> {
+    acc <U> = init
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            acc = f(acc, x)
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return acc
+}
+
+# a new List - in the caller's scope - of f applied to every remaining element
+fn (it mut ListIter<<T>>&) Map(f fn(x <T>) <U>) List<<U>>& {
+    out List<<U>>&return = List<<U>>()
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            out.Push(f(x))
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return out
+}
+
+# a new List - in the caller's scope - of the remaining elements keep holds for
+fn (it mut ListIter<<T>>&) Filter(keep fn(x <T>) Bool) List<<T>>& {
+    out List<<T>>&return = List<<T>>()
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            if keep(x) { out.Push(x) }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return out
+}
 
 # the elements stored next to each other from position at: a read-only slice of the chunk holding at, from at to that
 # chunk's end or the list's - failing with Exhausted when at is the list's length. What "for x in l" walks (S9f): a loop
@@ -180,9 +298,6 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
     }
     return out
 }
-
-# Any, All, Count, Fold, Map and Filter are every iterator's (Iterator, M19e): "l.Iter().Map(f)" walks the elements
-# in the order they were pushed.
 
 # whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
 fn (l List<<T>>&) Has(x <T>) Bool {
@@ -486,4 +601,110 @@ test "indexing a List, evaluated while compiling as at run time" {
     assert listIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
     assert listIndexed() == listIndexedBaked
     assert listIndexed() == 4153
+}
+
+# S9f: "for x in l" walks a List run by run - a counted loop over each chunk's slice - with every loop rule as before:
+# a break leaves the whole loop, a continue goes on to the next element, the index counts across chunks, a return
+# leaves from inside, and an element pushed while the loop runs is walked too
+fn listRuns(n I64) I64 {
+    l := List<I64>()
+    for i in range n { l.Push(i) }
+    firstBig I64 = -1
+    for i, x in l {
+        assert i == x
+        if x > 20 {
+            firstBig = x
+            break                              # leaves the loop over the runs, not just this run
+        }
+    }
+    odd I64 = 0
+    for x in l {
+        if x % 2 == 0 { continue }
+        odd += x
+    }
+    grown I64 = 0
+    for x in l {
+        if x < 3 { l.Push(100 + x) }          # walked later in this same loop
+        grown += x
+    }
+    return firstBig * 1000000 + odd * 100 + grown - (n * (n - 1) / 2 + 303)
+}
+
+fn firstOver(l List<I64>&, limit I64) I64 ? {
+    for x in l {
+        if x > limit { return x }
+    }
+    error
+}
+
+listRunsBaked := listRuns(40)
+
+test "S9f: a List is walked run by run, and every loop rule holds" {
+    assert listRuns(40) == listRunsBaked
+    assert listRunsBaked == 21 * 1000000 + 400 * 100
+    l := List<I64>()
+    for i in range 100 { l.Push(i * 2) }
+    assert (try firstOver(l, 150) catch default -1) == 152
+    assert (try firstOver(l, 500) catch default -1) == -1
+    pairs I64 = 0
+    for a in l { for b in l { if a == b { pairs++ } } }      # nested loops over one list keep their own places
+    assert pairs == 100
+    sq := I64[x * x for x in l if x < 10]                    # a comprehension walks it too
+    assert sq.Len() == 5 and sq[4] == 64
+    for x in List<I32>() { unreachable }
+}
+
+# the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Any or
+# All stopped at - so Next goes on from there - or at the end
+test "S9f: ListIter's helpers walk run by run and leave the iterator where Next would" {
+    l := List<I64>()
+    for i in range 50 { l.Push(i) }
+    it := l.Iter()
+    assert (try it.Next() catch default -1) == 0
+    assert it.Any(fn(x) { return x == 30 })
+    assert (try it.Next() catch default -1) == 31
+    assert not it.All(fn(x) { return x < 40 })
+    assert (try it.Next() catch default -1) == 41
+    assert it.Count(fn(x) { return x % 2 == 0 }) == 4        # 42 44 46 48
+    assert (try it.Next() catch default -1) == -1
+    assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 1225
+    assert l.Iter().Map(fn(x) { return x * 2 }).Len() == 50 and l.Iter().Filter(fn(x) { return x >= 45 }).Len() == 5
+    assert l.Iter().All(fn(x) { return x < 50 }) and not l.Iter().Any(fn(x) { return x > 49 })
+    l.Push(50)                                               # an exhausted iterator sees what is pushed after
+    assert (try it.Next() catch default -1) == 50
+}
+
+# elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
+# iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
+type listBag struct() {
+    items List<I64>& = List<I64>()
+}
+type listItem struct(n I64) {
+    n
+}
+fn listFind(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    for f in l {
+        if f.First == key { return f.Second }
+    }
+    error
+}
+fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    for f in l.Iter() {
+        if f.First == key { return f.Second }
+    }
+    error
+}
+test "S9f: a List of references, walked by every route" {
+    bags := List<listBag&>()
+    bags.Push(listBag())
+    bags.Push(listBag())
+    s I64 = 0
+    for b in bags { s += b.items.Len() + 1 }
+    for b in bags.Iter() { s += b.items.Len() + 1 }
+    assert s == 4 and bags.Iter().Count(fn(b) { return b.items.Len() == 0 }) == 2
+    m := List<Pair<String&, listItem&>>()
+    k String& = "x"
+    m.Push(Pair<String&, listItem&>(k, listItem(4)))
+    assert (try listFind(m, "x") catch { unreachable }).n == 4
+    assert (try listFindIter(m, "x") catch { unreachable }).n == 4
 }

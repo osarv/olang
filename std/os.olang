@@ -116,22 +116,26 @@ fn ReadFile(path String&) String& ? OsError {
     if IsDir(path) { error OsError.IS_DIR }            # a directory opens, and its size means nothing
     fd := open($path "\0", 0)
     try check(fd)
+    # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
+    # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
+    # has no size to give (lseek fails or says 0), and a file may grow while it is read
     size := lseek(fd, 0, 2)
-    if size < 0 { try closeAndRaise(fd, __olang_err()) }
-    lseek(fd, 0, 0)
-    text String&return = String(Array<U8>(size))
+    if size < 0 { size = 0 } else { lseek(fd, 0, 0) }
+    text String&return = String(Array<U8>(size + 1))
     got I64 = 0
-    for got < size {
-        n := read(fd, text[got:], size - got)
-        if n < 0 { try closeAndRaise(fd, __olang_err()) }
-        if n == 0 {                                     # it shrank while being read
-            close(fd)
-            error OsError.FAILED
+    for {
+        if got == text.Len() {
+            more String&return = String(Array<U8>(text.Len() * 2))
+            for i in range got { more[i] = text[i] }
+            text = more
         }
+        n := read(fd, text[got:], text.Len() - got)
+        if n < 0 { try closeAndRaise(fd, __olang_err()) }
+        if n == 0 { break }
         got += n
     }
     close(fd)
-    return text        # the file's bytes, read as text (T29c)
+    return text[:got]        # the file's bytes, read as text (T29c)
 }
 
 # closes fd and fails with the OsError naming "code" - for a call that failed on an open descriptor, whose errno has
@@ -297,6 +301,16 @@ test "ReadFile reads what a command wrote" {
     assert text.Eq("a\nb")
     missing := try ReadFile("build/no/such/file") catch OsError.NOT_FOUND default "gone" catch default "other"
     assert missing.Eq("gone")
+}
+
+# a file with no size to give - one in /proc, a pipe - is read to its end all the same, and so is one longer than the
+# room first made for it
+test "ReadFile reads to the end, whatever the size says" {
+    status := try ReadFile("/proc/self/status") catch default ""
+    assert status.Contains("VmHWM:") and status.EndsWith("\n")
+    Run("mkdir -p build/os_files && seq 1 20000 > build/os_files/seq.txt")
+    lines := try ReadFile("build/os_files/seq.txt") catch default ""
+    assert lines.Len() == 108894 and lines.StartsWith("1\n2\n") and lines.EndsWith("19999\n20000\n")
 }
 
 test "Quote survives a quote" {
