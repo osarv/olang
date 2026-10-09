@@ -435,6 +435,12 @@ because what it finds about structure feeds the refactor.
 - 23:05 CEST: the user answered QA/QB/QC as recommended (ledger). Started wt-qc (copies of read-only stay read-only);
   rvfix told to drop its T25b "known hole" note. Once the port starts, C compiler work is FIXES ONLY (QB).
   The user asked how far the compiler is: told port design + P0 done, port not started (refactor first), ~1-2 h to M1.
+- 23:25 CEST: cgfix3+s3scope pushed (e139b9b, verified). oann upgraded and pushed (ac77201): perm migration (168 mut
+  removed, 45 added), fixed repros deleted, attention as GemmBatch a cache-sized part at a time (step at ctx 256
+  206 -> 190 ms, bit-identical), conv forward by GemmPatches (1.2x), GemmAct measured and not adopted. oann's compiler
+  (oannc2) is 472373d: move it to master after rvfix/qc land and re-test (List/Map handles, ==, QC may need migration).
+  New: oann repro/condliteral (a conditional of literals beside an F32 is typed F64 - linalg's ActivationSlope/
+  ActivationBackward do not compile for F32) -> handed to rvfix as item 11.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
