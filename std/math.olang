@@ -476,30 +476,30 @@ big mut F64 = 1e300
 thousand mut F64 = 1000.0
 
 # baked while compiling (K2): each is the C library's own answer, by the very function the run time calls
-SqrtTwo F64 = Sqrt(2.0)
-ExpHalf F64 = Exp(0.5)
-LogTwo F64 = Log(2.0)
-PowHalf F64 = Pow(2.0, 0.5)
-SinHalf F64 = Sin(0.5)
-AtanTwo F64 = Atan2(2.0, 0.5)
-ErfHalf F64 = Erf(0.5)
-SqrtTwo32 F32 = Sqrt(F32(2.0))
-ExpHalf32 F32 = Exp(F32(0.5))
-ExpHalf16 F16 = Exp(F16(0.5))
-TanhHalfB BF16 = Tanh(BF16(0.5))
+bakedSqrtTwo F64 = Sqrt(2.0)
+bakedExpHalf F64 = Exp(0.5)
+bakedLogTwo F64 = Log(2.0)
+bakedPowHalf F64 = Pow(2.0, 0.5)
+bakedSinHalf F64 = Sin(0.5)
+bakedAtanTwo F64 = Atan2(2.0, 0.5)
+bakedErfHalf F64 = Erf(0.5)
+bakedSqrtTwo32 F32 = Sqrt(F32(2.0))
+bakedExpHalf32 F32 = Exp(F32(0.5))
+bakedExpHalf16 F16 = Exp(F16(0.5))
+bakedTanhHalfB BF16 = Tanh(BF16(0.5))
 
 test "the compile-time values are the run time's" {
-    assert Sqrt(two) == SqrtTwo and SqrtTwo == Sqrt2
-    assert Exp(half) == ExpHalf
-    assert Log(two) == LogTwo and LogTwo == Ln2
-    assert Pow(two, half) == PowHalf
-    assert Sin(half) == SinHalf
-    assert Atan2(two, half) == AtanTwo
-    assert Erf(half) == ErfHalf
-    assert Sqrt(F32(two)) == SqrtTwo32
-    assert Exp(F32(half)) == ExpHalf32
-    assert Exp(F16(half)) == ExpHalf16
-    assert Tanh(BF16(half)) == TanhHalfB
+    assert Sqrt(two) == bakedSqrtTwo and bakedSqrtTwo == Sqrt2
+    assert Exp(half) == bakedExpHalf
+    assert Log(two) == bakedLogTwo and bakedLogTwo == Ln2
+    assert Pow(two, half) == bakedPowHalf
+    assert Sin(half) == bakedSinHalf
+    assert Atan2(two, half) == bakedAtanTwo
+    assert Erf(half) == bakedErfHalf
+    assert Sqrt(F32(two)) == bakedSqrtTwo32
+    assert Exp(F32(half)) == bakedExpHalf32
+    assert Exp(F16(half)) == bakedExpHalf16
+    assert Tanh(BF16(half)) == bakedTanhHalfB
 }
 
 test "Sqrt is correctly rounded, in every float type" {
@@ -580,15 +580,15 @@ test "NaN, the infinities and -0" {
     assert Inf == 1.0 / 0.0 and -Inf < -1e308
 }
 
-type Grade struct(n I32) {
+type grade struct(n I32) {
     n
 }
-fn (a Grade) Less(b Grade) Bool { return a.n < b.n }
+fn (a grade) Less(b grade) Bool { return a.n < b.n }
 
 test "Min, Max and Clamp" {
     assert Min(1, 2) == 1 and Max(1, 2) == 2 and Min(U8(7), 3) == 3 and Max(I64(-4), -9) == -4
     assert Min(1.5, -2.0) == -2.0 and Max(F16(1.5), F16(-2.0)) == 1.5
-    assert Min(Grade(3), Grade(5)).n == 3 and Max(Grade(3), Grade(5)).n == 5
+    assert Min(grade(3), grade(5)).n == 3 and Max(grade(3), grade(5)).n == 5
     # -0.0 below 0.0, whichever comes first
     assert SignBit(Min(-0.0, 0.0)) and SignBit(Min(0.0, -0.0)) and not SignBit(Max(-0.0, 0.0)) and not SignBit(Max(0.0, -0.0))
     assert SignBit(Min(F32(0.0), F32(-0.0))) and not SignBit(Max(BF16(-0.0), BF16(0.0)))
