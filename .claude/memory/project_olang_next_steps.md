@@ -116,6 +116,15 @@ because what it finds about structure feeds the refactor.
   takes new storage otherwise - specified, evaluator matches; globals initialize in dependency order within a module,
   a cycle is an error; object names injective in the module's real identity (incl. a remote's commit); git run via
   exec with validated parts; Chan capacity >= 1 unless a rendezvous is clean.
+- Error messages remade (the user 2026-10-09: "shorten down the error messages and keep them concise ... preferably
+  on one row ... keep the rule number probably, it's better for agents ... you can remake the error message system
+  completely, it's very crude still"). After the four fix batches merge and the `a is b`/atomics change, before the
+  refactor (it touches every diagnostic call site). Plan (my design): `file:line:col: error[RULE]: message` on one
+  row, then the source line and a caret under the token; messages short and naming the actual names/types involved
+  (`expected I32, found F64`) instead of generic prose - a table of ids with rule and format string, ErrMsg calls take
+  arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
+  notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
+  characters, ~470 call sites, no arguments.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
