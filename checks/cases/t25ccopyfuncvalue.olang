@@ -1,0 +1,11 @@
+# check: fail error[T25c]: this lambda writes through or keeps its by-value parameter 'b', so it cannot be a function value
+# T25c: a function value's callers may pass read-only copies, so it may not write through its by-value parameters
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn main() ? {
+    f := fn(b Box) { b.P[0] = 1 }
+    f(Box(Array<I64>(1)))
+}

@@ -37,7 +37,7 @@ type Net struct(seed U64) {
 }
 
 # one step on (x, labels): forward, loss, backward, update. Returns the mean loss before the update
-fn (n Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, threads I64) F32 {
+fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, threads I64) F32 {
     linalg.Gemm(n.H, x, false, n.W1, true, 1, 0, threads)          # H = x W1^T
     n.H.AddRow(n.B1)
     n.A.Map(n.H, fn(v) { return v if v > 0.0 else 0.0 })             # A = relu(H)

@@ -50,19 +50,19 @@ fn attention(T I64, threads I64) {
     heads I64 = 4
     dh I64 = D / heads
     n I64 = B * T
-    q, k, v, dy linalg.Matrix<F32>& = linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D)
+    q, k, v, dy mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D)
     q.FillUniform(r, -1.0, 1.0)
     k.FillUniform(r, -1.0, 1.0)
     v.FillUniform(r, -1.0, 1.0)
     dy.FillUniform(r, -1.0, 1.0)
-    p linalg.Matrix<F32>& = linalg.Matrix<F32>(B * heads * T, T)
+    p mut linalg.Matrix<F32>& = linalg.Matrix<F32>(B * heads * T, T)
     p.FillUniform(r, 0.0, 1.0)
     s, dp linalg.Matrix<F32>& = linalg.Matrix<F32>(B * heads * T, T), linalg.Matrix<F32>(B * heads * T, T)
     y, dq, dk, dv linalg.Matrix<F32>& = linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D), linalg.Matrix<F32>(n, D)
     ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
     Q, K, V, DY linalg.Batch<F32>& = q.Heads(T, heads), k.Heads(T, heads), v.Heads(T, heads), dy.Heads(T, heads)
-    P, S, DP linalg.Batch<F32>& = p.Stacked(T, heads), s.Stacked(T, heads), dp.Stacked(T, heads)
-    Y, DQ, DK, DV linalg.Batch<F32>& = y.Heads(T, heads), dq.Heads(T, heads), dk.Heads(T, heads), dv.Heads(T, heads)
+    P, S, DP mut linalg.Batch<F32>& = p.Stacked(T, heads), s.Stacked(T, heads), dp.Stacked(T, heads)
+    Y, DQ, DK, DV mut linalg.Batch<F32>& = y.Heads(T, heads), dq.Heads(T, heads), dk.Heads(T, heads), dv.Heads(T, heads)
     scale F64 = 0.17677669529663687
     title := "attention T " $T " threads " $threads " forward (S = Q K^T, Y = P V), ms:"
     compare(title, String&["per head", "batched", "batched causal"], fn() {
@@ -104,13 +104,13 @@ fn attention(T I64, threads I64) {
 
 fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) {
     r := rand.Rand(2)
-    x linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, inner)
-    w linalg.Matrix<F32>& = linalg.Matrix<F32>(outer, inner)
-    b linalg.Matrix<F32>& = linalg.Matrix<F32>(1, outer)
+    x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, inner)
+    w mut linalg.Matrix<F32>& = linalg.Matrix<F32>(outer, inner)
+    b mut linalg.Matrix<F32>& = linalg.Matrix<F32>(1, outer)
     x.FillUniform(r, -1.0, 1.0)
     w.FillUniform(r, -0.1, 0.1)
     b.FillUniform(r, -0.1, 0.1)
-    z, y linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, outer), linalg.Matrix<F32>(rows, outer)
+    z, y mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, outer), linalg.Matrix<F32>(rows, outer)
     ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
     title := "dense " $rows " x " $inner " -> " $outer " " $act ", ms:"
     compare(title, String&["Gemm+AddRow+Activate", "GemmAct with pre", "GemmAct"], fn() {
@@ -172,17 +172,17 @@ fn oannIm2col(x Array<F32>&, n I64, C I64, H I64, W I64, K I64, S I64, P I64, co
 fn conv(C I64, H I64, W I64, K I64, outC I64) {
     r := rand.Rand(3)
     n I64 = 128
-    x linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)
+    x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)
     x.FillUniform(r, -1.0, 1.0)
     p linalg.Patches<F32>& = linalg.Patches(x, C, H, W, K, 1, 1)
-    cols linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, p.Cols)
-    w linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
+    cols mut linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, p.Cols)
+    w mut linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
     w.FillUniform(r, -0.3, 0.3)
     b linalg.Matrix<F32>& = linalg.Matrix<F32>(1, outC)
-    y linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
-    g linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
+    y mut linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
+    g mut linalg.Matrix<F32>& = linalg.Matrix<F32>(p.Rows, outC)
     g.FillUniform(r, -1.0, 1.0)
-    dw linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
+    dw mut linalg.Matrix<F32>& = linalg.Matrix<F32>(outC, p.Cols)
     ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
     title := "conv " $C "->" $outC " on " $H "x" $W ", batch 128, forward with bias and ReLU, ms:"
     compare(title, String&["oann im2col+Gemm+AddRow+ReLU", "Im2col+GemmAct", "GemmPatches"], fn() {

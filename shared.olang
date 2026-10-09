@@ -13996,7 +13996,7 @@ fn rvWalkCopy(src mut rvHW&) {
     for p in h.pairs { p.n.next = rvN(p.n.v + 30) }
 }
 fn rvWalkParam(l List<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
-fn rvCopyOut(src rvHold&) {
+fn rvCopyOut(src mut rvHold&) {
     d rvHold = src
     d.items[0].next.next = rvN(50)
 }
@@ -14198,4 +14198,59 @@ test "P2: a task calls a function value read out of storage that lasts until the
         spawn h.f()
     }
     assert c[1] == 7
+}
+
+# QC/T25c: a value holding 'mut' references copied out of a place reached read-only is read-only itself
+type qcBox struct(P mut Array<I64>&) {
+    P
+}
+fn qcMake(n I64) List<I64> {
+    l := List<I64>()
+    for i in range n { l.Push(i + 1) }
+    return l
+}
+QcList List<I64> = qcMake(3)
+QcBoxG qcBox = qcBox(I64[4, 5, 6])
+fn qcTotal(l List<I64>) I64 {
+    t I64 = 0
+    for x in l { t += x }
+    return t
+}
+fn qcFirst(b qcBox) I64 { return b.P[0] }
+fn qcSumBoxes(bs Array<qcBox>&) I64 {
+    t I64 = 0
+    for b in bs { t += qcFirst(b) }
+    return t
+}
+fn qcGrown(l List<I64>&, n I64) I64 {
+    c := l.Clone()
+    for i in range n { c.Push(10) }
+    return qcTotal(c)
+}
+fn qcAll(k I64) I64 {
+    l := qcMake(3 + k)
+    bs := qcBox[qcBox(I64[4, 5]), qcBox(I64[6])]
+    return qcTotal(l) + qcSumBoxes(bs) + qcGrown(l, 2)
+}
+QcBaked I64 = qcAll(0)
+test "T25c: a read-only copy is read, iterated and passed by value; a writable one is written; Clone gives one of its own" {
+    k I64 = I64(ctRuntimeZero)
+    z := QcList
+    assert z.Len() == 3 and qcTotal(z) == 6
+    s I64 = 0
+    for x in z { s += x }
+    assert s == 6
+    b := QcBoxG
+    assert b.P[1] == 5 and qcFirst(b) == 4
+    w := List<I64>()
+    v := w
+    v.Push(7 + k)
+    assert w.Len() == 1 and w[0] == 7
+    c := QcList.Clone()
+    c.Push(4 + k)
+    assert c.Len() == 4 and QcList.Len() == 3
+    bs := qcBox[qcBox(I64[1, 2]), qcBox(I64[3])]
+    for bb in bs { bb.P[0] = 9 + k }
+    assert bs[0].P[0] == 9 and bs[1].P[0] == 9
+    assert QcBaked == 42 and qcAll(k) == QcBaked and qcAll(0) == 42
 }
