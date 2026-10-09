@@ -1,0 +1,6 @@
+# check: fail the atomic operations are methods of the integer types only
+# P9: atomicity is a property of one machine word - a float has no atomic operations
+fn main() ? {
+    f F64 = 1.0
+    f.AtomicAdd(1.0)
+}

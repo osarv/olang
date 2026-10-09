@@ -1356,7 +1356,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   it would make the compiler able to fail because a C **header** is missing, which nothing in it can do
   today. Held in reserve for the day a foreign struct's *fields* are needed, which is real translation and
   which neither approach helps with.
-  **7. ATOMICS DONE (P9/P9a); cancellation and timeout still open.** Five builtins - `atomicLoad`,
+  **7. ATOMICS DONE (P9/P9a); cancellation and timeout still open.** (Methods since 2026-10-09 - `x.AtomicAdd(v)`,
+  E10c entry below.) Five builtins - `atomicLoad`,
   `atomicStore`, `atomicAdd`, `atomicSwap`, `atomicCas` - named and resolved exactly as `len` is, each
   lowering to **one** LLVM atomic instruction.
   **Explicit operations, not an `atomic` type qualifier.** A qualifier looks tidier and is a trap: with
@@ -2699,7 +2700,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   compared by it **at every depth** - as itself, as a field, an element, an enum payload, behind a reference - and
   `match`, `x in c` and `Map` keys all go through `==`. A reference to such a type compares its referents (a null equals
   only a null; `Eq` never sees one); a reference to a type with no `Eq` is still identity. **`same(a, b)`** is identity
-  whatever `Eq` says (my spelling, flagged), a builtin like `atomicLoad`. `String` declares `Eq`, so `s == "cm"`
+  whatever `Eq` says (my spelling, flagged), a builtin like `atomicLoad` (both replaced 2026-10-09: `a is b`, E10c). `String` declares `Eq`, so `s == "cm"`
   compares text. The prelude's `Equatable` and the primitives' `Eq` methods went; `Hashable` keeps only `Hash`.
   **`Str`** (no parameters, a `String`, always capitalized - a rendering belongs to the type, not to one module's
   view of it) takes over `$` for its type wherever the value sits, and **must be K1a-evaluable**: `$` calls it as often
@@ -3202,6 +3203,25 @@ Go through this for every change to what olang means - a rule added, revised or 
   text in its own closed scope - the next scope to take a chunk wrote over it; stack overflows from import strings or
   root paths longer than `PATH_MAX`. **Skipped**: T7a errors of `Pair(1, "x")` reported inside the prelude (the types
   agent's "instantiated from" note covers it).
+- **`is` replaces `same`, and the atomic builtins are methods (E10c, E32, P9, D2, D3a, 2026-10-09; the user: "I don't
+  like built-ins very much", then "Yes, do both").** `a is b` is identity - true when two references (or two function
+  values) of one type name one instance, whatever `Eq` says - and `a is not b` its negation, as `x is not Shape.Circle`
+  is the case test's; `same(a, b)` is gone, an ordinary unknown name. One operator, two forms, told apart by what
+  follows `is`: a `type-ref` that names a type - declared, the prelude's, a primitive, `Bool`, `Array`, a case of one
+  (`Shape.Circle`, `Expr.Nil`), or a type that is no plain name - is E32's test; anything else is a value, an
+  expression at the comparisons' precedence (`a is b + c` is `a is (b + c)`). The parser decides with the known-type
+  predicate choice values already use, and `is not` is built as `not (a is b)`. So that a name is never both, **D3a
+  now covers types** (no local or parameter named like a type it sees, the coordinator's call) and **D2 defines what it
+  left open**: a type and a function or global of one module may not share a name (my extension - the same hazard one
+  level up; the corpus had none). **Atomics** are `t.AtomicLoad()`, `AtomicStore(v)`, `AtomicAdd(v)`, `AtomicSwap(v)`
+  and `AtomicCompareSwap(expected, v)` on any integer **place**, supplied by the compiler as `Len()` is, inherited
+  through `extends`, never redeclared; `atomicLoad` and the rest are gone. My calls: `AtomicCompareSwap` (words, not
+  `Cas`); a value argument **fits as any argument does** (T6b: an `I32` into an `I64` receiver), where P9 said "exactly
+  the target's type"; all eight integer types (P9 still said `U8`/`I32`/`I64`, from before T4); `null is null` is an
+  error (no type between them). Lowering is unchanged - `is` is the `==` of two references, the atomics the same
+  operations - so codegen, the evaluator and `-i` needed nothing; K1 still refuses an atomic while compiling. Found on
+  the way: an unknown method or function left a placeholder that added "discards a value" (S3) and, in an `assert`/
+  `if`/`for` condition, "operand must be a boolean" - one error now; P8b still said olang has no atomic operations.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

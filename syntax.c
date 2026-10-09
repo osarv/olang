@@ -3002,6 +3002,20 @@ static struct syntax* parseNotOrUnary(SyntaxCtx sc) {
     return s;
 }
 
+//E10c/E32: whether the type-ref read after "is" is one - a name that is a known type, a case of one ("Shape.Circle"),
+//a primitive or "Array", or anything that is no plain name. A plain name that is none of those is a value, and the
+//right side is read again as an expression: a local never shares a type's name (D3a), so the two never meet
+static bool isRightNamesType(SyntaxCtx sc, struct syntax* t) {
+    if (t->parts.len != 1) return true; //"mut T"
+    struct syntaxPart* inner = ListGetIdx(&t->parts, 0);
+    if (inner->isToken || inner->sntx->type != SNTX_TYPE_REF) return true;
+    struct syntaxPart* head = ListGetIdx(&inner->sntx->parts, 0);
+    if (head->isToken || head->sntx->type != SNTX_NAME) return true; //"<T>"
+    struct syntax* name = head->sntx;
+    if (name->parts.len == 1 && StrCmp(((struct syntaxPart*)ListGetIdx(&name->parts, 0))->tok.str, StrFromCStr("Array"))) return true;
+    return nameIsPrimitiveTypeName(name) || nameIsKnownType(sc, name) || trailingWordFollowsKnownType(sc, name);
+}
+
 struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
     int start = TokenGetCursor(sc->tc);
     struct syntax* left = parseNotOrUnary(sc);
@@ -3013,16 +3027,36 @@ struct syntax* parseBinaryExpr(SyntaxCtx sc, int minPrec) {
         //E29: "not in" - the one operator spelled with two words; "not" anywhere else after an operand ends it
         struct token notTok = (struct token){0};
         if (opTok.type == TOK_NOT && peekTok(sc).type == TOK_IN) { notTok = opTok; opTok = TokenFeed(sc->tc); }
-        //E32: "x is T" - at the comparisons' level, its right side a type
+        //E32/E10c: "x is T" - at the comparisons' level. What follows names a type or a case of one (E32), or is a
+        //value, and "a is b" asks whether two references name one instance; "is not" negates either
         if (opTok.type == TOK_IS) {
             if (8 < minPrec) { TokenSetCursor(sc->tc, before); break; }
+            struct token notTok = acceptTok(sc, TOK_NOT);
+            int rhs = TokenGetCursor(sc->tc);
+            int mark = TokenEditMark(sc->tc);
             struct syntax* t = parseTypeExpr(sc);
-            if (!t) { TokenSetCursor(sc->tc, before); break; }
-            struct syntax* is = newNode(SNTX_EXPR_IS);
+            if (t && !isRightNamesType(sc, t)) {
+                TokenSetCursor(sc->tc, rhs);
+                TokenEditRewind(sc->tc, mark);
+                t = NULL;
+            }
+            struct syntax* r = t ? t : parseBinaryExpr(sc, 9);
+            if (!r) { TokenSetCursor(sc->tc, before); break; }
+            struct syntax* is = newNode(t ? SNTX_EXPR_IS : SNTX_EXPR_IS_SAME);
             addSntx(is, left);
             addTok(is, opTok);
-            addSntx(is, t);
+            addSntx(is, r);
+            if (notTok.type != TOK_NONE) { //"a is not b" is "not (a is b)", built as that
+                struct syntax* opNode = newNode(SNTX_EXPR_UNARY_OP);
+                addTok(opNode, notTok);
+                struct syntax* u = newNode(SNTX_EXPR_UNARY);
+                addSntx(u, opNode);
+                addSntx(u, is);
+                is = u;
+            }
             left = is;
+            if (!nestEnter(sc, 1)) { sc->depth -= links; return parseFail(sc, start); }
+            links++;
             continue;
         }
         int prec = binOpPrecedence(opTok.type);

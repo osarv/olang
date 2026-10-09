@@ -842,7 +842,7 @@ Like a literal (T29a) it is a temporary with no type worth defending, so it stil
 bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
-(E10a), so `==` compares what two texts say, through a reference too; `same(a, b)` asks whether they are one.
+(E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
 array type or a built-in one, of either length kind.
@@ -957,8 +957,10 @@ itself:
 - **imports** — import alias names (§4.2).
 
 Declaring two entries with the same name in the same set, within the same module, is a compile-time
-error. This specification does not define behavior for reusing a name across two *different* sets
-in the same module (e.g. a type and a global variable sharing a name).
+error. So is a type sharing its name with a function, an external function or a global of the same module, or with
+the prelude's types (§4 M19d) or a built-in one (a primitive, `Bool`, `Array`): within a module a name means one
+thing, which is what lets what follows `is` be read as a type exactly when it names one (E10c). An import alias's
+name is reserved apart (§4.6 M20).
 
 **D3.** A local variable (a parameter, or a variable declared inside a function or test body, §3.5)
 occupies a nested scope, distinct from its module's own `vars` set. A local declaration must not
@@ -966,10 +968,11 @@ reuse a name already declared by an *enclosing* local scope of the same function
 function's own parameters) — that is a compile-time error, not shadowing.
 
 **D3a.** There is **no shadowing** at all: a local declaration or a parameter may not reuse a name its
-module declares in its `vars` set (a global, a function or an external function), nor the name of a build
-constant (B10); either is a compile-time error. A module is what keeps a namespace small enough to manage,
+module declares in its `vars` set (a global, a function or an external function), the name of a build
+constant (B10), or the name of a type it sees - one its module declares, one of the prelude's (§4 M19d), or a built-in
+one (a primitive, `Bool`, `Array`); each is a compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
-scopes are known (S8b). Names another module declares are reached only through an import alias, so they
+scopes are known (S8b), and what follows `is` be told apart as a type or a value (E10c). Names another module declares are reached only through an import alias, so they
 never collide with a local.
 
 ### 3.3 Type and error declarations
@@ -1225,7 +1228,7 @@ handles: no `try` reaches it.
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
 returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
-`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic builtin that gives a value (P9)), a **field read**
+`Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic method that gives a value (P9)), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
 (`t := a[i]` — the array's element type), a **slice** (E16a), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
@@ -1637,7 +1640,7 @@ operators groups left-to-right):
 | 5 | `^` |
 | 6 | `&` |
 | 7 | `==` `!=` |
-| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
+| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is` `is not` (E10c, E32) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
 | 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
@@ -1734,9 +1737,26 @@ the type, and a type may say it itself:
   is both: the same storage and the same length.
 - a function value: identity (T21).
 
-Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
-function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
-is (P9), and a compile-time error on anything else.
+Identity is always available, whatever `Eq` says: `a is b` (E10c).
+
+**E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
+same instance - for a reference to an array, the same storage and the same length - whatever `Eq` says, and
+`a is not b` is `not (a is b)`. Either side may be `null`, which adapts to the other's type as beside `==` (a null is
+the same instance as another null and nothing else); both may not, having no type between them. Any other operand -
+a value of any type, two references of different types - is a compile-time error: `==` is what compares values.
+`a` is evaluated before `b`. This is the value form of the one operator `is` (E32 gives its type form):
+
+```
+is-expr ::= operand "is" [ "not" ] ( type-ref | binary )
+```
+
+What follows `is` (and `not`) is read as a `type-ref` when it is one that names a type - a name declared as a type
+in this module or the one an alias chain reaches, the prelude's, a primitive, `Bool` or `Array`, or a name whose
+last-but-one word names one (a case, `Shape.Circle`), or a type that is no plain name (`<T>`, a function type,
+`mut T`). Anything else is a value: an expression at the ordering comparisons' precedence and tighter, so
+`a is b + c` is `a is (b + c)` and `a is b == c` is `(a is b) == c`. Since no local, parameter, function or global
+shares a type's name (D2, D3a), a name is never both. `not a is b`, `a is not b` and `not (a is b)` are one
+question (E7a).
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` (or `eq`, private to its module as every
 operator method is, E31): one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
@@ -2255,10 +2275,11 @@ error, as for any other non-numeric type.
 
 ### 5.16 `is` and `as`
 
-**E32.** `is-expr ::= operand "is" type-ref` (at the comparisons' precedence) and `as-expr ::= postfix "as" type-ref`
+**E32.** `is-expr ::= operand "is" [ "not" ] type-ref` (at the comparisons' precedence; E10c says when what follows
+`is` is a `type-ref`) and `as-expr ::= postfix "as" type-ref`
 (binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) - or a
 reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
-whatever its payload; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
+whatever its payload, and `x is not Shape.Circle` whether it is not; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
 received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
 (`is` is the question it asks). On anything else `is` and `as` are a compile-time error. What follows `is` or `as` is a
 `type-ref`, so an `&` touching it with a name after it is that type's reference marker (§2.9): `b as Box.Val & mask` is
@@ -2889,7 +2910,7 @@ state with a mutex is not flagged.
 It sees a program's synchronisation because it **intercepts the C library**: the same `pthread_create`
 and `pthread_join` §6.8 is implemented with, and whatever a program itself reaches through `extern fn`
 (§11) — a mutex taken that way is as visible as one the language provided. The one other source of
-ordering is P9's atomic builtins, which lower to LLVM atomic instructions that ThreadSanitizer instruments
+ordering is P9's atomic methods, which lower to LLVM atomic instructions that ThreadSanitizer instruments
 and treats as edges directly. Since those are the only ways an olang program can establish ordering at
 all, the picture is complete. **Any synchronisation primitive added later must preserve that**: an LLVM
 atomic operation is understood, and anything establishing ordering by other means — including a change
@@ -2905,24 +2926,31 @@ linker free to keep either copy. An instrumented object is therefore a distinct 
 to propagate to, since the join carries no value and the spawner is no longer at the call site. A spawned
 call's return value, if any, is discarded — `spawn` is a statement, never an expression.
 
-**P9.** Five **atomic builtins**, resolved by the compiler and shadowable by no declaration:
+**P9.** Every integer type has five **atomic methods**, called on a place `t` of that type:
 
 ```
-atomicLoad(t)              -> T      reads t
-atomicStore(t, v)                    writes v to t
-atomicAdd(t, v)            -> T      adds v to t, yielding the value t held BEFORE
-atomicSwap(t, v)           -> T      writes v to t, yielding the value it held before
-atomicCas(t, expected, v)  -> T      writes v to t only if t holds `expected`, yielding what it found
+t.AtomicLoad()                       -> T      reads t
+t.AtomicStore(v)                               writes v to t
+t.AtomicAdd(v)                       -> T      adds v to t, yielding the value t held BEFORE
+t.AtomicSwap(v)                      -> T      writes v to t, yielding the value it held before
+t.AtomicCompareSwap(expected, v)     -> T      writes v to t only if t holds `expected`, yielding what it found
 ```
 
-`t` must be an **lvalue of an integer type** — `U8`, `I32` or `I64` — and a **mutable** one for every builtin
-but `atomicLoad`, which only reads: a task reading a flag another task sets holds it through a read-only reference
-(T25b), and needs no permission to write it in order to read it. Atomicity is a property
-of a single machine word, so there is nothing it could mean for an aggregate, a reference or a float. Each
-value argument must already have `t`'s type, a numeric literal adapting by representability as anywhere
-else (§5.2 T6); the operation is one machine instruction, with no point at which a conversion could run.
+`t` must be a **place** — a variable, a field or an array element, never a computed value — of an integer type
+(`I8` to `I64`, `U8` to `U64`), and a **writable** one for every method but `AtomicLoad`, which only reads: a task
+reading a flag another task sets holds it through a read-only reference (T25b), and needs no permission to write it
+in order to read it. Atomicity is a property of the single machine word a place occupies, so there is nothing it
+could mean for an aggregate, a reference or a float, and nothing for a value that occupies no place. Each value
+argument fits `T` as any argument fits its parameter (§5.3 E12) - a literal adapting (T6), a narrower integer
+widening (T6b) - before the operation, which is one machine instruction.
 
-`atomicCas` returns **what it found**, not whether it succeeded: for a strong compare-exchange those are
+They are supplied by the compiler rather than declared, as `Len()` is (E23), since nothing else in the language
+reaches the memory word a place occupies; in every other respect they are methods (§4.4 M19), and a call names its
+cost where it is written. A declared type extending an integer type (T29f) has them as it has its base's other
+methods - `T` is then the declared type - and may not declare a method of any of their names (T29e); a declared type
+that does not extend its base has none of them.
+
+`AtomicCompareSwap` returns **what it found**, not whether it succeeded: for a strong compare-exchange those are
 the same fact, since it writes if and only if it found `expected`. That is what lets it report both
 outcomes through the one return value this language has.
 
@@ -2930,7 +2958,7 @@ Every one of them is **sequentially consistent**, and no ordering can be selecte
 among the easiest things in systems programming to get subtly wrong, and admitting one later is purely
 additive.
 
-Each is a valid statement (§6.1 S3) except `atomicLoad`, which only reads and so really is a computed
+Each is a valid statement (§6.1 S3) except `AtomicLoad`, which only reads and so really is a computed
 value discarded.
 
 **P9a.** An atomic operation is a synchronisation edge for P8: two atomic accesses to the same location are
@@ -2966,8 +2994,8 @@ worker runs which task is unspecified.
 takes on a wrong `extern` prototype and §5.9 E16e takes on an out-of-range index: the language does not
 define what such a program does, and no guarantee stated anywhere else applies to it.
 
-There is no exception for any type or size. olang has no atomic operations, so **no** access is atomic —
-not a `U8`, not an `I32`, not a pointer — and a concurrent read of something being written may observe
+There is no exception for any type or size. Only P9's atomic methods are atomic, so **no** other access is —
+not to a `U8`, not to an `I32`, not to a pointer — and a concurrent read of something being written may observe
 a value that was never stored. `-r` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
 

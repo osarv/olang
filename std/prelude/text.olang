@@ -1,7 +1,7 @@
 # text, part of the prelude. A String is an Array<Char> with an identity of its own (T29a): it indexes, slices
 # and goes to C as the array does, and text written in the program - a literal, a "$x" rendering, a join - is a
 # String wherever one is wanted (T29c). Bytes become text with "String(bytes)", which copies nothing, and text goes
-# wherever an Array<U8> is wanted as it is (T29h). "==" compares what two texts say (String's Eq, E10a); "same(a, b)"
+# wherever an Array<U8> is wanted as it is (T29h). "==" compares what two texts say (String's Eq, E10a); "a is b"
 # asks whether they are one. There is no encoding check: a Char is one byte of text, a UTF-8 code unit.
 
 # one byte of text (T29h): a U8 that renders as a character, the type of a character literal ('a'), and with U8's
@@ -232,7 +232,7 @@ test "Eq compares contents, and == goes through it; same asks for one instance" 
     c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
     d String& = "hello"
     assert a == c and c == "hello" and "hello" == d and a != "hell"
-    assert same(a, a) and not same(a, c)    # E10: identity, whatever Eq says
+    assert a is a and a is not c    # E10c: identity, whatever Eq says
     n String& = null
     assert n == null and n != a and a != n
 }

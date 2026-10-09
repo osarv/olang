@@ -23,6 +23,7 @@ fn ring() Node& {
 }
 Chain Node& = Node(1, Node(2, null))
 Ring Node& = ring()
+Looped Bool = Ring.next is Ring and Chain.next is not Chain      # E10c: identity, while compiling
 closed mut I32 = 0
 type Loud struct(id I32) { id } destruct { closed = closed + 1 }
 fn loudOnce() I32 {
@@ -48,6 +49,6 @@ Later I32 = seed * 2
 fn main() ? E {
     assert Deferred == 7
     assert Fib == 610 and Table[3] == 233 and P.a == 8 and P.b == 0.5 and Later == 6
-    assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring
+    assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring and Looped
     assert Kept.id == 7 and Dropped == 1 and closed == 1
 }

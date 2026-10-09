@@ -45,7 +45,7 @@ fn After(ms I64) Token& {
 
 # fires the token: every Cancelled() from now on is true, and every wait given it gives up
 fn (t mut Token&) Cancel() {
-    atomicStore(t.flag, 1)
+    t.flag.AtomicStore(1)
 }
 
 # true once the token was cancelled or its deadline has passed
@@ -55,7 +55,7 @@ fn (t Token&) Cancelled() Bool {
 
 # 0 while the token has not fired; otherwise 1 when it was cancelled, 2 when its deadline passed
 fn (t Token&) Why() I32 {
-    if atomicLoad(t.flag) != 0 { return 1 }
+    if t.flag.AtomicLoad() != 0 { return 1 }
     if t.deadline != 0 and NowNs() >= t.deadline { return 2 }
     return 0
 }

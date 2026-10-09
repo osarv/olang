@@ -9020,3 +9020,58 @@ from their original form.
   `PATH_MAX` filled from an import string or a root path of any length (`resolveImport`, `semaLoadModule`, `moduleDir`).
   **Skipped**: a user's `Pair(1, "x")` reports T7a inside `pair.olang` - the types agent is adding an "instantiated from"
   note for errors inside instantiations, which covers it.
+- **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
+  the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
+  both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day
+  earlier) and the five atomic builtins of P9 - each intercepted by name before the ordinary call lookup, so no
+  declaration could use their names and nothing about them read like the rest of the language.
+  **`a is b`.** `is` already asked a question about what a value is (E32: `x is Shape.Circle`); identity is the same
+  kind of question, and the one Python spells the same way. The rule the coordinator wrote down: when what follows `is`
+  names a case or a type, it is E32's test, reading through a reference; otherwise both sides must be references (or
+  function values) of one type, `null` allowed on either side, and the answer is identity. A case with no payload
+  (`e is Expr.Nil`) stays the case test. **How the two forms are told apart.** Three ways were possible: parse both
+  readings and let the checker choose, decide in the checker from a type-ref, or decide in the parser. The parser
+  already has exactly the predicate needed - the one that commits `Shape.Circle` to a choice value and `Pair<...>(` to
+  a generic constructor, asking whether a name (or everything before its last word) is a known type through any alias
+  chain - so the right side is first read as a `type-ref`, and kept as one when it names a type, a case of one, a
+  primitive, `Bool` or `Array`, or is no plain name at all (`<T>`, a function type, `mut T`); otherwise the parser
+  rewinds (cursor and any `>>` split) and reads an expression at precedence 9, as every comparison's right side is read.
+  So `a is b + c` is `a is (b + c)`, `a is b == c` is `(a is b) == c`, and `x is f()`, `x is a.next`, `x is null` are
+  all values. **What makes it sound** is that a name is never both: D3a forbade a local named like a global, not like a
+  type, and `Circle := 3` beside `type Circle` compiled. The coordinator extended D3a to types (the module's, the
+  prelude's, the built-in names), and I extended **D2** the same way one level up - its text said it "does not define
+  behavior for reusing a name across two different sets", and a global or function named like a type of its module
+  compiled too (checked: both did). Nothing in the corpus, std or the checks used either.
+  **`is not`.** `a is not b` and `x is not Shape.Circle`, mirroring `not in` (E29) and Python. The parser takes a `not`
+  right after `is` as part of the operator and builds `not (a is b)` - the very node `not a is b` already gives (E7a:
+  `not` binds looser than comparisons) - so the checker, the evaluator and codegen see nothing new. No ambiguity arises:
+  `a is (not b)` would need a `Bool` reference, which does not exist.
+  **The atomics.** `x.AtomicLoad()`, `AtomicStore(v)`, `AtomicAdd(v)`, `AtomicSwap(v)` and `AtomicCompareSwap(e, v)`,
+  supplied by the compiler on every integer type as `Len()` is on every array (E23) and `Bits()` on every float (E33):
+  methods in every respect but that no declaration exists, inherited by a type `extends`-ing an integer (T29f), never
+  redeclared (the supplied-method clash, extended), and on a declared type without `extends` an "inherited only with
+  extends" error as for its other base methods. The `Atomic` prefix is kept so the cost stays visible where it is
+  written, which was P9's reason for named operations rather than an `atomic` qualifier. **Decided while building:**
+  `AtomicCompareSwap` over `AtomicCas` - two words a reader can say against an abbreviation, the language's
+  natural-language principle; the receiver must be a **place** (a variable, a field, an element - atomicity is a
+  property of the memory word the place occupies), read-only allowed only for `AtomicLoad` as P9 already relaxed; and a
+  **value argument fits the receiver's type as any argument fits its parameter** (T6, T6b), where P9 required exactly
+  the target's type "since there is no point at which a conversion could run". That reason was about the target, which
+  is never converted; an argument is computed before the instruction, as every argument is, and a method whose
+  arguments did not widen where every other call's do would have been the one exception to T6b. All eight integer
+  types work (LLVM's atomics take `i8`/`i16`); P9's text still named only `U8`, `I32` and `I64`, from before the T4
+  rename. The operations themselves are unchanged - the same operand kinds, so S3 (the four that write may stand as a
+  statement), D15 (`v := n.AtomicLoad()`), S8c's write scan, codegen, K1 (refused while compiling) and `-i` (performed
+  as plain operations, since nothing runs beside it) all needed no change.
+  **Evaluator.** `is` lowers to the `==` of two references - what `same` lowered to - which compiles to a pointer
+  comparison and which the evaluator already answered as identity, so nothing changed there either; it is proven by a
+  corpus global (`IdBaked`, K2) counting seven groups of identity and case questions - equal-by-`Eq` nodes that are two instances,
+  a self-loop, nulls on either side, function values, an enum reference - asserted equal to the same call at run time,
+  and by the K2 fixture baking `Ring.next is Ring and Chain.next is not Chain` to `i1 true`. The `-i` fixture now prints
+  an atomic counter and two identities, compared byte for byte with the built program.
+  **Found on the way.** Making `same` and `atomicAdd` unknown names showed two cascades, both pre-existing: an unknown
+  method (`a.Foo()`) left an `int` literal behind, which as a statement added S3's "computes a value and then discards
+  it"; and an unknown function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean"
+  (the stand-in type had been taught to meet operator requirements, not conditions). Both now leave the unknown
+  stand-in, and a condition does not judge it. And P8b still said "olang has no atomic operations, so no access is
+  atomic", written before P9; it now says only P9's methods are atomic.
