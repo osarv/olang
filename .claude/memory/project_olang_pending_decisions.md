@@ -72,9 +72,39 @@ projection as (I - alpha x x^T)".
    Architectures", Behrouz et al., NeurIPS 2025) my reading, to confirm: the paper's delta rule / Delta Gradient
    Descent - for a linear layer y = W x, W <- W (I - a x x^T) - lr * (AdamW update), where x is the layer's INPUT (the
    key), not the weights; per batch W <- W - (a/B) (W X^T) X (two GEMMs, as cheap as a forward pass), optionally
-   normalized by ||x||^2 per sample (the unofficial implementation's default). Open: normalized or not; replaces
-   weight decay or adds to it; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
+   normalized by ||x||^2 per sample (the unofficial implementation's default). The user (2026-10-09): "It replaces the weight
+   decay I think" - so the term REPLACES AdamW's weight decay in this variant. Still open: normalized or not; which layers (all linear layers?); a. arxiv and the author's site are blocked from the
    container (403), so the formula is from an unofficial implementation's README. Default: plain AdamW first.
+12. (asked 2026-10-09, const generics design - wt-constgen becd37f, spec only) run-time dimensions: in the library
+   (`Dynamic I64 = -1`; Matrix stores rows/cols when a dimension is Dynamic; `Matrix<F32, Dynamic, 784> @
+   Matrix<F32, 784, 128>` checks 784 at compile time) or a language-level `_` (hidden storage and hidden run-time
+   checks in every generic)? Default/rec: the library.
+13. (asked 2026-10-09) `Array<T, N>&` puts a length in a reference type again (reversing T11a for fixed arrays) -
+   forced by D9a (array parameters are references); the alternative is fixed arrays by value (on hold). Rec: keep D9a.
+14. (asked 2026-10-09) a constant variable is written `<N>` in expressions too (`for i in range <N>`, `i < <N>`),
+   one spelling as G8b - or bare `N` in bodies (reads better, two spellings)? Default: `<N>`. Rec: `<N>` (the
+   agent's call; flagged because it is the most visible syntax choice).
+15. (asked 2026-10-09, settling-network study - oann/docs/settling.md, pushed 3e99e45) the inspiration's code has a copyleft licence (its earlier code
+   MIT). oann reimplements from the documented equations (clean room); what licence should oann have? Default: none
+   yet (no licence file). Rec: a permissive one (MIT/Apache-2.0) with the clean-room note, or GPL-3.0 if the user
+   wants to stay close to the inspiration's code.
+16. (asked 2026-10-09) order after the MNIST MLP: transformers were chosen first - settling networks
+   second? (their batch-1 matvec / Ger / row max-abs needs go into the matrix library's first round already).
+   Default: transformers, then settling networks.
+17. (asked 2026-10-09) the FPGA target board and toolchain (Settling networks map well: local updates, weights in on-chip
+   memory; ~20 us for 32 sweeps of a 64x64 block at 200 MHz). Default: none chosen.
+18. (asked 2026-10-09) spiking: is LIF neurons with spike-count contrasts the intended direction (a pluggable neuron
+   enum from the start)? Default: pluggable neuron enum, LIF later.
+Decided by me from the study (details): Settling-network support lives as modules inside oann (`Circuit<T>` beside
+`Graph<T>`, sharing Matrix, planner, optimizers); oann's own vocabulary with a mapping table to the inspiration's; a single
+stream first; fidelity held by a test running an external package as an external reference on its fixed points (not exact
+replication); vectorizable fast tanh/exp/sigmoid approximations in the matrix library now, and whether LLVM's
+libmvec mapping could vectorize std/math is a language question to raise when measured.
+**Also in progress (2026-10-09):** "settling networks" (the user -
+(source omitted), Python/NumPy: reciprocal regions settling to equilibrium until a residual tolerance,
+local free/nudged-phase learning with no backprop, online and continual, working trace, associative memories,
+arousal, sleep/consolidation) - a research agent writes /home/user/oann/docs/settling.md; the matrix-library agent was
+told batch-1 matvec, rank-1/rank-k updates and residual norms matter as much as big GEMM.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
