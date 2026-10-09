@@ -1,0 +1,10 @@
+# check: fail this stores a reference to storage that does not live as long as the container
+# T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary
+type Holder struct() {
+  s mut String& = null
+}
+fn keep(h mut Holder&) {
+  local Array<U8> = U8[104, 105, 106]
+  h.s = String(local)
+}
+fn main() ? { }

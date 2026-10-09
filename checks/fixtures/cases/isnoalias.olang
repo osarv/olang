@@ -1,0 +1,6 @@
+# M12: an alias chain that names no module
+import "lib"
+fn main() ? {
+  d := lib.Dir.North
+  b Bool = d is nosuchalias.Dir.North
+}

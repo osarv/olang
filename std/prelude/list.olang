@@ -213,22 +213,23 @@ test "ToArray is a copy, independent of the list" {
     assert b.Len() == 3
 }
 
-type KV struct(k I32, v I32) {
+# a test's own type - private, so the prelude names nothing a program might want to call its own
+type listKV struct(k I32, v I32) {
     k
     v
 }
 
 test "a list of structs" {
-    l List<KV>& = List<KV>()
+    l List<listKV>& = List<listKV>()
     for i in range 20 {
-        l.Push(KV(i, i * i))
+        l.Push(listKV(i, i * i))
     }
-    a Array<KV>& = l.ToArray()
+    a Array<listKV>& = l.ToArray()
     assert a[19].v == 361
 }
 
-# O10e: ToArray's "&out" appears only in its return type, so it orders before the list's own scope and the
-# body requires nothing between them - an outer list flattens into an inner block's array freely
+# ToArray's result is built where it lands, whatever the list's own scope - an outer list flattens into an inner
+# block's array freely
 test "an outer list flattened into an inner block" {
     l List<I32>& = List<I32>()
     l.Push(1)
@@ -373,10 +374,10 @@ test "a checked index into a List" {
 
 # a List of structs and of references indexes like any other
 test "indexing a List of structs and of references" {
-    kv List<KV>& = List<KV>()
-    for i in range 30 { kv.Push(KV(I32(i), I32(i) * 2)) }
+    kv List<listKV>& = List<listKV>()
+    for i in range 30 { kv.Push(listKV(I32(i), I32(i) * 2)) }
     assert kv[17].v == 34
-    kv[17] = KV(0, 99)       # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
+    kv[17] = listKV(0, 99)       # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
     assert kv[17].v == 99 and kv[17].k == 0
     line String& = "to be or not"
     ws := wordsOf(line)

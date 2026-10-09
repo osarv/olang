@@ -37,7 +37,7 @@
 #define TYPE_NAME_IN_USE "type name already in use"
 #define INTERFACE_METHOD_IS_GENERIC "a trait method's signature may not be generic in a type of its own - a type satisfies a trait with one method per name, and a generic signature names a family of them (T35)"
 #define UNKNOWN_METHOD "this is written as a method call, but the value on the left has no method of this name - its type declares none, and no trait it satisfies has a default of this name (M19, M19e)"
-#define DUPLICATE_METHOD_FOR_TYPE "this module already declares a method of this name for this same type. Several functions may share a name only when each is a method of a DIFFERENT type - that is what lets two types in one module implement the same interface - so one name per type is the limit"
+#define DUPLICATE_METHOD_FOR_TYPE "this module already declares a method of this name for this same type. Several functions may share a name only when each is a method of a DIFFERENT type - that is what lets two types in one module satisfy the same trait - so one name per type is the limit"
 #define NAME_CLASHES_WITH_IMPORT "this name is already an import alias in this module, and an alias's name is reserved - otherwise the left of a dot could mean either the import or this, and the tiebreak would be silent. Rename this, or give the import an explicit alias"
 #define VAR_NAME_IN_USE "variable name already in use"
 #define MATCH_NOT_EXHAUSTIVE "this match over an enum type does not cover every case. An enum declares a closed set, so the compiler can tell you which places must change when you add one - add the missing case(s), or write 'nomatch { }' to say the rest are deliberately ignored. A case with a guard, or with a value or another case inside its payload, may let a value through, so it covers nothing (S13a)"
@@ -69,6 +69,7 @@
 #define CHOICE_CASE_IS_PRIVATE "this enum case is private - only a capitalized name is visible outside the module its enum type was declared in (M6a)"
 #define ERROR_WORD_IS_PRIVATE "this error word is private - only a capitalized name is visible outside the module its error type was declared in (M6a)"
 #define METHOD_SHADOWS_FIELD "this type already has a field of this name, so 'x.f' would mean two things - a method may not share a name with a field of the type it is declared on"
+#define METHOD_IS_PRIVATE "this method is private - only a capitalized method is callable outside the module that declared it (M6)"
 #define VAR_IS_PRIVATE "this variable is private - only a capitalized name is visible outside its own module"
 #define IMPORT_IS_PRIVATE "this import is private - only a capitalized alias is visible through re-export (e.g. 'import Sh \"shared\"', not 'import sh \"shared\"')"
 #define INVALID_IMPLICIT_IMPORT_ALIAS "this file's name isn't a valid identifier, so it can't be used as an implicit import alias ('import \"path\"' derives its alias from the file name) - give this import an explicit alias instead"
@@ -84,7 +85,7 @@
 #define FOR_IN_NOT_ITERABLE "'for ... in' walks an array, a range, an Iterator<T> - a type with 'mut Next() T ? Exhausted', declared on a mutable receiver: Next gives a value, and fails with Exhausted once there are no more (S9a) - or an iterable, whose 'Iter()' returns one (S9c)"
 #define RANGE_NEEDS_INTEGERS "a range's end, start and step are integers (S9b)"
 #define RANGE_ZERO_STEP "a range's step must be positive - a range only counts upward (S9b)"
-#define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)"
+#define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('I32', 'Bool', 'Array', 'Iterator') - choose another (D3a)"
 #define IMPORT_HAS_EXTENSION "an import names a file without its '.olang' extension - write 'import \"geom/rect\"', not 'import \"geom/rect.olang\"' (M23)"
 #define IMPORT_LEAVES_ROOT "a relative import inside the standard library or a remote repository stays within it - name a module outside it by its own path ('std/...' or 'host/owner/repo/...') (M23)"
 #define IMPORT_REMOTE_NEEDS_FILE "a remote import names a file within the repository: 'host/owner/repo[@ref]/path' (M23)"
@@ -101,6 +102,7 @@
 #define DESTRUCT_NEEDS_RESULTS "only a call returning several values, or an enum case's several fields taken with 'as', can be destructured - one value is received by an ordinary declaration or assignment (D8c)"
 #define DESTRUCT_COUNT_MISMATCH "the number of targets must be the number of values the call returns - write '_' for a value you do not want (D8c)"
 #define DESTRUCT_DECLARES_NAMES "':=' declares each target, so each must be a plain name or '_' - use '=' to assign into existing places (D8c)"
+#define TYPE_VAR_NAMES_TYPE "a type variable may not be named after a type - it would read as parameterizing over a type that is already concrete. Name the variable something no type is called, as '<T>' (G1)"
 #define TYPE_VAR_WRITTEN_BARE "a type variable is written with its angle brackets everywhere, type arguments included: 'Cell<<T>>', not 'Cell<T>' - a bare name is always a declared type (G8b)"
 #define TRY_DEFAULT_NO_VALUE "this call returns no value, so there is nothing for a default to stand in for - handle its errors with a try ... catch statement instead (R9a)"
 #define TRY_DEFAULT_COUNT "a clause's defaults must be one per result the call returns - several are written only where the try is the whole value being destructured or returned (R9a)"
@@ -143,7 +145,7 @@
 #define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
 #define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
 #define TYPE_MATCH_NOT_EXHAUSTIVE "no 'case' of this 'match' covers the type this generic was instantiated with, and there is no 'nomatch' clause - unlike a match over a value, a match over a type must cover every instantiation, or the generic would silently do nothing for some of them"
-#define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. A struct holds itself through a reference ('next Node&'); an enum through a struct holding a reference to it (T17)"
+#define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. Hold it through a reference: a struct field 'next Node&', an enum payload 'Add(a Expr&, b Expr&)', an array 'Array<Node&>' (T16)"
 #define INVALID_REFERENCE_TARGET "only a struct, enum or array type can be marked as a reference with '&' - primitives are always by value"
 
 // ---- types and values ----
@@ -215,7 +217,7 @@ statement - only a call and the '++'/'--' forms are. A bare name declares nothin
 takes at most one '&' - the two marker positions (before and after the array suffixes) are the same \
 place here, and writing both would leave one of the two scope tags meaning nothing"
 #define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
-(e.g. 'U8[]&'). Without it the array is copied at every call, in time proportional to its \
+(e.g. 'Array<U8>&'). Without it the array is copied at every call, in time proportional to its \
 length, and a 'mut' one would be written where the caller can never see it"
 #define MODULE_NAME_COLLISION "another module in this program has the same identity - a module's symbols are \
 named from it (§10 B3b), so two modules sharing one would define the same symbols. Only a module named by its file \
@@ -293,6 +295,9 @@ constructor, in a position whose parameter declares a default value"
 #define REF_TYPEVAR_NOT_AGGREGATE "a '<T>&' parameter is a reference to what T is, and here T is a number or another type that cannot be one - only a struct, an enum or an array can (G11a)"
 #define TRAIT_NOT_A_TYPE "a trait is a constraint, not a type: it is written only where a type variable is constrained - 'x <T Shape>', '<I Iterator<<E>>>' (T30, G19). A value of one of several types is an enum (T17); one thing that can be called, a function value (T21)"
 #define OVERRIDE_SIGNATURE_DIFFERS "this type satisfies a trait with a default method of this name, and this method does not have the default's signature - an override must match it exactly; give the method the default's signature or another name (M19e)"
+#define TYPE_HAS_NO_CONSTRUCTOR "this type has no constructor to call - an enum's value is one of its cases ('Color.Red'), and a trait or error type is no type of a value"
+#define GENERIC_TYPE_NOT_STRUCT "only a struct type (or a trait) takes type parameters - an enum's payloads, an error type's words and a declared number or array name their types as written, so there is nothing to parameterize. Write the payload's type, or hold it in a generic struct (section 12)"
+#define DECLARED_OVER_AGGREGATE "a declared type is a new name over a number or an array - a primitive, Array<T>, or another such declared type - not over a struct, an enum, a trait or a generic type's instance, whose constructor and identity a copy could not keep. Declare a struct holding one as a field instead: 'type Names struct() { items mut List<String&>& = List<String&>() }' (T29)"
 #define EXTENDS_NOT_BASE "only a type declared over a number or an array extends it - a struct, an enum, a trait or a function type has no base to inherit from (T29f)"
 #define NOT_EXTENDED_OP "this type does not extend its base, so the base's operator does not make a value of it - declare the operator's method (Plus, Minus, Neg, ... E31), or declare the type with 'extends' (T29f)"
 #define NUMBERS_DO_NOT_MEET "these two numbers do not meet: one must flow into the other's type - a number flows losslessly into a wider one of the same signedness, an unsigned one into a wider signed one (U8 into I16), F16 and BF16 into F32 into F64, and a declared type into its base (T6b). Convert one, as T(x)"
@@ -304,8 +309,6 @@ constructor, in a position whose parameter declares a default value"
 #define OPERATION_REQUIRES_NUMBER "operand must be a number"
 #define OPERATION_REQUIRES_BOOL "operand must be a boolean"
 #define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's - only the same scope, or one received from the caller flowing into one of this function's own, is provably safe"
-#define VAR_DECL_MISSING_INITIALIZER "a variable declaration needs an initializer ('= expr' or ':= expr'), unless its declared type is an array with a size ('T[N]', zero-filled, or 'T[expr]', arena-allocated and zero-filled)"
-#define REDUNDANT_ARRAY_SIZE "a compile-time-length array target ('T[N]') already knows its own size from the literal's own value count - restating it on both is redundant; either drop the size ('T[]', inferred from the literal) or drop the literal ('T[N]' alone, zero-filled)"
 
 // ---- statements and control flow ----
 
@@ -346,6 +349,9 @@ void ErrMsgUnexpectedToken(struct token found, char* expected);
 void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
 void ErrMsgSemantic(struct token tok, char* errMsg);
 void ErrMsgSemanticNote(struct token tok, char* msg);
+//every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
+void ErrMsgPushContext(struct token tok, char* msg);
+void ErrMsgPopContext(void);
 //K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
 void ErrMsgBufferStart(void);
 void ErrMsgBufferFlush(void);
@@ -364,7 +370,7 @@ void ErrMsgInstallCrashHandler(void);
 void ErrMsgSetInterpreting(bool on);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
-#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"
+#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text extends Array<Char>') and give that methods (M19d)"
 #define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
 #define ARRAY_SIZE_MISMATCH "this array's length is known here and differs from the length of the fixed storage it is copied into - an array is never silently truncated or padded to fit (C2e)"
 
@@ -379,7 +385,7 @@ void ErrMsgSetInterpreting(bool on);
 #define SPAWN_LAMBDA_CAPTURE_TOO_SHORT "this spawned lambda captures a variable declared inside the 'join' block, which closes while the task may still run - a spawned lambda is built to last until the join, but what it captured lives no longer than where it was declared. Declare the captured variable outside the join block (P2, D16e)"
 #define SPAWN_FUNC_TOO_SHORT "this function value does not outlive the enclosing 'join' block - a lambda made inside it lives in the block it was made in, which closes while the task may still run. Make it outside the join block, or spawn the lambda itself ('spawn fn() { ... }'), which is built to last until the join (P2, D16e)"
 #define SPAWN_LAMBDA_PARAMS "a spawned lambda takes no parameters - what the task needs, it captures (D16e)"
-#define METHOD_CLASHES_INHERITED "a type declared over an array inherits every array method, and this one is already among them - choose another name; an inherited method is never overridden (T29e)"
+#define METHOD_CLASHES_INHERITED "a type declared with 'extends' inherits every method of its base, and this one is already among them - choose another name; an inherited method is never overridden, except Eq, Hash and Str, which a type may declare to replace its base's (T29e)"
 #define METHOD_CLASHES_SUPPLIED "the compiler supplies a method of this name for this type - Len() on every array, a declared one included (E23), and Bits() on a float or the FromBits methods on an unsigned integer, for a type extending one (E33) - and a supplied method is never overridden: choose another name"
 #define FROM_BITS_RECEIVER "a float is made from the bits of the unsigned integer type of its width: F16FromBits() and BF16FromBits() are methods of U16, F32FromBits() of U32 and F64FromBits() of U64 - convert to that type first, as in U64(x).F64FromBits() (E33)"
 #define MUT_ON_VALUE_TYPE "'mut' before a type makes a reference writable - this type is not a reference, so there is nothing for it to permit (T25b)"

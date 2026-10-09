@@ -1,0 +1,24 @@
+# check: fail this value's type doesn't match the target's declared type
+# T27: nor with payloads of other types, and a declared enum is never the same type as an anonymous one
+# also: compilation failed with 2 error(s)
+type E enum {
+  A
+  B
+}
+fn f(x enum {
+  A
+  B
+}) I32 { return 1 }
+fn g(x enum {
+  A(n I32)
+  B
+}) I32 { return 2 }
+fn main() ? {
+  w enum {
+    A(n I64)
+    B
+  }
+  e E = E.A
+  a := f(e)
+  b := g(w)
+}
