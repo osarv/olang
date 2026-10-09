@@ -3763,6 +3763,7 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
 //`words` is kept in step with `vars` because a case's ordinal is its position, and the ordinal is what a
 //payload-free choice value still is at run time.
 void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out, struct list* scopeVars);
+static bool resolvingPayload; //T7c: resolveParamList is reading an enum case's payload
 static bool implicitParamScopes; //set while a signature's, constructor's or payload's parameters are resolved
 long long TypeGetSize(struct type t);
 
@@ -3796,7 +3797,10 @@ struct type resolveChoiceBody(struct semaModule* mod, struct token nameTok, stru
         struct syntax* params = firstPartOfType(c, SNTX_PARAM_LIST);
         bool prevImplicit = implicitParamScopes;
         implicitParamScopes = true; //T17c: a bare payload reference has its own scope, as a parameter does
+        bool prevPayload = resolvingPayload;
+        resolvingPayload = true; //T7b: a payload holds a fixed-length array by value
         if (params) resolveParamList(mod, params, &v.type.vars, &t.scopeVars);
+        resolvingPayload = prevPayload;
         implicitParamScopes = prevImplicit;
         ListAdd(&t.vars, &v);
         ListAdd(&t.words, &nTok);
@@ -4102,7 +4106,8 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         //hazard, arising from the marker's ABSENCE rather than its presence. Tested on structMAlloc (the
         //explicit marker) rather than on reference-shapedness, since T11 makes a runtime-length array
         //reference-SHAPED without one and that is exactly the case this rule exists to stop being implicit.
-        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) {
+        //T7b/T7c: an enum's payload holds an Array<T, N> by value, as a struct's field does - its elements are in it
+        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc && !(resolvingPayload && !v.type.arrMalloc)) {
             Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type);
         }
         struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
@@ -9373,6 +9378,25 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         if (OperandIsWrittenText(a) && !OperandIsWrittenText(b) && TypeIsSame(b->type, tv)) a = OperandNominalConversion(tv, a, a->tok);
         else if (OperandIsWrittenText(b) && !OperandIsWrittenText(a) && TypeIsSame(a->type, tv)) b = OperandNominalConversion(tv, b, b->tok);
     }
+    //T7d/E10: beside an Array<T>, an Array<T, N> meets it as an Array<T> - its own storage, the length beside it, so the
+    //lengths are compared first; and two literals of different lengths are two Array<T>s, as they are anywhere else
+    if ((opType == OPERATION_EQ || opType == OPERATION_NEQ) && a->type.bType == BASETYPE_ARRAY && b->type.bType == BASETYPE_ARRAY
+            && a->type.structMAlloc == b->type.structMAlloc && !a->type.arrLenArg && !b->type.arrLenArg
+            && a->type.arrElem && b->type.arrElem && typeSameNested(*a->type.arrElem, *b->type.arrElem)) {
+        bool bothLit = a->isLiteral && b->isLiteral && !TypeIsSame(a->type, b->type);
+        for (int k = 0; k < 2; k++) {
+            struct operand** side = k ? &b : &a;
+            struct operand* other = k ? a : b;
+            if ((*side)->type.arrMalloc || (!other->type.arrMalloc && !bothLit)) continue;
+            struct type rt = (*side)->type;
+            rt.arrMalloc = true;
+            rt.arrLen = NULL;
+            if (other->type.arrMalloc) { rt.owner = other->type.owner; rt.name = other->type.name; }
+            struct operand* conv = operandNew((*side)->tok, OPERATION_NOMINAL_CONVERT, rt);
+            ListAdd(&conv->args, side);
+            *side = conv;
+        }
+    }
     //E4a: a literal-only expression ("1.0 / 3.0") adapts here as a literal does - "f32 < 1.0 / 3.0" compares F32s
     bool aLit = operandIsLiteralLike(a), bLit = operandIsLiteralLike(b), unfit = false;
     if (rule.sameType && aLit != bLit) {
@@ -11504,7 +11528,8 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER), litScopeVars);
     //an element is never itself a scope's name, only bare (T7), and an element array is a reference (T7a)
     if (elemType.scopeParam) Err(tok, ERR_NAMED_SCOPE_ON_ELEMENT);
-    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc) Err(tok, ERR_ARRAY_NESTED_BY_VALUE, &elemType);
+    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc && elemType.arrMalloc && !elemType.unknown)
+        Err(tok, ERR_ARRAY_NESTED_BY_VALUE, &elemType); //T7c: a fixed-length one holds its elements in itself
     //an error type has no constructible values at all - every element would fail to type-check anyway, but
     //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
     if (elemType.bType == BASETYPE_ERROR) {

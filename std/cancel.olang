@@ -18,14 +18,14 @@ extern fn clock_gettime(clock I32, ts Array<I64>) I32
 
 # now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set
 fn NowNs() I64 {
-    ts := Array<I64>(2)
+    ts Array<I64, 2>
     clock_gettime(ClockMonotonic, ts)
     return ts[0] * 1000000000 + ts[1]
 }
 
 # the wall clock in nanoseconds - only what pthread_cond_timedwait measures its deadlines against
 fn wallNs() I64 {
-    ts := Array<I64>(2)
+    ts Array<I64, 2>
     clock_gettime(ClockRealtime, ts)
     return ts[0] * 1000000000 + ts[1]
 }
@@ -69,7 +69,7 @@ fn (t Token&) Reason() ? Stopped {
 # the wall-clock time, as a timespec, a wait should next wake at: the deadline if it is near, else soon enough
 # to notice a Cancel() - which no wait can be woken for directly, since the token does not know who is waiting
 PollNs I64 = 10000000
-fn (t Token&) WakeAt(ts mut Array<I64>&) {
+fn (t Token&) WakeAt(ts mut Array<I64, 2>&) {
     wait I64 = PollNs
     if t.deadline != 0 {
         left I64 = t.deadline - NowNs()

@@ -200,7 +200,7 @@ fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? IoError {
 }
 
 test "Read returns a slice of the caller's own buffer" {
-    buf := Array<U8>(8)
+    buf Array<U8, 8>
     path := U8['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
     fd I32 = openReadOnly(path)
     assert fd >= 0
@@ -213,7 +213,7 @@ test "Read returns a slice of the caller's own buffer" {
 }
 
 test "FormatInt renders decimals, including zero and negatives" {
-    buf := Array<U8>(24)
+    buf Array<U8, 24>
 
     # the extremes: I64's minimum has no positive counterpart to format from
     n0 := FormatInt(-9223372036854775807 - 1, buf)
@@ -242,7 +242,7 @@ test "FormatInt renders decimals, including zero and negatives" {
 # a descriptor reading back "text": the read end of a pipe it has been written into, the write end closed after it -
 # for the tests of Lines, which need no file. Under a pipe's own buffer, 64KB, so the write never waits for a reader
 fn reading(text String&) I32 {
-    fds := Array<I32>(2)
+    fds Array<I32, 2>
     assert pipe(fds) == 0
     try Write(fds[1], text) catch IoError { fail }
     close(fds[1])

@@ -3136,6 +3136,12 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        //X3/T7c: an Array<T, N> is handed over as its own storage - a value's address, a reference's pointer - never
+        //copied first, so what the foreign function writes there is in the array afterwards
+        if (paramT.bType == BASETYPE_ARRAY && argOp->type.bType == BASETYPE_ARRAY && !argOp->type.arrMalloc) {
+            cgArgAdd(&args, "ptr", cgValue(ctx, argOp));
+            continue;
+        }
         char* boundary = cgBoundaryValue(ctx, argOp, paramT, ctx->ownScopeSlot);
         if (paramT.bType == BASETYPE_ARRAY) {
             char* ptr;
