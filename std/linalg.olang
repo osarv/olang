@@ -456,7 +456,7 @@ fn Cast(x <S>, like <D>) <D> {
 
 # a tile of accumulators, kept in registers by the micro-kernels (an inline array, indexed only at constants)
 type tile<A> struct() {
-    v mut Array<<A>> = Array<<A>>(48)
+    v mut Array<<A>, 48>
 }
 
 # A[i0 : i0 + rows, p0 : p0 + depth] (or of A's transpose) packed into ap as panels of mr rows: panel r holds, for
@@ -839,7 +839,7 @@ fn Outer(x Array<<T>>&, y Array<<T>>&) Matrix<<T>> {
 # long sum near that of pairwise summation. The order is fixed, so a sum is the same on every run.
 
 type lanes<A> struct() {
-    v mut Array<<A>> = Array<<A>>(16)
+    v mut Array<<A>, 16>
 }
 
 # the eight lanes added up pairwise. The loops filling lanes read and write them only at constant positions, which
@@ -1165,7 +1165,7 @@ fn (m Matrix<<T>>&) ColumnSums(out Matrix<<T>>&, beta F64 = 0) {
 }
 
 type colLanes<A> struct(z <A>) {
-    v mut Array<<A>> = Array<<A>>(64)
+    v mut Array<<A>, 64>
 }
 
 fn columnSumsIn(m Matrix<<T>>&, out Matrix<<T>>&, beta F64, z <A>) {
