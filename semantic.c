@@ -5633,12 +5633,27 @@ bool OperandIsMutableLvalue(struct operand* op);
 //type it was read as), a value's own storage being writable when it is borrowed, or a fresh value
 bool OperandGivesWritable(struct operand* op) {
     if (op->isNullLiteral || op->type.bType == BASETYPE_FUNC) return true;
+    //E28/S12b: whichever value is chosen is what is written through, so each must be writable; a hidden local's
+    //statements ahead of a value (a derived "try c[i]") give what the value gives; a bounds check gives its value
+    if (op->opType == OPERATION_COND && op->args.len == 3)
+        return OperandGivesWritable(*(struct operand**)ListGetIdx(&op->args, 1))
+            && OperandGivesWritable(*(struct operand**)ListGetIdx(&op->args, 2));
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!OperandGivesWritable(*(struct operand**)ListGetIdx(&vs, i))) return false;
+        return true;
+    }
+    if (op->opType == OPERATION_SEQ && op->args.len)
+        return OperandGivesWritable(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
+    if (op->opType == OPERATION_BOUNDS && op->args.len) return OperandGivesWritable(*(struct operand**)ListGetIdx(&op->args, 0));
     if (TypeIsPermRef(op->type)) {
         switch (op->opType) {
-            case OPERATION_READ_VAR: case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_FUNCCALL:
-            case OPERATION_SLICE: case OPERATION_NOMINAL_CONVERT:
-                return op->type.refMut;
-            default: return true; //a fresh value
+            //a value only the expression made - text, a new array, a literal, a zero value - is writable; every
+            //other reference is as its type says (an "as" reads the payload field's own permission)
+            case OPERATION_NONE: case OPERATION_STR_OF: case OPERATION_CONCAT: case OPERATION_SIZED_ARRAY_ALLOC:
+            case OPERATION_COMPREHENSION: case OPERATION_ZERO:
+                return true;
+            default: return op->type.refMut;
         }
     }
     if (OperandNamesExistingStorage(op)) return OperandIsMutableLvalue(op);
@@ -13114,6 +13129,52 @@ struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//P2: whether a scope lasts until the join that ctx's spawn belongs to - a scope variable or the program's does (each
+//outlives the body), a block only when it is the join block or one around it
+static bool lastsUntilJoin(struct checkCtx* ctx, struct var* v, int d, bool unnamed) {
+    if (unnamed || (v && v != SCOPE_AMBIGUOUS)) return true;
+    if (v == SCOPE_AMBIGUOUS) return false;
+    return normDepth(d) <= ctx->joinDepth;
+}
+
+//P2: whether everything a temporary argument of a task holds lasts until the join - what its scope variables were bound
+//to (a constructor's or an enum's arguments), a lambda's captures, and, through the values it is built from, the same
+//for each of those. A scope still following the result is built in the join block, as a task's temporary is.
+static bool argBindingsLastUntilJoin(struct checkCtx* ctx, struct operand* op) {
+    if (op->lambdaHomeSet && !lastsUntilJoin(ctx, op->lambdaHome, op->lambdaHomeDepth, false)) return false;
+    for (int i = 0; i < op->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
+        if (b->landing || b->boundUnnamed || (!b->boundTo && b->boundDepth == 0)) continue;
+        if (b->boundTo != SCOPE_AMBIGUOUS) {
+            if (!lastsUntilJoin(ctx, b->boundTo, b->boundDepth, false)) return false;
+            continue;
+        }
+        for (int k = 0; k < b->candidates.len; k++) {
+            struct var* c = *(struct var**)ListGetIdx(&b->candidates, k);
+            if (!c) return false; //a block of ours whose depth was not kept
+        }
+    }
+    struct list held = ListInit(sizeof(struct operand*));
+    if (opIsCtorCall(op) || opIsEnumCtor(op) || opIsArrayLiteral(op)) held = op->args;
+    else if (op->opType == OPERATION_COND && op->args.len == 3) {
+        ListAdd(&held, ListGetIdx(&op->args, 1));
+        ListAdd(&held, ListGetIdx(&op->args, 2));
+    } else if (op->opType == OPERATION_MATCH) held = SemanticMatchValues(op);
+    for (int i = 0; i < held.len; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&held, i);
+        bool asRef = a->type.structMAlloc || (a->type.bType == BASETYPE_ARRAY && a->type.arrMalloc && OperandNamesExistingStorage(a));
+        struct var* sv;
+        int sd;
+        bool su;
+        if ((asRef || (OperandNamesExistingStorage(a) && TypeHoldsReferences(a->type))) && !operandIsTemporary(ctx, a)) {
+            if (RefExactScope(ctx, a, a->type.structMAlloc, &sv, &sd, &su) && !lastsUntilJoin(ctx, sv, sd, su)) return false;
+            continue;
+        }
+        if (!argBindingsLastUntilJoin(ctx, a)) return false;
+    }
+    return true;
+}
+
 struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_SPAWN);
     struct statement stmt = (struct statement){0};
@@ -13185,19 +13246,31 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     //P2: the task runs until the join, so everything it was handed has to still be there then. An
     //argument declared in a block NESTED inside the join closes first - the same containment question O10
     //asks everywhere else, here against the join block's own depth.
-    for (int i = 0; i < call->args.len; i++) {
+    //...and so has everything an argument holds: a temporary is built in the join block and a value is copied into the
+    //task, but the references inside either still name storage of their own - a constructor's or an enum's arguments,
+    //a lambda's captures, a value local's references - which must last until the join as well
+    for (int i = 0; i < call->args.len && i < call->readVar->type.vars.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&call->args, i);
-        if (!arg->type.structMAlloc && !arg->type.arrMalloc) continue;
-        if (arg->type.scopeParam) continue; //a named scope outlives this body entirely
-        struct var* root = lvalueRootVar(arg);
-        if (!root || root->owner) continue; //a temporary, or a global: neither is block-scoped
-        if (arg->type.scopeDepth > ctx->joinDepth) ErrMsgSemantic(arg->tok, SPAWN_ARG_TOO_SHORT);
+        struct type pt = ((struct var*)ListGetIdx(&call->readVar->type.vars, i))->type;
+        bool refParam = pt.structMAlloc || (pt.bType == BASETYPE_ARRAY && pt.arrMalloc);
+        bool asRef = arg->type.structMAlloc;
+        struct var* sv;
+        int sd;
+        bool su;
+        bool storage = asRef || (OperandNamesExistingStorage(arg) && (refParam || TypeHoldsReferences(arg->type)));
+        if (storage && !operandIsTemporary(ctx, arg) && RefExactScope(ctx, arg, asRef, &sv, &sd, &su)
+                && !lastsUntilJoin(ctx, sv, sd, su)) {
+            ErrMsgSemantic(arg->tok, (asRef || refParam) && arg->type.bType != BASETYPE_FUNC ? SPAWN_ARG_TOO_SHORT : SPAWN_ARG_HOLDS_SHORT);
+            continue;
+        }
+        if (!argBindingsLastUntilJoin(ctx, arg)) ErrMsgSemantic(arg->tok, SPAWN_ARG_HOLDS_SHORT);
     }
-    //...and so has the function value it calls: a lambda's closure lives where its local does (D16d)
+    //...and so has the function value it calls: a lambda's closure lives where its local does (D16d) - and a spawned
+    //lambda's, built to last until the join, where what it captured does
     struct var* fv = call->readVar;
     if (fv && !fv->owner && fv->type.bType == BASETYPE_FUNC && !fv->type.scopeParam
             && normDepth(fv->type.scopeDepth) > ctx->joinDepth) {
-        ErrMsgSemantic(call->tok, SPAWN_FUNC_TOO_SHORT);
+        ErrMsgSemantic(call->tok, lambdaTask ? SPAWN_LAMBDA_CAPTURE_TOO_SHORT : SPAWN_FUNC_TOO_SHORT);
     }
     //P1g: the result is stored when the call returns, which is somewhere between the spawn and the join -
     //so the target has to still be there then, on exactly the terms an argument does. The store is a
