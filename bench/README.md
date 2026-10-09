@@ -454,6 +454,54 @@ Plain `Gemm` through the reworked core, against master's, interleaved (GFLOPS, s
 F32 n 128 72 -> 79, 256 91-97 -> 93-98, 512 72-83 -> 90-94, 1024 74-78 -> 74-76; F64 n 512 34-36 -> 40-41 and level
 elsewhere.
 
+### From oann: BF16 narrowing, a lambda through a larger caller, small products (2026-10-09)
+
+oann's `repro/bf16narrow`, `repro/capturedvalue` and DESIGN.md section 13, fixed in the compiler and std/linalg (CLAUDE.md,
+"oann's four"). Each the previous compiler's binary against the new one's, built side by side and run interleaved; the
+machine was shared at load 7-10, so each row gives the range over its runs (medians of 9, or minimums of 11 for the
+products, which the load disturbs least).
+
+| what | before | after |
+|---|---:|---:|
+| `BF16(x)` from F32, ns an element (4M) | 10.3-20.2 | 0.65-1.0 |
+| `b * b + b` in BF16, ns an element | 22.6-30.4 | 0.54-1.43 |
+| narrowing by bits, `U16(h).BF16FromBits()`, ns an element | 1.27-2.29 | 0.67-1.64 |
+| std/linalg BF16 product 1024 x 512 x 128, ms (F32: 1.9-2.4) | 4.86-7.49 | 1.58-1.69 |
+| std/linalg BF16 product 1024 x 128 x 128, ms (F32: 0.40-0.60) | 1.90-2.33 | 0.34-0.38 |
+| a capturing lambda through `Map` from a dispatch, ns an element | 19.4-32.2 | 1.40-2.67 |
+| the same lambda declaring its values instead (unchanged) | 1.37-3.35 | 1.48-2.31 |
+
+- **BF16**: `fptrunc float to bfloat` was a call of `__truncsfbf2` (LLVM 18 has no other lowering on x86 once B12c
+  takes AVX512-BF16 away); the code generator now narrows in integers on the F32's bits, inline, and every loop above
+  vectorizes. Identical bits on all 2^32 F32 patterns. `bench/repro/bf16_narrow.olang`.
+- **The lambda**: `Map$F32` was inlined where its function value was a constant pair (a capture-free lambda) and not
+  where it was built around an environment, so the capturing lambda was called indirectly per element. A function
+  value is now passed as two words, its code a constant argument either way. `bench/repro/captured_value.olang`.
+
+**Small products.** std/linalg computed a product of at most 64^3 multiply-adds directly (each row of C updated in
+memory from rows of B) where B is not transposed. Both paths were measured over 60-odd shapes on AVX-512, AVX2
+(`-a x86-64-v3`) and SSE (`-a x86-64`), from a copy of std/linalg with the bound a mutable global, both in one process,
+minimum of 11 interleaved runs of each (us). A sample, AVX-512 F32 (m x k x n):
+
+| shape | direct | packed | | shape | direct | packed |
+|---|---:|---:|---|---|---:|---:|
+| 8 x 8 x 8 | 0.26 | 0.54 | | 5 x 64 x 16 | 1.57 | 1.46 |
+| 10 x 10 x 10 | 0.60 | 0.64 | | 5 x 64 x 64 | 1.53 | 3.91 |
+| 11 x 11 x 11 | 0.79 | 0.67 | | 8 x 64 x 32 | 2.53 | 1.92 |
+| 16 x 16 x 16 | 0.96 | 0.74 | | 8 x 64 x 128 | 3.76 | 6.31 |
+| 32 x 32 x 32 | 6.48 | 1.71 | | 11 x 64 x 64 | 3.34 | 3.97 |
+| 64 x 32 x 64 | 10.51 | 4.96 | | 12 x 64 x 64 | 3.68 | 2.97 |
+| 64 x 64 x 64 | 22.05 | 8.75 | | 8 x 512 x 64 | 19.88 | 29.76 |
+| 64 x 8 x 5 | 3.88 | 1.30 | | 5 x 1024 x 64 | 24.46 | 59.49 |
+
+The direct loop wins below about a thousand multiply-adds (the packed path has ~0.5 us of its own) and for a result of
+a few rows each several vectors wide (where a tile would be mostly padding); a row one or two vectors long loses, its
+loop's tests costing more than its work. AVX2 and SSE move the edges a little (SSE's packed kernel is the weakest, and
+loses at 14^3 and 16^3 by 0.1-0.4 us) but not the shape of it. Now: direct when m n k <= 1024, or m < 12, n at least
+four vectors and k n <= 65536 (`computedDirectly`). Through the real `Gemm`, before -> after (us, minimum of 11, both
+in one process): 64 x 32 x 64 10.3-10.5 -> 4.75-4.8 (attention's), 64^3 19.7 -> 8.2-8.4, 32^3 5.45 -> 1.66, 64 x 8 x 5
+2.9-3.1 -> 1.0, F64 64 x 32 x 64 14.5-15.0 -> 11.0; 8^3 and 8 x 64 x 64 unchanged.
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;

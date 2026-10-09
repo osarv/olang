@@ -11715,3 +11715,115 @@ numeric literal or written text already is; a variable only `null` reaches still
 **The evaluator** needed nothing new: `assert causalSmall(1.0) == 2020.0` - a small causal `GemmBatch`, Result then Left,
 through the packed micro-kernels and FMA - is decided while compiling (a wrong value is S18c's compile error), and the
 same call on a mutable global runs at run time and gives the same value.
+
+### From oann: a spawned lambda called where it is made, BF16 narrowing, a lambda through a larger caller, small products (D16b, D16e, P2, T4, E33, D16, std/linalg, 2026-10-09)
+
+oann found three compiler problems and one in std/linalg while moving attention onto per-head products and its kernels
+onto a compute type (its `repro/spawncall`, `bf16narrow`, `capturedvalue` and DESIGN.md section 13). One was wrong
+answers; three were speed.
+
+**A lambda called where it is spawned (D16e, P2).** `spawn fn() { ... }()` inside a loop gave wrong elements - 8,000 of
+25,600 in the reproducer, as many as a third of the products in oann's attention. The call's callee (E13b) is a
+lambda capturing two parameters' arrays and the loop's variable; captures living in several scopes put the closure in
+the block it is made in (D16d) - the loop body - whose arena closes at the end of each iteration and is the first thing
+the next iteration's closure is built over, while the task that runs the closure may not even have started. The
+uncalled form, `spawn fn() { ... }`, has a path of its own that holds the closure in a hidden local typed at the join
+block's depth and checks it there (P2); the called form never reached it - its callee is not a variable - so it was
+neither placed nor checked. Now the called form takes the same path: the callee lambda becomes the hidden local and the
+call is a call through it with the arguments it had, so it behaves exactly as the uncalled form, arguments aside.
+**Decided (mine)**: rather than rejecting `spawn fn() { ... }()` with a diagnostic naming the uncalled form, it is made
+correct - it reads naturally, it is the only way to hand a spawned lambda arguments, and it costs nothing.
+
+Placing the closure exposed a second half: the uncalled form was refused for the very same program ("captures a
+variable declared inside the join") when it captured two parameters - it captured nothing declared inside the join, but
+the closure's home, the block it is made in, is. **Decided (mine)**: a spawned lambda is built in the join block
+whenever every scope it captured from lasts until the join - which is all P2 ever required of it; where one does not,
+P2's error stands. So `spawn fn() { c[n * 16 + t] = a[t] }` with `a` and `c` parameters compiles now.
+
+And a third, found looking for other callees: `spawn id(f)()` - a function value computed for the task, `id` returning
+its parameter - handed the task a closure `f` living in the loop body; the existing check covers a callee that is a
+local, a field or an element (its type's scope), not one a call computes. Such a callee is now held to P2 as a
+temporary argument is: what it was made from must last until the join (checks/cases/p2spawncallee.olang). A call's
+result that makes its own closure (`spawn mk(c, t)()`) is built in the join block, as any temporary for a task is, and
+was already right.
+
+**Found on the way**: a lambda called where it is written - `x := fn() I64 { return 3 + k }()`, `fn(a I64) { ... }(1)` -
+did not work at all: its call was built against the lambda's placeholder, which has no parameters and no result
+("expected 0 arguments", "a call returning nothing"), and the lambda was checked only at the end of the statement. A
+callee has no expected function type, so it is checked as D16b says, before its call is built. Corpus: the called
+lambda, run and baked (the evaluator calls it while compiling); the spawned form in a loop, read back after an arena
+churn in the spawner and baked (the evaluator runs a join's tasks in sequence); two checks cases.
+
+**BF16 narrowing (T4, E33).** `BF16(x)` from an F32, and every BF16 operation (computed in F32 and narrowed after each
+one), was a call of the C library's `__truncsfbf2` per element: LLVM 18 has no inline lowering of `fptrunc float to
+bfloat` on x86 without AVX512-BF16 or AVX-NE-CONVERT, and B12c switches those off because VCVTNEPS2BF16 flushes
+subnormals. 10-14 ns an element, against ~1 for widening (already an integer shift, T4); a BF16 multiply-add 23-30 ns;
+std/linalg's BF16 product spent most of its time narrowing its results. The narrowing is now integer arithmetic on the
+F32's bits, emitted inline (`cgNarrowBF16`): add `0x7FFF` plus the bit that will be the result's last, shift right 16 -
+round to nearest, ties to even, through the subnormals and into infinity - and for a NaN the top 16 bits with the quiet
+bit set, which is what `__truncsfbf2` gives. BF16 `+ - * /`, `++`/`--`, and a `try`'s finiteness checks widen, compute in
+F32 and narrow through it (`cgBF16Arith`); negation flips the sign bit (`fneg bfloat` was promoted and narrowed too);
+F16 -> BF16 goes through it after the exact widening. F64 -> BF16 still calls `__truncdfbf2`: narrowing the F64 to F32
+first would round twice, and doing it right (round to odd) was not needed by anything measured. **Same bits, checked
+exhaustively**: every one of the 2^32 F32 patterns narrowed, every F16 pattern converted, and every BF16 against ten
+others through `+ - * /` and negation, hashed, identical between the previous compiler and this one (NaN results
+compared as NaNs only - an operation's NaN is unspecified, E33a); `-d` and `-i` agree with `-b` on the tie and
+subnormal cases, and the evaluator decides an assert over them and bakes a global from them (shared.olang). One
+difference that was already there and is within E33a: `-i` keeps a signalling NaN's quiet bit clear through a
+conversion where the built program sets it.
+
+E33's guard was in the way of the bit-level route as well: every bitcast to F16 or BF16 went through an empty inline asm,
+which no loop vectorizes through, so oann's narrowing by bits (`U16(h).BF16FromBits()`) stayed scalar. The guard exists
+for LLVM 18's InstCombine taking a bitcast between `half` and `bfloat` for a no-op cast - which needs a half on one side
+of an i16 and a bfloat on the other - and only an F16's bits ever put a half beside an i16 (a BF16's are also widened
+and narrowed through one, by the code generator itself). **Decided (mine)**: the asm is on every F16 bitcast, both
+directions (`h.Bits()` after, `u.F16FromBits()` before), and on no BF16 one - so `BF16FromBits` and `BF16.Bits()` are
+plain bitcasts and vectorize. `F16.Bits()` became scalar where it was not; nothing measured reads an F16's bits in a hot
+loop. Checked: the fuzzer's `bf16bitcastfold`, `bf16shrink`, `bf16fastisel` and `f16fold` reproducers give their fixed
+answers at `-b`, `-d` and `-i`, shared.olang's tests of them pass, and fuzz runs over the BF16-heavy generator (60
+programs and 1,800 cases each, seeds 1, 500 and 2000) found nothing of it - one finding, below, was the evaluator's.
+
+Measured (interleaved, load 7-10): `BF16(x)` 10.3-20 -> 0.65-1.0 ns an element; a BF16 multiply-add 23-30 -> 0.5-1.4;
+by bits 1.3-2.3 -> 0.7-1.6 (vectorized now); std/linalg's BF16 product 1024 x 512 x 128 4.9-7.5 -> 1.6-1.7 ms (F32
+1.9-2.4) and 1024 x 128 x 128 1.9-2.3 -> 0.34-0.38 (F32 0.40-0.60).
+
+**A capturing lambda through a larger caller (D16).** oann's GELU kernel captured two zero values naming its types and
+ran 20-25 ns an element, against 2 for the same lambda declaring them in its body, once the function handing it to
+linalg's `Map` sat inside a dispatch of eight operations. From the optimized IR: `Map$F32` is one function for every
+lambda of its type, called from each case of the dispatch; LLVM inlined it where its argument was a capture-free
+lambda's pair - a constant, `{ ptr @lambda, ptr null }` - and not where it was a capturing one's, built around its
+environment by `insertvalue`. The inliner credits a call site whose inlining turns an indirect call direct, but it
+follows the argument only when it simplifies to a constant, and it does not look through an aggregate built at the call;
+without the credit `Map` was too big to inline into a large caller, and the lambda was called per element. Proven by
+hand first: splitting `Map`'s parameter into two in the IR took the reproducer to 2.2-2.6 ns. **The fix (mine)**: a
+function value crosses a call as two words, code then environment (`cgParamSplit`) - in a function's parameter list
+and its declaration, at every call (ordinary, through a value, a task's), in the named function's and `Call`'s
+adapters - and is paired again in the callee's prologue. The code is then a constant argument wherever the lambda is
+made at the call, captures or not. The x86-64 calling convention passed the pair in the same two registers already, so
+nothing changes below the IR; the function-value representation is not specified (T21), so the spec did not change.
+`!invariant` metadata and `alwaysinline` on the lambda were not needed and would not have helped: the call to inline
+was `Map`'s, not the lambda's. Measured: captured 19-32 -> 1.4-2.7 ns an element, declared 1.4-3.4 (bench/repro/
+captured_value.olang, a reduced copy).
+
+**Small products in std/linalg.** A product of at most 64^3 multiply-adds with its right operand not transposed was
+computed directly - the i-k-j loop, each row of C updated in memory from rows of B - and on AVX-512 that was 2-3x
+slower than the packed path for most such shapes: attention's 64 x 32 x 64 10.5 us against 5.0, 32^3 6.5 against 1.7,
+64 x 8 x 5 3.9 against 1.3. Measured both paths over 60-odd shapes on AVX-512, AVX2 and SSE (a copy of std/linalg with
+the bound a mutable global, both paths in one process, interleaved, minimum of 11): the direct loop is ahead only for
+products under about a thousand multiply-adds (the packed path has ~0.5 us of its own) and for results of a few rows
+that are several vectors wide (its per-row loop then runs at full width where a tile would be mostly padding: 5 x 64 x
+64 1.5 against 3.9 us, 8 x 64 x 512 17 against 24), and it is behind wherever a row is one or two vectors long, the
+loop's tests then costing more than its work. **Decided (mine)**: direct when m n k <= 1024, or when m < 12, n >= four
+vectors of the element type and k n <= 65536 (B stays in L2) - `computedDirectly`. Through the real `Gemm`, before and
+after: 64 x 32 x 64 10.3-10.5 -> 4.75-4.8 us, 64^3 19.7 -> 8.2-8.4, 32^3 5.45 -> 1.66, 64 x 8 x 5 2.9-3.1 -> 1.0, F64 64 x
+32 x 64 14.5-15 -> 11.0; 8^3 and 8 x 64 x 64 unchanged. SSE loses a little at 14^3 and 16^3 (1.2-1.6 against 1.1-1.2
+us), not the default target. A test runs shapes either side of each bound, F32 and I32, against the plain sum, exactly.
+
+**Found by the fuzzer on the way (seed 551), pre-existing, fixed (K1, R10)**: `try h(try g()) catch { ... }` - an
+argument's own `try` inside a try *statement* - handed g's error to the statement's clauses while compiling, where at
+run time it leaves the function (R9: the inner `try` has no clauses), so a baked global and a decided assert disagreed
+with `-b` and `-d` (and `-i` with them). The expression form was fixed long ago (K1's "an argument's own try"): the
+evaluator lets an error from a tried call's arguments bypass that call's clauses only when the call is marked tried,
+which the statement form's call never was. It is told which call a statement tries now (`stmtTried`), so the two forms
+agree; the old compiler gives 3 where the program gives 9 (shared.olang's `ktOuterStmt`, an assert decided while
+compiling).

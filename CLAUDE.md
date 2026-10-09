@@ -4072,6 +4072,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   inferred"; a variable only null reaches still cannot be. **Recorded, not fixed**: the non-causal batched backward at
   T 256 is slower than a Gemm per head (a head's P stays in L2 across its three products only when they run back to
   back).
+- **oann's four: a spawned lambda called where it is made, BF16 narrowing, a lambda through a larger caller, small
+  products (D16b, D16e, P2, T4, E33, D16, std/linalg, 2026-10-09; details mine).** **D16e/P2, wrong answers**: `spawn
+  fn() { ... }()` in a loop built its closure in the loop body (two parameters captured put it in the block it is made
+  in, D16d), which the next iteration reused while the task ran - and P2 never saw it, the callee being no variable.
+  **Decided**: made correct rather than refused - the called form takes the uncalled form's path (a hidden local at the
+  join, the call made through it with its arguments); a spawned lambda is built in the join block whenever every scope
+  it captured from lasts until the join (the uncalled form was refused for the same program); and a function value a
+  call computes for a task (`spawn id(f)()`) is held to P2 as a temporary argument is. **Found on the way**: a lambda
+  called where it is written (`fn(a I64) I64 { ... }(4)`) never worked - its call was built against the placeholder; it
+  is checked first now (D16b). **T4/E33**: F32 -> BF16 was a call of `__truncsfbf2` per element (no inline lowering in
+  LLVM 18 once B12c takes AVX512-BF16 away): it is integer arithmetic on the F32's bits now, inline and vectorized, the
+  same bits (all 2^32 F32 patterns compared with the previous compiler), and BF16 `+ - * /`, `++`, negation and F16 ->
+  BF16 go through it; F64 -> BF16 still calls `__truncdfbf2` (one rounding needs round-to-odd, not built). E33's empty asm
+  sits on every F16 bitcast and no BF16 one (the InstCombine fold needs a half beside the i16), so `BF16FromBits`
+  vectorizes. `BF16(x)` 10-20 -> 0.7-1.0 ns, a BF16 multiply-add 23-30 -> 0.5-1.4, linalg's BF16 product 1024 x 512 x 128
+  4.9-7.5 -> 1.6-1.7 ms (F32 1.9-2.4). **D16**: a capturing lambda handed to `Map` from a large caller ran 25 ns an
+  element against 2 - LLVM's inliner follows a constant code pointer into an indirect call only when the argument is
+  one, and a pair built around an environment is not; **a function value now crosses a call as two words, code then
+  environment** (`cgParamSplit`; the same two registers below the IR): 19-32 -> 1.4-2.7 ns. **std/linalg**: the direct
+  (unpacked) product was 2-3x slower than packing on AVX-512 for most shapes under 64^3 (attention's 64 x 32 x 64 10.5
+  against 5.0 us); measured on AVX-512, AVX2 and SSE, **decided**: direct only at most 1024 multiply-adds, or under 12
+  rows each four vectors wide against a B of at most 65536 elements (`computedDirectly`) - 64 x 32 x 64 -> 4.8 us, 32^3
+  5.45 -> 1.66. bench/README.md has the measurements, bench/repro the two reproducers. **Found by the fuzzer (K1/R10,
+pre-existing)**: the evaluator let a try *statement's* clauses take an error its call's argument's own `try` propagates
+(`try h(try g()) catch { }`), where the program leaves the function - fixed, as the expression form was.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
