@@ -213,6 +213,7 @@ struct type;
     X(ERR_SPREAD_COUNT,                 "D8d",   "these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'") \
     X(ERR_SCOPE_ARG_NOT_ACCEPTED,       "E25",   "%S builds no result a scope argument could place") \
     X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
+    X(ERR_BORROW_SPLIT_SCOPES,          "O17",   "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") \
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \

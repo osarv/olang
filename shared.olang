@@ -11635,3 +11635,40 @@ test "C2d: a Map of lists reuses a removed key's slot" {
     r := $sbRegroup(sbRun)
     assert r == "1g3g4g1new"
 }
+
+# O13c: a function's result built fresh in it carries what its body gave it, never what its arguments were bound to - a
+# new value made from a local's operands is returned (it used to be taken for the local's own storage, O26)
+type sbBox struct(n I64, from Array<I64>& = null) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+fn sbCopyOf(b Array<I64>&) sbBox {
+    c := sbBox&return(b.Len() + 2)
+    for i in range b.Len() { c.Data[i] = b[i] }
+    return c
+}
+fn (b sbBox&) size() I64 { return b.Data.Len() }
+fn sbFill(d mut Array<I64>&, v I64) { for i in range d.Len() { d[i] = v } }
+# O17/O25h: a value built in the result scope is borrowed by a read-only method, and its field passed on, where it lives
+fn sbMade(n I64) sbBox {
+    id := sbBox(n, null)
+    sbFill(id.Data, 3)
+    b := sbBox&return(n + id.size())
+    sbFill(b.Data, 7)
+    assert b.size() == n + n
+    return b
+}
+fn sbFresh(n I64) I64 {
+    id := sbBox(n, null)
+    sbFill(id.Data, 5)
+    c := sbCopyOf(id.Data)
+    m := sbMade(n)
+    sbChurn()
+    return c.Data[0] * 100 + c.Data.Len() * 10 + m.Data[m.size() - 1]
+}
+# G18: a literal default for a type-variable parameter is fitted at each call, as a literal argument is
+fn sbScale(x <T>, alpha <T> = 2) <T> { return x * alpha }
+SbFreshBaked I64 = sbFresh(2)
+test "O13c/O17: fresh results from a local's operands; a value built in the result scope lent and passed on" {
+    assert sbFresh(sbRun + 1) == 547 and SbFreshBaked == 547
+    assert sbScale(I32(3)) == 6 and sbScale(F32(1.5)) == 3.0 and sbScale(I64(4), 5) == 20
+}
