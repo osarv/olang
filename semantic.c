@@ -182,7 +182,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_ARRAY: return getArraySize(t);
         case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_CHOICE: return t.structMAlloc ? PTR_SIZE : ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
-        case BASETYPE_FUNC: return PTR_SIZE;
+        case BASETYPE_FUNC: return 2 * PTR_SIZE; //T21: the (code, closure environment) pair codegen holds
         case BASETYPE_INTERFACE: return 2 * PTR_SIZE; //T33: the (concrete type, instance) pair
         case BASETYPE_ERROR: return ERROR_SIZE;
         case BASETYPE_SCOPE: return PTR_SIZE;
@@ -1032,7 +1032,7 @@ static char* normalizePath(const char* p) {
 }
 
 //M22a: a relative import's identity is the importer's with its last element replaced by the relative path -
-//so "map" written in std/io is std/map, the same module "std/map" names, and each version of a remote
+//so "io" written in std/os is std/io, the same module "std/io" names, and each version of a remote
 //repository has its own copy of what it imports relatively
 static struct str relativeIdentity(struct semaModule* from, const char* spec) {
     char* base = StrDupStr(from->identity);
@@ -2057,6 +2057,12 @@ static struct list pendingInstances; //int: indices into instantiations whose bo
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
 //further generics, so they queue here and drain alongside the function ones.
 struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; };
+//G19: a written type's constraints, met while signatures are still being resolved, wait until every signature is - a
+//method that makes a type satisfy one may be declared in a module whose signatures come later ("Map<b.Key&, I32>" in a
+//module resolved before b, whose Key has its Hash; or a prelude file before text.olang's String.Hash)
+struct deferredConstraint { struct type* generic; struct type* spec; struct list bindings; struct token site; };
+static struct list deferredConstraints;
+static bool signaturesResolved;
 //G16: where the instantiation being made was asked for - a call, or a written type - for a note on errors in its body
 static struct token instSite;
 
@@ -2482,6 +2488,10 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         ctor->name = instantiationNameFor(generic->ctorFunc->name, &generic->typeParams, bindings);
         ctor->type = TypeSubstitute(generic->ctorFunc->type, bindings);
         ctor->type.typeParams = ListInit(sizeof(struct str));
+        //O4b/G11: a parameter written "<T>" became a reference where T is one, and is passed with its scope like any
+        //other, as instantiateFunc gives a function's - the generic's constructor could not know to give it one. Left
+        //without, what the body built from it was held to a scope nothing could name (C2d)
+        assignImplicitParamScopes(&ctor->type);
         //the copy's own stable slot, never a snapshot of it: the destructor below is attached to *spec
         //after this point, and a by-value copy taken here would freeze the GENERIC's destructFunc into
         //the constructed value's type - registering the wrong (never-emitted) symbol at every
@@ -2508,8 +2518,16 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //signature a substitution reached it through. One not met is reported there and its body is not checked: the body
     //would only repeat that one error inside the generic's own code. Nor is a pattern's (G16): its arguments are not
     //known, and each instantiation of it is checked for its own
-    bool met = argsStillGeneric
-        || checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    bool met = argsStillGeneric;
+    if (!met && !signaturesResolved) {
+        struct deferredConstraint dc = { generic, spec, ListInit(sizeof(struct typeBinding)),
+                                         instSite.type != TOK_NONE ? instSite : generic->tok };
+        ListAddList(&dc.bindings, *bindings);
+        ListAdd(&deferredConstraints, &dc);
+        met = true;
+    } else if (!met) {
+        met = checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    }
     if (spec->ctorFunc && !argsStillGeneric && met) {
         struct pendingTypeInst p = (struct pendingTypeInst){0};
         p.spec = spec;
@@ -5627,8 +5645,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
         if (r == TYPE_FIT_OK) r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
-        //its values adapted, or widened (T6b) - so the conditional is of the target's type too, as a match is below
-        if (r == TYPE_FIT_OK && TypeIsNumeric(target) && TypeIsNumeric(op->type)) op->type = target;
+        if (r == TYPE_FIT_OK && TypeIsNumeric(target) && TypeIsNumeric(op->type)) op->type = target; //as a match's (S12b)
         return r;
     }
     if (heldResult(op)) { //what hidden locals ahead of a value lead to is that value, judged as it is
@@ -6035,7 +6052,15 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);
         return *textT;
     }
-    return declaredArrayType(rhs->type);
+    //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
+    //built where the declaration lives and registered there. A value took it in, and its destructor never ran
+    struct type t = declaredArrayType(rhs->type);
+    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
+        t.structMAlloc = true;
+        t.refMut = OperandGivesWritable(rhs);
+        reportTypeFit(OperandFitsType(func, rhs, t), rhs->tok, rhs, t);
+    }
+    return t;
 }
 
 bool OperandIsLvalue(struct operand* op) {
@@ -9096,12 +9121,9 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
         }
     }
     struct type dt = x->type;
-    //a value is held in this block, as a value local is: the callee's result scope a call's type names is the callee's,
-    //never one of this function's (a "String" result compared by "==" crashed codegen looking it up here)
-    if (!dt.structMAlloc) {
-        dt.scopeParam = NULL;
-        dt.scopeWritten = false;
-    }
+    //a value held lives in this block, as ":=" makes it - a call's result type names the callee's result scope, which
+    //is nothing here (and crashed the code generator, "f() == s" with f giving a String value and s a String&)
+    if (!dt.structMAlloc) dt.scopeParam = NULL;
     bool unnamed = false;
     if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
     reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok, x, dt);
@@ -10574,8 +10596,18 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         //does - "Meters(n)" is the way into a nominal type, and without it nominality would be a prison
         //you could leave (int32(m) already worked, since Meters IS numeric) but never enter.
         struct type* namedConv = NULL;
-        if (nameIdens.len == 1) {
-            struct type* cand = typeNamed(ctx->mod, strFromTok(nameTok));
+        //...written bare, or through an import alias ("units.Meters(n)") as a constructor call is - M20 keeps the alias
+        //reading apart from a value's: a name an import uses is never a local's or a global's
+        struct semaModule* convMod = nameIdens.len == 1 ? ctx->mod : NULL;
+        if (nameIdens.len >= 2 && findImport(ctx->mod, strFromTok(*(struct token*)ListGetIdx(&nameIdens, 0)))) {
+            ErrMsgMuteStart();
+            convMod = resolveAliasChain(ctx->mod, nameIdens, 1);
+            ErrMsgMuteEnd();
+        }
+        if (convMod) {
+            struct type* cand = convMod == ctx->mod ? typeNamed(ctx->mod, strFromTok(nameTok))
+                                                    : TypeGetList(&convMod->types, strFromTok(nameTok));
+            if (cand && convMod != ctx->mod && !isPublic(strFromTok(nameTok))) Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok);
             //numeric goes through the numeric path (it may genuinely change width); anything else with a
             //shared representation is a pure retype
             if (cand && ((isTypeVanilla(cand->bType) && TypeIsNumeric(*cand))
@@ -11404,6 +11436,28 @@ static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var*
     ListAdd(&call->scopeBindings, &b);
 }
 
+//C2d: whether every scope a binding names is the implicit scope of one of func's bare reference parameters, or of a
+//by-value one holding references (O4b)
+static bool bareParamScope(struct var* func, struct var* sv) {
+    if (!sv || sv == SCOPE_AMBIGUOUS) return false;
+    sv = canonicalVar(sv);
+    if (!sv->isImplicitScope || sv->derivedFrom) return false;
+    for (int j = 0; j < func->type.vars.len; j++) {
+        struct var* p = ListGetIdx(&func->type.vars, j);
+        if (p->type.scopeParam && canonicalVar(p->type.scopeParam) == sv) return true; //a reference, or a value holding some
+    }
+    return false;
+}
+static bool bareParamScopesOnly(struct var* func, struct scopeBinding* b) {
+    if (b->boundUnnamed) return false;
+    if (b->boundTo != SCOPE_AMBIGUOUS) return bareParamScope(func, b->boundTo);
+    if (!b->candidates.len) return false;
+    for (int k = 0; k < b->candidates.len; k++) {
+        if (!bareParamScope(func, *(struct var**)ListGetIdx(&b->candidates, k))) return false;
+    }
+    return true;
+}
+
 //C2d: a constructed value landing in (dstVar, dstDepth) - NULL at a depth being one of this function's own
 //block scopes - may not outlive the storage its constructor call stored by reference
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok) {
@@ -11451,12 +11505,19 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
     bool isEnum = val->type.bType == BASETYPE_CHOICE && !val->type.structMAlloc; //T17c: an enum's payload is its fields
     if (!ctx || !ctx->hasOwnScope || (val->type.bType != BASETYPE_STRUCT && !isEnum) || !val->type.hereVar) return;
     val->hereChecked = true;
+    //C2d/C2c: landing in the very instance a constructor is building - every call of it holds that instance to a bare
+    //reference parameter's argument (exactly, where something can be stored through it), so a value built from such a
+    //parameter suits it by construction
+    bool intoOwnInstance = ctx->inCtor && dstVar && dstVar != SCOPE_AMBIGUOUS && ctx->func && ctx->func->type.hasRetType
+                           && ctx->func->type.retType->hereVar
+                           && canonicalVar(dstVar) == canonicalVar(ctx->func->type.retType->hereVar);
     for (int i = 0; i < val->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&val->scopeBindings, i);
         //only the value's own: an entry carried from an argument (viaPath) is that argument's, judged where it landed
         if (canonicalVar(b->typeParam) != canonicalVar(val->type.hereVar) || b->viaPath.len) continue;
         bool ok;
-        if (b->boundTo == SCOPE_AMBIGUOUS) {
+        if (intoOwnInstance && bareParamScopesOnly(ctx->func, b)) ok = true;
+        else if (b->boundTo == SCOPE_AMBIGUOUS) {
             //several scopes, from O13b or from several arguments: the instance must suit every one of them
             ok = b->candidates.len > 0;
             for (int k = 0; ok && k < b->candidates.len; k++) {
@@ -12888,6 +12949,171 @@ static void forInTryFinish(struct forInTry* ft) {
     }
 }
 
+//S9f: a collection's RunFrom - "RunFrom(at I64) Array<T>& ? Exhausted", the elements stored next to each other from
+//position at - or NULL when its type has none of that shape
+static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
+    struct var* m = methodNamedOn(t, "RunFrom");
+    if (!m || m->type.vars.len != 2 || !m->type.hasRetType) return NULL;
+    struct type at = ((struct var*)ListGetIdx(&m->type.vars, 1))->type;
+    struct type* rt = m->type.retType;
+    if (at.bType != BASETYPE_INT64 || at.owner || rt->bType != BASETYPE_ARRAY || !rt->arrMalloc || !rt->structMAlloc) return NULL;
+    if (!exhaustedT || m->type.errors.len != 1 || !TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, 0), *exhaustedT))
+        return NULL;
+    return m;
+}
+
+//S9d/S9f: the type of the hidden borrow of a collection the loop walks - its own type as a reference, its scope still
+//to be taken from the collection (O25a). The scope its declared type wrote ("&y", a parameter's own) is not where the
+//borrow lives, and kept it would stop the borrow adopting anything, leaving it at the loop's block - an element pushed
+//from the loop into a list beside the collection then had no scope to show it outlives that list
+static struct type forInBorrowType(struct type t) {
+    t.structMAlloc = true;
+    t.scopeParam = NULL;
+    t.scopeWritten = false;
+    t.scopeUnknown = false;
+    t.scopeDepth = 0;
+    return t;
+}
+
+//S9f: an element read out of an array the loop walks keeps its references where the array's elements keep theirs - the
+//array's scope - so one may be returned or stored as the collection's own (O25a), as an iterator's Next would give it
+static void forInElemRefsHome(struct scope* sc, struct token elemTok, struct type arrT) {
+    struct var* xv = scopeFindLocal(sc, strFromTok(elemTok));
+    if (!xv || xv->type.structMAlloc || !TypeHoldsReferences(xv->type) || !arrT.scopeParam) return;
+    xv->refsHomeSet = true;
+    xv->refsHome = canonicalVar(arrT.scopeParam);
+}
+
+//S9f: "for x in c" over a collection with RunFrom, run by run - lowered, inside the for-in's own block, to
+//    $Col := c                                         (borrowed, E12c)
+//    $At := 0
+//    for {
+//        $Run := try $Col.RunFrom($At) catch Exhausted { break }
+//        for $J := 0, $J < $Run.Len(), $J++ {           (a "break" here leaves the outer loop: breakOuter)
+//            [i := $At + $J]  x := $Run[$J]  <body>
+//        }
+//        $At = $At + $Run.Len()
+//    }
+//so the elements of each run are walked by a counted loop over a slice, as an array's are, and each run is asked for
+//where the last one ended - an element pushed during the loop is in a later run, as an iterator would give it
+static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx* wctx, struct list pre, struct syntax* s,
+                                          struct operand* src, struct token kw, struct token* idxTok, struct token elemTok,
+                                          struct comprSpec* spec, struct type* exhaustedT) {
+    struct type refT = forInBorrowType(src->type);
+    bool unnamed = false;
+    if (!adoptInitializerScope(wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx->blockDepth;
+    reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
+    struct token ct = forInHiddenTok(kw, "Col");
+    struct var* col = scopeDeclare(wctx->mod, wctx->scope, ct.str, ct, refT, true);
+    col->scopeUnnamed = unnamed;
+    col->scopeBindings = src->scopeBindings;
+    struct statement d = (struct statement){0};
+    d.sType = STATEMENT_VAR_DECL;
+    d.var = *col;
+    d.op = src;
+    ListAdd(&pre, &d);
+    struct var* at = rangeLocal(wctx, &pre, kw, "At", TypeVanilla(BASETYPE_INT64), rangeLit(kw, "0"));
+
+    //the loop over the runs, in its own scope
+    struct scope runsScope = scopePush(wctx->scope);
+    struct checkCtx octx = *wctx;
+    octx.scope = &runsScope;
+    octx.inLoop = true;
+    struct statement outer = (struct statement){0};
+    outer.sType = STATEMENT_FOR;
+    struct list obody = ListInit(sizeof(struct statement));
+    struct list args = ListInit(sizeof(struct operand*));
+    struct operand* atArg = OperandReadVar(at, kw);
+    ListAdd(&args, &atArg);
+    struct token mTok = kw;
+    mTok.type = TOK_IDEN;
+    mTok.str = StrFromCStr("RunFrom");
+    struct list* prevArgs = prebuiltMethodArgs;
+    prebuiltMethodArgs = &args;
+    octx.allowFallibleCall = true;
+    bool reported = false;
+    struct operand* call = buildMethodCall(&octx, OperandReadVar(col, kw), mTok, NULL, ListInit(sizeof(struct syntax*)),
+                                           &reported);
+    octx.allowFallibleCall = false;
+    prebuiltMethodArgs = prevArgs;
+    if (call && call->opType == OPERATION_FUNCCALL) {
+        call->isTried = true;
+        struct catchClause end = (struct catchClause){0};
+        end.tok = kw;
+        end.matches = ListInit(sizeof(struct catchMatch));
+        struct catchMatch em = (struct catchMatch){0};
+        em.errType = *exhaustedT;
+        ListAdd(&end.matches, &em);
+        end.hasBlock = true;
+        end.block = ListInit(sizeof(struct statement));
+        struct statement brk = (struct statement){0};
+        brk.sType = STATEMENT_BREAK;
+        ListAdd(&end.block, &brk);
+        struct list cs = ListInit(sizeof(struct catchClause));
+        ListAdd(&cs, &end);
+        call->catchClauses = cs;
+    }
+    struct statement rd = buildVarDeclFromOperand(&octx, forInHiddenTok(kw, "Run"), call);
+    struct var* run = scopeFindLocal(octx.scope, rd.var.name);
+    ListAdd(&obody, &rd);
+
+    //the counted loop over one run, in its own scope
+    struct scope runScope = scopePush(octx.scope);
+    struct checkCtx ictx = octx;
+    ictx.scope = &runScope;
+    struct statement inner = (struct statement){0};
+    inner.sType = STATEMENT_FOR;
+    inner.breakOuter = true;
+    struct token jt = forInHiddenTok(kw, "J");
+    struct type j64 = TypeVanilla(BASETYPE_INT64);
+    j64.scopeDepth = ictx.blockDepth;
+    struct var* j = scopeDeclare(ictx.mod, ictx.scope, jt.str, jt, j64, true);
+    inner.var = *j;
+    inner.forInit = rangeLit(kw, "0");
+    inner.forInit->type = TypeVanilla(BASETYPE_INT64);
+    inner.op = OperandBinary(OperandReadVar(j, kw), OperandLen(OperandReadVar(run, kw), kw), OPERATION_LST, kw);
+    inner.forPost = MallocOrCrash(sizeof(struct statement));
+    *inner.forPost = (struct statement){0};
+    inner.forPost->sType = STATEMENT_EXPR;
+    inner.forPost->op = OperandUnary(OperandReadVar(j, kw), OPERATION_POSTFIX_INC, kw);
+    struct list baseline = snapshotScopeBindings(ictx.scope);
+    struct list body = ListInit(sizeof(struct statement));
+    if (idxTok) {
+        struct operand* i = OperandBinary(OperandReadVar(at, kw), OperandReadVar(j, kw), OPERATION_ADD, kw);
+        struct statement di = buildVarDeclFromOperand(&ictx, *idxTok, i);
+        ListAdd(&body, &di);
+    }
+    struct operand* elem = OperandIndex(OperandReadVar(run, kw), OperandReadVar(j, kw), kw);
+    elem->noCheck = true;
+    struct statement dx = buildVarDeclFromOperand(&ictx, elemTok, elem);
+    ListAdd(&body, &dx);
+    forInElemRefsHome(ictx.scope, elemTok, run->type);
+    struct list user = forInBody(&ictx, s, spec, kw);
+    for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
+    inner.block = body;
+    struct list after = snapshotScopeBindings(ictx.scope);
+    foldScopeBindingsBranch(&baseline, &after);
+    applyScopeBindingsSnapshot(&baseline);
+    inner.line = kw.lineNr;
+    if (kw.owner) inner.file = TokenGetFileName(kw.owner);
+    ListAdd(&obody, &inner);
+    rangeSet(&octx, &obody, at, OperandBinary(OperandReadVar(at, kw), OperandLen(OperandReadVar(run, kw), kw),
+                                             OPERATION_ADD, kw), kw);
+    outer.block = obody;
+    outer.line = kw.lineNr;
+    if (kw.owner) outer.file = TokenGetFileName(kw.owner);
+    ListAdd(&pre, &outer);
+
+    struct token t = kw;
+    t.type = TOK_BOOL_LIT;
+    t.str = StrFromCStr("true");
+    struct statement wrap = (struct statement){0};
+    wrap.sType = STATEMENT_IF;
+    wrap.op = OperandBoolLiteral(t);
+    wrap.block = pre;
+    return wrap;
+}
+
 //S9a: "for x in a" / "for i, x in a". Lowered, in a block of its own, to what the program could have written:
 //for an array, a borrow of it and a counted loop whose body starts by copying out element i; for an
 //iterator (a type with "mut Next() T ? Exhausted"), or a value whose "Iter()" returns one, a hidden iterator
@@ -12941,6 +13167,10 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     wctx.allowFallibleCall = false;
     forInTryNote(&ft, &wctx, src, NULL);
     bool isArray = src->type.bType == BASETYPE_ARRAY;
+    //S9f: a collection that hands out the runs its elements are stored in is walked run by run - before its Iter, which
+    //gives the same elements one call at a time. Not where the loop's own calls are tried (S9e): those are Next's
+    if (!isArray && !ft.on && !forInMethod(src->type, "Next") && forInRunFrom(src->type, exhaustedT))
+        return buildForRunsStmnt(ctx, &wctx, pre, s, src, kw, idxTok, elemTok, spec, exhaustedT);
     bool indexable = false; //S9d: walked through At and Len
     const char* atName = NULL;
     const char* lenName = NULL;
@@ -12985,8 +13215,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         atName = operatorMethodName(&wctx, src->type, "At");
         if (!atName) atName = tryOperatorName(&wctx, src->type, "At");
         lenName = operatorMethodName(&wctx, src->type, "Len");
-        struct type refT = src->type;
-        refT.structMAlloc = true;
+        struct type refT = forInBorrowType(src->type);
         bool unnamed = false;
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
@@ -13099,6 +13328,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (indexable) forInTryNote(&ft, &lctx, elem, NULL);
         struct statement d = buildVarDeclFromOperand(&lctx, elemTok, elem);
         ListAdd(&body, &d);
+        if (isArray) forInElemRefsHome(lctx.scope, elemTok, arr->type);
     } else {
         lctx.allowFallibleCall = true;
         struct operand* call = forInCall(&lctx, OperandReadVar(iter, kw), kw, "Next");
@@ -15225,6 +15455,10 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         //report. Empty (the common case) whenever fieldOp itself carries no map - an ordinary
         //field whose own type isn't constructor-bearing, or one with no scope variables.
         field->scopeBindings = fieldOp ? fieldOp->scopeBindings : (struct list){0};
+        //C2d: a value field's initializer built from existing storage lands in the instance - judged there, now, rather
+        //than against whatever is being built when the queue of pending checks next empties
+        if (fieldOp && !field->type.structMAlloc && (opIsCtorCall(fieldOp) || opIsEnumCtor(fieldOp)) && t->hereVar)
+            checkCtorHereFits(&cctx, fieldOp, t->hereVar, 0, fieldOp->tok);
         //C2d/O18a: what the initializer built with nothing to determine it lands in the instance - recorded as
         //such for a later "instance.field.x" to resolve, on a copy, since codegen reads the call's own
         if (fieldOp && fieldOp->scopeBindings.len > 0) {
@@ -15623,6 +15857,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
+    deferredConstraints = ListInit(sizeof(struct deferredConstraint));
+    signaturesResolved = false;
     allModules = ListInit(sizeof(struct semaModule*));
     buildModule = makeBuildModule();
     //T35b: the prelude - ordinary olang in <std>/prelude, part of every program. Loaded first, so its
@@ -15656,6 +15892,18 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
 
     for (int i = 0; i < allModules.len; i++) semaCollectNames(*(struct semaModule**)ListGetIdx(&allModules, i));
     for (int i = 0; i < allModules.len; i++) semaResolveModule(*(struct semaModule**)ListGetIdx(&allModules, i));
+    //G19: the constraints written types met during that pass, now that every method is known - one not met is reported
+    //at its type, and the instantiation's body is not checked (instantiateType)
+    signaturesResolved = true;
+    for (int i = 0; i < deferredConstraints.len; i++) {
+        struct deferredConstraint* dc = ListGetIdx(&deferredConstraints, i);
+        if (checkTypeConstraints(&dc->generic->typeConstraints, &dc->bindings, dc->site)) continue;
+        for (int k = 0; k < pendingTypeInsts.len; k++) {
+            if (((struct pendingTypeInst*)ListGetIdx(&pendingTypeInsts, k))->spec != dc->spec) continue;
+            ListRemoveIdx(&pendingTypeInsts, k);
+            break;
+        }
+    }
     for (int i = 0; i < allModules.len; i++) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) refreshStructSnapshots(ListGetIdx(&m->types, j));

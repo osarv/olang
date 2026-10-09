@@ -1,0 +1,607 @@
+# Math - the functions a numeric program needs, over the four float types: math.Sqrt(x), math.Exp(x), math.Pow(x, y) ...
+#
+# Free functions, each generic over F64, F32, F16 and BF16 and compiled per type (G16), since a method on a built-in
+# type can only be declared by the prelude (M19d). An F64 or an F32 goes to the C math library's function for its
+# type; an F16 or a BF16 is computed in F32 - F64 for Fma - and rounded once to its own type. The library's functions
+# are ones the language knows (X8): sqrt, fma, floor and the other exact ones become instructions where the machine has
+# them and vectorize, and every one of them is computed while compiling where a value is needed then (K1, K2), by the
+# very function the program calls.
+#
+# A result outside a function's domain is what IEEE 754 says - Sqrt(-1.0) and Log(-1.0) are NaN, Log(0.0) is -Inf,
+# Exp(1000.0) is Inf - never an error: a NaN carries the failure through the rest of a computation and is asked about
+# once, with IsNan, where a check on every call would cost what the call does. Math with checks is IsFinite on the
+# result.
+
+extern fn sqrt(x F64) F64
+extern fn sqrtf(x F32) F32
+extern fn cbrt(x F64) F64
+extern fn cbrtf(x F32) F32
+extern fn exp(x F64) F64
+extern fn expf(x F32) F32
+extern fn exp2(x F64) F64
+extern fn exp2f(x F32) F32
+extern fn expm1(x F64) F64
+extern fn expm1f(x F32) F32
+extern fn log(x F64) F64
+extern fn logf(x F32) F32
+extern fn log2(x F64) F64
+extern fn log2f(x F32) F32
+extern fn log10(x F64) F64
+extern fn log10f(x F32) F32
+extern fn log1p(x F64) F64
+extern fn log1pf(x F32) F32
+extern fn pow(x F64, y F64) F64
+extern fn powf(x F32, y F32) F32
+extern fn sin(x F64) F64
+extern fn sinf(x F32) F32
+extern fn cos(x F64) F64
+extern fn cosf(x F32) F32
+extern fn tan(x F64) F64
+extern fn tanf(x F32) F32
+extern fn asin(x F64) F64
+extern fn asinf(x F32) F32
+extern fn acos(x F64) F64
+extern fn acosf(x F32) F32
+extern fn atan(x F64) F64
+extern fn atanf(x F32) F32
+extern fn atan2(y F64, x F64) F64
+extern fn atan2f(y F32, x F32) F32
+extern fn sinh(x F64) F64
+extern fn sinhf(x F32) F32
+extern fn cosh(x F64) F64
+extern fn coshf(x F32) F32
+extern fn tanh(x F64) F64
+extern fn tanhf(x F32) F32
+extern fn erf(x F64) F64
+extern fn erff(x F32) F32
+extern fn erfc(x F64) F64
+extern fn erfcf(x F32) F32
+extern fn hypot(x F64, y F64) F64
+extern fn hypotf(x F32, y F32) F32
+extern fn fma(a F64, b F64, c F64) F64
+extern fn fmaf(a F32, b F32, c F32) F32
+extern fn floor(x F64) F64
+extern fn floorf(x F32) F32
+extern fn ceil(x F64) F64
+extern fn ceilf(x F32) F32
+extern fn trunc(x F64) F64
+extern fn truncf(x F32) F32
+extern fn round(x F64) F64
+extern fn roundf(x F32) F32
+extern fn roundeven(x F64) F64
+extern fn roundevenf(x F32) F32
+extern fn fabs(x F64) F64
+extern fn fabsf(x F32) F32
+extern fn copysign(x F64, s F64) F64
+extern fn copysignf(x F32, s F32) F32
+
+# the constants, as F64s - F32(Pi) is the F32 nearest pi
+Pi F64 = 3.141592653589793
+E F64 = 2.718281828459045
+Sqrt2 F64 = 1.4142135623730951
+Ln2 F64 = 0.6931471805599453
+Ln10 F64 = 2.302585092994046
+Inf F64 = 1.0 / 0.0
+# the quiet NaN with no sign and no payload, made from its bits so that its bits are known (E33a)
+NaN F64 = U64(0x7FF8000000000000).F64FromBits()
+
+# ---- roots, powers, exponentials and logarithms ----
+
+# the square root - correctly rounded, as IEEE 754 requires; NaN below zero, and Sqrt(-0.0) is -0.0
+fn Sqrt(x <T>) <T> {
+    return match <T> {
+        case F64 => sqrt(x)
+        case F32 => sqrtf(x)
+        case F16 => F16(sqrtf(x))
+        case BF16 => BF16(sqrtf(x))
+    }
+}
+
+# the cube root, negative for a negative x
+fn Cbrt(x <T>) <T> {
+    return match <T> {
+        case F64 => cbrt(x)
+        case F32 => cbrtf(x)
+        case F16 => F16(cbrtf(x))
+        case BF16 => BF16(cbrtf(x))
+    }
+}
+
+# e to the power x
+fn Exp(x <T>) <T> {
+    return match <T> {
+        case F64 => exp(x)
+        case F32 => expf(x)
+        case F16 => F16(expf(x))
+        case BF16 => BF16(expf(x))
+    }
+}
+
+# 2 to the power x
+fn Exp2(x <T>) <T> {
+    return match <T> {
+        case F64 => exp2(x)
+        case F32 => exp2f(x)
+        case F16 => F16(exp2f(x))
+        case BF16 => BF16(exp2f(x))
+    }
+}
+
+# Exp(x) - 1, accurate where x is near zero and the subtraction would lose it
+fn Expm1(x <T>) <T> {
+    return match <T> {
+        case F64 => expm1(x)
+        case F32 => expm1f(x)
+        case F16 => F16(expm1f(x))
+        case BF16 => BF16(expm1f(x))
+    }
+}
+
+# the natural logarithm: -Inf at zero, NaN below it
+fn Log(x <T>) <T> {
+    return match <T> {
+        case F64 => log(x)
+        case F32 => logf(x)
+        case F16 => F16(logf(x))
+        case BF16 => BF16(logf(x))
+    }
+}
+
+# the base-2 logarithm
+fn Log2(x <T>) <T> {
+    return match <T> {
+        case F64 => log2(x)
+        case F32 => log2f(x)
+        case F16 => F16(log2f(x))
+        case BF16 => BF16(log2f(x))
+    }
+}
+
+# the base-10 logarithm
+fn Log10(x <T>) <T> {
+    return match <T> {
+        case F64 => log10(x)
+        case F32 => log10f(x)
+        case F16 => F16(log10f(x))
+        case BF16 => BF16(log10f(x))
+    }
+}
+
+# Log(1 + x), accurate where x is near zero and the addition would lose it
+fn Log1p(x <T>) <T> {
+    return match <T> {
+        case F64 => log1p(x)
+        case F32 => log1pf(x)
+        case F16 => F16(log1pf(x))
+        case BF16 => BF16(log1pf(x))
+    }
+}
+
+# x to the power y - C's pow, with every one of its special cases: Pow(x, 0.0) is 1 even for a NaN x, and a negative
+# x to a power that is not a whole number is NaN
+fn Pow(x <T>, y <T>) <T> {
+    return match <T> {
+        case F64 => pow(x, y)
+        case F32 => powf(x, y)
+        case F16 => F16(powf(x, y))
+        case BF16 => BF16(powf(x, y))
+    }
+}
+
+# the length of the vector (x, y) - Sqrt(x * x + y * y) without overflowing or underflowing on the way
+fn Hypot(x <T>, y <T>) <T> {
+    return match <T> {
+        case F64 => hypot(x, y)
+        case F32 => hypotf(x, y)
+        case F16 => F16(hypotf(x, y))
+        case BF16 => BF16(hypotf(x, y))
+    }
+}
+
+# a * b + c, rounded once - an F16 or a BF16 in F64, whose 53 bits hold their product exactly
+fn Fma(a <T>, b <T>, c <T>) <T> {
+    return match <T> {
+        case F64 => fma(a, b, c)
+        case F32 => fmaf(a, b, c)
+        case F16 => F16(fma(a, b, c))
+        case BF16 => BF16(fma(a, b, c))
+    }
+}
+
+# ---- trigonometry, in radians ----
+
+fn Sin(x <T>) <T> {
+    return match <T> {
+        case F64 => sin(x)
+        case F32 => sinf(x)
+        case F16 => F16(sinf(x))
+        case BF16 => BF16(sinf(x))
+    }
+}
+
+fn Cos(x <T>) <T> {
+    return match <T> {
+        case F64 => cos(x)
+        case F32 => cosf(x)
+        case F16 => F16(cosf(x))
+        case BF16 => BF16(cosf(x))
+    }
+}
+
+fn Tan(x <T>) <T> {
+    return match <T> {
+        case F64 => tan(x)
+        case F32 => tanf(x)
+        case F16 => F16(tanf(x))
+        case BF16 => BF16(tanf(x))
+    }
+}
+
+# the angle whose sine is x, in -Pi/2 .. Pi/2; NaN outside -1 .. 1
+fn Asin(x <T>) <T> {
+    return match <T> {
+        case F64 => asin(x)
+        case F32 => asinf(x)
+        case F16 => F16(asinf(x))
+        case BF16 => BF16(asinf(x))
+    }
+}
+
+# the angle whose cosine is x, in 0 .. Pi; NaN outside -1 .. 1
+fn Acos(x <T>) <T> {
+    return match <T> {
+        case F64 => acos(x)
+        case F32 => acosf(x)
+        case F16 => F16(acosf(x))
+        case BF16 => BF16(acosf(x))
+    }
+}
+
+# the angle whose tangent is x, in -Pi/2 .. Pi/2
+fn Atan(x <T>) <T> {
+    return match <T> {
+        case F64 => atan(x)
+        case F32 => atanf(x)
+        case F16 => F16(atanf(x))
+        case BF16 => BF16(atanf(x))
+    }
+}
+
+# the angle of the point (x, y) from the positive x axis, in -Pi .. Pi - y first, as in C
+fn Atan2(y <T>, x <T>) <T> {
+    return match <T> {
+        case F64 => atan2(y, x)
+        case F32 => atan2f(y, x)
+        case F16 => F16(atan2f(y, x))
+        case BF16 => BF16(atan2f(y, x))
+    }
+}
+
+fn Sinh(x <T>) <T> {
+    return match <T> {
+        case F64 => sinh(x)
+        case F32 => sinhf(x)
+        case F16 => F16(sinhf(x))
+        case BF16 => BF16(sinhf(x))
+    }
+}
+
+fn Cosh(x <T>) <T> {
+    return match <T> {
+        case F64 => cosh(x)
+        case F32 => coshf(x)
+        case F16 => F16(coshf(x))
+        case BF16 => BF16(coshf(x))
+    }
+}
+
+fn Tanh(x <T>) <T> {
+    return match <T> {
+        case F64 => tanh(x)
+        case F32 => tanhf(x)
+        case F16 => F16(tanhf(x))
+        case BF16 => BF16(tanhf(x))
+    }
+}
+
+# the error function, 2/Sqrt(Pi) times the integral of Exp(-t*t) from 0 to x - the normal distribution's, and GELU's
+fn Erf(x <T>) <T> {
+    return match <T> {
+        case F64 => erf(x)
+        case F32 => erff(x)
+        case F16 => F16(erff(x))
+        case BF16 => BF16(erff(x))
+    }
+}
+
+# 1 - Erf(x), accurate where Erf(x) is near 1
+fn Erfc(x <T>) <T> {
+    return match <T> {
+        case F64 => erfc(x)
+        case F32 => erfcf(x)
+        case F16 => F16(erfcf(x))
+        case BF16 => BF16(erfcf(x))
+    }
+}
+
+# ---- rounding to a whole number ----
+
+# the largest whole number not above x
+fn Floor(x <T>) <T> {
+    return match <T> {
+        case F64 => floor(x)
+        case F32 => floorf(x)
+        case F16 => F16(floorf(x))
+        case BF16 => BF16(floorf(x))
+    }
+}
+
+# the smallest whole number not below x
+fn Ceil(x <T>) <T> {
+    return match <T> {
+        case F64 => ceil(x)
+        case F32 => ceilf(x)
+        case F16 => F16(ceilf(x))
+        case BF16 => BF16(ceilf(x))
+    }
+}
+
+# x without its fraction - toward zero
+fn Trunc(x <T>) <T> {
+    return match <T> {
+        case F64 => trunc(x)
+        case F32 => truncf(x)
+        case F16 => F16(truncf(x))
+        case BF16 => BF16(truncf(x))
+    }
+}
+
+# the nearest whole number, a half away from zero: Round(2.5) is 3, Round(-2.5) is -3 - as C, Go and Rust round
+fn Round(x <T>) <T> {
+    return match <T> {
+        case F64 => round(x)
+        case F32 => roundf(x)
+        case F16 => F16(roundf(x))
+        case BF16 => BF16(roundf(x))
+    }
+}
+
+# the nearest whole number, a half to the even one: RoundEven(2.5) is 2, RoundEven(3.5) is 4 - IEEE 754's own rounding,
+# which leaves no bias over many values, so the one a quantizer wants
+fn RoundEven(x <T>) <T> {
+    return match <T> {
+        case F64 => roundeven(x)
+        case F32 => roundevenf(x)
+        case F16 => F16(roundevenf(x))
+        case BF16 => BF16(roundevenf(x))
+    }
+}
+
+# ---- sign, size and comparison ----
+
+# x without its sign - a float's sign bit cleared, so Abs(-0.0) is 0.0; an integer's negation when it is negative,
+# which for the most negative one is itself, as negation wraps (E6c). Any other type with < and unary - too
+fn Abs(x <T>) <T> {
+    return match <T> {
+        case F64 => fabs(x)
+        case F32 => fabsf(x)
+        case F16 => F16(fabsf(x))
+        case BF16 => BF16(fabsf(x))
+        case U8, U16, U32, U64 => x
+        nomatch => -x if x < 0 else x
+    }
+}
+
+# x's magnitude with the sign of s - its sign bit, so CopySign(1.0, -0.0) is -1.0
+fn CopySign(x <T>, s <T>) <T> {
+    return match <T> {
+        case F64 => copysign(x, s)
+        case F32 => copysignf(x, s)
+        case F16 => F16(copysignf(x, s))
+        case BF16 => BF16(copysignf(x, s))
+    }
+}
+
+# whether x's sign bit is set - true for -0.0 and for a NaN with a sign, which x < 0.0 is not
+fn SignBit(x <T>) Bool {
+    return match <T> {
+        case F64 => x.Bits() >> 63 == 1
+        case F32 => x.Bits() >> 31 == 1
+        case F16, BF16 => x.Bits() >> 15 == 1
+    }
+}
+
+# whether x is a NaN - the one value not equal to itself
+fn IsNan(x <T>) Bool {
+    return match <T> {
+        case F64, F32, F16, BF16 => x != x
+    }
+}
+
+# whether x is an infinity, of either sign
+fn IsInf(x <T>) Bool {
+    return match <T> {
+        case F64, F32, F16, BF16 => Abs(x) == Inf
+    }
+}
+
+# whether x is a number - neither an infinity nor a NaN
+fn IsFinite(x <T>) Bool {
+    return match <T> {
+        case F64, F32, F16, BF16 => Abs(x) < Inf
+    }
+}
+
+# the lesser of a and b, for any type with < - an integer, a float, or a type declaring Less (E31). For a float, IEEE
+# 754's minimum: a NaN if either is one, since a NaN means the computation that made it failed and taking the other
+# would hide that; and -0.0 below 0.0, so Min(a, b) and Min(b, a) are the same value. Otherwise a when they are equal
+fn Min(a <T>, b <T>) <T> {
+    match <T> {
+        case F64, F32, F16, BF16 {
+            if a != a or b != b { return a + b }        # a NaN: the sum is one
+            if a == b { return a if SignBit(a) else b }  # -0.0 and 0.0 are equal and differ only there
+        }
+        nomatch { }
+    }
+    return b if b < a else a
+}
+
+# the greater of a and b, as Min: a NaN if either is one, and 0.0 above -0.0
+fn Max(a <T>, b <T>) <T> {
+    match <T> {
+        case F64, F32, F16, BF16 {
+            if a != a or b != b { return a + b }
+            if a == b { return b if SignBit(a) else a }
+        }
+        nomatch { }
+    }
+    return b if a < b else a
+}
+
+# x brought within lo .. hi: lo below it, hi above it - and hi when lo is above hi, since the upper bound is applied
+# last. A NaN x stays a NaN
+fn Clamp(x <T>, lo <T>, hi <T>) <T> {
+    return Min(Max(x, lo), hi)
+}
+
+# ---- tests ----
+
+# read at run time - a mutable global is the running program's, so nothing reading one is computed while compiling (K1)
+# and each assert below that reads one checks the function as the built program runs it, beside its twin read from a
+# constant, which the compiler decides itself (S18c)
+half mut F64 = 0.5
+two mut F64 = 2.0
+negOne mut F64 = -1.0
+big mut F64 = 1e300
+thousand mut F64 = 1000.0
+
+# baked while compiling (K2): each is the C library's own answer, by the very function the run time calls
+bakedSqrtTwo F64 = Sqrt(2.0)
+bakedExpHalf F64 = Exp(0.5)
+bakedLogTwo F64 = Log(2.0)
+bakedPowHalf F64 = Pow(2.0, 0.5)
+bakedSinHalf F64 = Sin(0.5)
+bakedAtanTwo F64 = Atan2(2.0, 0.5)
+bakedErfHalf F64 = Erf(0.5)
+bakedSqrtTwo32 F32 = Sqrt(F32(2.0))
+bakedExpHalf32 F32 = Exp(F32(0.5))
+bakedExpHalf16 F16 = Exp(F16(0.5))
+bakedTanhHalfB BF16 = Tanh(BF16(0.5))
+
+test "the compile-time values are the run time's" {
+    assert Sqrt(two) == bakedSqrtTwo and bakedSqrtTwo == Sqrt2
+    assert Exp(half) == bakedExpHalf
+    assert Log(two) == bakedLogTwo and bakedLogTwo == Ln2
+    assert Pow(two, half) == bakedPowHalf
+    assert Sin(half) == bakedSinHalf
+    assert Atan2(two, half) == bakedAtanTwo
+    assert Erf(half) == bakedErfHalf
+    assert Sqrt(F32(two)) == bakedSqrtTwo32
+    assert Exp(F32(half)) == bakedExpHalf32
+    assert Exp(F16(half)) == bakedExpHalf16
+    assert Tanh(BF16(half)) == bakedTanhHalfB
+}
+
+test "Sqrt is correctly rounded, in every float type" {
+    assert Sqrt(4.0) == 2.0 and Sqrt(F32(4.0)) == 2.0 and Sqrt(F16(9.0)) == 3.0 and Sqrt(BF16(16.0)) == 4.0
+    # each type's nearest value to the root of 2 - what rounding F64's own once more gives, since F64 holds over twice
+    # their bits
+    assert Sqrt(F32(2.0)) == F32(Sqrt2) and Sqrt(F16(2.0)) == F16(Sqrt2) and Sqrt(BF16(2.0)) == BF16(Sqrt2)
+    assert Sqrt(F32(two)) == F32(Sqrt2) and Sqrt(F16(two)) == F16(Sqrt2) and Sqrt(BF16(two)) == BF16(Sqrt2)
+    assert Sqrt(1e300) == 1e150 and Sqrt(big) == 1e150
+    assert Sqrt(Inf) == Inf
+    assert IsNan(Sqrt(-1.0)) and IsNan(Sqrt(negOne)) and IsNan(Sqrt(F16(negOne)))
+    assert Sqrt(-0.0) == 0.0 and SignBit(Sqrt(-0.0))
+}
+
+test "a result outside a function's domain is IEEE's, never an error" {
+    assert Log(0.0) == -Inf and IsNan(Log(-1.0)) and IsNan(Log(negOne))
+    assert Exp(1000.0) == Inf and Exp(thousand) == Inf and Exp(-1000.0) == 0.0
+    assert IsNan(Asin(2.0)) and IsNan(Acos(F32(-2.0)))
+    assert IsNan(Pow(-8.0, 1.0 / 3.0)) and Cbrt(-8.0) == -2.0
+    assert Pow(NaN, 0.0) == 1.0 and Pow(2.0, 10.0) == 1024.0
+    assert IsInf(Exp(F16(20.0))) and IsInf(Exp(F16(thousand)))        # past F16's largest, 65504
+    assert Tanh(1000.0) == 1.0 and Tanh(thousand) == 1.0
+}
+
+test "huge and tiny arguments" {
+    assert Hypot(1e300, 1e300) == 1e300 * Sqrt2 and Hypot(big, big) == 1e300 * Sqrt2      # no overflow on the way
+    assert Hypot(3.0, 4.0) == 5.0
+    assert Expm1(1e-20) == 1e-20 and Log1p(1e-20) == 1e-20       # where Exp(x) - 1 and Log(1 + x) give 0
+    assert Exp(1e-20) - 1.0 == 0.0
+    tiny := U64(1).F64FromBits()                                 # the smallest subnormal
+    assert Sqrt(tiny) == 2.2227587494850775e-162
+    assert Log2(tiny) == -1074.0 and Exp2(-1074.0) == tiny
+}
+
+test "trigonometry" {
+    assert Sin(0.0) == 0.0 and Cos(0.0) == 1.0 and Tan(0.0) == 0.0
+    assert Atan2(1.0, 1.0) == Pi / 4.0 and Atan2(0.0, -1.0) == Pi and Atan2(-0.0, -1.0) == -Pi
+    assert Atan(Inf) == Pi / 2.0 and Asin(1.0) == Pi / 2.0 and Acos(-1.0) == Pi
+    assert Sinh(0.0) == 0.0 and Cosh(0.0) == 1.0
+    assert Erf(0.0) == 0.0 and Erf(Inf) == 1.0 and Erfc(0.0) == 1.0 and Erfc(Inf) == 0.0
+    assert Log10(1000.0) == 3.0 and Log2(1024.0) == 10.0 and Exp2(10.0) == 1024.0
+}
+
+test "rounding to a whole number" {
+    assert Floor(-1.5) == -2.0 and Ceil(-1.5) == -1.0 and Trunc(-1.5) == -1.0
+    assert Round(2.5) == 3.0 and Round(-2.5) == -3.0 and Round(0.49999999999999994) == 0.0
+    assert RoundEven(2.5) == 2.0 and RoundEven(3.5) == 4.0 and RoundEven(-2.5) == -2.0
+    assert Round(F16(0.5)) == 1.0 and RoundEven(F16(0.5)) == 0.0 and Floor(BF16(-0.5)) == -1.0
+    assert Round(F32(half)) == 1.0 and RoundEven(F32(half)) == 0.0
+    assert SignBit(Floor(-0.0)) and SignBit(Ceil(-0.5)) and SignBit(Trunc(F32(-0.5)))
+    assert Floor(Inf) == Inf and IsNan(Floor(NaN))
+}
+
+test "Fma rounds once" {
+    # 0.1 * 10 is 1 and a little, which rounding the product to an F64 loses
+    assert Fma(0.1, 10.0, -1.0) == 5.551115123125783e-17 and 0.1 * 10.0 - 1.0 == 0.0
+    assert Fma(F32(0.1), F32(10.0), F32(-1.0)) == F32(1.4901161e-8)
+    assert Fma(F16(1.5), F16(1.5), F16(-2.0)) == 0.25 and Fma(BF16(3.0), BF16(3.0), BF16(1.0)) == 10.0
+    assert Fma(two, two, half) == 4.5
+}
+
+test "sign and size" {
+    assert Abs(-3) == 3 and Abs(I64(-3)) == 3 and Abs(U8(200)) == 200
+    assert Abs(I32(-2147483647) - 1) == I32(-2147483647) - 1        # the most negative stays as it is
+    assert Abs(-1.5) == 1.5 and Abs(F32(-1.5)) == 1.5 and Abs(F16(-1.5)) == 1.5 and Abs(BF16(-1.5)) == 1.5
+    assert Abs(-0.0).Bits() == 0 and Abs(negOne) == 1.0 and Abs(-Inf) == Inf
+    assert CopySign(3.0, -0.0) == -3.0 and CopySign(-3.0, 1.0) == 3.0 and CopySign(F16(2.0), F16(-1.0)) == -2.0
+    assert SignBit(-0.0) and not SignBit(0.0) and SignBit(F16(-0.0)) and SignBit(BF16(-2.0)) and SignBit(-NaN)
+    assert not SignBit(NaN) and not (-0.0 < 0.0)
+}
+
+test "NaN, the infinities and -0" {
+    assert IsNan(NaN) and not IsNan(Inf) and not IsNan(0.0) and IsNan(F32(NaN)) and IsNan(F16(NaN)) and IsNan(BF16(NaN))
+    assert NaN.Bits() == 0x7FF8000000000000
+    assert IsInf(Inf) and IsInf(-Inf) and not IsInf(NaN) and not IsInf(1e308) and IsInf(F32(1e300 * big))
+    assert IsFinite(0.0) and IsFinite(-1e308) and not IsFinite(Inf) and not IsFinite(NaN) and not IsFinite(F16(NaN))
+    assert IsFinite(F16(65504.0)) and IsFinite(BF16(1e38))
+    assert Inf == 1.0 / 0.0 and -Inf < -1e308
+}
+
+type grade struct(n I32) {
+    n
+}
+fn (a grade) Less(b grade) Bool { return a.n < b.n }
+
+test "Min, Max and Clamp" {
+    assert Min(1, 2) == 1 and Max(1, 2) == 2 and Min(U8(7), 3) == 3 and Max(I64(-4), -9) == -4
+    assert Min(1.5, -2.0) == -2.0 and Max(F16(1.5), F16(-2.0)) == 1.5
+    assert Min(grade(3), grade(5)).n == 3 and Max(grade(3), grade(5)).n == 5
+    # -0.0 below 0.0, whichever comes first
+    assert SignBit(Min(-0.0, 0.0)) and SignBit(Min(0.0, -0.0)) and not SignBit(Max(-0.0, 0.0)) and not SignBit(Max(0.0, -0.0))
+    assert SignBit(Min(F32(0.0), F32(-0.0))) and not SignBit(Max(BF16(-0.0), BF16(0.0)))
+    # a NaN either way round
+    assert IsNan(Min(NaN, 1.0)) and IsNan(Min(1.0, NaN)) and IsNan(Max(NaN, 1.0)) and IsNan(Max(F16(1.0), F16(NaN)))
+    assert Clamp(5, 0, 3) == 3 and Clamp(-1, 0, 3) == 0 and Clamp(2, 0, 3) == 2
+    assert Clamp(-1.5, 0.0, 1.0) == 0.0 and Clamp(half, 0.0, 1.0) == 0.5 and IsNan(Clamp(NaN, 0.0, 1.0))
+    assert Clamp(5, 3, 0) == 0                                   # lo above hi: hi
+    assert Min(half, two) == 0.5 and Max(half, two) == 2.0
+}
+
+test "the constants" {
+    assert F32(Pi) == F32(3.1415927) and Cos(Pi) == -1.0 and Sin(Pi / 2.0) == 1.0
+    assert Log(E) == 1.0 and Exp(1.0) == E
+    assert Sqrt2 * Sqrt2 == 2.0000000000000004 and Exp(Ln2) == 2.0 and Exp(Ln10) == 10.000000000000002
+}

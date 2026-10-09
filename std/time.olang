@@ -1,0 +1,41 @@
+# time - clocks. Ordinary olang on top of "extern fn" (§11), as io and os are: the C library's clock_gettime,
+# handed a timespec as the two words it is (X3).
+#
+# Now() is the clock for measuring - how long something took, when a deadline falls: it counts nanoseconds from an
+# arbitrary start and never jumps, whatever is done to the system's date. Wall() is the date: nanoseconds since
+# 1970-01-01 00:00 UTC, which can jump when the system's clock is set, so it is for saying WHEN, never for HOW LONG.
+# Reading a clock is an effect, so neither is computed while compiling (K1): a global set from one is set at startup.
+
+# Linux's clock ids
+clockRealtime I32 = 0
+clockMonotonic I32 = 1
+extern fn clock_gettime(clock I32, ts Array<I64>) I32
+
+fn read(clock I32) I64 {
+    ts := Array<I64>(2)
+    clock_gettime(clock, ts)
+    return ts[0] * 1000000000 + ts[1]
+}
+
+# now on the monotonic clock, in nanoseconds from an arbitrary start - only differences between two readings mean
+# anything
+fn Now() I64 { return read(clockMonotonic) }
+
+# the nanoseconds that have passed since t, a reading of Now()
+fn Since(t I64) I64 { return Now() - t }
+
+# the date and time, in nanoseconds since 1970-01-01 00:00 UTC
+fn Wall() I64 { return read(clockRealtime) }
+
+test "the monotonic clock never goes back, and measures what passes" {
+    a := Now()
+    b := Now()
+    assert b >= a
+    start := Now()
+    for Since(start) < 2000000 { }        # two milliseconds, spun
+    assert Since(start) >= 2000000 and Now() - start < 10000000000
+}
+
+test "the wall clock is a date after this was written" {
+    assert Wall() > 1790000000000000000        # 2026-09-21, in nanoseconds
+}

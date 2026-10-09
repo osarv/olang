@@ -967,7 +967,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_FUNCCALL: {
             struct var* f = op->readVar;
             if (op->isCtorCall && ctHasDestructor(op->type)) { ctScanFail(sc, op->tok, CT_WHY_DESTRUCTOR); return; }
-            if (!f || f->type.isExtern) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
+            if (!f || (f->type.isExtern && !CtMathFn(f))) { ctScanFail(sc, op->tok, "it calls an external function"); return; }
             //a call through a function value is evaluable exactly when the function it reaches is - which only
             //the evaluation knows, so it is decided there (ctCall), not here. A function-typed global's is read first
             bool throughValue = (!f->owner || f->isGlobalVar) && !op->isCtorCall;
@@ -987,7 +987,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
                 }
                 ctScanOp(sc, a);
             }
-            if (sc->why || f->type.typeParams.len || throughValue) return;
+            if (sc->why || f->type.typeParams.len || throughValue || f->type.isExtern) return;
             struct token t;
             const char* why = ctFuncWhy(f, &t);
             if (why) ctScanFail(sc, t, why);
@@ -1366,7 +1366,8 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         if (ctRun) return ctFail(st, op->tok, "it builds a value whose type declares a destructor, which -i does not run yet");
         return ctFail(st, op->tok, CT_WHY_DESTRUCTOR);
     }
-    if (func && func->type.isExtern && ctRun) return ctExtern(st, op, func); //B3e
+    //B3e, X8: -i calls every extern; while compiling only the C math library's, which has no effect to skip
+    if (func && func->type.isExtern && (ctRun || CtMathFn(func))) return ctExtern(st, op, func);
     if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
     struct ctVal* through = NULL;
     if ((!func->owner || func->isGlobalVar) && !op->isCtorCall) {
@@ -2261,7 +2262,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 if (s->op && !ctTruth(st, s->op)) break;
                 if (st->flow != CF_NORMAL) break;
                 ctExecBlock(st, &s->block);
-                if (st->flow == CF_BREAK) { st->flow = CF_NORMAL; break; }
+                if (st->flow == CF_BREAK) { if (!s->breakOuter) st->flow = CF_NORMAL; break; } //S9f: the run loop's break ends the loop around it too
                 if (st->flow == CF_CONTINUE) st->flow = CF_NORMAL;
                 if (st->flow != CF_NORMAL) break;
                 if (s->forPost) ctExec(st, s->forPost);
@@ -2424,6 +2425,38 @@ bool CtIsPlainData(struct ctVal* v) {
         for (int i = 0; i < v->n; i++) if (!CtIsPlainData(v->elems[i])) return false;
     }
     return true;
+}
+
+// ---- X8: the C math library ----
+
+//the functions of the C math library the language knows, each for F64 under its own name and for F32 with "f" after it,
+//every parameter and the result of that one type. IEEE 754 requires the correctly rounded result of the exact ones, so
+//every library, the hardware and LLVM's own folding give the same answer; the others are the C library's own
+static const struct { const char* name; int arity; bool exact; } ctMathLib[] = {
+    { "sqrt", 1, true }, { "fma", 3, true }, { "floor", 1, true }, { "ceil", 1, true }, { "trunc", 1, true },
+    { "round", 1, true }, { "roundeven", 1, true }, { "fabs", 1, true }, { "copysign", 2, true },
+    { "cbrt", 1, false }, { "exp", 1, false }, { "exp2", 1, false }, { "expm1", 1, false }, { "log", 1, false },
+    { "log2", 1, false }, { "log10", 1, false }, { "log1p", 1, false }, { "pow", 2, false }, { "sin", 1, false },
+    { "cos", 1, false }, { "tan", 1, false }, { "asin", 1, false }, { "acos", 1, false }, { "atan", 1, false },
+    { "atan2", 2, false }, { "sinh", 1, false }, { "cosh", 1, false }, { "tanh", 1, false }, { "erf", 1, false },
+    { "erfc", 1, false }, { "hypot", 2, false },
+};
+
+enum ctMathFn CtMathFn(struct var* f) {
+    if (!f || f->type.bType != BASETYPE_FUNC || !f->type.isExtern || !f->type.hasRetType) return CT_MATH_NONE;
+    enum baseType want = f->type.retType->bType;
+    if (want != BASETYPE_FLOAT64 && want != BASETYPE_FLOAT32) return CT_MATH_NONE;
+    for (size_t i = 0; i < sizeof(ctMathLib) / sizeof(ctMathLib[0]); i++) {
+        int n = (int)strlen(ctMathLib[i].name);
+        bool f32 = f->name.len == n + 1 && f->name.ptr[n] == 'f';
+        if ((f->name.len != n && !f32) || strncmp(f->name.ptr, ctMathLib[i].name, (size_t)n)) continue;
+        if (f32 != (want == BASETYPE_FLOAT32) || f->type.vars.len != ctMathLib[i].arity) return CT_MATH_NONE;
+        for (int p = 0; p < f->type.vars.len; p++) {
+            if (((struct var*)ListGetIdx(&f->type.vars, p))->type.bType != want) return CT_MATH_NONE;
+        }
+        return ctMathLib[i].exact ? CT_MATH_EXACT : CT_MATH_INEXACT;
+    }
+    return CT_MATH_NONE;
 }
 
 // ---- B3e: "-i", a whole program run by this evaluation ----

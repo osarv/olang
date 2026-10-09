@@ -1,6 +1,5 @@
-# check: fail private
-# the standard library's test-only globals are its own, not part of its interface
-import "std/map"
+# check: fail unknown name 'lookupBaked'
+# the standard library's test-only globals are its own, not part of its interface - the prelude's are no names at all
 fn main() ? {
-    assert map.lookupBaked == 41
+    assert lookupBaked == 41
 }
