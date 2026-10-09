@@ -2161,8 +2161,8 @@ is `a if c else (b if d else e)`. An `if` with no `else` after its condition doe
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
 E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types. A reference and a **new value** of its referent type (a constructor call, an enum case, an
-array built here) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
+wider of their types. A reference and a **new value** of its referent type (a temporary, E12c: a call's
+value, a constructor call, an enum case, an array built here - not existing storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
 `:=` takes one when it would take each value on its own (D15).
