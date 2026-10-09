@@ -748,12 +748,15 @@ pointer identity rather than structural content (see
 - both are struct, enum, error types or traits declared with the same name in the same module,
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
   aggregate and the other a pointer to one, and converting between them is an assignability rule
-  (§5.3 E12), not an identity one.
+  (§5.3 E12), not an identity one, or
+- both are **anonymous** enums (`x enum { A  B }`, written where a type is) with the same cases in the same order,
+  each case's payload of the same types, position by position (a payload's field names do not matter), or both are
+  several results of the same types (D8c).
 
 Any other pairing (different primitives, an array against a non-array, two structs with the same
-field shape but different declared names, etc.) is not the same type. olang has no structural
-typing for struct, enum, or error types: identity is always by declared name and declaring module,
-never by shape.
+field shape but different declared names, a declared enum against an anonymous one, etc.) is not the same type.
+olang has no structural typing for declared struct, enum, or error types: identity is always by declared name and
+declaring module, never by shape; only what has no name is identified by its structure.
 
 **T29.** A **declared** type is nominal, including one whose underlying shape is a primitive (T4).
 `type Meters I32` and `type Feet I32` are different types, and both differ from `I32`: a value of one

@@ -491,6 +491,18 @@ bool TypeIsSame(struct type a, struct type b) {
                 return true;
             }
             if (a.owner != b.owner) return false;
+            //T27: an anonymous enum - or the anonymous struct a case's payload is - has no name to be identified by, so it
+            //is identified by its structure: the same cases in the same order, each with payloads of the same types
+            if (!a.owner && !a.name.len && !b.name.len && (a.bType == BASETYPE_CHOICE || a.bType == BASETYPE_STRUCT)) {
+                if (a.vars.len != b.vars.len) return false;
+                for (int i = 0; i < a.vars.len; i++) {
+                    struct var* va = ListGetIdx(&a.vars, i);
+                    struct var* vb = ListGetIdx(&b.vars, i);
+                    if (a.bType == BASETYPE_CHOICE && !StrCmp(va->name, vb->name)) return false;
+                    if (!typeSameNested(va->type, vb->type)) return false;
+                }
+                return true;
+            }
             return StrCmp(a.name, b.name);
     }
 }
@@ -5583,7 +5595,9 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     }
     bool sameUnderlyingArray = target.bType == BASETYPE_ARRAY && op->type.bType == BASETYPE_ARRAY
                                && target.arrElem && op->type.arrElem && TypeIsSame(*target.arrElem, *op->type.arrElem);
-    if (!target.owner && op->type.owner && (TypeIsSameRepr(target, op->type) || sameUnderlyingArray)) {
+    //...for a type over a number or an array (T29) - a declared struct or enum is never its anonymous shape (T27)
+    if (!target.owner && op->type.owner && op->type.bType != BASETYPE_STRUCT && op->type.bType != BASETYPE_CHOICE
+            && (TypeIsSameRepr(target, op->type) || sameUnderlyingArray)) {
         struct type asUnnamed = op->type;
         asUnnamed.owner = NULL;
         asUnnamed.name = (struct str){0};
