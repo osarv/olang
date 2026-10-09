@@ -144,11 +144,12 @@ A character that is a digit or a letter immediately after a `0x` or `0b` literal
 rather than the start of the next token: `0b12` is a mistake in the literal, not a binary `1` beside a
 stray `2`.
 
-**L10b.** `digit-sep ::= { "_" }` — a `_` inside a numeric literal is a **separator with no meaning**,
+**L10b.** `digit-sep ::= [ "_" ]` — a `_` inside a numeric literal is a **separator with no meaning**,
 removed before the value is read, so `1_000_000`, `0xFF_FF`, `0b1010_1010`, `1_000.5` and `1e1_0` are all
-ordinary literals. The rule is that a `_` **must be followed by another digit** of the same base, which is
-what makes `1_`, `1_.5` and `1_e5` errors. Nothing is said about the other end because nothing needs to
-be: a leading `_` is a letter, so `_1` is an identifier and never reaches the number path at all.
+ordinary literals. The rule is that a `_` **stands between two digits** of the same base: one is needed after it,
+which is what makes `1_`, `1_.5`, `1_e5` and `1__0` errors, and one before it, which is what makes `0x_FF`, `0b_1` and
+`1e_5` errors. Before a decimal literal a leading `_` is a letter, so `_1` is an identifier and never reaches the
+number path at all.
 
 **L11.** `BOOL_LIT ::= "true" | "false"` — of type `Bool`.
 
@@ -1676,6 +1677,20 @@ the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no 
 `x` - of those, the closest to it - `0, 0` for a zero, failing with the default error for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
 
+Text has `t.ParseInt(base = 10) I64 ? ParseError` and `t.ParseUint(base = 10) U64 ? ParseError`: the integer `t`
+writes - an optional sign (`ParseUint` takes `+` only), then digits of `base`, `2` to `36`, the digits past `9` being
+the letters in either case, and nothing else: no surrounding space, no prefix, no `_`. Base `0` reads the digits as an
+integer literal is written (L10): `0x`/`0X` before hexadecimal digits, `0b`/`0B` before binary ones, decimal otherwise,
+with a `_` between two digits as L10b allows it; a hexadecimal or binary literal is a bit pattern, read by `ParseInt`
+as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
+E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
+number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; a base other than `0` or `2` to
+`36` is a mistake in the program, stopping it as an `assert` does. Text has `PadStart(width, fill = ' ')` and
+`PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
+never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
+with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
+none, since a `Char` would inherit them (T29f) and pad its number rather than the character.
+
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
 (E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type - except
@@ -1707,7 +1722,8 @@ fn eprintln(t String& = "")  # t and a line end, to the standard error
 ```
 
 Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `println("n is " $n)`.
-`println` and `eprintln` write the text and its line end as one write. None of them can fail: a write the system does
+`println` and `eprintln` write the text and its line end as one write. Each call writes at once, with nothing held
+back - a buffered writer for much output is a library's (`std/io`'s `Writer`). None of them can fail: a write the system does
 not complete ends the program as a failed check does (S18) - aborting, or failing the test that is running - with a
 line on the standard error naming the function and the stream (`print could not write to the standard output`). So a
 program writing its output needs no `try` and no error set for it; `io.Print` and `io.PrintErr` are the forms that hand
@@ -4516,7 +4532,9 @@ file's compilation and test run is independent: a compile-time error in one list
 not exist or is a directory, or the compiler itself failing on one, with a fatal or an internal error - does not
 prevent the others from being checked and run, and the exit status is nonzero when any listed file failed to build or
 failed a test. The files are built and run one at a time, in the order listed, and what one file's build holds is
-released before the next begins: a list needs the memory of its largest file, not of the whole list.
+released before the next begins: a list needs the memory of its largest file, not of the whole list. Each test's
+result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
+such, so what ran before it is never lost.
 
 **B3e.** `-i <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `-b` - `main` is required (B4), and every compile-time error is reported the

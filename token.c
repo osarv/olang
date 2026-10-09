@@ -412,19 +412,23 @@ bool isBinDigit(char c) {
 }
 
 //L10b: consumes a run of digits of one radix, allowing "_" separators between them, and returns how many
-//real digits it saw. A separator must be followed by another digit of the same radix - so "1_000" is
-//fine, while "1_", "1_.5" and "0x_FF" are not. A LEADING "_" never reaches here at all: it is a letter,
-//so "_1" is an identifier, which is why the rule only has to talk about the other end.
+//real digits it saw. A separator stands between two digits of the same radix - so "1_000" is fine, while
+//"1_", "1_.5", "1__0", "0x_FF" and "1e_5" are not. Before a decimal literal a LEADING "_" never reaches here: it
+//is a letter, so "_1" is an identifier - but one right after a "0x"/"0b" prefix, or an exponent's "e", does.
 int consumeDigitRun(TokenCtx tc, bool (*isRadixDigit)(char)) {
     int nDigits = 0;
+    char prev = '\0';
     while (true) {
         char c = feedChar(tc);
-        if (isRadixDigit(c)) { nDigits++; continue; }
+        if (isRadixDigit(c)) { nDigits++; prev = c; continue; }
         if (c == '_') {
             char next = feedChar(tc);
             unfeedChar(tc);
-            if (isRadixDigit(next)) continue;
-            ErrSyntax(charSpan(tc, tc->charIdx - 1, 1), ERR_DIGIT_SEPARATOR);
+            bool between = isRadixDigit(prev) && isRadixDigit(next);
+            bool reported = prev == '_'; //"1__0" is one mistake, reported at its first "_"
+            prev = c;
+            if (between) continue;
+            if (!reported) ErrSyntax(charSpan(tc, tc->charIdx - 1, 1), ERR_DIGIT_SEPARATOR);
             continue; //reported; keep lexing so one bad literal does not derail the rest of the file
         }
         unfeedChar(tc);
@@ -461,6 +465,7 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
         unfeedChar(tc);
     }
 
+    unfeedChar(tc); //the first digit is the run's own, so a "_" right after it stands between two digits
     bool isFloat = false;
     consumeDigitRun(tc, isDigit);
     //L12: a "." before a name is not part of the number - it is a member access or a method call on the integer
