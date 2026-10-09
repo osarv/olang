@@ -110,6 +110,30 @@ abstractions above that**: capturing lambdas, the `List` iterator and `Push`, `M
 language-level trade-off, wrapping arithmetic (spectral-norm). Every gap but that one has a fix inside the compiler or
 std that keeps the language as it is.
 
+### After std's fixes (2026-10-09)
+
+Items 3, 4 and 6 below were std's, and are fixed there (CLAUDE.md, "std closes the benchmarks' library gaps"): `for x
+in` a `List` walks it run by run and `ListIter`'s helpers do the same (S9f), `$n` renders an integer without
+`snprintf`, `Find` compares in place, and `Map.Update` counts in one lookup. Two runs of `bench/run.sh` on these rows
+(7 and 9 repetitions, interleaved, on a machine at load 7-9 - so each ratio is given as the range of the two, with the
+minimums, which the load disturbs least, beside it):
+
+| benchmark | olang/C, run 1 | olang/C, run 2 | minimums, olang / C (s) | before (olang/C, above) |
+|---|---:|---:|---:|---:|
+| sum: for x in List | 1.07 | 0.89 | 0.177 / 0.162 | 5.11 |
+| sum: List.Iter().Fold | 0.85 | 0.93 | 0.169 / 0.162 | 6.27 |
+| sum: for x in Array | 1.20 | 1.22 | 0.172 / 0.178 | 1.34 |
+| sum: Array.Iter().Fold | 1.04 | 1.14 | 0.173 / 0.165 | 1.07 |
+| List push | 1.20 | 1.10 | 0.168 / 0.142 | 0.96 |
+| k-nucleotide | 0.80 | 1.04 | 0.561 / 0.680 | 1.47 |
+| text | 0.76 | 0.84 | 0.357 / 0.453 | 2.09 |
+
+`List push`'s code did not change, so its rows are a measure of the noise. An A/B of the `List` rows against master's
+compiler at the same load (blocks of 7, medians): `for x in List` 1.23s -> 0.22s, `List.Iter().Fold` 1.31s -> 0.21s.
+The `List` rows are now where the `Array` rows are, and k-nucleotide and text are level with C or faster (text gains
+from rendering into a `StringBuilder` with no `snprintf` at all, where C's `snprintf` parses its format every time).
+Of the gaps this page found, what is left is wrapping arithmetic (item 5).
+
 ## Why olang is slower where it is
 
 Each finding was read off the whole-program optimized IR (`bench/ir.sh`), confirmed by an experiment - the IR
@@ -136,14 +160,19 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    change folded into every step, so the loop has a data-dependent branch in its body and stays scalar; `ToArray()`
    then the same loop runs at C's speed. **Fix:** walk a List chunk-wise - an outer loop over chunks, an inner
    counted loop over each - e.g. a protocol for "contiguous pieces" that `for ... in` lowers to nested loops, or
-   `ListIter` overriding the iterator defaults (`Fold`, `Count`, ...) with chunk loops. `repro/list_sum.olang`.
+   `ListIter` overriding the iterator defaults (`Fold`, `Count`, ...) with chunk loops. **Both were built**: a type
+   with `RunFrom(at)` (a `List` has it) is walked run by run by `for ... in` (S9f), and `ListIter`'s `Any`, `All`,
+   `Count`, `Fold`, `Map` and `Filter` walk the same way - `for x in List` 0.92s -> 0.24s, `List.Iter().Fold` 1.15s ->
+   0.18s (table above). `repro/list_sum.olang`.
 4. **FIXED (E11a, T29c): text - `$n` formatted every integer twice, 2.3-2.5x.** A rendering calls its `olang.rd.<T>` helper once with a null
    buffer to measure and once to write, so each `$n` is two `snprintf` calls (about 80ns each here) where C makes one;
    5M renderings take 0.79s against 0.42s for one `snprintf` each (0.81s for two). And `Split` scans the text twice
    (count, then fill), and `Find` builds a bounds-checked slice and calls `Eq` at every position - 0.48s for split
    and parse against 0.05s for C's strtoll walk. **Fix:** render integers with a digit count and an itoa instead of
    snprintf (measuring becomes a few compares); `Find` with a one-byte needle as `FindByte`, comparing in place
-   instead of slicing per position. `repro/render_int.olang`.
+   instead of slicing per position. **Done** (E11a, T29c): the runtime counts digits from `ctlz` and writes them two
+   at a time (5M renderings 0.79s -> 0.09s), `Find` compares in place, and `Split` by one byte counts in one
+   vectorizable pass. `repro/render_int.olang`.
 5. **Wrapping arithmetic costs the optimizer the facts `nsw` gives C - spectral-norm 1.37-1.44x.** E6c defines integer
    overflow to wrap, so `(i + j) * (i + j + 1) / 2` is emitted with plain `add`/`mul`; LLVM cannot prove the product
    non-negative and keeps the signed division by two as three instructions (shift, add, shift) where C's
@@ -159,7 +188,7 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    update in one lookup - `m.Update(k, init, fn(v) { return v + 1 })`, or a method handing out the slot (a reference
    to a struct with a mutable `Value`, which olang can express), or a place protocol so `m[k] += 1` is one lookup.
    The rest is `String.Eq`'s byte loop against `memcmp`, a slice bounds check per key, and finding 2 in `Map.grow`.
-   `repro/map_count.olang`.
+   **Done** (M19d): `m.Update(k, init, f)`, and `Map` is in the prelude; k-nucleotide uses it. `repro/map_count.olang`.
 7. **FIXED (E12c/O16, O8a): binary-trees was 1.27-1.32x a C arena.** Two causes, both addressed. (a) **Allocation
    order:** a constructor's arguments were evaluated before its instance was allocated, so `Node(tree(d - 1),
    tree(d - 1))` laid a tree out in post-order against `check`'s pre-order walk. **A promoted instance's slot is now

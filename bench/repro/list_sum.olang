@@ -1,9 +1,10 @@
-# "for x in l" over a List never vectorizes: ListIter.Next is one element at a time, with the chunk change folded
-# into every step ("if it.i == it.room { next chunk }"), so the loop LLVM sees has a data-dependent exit in its body
-# and stays scalar. Summing 100,000 I64 8,000 times: over the List 0.87s, over an Array 0.20s, C's array 0.18s.
-# The fix is a chunk-wise walk - an outer loop over chunks and an inner counted loop over each - which is what the
-# array case already is.
-# See it: repro/opt.sh list_sum, then  grep -n "xor" build/list_sum.opt.ll  (scalar i64 only, no vector xor/add)
+# FIXED (S9f): "for x in l" over a List did not vectorize - ListIter.Next is one element at a time, with the chunk
+# change folded into every step ("if it.i == it.room { next chunk }"), so the loop LLVM saw had a data-dependent exit
+# in its body and stayed scalar: summing 100,000 I64 8,000 times took 0.87s over the List, 0.20s over an Array, 0.18s
+# for C's array. A List now has RunFrom(at), the contiguous run of its elements from position at, and "for x in l"
+# walks it run by run - an outer loop asking for the next run, an inner counted loop over it - which is what the array
+# case is: 0.24s at load 7, against 0.22s for C.
+# See it: repro/opt.sh list_sum, then  grep -n "xor <" build/list_sum.opt.ll  (the vector xor of the inner loop)
 import "std/io"
 import "std/os"
 
