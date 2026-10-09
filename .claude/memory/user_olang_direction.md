@@ -19,3 +19,6 @@ rule that composes over special cases, and fix rough edges found while building 
 
 Written out as `PRINCIPLES.md` in the repo root (the user: "Record the general language-vibe specs"), imported by
 CLAUDE.md so every session loads it; keep it current when the direction moves.
+
+**FPGA (2026-10-09):** the user wants olang to target FPGAs for spiking neural network implementations - a long-term
+domain to weigh when designing numeric types (bit widths, fixed point, saturation) and concurrency (dataflow).

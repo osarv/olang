@@ -9020,6 +9020,83 @@ from their original form.
   `PATH_MAX` filled from an import string or a root path of any length (`resolveImport`, `semaLoadModule`, `moduleDir`).
   **Skipped**: a user's `Pair(1, "x")` reports T7a inside `pair.olang` - the types agent is adding an "instantiated from"
   note for errors inside instantiations, which covers it.
+- **The statements and scopes, hardened from a review (O4b/O14c, O12, O18a/O18b, O23, O25c/O25e, O1b, R9a, S13c, E28,
+  T25c/T25d, P2, E31, 2026-10-09).** The third of the overnight reviews read the checker's operand and statement half
+  and §8, and reproduced each finding with a small program on the current compiler: ten holes (F01-F10), seven
+  over-rejections (R01-R07), and a baking bug the evaluator's fix batch took. The holes were nearly all one shape - a
+  value whose scope the checker read from the wrong place, or never read at all, so a program kept a reference into an
+  arena reclaimed under it. Each fix below has a `checks/cases` program for what must now fail, and the valid shapes are
+  corpus tests that read their values back after churning the arena (`shared.olang`'s "statements/scopes review"
+  section, `std/map`), with a baked global proving the evaluator agrees.
+  **"Unnamed" meant two things (O12).** `RefExactScope` answered "the program's scope" both for a global's referent and
+  for a reference whose scope it could not trace, and callers trusted the answer as the former. Three findings came out
+  of that one conflation: a payload bound out of a by-value enum parameter (F08) read as the program's, so it could be
+  pushed into any list and stored in a global through a lambda (a segfault); a `match` whose alternatives bound one name
+  from payloads in different scopes (F02) took the *first* alternative's scope, and its permission; and a value that
+  arrived through several branches was treated as living as long as the program. Now "unnamed" is only the program's
+  scope, and an untraced or ambiguous scope is reported as such (`SCOPE_AMBIGUOUS`, a local adopting one is marked
+  `scopeUnknown`): it is read and walked, never equal to an exact scope, never determines a scope variable a callee may
+  build into (`BUILD_INTO_UNKNOWN_SCOPE`), never a scope argument. Alternatives meet (S13c): writable only when every
+  alternative is, and of unknown scope where they differ.
+  **A by-value parameter holding references (F04, R01 - the coordinator's decision, O4b/O14c).** Such a parameter had no
+  scope for its references, so returning one (`fn idh(x Holder) Holder { return x }`) was unchecked, and a generic `id`
+  instantiated at one was the same hole. It now has an implicit scope variable for where those references live, bound
+  by the argument (existing storage: where its references are, O25h; a temporary: where the call places it), and a
+  return handing them back is an obligation on the caller (O14c) - the existing O10b/O18a machinery, with the
+  reverse obligation added where something can be stored through them. That same variable is what made R01 work:
+  `l.Push(Pair(n, n.Len()))` for a `List<Pair<String&, I64>>` had been rejected because the pair's text had no scope.
+  **Where a value read out of a call lands (F05, F06, O18a/O25c).** `keep = mkBox(43).n`, `mkNodes(43)[0]`,
+  `mkArr(42)[0:2]` and `mkPk(42) as Box.Has`, assigned inside a loop to an outer variable, built the call's result in
+  the loop body's arena: a projection of a landing call was not itself landing. `projectionBase` makes a member, index,
+  slice or `as` read land with the value it reads, and copies the read's own bindings over. Arrays had the mirror
+  problem: an array literal or `Array<T>(n, fill)` holding temporaries did not land its elements, and one holding
+  existing storage was never checked where it went - `return Node&[n]` with `n` a local compiled. An array built here
+  now records where it landed (`ctorLanded`/`landedTo`, as a constructor does) and is checked there with
+  `ARRAY_ELEM_OUTLIVED`/`ARRAY_ELEM_NOT_IN_SCOPE`. Codegen had its own bug under it: a fill that was a temporary
+  struct reference was lowered with no target scope, so its stack address was stored in every element (a segfault
+  once returned) - it is now promoted into the array's scope.
+  **The same for what a call is built from (C2d/T17c).** A constructor's or an enum case's arguments were checked against
+  where the instance landed only at declarations, assignments and returns - never when the call was itself an argument,
+  so `l.Push(Wrap(inner))` in a loop kept `inner` past its block. The check is now queued when the binding is made and
+  run where the value lands (`queueHereCheck`), for constructor calls, enum cases and arrays alike.
+  **R9a's default was judged before the call landed (F01).** `keep = try mk(i) catch default inner` compared `inner` with
+  the result's scope while that scope was still following the result - so against nothing, and accepted; the valid
+  `return try fail1() catch default a` (with `a` the borrowed result's parameter) was rejected for the same reason. The
+  check is now made with the statement's discharges, once the result has landed.
+  **Destructuring (found on the way).** `a, b = two(i)` inside a loop, with `a` and `b` declared outside, built both
+  results in the loop body's block and stored them into the outer variables. The targets are now built first and the
+  call lands where they agree (`landAtTargets`, shared with `spawn a, b = f()`); new locals, or targets that disagree,
+  land in the statement's block and the per-target checks judge them.
+  **Writes through an unknown binding (F03, O23).** A field written `&of` is read at its instance's construction
+  binding, which every holder of the instance believes. Writing it through an alias whose binding is not known - an
+  element of an array holding the instance, a field of another instance, a method called through either - could
+  falsify that binding. Such a store is now unverifiable (`FIELD_BINDING_UNKNOWN_WRITE`), directly or through a
+  callee's obligation that fell back to the container's scope.
+  **Permissions (F09, T25c).** `(p if c else q).v = 1`, `(match k { ... }).v = 1`, `(b as Box.R).v = 1` and
+  `(try w.items[0]).v = 1` wrote through read-only references: `OperandGivesWritable` did not look through a conditional,
+  a match, a held sequence or a bounds check, and took an `as`'s payload as writable. Each now gives what its values do.
+  **P2 (F07, R07).** A task's argument was checked for its own storage only: a temporary `W(a)`, a by-value `wv` or an
+  enum `Box.Has(a)`, each holding a loop body's array, and a lambda capturing one, all reached a task that outlived
+  the array. Everything an argument holds must now last until the join. R07 was the spawned-lambda message, which told
+  the reader to move "the reference" when the fix is to declare the captured variable outside the join block.
+  **A Call instance returned as a function value (F10).** Returning a local `Counter&` for a `fn() I64` result built the
+  adapter over the local - the instance itself - with no O14 check, since the fit check treated it as a temporary. It
+  is now checked as the reference it is.
+  **Over-rejections.** R02: `try w.items[0]` (a derived `TryAt`, lowered as a held sequence) never landed and was then
+  "not in scope"; `heldResult` makes a sequence's value land and read as its last operand. R04: `n if c else Node(1)`
+  had no type (decided: a reference and new values of its referent meet at the reference type). R06 and the evaluator
+  review's `glist`: a global passed to a read-only receiver was rejected by O25e - decided: it binds the program's scope,
+  O18b may build there, and `SCOPE_ARG_PROGRAM`'s "no function allocates into" (stale since O1b) is reworded. The
+  static-literal case: `for nm in String&["ann", "bob"] { m.Put(nm, 1) }` was rejected because the element read from the
+  literal was copied into the loop's block; such an element is static data (T25d), marked on the hidden array local
+  (`elemsStatic`), lives in the program's scope, and codegen now emits it as the static `{ len, ptr }` in a literal's
+  element as it already did for an argument.
+  **Merged with the driver batch**, which had made landing look through a nominal conversion (`return
+  String(b.chars.ToArray())` in `StringBuilder.ToString`): kept beside `heldResult` and `projectionBase` in
+  `callIsLanding` and `landCallIn`.
+  **Not fixed**: an `At` result used as an operand (`$l[0].v`) of a `List` whose element type has `mut` reference fields
+  still asks an exact scope it cannot show - the limit the recursive-enums entry recorded. **Skipped**: R03 (a function
+  value in a field, the types agent's), R05 (`same(...)`, being replaced by `a is b`).
 - **A review of the type checker, and what it fixed (2026-10-09).** The second read-only review of the overnight plan
   covered the types/modules/generics half of semantic.c; its reproducers are in /home/user/review/types. Every finding was
   reproduced on the current compiler before it was fixed, and each fix has a corpus test (with a baked global or a

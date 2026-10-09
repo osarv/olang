@@ -1,0 +1,18 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O4b/O14c: the same through a generic instantiated at a struct holding a reference
+type Node struct(v I32) {
+    v mut
+}
+type Holder struct(n Node&) {
+    n
+}
+fn id(x <T>) <T> { return x }
+fn main() ? {
+    outer Node& = Node(1)
+    keep Holder = Holder(outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        h2 := Holder(inner)
+        keep = id(h2)
+    }
+}
