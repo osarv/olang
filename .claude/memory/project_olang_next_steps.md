@@ -441,6 +441,12 @@ because what it finds about structure feeds the refactor.
   (oannc2) is 472373d: move it to master after rvfix/qc land and re-test (List/Map handles, ==, QC may need migration).
   New: oann repro/condliteral (a conditional of literals beside an F32 is typed F64 - linalg's ActivationSlope/
   ActivationBackward do not compile for F32) -> handed to rvfix as item 11.
+- 23:35 CEST: review2 (/home/user/review/tonight2): 8 confirmed - three NEW use-after-frees from s3scope's O17
+  change (callee storing its parameter's own storage into the lent region; settleRegions not revisiting callers;
+  multi-target spawn not a store), two older (split value borrowed into a ref local / for-in -> handed to rvfix as
+  item 12; spawn h.f() field closure not held to P2), x[i]++ index evaluated twice, a T22 over-rejection, a G4
+  cascade, `x = E.Neg(x)` self-cycle. Started wt-rv2fix for all but the rvfix twin. LESSON: every O-rule relaxation
+  gets a soundness review before it is merged - three agents' relaxations tonight each opened a UAF.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
