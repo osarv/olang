@@ -324,6 +324,12 @@ struct type* typeNamed(struct semaModule* mod, struct str name) {
     return t ? t : preludeType(name);
 }
 
+//a name every module sees as a type: a primitive, "Bool" or "Array"
+static bool isBuiltinTypeName(struct str name) {
+    enum baseType b;
+    return PrimByName(name, &b) || StrCmp(name, StrFromCStr("Bool")) || StrCmp(name, StrFromCStr("Array"));
+}
+
 struct str strFromTok(struct token tok);
 //T4: case-insensitive edit distance, for suggesting the type a misspelt name probably meant
 static int nameDistance(struct str a, struct str b) {
@@ -1474,6 +1480,10 @@ void collectType(struct semaModule* mod, struct token nameTok, enum baseType bTy
         ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //T7, T4: the language's own names
     }
     checkNoAliasClash(mod, name, nameTok); //M20
+    for (int i = 0; i < mod->vars.len; i++) { //D2: a function or global of this name, declared before it
+        struct var* v = ListGetIdx(&mod->vars, i);
+        if (!v->isMethod && StrCmp(v->name, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IS_TYPE); break; }
+    }
     struct type t = (struct type){0};
     t.owner = mod;
     t.bType = bType;
@@ -1502,6 +1512,8 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
         struct var* prev = VarGetList(&mod->vars, name);
         if (prev && !(isFuncDecl && prev->isFuncDecl)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); return; }
         if (!prev) checkNoAliasClash(mod, name, nameTok); //M20
+        //D2: nor a type's name - a type declared later in the module is caught by collectType
+        if (!prev && (typeNamed(mod, name) || isBuiltinTypeName(name))) ErrMsgSemantic(nameTok, VAR_NAME_IS_TYPE);
     }
     struct var v = (struct var){0};
     v.isMethod = isMethod;
@@ -4079,6 +4091,22 @@ static bool suppliedBitsMethod(struct type t, struct str name, struct type* out)
     return true;
 }
 
+//P9: the atomic operations, methods every integer type has - supplied by the compiler, as Len() is (E23), since
+//atomicity is a property of the memory word a place occupies and no olang code can reach that. OPERATION_NONE when
+//name is none of them for t. A declared type has them when it extends its base, as it has its base's other methods
+static enum operation atomicMethodNamed(struct str name) {
+    if (StrCmp(name, StrFromCStr("AtomicLoad"))) return OPERATION_ATOMIC_LOAD;
+    if (StrCmp(name, StrFromCStr("AtomicStore"))) return OPERATION_ATOMIC_STORE;
+    if (StrCmp(name, StrFromCStr("AtomicAdd"))) return OPERATION_ATOMIC_ADD;
+    if (StrCmp(name, StrFromCStr("AtomicSwap"))) return OPERATION_ATOMIC_SWAP;
+    if (StrCmp(name, StrFromCStr("AtomicCompareSwap"))) return OPERATION_ATOMIC_CAS;
+    return OPERATION_NONE;
+}
+static enum operation suppliedAtomicMethod(struct type t, struct str name) {
+    if (!TypeIsInt(t) || t.structMAlloc || !(receiverIsBuiltin(t) || t.extendsBase)) return OPERATION_NONE;
+    return atomicMethodNamed(name);
+}
+
 //M19: does a method declared over built-in receiver `r` accept a receiver of type `recv`? An array matches
 //by its ELEMENT - the length kind and the marker are E12's business at the call, which widens a "T[N]" to a
 //"T[]&" exactly as it does for any argument - and a generic element ("<T>[]") matches every array. `exact`
@@ -4293,7 +4321,8 @@ void checkMethodOverloads(struct semaModule* mod) {
             //accepted and then never called, the supplied method answering every call
             struct type suppliedT;
             if (!receiverIsBuiltin(*ra) && ((ra->bType == BASETYPE_ARRAY && StrCmp(a->name, StrFromCStr("Len")))
-                                            || suppliedBitsMethod(*ra, a->name, &suppliedT))) {
+                                            || suppliedBitsMethod(*ra, a->name, &suppliedT)
+                                            || suppliedAtomicMethod(*ra, a->name) != OPERATION_NONE)) {
                 ErrMsgSemantic(a->tok, METHOD_CLASHES_SUPPLIED);
                 continue;
             }
@@ -4543,13 +4572,15 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
 }
 
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
-//global or a function) or a build constant (B10). A module is the unit that keeps a namespace small enough
+//global or a function), a build constant (B10), or the name of a type it sees - its own, the prelude's or a built-in
+//one, so that what follows "is" is a type exactly when it is a type's name (E10c, E32). A module is the unit that keeps a namespace small enough
 //to manage, so a name means one thing everywhere in it; and conditional compilation (S8b) can then read any
 //name in a condition knowing whether it is a local or a global without knowing the scopes.
 static void rejectShadowing(struct semaModule* mod, struct str name, struct token tok) {
     if (!mod || (name.len && name.ptr[0] == '$')) return;
     if (VarGetList(&mod->vars, name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_GLOBAL);
     else if (buildConstVar(name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_BUILD_CONST);
+    else if (typeNamed(mod, name) || isBuiltinTypeName(name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_TYPE);
 }
 
 struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str name, struct token tok, struct type type, bool mut) {
@@ -5987,7 +6018,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
     //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
-    //the atomic builtins that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
+    //the atomic methods that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
     //while "n := l.Len()" on a List compiled
     if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST || op->suppliedCall) return true;
     if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
@@ -7425,36 +7456,29 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
 //(embedded, or a "&"-tagged compile-time-length reference) codegen emits the constant directly rather than
 //computing anything at runtime - only a genuinely runtime-length ("T[]") array reads its length from the
 //runtime slice.
-//P9: one of the five atomic builtins. `kind` decides the arity and the result type; every one takes a
-//mutable integer lvalue first, because atomicity is a property of a single machine word and the operation
-//lowers to exactly one instruction with nowhere to put a conversion.
-struct operand* OperandAtomic(struct list args, enum operation kind, struct token tok) {
-    int want = (kind == OPERATION_ATOMIC_LOAD) ? 1 : (kind == OPERATION_ATOMIC_CAS ? 3 : 2);
-    struct type resT = TypeVanilla(kind == OPERATION_ATOMIC_STORE ? BASETYPE_VOID : BASETYPE_INT32);
+//P9: "t.AtomicAdd(v)" and the others. `kind` decides the arity and the result type; the receiver must be a place - a
+//variable, a field or an element - and a writable one for every operation but AtomicLoad, which only reads. Each
+//value argument fits the receiver's type as any argument fits its parameter (T6, T6b), before the one instruction
+//the operation is.
+static struct operand* OperandAtomic(struct var* func, struct operand* target, struct list args, enum operation kind,
+                                     struct token tok) {
+    int want = (kind == OPERATION_ATOMIC_LOAD) ? 0 : (kind == OPERATION_ATOMIC_CAS ? 2 : 1);
+    struct type resT = kind == OPERATION_ATOMIC_STORE ? TypeVanilla(BASETYPE_VOID) : target->type;
     if (args.len != want) {
         reportArgCount(args, tok);
-        return operandNew(tok, OPERATION_NONE, resT);
+        return unknownPlaceholder(tok);
     }
-    struct operand* target = *(struct operand**)ListGetIdx(&args, 0);
-    if (!TypeIsInt(target->type)) {
-        ErrMsgSemantic(target->tok, ATOMIC_NOT_INTEGER);
-        return operandNew(tok, OPERATION_NONE, resT);
-    }
-    //P9: atomicLoad only reads, so a read-only place serves - a flag set by one task is read by others through
+    //P9: AtomicLoad only reads, so a read-only place serves - a flag set by one task is read by others through
     //read-only references
     if (!OperandIsLvalue(target) || (kind != OPERATION_ATOMIC_LOAD && !OperandIsMutableLvalue(target))) {
-        ErrMsgSemantic(target->tok, kind == OPERATION_ATOMIC_LOAD ? ATOMIC_LOAD_NOT_LVALUE : ATOMIC_NOT_MUTABLE);
-        return operandNew(tok, OPERATION_NONE, resT);
+        ErrMsgSemantic(target->tok, !OperandIsLvalue(target) ? ATOMIC_NOT_PLACE : ATOMIC_NOT_MUTABLE);
+        return unknownPlaceholder(tok);
     }
-    if (kind != OPERATION_ATOMIC_STORE) resT = target->type;
     struct operand* op = operandNew(tok, kind, resT);
     ListAdd(&op->args, &target);
-    for (int i = 1; i < args.len; i++) {
+    for (int i = 0; i < args.len; i++) {
         struct operand* v = *(struct operand**)ListGetIdx(&args, i);
-        //a literal still adapts by representability, exactly as against any other same-type-requiring
-        //position (T6); anything else must already be the target's type
-        if (operandOnlyNumericLiterals(v)) reportTypeFit(OperandFitsType(NULL, v, target->type), v->tok);
-        else if (!TypeIsSame(v->type, target->type)) ErrMsgSemantic(v->tok, ATOMIC_VALUE_TYPE);
+        reportTypeFit(OperandFitsType(func, v, target->type), v->tok);
         ListAdd(&op->args, &v);
     }
     return op;
@@ -9017,7 +9041,7 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
     struct token ifTok = partAt(s, 1)->tok;
     struct operand* c = buildExprFromSyntax(ctx, partSntx(s, 2));
-    if (!OperandIsBool(c)) ErrMsgSemantic(c->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(c) && !c->type.unknown) ErrMsgSemantic(c->tok, OPERATION_REQUIRES_BOOL);
     struct operand* b = buildExprFromSyntax(ctx, partSntx(s, 4));
     FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
     FinalizeLambda(b, &a->type);
@@ -9394,6 +9418,26 @@ static struct token markerNameIn(struct syntax* t) {
         }
     }
     return (struct token){0};
+}
+
+//E10c: "a is b" - whether two references (or two function values) of one type name the same instance, whatever Eq
+//says: the "==" of two references, which is identity before any Eq is consulted (E10)
+static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
+    struct token kw = firstTokOfType(s, TOK_IS);
+    struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
+    struct operand* b = buildExprFromSyntax(ctx, partSntx(s, s->parts.len - 1));
+    if (a->type.unknown || b->type.unknown) return OperandBoolLiteral(kw); //reported where it was written
+    bool idA = a->isNullLiteral || a->type.structMAlloc || a->type.bType == BASETYPE_FUNC;
+    bool idB = b->isNullLiteral || b->type.structMAlloc || b->type.bType == BASETYPE_FUNC;
+    if (!idA || !idB || (a->isNullLiteral && b->isNullLiteral)) {
+        ErrMsgSemantic(kw, IS_NOT_REFERENCE);
+        return OperandBoolLiteral(kw);
+    }
+    if (!a->isNullLiteral && !b->isNullLiteral && !a->pendingLambda && !b->pendingLambda && !TypeIsSame(a->type, b->type)) {
+        ErrMsgSemantic(kw, IS_NOT_ONE_TYPE);
+        return OperandBoolLiteral(kw);
+    }
+    return OperandBinary(a, b, OPERATION_EQ, kw);
 }
 
 //M12/M6a/E32/S13b: "[alias.]Type.Case" naming a case of xt's enum - the alias chain resolved and the type found as any
@@ -10349,6 +10393,17 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
         return OperandBitcast(recvOp, bitsT, mTok);
     }
+    //P9: the atomic operations on an integer place - supplied by the compiler too
+    enum operation atomKind = suppliedAtomicMethod(recvType, mName);
+    if (atomKind != OPERATION_NONE) {
+        *reported = true;
+        bool allowedAt = ctx->allowFallibleCall;
+        ctx->allowFallibleCall = false;
+        struct list atArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
+        rejectDefaultArgs(atArgs);
+        ctx->allowFallibleCall = allowedAt;
+        return OperandAtomic(ctx->func, recvOp, atArgs, atomKind, mTok);
+    }
     //a field always wins - a method may not share its name (M19) - so "x.f(args)" on a field is E13b's call through
     //the value "x.f" gives, as "(x.f)(args)" is
     if (recvType.bType == BASETYPE_STRUCT && VarGetList(&recvType.vars, mName)) {
@@ -10439,10 +10494,13 @@ static char* unknownMethodMsg(struct operand* recv, struct token name) {
         struct type base = t;
         base.owner = NULL;
         base.name = (struct str){0};
-        if (VarGetMethod(NULL, strFromTok(name), base) || suppliedBitsMethod(base, strFromTok(name), &supplied)) {
+        if (VarGetMethod(NULL, strFromTok(name), base) || suppliedBitsMethod(base, strFromTok(name), &supplied)
+            || suppliedAtomicMethod(base, strFromTok(name)) != OPERATION_NONE) {
             return METHOD_NOT_INHERITED;
         }
     }
+    //P9: an atomic operation is a method of the integer types only
+    if (atomicMethodNamed(strFromTok(name)) != OPERATION_NONE && !TypeIsInt(t)) return ATOMIC_NOT_INTEGER;
     if (TypeIsNumeric(t) && fromBitsTarget(strFromTok(name))) return FROM_BITS_RECEIVER; //E33: not that float's width
     return UNKNOWN_METHOD;
 }
@@ -10507,36 +10565,6 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (firstPartOfType(s, SNTX_SCOPE_ARG) && nameIdens.len == 1
                 && numericPrimitiveBaseType(strFromTok(nameTok), &(enum baseType){0})) {
             ErrMsgSemantic(nameTok, SCOPE_ARG_NOT_ACCEPTED);
-        }
-        //P9: the atomic builtins, intercepted before the normal lookup so no declaration can shadow them
-        enum operation atomKind = OPERATION_NONE;
-        if (nameIdens.len == 1) {
-            struct str nm = strFromTok(nameTok);
-            if (StrCmp(nm, StrFromCStr("atomicLoad"))) atomKind = OPERATION_ATOMIC_LOAD;
-            else if (StrCmp(nm, StrFromCStr("atomicStore"))) atomKind = OPERATION_ATOMIC_STORE;
-            else if (StrCmp(nm, StrFromCStr("atomicAdd"))) atomKind = OPERATION_ATOMIC_ADD;
-            else if (StrCmp(nm, StrFromCStr("atomicSwap"))) atomKind = OPERATION_ATOMIC_SWAP;
-            else if (StrCmp(nm, StrFromCStr("atomicCas"))) atomKind = OPERATION_ATOMIC_CAS;
-        }
-        //E10: "same(a, b)" - identity, whatever Eq says
-        if (nameIdens.len == 1 && StrCmp(strFromTok(nameTok), StrFromCStr("same"))) {
-            struct list sArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
-            rejectDefaultArgs(sArgs);
-            if (sArgs.len != 2) { reportArgCount(sArgs, nameTok); return OperandBoolLiteral(nameTok); }
-            struct operand* sa = *(struct operand**)ListGetIdx(&sArgs, 0);
-            struct operand* sb = *(struct operand**)ListGetIdx(&sArgs, 1);
-            bool idA = sa->isNullLiteral || sa->type.structMAlloc || sa->type.bType == BASETYPE_FUNC;
-            bool idB = sb->isNullLiteral || sb->type.structMAlloc || sb->type.bType == BASETYPE_FUNC;
-            if (!idA || !idB) { ErrMsgSemantic(nameTok, SAME_NOT_REFERENCE); return OperandBoolLiteral(nameTok); }
-            return OperandBinary(sa, sb, OPERATION_EQ, nameTok);
-        }
-        if (atomKind != OPERATION_NONE) {
-            bool allowedAt = ctx->allowFallibleCall;
-            ctx->allowFallibleCall = false;
-            struct list atArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
-            rejectDefaultArgs(atArgs);
-            ctx->allowFallibleCall = allowedAt;
-            return OperandAtomic(atArgs, atomKind, nameTok);
         }
         //"int32(x)" etc. - the explicit numeric-conversion builtin (see the report) - intercepted the
         //same way "len" is, before the normal var/constructor lookup: a primitive type name is never a
@@ -10757,6 +10785,7 @@ struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
         }
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
         case SNTX_EXPR_IS: case SNTX_EXPR_AS: return buildIsAs(ctx, s);
+        case SNTX_EXPR_IS_SAME: return buildIsSame(ctx, s);
         case SNTX_EXPR_TEXT: return buildText(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);
         case SNTX_EXPR_PRIMARY: return buildPrimary(ctx, s);
@@ -12051,9 +12080,9 @@ static bool exprCanStandAsStatement(struct operand* op) {
         case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             return true;
         case OPERATION_SEQ: return op->isIncDec; //E31: an increment a type declares
-        //P9: every atomic builtin writes its target, which is exactly S3's own criterion. "atomicStore"
-        //has no value at all, and the other four are routinely wanted for the write rather than the value
-        //they return - a discarded "atomicAdd" is a counter bump, not dead code.
+        //P9: every atomic method but AtomicLoad writes its place, which is exactly S3's own criterion.
+        //"AtomicStore" has no value at all, and the other three are routinely wanted for the write rather than
+        //the value they return - a discarded "AtomicAdd" is a counter bump, not dead code.
         case OPERATION_ATOMIC_LOAD: //...except this one, which only reads
             return false;
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
@@ -12486,7 +12515,7 @@ static struct operand* fixedLocalInit(struct var* local, void* ctx) {
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
     //S8b: decided, if it can be, after this attempt - but one that does not check is the running program's, so the
     //attempt that follows reports what is wrong with it rather than deciding it from a value it cannot have
     noteLocalCond(ctx, firstPartOfType(s, SNTX_EXPR), ErrMsgGetNErrors() == errs ? cond : NULL);
@@ -12551,7 +12580,7 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     innerCtx->inLoop = true;
     if (condNode) {
         stmt.op = buildExprFromSyntax(innerCtx, condNode);
-        if (!OperandIsBool(stmt.op)) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
+        if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
     }
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
     struct list after = snapshotScopeBindings(innerCtx->scope);
@@ -12584,7 +12613,7 @@ static struct list forInBody(struct checkCtx* ctx, struct syntax* s, struct comp
     struct statement push = comprOpStmt(OPERATION_COMPR_PUSH, elem, kw);
     if (!spec->condNode) { ListAdd(&out, &push); return out; }
     struct operand* cond = buildExprFromSyntax(ctx, spec->condNode);
-    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
     finalizeOpLambdas(cond);
     struct statement st = (struct statement){0};
     st.sType = STATEMENT_IF;
@@ -13177,7 +13206,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
     struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
-    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
     struct syntax* postNode = firstPartOfType(s, SNTX_STMNT_ASSIGN);
     if (!postNode) postNode = firstPartOfType(s, SNTX_STMNT_EXPR);
 
@@ -13217,7 +13246,7 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
     stmt.op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(stmt.op)) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
     return stmt;
 }
 
@@ -14709,7 +14738,7 @@ static struct list assertRecs;
 
 struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(cond)) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
     struct assertRec r = { cond, ctx->bodyId, ctx->inTest };
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};

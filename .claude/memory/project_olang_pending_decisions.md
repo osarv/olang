@@ -35,12 +35,30 @@ design. Do what you want") - nothing to decide until a GUI is written.
    Default (in effect): private operators kept; lowercase eq/hash/str ordinary, ignored by ==/Map/$ (tfix's decision F).
    Rec: drop them (Go's fmt, Rust impls and Python dunders are all type-global; no mainstream language has
    module-private operators).
-**Decided 2026-10-09 (the user: "Yes, do both"), queued after the tfix/sfix merges (both touch buildIsAs and method
-resolution):** `same(a, b)` becomes `a is b` (identity when the right side names no case or type; a case/type on the
-right is the existing test, read through a reference); the five atomics become methods on the integer types
-(`n.AtomicAdd(1)`, `n.AtomicLoad()`...). With it, my call: D3a extended - a local or parameter may not reuse a
-type's name either (today `Circle := 3` beside `type Circle` compiles, which would make `x is Circle` ambiguous once
-`any Trait&` brings type tests back).
+2. (asked 2026-10-09, from the benchmarks) keep integer overflow wrapping (E6c)? It costs `nsw`: spectral-norm 1.4x
+   slower than C (`(i+j)*(i+j+1)/2` keeps a 3-instruction signed divide); `>> 1` or unsigned types avoid it. Default:
+   wrapping stays. Rec: keep - the alternative is C's undefined behaviour, which the evaluator could not reproduce
+   (K1) and the language has spent weeks removing; Rust (release) and Go pay the same cost.
+3. (asked 2026-10-09, from the benchmarks: nbody writes F64 on ten temporaries) relax D15 so `x := a - b` (any
+   expression whose type is determined; still not `null` or an untyped literal-only expression beyond today's rule)
+   declares with that type? Default: D15 as is. Rec: relax - the operands' types are visible and every mainstream
+   language infers here.
+4. (asked 2026-10-09, from the usage study) a local's reference permission: today a typed local is writable unless
+   its initializer is read-only, so `path String& = "x"` then `path = args[1]` (read-only) fails, and no read-only
+   local can be declared (D11a forbids `mut` on locals). Proposal: the written type decides, as for parameters and
+   fields - `x T& = ...` read-only, `x mut T& = ...` writable (that `mut` speaks about the referent; the binding is
+   always reassignable); `:=` copies the initializer's permission. Default: as today. Rec: yes.
+5. (asked 2026-10-09) a reassignable field holding a READ-ONLY reference cannot be written: a field's top `mut` means
+   both "reassignable" and "writable referent" (T25c), forcing `$x` copies (LRU value, Query.order). Options: (a)
+   `f mut String&` = reassignable + read-only, `f mut mut String&`-like spelling for both - ugly; (b) the top `mut`
+   on a field/global means the binding only and the reference's permission is written inside the type like an
+   element's (`f mut (mut String&)`); (c) leave it. Rec: decide together with 4 - make `mut` mean one thing per
+   position. Default: as today.
+6. (asked 2026-10-09) scripting: printing needs `try io.Print(...)` and every main `? io.IoError`. Add a prelude
+   `print`/`println` that aborts on a write failure (Rust's println! panics; Python's print raises)? Default: no.
+   Rec: yes - a failed write to stdout is not something a script handles.
+**Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
+`AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
 expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
 T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default

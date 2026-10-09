@@ -2530,7 +2530,7 @@ test "G8a: a variable introduced inside type-args" {
 #                              # is always a declared type (G8b), which is what keeps a typo from
 #                              # silently making the function generic
 
-# P9: the atomic builtins. Five of them, every one lowering to exactly one LLVM atomic instruction and
+# P9: the atomic operations, methods every integer type has. Five of them, every one lowering to exactly one LLVM atomic instruction and
 # every one sequentially consistent - there is no ordering argument, because relaxed orderings are the
 # easiest thing in systems programming to get subtly wrong and are purely additive if they are ever
 # wanted. They are the first synchronisation olang can express on its own rather than by calling pthread
@@ -2539,23 +2539,23 @@ test "G8a: a variable introduced inside type-args" {
 type Ctr struct(n I32) { v mut I32 = n }
 
 fn bumpAtomic(c mut Ctr&, times I32) {
-    for i in range times { atomicAdd(c.v, 1) }
+    for i in range times { c.v.AtomicAdd(1) }
 }
 
-test "P9: the five builtins, and what each returns" {
+test "P9: the five atomic methods, and what each returns" {
     x I32 = 0
-    atomicStore(x, 7)
-    assert atomicLoad(x) == 7
-    assert atomicAdd(x, 3) == 7        # the OLD value, as fetch-and-add
-    assert atomicLoad(x) == 10
-    assert atomicSwap(x, 99) == 10        # likewise the old value
-    assert atomicLoad(x) == 99
+    x.AtomicStore(7)
+    assert x.AtomicLoad() == 7
+    assert x.AtomicAdd(3) == 7        # the OLD value, as fetch-and-add
+    assert x.AtomicLoad() == 10
+    assert x.AtomicSwap(99) == 10        # likewise the old value
+    assert x.AtomicLoad() == 99
         # a strong compare-exchange returns what it found, so "== expected" IS the success condition -
         # which is also why it needs no second return value the language does not have
-    assert atomicCas(x, 99, 5) == 99        # found 99, so it swapped
-    assert atomicLoad(x) == 5
-    assert atomicCas(x, 99, 8) == 5        # found 5, not 99, so it did not
-    assert atomicLoad(x) == 5
+    assert x.AtomicCompareSwap(99, 5) == 99        # found 99, so it swapped
+    assert x.AtomicLoad() == 5
+    assert x.AtomicCompareSwap(99, 8) == 5        # found 5, not 99, so it did not
+    assert x.AtomicLoad() == 5
 }
 
 # the point of the whole feature: this is exact, where "c.v = c.v + 1" would lose updates and be a race
@@ -2571,17 +2571,52 @@ test "P9: an atomic counter across two tasks is exact" {
 test "P9: U8 and I64 targets" {
     b U8 = 0
     q I64 = 0
-    atomicAdd(b, 5)
-    atomicAdd(q, 5)
-    assert atomicLoad(b) == 5
-    assert atomicLoad(q) == 5
+    b.AtomicAdd(5)
+    q.AtomicAdd(5)
+    assert b.AtomicLoad() == 5
+    assert q.AtomicLoad() == 5
 }
 
-# rejected, and nameable only here:
-#   atomicAdd(f, 1.0)        # a float target - atomicity is a property of one machine word
-#   atomicAdd(g, 1)          # an immutable target, or any non-lvalue
-#   atomicAdd(x32, y64)      # a value argument of a different type - one instruction, no conversion
-#   atomicLoad(x)            # as a statement: it only reads, so it really is a discarded value
+# every integer type has them, and a declared type extending one inherits them (T29f); a field and an element are
+# places as a variable is; a value argument fits the receiver's type as any argument fits its parameter, so an I32
+# widens into an I64 receiver's (T6b) before the one instruction; and AtomicLoad reads a read-only place
+type AtHits extends I32
+
+fn atPeek(c Ctr&) I32 { return c.v.AtomicLoad() }
+
+test "P9: atomic methods on every integer type, an extending type, a field and an element" {
+    a I8 = 1
+    b I16 = 1
+    c U16 = 1
+    d U32 = 1
+    e U64 = 1
+    a.AtomicAdd(2)
+    b.AtomicAdd(2)
+    c.AtomicAdd(2)
+    d.AtomicAdd(2)
+    e.AtomicAdd(2)
+    assert a.AtomicLoad() == 3 and b.AtomicLoad() == 3 and c.AtomicLoad() == 3 and d.AtomicLoad() == 3
+    assert e.AtomicCompareSwap(3, 9) == 3 and e == 9
+    h AtHits = 1
+    assert h.AtomicAdd(2) == 1 and h == 3
+    small I32 = 5
+    big I64 = 0
+    big.AtomicAdd(small)
+    assert big == 5
+    xs := Array<I64>(2)
+    xs[1].AtomicAdd(7)
+    k Ctr& = Ctr(0)
+    assert k.v.AtomicSwap(4) == 0 and atPeek(k) == 4 and xs[1] == 7
+    v := big.AtomicLoad()        # D15: a method call, so ":=" reads its type
+    assert v == 5
+}
+
+# rejected (checks/cases/atomic*.olang):
+#   f.AtomicAdd(1.0)        # a float receiver - atomicity is a property of one machine word
+#   (x + 1).AtomicAdd(1)    # not a place - the operation acts on one storage location
+#   g.AtomicAdd(1)          # a read-only place - only AtomicLoad reads one
+#   x32.AtomicAdd(y64)      # a value argument that does not fit the receiver's type
+#   x.AtomicLoad()          # as a statement: it only reads, so it really is a discarded value
 
 # P8: the memory model, which is three edges and nothing else. These pass trivially on a correct
 # implementation and are here because a change that broke an edge would otherwise go unnoticed until it
@@ -2933,19 +2968,19 @@ test "':=' infers a slice's type from the slice expression" {
     assert inner.Len() == 2
 }
 
-# D15: an array's Len() and the atomic builtins that give a value are calls like any other, so ":=" reads their types
+# D15: an array's Len() and the atomic methods that give a value are calls like any other, so ":=" reads their types
 # off them - "n := a.Len()" was rejected while the same call on a List compiled. The global is computed while
 # compiling (K2), so the evaluator agrees with the run time on it.
 LenOfLiteral := I32[4, 5, 6, 7].Len()
 
-test "':=' infers from an array's Len() and from an atomic builtin" {
+test "':=' infers from an array's Len() and from an atomic method" {
     a := I32[1, 2, 3]
     n := a.Len()
     assert n == 3 and LenOfLiteral == 4
     c I64 = 5
-    old := atomicAdd(c, 2)
+    old := c.AtomicAdd(2)
     assert old == 5 and c == 7
-    now := atomicLoad(c)
+    now := c.AtomicLoad()
     assert now == 7
 }
 
@@ -7996,6 +8031,61 @@ test "E32: is and as on enum values" {
     assert IcToksBaked == icToks()
 }
 
+# E10c: "a is b" asks whether two references (or two function values) name one instance - identity, whatever Eq
+# says. What follows "is" is a value when it names no type and no case of one (a local never shares a type's name,
+# D3a), and "is not" negates either form. IdBaked is computed while compiling (K2), so the evaluator agrees with the
+# run time on identity.
+type IdNode struct(v I32, next mut IdNode&) {
+    v
+    next mut
+}
+fn (a IdNode&) Eq(b IdNode&) Bool { return a.v == b.v }        # equal by value - "is" never consults it
+fn (n IdNode&) Hash() I64 { return I64(n.v) }
+
+fn idDouble(x I32) I32 { return x * 2 }
+
+type IdExpr enum {
+    Lit(v I64)
+    Neg(e IdExpr&)
+    Nil
+}
+
+fn idCount() I32 {
+    t := 0
+    a IdNode& = IdNode(1, null)
+    b IdNode& = IdNode(1, null)
+    a.next = a
+    c IdNode& = a
+    if a is c { t += 1 }
+    if a is not b { t += 10 }                       # equal by Eq, yet two instances
+    if a == b and not (a is b) { t += 100 }
+    if a.next is a and a.next is not b { t += 1000 }
+    if b.next is null and null is b.next and a is not null { t += 10000 }
+    f fn(x I32) I32 = idDouble
+    g fn(x I32) I32 = f
+    if f is g { t += 100000 }
+    e IdExpr& = IdExpr.Neg(IdExpr.Lit(3))
+    l IdExpr& = e
+    if e is l and e is IdExpr.Neg and e is not IdExpr.Nil and not e is IdExpr.Lit { t += 1000000 }
+    return t
+}
+
+IdBaked := idCount()
+
+test "E10c: 'a is b' is identity and 'is not' its negation, while compiling and at run time" {
+    assert idCount() == 1111111 and IdBaked == idCount()
+    p IdNode& = IdNode(2, null)
+    q IdNode& = IdNode(2, null)
+    assert p == q and p is not q and not p is q        # "not" reads the whole "p is q" (E7a)
+    assert (p is p) == true and p is not q != false     # "is" binds as the comparisons do, tighter than "=="
+    xs := Array<I32>(3)
+    r Array<I32>& = xs
+    s Array<I32>& = xs
+    assert r is s and r is not null
+    n IdExpr& = null
+    assert n is null and n is not IdExpr.Nil           # a null reference holds no case (E32)
+}
+
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
     p := Pair<I32, I64>(1, 2)
     assert p.Second == 2
@@ -9047,7 +9137,7 @@ test "T25b: writable and read-only references, by type" {
 }
 
 # E10/E10a: "==" goes through a declared Eq, at every depth - a field, an element, an enum's payload, through a
-# reference (a null kept away from Eq), in a match and in "x in c"; same(a, b) is identity whatever Eq says.
+# reference (a null kept away from Eq), in a match and in "x in c"; "a is b" is identity whatever Eq says (E10c).
 # A mutable global makes every comparison below happen at run time; eqGlobal's are made while compiling (K2).
 type EqLabel struct(s String&) {
     s
@@ -9096,14 +9186,14 @@ test "E10a: == consults a declared Eq at every depth, while compiling and at run
     assert EqBaked
     s String& = eqText(EqLen)
     r String& = "ab"
-    assert s == r and s == "ab" and "ab" == s and s != "abc" and not same(s, r) and same(s, s)
+    assert s == r and s == "ab" and "ab" == s and s != "abc" and s is not r and s is s
     assert eqWords(s) == 1 and eqWords(eqText(1)) == 0
     n String& = null
     m String& = null
     assert n == m and n != s and s != n and n == null
     p EqLabel& = EqLabel(s)
     q EqLabel& = EqLabel("zz")
-    assert p == q and not same(p, q)
+    assert p == q and p is not q and not (p is q)
 }
 
 # E11c: "$" renders a type through its own Str - at the top level, inside another value, behind a reference -
@@ -10484,7 +10574,7 @@ fn evIdentity(n I64) String {
     x Array<I32>
     y Array<I32>
     none Array<I32>& = null
-    return $same(a, b) " " $(a == b) " " $same(c, d) " " $same(e, f) " " $same(a, g) " " $same(x[:], y[:]) " " $same(x[:], none)
+    return $(a is b) " " $(a == b) " " $(c is d) " " $(e is f) " " $(a is g) " " $(x[:] is y[:]) " " $(x[:] is none)
 }
 EvIdentityBaked String = evIdentity(2)
 test "E10: an array reference is the same as another with the same storage and the same length" {
@@ -10564,7 +10654,7 @@ test "C2e: a copy into fixed storage of its length, while compiling and at run t
 
 # T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
 # new instance each time one site was reached)
-fn evTwo(a String&, b String&) Bool { return same(a, b) }
+fn evTwo(a String&, b String&) Bool { return a is b }
 fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }
 fn evSites(n I64) String {
     l := List<String&>()
@@ -10586,11 +10676,11 @@ EvG fn(x I32) I32 = evTri
 EvSix I32 = EvG(2)
 EvVia I32 = evApply(EvG, 5)
 test "a function-typed global holds a function value, read, called and assigned as one" {
-    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and same(EvG, evTri)
+    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and EvG is evTri
     assert EvF(4) == 8 and evApply(EvF, 4) == 8
     k I32 = I32(evRun) + 6
     EvF = evTri
-    assert EvF(4) == 12 and same(EvF, evTri)
+    assert EvF(4) == 12 and EvF is evTri
     EvF = fn(x I32) I32 { return x + k }
     assert EvF(4) == 11
     EvF = evDbl
@@ -10664,7 +10754,7 @@ test "K1: a global reaching what a writable reference can change is not a compil
     EvHold.a[0] = 9
     assert evHeld(0) == 9 and EvHold.a[0] == 9
     EvHold.a[1] = 6
-    assert EvHold.b[0] == 6 and same(EvHold.b, EvHold.a[1:3])
+    assert EvHold.b[0] == 6 and EvHold.b is EvHold.a[1:3]
 }
 
 # K2b: globals sharing an instance, or a slice of one, share it in the program's data (each global's data was its own copy)
@@ -10679,13 +10769,13 @@ fn evIdr(n EvNode&) EvNode&n { return n }
 EvA EvNode& = evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
-EvSameAB Bool = same(EvA, EvB)
+EvSameAB Bool = EvA is EvB
 EvArr Array<I64>& = I64[1, 2, 3, 4]
 EvSl Array<I64>& = EvArr[1:3]
-EvSameSl Bool = same(EvSl, EvArr[1:3])
+EvSameSl Bool = EvSl is EvArr[1:3]
 test "K2b: globals sharing an instance or a slice of one share it in the program's data too" {
     assert EvSameAB and EvSameSl
-    assert same(EvA, EvB) and same(EvC, EvA) and same(EvSl, EvArr[1:3]) and EvSl[0] == 2
+    assert EvA is EvB and EvC is EvA and EvSl is EvArr[1:3] and EvSl[0] == 2
 }
 
 # E30/E27: a comparison chain re-evaluated inside its own Less (its cached operands were the outer chain's), and

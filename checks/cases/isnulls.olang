@@ -1,0 +1,5 @@
+# check: fail 'a is b' asks whether two references
+# E10c: two nulls have no type to be one instance of
+fn main() ? {
+    assert null is null
+}

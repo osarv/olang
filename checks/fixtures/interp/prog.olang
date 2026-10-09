@@ -1,6 +1,6 @@
 # B3e: a program -i runs as the built program runs - globals, std's maps and lists, text, an extern from libm, a
-# file written and read back through the C library, deferred code (S19), a tree of enums held by reference (T17d), and
-# main ending in an error nothing catches
+# file written and read back through the C library, deferred code (S19), a tree of enums held by reference (T17d), the
+# atomic methods (P9) and identity (E10c), and main ending in an error nothing catches
 import "std/io"
 import "std/os"
 
@@ -63,6 +63,13 @@ fn main() ? Oops + io.IoError + os.OsError {
     tree Expr& = Expr.Add(Expr.Add(Expr.Lit(1), Expr.Lit(2)), Expr.Neg(Expr.Add(Expr.Lit(3), Expr.Neg(Expr.Lit(4)))))
     try io.Print("tree " $tree " folds to " $fold(tree) "\n")
     try io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range 10 if x % 2 == 0] "\n")
+    hits I64 = 0
+    hits.AtomicAdd(5)
+    found := hits.AtomicCompareSwap(5, 7)
+    q P& = P(1, 2)
+    r P& = q
+    o P& = P(1, 2)
+    try io.Print("atomics " $found " " $hits.AtomicLoad() " identity " $(q is r) " " $(q is not o) "\n")
     os.Run("echo written > prog.txt")
     t := try os.ReadFile("prog.txt")
     try io.Print("read " $t.Trim() " " $(try risky(1) catch default -1) " " $(try risky(5) catch default -1) "\n")
