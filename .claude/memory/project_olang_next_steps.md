@@ -283,6 +283,11 @@ because what it finds about structure feeds the refactor.
   the follow-up flips it and migrates (recipe in the merge's HISTORY: keep each name's first `<X`, later `<X>` -> `X`;
   in a type item every listed name bare after the header; never the header). Known limit: a trait method returning
   `T&` (built) is not met by one returning `T&p` (borrowed).
+- 16:50 CEST: constgen pushed (verified on master), langb merged by me (conflicts in semantic.c/errmsg/SPEC/checks
+  resolved, verified) and pushed as a3ed507: M6b protocol privacy, D15 any settled type, print/println, ctordefault and
+  listzero (List needs no zero value; library errors reported at the program's use, B11). wt-tbare started (type
+  variables bare after <T>, with a re-runnable migration script; oann migrated by it later). Running: native, oann
+  transformers, oann settling, tbare. Next after tbare: the permissions batch.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
