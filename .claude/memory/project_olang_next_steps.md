@@ -158,7 +158,9 @@ because what it finds about structure feeds the refactor.
   may end with `]` on its own line; bare `{ }` blocks (scope ends early - no expression starts with `{`); a `for { }`
   with no break targeting it leaves (D10a), so no trailing `unreachable`; a shift amount may be any integer type;
   in `a << b` a literal `a` adapts to the target (`x I64 = 1 << s` silently shifted an I32 - a trap); `x := "abc" if c
-  else "no"` (E28/D15). Fuzzer (wt-fuzz ready) once CPU allows.
+  else "no"` (E28/D15); the evaluator performs atomics while compiling (K1 refuses them with no real reason - keep
+  run-time coverage in the P9 tests through mut-global inputs). Fuzzer (wt-fuzz ready) once CPU allows. 09:15: isatom
+  merged (b7e5fa4); errmsg resumed for phase 2.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
