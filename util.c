@@ -45,7 +45,7 @@ bool StrCmp(struct str a, struct str b) {
 
 void CheckAllocPtr(void* ptr) {
     if (!ptr) {
-        fputs(COLOR_FG_RED "ERROR: " COLOR_RESET "memory allocation failed\n", stderr);
+        fputs("olang: error: out of memory\n", stderr);
         exit(EXIT_FAILURE);
     }
 }
@@ -171,7 +171,8 @@ int MakeDirs(const char* path) {
 }
 
 void ErrorBugFound() {
-    fputs(COLOR_FG_RED "ERROR: bug found\n" COLOR_RESET, stderr);
+    fputs("olang: internal compiler error: a check inside the compiler failed - a bug in the compiler, not in the "
+          "program\n", stderr);
     exit(EXIT_FAILURE);
 }
 

@@ -1,4 +1,4 @@
-# check: fail unknown symbol
+# check: fail unexpected character '`'
 # a function body that fails to parse partway leaves a "}" closing nothing at the top level, which used to hang the parser
 fn f() {
     x := 1 ` 2

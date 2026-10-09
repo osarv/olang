@@ -1,4 +1,4 @@
-# check: fail -D X=1e400: out of range
+# check: fail -D X=1e400: beyond F64's range
 # flags: -D X=1e400
 # B10/L12b: a float build constant is an F64 no literal makes an infinity - the error used to name no file and no flag
 fn main() ? { }

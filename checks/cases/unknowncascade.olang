@@ -1,5 +1,5 @@
 # check: fail unknown name 'nope'
-# also: compilation failed with 4 error(s)
+# also: compilation failed with 4 errors
 # never: same type
 # never: must be a boolean
 # an unknown name stands for whatever it is used as, so each misspelling is one error - not also a mismatched

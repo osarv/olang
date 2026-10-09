@@ -1,6 +1,6 @@
 # check: fail this value's type doesn't match the target's declared type
 # T27: nor with payloads of other types, and a declared enum is never the same type as an anonymous one
-# also: compilation failed with 2 error(s)
+# also: compilation failed with 2 errors
 type E enum {
   A
   B

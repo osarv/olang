@@ -2,35 +2,139 @@
 #define ERRMSG_H
 #include "token.h"
 
-// ---- CLI ----
+struct type;
 
-#define NO_FILE_SPECIFIED "no file specified"
-#define EXPECTED_C_OR_T_FLAG "expected a mode first: -b (build), -c (compile one module), -t (test) or -i (interpret) (B1)"
-#define EXPECTED_ONE_COMPILE_FILE "-b and -c take exactly one file, and -i one file followed by the program's own arguments"
-#define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
-#define UNKNOWN_FLAG "unknown flag - every flag is one character: the modes -b -c -t -i, and the modifiers -r (race detector), -d (debug), -u (update olang.lock) and -D Name=value (B1)"
-#define NOT_A_REGULAR_FILE "not a regular file (is this a directory?)"
+//B11: every diagnostic is one row - "path:line:col: error[RULE]: message" - then the source line and a caret under
+//what it is about, and any notes as rows of their own ("path:line:col: note: ..."). RULE is the rule of the
+//specification the diagnostic applies, and "olang -e RULE" prints that rule's text (B11a): the long explanation lives
+//there, under the rule, and a message says what is wrong here, in a few words, and what to write instead where that is
+//obvious. Messages are lowercase, one line, with no period at the end.
+//
+//Each diagnostic is one entry below: its id, the rule it applies ("" for none - never an invented one) and its message.
+//A message's %-directives take the call's arguments, in order:
+//    %s  char*          inserted as it is
+//    %S  struct str     inserted as it is
+//    %n  struct token   as a reader sees it: 'text' in quotes, or end of line, or end of file
+//    %t  struct type*   the type as source writes it (I32, Array<U8>&, lib.Point)
+//    %d  int            %l  long long
+//    %c  char           escaped where it is no printable character (\t, \x80), no quotes
+//    %%  a '%'
+//checks/checks.olang holds every call to the number of arguments its message takes, and every rule to one the
+//specification states.
+#define DIAGNOSTICS(X) \
+    /* ---- the command line ---- */ \
+    X(ERR_USAGE,              "B1",   "nothing to do - write a mode and a file, as 'olang -b main.olang'") \
+    X(ERR_NOT_A_MODE,         "B1",   "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
+    X(ERR_MODE_ONE_FILE,      "B1",   "%s takes exactly one file") \
+    X(ERR_MODE_NEEDS_FILE,    "B1",   "%s needs a file") \
+    X(ERR_UNKNOWN_FLAG,       "B1",   "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -u -D") \
+    X(ERR_EXPLAIN_NEEDS_RULE, "B11a", "-e takes one rule, as 'olang -e B1'") \
+    X(ERR_NO_SPEC,            "B11a", "no specification at %s") \
+    X(ERR_NO_RULE,            "B11a", "the specification has no rule %s") \
+    X(ERR_DEFINE_MISSING,     "B10",  "-D needs Name=value after it") \
+    X(ERR_DEFINE_SHAPE,       "B10",  "-D takes Name=value, found '%s'") \
+    X(ERR_DEFINE_NOT_NAME,    "B10",  "-D %s=%s: the name is not an identifier") \
+    X(ERR_DEFINE_TWICE,       "B10",  "-D %s=%s: defined twice") \
+    X(ERR_DEFINE_BAD_NUMBER,  "B10",  "-D %s=%s: not a number - '0x' and '0b' take digits of their own base") \
+    X(ERR_DEFINE_INT_RANGE,   "B10",  "-D %s=%s: beyond 64 bits") \
+    X(ERR_DEFINE_NEG_RANGE,   "B10",  "-D %s=%s: below I64's minimum") \
+    X(ERR_DEFINE_FLOAT_RANGE, "B10",  "-D %s=%s: beyond F64's range") \
+    X(ERR_DEFINE_BUILTIN,     "B10a", "-D cannot redefine the built-in constant %s") \
+    /* ---- files and the toolchain ---- */ \
+    X(ERR_CANNOT_OPEN,        "",     "cannot open this file") \
+    X(ERR_NOT_REGULAR,        "",     "not a regular file") \
+    X(ERR_IS_DIRECTORY,       "M1",   "a directory - a module is one .olang file") \
+    X(ERR_NO_MAIN,            "B4",   "no main function - a program starts at 'fn main() ? { }'") \
+    X(ERR_NO_CLANG,           "",     "clang not found on PATH - install clang-20 (the IR is in %s)") \
+    X(ERR_CLANG_FAILED,       "",     "clang could not compile %s") \
+    X(ERR_LINK_FAILED,        "",     "linking %s failed") \
+    /* ---- characters and tokens ---- */ \
+    X(ERR_UNKNOWN_CHAR,       "L16",  "unexpected character '%c'") \
+    X(ERR_NON_ASCII,          "L1",   "non-ASCII byte '%c' - olang source is ASCII") \
+    X(ERR_CARRIAGE_RETURN,    "L3",   "carriage return - save the file with LF line endings") \
+    X(ERR_NUL_BYTE,           "L1",   "NUL byte in the source - is this a text file?") \
+    X(ERR_UNCLOSED_COMMENT,   "L4a",  "unterminated block comment - '##' closes it") \
+    X(ERR_UNCLOSED_STRING,    "L14",  "unterminated string literal") \
+    X(ERR_STRING_NEWLINE,     "L14",  "string literal not closed on its line - write \\n for a newline") \
+    X(ERR_UNCLOSED_CHAR,      "L13",  "unterminated character literal") \
+    X(ERR_CHAR_NEWLINE,       "L13",  "character literal not closed on its line") \
+    X(ERR_EMPTY_CHAR,         "L13",  "empty character literal") \
+    X(ERR_LONG_CHAR,          "L13",  "character literal holds more than one character - text is written in \"\"") \
+    X(ERR_BAD_ESCAPE,         "L15",  "unknown escape '\\%c' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") \
+    X(ERR_HEX_NO_DIGITS,      "L10a", "'0x' needs hexadecimal digits") \
+    X(ERR_BIN_NO_DIGITS,      "L10c", "'0b' needs binary digits") \
+    X(ERR_HEX_DIGIT,          "L10a", "'%c' is not a hexadecimal digit") \
+    X(ERR_BIN_DIGIT,          "L10c", "'%c' is not a binary digit") \
+    X(ERR_DIGIT_SEPARATOR,    "L10b", "'_' in a number must be followed by a digit") \
+    X(ERR_POINT_NO_DIGIT,     "L12",  "a decimal point needs a digit after it") \
+    X(ERR_TWO_POINTS,         "L12",  "a number has at most one decimal point") \
+    /* ---- syntax ---- */ \
+    X(ERR_EXPECTED,           "",     "expected %s, found %n") \
+    X(ERR_NESTING,            "L21",  "nested more than %d levels deep - split it into locals or functions") \
+    X(ERR_SEPARATOR_COMMA,    "T17, T19, C2", "entries are separated by line ends, not commas") \
+    X(ERR_VAR_LIST_COUNT,     "D12b", "%d names need as many values, found %d") \
+    X(ERR_ERROR_AFTER_QUESTION, "R15", "'?' alone is the default error - write '?', or name the types: '? IoError'") \
+    X(ERR_VALUE_AFTER_EQ,     "D12",  "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \
+    /* ---- top-level conditions (each message takes the token it is about) ---- */ \
+    X(ERR_COND_NAME,          "B9a",  "%n is not a build constant or an immutable global of this module") \
+    X(ERR_COND_MUTABLE,       "B9a",  "%n is mutable, so a top-level condition cannot read it") \
+    X(ERR_COND_GLOBAL_INIT,   "B9a",  "%n is not computed from literals and build constants alone") \
+    X(ERR_COND_CYCLE,         "B9a",  "%n is defined in terms of itself") \
+    X(ERR_COND_TYPES,         "B9",   "%n cannot combine these values") \
+    X(ERR_COND_NO_MEET,       "T6b",  "%n: these numbers' types do not meet - convert one, as I64(n)") \
+    X(ERR_COND_NOT_BOOL,      "B9",   "the condition beginning %n is not a Bool")
 
-// ---- tokenizer ----
+enum diag {
+    DIAG_NONE, //no diagnostic - what a function that may find one returns when it found none
+#define DIAG_ENUM(id, rule, fmt) id,
+    DIAGNOSTICS(DIAG_ENUM)
+#undef DIAG_ENUM
+    DIAG_COUNT
+};
 
-#define NESTING_TOO_DEEP "this nests too deeply - more than 20000 levels of parentheses, blocks and operators applied one to another; split it, through locals or functions of its own"
-#define UNKNOWN_SYMBOL "unknown symbol - this character begins no token (L16); olang source is ASCII (L1)"
-#define CARRIAGE_RETURN "carriage return - save the file with LF line endings: only a newline ends a line (L3, L5)"
-#define NUL_BYTE "a NUL byte outside a string or character literal - is this a text file? (L1)"
-#define UNTERMINATED_STRING_LITERAL "this string literal is never closed - the file ends first (L14)"
-#define UNTERMINATED_CHAR_LITERAL "this character literal is never closed - the file ends first (L13)"
-#define INVALID_ESCAPE_CHAR "invalid escape character"
-#define NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL "newline before closing of character literal"
-#define NEWLINE_IN_STRING_LITERAL "a string literal closes on its own line - write \\n for a newline in the text (L14)"
-#define UNTERMINATED_BLOCK_COMMENT "a block comment opened with ## is never closed - another ## ends it (L4a)"
-#define EMPTY_CHAR_LITERAL "empty character literal"
-#define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
-#define BIN_LITERAL_NO_DIGITS "a binary literal needs at least one digit after '0b'"
-#define NUMBER_SEPARATOR_PLACEMENT "a '_' in a numeric literal must be followed by another digit - so it may not end the literal, and may not sit beside the '.' or the exponent's 'e'"
-#define RADIX_LITERAL_BAD_DIGIT "this character is not a digit of the literal's own base - a '0b' literal takes only 0 and 1, and a '0x' literal only 0-9, a-f and A-F"
-#define HEX_LITERAL_NO_DIGITS "a hexadecimal literal needs at least one digit after '0x'"
-#define MULTIPLE_DECIMAL_POINTS "multiple decimal points"
-#define LAST_WAS_DECIMAL_POINT "float literals must not end in a decimal point"
+//an error about the token at
+void Err(struct token at, enum diag d, ...);
+//the same, counted as a syntax error too - which may have hidden a declaration, so a missing one is not reported
+void ErrSyntax(struct token at, enum diag d, ...);
+//an error about the whole of a file
+void ErrFile(struct str file, enum diag d, ...);
+//an error that ends the compilation: what is already certain is shown, then this - about the file, or with no
+//location where file is empty
+void ErrFatal(struct str file, enum diag d, ...);
+//a mistake in the command line itself: reported, and the process ends - no compilation began
+void ErrUsage(enum diag d, ...);
+//a note on the error just reported, about the token at
+void Note(struct token at, enum diag d, ...);
+//B11a: prints rule's text from the specification; the process's exit status
+int ErrMsgExplain(char* rule);
+//code, a terminal colour, where diagnostics go to a terminal, and "" where they do not (a file, a pipe, an agent)
+const char* ErrMsgColor(const char* code);
+
+int ErrMsgGetNErrors();
+int ErrMsgGetNSyntaxErrors();
+void ErrMsgFinishCompilation();
+//every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
+void ErrMsgPushContext(struct token tok, char* msg);
+void ErrMsgPopContext(void);
+//K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
+void ErrMsgBufferStart(void);
+void ErrMsgBufferFlush(void);
+void ErrMsgBufferDiscard(void);
+void ErrMsgMuteStart(void);
+void ErrMsgMuteEnd(void);
+bool ErrMsgMuted(void); //inside a muted stretch: nothing reported now would be seen
+void ErrMsgFlush(void);
+//a crash of the calling thread is reported rather than silent, even after a stack overflow - call once per thread the
+//compiler runs on, before it does anything else
+void ErrMsgInstallCrashHandler(void);
+//B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
+void ErrMsgSetInterpreting(bool on);
+
+//---- until every call site names a diagnostic: a message written out whole, its trailing "(RULE)" taken as its rule --
+void ErrMsgFatal(char* errMsg);
+void ErrMsgSemantic(struct token tok, char* errMsg);
+void ErrMsgSemanticNote(struct token tok, char* msg);
+void ErrMsgFile(struct str fileName, char* errMsg);
 
 // ---- names, visibility, declarations ----
 
@@ -61,14 +165,12 @@
 #define UNKNOWN_ERROR "unknown error"
 #define UNKNOWN_VAR "unknown variable"
 #define UNKNOWN_SCOPE "a reference marker names a variable that lives where the reference should (O4a) - an earlier parameter, any parameter from the result type, a local, parameter or global in scope, or a constructor's parameter or earlier field - and no such variable is visible here. A scope has no name of its own"
-#define SCOPE_NOT_ALLOWED_HERE "'scope' may only be used as a function parameter's type"
 #define UNKNOWN_NAMESPACE "unknown namespace"
 #define UNKNOWN_STRUCT_MEMBER "unknown struct member"
 #define TYPE_IS_PRIVATE "this type is private - only a capitalized name is visible outside its own module"
 #define MEMBER_IS_PRIVATE "this struct member is private - only a capitalized name is visible outside the module its type was declared in (M6a)"
 #define CHOICE_CASE_IS_PRIVATE "this enum case is private - only a capitalized name is visible outside the module its enum type was declared in (M6a)"
 #define ERROR_WORD_IS_PRIVATE "this error word is private - only a capitalized name is visible outside the module its error type was declared in (M6a)"
-#define METHOD_SHADOWS_FIELD "this type already has a field of this name, so 'x.f' would mean two things - a method may not share a name with a field of the type it is declared on"
 #define METHOD_IS_PRIVATE "this method is private - only a capitalized method is callable outside the module that declared it (M6)"
 #define VAR_IS_PRIVATE "this variable is private - only a capitalized name is visible outside its own module"
 #define IMPORT_IS_PRIVATE "this import is private - only a capitalized alias is visible through re-export (e.g. 'import Sh \"shared\"', not 'import sh \"shared\"')"
@@ -114,14 +216,7 @@
 #define DEFAULT_IN_CATCH_STATEMENT "a default gives the try a value, and a try written as a statement has nowhere for a value to go (R9b)"
 #define CATCH_AFTER_CATCH_ALL "a catch with no error types takes every error left, so no clause can come after it (R9b)"
 #define CATCH_CLAUSE_UNREACHABLE "every error this clause names is already taken by an earlier clause, so it can never run (R9b)"
-#define BUILD_COND_NAME "a top-level condition decides which declarations exist, so it may use only literals, build constants (-D names, TargetOs, TargetArch, DebugBuild, RaceBuild, TestBuild) and immutable globals this module declares outside any conditional (B9a)"
-#define BUILD_COND_MUTABLE "a mutable global has no value a build can decide on, so a top-level condition cannot use it (B9a)"
-#define BUILD_COND_GLOBAL_INIT "a global a top-level condition uses must itself be computed from literals, build constants and such globals - a call cannot be evaluated before the module's declarations are settled (B9a)"
-#define BUILD_COND_CYCLE "these globals are defined in terms of each other, so a top-level condition cannot evaluate them (B9a)"
-#define BUILD_COND_TYPES "these values cannot be combined this way in a top-level condition (B9)"
-#define BUILD_COND_NO_MEET "these numbers' types do not meet (T6b): an integer of a type of its own never meets a float, and two integers meet only where one's type flows into the other's - convert one, as in F64(x) or I64(n)"
 #define BUILD_COND_NOT_BOOL "a top-level condition must be true or false (B9)"
-#define BUILD_COND_SHAPE "a top-level condition supports literals, build constants, parentheses, unary -, * / % + -, the comparisons, not, and, or - and whatever compile-time evaluation can decide (B9, B9c)"
 #define BUILD_CONST_REDECLARED "this name is a build constant (-D or built in), visible in every module, so it cannot be declared again (B10)"
 #define BUILD_COND_UNSEEN "this top-level condition uses something that does not exist outside the branches being decided, or does not check - a condition may use only declarations that exist whatever it decides (B9c)"
 #define BUILD_COND_TOO_DEEP "top-level conditions decide branches holding further conditions too many levels deep (B9c)"
@@ -133,9 +228,7 @@
 #define METHOD_AMBIGUOUS "two imported modules each declare a method of this name on this built-in type - import only the one you mean here, or call it from a module that imports only that one (M22)"
 #define DESTRUCT_TYPE_MUST_BE_REFERENCE "this type declares a 'destruct' block, so it is reference-only - write it with a reference marker ('&' or '&x'). A destructor releases something when the scope holding the instance closes, and only a reference carries the scope tag that lets that lifetime be checked; a by-value copy carries none, so it could still name the released resource afterwards with nothing able to see it"
 #define NAMED_SCOPE_ON_ELEMENT "only the outermost level of a type may name a variable in its marker - this marker sits nested inside a larger value, and a nested reference always belongs to its container's own scope, never an independent one, so it could never be honoured; write a bare '&' here"
-#define TYPE_VAR_SHADOWS_TYPE "a type variable may not be named after a type that already exists - '<Point>' would read as parameterizing over something already concrete"
 #define TYPE_VAR_NOT_INFERABLE "this type variable appears only in the return type or the error list, so nothing at a call site could determine it - use it in at least one parameter's type"
-#define TYPE_VAR_IN_ERROR_LIST "a generic function's error set is the same for every instantiation, so it may not mention a type variable"
 #define UNKNOWN_TYPE_VAR "unknown type variable - a generic type's parameters are declared in its own '<...>' list, after the type name"
 #define TYPE_ARGS_ON_NON_GENERIC "this type is not generic, so it takes no type arguments"
 #define CTOR_TYPE_ARGS_NOT_INFERABLE "this generic type's arguments can't be inferred from the constructor's arguments - a type parameter no constructor parameter mentions, or two arguments for one parameter that disagree. Write them: 'Name<I32>(...)' (G10a/G10c)"
@@ -189,8 +282,6 @@
 #define CONSTRAINT_NOT_INTERFACE "a constraint on a type variable is a trait the variable's type must satisfy (G19)"
 #define CONSTRAINT_DISAGREES "this type variable is constrained differently elsewhere in the declaration - one constraint per variable (G19)"
 #define INCDEC_IN_EXPRESSION "'++' and '--' are statements of their own, never part of an expression - write 'x++' on its own and use x after it (S3a)"
-#define SEPARATOR_COMMA "these entries are separated by line ends, one per line - not by commas (T17/T19/C2)"
-#define VAR_LIST_COUNT "a declaration of several names takes one value per name, or none (D12b)"
 #define ASSIGN_LIST_COUNT "an assignment of several targets takes one value per target, or one call giving that many results (S4c)"
 #define COND_BRANCH_TYPES "the two values of 'a if c else b' must have the same type - a literal adapts to the other, nothing else is converted (E28)"
 #define MEMBERSHIP_NO_METHOD "'x in c' calls c.Has(x), or c.Contains(x) when x is the collection's own type - this collection has no such method (E29)"
@@ -336,36 +427,6 @@ constructor, in a position whose parameter declares a default value"
 // ---- external functions ----
 
 #define EXTERN_TYPE_NOT_ALLOWED "an 'extern fn' parameter/return type must be a numeric primitive (U8, I32, I64, F32, F64) or an array of one - no structs, references, or error unions cross the C ABI boundary"
-#define EXTERN_FUNC_NOT_FALLIBLE "an 'extern fn' call is never fallible - it has no error union, so it can't be the operand of try/try-catch"
-
-int ErrMsgGetNErrors();
-void ErrMsgFinishCompilation();
-void ErrMsgFatal(char* errMsg);
-void ErrMsgUnableToOpenFile(struct str fileName);
-void ErrMsgNotARegularFile(struct str fileName);
-void ErrMsgUnexpectedToken(struct token found, char* expected);
-void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
-void ErrMsgSemantic(struct token tok, char* errMsg);
-void ErrMsgSemanticNote(struct token tok, char* msg);
-//every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
-void ErrMsgPushContext(struct token tok, char* msg);
-void ErrMsgPopContext(void);
-//K4: hold diagnostics back, then print them (Flush) or drop them and their count (Discard)
-void ErrMsgBufferStart(void);
-void ErrMsgBufferFlush(void);
-void ErrMsgBufferDiscard(void);
-void ErrMsgMuteStart(void);
-void ErrMsgMuteEnd(void);
-bool ErrMsgMuted(void); //inside a muted stretch: nothing reported now would be seen
-void ErrMsgFile(struct str fileName, char* errMsg);
-void ErrMsgSyntax(struct token tok, char* errMsg);
-int ErrMsgGetNSyntaxErrors();
-void ErrMsgFlush(void);
-//a crash of the calling thread is reported rather than silent, even after a stack overflow - call once per thread the
-//compiler runs on, before it does anything else
-void ErrMsgInstallCrashHandler(void);
-//B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
-void ErrMsgSetInterpreting(bool on);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
 #define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text extends Array<Char>') and give that methods (M19d)"

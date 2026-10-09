@@ -261,7 +261,7 @@ test "-t runs every file it can, whatever another one is" {
     os.Run("cp checks/fixtures/ttolerant/* " $os.Quote(dir) " && mkdir " $os.Quote($dir "/adir"))
     assert sh(dir, "\"$OLANG\" -t nosuch.olang t1.olang adir t2.olang > out.txt 2>&1") != 0
     assert outOf(dir).Contains("ok - one") and outOf(dir).Contains("ok - two") or failed("-t stopped early", dir)
-    assert outOf(dir).Contains("nosuch.olang") and outOf(dir).Contains("a module is a file") or failed("-t reports", dir)
+    assert outOf(dir).Contains("nosuch.olang: error: cannot open this file") and outOf(dir).Contains("adir: error[M1]: a directory") or failed("-t reports", dir)
 }
 
 # B3a: each listed file is built in a process of its own, so the compiler ending on one - here a crash, forced as the
@@ -306,7 +306,7 @@ test "a program of many long-named modules links" {
 test "diagnostics are on one stream, and a crash says so" {
     dir := fresh("diag")
     assert sh(dir, "\"$OLANG\" -race x.olang > out.txt 2> err.txt") != 0
-    assert outOf(dir).Contains("-race: unknown flag") and sh(dir, "test ! -s err.txt") == 0 or failed("unknown flag", dir)
+    assert outOf(dir).Contains("olang: error[B1]: unknown flag '-race'") and sh(dir, "test ! -s err.txt") == 0 or failed("unknown flag", dir)
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
     # (the status is kept in a file, so the shell that saw the crash is not the one that reports it)
@@ -324,7 +324,7 @@ test "a directory groups files and is never a module" {
     assert sh(dir, "\"$OLANG\" -t pkg/one.olang > out.txt 2>&1") == 0 or failed("-t on a file in a directory", dir)
     assert outOf(dir).Contains("1 passed")
     assert sh(dir, "\"$OLANG\" -t pkg > out.txt 2>&1") != 0
-    assert outOf(dir).Contains("a module is a file")
+    assert outOf(dir).Contains("pkg: error[M1]: a directory")
     assert sh(dir, "\"$OLANG\" -c pkg/three.olang > out.txt 2>&1") != 0
     assert outOf(dir).Contains("unknown")
 }
@@ -527,7 +527,7 @@ test "nesting is bounded with a diagnostic, never a crash" {
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 25000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
     assert sh(dir, "\"$OLANG\" -c deep.olang > out.txt 2>&1") != 0
-    assert outOf(dir).Contains("this nests too deeply") or failed("25000 parentheses", dir)
+    assert outOf(dir).Contains("error[L21]: nested more than 20000 levels deep") or failed("25000 parentheses", dir)
     assert outOf(dir).Contains("compilation failed with 1 error") or failed("25000 parentheses, one error", dir)
 }
 
@@ -590,4 +590,150 @@ test "the type checker's review fixes, across modules" {
     assert oneError(dir, "privmethod", "this method is private")
     assert oneError(dir, "privtype", "this type is private")
     assert oneError(dir, "lambdaalias", "this name is already an import alias")
+}
+
+# B11: what the diagnostics are held to. Every call passes as many arguments as its message's directives take - a wrong
+# count is undefined behaviour in C's varargs, which nothing else would catch - and every rule a diagnostic names is one
+# the specification states, so "olang -e RULE" finds it
+
+# the index of the quote closing the C string or character literal whose opening quote is at open
+fn cLiteralEnd(t String&, open I64) I64 {
+    i I64 = open + 1
+    for i < t.Len() {
+        if t[i] == '\\' {
+            i = i + 2
+        } else if t[i] == t[open] {
+            return i
+        } else {
+            i++
+        }
+    }
+    return t.Len()
+}
+
+# how many arguments a message takes: its %-directives, "%%" aside
+fn directiveCount(fmt String&) I64 {
+    n := 0
+    i := 0
+    for i < fmt.Len() - 1 {
+        if fmt[i] == '%' {
+            if fmt[i + 1] != '%' { n++ }
+            i = i + 2
+        } else {
+            i++
+        }
+    }
+    return n
+}
+
+fn isIdentChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# the call whose "(" is at open: where its diagnostic id is (start and end; -1 when no argument is one) and how many
+# arguments follow it - read past nested brackets and C string and character literals
+fn callShape(t String&, open I64) (I64, I64, I64) {
+    idStart, idEnd, after := I64(-1), I64(-1), I64(0)
+    depth := 0
+    argStart I64 = open + 1
+    i I64 = open + 1
+    for i < t.Len() {
+        c := t[i]
+        if c == '"' or c == '\'' {
+            i = cLiteralEnd(t, i) + 1
+            continue
+        }
+        closes Bool = (c == ')' or c == ']' or c == '}') and depth == 0
+        if closes or (c == ',' and depth == 0) {
+            s, e := argStart, i
+            for s < e and t[s].IsSpace() { s++ }
+            for e > s and t[e - 1].IsSpace() { e-- }
+            if idStart >= 0 {
+                if e > s { after++ }
+            } else if t[s:e].StartsWith("ERR_") or t[s:e].StartsWith("NOTE_") {
+                whole := true
+                for k in range s, e { whole = whole and isIdentChar(t[k]) }
+                if whole { idStart, idEnd = s, e }
+            }
+            argStart = i + 1
+            if closes { break }
+        } else if c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == ')' or c == ']' or c == '}' {
+            depth--
+        }
+        i++
+    }
+    return idStart, idEnd, after
+}
+
+# the C string literal starting at the first quote at or after from, and where it ends
+fn literalAfter(t String&, from I64) (I64, I64) {
+    open I64 = from + t[from:].FindByte('"')
+    return open + 1, cLiteralEnd(t, open)
+}
+
+test "every diagnostic's call fits its message, and every rule it names is in the specification" {
+    table := try os.ReadFile("errmsg.h") catch default ""
+    spec := try os.ReadFile("spec.md") catch default ""
+    assert table.Len() > 0 and spec.Len() > 0
+    bad := 0
+    entries := 0
+    # each entry's rules - "L10a, L10c" names two
+    rest String& = table
+    for {
+        at := rest.Find("    X(")
+        if at < 0 { break }
+        rs, re := literalAfter(rest, at)
+        rules := rest[rs:re]
+        for rules.Len() > 0 {
+            comma := rules.Find(", ")
+            end I64 = rules.Len() if comma < 0 else comma
+            r := rules[:end]
+            if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which spec.md does not state\n") catch { }
+                bad++
+            }
+            rules = rules[end:] if comma < 0 else rules[end + 2:]
+        }
+        entries++
+        rest = rest[re:]
+    }
+    assert entries > 0
+    # each call naming a diagnostic, in every source file
+    dir := fresh("diags")
+    os.Run("ls *.c > " $os.Quote($dir "/sources.txt"))
+    list := try os.ReadFile($dir "/sources.txt") catch default ""
+    calls := 0
+    for name in list.Split("\n") {
+        if name.Len() == 0 { continue }
+        src := try os.ReadFile(name) catch default ""
+        for fname in String&["Err(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
+            from := I64(0)
+            for {
+                hit := src[from:].Find(fname)
+                if hit < 0 { break }
+                at I64 = from + hit
+                from = at + fname.Len()
+                if at > 0 and isIdentChar(src[at - 1]) { continue }
+                s, e, after := callShape(src, at + fname.Len() - 1)
+                if s < 0 { continue }
+                id := src[s:e]
+                entry := table.Find("    X(" $id ",")
+                if entry < 0 {
+                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch { }
+                    bad++
+                    continue
+                }
+                _, re := literalAfter(table, entry)
+                fs, fe := literalAfter(table, re + 1)
+                want := directiveCount(table[fs:fe])
+                if want != after {
+                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n") catch { }
+                    bad++
+                }
+                calls++
+            }
+        }
+    }
+    assert calls > 0
+    assert bad == 0
 }
