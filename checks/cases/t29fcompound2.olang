@@ -1,0 +1,8 @@
+# check: fail this type does not extend its base
+# T29f/S4: and two of it in a compound assignment have no built-in operator, as in "p = p + q"
+type Pct I32
+fn main() ? {
+  p Pct = Pct(5)
+  q Pct = Pct(6)
+  p += q
+}

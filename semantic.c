@@ -11105,6 +11105,24 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
 //held in hidden locals so each is evaluated once
 static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, struct operand* b, struct token opTok,
                                      bool inChain);
+
+//S4/E31: the binary operator a compound assignment applies - "v += w" is "v = v + w", built as that "+" is
+static enum tokenType compoundBinTokType(enum operation compoundOp) {
+    switch (compoundOp) {
+        case OPERATION_ADD: return TOK_ADD;
+        case OPERATION_SUB: return TOK_SUB;
+        case OPERATION_MUL: return TOK_MUL;
+        case OPERATION_DIV: return TOK_DIV;
+        case OPERATION_MOD: return TOK_MOD;
+        case OPERATION_BTWSE_AND: return TOK_BTWSE_AND;
+        case OPERATION_BTWSE_OR: return TOK_BTWSE_OR;
+        case OPERATION_BTWSE_XOR: return TOK_BTWSE_XOR;
+        case OPERATION_BTSFT_L: return TOK_BTSFT_L;
+        case OPERATION_BTSFT_R: return TOK_BTSFT_R;
+        default: return TOK_NONE;
+    }
+}
+
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
     struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
@@ -11135,19 +11153,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
         struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok) : operatorCall(ctx, base, idx, atName, opTok);
         if (!cur) return (struct statement){0}; //reported
         struct token binTok = opTok;
-        switch (compoundOp) {
-            case OPERATION_ADD: binTok.type = TOK_ADD; break;
-            case OPERATION_SUB: binTok.type = TOK_SUB; break;
-            case OPERATION_MUL: binTok.type = TOK_MUL; break;
-            case OPERATION_DIV: binTok.type = TOK_DIV; break;
-            case OPERATION_MOD: binTok.type = TOK_MOD; break;
-            case OPERATION_BTWSE_AND: binTok.type = TOK_BTWSE_AND; break;
-            case OPERATION_BTWSE_OR: binTok.type = TOK_BTWSE_OR; break;
-            case OPERATION_BTWSE_XOR: binTok.type = TOK_BTWSE_XOR; break;
-            case OPERATION_BTSFT_L: binTok.type = TOK_BTSFT_L; break;
-            case OPERATION_BTSFT_R: binTok.type = TOK_BTSFT_R; break;
-            default: binTok.type = TOK_NONE; break;
-        }
+        binTok.type = compoundBinTokType(compoundOp);
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
     }
     if (derived) {
@@ -11186,21 +11192,8 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct operand* value = rhs;
     if (isCompound) {
-        //E31: "v += w" is "v = v + w", through the operator v's type declares when it declares one
-        const char* cap = NULL;
-        switch (compoundOp) {
-            case OPERATION_ADD: cap = "Plus"; break;
-            case OPERATION_SUB: cap = "Minus"; break;
-            case OPERATION_MUL: cap = "Mul"; break;
-            case OPERATION_DIV: cap = "Div"; break;
-            case OPERATION_MOD: cap = "Rem"; break;
-            case OPERATION_BTWSE_AND: cap = "BitAnd"; break;
-            case OPERATION_BTWSE_OR: cap = "BitOr"; break;
-            case OPERATION_BTWSE_XOR: cap = "BitXor"; break;
-            case OPERATION_BTSFT_L: cap = "ShiftLeft"; break;
-            case OPERATION_BTSFT_R: cap = "ShiftRight"; break;
-            default: break;
-        }
+        //E31/T29f: "v += w" is "v = v + w", built as that "+" is - through the operator v's type declares when it
+        //declares one, and a declared number that does not extend its base has no built-in one making itself
         //S4: the place is evaluated once - the read inside the value is a copy of the target that reads the place the
         //statement computed, rather than the target itself, which evaluated its index twice and which the meeting rule
         //(T6b) could rewrite into a conversion in place, leaving the statement storing through a non-place
@@ -11213,9 +11206,9 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             ListAddList(&cur->scopeBindings, target->scopeBindings);
         }
         cur->placeOf = target;
-        const char* nm = cap ? operatorFor(ctx, target->type, cap, opTok) : NULL;
-        if (nm) value = operatorCall(ctx, cur, rhs, nm, opTok);
-        else value = OperandBinary(cur, rhs, compoundOp, opTok);
+        struct token binTok = opTok;
+        binTok.type = compoundBinTokType(compoundOp);
+        value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
         //"b += x" is "b = b + x", so the sum must fit b as an assignment's value does - with "x" an I32 and "b" a U8
         //the sum is an I32 (T6b) and does not
         reportTypeFit(OperandFitsType(ctx->func, value, target->type), opTok);
