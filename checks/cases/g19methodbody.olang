@@ -2,11 +2,10 @@
 # also: compilation failed with 1 error
 # never: has no method 'Hash'
 # G19: a method of an instantiation whose constraints were not met is not checked either - it would only repeat the one
-# error inside the generic's own code (std/map's bucketOf calling key.Hash())
-import "std/map"
+# error inside the generic's own code (the prelude Map's bucketOf calling key.Hash())
 type K struct(x F64) { x }
 fn main() ? {
-    m := map.Map<K, I32>()
+    m := Map<K, I32>()
     m.Put(K(1.0), 2)
     assert m.Len() == 1
 }

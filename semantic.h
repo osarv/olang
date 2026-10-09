@@ -439,6 +439,8 @@ struct statement {
     bool zeroFill;
     struct operand* forInit;     //FOR only: the loop variable's initial value expression
     struct statement* forPost;   //FOR only: the post clause - an assignment or an S3 expression statement
+    bool breakOuter;             //FOR only (S9f): the counted loop over one run of a for-in walking a collection run by
+                                 //run - a "break" directly in it leaves the loop over the runs too, as the one written did
     struct list block;           //list of struct statement: the primary body; TRY_CATCH: the catch body
     struct statement* elseStmnt; //IF only: heap-allocated, NULL if no else clause
     bool elseIsBlock;            //IF only: true if elseStmnt is a bare block wrapper rather than a chained "else if"

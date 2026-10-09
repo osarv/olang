@@ -6,6 +6,7 @@ extern fn write(fd I32, buf Array<U8>, count I64) I64
 extern fn read(fd I32, buf Array<U8>, count I64) I64
 extern fn open(path Array<U8>, flags I32) I32
 extern fn close(fd I32) I32
+extern fn pipe(fds Array<I32>) I32
 
 error IoError {
     FAILED
@@ -105,6 +106,68 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
     return used
 }
 
+# a file's lines, one at a time: "for line in try io.Lines(fd) { ... } catch IoError { ... }". The file is read through a
+# buffer a piece at a time, so reading one of any size takes the memory of its longest line, never of the whole of it -
+# the buffer starts at "size" bytes and doubles whenever a single line fills it.
+# A line is what comes before a newline, without it, and one carriage return just before the newline goes with it, so
+# "a\r\nb\n" is "a" and "b" as "a\nb\n" is. The last line needs no newline after it: "a\nb" is "a" and "b", "a\n" is
+# just "a", and "a\n\n" is "a" and "" - an empty file has no lines at all.
+# Each line Next gives is new text, built where its caller puts it (O18a) and nowhere else, so it stays as it is
+# whatever is read after it: in "for line in", the loop body's own scope, reclaimed as each turn ends - to keep one
+# longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope). Next fails with
+# IoError.FAILED when the read under it does - calling it again reads again - and with Exhausted once every line has
+# been given.
+type Lines struct(fd I32, size I64 = 65536) {
+    fd
+    buf mut String& = String(Array<U8>(size if size > 0 else 1))
+    start mut I64 = 0                # buf[start:end] is what has been read and not yet given as a line
+    end mut I64 = 0
+    ended mut Bool = false           # read has said the file is over
+}
+
+fn (l mut Lines&) Next() String& ? IoError + Exhausted {
+    from I64 = l.start               # buf[l.start:from] holds no newline
+    for {
+        for i in range from, l.end {
+            if l.buf[i] == '\n' {
+                first := l.start
+                l.start = i + 1
+                return l.line(first, i)
+            }
+        }
+        if l.ended {
+            if l.start == l.end { error Exhausted.END }
+            first := l.start
+            l.start = l.end
+            return l.line(first, l.end)
+        }
+        from = l.end - l.start
+        if l.start > 0 {             # what is unread to the front, leaving the room after it to read into
+            for k in range from { l.buf[k] = l.buf[l.start + k] }
+            l.start = 0
+            l.end = from
+        }
+        if l.end == l.buf.Len() {    # one line fills the buffer: twice the room
+            old := l.buf
+            l.buf = String(Array<U8>(old.Len() * 2))
+            for k in range l.end { l.buf[k] = old[k] }
+        }
+        got := read(l.fd, l.buf[l.end:], l.buf.Len() - l.end)
+        if got < 0 { error IoError.FAILED }
+        if got == 0 { l.ended = true }
+        l.end += got
+    }
+    unreachable
+}
+
+# buf[first:last] as new text, a carriage return at its end dropped
+fn (l Lines&) line(first I64, last I64) String& {
+    n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
+    text String&return = String(Array<U8>(n))
+    for k in range n { text[k] = l.buf[first + k] }
+    return text
+}
+
 test "Write reports a failure from the underlying syscall" {
     failed Bool = false
     try Write(-1, "no such fd") catch IoError {
@@ -174,4 +237,100 @@ test "FormatInt renders decimals, including zero and negatives" {
     assert buf[0] == '-'
     assert buf[1] == '9'
     assert buf[2] == '0'
+}
+
+# a descriptor reading back "text": the read end of a pipe it has been written into, the write end closed after it -
+# for the tests of Lines, which need no file. Under a pipe's own buffer, 64KB, so the write never waits for a reader
+fn reading(text String&) I32 {
+    fds := Array<I32>(2)
+    assert pipe(fds) == 0
+    try Write(fds[1], text) catch IoError { fail }
+    close(fds[1])
+    return fds[0]
+}
+
+# the lines of "text", read through Lines with a buffer of "size" bytes, each in brackets
+fn bracketed(text String&, size I64) String& {
+    fd := reading(text)
+    out String&return = ""
+    for line in try Lines(fd, size) {
+        out = $out "[" $line "]"
+    } catch IoError { fail }
+    close(fd)
+    return out
+}
+
+test "Lines gives each line, without its newline" {
+    assert bracketed("one\ntwo\n\nfour", 65536) == "[one][two][][four]"
+    assert bracketed("one\ntwo\n", 65536) == "[one][two]"           # a newline at the end ends the last line
+    assert bracketed("one\n\n", 65536) == "[one][]"
+    assert bracketed("\n", 65536) == "[]"
+    assert bracketed("", 65536) == ""                                  # an empty file has no lines
+    assert bracketed("no newline at all", 65536) == "[no newline at all]"
+}
+
+test "Lines drops the carriage return of a CRLF, and only that one" {
+    assert bracketed("a\r\nb\r\n\r\nc", 65536) == "[a][b][][c]"
+    assert bracketed("last\r", 65536) == "[last]"                    # before the end of the file as before a newline
+    assert bracketed("x\ry\n\r\r\n\r", 65536) == "[x\ry][\r][]"
+}
+
+test "Lines reads lines longer than its buffer" {
+    long String& = "0123456789abcdefghijklmnopqrstuvwxyz"
+    text := $long "\nab\n\n" $long $long "\r\nc"
+    want := "[" $long "][ab][][" $long $long "][c]"
+    assert bracketed(text, 4) == want            # each long line doubling the buffer, and what follows moved to its front
+    assert bracketed(text, 1) == want
+    assert bracketed(text, 0) == want            # no room at all is taken as one byte
+    assert bracketed(text, 37) == want           # a line exactly as long as the buffer
+    assert bracketed(text, 65536) == want
+}
+
+test "Lines reports a read that fails, and ends the loop with it" {
+    failed := false
+    n I64 = 0
+    for line in try Lines(-1) {
+        n++
+    } catch IoError { failed = true }
+    assert failed and n == 0
+}
+
+# Exhausted again for every call once the lines have run out
+fn afterTheEnd(fd I32) ? IoError {
+    l := Lines(fd, 2)
+    first := try l.Next() catch Exhausted { fail }
+    assert first == "only"
+    for i in range 3 {
+        try l.Next() catch Exhausted { continue }
+        fail
+    }
+}
+
+test "Next fails with Exhausted once the lines are over, each time it is called" {
+    fd := reading("only\n")
+    try afterTheEnd(fd) catch IoError { fail }
+    close(fd)
+}
+
+# allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again
+fn ioChurn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i "-------------------------------------------------------------"
+        t += s.Len()
+    }
+    return t
+}
+
+# a line lives where it is put: kept in a list, its copy is built in the list's scope and outlives the loop
+test "a line kept is built where it is kept" {
+    fd := reading("alpha\nbeta\ngamma\n")
+    kept := List<String&>()
+    for line in try Lines(fd, 3) {
+        assert ioChurn() > 0
+        kept.Push($line)
+    } catch IoError { fail }
+    close(fd)
+    assert ioChurn() > 0
+    assert kept.Len() == 3 and kept[0] == "alpha" and kept[1] == "beta" and kept[2] == "gamma"
 }

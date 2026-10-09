@@ -1,4 +1,4 @@
-import "std/map"
-import "map"
+import "std/io"
+import "io"
 error E { X }
 fn main() ? E { }

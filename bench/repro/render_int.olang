@@ -1,9 +1,9 @@
-# "$n" on an integer formats it twice: the generated helper (olang.rd.I64) is called once to measure (snprintf with
-# a null buffer) and once to write, so every rendering costs two snprintf calls where C's code makes one - and
-# snprintf is the dominant cost of rendering (about 80ns each on this machine). 5,000,000 renderings: olang 0.79s,
-# C making one snprintf each 0.42s, C making two 0.81s.
-# See it: build, then  grep -n "call i64 @olang.rd.I64" build/render_int.main.ll
-# (a call with a null buffer, then the real one)
+# FIXED (E11a): "$n" on an integer formatted it twice - the generated helper (olang.rd.I64) was called once to measure
+# (snprintf with a null buffer) and once to write, two snprintf calls (about 80ns each here) where C's code makes one:
+# 5,000,000 renderings took 0.79s, C with one snprintf each 0.42s. The runtime now counts the digits from ctlz and
+# writes them two at a time from a table (__olang_fmt_u64/__olang_fmt_i64), so measuring is a few compares and no
+# snprintf is called: 0.09s.
+# See it: build, then  grep -n "__olang_fmt_i64\|snprintf" build/render_int.main.ll
 import "std/io"
 import "std/os"
 
