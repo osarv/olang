@@ -3174,6 +3174,34 @@ Go through this for every change to what olang means - a rule added, revised or 
   muted), so `if X > 0.5` with X an I32 build constant compiled - it stays a runtime if now and the error is reported.
   **Not fixed**: compile time grows faster than linearly in a module's number of functions (each declaration looks the
   module's names up in a list); not per-if, and not the parser's.
+- **The driver, remote imports, diagnostics and std, hardened from a review (M23a/M23b, B3/B3a/B3b, B1, T29a,
+  2026-10-09).** **Security**: a remote import's host, owner, repository and ref ran through `system()` - `import
+  "example.com/me/x'$(touch PWNED)'y/file"`, or such a commit in `olang.lock`, ran a command while fetching. They are
+  now validated (letters, digits, `.`, `_`, `-`; no leading `.`/`-`, no `..`; a lock commit is 40 or 64 hex digits),
+  and nothing the compiler runs goes through a shell (`RunProgram`/`RunProgramCapture` over `posix_spawnp`, `RemoveTree`
+  and `MakeDirs` in C), clang and the link included. A fetch, locked or not, goes into a temporary directory renamed
+  into place once it holds the right commit, so an interrupted one is never later trusted. **Objects (B3) are named
+  injectively** - the readable identity plus a hash of the identity and real path of every module compiled against
+  (own, imports', prelude's) - so `geom/rect`/`geom_rect`, two `main.olang` roots outside the working directory, and a
+  module built against two commits of a remote (or two std trees) no longer reuse each other's objects; the IR file
+  and the binary keep readable names. **Symbols (B3b) too**: a module prefix escapes everything but letters and digits
+  (`/` is `_`, others `$HH`), and a global's name its `_` as `$5F`, so `geom/rect` and `geom_rect` are two modules of
+  one program and module `a`'s `b_c` never meets `a/b`'s `c` (it failed in clang). **`-t`** reports a missing file or
+  a directory and runs the rest (B3a); the link is an argument list (40 200-byte module names lost its tail). **One
+  stream**: the unknown flag's message and `-D` errors are fatal diagnostics on stdout; a crash prints "internal compiler
+  error" from a handler on an alternate stack, write() only, so even a stack overflow says so (under `-i` a program's
+  own abort is not one); a fatal error during a held-back attempt (B9c) no longer prints that attempt's diagnostics. A
+  function whose body fails to parse stays **declared by its signature** (`SNTX_BODY_UNPARSED`, never checked), so
+  calls to it are not each "unknown function"; an unknown name no longer adds "same type"/"must be a boolean".
+  **std**: `io.FormatInt(I64 min)` formats on the negative side; `C16`/`C32` divide in `F64` and `C64` by Smith's
+  method (`C16(600)/C16(300)` was NaN); `F8E4M3(-0.0)`/`F8E5M2(-0.0)` keep the sign; test-only exported names are
+  private; `Chan<T>`'s functions are generic. **Decided (mine)**: a channel of capacity 0 is a **rendezvous**, as in Go -
+  Send returns once its value is taken (`SendUntil` withdraws an untaken value when the token fires) - rather than an
+  error at construction, which would have put `try` on every channel built. **Found on the way, fixed**: landing (O18a)
+  did not pass through a nominal conversion, so `StringBuilder.ToString`'s `return String(b.chars.ToArray())` built the
+  text in its own closed scope - the next scope to take a chunk wrote over it; stack overflows from import strings or
+  root paths longer than `PATH_MAX`. **Skipped**: T7a errors of `Pair(1, "x")` reported inside the prelude (the types
+  agent's "instantiated from" note covers it).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

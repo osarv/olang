@@ -3,6 +3,7 @@
 # ordinary olang program whose first lines say what it must do:
 #     # check: fail <text>    it must fail to build, with <text> in the diagnostics
 #     # also: <text>          and with <text> too - any number of these lines, each checked
+#     # never: <text>         and without <text> anywhere in them - any number, each checked
 #     # check: build          it must build
 #     # check: run            it must build, and the program must exit 0
 #     # flags: <arguments>    passed to the compiler (a -D value, say)
@@ -72,6 +73,17 @@ fn runCase(dir String&, name String&) Bool {
             if end < 0 { end = line.Len() }
             also := line[:end]
             if not outOf(dir).Contains(also) { return failed($name ": expected '" $also "'", dir) }
+            rest = line[end:]
+        }
+        rest = src[:]
+        for {
+            at := rest.Find("# never: ")
+            if at < 0 { break }
+            line := rest[at + 9:]
+            end := line.FindByte('\n')
+            if end < 0 { end = line.Len() }
+            never := line[:end]
+            if outOf(dir).Contains(never) { return failed($name ": did not expect '" $never "'", dir) }
             rest = line[end:]
         }
         return true
@@ -175,6 +187,118 @@ test "a file in a remote repository, fetched once into the cache" {
     assert outOf(dir).Contains("fetch")
 }
 
+# M23a: the host, owner, repository and ref of a remote import, and a locked commit, are checked before git sees them,
+# and git is never run through a shell - each of these ran "touch PWNED" while fetching. A locked commit that cannot be
+# fetched leaves nothing in the cache a later build would take for it.
+test "nothing in a remote import or the lock file is run" {
+    dir := fresh("remotebad")
+    os.Run("cp -r checks/fixtures/remotebad/. " $os.Quote(dir))
+    env String& = "OLANG_GIT_BASE=file://" $dir "/remote/ OLANG_CACHE=" $dir "/cache "
+    assert sh($dir "/inj", $env "\"$OLANG\" -b inj.olang > out.txt 2>&1") != 0
+    assert outOf($dir "/inj").Contains("may hold only letters") or failed("bad import", $dir "/inj")
+    assert sh($dir "/lock", $env "\"$OLANG\" -b p.olang > out.txt 2>&1") != 0
+    assert outOf($dir "/lock").Contains("names no commit") or failed("bad lock", $dir "/lock")
+    assert sh(dir, "test ! -e inj/PWNED && test ! -e lock/PWNED && test ! -e PWNED") == 0
+    git String& = "git -c user.name=t -c user.email=t@t"
+    assert sh(dir, "mkdir -p remote/example.com/me/tools/mathx && echo 'fn Add1(n I32) I32 { return n + 1 }' > remote/example.com/me/tools/mathx/add.olang") == 0
+    assert sh($dir "/remote/example.com/me/tools", "git init -q && git add . && " $git " commit -qm v1") == 0
+    assert sh($dir "/missing", $env "\"$OLANG\" -b p.olang > out.txt 2>&1") != 0
+    assert outOf($dir "/missing").Contains("could not fetch the commit olang.lock names") or failed("missing commit", $dir "/missing")
+    assert sh(dir, "test -z \"$(ls -A cache/example.com/me/tools)\"") == 0 or failed("a failed fetch left something", dir)
+}
+
+# B3/M22a: an object is named by what it is built from - every module's identity and real path in what it is compiled
+# against - so two modules whose readable names coincide, two roots of one file name outside the working directory,
+# and one module compiled against two commits of a remote repository each have objects of their own. And a symbol is
+# named injectively: "geom/rect" and "geom_rect" are two modules of one program, as are module "a" naming "b_c" and
+# module "a/b" naming "c". Each of these reused another's object, or failed to link
+test "objects and symbols are named by what they are built from" {
+    dir := fresh("objnames")
+    os.Run("cp -r checks/fixtures/objnames/. " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b app1.olang > out.txt 2>&1 && ./build/app1 > out.txt") == 0 or failed("app1", dir)
+    assert outOf(dir) == "app1 1\n" or failed("app1 output", dir)
+    assert sh(dir, "\"$OLANG\" -b app2.olang > out.txt 2>&1 && ./build/app2 > out.txt") == 0 or failed("app2", dir)
+    assert outOf(dir) == "app2 2\n" or failed("app2 output", dir)
+    assert sh(dir, "\"$OLANG\" -b both.olang > out.txt 2>&1 && ./build/both > out.txt") == 0 or failed("both", dir)
+    assert outOf(dir) == "1 2\n" or failed("both output", dir)
+    assert sh(dir, "\"$OLANG\" -b syms.olang > out.txt 2>&1 && ./build/syms > out.txt") == 0 or failed("syms", dir)
+    assert outOf(dir) == "1 2\n" or failed("syms output", dir)
+    work String& = $dir "/work"
+    for round in range 2 {
+        assert sh(work, "\"$OLANG\" -b ../x/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0 or failed("x", work)
+        assert outOf(work) == "I am X\n" or failed("x output", work)
+        assert sh(work, "\"$OLANG\" -b ../y/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0 or failed("y", work)
+        assert outOf(work) == "I am Y\n" or failed("y output", work)
+    }
+}
+
+# B3: an object built against one commit of a remote repository is not taken for one built against another - locked to
+# a commit, moved to a newer one, and locked back, the program is the first one again (it used to keep the second's
+# object, whose files were newer than the first commit's)
+test "a program locked back to an older commit is built from it" {
+    dir := fresh("remotestale")
+    repo String& = $dir "/remote/example.com/me/tools"
+    env String& = "OLANG_GIT_BASE=file://" $dir "/remote/ OLANG_CACHE=" $dir "/cache "
+    src String& = "checks/fixtures/remote/"
+    assert os.Run("mkdir -p " $os.Quote(repo) " && cp -r " $src "mathx " $src "mathy " $os.Quote(repo)) == 0
+    assert os.Run("cp " $src "printed.olang " $os.Quote(dir)) == 0
+    git String& = "git -c user.name=t -c user.email=t@t"
+    assert sh(repo, "git init -q && git add . && " $git " commit -qm v1") == 0
+    build String& = $env "\"$OLANG\" -b printed.olang > out.txt 2>&1 && ./build/printed > out.txt"
+    assert sh(dir, build) == 0 or failed("first commit", dir)
+    assert outOf(dir) == "2\n" or failed("first commit output", dir)
+    assert sh(dir, "cp olang.lock first.lock && rm olang.lock") == 0
+    assert sh(repo, "sed -i 's/n + 1/n + 100/' mathy/inc.olang && " $git " commit -qam v2") == 0
+    assert sh(dir, build) == 0 or failed("second commit", dir)
+    assert outOf(dir) == "101\n" or failed("second commit output", dir)
+    assert sh(dir, "cp first.lock olang.lock && " $build) == 0 or failed("first commit again", dir)
+    assert outOf(dir) == "2\n" or failed("the second commit's objects were reused", dir)
+}
+
+# B3a: each file -t is given is a build of its own - one that is missing, or a directory, is reported and the rest run
+test "-t runs every file it can, whatever another one is" {
+    dir := fresh("ttolerant")
+    os.Run("cp checks/fixtures/ttolerant/* " $os.Quote(dir) " && mkdir " $os.Quote($dir "/adir"))
+    assert sh(dir, "\"$OLANG\" -t nosuch.olang t1.olang adir t2.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("ok - one") and outOf(dir).Contains("ok - two") or failed("-t stopped early", dir)
+    assert outOf(dir).Contains("nosuch.olang") and outOf(dir).Contains("a module is a file") or failed("-t reports", dir)
+}
+
+# B3: a program's link is an argument list, never one command line cut to a fixed length - forty modules with 200-byte
+# names used to lose the end of it
+test "a program of many long-named modules links" {
+    dir := fresh("manymods")
+    long String& = "_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    app := StringBuilder()
+    app.Push("import \"std/io\"\n")
+    for i in range 40 {
+        name String& = "m" $i $long
+        try os.WriteFile($dir "/" $name ".olang", "fn F() I32 { return " $i " }\n") catch { fail }
+        app.Push("import m" $i " \"" $name "\"\n")
+    }
+    app.Push("fn main() ? io.IoError {\n    s := 0\n")
+    for i in range 40 { app.Push("    s = s + m" $i ".F()\n") }
+    app.Push("    try io.Print($s \"\\n\")\n}\n")
+    try os.WriteFile($dir "/app.olang", app.ToString()) catch { fail }
+    assert sh(dir, "\"$OLANG\" -b app.olang > out.txt 2>&1 && ./build/app > out.txt") == 0 or failed("many modules", dir)
+    assert outOf(dir) == "780\n" or failed("many modules output", dir)
+}
+
+# B1: every diagnostic is written to one stream, the unknown flag's included (its first half used to go to the other);
+# and a crash of the compiler itself says so, even one that has run out of stack - here forced by running it on a small
+# one: the address-space limit leaves no room for the large stack it asks for, so it runs on the one ulimit gives it
+test "diagnostics are on one stream, and a crash says so" {
+    dir := fresh("diag")
+    assert sh(dir, "\"$OLANG\" -race x.olang > out.txt 2> err.txt") != 0
+    assert outOf(dir).Contains("-race: unknown flag") and sh(dir, "test ! -s err.txt") == 0 or failed("unknown flag", dir)
+    deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
+    try os.WriteFile($dir "/deep.olang", deep) catch { }
+    # (the status is kept in a file, so the shell that saw the crash is not the one that reports it)
+    crash String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -c deep.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
+    assert sh(dir, $crash " && test $(cat rc.txt) -ne 0") == 0
+    assert outOf(dir).Contains("internal compiler error") or failed("a crash was silent", dir)
+}
+
 # M1/M22: a module is a file - a directory is not one, and files in one directory see each other only
 # through imports
 test "a directory groups files and is never a module" {
@@ -194,10 +318,10 @@ test "a -D value rebuilds only the modules that mention it" {
     dir := fresh("stale")
     os.Run("cp checks/fixtures/stale/* " $os.Quote(dir))
     assert sh(dir, "\"$OLANG\" -b -D Level=1 -D Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0 or failed("first build", dir)
-    assert sh(dir, "stat -c %Y.%N build/plain.o > before.txt && ls build/uses.d*.main.o | wc -l > first.txt") == 0
+    assert sh(dir, "stat -c %Y.%N build/plain.*.o > before.txt && ls build/uses.*.d*.main.o | wc -l > first.txt") == 0
     assert sh(dir, "sleep 1 && \"$OLANG\" -b -D Level=5 -D Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0
-    assert sh(dir, "stat -c %Y.%N build/plain.o | cmp -s - before.txt") == 0     # plain.o untouched
-    assert sh(dir, "test $(ls build/uses.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
+    assert sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0     # plain's object untouched
+    assert sh(dir, "test $(ls build/uses.*.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

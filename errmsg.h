@@ -89,6 +89,8 @@
 #define IMPORT_LEAVES_ROOT "a relative import inside the standard library or a remote repository stays within it - name a module outside it by its own path ('std/...' or 'host/owner/repo/...') (M23)"
 #define IMPORT_REMOTE_NEEDS_FILE "a remote import names a file within the repository: 'host/owner/repo[@ref]/path' (M23)"
 #define IMPORT_LOCKED_FETCH_FAILED "could not fetch the commit olang.lock names for this repository - it may no longer exist on the remote. Check the connection, or delete its line in olang.lock or build with -u, to build from the ref's current commit instead (M23b, M23c)"
+#define IMPORT_REMOTE_BAD_NAME "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-', and none may begin with '.' or '-' or hold '..' - they are handed to git and name cache directories (M23a)"
+#define IMPORT_LOCK_NOT_A_COMMIT "olang.lock's line for this repository names no commit - a commit is 40 hexadecimal digits. Delete the line, or build with -u, to lock the ref's current commit (M23b)"
 #define IMPORT_FETCH_FAILED "could not fetch this remote repository with git - check the path and your connection; once fetched it is kept in the cache (OLANG_CACHE) and needs no network again (M23a)"
 #define IMPORT_FILE_NOT_FOUND "no .olang file at this path - a relative path is resolved from the importing module's own directory, 'std/...' from the standard library (M23)"
 #define IMPORT_ALIAS_CONFLICT "this alias is already used by another import in this module - give one of them an explicit alias (M5)"
@@ -216,9 +218,10 @@ place here, and writing both would leave one of the two scope tags meaning nothi
 #define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
 (e.g. 'U8[]&'). Without it the array is copied at every call, in time proportional to its \
 length, and a 'mut' one would be written where the caller can never see it"
-#define MODULE_NAME_COLLISION "another module in this program has the same file base name - a module's \
-symbols are named from it (§10 B3b), so two modules sharing one would define the same symbols; rename \
-one of the files"
+#define MODULE_NAME_COLLISION "another module in this program has the same identity - a module's symbols are \
+named from it (§10 B3b), so two modules sharing one would define the same symbols. Only a module named by its file \
+name alone has such an identity (a root outside the working directory, an import by absolute path): rename one of \
+the files, or reach it by a relative path"
 #define SCOPE_DECL_REMOVED "a scope cannot be declared after a name - scopes have no names. A built result lives where the caller puts it, a returned local lives there too (O26), and anything else names a variable that lives where it should ('&x', O4a)"
 #define SCOPE_DECL_ON_PLAIN_TYPE "a scope cannot be declared - write a bare '&' where something lives with the instance, and '&p' where it lives with a constructor parameter (O3)"
 #define SCOPE_ARG_NOT_ACCEPTED "this call's target builds no result a scope argument could place - it returns nothing that is or holds a reference, or its result is borrowed from a parameter (E25)"
@@ -349,6 +352,11 @@ void ErrMsgFile(struct str fileName, char* errMsg);
 void ErrMsgSyntax(struct token tok, char* errMsg);
 int ErrMsgGetNSyntaxErrors();
 void ErrMsgFlush(void);
+//a crash of the calling thread is reported rather than silent, even after a stack overflow - call once per thread the
+//compiler runs on, before it does anything else
+void ErrMsgInstallCrashHandler(void);
+//B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
+void ErrMsgSetInterpreting(bool on);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
 #define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"

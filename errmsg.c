@@ -3,6 +3,7 @@
 #include <string.h>
 #include <limits.h>
 #include <signal.h>
+#include <unistd.h>
 #include "util.h"
 #include "errmsg.h"
 #include "token.h"
@@ -95,23 +96,68 @@ void ErrMsgFlush(void) {
     freeRecords(0);
 }
 
+//the compiler is ending early - a fatal error, or an exit nothing else reported. An attempt whose diagnostics are still
+//held back (K4, B9c) may have been about to be thrown away and redone with more of the program decided, so what it
+//found is not shown: the reason for ending is the real output.
 static void flushAtExit(void) {
-    buffering = false;
+    if (buffering) ErrMsgBufferDiscard();
     ErrMsgFlush();
 }
-static void flushOnCrash(int sig) {
-    flushAtExit();
-    signal(sig, SIG_DFL);
+
+static void writeAll(int fd, const char* p, size_t n) {
+    while (n > 0) {
+        ssize_t w = write(fd, p, n);
+        if (w <= 0) return;
+        p += w;
+        n -= (size_t)w;
+    }
+}
+
+//a crash in the compiler says so, always. A signal handler may do almost nothing safely - no stdio, no allocation, the
+//heap possibly corrupt, and after a stack overflow no stack - so it runs on a stack of its own (ErrMsgInstallCrash
+//Handler) and only writes: first the one line that must get out, then the diagnostics finished before the crash, as
+//they are. The handler is reset before it runs, so a second fault while writing them ends the process quietly.
+static volatile sig_atomic_t interpreting;
+void ErrMsgSetInterpreting(bool on) { interpreting = on; }
+
+static void onCrash(int sig) {
+    //B3e: under -i an abort is the interpreted program's own - a check it guarantees failed, its message written
+    if (interpreting && sig == SIGABRT) raise(sig);
+    const char* what = sig == SIGSEGV ? "a segmentation fault" : sig == SIGBUS ? "a bus error"
+                     : sig == SIGFPE ? "an arithmetic fault" : sig == SIGILL ? "an illegal instruction" : "an abort";
+    static const char head[] = "olang: internal compiler error - the compiler crashed (";
+    static const char tail[] = "). This is a bug in the compiler, not in the program.\n";
+    //an extern function the interpreted program calls runs in this process too (B3e), so a crash under -i may be
+    //the program's - a wrong prototype is undefined behaviour (X1a)
+    static const char tailRun[] = ") while interpreting - in a foreign function the program calls, if its extern "
+                                  "declaration is wrong (X1a), or else a bug in the compiler.\n";
+    writeAll(2, head, sizeof(head) - 1);
+    writeAll(2, what, strlen(what));
+    if (interpreting) writeAll(2, tailRun, sizeof(tailRun) - 1);
+    else writeAll(2, tail, sizeof(tail) - 1);
+    for (int i = 0; i < nRecs - (cur ? 1 : 0); i++) writeAll(1, recs[i]->text, recs[i]->size);
     raise(sig);
 }
-//errors already found are still shown when the compiler exits early or crashes
+
+void ErrMsgInstallCrashHandler(void) {
+    size_t size = 1 << 16;
+    stack_t ss = { .ss_sp = MallocOrCrash(size), .ss_size = size, .ss_flags = 0 }; //one per thread, kept for its life
+    sigaltstack(&ss, NULL);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = onCrash;
+    sa.sa_flags = SA_ONSTACK | SA_RESETHAND | SA_NODEFER;
+    sigemptyset(&sa.sa_mask);
+    int sigs[] = { SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT };
+    for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) sigaction(sigs[i], &sa, NULL);
+}
+
+//errors already found are still shown when the compiler exits early
 static void ensureFlushHooks(void) {
     static bool done;
     if (done) return;
     done = true;
     atexit(flushAtExit);
-    signal(SIGSEGV, flushOnCrash);
-    signal(SIGABRT, flushOnCrash);
 }
 
 //K4: nothing between these is reported, and the count they leave is the count they found - for checking
@@ -157,7 +203,7 @@ void ErrMsgFinishCompilation() {
 }
 
 void ErrMsgFatal(char* errMsg) {
-    flushAtExit(); //a fatal error ends the compilation, so whatever was held back is the real output
+    flushAtExit(); //a fatal error ends the compilation: what is already certain is shown, and the reason
     nErrors++;
     fputs(COLOR_FG_RED "fatal error: " COLOR_FG_YELLOW, stdout);
     fputs(errMsg, stdout);

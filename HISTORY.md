@@ -8933,3 +8933,90 @@ from their original form.
   value it cannot hold; `-D X=18446744073709551615` is a `U64` build constant, built by `OperandIntLiteralValue` with that
   flag, and `-D X=-9223372036854775809` an error naming the flag. `OperandIntLiteral` keeps the review's reading
   (`parseIntLiteralChecked`, an error past 64 bits) and builds through the same function.
+- **The driver, remote imports, diagnostics and the standard library, hardened from a review (M23a/M23b, B3/B3a/B3b,
+  B1, T29a, 2026-10-09).** The fifth area of the overnight review (comptime, driver, util, errmsg, std); this batch is
+  the driver, remote-import, diagnostics and std half. Every finding was reproduced first.
+  **Shell injection while fetching (M23a).** `fetchRemote` built `system()` command lines from the import's host,
+  owner, repository and ref and from the commit `olang.lock` names, quoting them with single quotes - which a `'` in
+  any of them closed. `import "example.com/me/x'$(touch PWNED)'y/file"` created `PWNED` during `-b`, and so did a lock
+  line `example.com/me/tools abc'$(touch${IFS}PWNED2)'def` - the second is the worse one, since a lock file arrives
+  with a checkout. Fixed both ways. The four names are validated before anything runs - letters, digits, `.`, `_`
+  and `-`, none beginning with `.` or `-` (no option, no hidden or parent directory) and none holding `..` - with an
+  error naming the rule (`IMPORT_REMOTE_BAD_NAME`); a ref is one path element in this syntax already, so it needs no
+  `/`. A lock commit must be 40 or 64 lowercase hex digits (`IMPORT_LOCK_NOT_A_COMMIT`); under `-u` a malformed line is
+  set aside like any other. And nothing the compiler runs goes through a shell any more: `RunProgram` and
+  `RunProgramCapture` (util.c) spawn an argument vector with `posix_spawnp`, git takes `--` before the URL, the ref goes
+  as `--branch=REF`, and `rm -rf`/`mkdir -p`/`mv` became `RemoveTree` (nftw, links never followed), `MakeDirs` and
+  `rename`. The other shell-outs - finding clang (`which`), compiling, linking, running a test binary - now use the
+  same, though their arguments were already sanitized names. **The locked fetch cloned straight into its final cache
+  directory** (reported as plausible): a fetch killed part way left a directory every later build trusted, since a
+  locked build takes an existing directory as fetched. Both fetches now go into `.fetch-PID` and are renamed into place
+  only once `rev-parse HEAD` says they hold the right commit; a failed one leaves nothing, checked.
+  **Objects reused for a different program (B3/M22a).** `moduleObjectBase` mapped `/` and every other character outside
+  `[A-Za-z0-9_-]` to `_`, and staleness compared times only, so three different things reused an object built from
+  other files: `app1` importing `geom/rect` then `app2` importing `geom_rect.olang` printed `app2 1` (one
+  `build/geom_rect.o`); two roots `../x/main.olang` and `../y/main.olang` outside the working directory, both of
+  identity `main`, printed `I am X` twice; and locking a remote to commit A, moving to B and locking back built B's
+  answer, because B's objects were newer than A's cached sources. Considered: recording the source path beside each
+  object and rebuilding when it differs - which fixes reuse but not two modules of one build overwriting one object,
+  and ping-pongs. Chosen: an object's name is the readable identity, then a hash (FNV-1a, 64 bits) of the identity and
+  real path of every module it is compiled against - its own, its transitive imports' and the prelude's. The closure,
+  not just the module's own path, because what an object holds depends on it: the root holds the program's
+  instantiations (B3d) and K2 bakes values computed from imported functions, so a root compiled against commit B is not
+  the root of commit A even though its own source never changed - the same holds for `OLANG_STD`. The IR file keeps the
+  readable name (an intermediate, written just before each compile) and so does the binary; the checks grepping IR
+  needed no change, the stale check's object globs did.
+  **Symbols (B3b).** The same lossy mapping named symbols, so `geom/rect` and `geom_rect` in one program were reported
+  as "the same file base name" (B3b's error, worded for a rule M22a replaced) - a valid program refused - and module `a`
+  declaring `b_c` and module `a/b` declaring `c` both defined `@a_b_c`, which clang rejected ("invalid redefinition").
+  The prefix is now injective - a letter or digit as itself, `/` as `_`, every other byte as `$HH` - and a global's
+  name writes its `_` as `$5F`, so the last `_` before any `.` always separates the two. Every existing symbol whose
+  module path and name hold only letters, digits and `/` is unchanged, which is all of the corpus's grepped ones. B3b
+  can now fire only for genuinely equal identities (two modules identified by file name alone), and says so.
+  **`-t` stopped every file for one (B3a).** `semaLoadModule` called `exit` for a directory and `readChars` was fatal
+  for a missing file, so `-t nosuch.olang t1.olang t2.olang` ran nothing. `runTestFile` now checks the file first and
+  reports it as that file's failure. **The link was truncated**: `objs[8192]` filled by `strncat` and a `cmd[16384]`, so
+  80 modules of 100-character names lost the end of the object list ("no such file", "link failed"). The compile and
+  link are argument lists now, and main.c builds every path with `StrFmt` - no fixed buffer is left there or in util.c.
+  **Diagnostics.** The unknown flag's message was split, `olang: -race:` to stderr and the rest to stdout; it and the
+  `-D` errors are now one fatal diagnostic each, on stdout with the rest, as are a failed native compile and link. The
+  SIGSEGV handler called stdio and `qsort` and had no alternate stack, so a stack overflow - the likeliest crash, the
+  compiler being recursive - printed nothing at all, and any crash risked deadlocking in `malloc`. The handler now runs
+  on a per-thread `sigaltstack`, is installed at the compiler thread's start rather than at the first error, and only
+  writes: "olang: internal compiler error - the compiler crashed (...)" to stderr first, then the diagnostics already
+  finished, unsorted. Shown by forcing the compiler onto a 256KB stack (an address-space limit makes its 1GB thread
+  fail to start) and nesting 5,000 parentheses. Under `-i` an abort is the interpreted program's own guaranteed check
+  and is left alone, and a crash says it may be a wrong `extern` (X1a). A fatal error during a held-back attempt (B9c)
+  printed that attempt's diagnostics too, which may have been about to be discarded; an early exit now discards them.
+  **A function whose body did not parse** was skipped whole, so every call to it added "unknown function 't' - did
+  you mean 'u'?". The item is now salvaged when its signature and the body's `{` parse: a definition with an empty
+  body marked `SNTX_BODY_UNPARSED`, which the checker declares and never checks (no D10a "missing return", and K1a
+  treats it as having errors). `parseFuncDef` was split into a head and a body for it; the head now restores the
+  cursor fully on a bad receiver (it used to leave it after `fn`). Also: an unknown name, already reported, added "both
+  operands must have the same type" beside a `String` and "operand must be a boolean" under `not` - the stand-in type
+  now meets every operand requirement and skips the same-type check.
+  **Standard library.** `io.FormatInt(I64 min)` wrote `-(`: `v = -v` wrapped and `v % 10` was negative; it formats on
+  the negative side now, as `ParseInt` accumulates. Complex division used the textbook formula, squaring the divisor's
+  parts: `C16(600) / C16(300)` and `C32(3e20) / C32(3e20)` were NaN and `C64(1) / C64(1e200)` was 0. `C16` and `C32`
+  now divide in `F64` - every product of two of their parts is exact there and nothing overflows or underflows - and
+  round once; `C64` uses Smith's method, with Stewart's care where the ratio underflows to zero. `F8E4M3(-0.0)` and
+  `F8E5M2(-0.0)` gave bits 0 (the only mismatch in 1,303 values checked against the OCP tables): the sign is taken
+  from the bits now. Test-only exported names (`ArraySorted`, `ArraySum`, `ListIndexedBaked`, `BuiltBaked`, `map`'s
+  `*Baked`, `cancel.Count`, `chan.Sum`) are private; `KV` was left to the types agent. **`Chan<T>` was generic in name
+  only** - `Init`, `Send`, `Recv` and the `Until` forms took `Chan<I32>`; they are generic now, tested with a struct, an
+  `F64` and `String&`. **`Chan(0)`** made `Send` wait forever (count == Len() == 0) and `%` by zero. Decided: capacity 0
+  is a rendezvous, Go's unbuffered channel - a one-slot ring whose sender then waits for its value to be taken, told by
+  counting (values leave in order); `SendUntil` withdraws a value not yet taken when its token fires, so a value either
+  reached a `Recv` or was never sent. The alternative, refusing 0 at construction, would have made the constructor
+  fallible and put `try` on every channel built, for a capacity that is almost always a literal; a negative capacity
+  still aborts as an array's length does (D14b).
+  **Found on the way: a use-after-free in landing (T29a/O18a).** Writing the many-modules check, a `StringBuilder`'s
+  text was overwritten by a path `os.WriteFile` built. `ToString` is `return String(b.chars.ToArray())`, and landing
+  (O18a) did not pass through `OPERATION_NOMINAL_CONVERT`, so the inner call's result scope fell back to `ToString`'s own
+  block, closed by the return; the next scope to take a chunk from the pool - here the callee's - wrote over the text.
+  Reproduced on the previous compiler; a nominal conversion now lands as its argument does, in `callIsLanding` and
+  `landCallIn`. Pinned by a prelude test that calls an allocating function between `ToString` and the read, with a
+  mutable global so the check is made at run time rather than decided while compiling. Also fixed: stack buffers of
+  `PATH_MAX` filled from an import string or a root path of any length (`resolveImport`, `semaLoadModule`, `moduleDir`).
+  **Skipped**: a user's `Pair(1, "x")` reports T7a inside `pair.olang` - the types agent is adding an "instantiated from"
+  note for errors inside instantiations, which covers it.
