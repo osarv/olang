@@ -222,13 +222,16 @@ struct cgCtx {
 //never collide
 //B3b: a module's identity as a symbol prefix, injectively - a letter or digit as itself, '/' as '_', and every other
 //byte as '$' and two hexadecimal digits - so "geom/rect" is geom_rect while "geom_rect" is geom$5Frect and "a.b" is
-//a$2Eb. Every prefix is therefore one identity's only (identities are paths, so the common ones read as before).
+//a$2Eb. Every prefix is therefore one identity's only (identities are paths, so the common ones read as before). A
+//leading digit is escaped too: every symbol and type name starts with the prefix, and an LLVM name may not begin with
+//a digit ("@2go_helper" is invalid IR - "2go.olang" could not be built), so "2go" is $32go.
 void mangleModPrefix(struct semaModule* mod, char* buf, size_t n) {
     struct str f = mod->identity;
     size_t w = 0;
     for (int i = 0; i < f.len && w + 1 < n; i++) {
         unsigned char c = (unsigned char)f.ptr[i];
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) buf[w++] = (char)c;
+        bool digit = c >= '0' && c <= '9';
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (digit && w > 0)) buf[w++] = (char)c;
         else if (c == '/') buf[w++] = '_';
         else {
             if (w + 4 > n) break;
@@ -3406,6 +3409,15 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     return agg2;
 }
 
+//E28/S12b: where a conditional's or a match's value v is built when it has to be made into the result's reference type:
+//where the value as a whole is being built into, else where the checker landed v. Never the result type's own tag - a
+//reference taken from a call's result is tagged with the CALLEE's scope variable, which no frame here holds (resolving
+//it crashed the compiler: "return wrap(e) if e != null else Expr.Num(1.0)")
+static char* cgArmScope(struct cgCtx* ctx, struct operand* v, struct type resultT) {
+    if (ctx->targetScopeOverride || !typeNeedsMallocPromotion(resultT, v->type)) return ctx->targetScopeOverride;
+    return cgWhereBuilt(ctx, v);
+}
+
 //E28: "a if c else b" - the chosen value, converted to the conditional's type on its own path, through one slot.
 //A value built here (text, an array) is built in the target's scope, which reaches the branch as the override.
 char* cgCond(struct cgCtx* ctx, struct operand* op) {
@@ -3425,8 +3437,9 @@ char* cgCond(struct cgCtx* ctx, struct operand* op) {
     for (int b = 1; b <= 2; b++) {
         cgLabel(ctx, b == 1 ? thenLbl : elseLbl);
         struct operand* v = *(struct operand**)ListGetIdx(&op->args, b);
-        char* val = cgValueForTarget(ctx, v, op->type, ctx->targetScopeOverride);
-        cgStoreInto(ctx, op->type, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+        char* where = cgArmScope(ctx, v, op->type);
+        char* val = cgValueForTarget(ctx, v, op->type, where);
+        cgStoreInto(ctx, op->type, v->type, val, slot, where, false, OperandIsLvalue(v), false);
         cgBr(ctx, endLbl);
     }
     cgLabel(ctx, endLbl);
@@ -5330,8 +5343,9 @@ char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
 
 //one value case's value into the slot
 static void cgMatchStore(struct cgCtx* ctx, struct operand* v, char* slot, struct type resultT) {
-    char* val = cgValueForTarget(ctx, v, resultT, ctx->targetScopeOverride);
-    cgStoreInto(ctx, resultT, v->type, val, slot, ctx->targetScopeOverride, false, OperandIsLvalue(v), false);
+    char* where = cgArmScope(ctx, v, resultT);
+    char* val = cgValueForTarget(ctx, v, resultT, where);
+    cgStoreInto(ctx, resultT, v->type, val, slot, where, false, OperandIsLvalue(v), false);
 }
 
 static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT) {

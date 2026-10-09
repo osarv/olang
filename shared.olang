@@ -9041,17 +9041,17 @@ type LamSlot struct(f fn(x I32) I32) {
     f mut
 }
 fn lamHeld(n I32) I32 {
-    add := lamAdder(n + 2)
-    s := LamSlot(add)
+    plus2 := lamAdder(n + 2)
+    s := LamSlot(plus2)
     t LamSlot = s                                   # copied with its container: still the same value
-    assert t.f == add and same(t.f, s.f) and t.f(1) == n + 3
+    assert t.f == plus2 and t.f is s.f and t.f(1) == n + 3
     t.f = lamDoubler()
     assert t.f(5) == 10 and s.f(5) == n + 7 and t.f != s.f
     fs := Array<fn(x I32) I32>(3)
-    fs[0] = add
+    fs[0] = plus2
     fs[1] = lamDoubler()
     fs[2] = lamAdder(n + 2)                         # the same code, its own captures: another value
-    assert fs[0] == add and fs[2] != add and fs[1] == lamDoubler() and fs[1] == t.f
+    assert fs[0] == plus2 and fs[2] != plus2 and fs[1] == lamDoubler() and fs[1] == t.f
     return fs[0](1) + fs[1](1) + fs[2](1)
 }
 LamHeldBaked I32 = lamHeld(1)
@@ -9343,6 +9343,51 @@ fn zeroAll() Bool {
 }
 ZeroBaked := zeroAll()
 
+# E28/S12b: a conditional of two literals takes its target's type, as a match's values do; and a value made inside a
+# conditional or a match that is promoted into the result's reference type is built where that result lands - never
+# where the type of the arm it was paired with, a call's result tagged with the callee's scope, says
+type CaExpr enum {
+    Num(v F64)
+    Neg(e CaExpr&)
+}
+fn caWrap(a CaExpr&) CaExpr&a { return CaExpr.Neg(a) }
+fn caSimplify(e CaExpr&) CaExpr&e { return caWrap(e) if e != null else CaExpr.Num(1.0) }
+fn caSimplifyM(e CaExpr&, k I64) CaExpr&e {
+    return match k {
+        case 0 => caWrap(e)
+        nomatch => CaExpr.Num(F64(k))
+    }
+}
+fn caDepth(e CaExpr&) I64 {
+    match e {
+        case CaExpr.Neg(x) { return 1 + caDepth(x) }
+        case CaExpr.Num(v) { return I64(v) * 100 }
+    }
+    unreachable
+}
+fn caPick8(b Bool) U8 { return 200 if b else 0 }
+fn caCondLits(b Bool) I64 {
+    v I64 = 7 if b else 9
+    f F32 = 2.5 if b else 3.5
+    return v + I64(f * 2.0) + I64(caPick8(b))
+}
+CaCondBaked I64 = caCondLits(true)
+CaCondBakedNo I64 = caCondLits(false)
+
+test "E28/S12b: a conditional of literals takes its target's type; a value made in an arm is built where it lands" {
+    k I32 = ctRuntimeZero
+    assert caCondLits(k == 0) == 7 + 5 + 200 and caCondLits(k != 0) == 9 + 7 + 0
+    assert CaCondBaked == caCondLits(k == 0) and CaCondBakedNo == caCondLits(k != 0)
+    t CaExpr& = CaExpr.Neg(CaExpr.Num(2.0))
+    s := caSimplify(t)
+    n CaExpr& = null
+    one := caSimplify(n)
+    m0 := caSimplifyM(t, I64(k))
+    m3 := caSimplifyM(t, I64(k) + 3)
+    assert churnArena() == 2469000
+    assert caDepth(s) == 202 and caDepth(one) == 100 and caDepth(m0) == 202 and caDepth(m3) == 300
+}
+
 # T7/E12c: a reference field or element given an array the expression makes itself - "Array<T>(n)", a comprehension,
 # a rendering - holds that very storage (it is built where the field lives), each one its own
 type AdoptHolder struct() {
@@ -9361,7 +9406,7 @@ fn adoptFresh(n I64) I64 {
     h.rows[1] = h.rows[0]
     h.rows[1][1] = 40
     h.s = $(n * 11) "!"
-    assert not same(first, h.a) and first[0] == 0 and h.a.Len() == n and same(h.rows[0], h.rows[1])
+    assert first is not h.a and first[0] == 0 and h.a.Len() == n and h.rows[0] is h.rows[1]
     return h.a[0] + h.rows[0][1] + h.rows[0][2] + I64(h.s.Len())
 }
 AdoptBaked I64 = adoptFresh(3)
