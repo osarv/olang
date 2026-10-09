@@ -8898,9 +8898,15 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
 //E13b: "e(args)" - a call through the function value e gives. It is an ordinary call whose target is a var of
 //e's function type standing for the value, so arity, fit, scope binding and codegen's argument lowering are all
 //the ordinary call's; the value itself is computed from e, before the arguments
+static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* callee, struct list args, struct token tok,
+                                          bool allowed);
 static struct operand* buildValueCall(struct checkCtx* ctx, struct operand* callee, struct syntax* callNode, bool allowed) {
     struct token tok = firstTokOfType(callNode, TOK_PAREN_O);
-    struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+    return buildValueCallArgs(ctx, callee, buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS)), tok, allowed);
+}
+static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* callee, struct list args, struct token tok,
+                                          bool allowed) {
+    if (callee->type.unknown) return unknownPlaceholder(tok); //reported where it was written
     if (callee->type.bType != BASETYPE_FUNC) {
         //E31: "f(x)" on a value whose type declares Call
         const char* cn = operatorMethodName(ctx, callee->type, "Call");
@@ -9931,12 +9937,13 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
         return OperandBitcast(recvOp, bitsT, mTok);
     }
-    //a field always wins, and a method that shadows one is a name clash rather than a silent preference -
-    //the whole point of the rule is that "x.f" has exactly one meaning
+    //a field always wins - a method may not share its name (M19) - so "x.f(args)" on a field is E13b's call through
+    //the value "x.f" gives, as "(x.f)(args)" is
     if (recvType.bType == BASETYPE_STRUCT && VarGetList(&recvType.vars, mName)) {
-        ErrMsgSemantic(mTok, METHOD_SHADOWS_FIELD);
         *reported = true;
-        return OperandIntLiteral(mTok);
+        struct operand* field = OperandMember(ctx->mod, recvOp, mName, mTok);
+        struct list fArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
+        return buildValueCallArgs(ctx, field, fArgs, mTok, ctx->allowFallibleCall);
     }
     //T29c: a method on written text is looked up on String
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));

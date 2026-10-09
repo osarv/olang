@@ -6234,6 +6234,24 @@ test "E13b: a call's result, an element or a parenthesized value is called direc
     assert ChainBakedE == 7
 }
 
+# E13b/M19: "x.f(args)" where f is a field holding a function calls the value the field holds, as "(x.f)(args)" does -
+# a method may not share a field's name, so the spelling has one meaning
+type FieldFnE struct(f fn(a I32) I32) { f }
+type FieldFnHolderE struct(b FieldFnE) { b }
+type FieldFnRiskyE struct(g fn(a I32) I32 ? DivError) { g }
+fn fieldFnsE(n I32) I32 {
+    b := FieldFnE(doubleO)
+    h := FieldFnHolderE(b)
+    r := FieldFnRiskyE(limiterE(5))
+    return b.f(n) + h.b.f(1) * 100 + (try r.g(9) catch default 7) * 1000
+}
+FieldFnsBakedE := fieldFnsE(21)
+
+test "E13b: a field holding a function is called as x.f(args)" {
+    assert fieldFnsE(21) == 7242
+    assert FieldFnsBakedE == 7242
+}
+
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
     y fn(a I32) I32 = doubleO
     (y)(2)

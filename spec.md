@@ -1928,7 +1928,9 @@ argument (E25) between the target name and the `(`; a call whose target has none
 `id(dbl)(3)`, `fs[i](x)`, `(pick(c))(x)`. The expression is evaluated first, then the arguments, and the call
 is checked as a call through a variable of that type would be (E14, E12). A fallible one needs `try` as any
 call does; a `try` written before the chain covers its last call only. A `(` beginning a new line begins a new
-statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error.
+statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error. `x.f(args)` where
+`f` is a field of `x` is such a call too - the function value the field holds is called, as `(x.f)(args)` - since a
+method may not share a field's name (M19), so the spelling has that one meaning.
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,
