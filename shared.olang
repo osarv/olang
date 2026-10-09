@@ -9264,6 +9264,30 @@ test "T4: signed, unsigned and half-width float types" {
     assert PrimsBaked
 }
 
+# E11a: an integer renders in decimal - written by the runtime with a digit count and a two-digits-at-a-time writer -
+# at every digit-count boundary, both signs, the extremes of each width; the same text at run time as while compiling
+fn renderInts(k I64) String {
+    lo I64 = -9223372036854775807 - k
+    edges := I64[0, 9, 10, 99, 100, 999999999, 1000000000, 999999999999999999, 1000000000000000000, -1, -10, -100]
+    t := StringBuilder()
+    for v in edges { t.Push($v " ") }
+    t.Push($lo " " $(lo + 1) " " $(U64(0) - U64(k)) " " $U64(10000000000000000000) " " $U8(200) " " $I8(-128) " ")
+    t.Push($I32(-2147483647 - k) " " $U32(4294967295) " " $U16(65535) " " $I16(-32768) " " $(I64(9223372036854775807) * k))
+    return t.ToString()
+}
+RenderIntsBaked := renderInts(1)
+
+test "E11a: integers render in decimal at every digit-count boundary, at run time as while compiling" {
+    w := StringBuilder()
+    w.Push("0 9 10 99 100 999999999 1000000000 999999999999999999 1000000000000000000 -1 -10 -100 ")
+    w.Push("-9223372036854775808 -9223372036854775807 18446744073709551615 10000000000000000000 200 -128 ")
+    w.Push("-2147483648 4294967295 65535 -32768 9223372036854775807")
+    want := w.ToString()
+    assert RenderIntsBaked == want
+    assert renderInts(WdMutable / 2000000000) == want        # a String value beside a String&: the value is held for
+                                                              # Eq in this block (it crashed the code generator)
+}
+
 # T4: an F16 or BF16 zero is zero. MinifloatFrom, which rounds a value to either while compiling, read zero as a normal
 # number and gave -infinity's bits: "h F16 = 0.0" was emitted as a malformed constant, and the evaluator baked an F16
 # difference reaching zero as -inf. Run at run time and baked (K2), the two agreeing.

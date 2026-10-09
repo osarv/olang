@@ -3973,9 +3973,10 @@ static void rdPutQuoted(struct cgCtx* ctx, char* src, char* count, int quote) {
     rdAdvance(ctx, at, k);
 }
 
-//a number, through the runtime's snprintf wrappers. While writing, the capacity only bounds what snprintf
-//may write - the measured length is exact, and its trailing NUL lands on the next piece's first byte (or on
-//the one spare byte a join allocates past the end), which is overwritten or unused
+//a number, through the runtime's writers: an integer's writes exactly its digits, a float's goes through snprintf -
+//while writing, the capacity only bounds what snprintf may write; the measured length is exact, and its trailing
+//NUL lands on the next piece's first byte (or on the one spare byte a join allocates past the end), which is
+//overwritten or unused
 static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     char ty[64];
     llvmType(t, ty, sizeof(ty));
@@ -3999,7 +4000,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
                           : t.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_float(ptr %s, i64 %s, double %s, i32 %d)\n", k, p, cap, wide, (int)fk);
     } else {
-        fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, cap, wide);
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, wide);
     }
     rdAdvance(ctx, at, k);
 }
@@ -6329,23 +6330,94 @@ void emitScopeRuntime(FILE* out) {
         //unbounded in the number of tasks. Every chunk on the pool came from a scope that has already
         //closed, so nothing references it; a sub-scope's chunks are never here, having been spliced into
         //the parent at the join rather than freed by their own thread.
-        //E11a: the two renderings the compiler owns. snprintf's contract IS the one E11a states - write
-        //what fits, return the length the rendering needs - so a caller can allocate an estimate and
-        //retry only when it was too small. A float's rendering is @__olang_fmt_float's, below.
-        "@__olang_fmt_d = linkonce_odr unnamed_addr constant [5 x i8] c\"%lld\\00\"\n"
-        "@__olang_fmt_u = linkonce_odr unnamed_addr constant [5 x i8] c\"%llu\\00\"\n"
+        //E11a: an integer in decimal - the length it takes (a digit count: the bit length gives the count to within
+        //one, a power of ten settles it), and with a destination, the digits written there, two at a time from a
+        //table, last first. No snprintf: measuring is a few instructions, and writing is no more than it has to be.
+        //A null destination only measures, as every rendering's contract says (E11a); a real one has the room the
+        //measurement said, and nothing is written past it. A float's rendering is @__olang_fmt_float's, below.
         "@__olang_fmt_g = linkonce_odr unnamed_addr constant [6 x i8] c\"%.17g\\00\"\n"
-        "define linkonce_odr i64 @__olang_fmt_i64(ptr %buf, i64 %cap, i64 %v) {\n"
+        "@__olang_pow10 = linkonce_odr unnamed_addr constant [20 x i64] [i64 1, i64 10, i64 100, i64 1000, i64 10000, "
+            "i64 100000, i64 1000000, i64 10000000, i64 100000000, i64 1000000000, i64 10000000000, i64 100000000000, "
+            "i64 1000000000000, i64 10000000000000, i64 100000000000000, i64 1000000000000000, i64 10000000000000000, "
+            "i64 100000000000000000, i64 1000000000000000000, i64 -8446744073709551616]\n"
+        "@__olang_digits2 = linkonce_odr unnamed_addr constant [200 x i8] c\""
+            "00010203040506070809101112131415161718192021222324252627282930313233343536373839"
+            "40414243444546474849505152535455565758596061626364656667686970717273747576777879"
+            "8081828384858687888990919293949596979899\"\n"
+        "define linkonce_odr i64 @__olang_fmt_u64(ptr %buf, i64 %v) {\n"
         "entry:\n"
-        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_d, i64 %v)\n"
-        "  %n64 = sext i32 %n to i64\n"
-        "  ret i64 %n64\n"
+        "  %v1 = or i64 %v, 1\n"
+        "  %lz = call i64 @llvm.ctlz.i64(i64 %v1, i1 true)\n"
+        "  %bits = sub i64 64, %lz\n"
+        "  %t0 = mul i64 %bits, 1233\n"
+        "  %t = lshr i64 %t0, 12\n"
+        "  %pp = getelementptr [20 x i64], ptr @__olang_pow10, i64 0, i64 %t\n"
+        "  %pw = load i64, ptr %pp\n"
+        "  %below = icmp ult i64 %v1, %pw\n"
+        "  %belowi = zext i1 %below to i64\n"
+        "  %t1 = add i64 %t, 1\n"
+        "  %len = sub i64 %t1, %belowi\n"
+        "  %measure = icmp eq ptr %buf, null\n"
+        "  br i1 %measure, label %done, label %write\n"
+        "write:\n"
+        "  %end = getelementptr i8, ptr %buf, i64 %len\n"
+        "  br label %pairs\n"
+        "pairs:\n"
+        "  %m = phi i64 [ %v, %write ], [ %q, %pair ]\n"
+        "  %p = phi ptr [ %end, %write ], [ %p2, %pair ]\n"
+        "  %big = icmp uge i64 %m, 100\n"
+        "  br i1 %big, label %pair, label %last\n"
+        "pair:\n"
+        "  %q = udiv i64 %m, 100\n"
+        "  %q100 = mul i64 %q, 100\n"
+        "  %r = sub i64 %m, %q100\n"
+        "  %ri = shl i64 %r, 1\n"
+        "  %src = getelementptr i8, ptr @__olang_digits2, i64 %ri\n"
+        "  %d = load i16, ptr %src, align 1\n"
+        "  %p2 = getelementptr i8, ptr %p, i64 -2\n"
+        "  store i16 %d, ptr %p2, align 1\n"
+        "  br label %pairs\n"
+        "last:\n"
+        "  %two = icmp uge i64 %m, 10\n"
+        "  br i1 %two, label %lasttwo, label %lastone\n"
+        "lasttwo:\n"
+        "  %li = shl i64 %m, 1\n"
+        "  %lsrc = getelementptr i8, ptr @__olang_digits2, i64 %li\n"
+        "  %ld = load i16, ptr %lsrc, align 1\n"
+        "  %lp = getelementptr i8, ptr %p, i64 -2\n"
+        "  store i16 %ld, ptr %lp, align 1\n"
+        "  br label %done\n"
+        "lastone:\n"
+        "  %c = add i64 %m, 48\n"
+        "  %c8 = trunc i64 %c to i8\n"
+        "  %op = getelementptr i8, ptr %p, i64 -1\n"
+        "  store i8 %c8, ptr %op\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret i64 %len\n"
         "}\n\n"
-        "define linkonce_odr i64 @__olang_fmt_u64(ptr %buf, i64 %cap, i64 %v) {\n"
+        //a signed one: a '-', then the magnitude - "0 - v" is the magnitude as an unsigned number for every v, the
+        //most negative included, since the subtraction wraps (E6c)
+        "define linkonce_odr i64 @__olang_fmt_i64(ptr %buf, i64 %v) {\n"
         "entry:\n"
-        "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 %cap, ptr @__olang_fmt_u, i64 %v)\n"
-        "  %n64 = sext i32 %n to i64\n"
-        "  ret i64 %n64\n"
+        "  %neg = icmp slt i64 %v, 0\n"
+        "  br i1 %neg, label %minus, label %plain\n"
+        "plain:\n"
+        "  %n = call i64 @__olang_fmt_u64(ptr %buf, i64 %v)\n"
+        "  ret i64 %n\n"
+        "minus:\n"
+        "  %mag = sub i64 0, %v\n"
+        "  %measure = icmp eq ptr %buf, null\n"
+        "  br i1 %measure, label %count, label %sign\n"
+        "sign:\n"
+        "  store i8 45, ptr %buf\n"
+        "  br label %count\n"
+        "count:\n"
+        "  %after = getelementptr i8, ptr %buf, i64 1\n"
+        "  %rest = select i1 %measure, ptr null, ptr %after\n"
+        "  %k = call i64 @__olang_fmt_u64(ptr %rest, i64 %mag)\n"
+        "  %k1 = add i64 %k, 1\n"
+        "  ret i64 %k1\n"
         "}\n\n"
         //T4: an integer - negative when %neg, of magnitude %m - as a BF16, rounded ONCE to its 8 significant bits, ties
         //to even. LLVM's own "sitofp ... to bfloat" goes through a float at -O0, rounding twice, and so came out one

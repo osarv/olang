@@ -9087,6 +9087,9 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
         }
     }
     struct type dt = x->type;
+    //a value held lives in this block, as ":=" makes it - a call's result type names the callee's result scope, which
+    //is nothing here (and crashed the code generator, "f() == s" with f giving a String value and s a String&)
+    if (!dt.structMAlloc) dt.scopeParam = NULL;
     bool unnamed = false;
     if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
     reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok);
