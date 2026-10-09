@@ -422,6 +422,7 @@ bool TypeIsSameRepr(struct type a, struct type b) {
 //T25b: identity with permission compared too - which it is at every level inside another type
 static bool typeSameNested(struct type a, struct type b);
 
+static bool constPatternSame(struct type a, struct type b);
 bool TypeIsSame(struct type a, struct type b) {
     if (a.bType != b.bType) return false;
     //T27: reference-shapedness is part of a type's identity. "Point" and "Point&" are different types - one
@@ -463,13 +464,21 @@ bool TypeIsSame(struct type a, struct type b) {
             if ((a.owner != NULL) != (b.owner != NULL)) return false;
             if (a.owner != NULL && (a.owner != b.owner || !StrCmp(a.name, b.name))) return false;
             if (a.arrMalloc != b.arrMalloc) return false;
+            //T12: a length still a pattern (T7c, G22) is the same only as the same pattern
+            if ((a.arrLenArg != NULL) != (b.arrLenArg != NULL)) return false;
+            if (a.arrLenArg && !TypeIsSame(*a.arrLenArg, *b.arrLenArg)) return false;
             //a real, previously-latent bug fixed alongside the array-literal rework below: this never
             //compared the two fixed sizes at all, so e.g. "x mut int32[5] = <an int32[3] value>" silently
             //type-checked - a buffer over-read the moment cgStoreInto's by-ref load/store pair ran, reading
             //5 elements' worth out of a 3-element backing store. Both sides are fixed here (arrMalloc
             //already confirmed equal above and neither is a runtime-length slice), so arrLen is always populated.
-            if (!a.arrMalloc && a.arrLen->intLiteralVal != b.arrLen->intLiteralVal) return false;
+            if (!a.arrMalloc && !a.arrLenArg && a.arrLen->intLiteralVal != b.arrLen->intLiteralVal) return false;
             return typeSameNested(*a.arrElem, *b.arrElem);
+        case BASETYPE_CONST: //G25: the same value of the same type, or the same pattern
+            if (a.unknown || b.unknown) return true;
+            if (a.constKnown != b.constKnown) return false;
+            if (a.constKnown) return a.constVal == b.constVal && TypeIsSame(*a.constOf, *b.constOf);
+            return constPatternSame(a, b);
         case BASETYPE_FUNC: {
             if (a.vars.len != b.vars.len) return false;
             for (int i = 0; i < a.vars.len; i++) {
@@ -1500,6 +1509,8 @@ void collectType(struct semaModule* mod, struct token nameTok, enum baseType bTy
 //rest once every signature is known.
 static void rejectUnderscoreName(struct str name, struct token tok);
 static struct var* buildConstVar(struct str name);
+static bool isPreludeWord(struct str name);
+static struct var* preludeWordVar(struct str name);
 static struct semaModule* buildModule;
 void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isFuncDecl, bool isMethod) {
     struct str name = strFromTok(nameTok);
@@ -1509,6 +1520,7 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     //reported, and then declared anyway: later passes look the declaration up, and the module's own
     //name shadows the constant for the rest of the check, so nothing downstream trips over a missing var
     if (!isMethod && mod != buildModule && buildConstVar(name)) Err(nameTok, ERR_BUILD_CONST_REDECLARED, nameTok);
+    if (!isMethod && !isPreludeModule(mod) && isPreludeWord(name)) Err(nameTok, ERR_PRELUDE_WORD_REDECLARED, nameTok); //M19f
     if (!isMethod) {
         struct var* prev = VarGetList(&mod->vars, name);
         if (prev && !(isFuncDecl && prev->isFuncDecl)) { Err(nameTok, ERR_NAME_IN_USE, nameTok); return; }
@@ -1621,7 +1633,8 @@ void semaCollectNames(struct semaModule* mod) {
 // ---- pass 2: resolve type shapes and function signatures ----
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
-struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
+struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
+struct operand* paramDefaultOp(struct var* param);
 void resolveTypeDecl(struct type* t);
 
 //resolves a "&name" heap-indirection tag's optional scope name against scopeParams (the function
@@ -1744,7 +1757,19 @@ void refreshStructSnapshots(struct type* t);
 
 static bool typeIsDeclaredStruct(struct type t);
 bool TypeIsGeneric(struct type t);
+static bool constPatternValue(struct type p, struct list* bindings, long long* out);
+static void fixArrayLength(struct type* t, long long n, struct token tok);
+struct type TypeConst(struct type of, long long v);
 struct type TypeSubstitute(struct type t, struct list* bindings) {
+    //G24/G25: a constant argument computed from constant variables is computed once they are bound
+    if (t.bType == BASETYPE_CONST) {
+        if (t.constKnown || t.unknown || !t.constExpr) return t;
+        long long n;
+        if (!constPatternValue(t, bindings, &n)) return t;
+        struct type k = TypeConst(*t.constOf, n);
+        k.tok = t.tok;
+        return k;
+    }
     if (t.bType == BASETYPE_TYPEVAR) {
         struct type* bound = bindingGet(bindings, t.name);
         if (!bound) return t;
@@ -1766,6 +1791,17 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
         struct type* elem = MallocOrCrash(sizeof(struct type));
         *elem = TypeSubstitute(*t.arrElem, bindings);
         t.arrElem = elem;
+        //T7c: a length still a pattern becomes the instantiation's own
+        if (t.arrLenArg) {
+            struct type len = TypeSubstitute(*t.arrLenArg, bindings);
+            if (len.bType == BASETYPE_CONST && len.constKnown) {
+                fixArrayLength(&t, len.constVal, len.tok.type != TOK_NONE ? len.tok : t.tok);
+                if (len.unknown) t.unknown = true;
+            } else {
+                t.arrLenArg = MallocOrCrash(sizeof(struct type));
+                *t.arrLenArg = len;
+            }
+        }
         return t;
     }
     //G8a: a generic applied to arguments substitutes through its ARGUMENTS and is then re-applied, so the
@@ -1843,7 +1879,8 @@ static bool typeIsDeclaredStruct(struct type t) {
 
 bool TypeIsGeneric(struct type t) {
     if (t.bType == BASETYPE_TYPEVAR) return true;
-    if (t.bType == BASETYPE_ARRAY) return TypeIsGeneric(*t.arrElem);
+    if (t.bType == BASETYPE_CONST) return !t.constKnown && !t.unknown; //G24: a pattern
+    if (t.bType == BASETYPE_ARRAY) return t.arrLenArg || TypeIsGeneric(*t.arrElem);
     if (typeIsDeclaredStruct(t)) {
         if (!t.genericOrigin) return t.typeParams.len > 0;
         for (int i = 0; i < t.typeArgs.len; i++) {
@@ -1871,7 +1908,13 @@ void TypeCollectVars(struct type t, struct list* out) {
         if (t.varConstraint) TypeCollectVars(*t.varConstraint, out);
         return;
     }
-    if (t.bType == BASETYPE_ARRAY) { TypeCollectVars(*t.arrElem, out); return; }
+    //G24: only a constant variable written as a WHOLE argument is collected - one an expression reads is computed
+    //from the others, never inferred
+    if (t.bType == BASETYPE_ARRAY) {
+        TypeCollectVars(*t.arrElem, out);
+        if (t.arrLenArg) TypeCollectVars(*t.arrLenArg, out);
+        return;
+    }
     if (typeIsDeclaredStruct(t)) {
         if (t.genericOrigin) {
             for (int i = 0; i < t.typeArgs.len; i++) TypeCollectVars(*(struct type*)ListGetIdx(&t.typeArgs, i), out);
@@ -1900,9 +1943,23 @@ void TypeCollectVars(struct type t, struct list* out) {
 static int numericTypeRank(struct type t);
 static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
 struct var* SemanticCallOf(struct type t);
+//G24: why the last failed unification failed, where it was a constant's doing - a variable bound to two values, or an
+//array whose length its type does not hold - for the call to report as that rather than as "cannot infer"
+static struct { bool set; struct str name; long long a, b; bool runtimeLength; struct type arrayType; } unifyConstMismatch;
 bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     if (param.bType == BASETYPE_TYPEVAR) {
         struct type* bound = bindingGet(bindings, param.name);
+        //G24: a constant variable bound twice must be bound to one value - the two values are what the call reports
+        if (bound && param.isConstVar && bound->bType == BASETYPE_CONST && arg.bType == BASETYPE_CONST
+                && bound->constKnown && arg.constKnown && !bound->unknown && !arg.unknown && bound->constVal != arg.constVal) {
+            if (!unifyConstMismatch.set) {
+                unifyConstMismatch.set = true;
+                unifyConstMismatch.name = param.name;
+                unifyConstMismatch.a = bound->constVal;
+                unifyConstMismatch.b = arg.constVal;
+            }
+            return false;
+        }
         if (bound) return TypeIsSame(*bound, arg);
         struct typeBinding b = (struct typeBinding){0};
         b.name = param.name;
@@ -1930,8 +1987,27 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     if (param.bType == BASETYPE_INTERFACE && arg.bType != BASETYPE_INTERFACE && arg.bType != BASETYPE_TYPEVAR) {
         return unifyThroughMethods(param, arg, bindings);
     }
+    if (param.bType == BASETYPE_CONST) return true; //G24: a pattern is computed once bound, then checked by the fit
     if (param.bType != arg.bType) return false;
-    if (param.bType == BASETYPE_ARRAY) return TypeUnify(*param.arrElem, *arg.arrElem, bindings);
+    if (param.bType == BASETYPE_ARRAY) {
+        if (!TypeUnify(*param.arrElem, *arg.arrElem, bindings)) return false;
+        if (!param.arrLenArg) return true;
+        //G24/T7d: "Array<<T>, <N>>" binds N to the length the argument's type holds - an Array<T>'s is known only at
+        //run time, so it binds nothing and the call says to view it as one of a known length (E32b)
+        if (arg.arrMalloc && !arg.arrLenArg) {
+            if (!unifyConstMismatch.set) {
+                unifyConstMismatch.set = true;
+                unifyConstMismatch.runtimeLength = true;
+                unifyConstMismatch.arrayType = arg;
+            }
+            return false;
+        }
+        struct type len = arg.arrLenArg ? *arg.arrLenArg
+                        : TypeConst(TypeVanilla(BASETYPE_INT64), arg.arrLen ? arg.arrLen->intLiteralVal : 0);
+        if (arg.unknown) len.unknown = true;
+        if (param.arrLenArg->bType == BASETYPE_TYPEVAR) return TypeUnify(*param.arrLenArg, len, bindings);
+        return true;
+    }
     //two applications of one generic unify through their arguments - see typeIsDeclaredStruct
     if (typeIsDeclaredStruct(param) && param.genericOrigin) {
         if (arg.genericOrigin != param.genericOrigin || arg.typeArgs.len != param.typeArgs.len) return false;
@@ -1987,6 +2063,9 @@ static void TypeCollectConstraints(struct type t, struct list* out) {
 //its constrained variable is bound to (G9c). Returns false when a constraint is not met.
 static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
 bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed);
+static const char* protocolOf(struct str name, bool* priv);
+static char* protocolPrivateName(const char* cap);
+static struct var* methodNamedOn(struct type t, const char* name);
 static bool checkTypeConstraints(struct list* constraints, struct list* bindings, struct token tok) {
     for (int i = 0; i < constraints->len; i++) {
         struct type* c = ListGetIdx(constraints, i);
@@ -2006,6 +2085,11 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
         if (!missing) Err(tok, ERR_CONSTRAINT_UNMET, bound, wantNamed.name, c->name);
         else if (StrCmp(missing->name, StrFromCStr("Hash"))) Err(tok, ERR_CONSTRAINT_UNMET_HASH, bound, wantNamed.name, c->name);
         else Err(tok, ERR_CONSTRAINT_UNMET_METHOD, bound, wantNamed.name, c->name, missing->name);
+        //M6b: a trait's method is met by its own name, so a private spelling of it meets nothing - said where it is
+        bool privSpelt = false;
+        const char* proto = missing ? protocolOf(missing->name, &privSpelt) : NULL;
+        struct var* pm = proto && !privSpelt ? methodNamedOn(*bound, protocolPrivateName(proto)) : NULL;
+        if (pm) Note(pm->tok, NOTE_PRIVATE_SPELLING, pm->name, missing->name);
         ok = false;
     }
     return ok;
@@ -2030,6 +2114,7 @@ static struct list typeInstantiations;
 //syntax being checked again per instantiation (G16). Threaded as a static rather than through every
 //type-resolution signature, and cleared on the way out so nothing outside an instantiation sees it.
 static struct list* currentBindings;   //struct instantiation
+static struct list* currentConstVars; //G20/G22: see below
 //G8: the type parameters in scope while a declaration's own types are being resolved, so a bare IDEN
 //inside a "type-args" list can name one - "Box<T> inside a declaration that declares T". For a generic
 //TYPE that is its declared list, available before any field is resolved; for a FUNCTION there is no list
@@ -2041,13 +2126,17 @@ static struct list* currentTypeParamNames;
 //every name written as "<T>" anywhere under `node`, at any depth
 static void collectTypeVarNames(struct syntax* node, struct list* out) {
     if (!node) return;
-    if (node->type == SNTX_TYPE_VAR) {
+    if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) { //G22: "<N>" in a constant argument too
         struct token t = firstTokOfType(node, TOK_IDEN);
+        bool seen = false;
         if (t.type != TOK_NONE) {
             struct str n = strFromTok(t);
-            for (int i = 0; i < out->len; i++) if (StrCmp(*(struct str*)ListGetIdx(out, i), n)) return;
-            ListAdd(out, &n);
+            for (int i = 0; i < out->len; i++) if (StrCmp(*(struct str*)ListGetIdx(out, i), n)) seen = true;
+            if (!seen) ListAdd(out, &n);
         }
+        //G19/G28: a constraint's own variables - "<V Shaped<<R>, <C>>>" - are the signature's too
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR);
+        if (c) collectTypeVarNames(c, out);
         return;
     }
     for (int i = 0; i < node->parts.len; i++) {
@@ -2058,12 +2147,15 @@ static void collectTypeVarNames(struct syntax* node, struct list* out) {
 //G1: the first token naming each distinct type variable written in node
 static void collectTypeVarToks(struct syntax* node, struct list* out) {
     if (!node) return;
-    if (node->type == SNTX_TYPE_VAR) {
+    if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
         struct token t = firstTokOfType(node, TOK_IDEN);
+        bool seen = false;
         if (t.type != TOK_NONE) {
-            for (int i = 0; i < out->len; i++) if (StrCmp(strFromTok(*(struct token*)ListGetIdx(out, i)), strFromTok(t))) return;
-            ListAdd(out, &t);
+            for (int i = 0; i < out->len; i++) if (StrCmp(strFromTok(*(struct token*)ListGetIdx(out, i)), strFromTok(t))) seen = true;
+            if (!seen) ListAdd(out, &t);
         }
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR);
+        if (c) collectTypeVarToks(c, out);
         return;
     }
     for (int i = 0; i < node->parts.len; i++) {
@@ -2071,11 +2163,93 @@ static void collectTypeVarToks(struct syntax* node, struct list* out) {
         if (!p->isToken) collectTypeVarToks(p->sntx, out);
     }
 }
+//G22: a generic's variable is INTRODUCED by its first "<X>" - in a struct type or trait by its parameter list, in a function
+//by the first "<X>" read left to right (receiver, parameters, results) - and written bare, "X", everywhere after it: in
+//the rest of the declaration and in its body. "<X>" written again is an error, and a bare "X" before the introduction
+//names no variable. Constant variables follow the rule; type variables follow it once bareTypeVars is set, and are
+//written "<T>" everywhere until then (G8b)
+static const bool bareTypeVars = false;
+//the introduction of each variable of the signature being resolved - its first "<X>", by source position - or NULL
+//outside a signature
+static struct list* currentSigIntros; //struct token
+
+static void collectSigIntros(struct syntax* node, struct list* out) {
+    if (!node) return;
+    if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
+        struct token t = firstTokOfType(node, TOK_IDEN);
+        if (t.type != TOK_NONE) {
+            bool seen = false;
+            for (int i = 0; i < out->len && !seen; i++) {
+                struct token* o = ListGetIdx(out, i);
+                if (!StrCmp(strFromTok(*o), strFromTok(t))) continue;
+                seen = true;
+                if (t.str.ptr < o->str.ptr) *o = t;
+            }
+            if (!seen) ListAdd(out, &t);
+        }
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR); //"<V Shaped<<R>>>" introduces R too
+        if (c) collectSigIntros(c, out);
+        return;
+    }
+    for (int i = 0; i < node->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&node->parts, i);
+        if (!p->isToken) collectSigIntros(p->sntx, out);
+    }
+}
+static struct token* sigIntroOf(struct str name) {
+    for (int i = 0; currentSigIntros && i < currentSigIntros->len; i++) {
+        struct token* t = ListGetIdx(currentSigIntros, i);
+        if (StrCmp(strFromTok(*t), name)) return t;
+    }
+    return NULL;
+}
+//G22: whether "<X>" written at t is written again - after the variable's introduction: in a body or a type's own
+//declaration always, in a signature anywhere but its first "<X>"
+static bool varWrittenAgain(struct token t) {
+    struct str name = strFromTok(t);
+    if (currentBindings && bindingGet(currentBindings, name)) return true;
+    if (currentConstVars && bindingGet(currentConstVars, name)) return true;
+    struct token* intro = sigIntroOf(name);
+    return intro && intro->str.ptr != t.str.ptr;
+}
+//G22: what a bare name written at `at` is - 1 a variable of the declaration in scope there, -1 one of the signature's
+//introduced only after it, 0 no variable
+static int bareVarAt(struct str name, struct token at) {
+    if (currentBindings && bindingGet(currentBindings, name)) return 1;
+    if (currentConstVars && bindingGet(currentConstVars, name)) return 1;
+    struct token* intro = sigIntroOf(name);
+    if (intro) return intro->str.ptr < at.str.ptr ? 1 : -1;
+    //a type's own list, or an enclosing declaration's, introduced its type variables before anything they are read in
+    for (int i = 0; bareTypeVars && currentTypeParamNames && i < currentTypeParamNames->len; i++)
+        if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) return 1;
+    return 0;
+}
+//a node that is one bare name used as a value or a type - "N" as an operand, or as a whole type argument - its token,
+//else a token of type TOK_NONE
+static struct token bareNameTok(struct syntax* s) {
+    if (s && (s->type == SNTX_EXPR_PRIMARY || s->type == SNTX_NAME) && s->parts.len == 1 && partAt(s, 0)->isToken
+            && partAt(s, 0)->tok.type == TOK_IDEN) return partAt(s, 0)->tok;
+    return (struct token){0};
+}
+//the innermost node of a chain of nodes each holding exactly one node - what "N" as a whole expression comes down to
+static struct syntax* firstNodeOfChain(struct syntax* s) {
+    while (s && s->parts.len == 1 && !partAt(s, 0)->isToken) s = partSntx(s, 0);
+    return s;
+}
+//G22: the binding of the constant variable named so in the instantiation being checked, else NULL
+static struct type* boundConstVar(struct str name) {
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    return b && b->bType == BASETYPE_CONST ? b : NULL;
+}
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
 //the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
 //generic's own field syntax against the copy's substituted types, and building one can instantiate
 //further generics, so they queue here and drain alongside the function ones.
-struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; };
+struct pendingTypeInst { struct type* spec; struct list bindings; struct token site; int chain; };
+//G17: how many instantiations, each requiring the next, led to the one whose body is being checked - a constant argument
+//that keeps changing ("grow" at <N> asking for "grow" at <N> + 1) never nests a type deeper, so this is what stops it
+#define INSTANTIATION_CHAIN_LIMIT 1000
+static int instChain;
 //G19: a written type's constraints, met while signatures are still being resolved, wait until every signature is - a
 //method that makes a type satisfy one may be declared in a module whose signatures come later ("Map<b.Key&, I32>" in a
 //module resolved before b, whose Key has its Hash; or a prelude file before text.olang's String.Hash)
@@ -2143,6 +2317,7 @@ static struct str sbufTake(struct sbuf* b) {
 //be read as part of it: "A-" element "-n" (or "-<length>") "-e" an array, "F-" ... "-f" a function ("m-" a "mut"
 //parameter, each parameter closed by "-p", the result in "R-" ... "-q", each error in "E-" ... "-x"), "T-" ... "-u" a
 //tuple or an anonymous struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+static struct str constPatternText(struct type t);
 static void typeSpell(struct sbuf* b, struct type t) {
     if (t.unknown) {
         sbufStr(b, "unknown");
@@ -2164,8 +2339,17 @@ static void typeSpell(struct sbuf* b, struct type t) {
         if (t.arrElem) typeSpell(b, *t.arrElem);
         char len[32];
         snprintf(len, sizeof(len), "-%lld", t.arrLen ? t.arrLen->intLiteralVal : 0);
-        sbufStr(b, t.arrMalloc ? "-n" : len);
+        if (t.arrLenArg) { sbufStr(b, "-"); typeSpell(b, *t.arrLenArg); }
+        else sbufStr(b, t.arrMalloc ? "-n" : len);
         sbufStr(b, "-e");
+    } else if (t.bType == BASETYPE_CONST) { //G25: a constant argument is its type and its value
+        sbufStr(b, "K-");
+        if (t.constOf) typeSpell(b, *t.constOf);
+        char v[32];
+        snprintf(v, sizeof(v), "-%lld", t.constVal);
+        if (t.constKnown) sbufStr(b, v);
+        else sbufS(b, constPatternText(t));
+        sbufStr(b, "-k");
     } else if (t.bType == BASETYPE_FUNC) {
         sbufStr(b, "F-");
         for (int i = 0; i < t.vars.len; i++) {
@@ -2349,6 +2533,8 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.bindings = *bindings;
     inst.specialized = spec;
     inst.site = instSite;
+    inst.chain = instChain + 1;
+    if (inst.chain > INSTANTIATION_CHAIN_LIMIT) { reportUnbounded(generic->tok); tooDeep = true; }
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
     //G17: its body would only instantiate a deeper one. G19: nor is the body of a method of an instantiation whose
@@ -2356,8 +2542,8 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     bool unmet = false;
     for (int i = 0; i < spec->type.vars.len && !unmet; i++)
         unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
-    if (unmet) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
-    else if (!tooDeep) ListAdd(&pendingInstances, &idx);
+    if (unmet || tooDeep) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
+    else ListAdd(&pendingInstances, &idx);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -2483,7 +2669,6 @@ static void checkHoldsItself(struct type* t) {
     }
 }
 
-static void applyInlineDecisions(struct type* spec);
 struct type* instantiateType(struct type* generic, struct list* bindings) {
     struct str name = instantiationNameFor(generic->name, &generic->typeParams, bindings);
     for (int i = 0; i < typeInstantiations.len; i++) {
@@ -2522,7 +2707,6 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //to emit. Keeping typeParams non-empty is what makes codegen skip it (G16) and what stops its
     //constructor being emitted with a field whose type is still a variable.
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
-    if (!argsStillGeneric) applyInlineDecisions(spec); //C2e
     refreshStructSnapshots(spec);
 
     //D13/D14a re-checked against the SUBSTITUTED field types. The generic's own declaration cannot answer
@@ -2585,7 +2769,9 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         p.spec = spec;
         p.bindings = *bindings;
         p.site = instSite;
-        ListAdd(&pendingTypeInsts, &p);
+        p.chain = instChain + 1;
+        if (p.chain > INSTANTIATION_CHAIN_LIMIT) reportUnbounded(generic->tok); //G17
+        else ListAdd(&pendingTypeInsts, &p);
     }
     return spec;
 }
@@ -2598,6 +2784,698 @@ static struct type* instantiateTypeAt(struct type* found, struct list* bindings,
     struct type* spec = instantiateType(found, bindings);
     instSite = prevSite;
     return spec;
+}
+
+// ---- G20-G28: constant parameters ----
+
+static bool typeDeclaresEq(struct type v);
+static bool nameIsAType(struct semaModule* mod, struct str name);
+static void rejectConstVarClash(struct semaModule* mod, struct str name, struct token tok);
+static bool intLiteralIsDecimal(struct str text);
+bool ChoiceHasPayload(struct type t);
+long long decodeCharBody(char* ptr, int len);
+long long parseIntLiteralChecked(char* buf, bool* tooLarge);
+//G20/G22: the constant parameters of the struct type or trait whose declaration is being resolved, as bindings of
+//each name to the constant's TYPE - so a "<N>" written where a type belongs, or for a constant of another type, is
+//reported where it is written. A function's constant variables are introduced by the slot they fill instead (G22)
+static struct list* currentConstVars;
+
+//G20: what a constant parameter may be - an integer type, Bool, a declared type over one with no constructor, or an
+//enum whose cases carry no payload - none declaring Eq, since two arguments are one exactly when their values are
+static bool constParamTypeOk(struct type t) {
+    if (t.unknown) return true;
+    if (t.structMAlloc) return false;
+    if (t.bType == BASETYPE_CHOICE) return !ChoiceHasPayload(t) && !typeDeclaresEq(t);
+    bool intOrBool = t.bType == BASETYPE_BOOL || (PrimInfo(t.bType) && PrimInfo(t.bType)->kind != 'f');
+    if (!intOrBool) return false;
+    if (t.owner) return !t.hasCtor && !typeDeclaresEq(t);
+    return true;
+}
+
+//G25: a constant argument whose value is known
+struct type TypeConst(struct type of, long long v) {
+    struct type c = (struct type){0};
+    c.bType = BASETYPE_CONST;
+    c.constOf = MallocOrCrash(sizeof(struct type));
+    *c.constOf = of;
+    c.constVal = v;
+    c.constKnown = true;
+    return c;
+}
+
+//G21: does v fit a constant parameter of type `of` - an integer's range, Bool's two values, an enum's cases
+static bool constFits(struct type of, long long v) {
+    if (of.unknown) return true;
+    if (of.bType == BASETYPE_BOOL) return v == 0 || v == 1;
+    if (of.bType == BASETYPE_CHOICE) return v >= 0 && v < of.vars.len;
+    const struct primInfo* pi = PrimInfo(of.bType);
+    if (!pi || pi->kind == 'f') return false;
+    if (pi->kind == 'u') return v >= 0 && (pi->bits >= 63 || v < (1LL << pi->bits));
+    if (pi->bits >= 64) return true;
+    long long lim = 1LL << (pi->bits - 1);
+    return v >= -lim && v < lim;
+}
+
+//G21: a constant argument folded on its syntax, while types are resolved - literals, arithmetic, constant variables,
+//immutable globals and build constants. What needs evaluation proper (a call, a global computed by one) is deferred:
+//computed once the program has checked, and the program checked again with it (B9c's loop). What reads a constant
+//variable not bound yet is a pattern, computed per instantiation (G24, G25)
+enum cfKind { CF_INT, CF_BOOL, CF_ENUM };
+struct cfVal { enum cfKind kind; long long i; struct type* enumType; };
+enum cfRes { CF_OK, CF_PATTERN, CF_DEFER, CF_ERROR };
+struct cfCtx { struct semaModule* mod; struct list* bindings; bool substituting; int depth; struct token errTok; const char* why; };
+
+static enum cfRes cfFail(struct cfCtx* c, struct token t, const char* why) {
+    if (!c->why) { c->errTok = t; c->why = why; }
+    return CF_ERROR;
+}
+static enum cfRes cfWorst(enum cfRes a, enum cfRes b) { return a > b ? a : b; }
+static struct cfVal cfBool(bool v) { struct cfVal r = { CF_BOOL, v, NULL }; return r; }
+static struct cfVal cfInt(long long v) { struct cfVal r = { CF_INT, v, NULL }; return r; }
+
+static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out);
+
+//the declaration of a global this module declares, by name; NULL if none
+static struct syntax* cfGlobalDecl(struct semaModule* mod, struct str name) {
+    for (int i = 0; i < mod->syn.decls.len; i++) {
+        struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
+        struct syntax* actual = partSntx(decl, 0);
+        if (actual->type != SNTX_VAR_DECL) continue;
+        if (StrCmp(strFromTok(firstTokOfType(actual, TOK_IDEN)), name)) return actual;
+    }
+    return NULL;
+}
+
+//whether a bare name means something in the module itself - a global, a function, a type, an import or a build constant -
+//and so is no constant variable of a generic of it (D3a, G22)
+bool nameIsImportAlias(struct semaModule* mod, struct str name);
+static bool cfNamesGlobal(struct semaModule* mod, struct str name) {
+    if (!mod) return false;
+    return cfGlobalDecl(mod, name) || VarGetList(&mod->vars, name) || buildConstVar(name) || nameIsAType(mod, name)
+           || nameIsImportAlias(mod, name);
+}
+
+static enum cfRes cfGlobal(struct cfCtx* c, struct semaModule* mod, struct token nameTok, struct cfVal* out) {
+    struct str name = strFromTok(nameTok);
+    struct syntax* decl = cfGlobalDecl(mod, name);
+    if (decl) {
+        if (hasTokOfType(decl, TOK_MUT)) return cfFail(c, nameTok, "it reads a mutable global");
+        struct syntax* init = firstPartOfType(decl, SNTX_EXPR);
+        if (!init) return CF_DEFER; //its zero value - evaluation knows it
+        if (c->depth > 32) return cfFail(c, nameTok, "a global is defined in terms of itself");
+        struct cfCtx inner = *c;
+        inner.mod = mod;
+        inner.bindings = NULL;
+        inner.depth = c->depth + 1;
+        inner.why = NULL;
+        enum cfRes r = cfExpr(&inner, init, out);
+        if (r == CF_ERROR) return cfFail(c, inner.errTok, inner.why);
+        if (r != CF_OK) return CF_DEFER;
+        //a declared type is the global's own: the value must be one of it, as its initializer would have to be (T6) -
+        //anything that is not plainly a primitive or Bool is evaluation's to judge
+        struct syntax* te = firstPartOfType(decl, SNTX_TYPE_EXPR);
+        if (te) {
+            struct syntax* ref = te->parts.len == 1 && !partAt(te, 0)->isToken ? partSntx(te, 0) : NULL;
+            struct syntax* nm = ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 ? firstPartOfType(ref, SNTX_NAME) : NULL;
+            if (!nm || nm->parts.len != 1) return CF_DEFER;
+            struct str tn = strFromTok(partAt(nm, 0)->tok);
+            enum baseType pb;
+            if (StrCmp(tn, StrFromCStr("Bool"))) return out->kind == CF_BOOL ? CF_OK : CF_DEFER;
+            if (!PrimByName(tn, &pb) || out->kind != CF_INT || !constFits(TypeVanilla(pb), out->i)) return CF_DEFER;
+        }
+        return CF_OK;
+    }
+    if (buildModule) {
+        struct var* bc = VarGetList(&buildModule->vars, name);
+        if (bc && bc->initExpr && bc->initExpr->isLiteral) {
+            if (bc->type.bType == BASETYPE_BOOL) { *out = cfBool(bc->initExpr->intLiteralVal != 0); return CF_OK; }
+            if (TypeIsInt(bc->type) && !TypeIsUnsigned(bc->type)) { *out = cfInt(bc->initExpr->intLiteralVal); return CF_OK; }
+            if (TypeIsInt(bc->type)) return CF_DEFER;
+            return cfFail(c, nameTok, "a build constant of text or a float is no constant argument");
+        }
+    }
+    if (VarGetList(&mod->vars, name)) return CF_DEFER; //a function, a global its pass knows: evaluation's to judge
+    return cfFail(c, nameTok, "it reads no global, build constant or constant variable - a local or a parameter is "
+                              "known only when the program runs");
+}
+
+//"Layout.RowMajor" - a case of an enum without payloads, by its index
+static enum cfRes cfCase(struct cfCtx* c, struct type* et, struct token caseTok, struct cfVal* out) {
+    if (et->placeholder && !et->resolving) resolveTypeDecl(et);
+    if (et->bType != BASETYPE_CHOICE) return cfFail(c, caseTok, "it names a member of a type that is no enum");
+    for (int i = 0; i < et->vars.len; i++) {
+        struct var* cs = ListGetIdx(&et->vars, i);
+        if (!StrCmp(cs->name, strFromTok(caseTok))) continue;
+        out->kind = CF_ENUM;
+        out->i = i;
+        out->enumType = et;
+        return CF_OK;
+    }
+    return cfFail(c, caseTok, "the enum has no such case");
+}
+
+static enum cfRes cfConstVar(struct cfCtx* c, struct token nameTok, struct cfVal* out);
+static enum cfRes cfNameChain(struct cfCtx* c, struct list idens, struct cfVal* out) {
+    struct token last = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+    if (idens.len == 1) {
+        //G22: a constant variable written bare - in scope where the argument is resolved; in a substitution, the
+        //variables are what it binds, and what names nothing in the module (a variable not bound yet)
+        struct str n = strFromTok(last);
+        bool var = c->substituting ? (c->bindings && bindingGet(c->bindings, n)) || !cfNamesGlobal(c->mod, n)
+                                   : (c->bindings && bindingGet(c->bindings, n)) || bareVarAt(n, last) > 0;
+        if (var) return cfConstVar(c, last, out);
+        if (nameIsAType(c->mod, strFromTok(last))) return cfFail(c, last, "it names a type, not a value");
+        return cfGlobal(c, c->mod, last, out);
+    }
+    //"Type.Case", or "alias.Type.Case"
+    struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
+    struct type* et = NULL;
+    if (idens.len == 2) et = typeNamed(c->mod, strFromTok(typeTok));
+    if (!et && idens.len > 2) {
+        ErrMsgMuteStart();
+        struct semaModule* tm = resolveAliasChain(c->mod, idens, 2);
+        ErrMsgMuteEnd();
+        if (tm) et = TypeGetList(&tm->types, strFromTok(typeTok));
+    }
+    if (et) return cfCase(c, et, last, out);
+    //"alias.Global"
+    ErrMsgMuteStart();
+    struct semaModule* target = resolveAliasChain(c->mod, idens, 1);
+    ErrMsgMuteEnd();
+    if (!target) return CF_DEFER;
+    if (!isPublic(strFromTok(last))) return cfFail(c, last, "it names a private global of another module");
+    return cfGlobal(c, target, last, out);
+}
+
+//"<N>" - a constant variable: its value where it is bound, a pattern where it is not yet
+static enum cfRes cfConstVar(struct cfCtx* c, struct token nameTok, struct cfVal* out) {
+    struct str name = strFromTok(nameTok);
+    struct type* b = c->bindings ? bindingGet(c->bindings, name) : NULL;
+    if (!b && !c->substituting && currentBindings) b = bindingGet(currentBindings, name);
+    if (b) {
+        if (b->bType == BASETYPE_TYPEVAR && b->isConstVar) return CF_PATTERN; //bound to another declaration's variable
+        if (b->bType != BASETYPE_CONST) return cfFail(c, nameTok, "it reads a type variable as a value");
+        if (!b->constKnown || b->unknown) return b->unknown && b->constKnown ? CF_DEFER : CF_PATTERN;
+        struct type of = *b->constOf;
+        out->i = b->constVal;
+        out->kind = of.bType == BASETYPE_BOOL ? CF_BOOL : of.bType == BASETYPE_CHOICE ? CF_ENUM : CF_INT;
+        if (out->kind == CF_ENUM) { out->enumType = MallocOrCrash(sizeof(struct type)); *out->enumType = of; }
+        return CF_OK;
+    }
+    if (c->substituting) return CF_PATTERN; //not bound by this substitution: still a pattern
+    for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++) {
+        if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) return CF_PATTERN;
+    }
+    return cfFail(c, nameTok, "it names no constant variable of this declaration");
+}
+
+static enum cfRes cfBinary(struct cfCtx* c, struct token op, struct cfVal a, struct cfVal b, struct cfVal* out) {
+    long long r = 0;
+    bool ints = a.kind == CF_INT && b.kind == CF_INT;
+    bool bools = a.kind == CF_BOOL && b.kind == CF_BOOL;
+    switch (op.type) {
+        case TOK_ADD: case TOK_SUB: case TOK_MUL: case TOK_DIV: case TOK_MOD:
+        case TOK_BTSFT_L: case TOK_BTSFT_R: case TOK_BTWSE_AND: case TOK_BTWSE_OR: case TOK_BTWSE_XOR:
+            if (!ints) return cfFail(c, op, "these values do not combine");
+            break;
+        default: break;
+    }
+    switch (op.type) {
+        case TOK_ADD: if (__builtin_add_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
+        case TOK_SUB: if (__builtin_sub_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
+        case TOK_MUL: if (__builtin_mul_overflow(a.i, b.i, &r)) return cfFail(c, op, "it is beyond 64 bits"); *out = cfInt(r); return CF_OK;
+        case TOK_DIV: case TOK_MOD:
+            if (b.i == 0) return cfFail(c, op, "it divides by zero");
+            if (a.i == LLONG_MIN && b.i == -1) return cfFail(c, op, "it is beyond 64 bits");
+            *out = cfInt(op.type == TOK_DIV ? a.i / b.i : a.i % b.i);
+            return CF_OK;
+        case TOK_BTSFT_L:
+            if (b.i < 0 || b.i > 62 || a.i < 0 || (a.i >> (62 - b.i)) != 0) return cfFail(c, op, "it is beyond 64 bits");
+            *out = cfInt(a.i << b.i);
+            return CF_OK;
+        case TOK_BTSFT_R:
+            if (b.i < 0 || b.i > 63) return cfFail(c, op, "it shifts by more than the width");
+            *out = cfInt(a.i >> b.i);
+            return CF_OK;
+        case TOK_BTWSE_AND: *out = cfInt(a.i & b.i); return CF_OK;
+        case TOK_BTWSE_OR: *out = cfInt(a.i | b.i); return CF_OK;
+        case TOK_BTWSE_XOR: *out = cfInt(a.i ^ b.i); return CF_OK;
+        case TOK_LST: case TOK_LSE: case TOK_GRT: case TOK_GRE:
+            if (!ints) return cfFail(c, op, "only numbers are ordered");
+            *out = cfBool(op.type == TOK_LST ? a.i < b.i : op.type == TOK_LSE ? a.i <= b.i
+                          : op.type == TOK_GRT ? a.i > b.i : a.i >= b.i);
+            return CF_OK;
+        case TOK_EQ: case TOK_NEQ:
+            if (a.kind != b.kind || (a.kind == CF_ENUM && !TypeIsSame(*a.enumType, *b.enumType)))
+                return cfFail(c, op, "these values do not compare");
+            *out = cfBool((a.i == b.i) == (op.type == TOK_EQ));
+            return CF_OK;
+        case TOK_AND: case TOK_OR: case TOK_XOR:
+            if (!bools) return cfFail(c, op, "'and', 'or' and 'xor' take Bools");
+            *out = cfBool(op.type == TOK_AND ? (a.i && b.i) : op.type == TOK_OR ? (a.i || b.i) : (a.i != b.i));
+            return CF_OK;
+        default:
+            return CF_DEFER;
+    }
+}
+
+static enum cfRes cfExpr(struct cfCtx* c, struct syntax* s, struct cfVal* out) {
+    if (!s) return CF_DEFER;
+    switch (s->type) {
+        case SNTX_EXPR: case SNTX_CONST_ARG: case SNTX_TYPE_EXPR:
+            if (s->parts.len != 1 || partAt(s, 0)->isToken) return CF_DEFER; //"mut T"
+            return cfExpr(c, partSntx(s, 0), out);
+        case SNTX_EXPR_POSTFIX: {
+            if (s->parts.len == 1 && !partAt(s, 0)->isToken) return cfExpr(c, partSntx(s, 0), out);
+            //"lib.Width" - a global of another module; anything else (a call, an index) is evaluation's
+            struct syntax* head = partAt(s, 0)->isToken ? NULL : partSntx(s, 0);
+            if (!head || head->type != SNTX_EXPR_PRIMARY || head->parts.len != 1 || !partAt(head, 0)->isToken
+                    || partAt(head, 0)->tok.type != TOK_IDEN) return CF_DEFER;
+            struct list idens = ListInit(sizeof(struct token));
+            ListAdd(&idens, &partAt(head, 0)->tok);
+            for (int i = 1; i < s->parts.len; i++) {
+                struct syntaxPart* p = partAt(s, i);
+                if (p->isToken || p->sntx->type != SNTX_EXPR_MEMBR || p->sntx->parts.len != 2) return CF_DEFER;
+                ListAdd(&idens, &partAt(p->sntx, 1)->tok);
+            }
+            return cfNameChain(c, idens, out);
+        }
+        case SNTX_CONST_VAR: return cfConstVar(c, firstTokOfType(s, TOK_IDEN), out);
+        case SNTX_TYPE_REF: {
+            struct syntax* head = partSntx(s, 0);
+            if (head->type == SNTX_TYPE_VAR && s->parts.len == 1) return cfConstVar(c, firstTokOfType(head, TOK_IDEN), out);
+            if (s->parts.len != 1 || head->type != SNTX_NAME) return cfFail(c, firstTokAnywhere(s), "it is a type, not a value");
+            return cfNameChain(c, allTokOfType(head, TOK_IDEN), out);
+        }
+        case SNTX_NAME: return cfNameChain(c, allTokOfType(s, TOK_IDEN), out);
+        case SNTX_EXPR_CHOICE_VALUE: {
+            if (s->parts.len != 1) return cfFail(c, firstTokAnywhere(s), "an enum case with a payload is no constant argument");
+            return cfNameChain(c, allTokOfType(partSntx(s, 0), TOK_IDEN), out);
+        }
+        case SNTX_EXPR_PRIMARY: {
+            struct syntaxPart* p0 = partAt(s, 0);
+            if (!p0->isToken) return s->parts.len == 1 ? cfExpr(c, p0->sntx, out) : CF_DEFER; //a call, a constructor
+            struct token t = p0->tok;
+            if (t.type == TOK_PAREN_O) return s->parts.len == 3 ? cfExpr(c, partSntx(s, 1), out) : CF_DEFER;
+            if (s->parts.len != 1) return CF_DEFER;
+            if (t.type == TOK_IDEN) {
+                struct list one = ListInit(sizeof(struct token));
+                ListAdd(&one, &t);
+                return cfNameChain(c, one, out);
+            }
+            if (t.type == TOK_BOOL_LIT) { *out = cfBool(t.str.len == 4); return CF_OK; }
+            if (t.type == TOK_CHAR_LIT) { *out = cfInt(decodeCharBody(t.str.ptr + 1, t.str.len - 2)); return CF_OK; }
+            if (t.type == TOK_INT_LIT) {
+                char buf[t.str.len + 1];
+                memcpy(buf, t.str.ptr, (size_t)t.str.len);
+                buf[t.str.len] = '\0';
+                bool tooLarge;
+                long long v = parseIntLiteralChecked(buf, &tooLarge);
+                if (tooLarge || (intLiteralIsDecimal(t.str) && v < 0)) return cfFail(c, t, "it is beyond I64's range");
+                *out = cfInt(v);
+                return CF_OK;
+            }
+            return cfFail(c, t, "a constant argument is an integer, a Bool or an enum case");
+        }
+        case SNTX_EXPR_UNARY: {
+            int nOps = s->parts.len - 1;
+            enum cfRes r = cfExpr(c, partSntx(s, nOps), out);
+            if (r != CF_OK) return r;
+            for (int i = nOps - 1; i >= 0; i--) {
+                struct token op = partAt(partSntx(s, i), 0)->tok;
+                if (op.type == TOK_SUB) {
+                    if (out->kind != CF_INT) return cfFail(c, op, "only a number is negated");
+                    if (out->i == LLONG_MIN) return cfFail(c, op, "it is beyond 64 bits");
+                    out->i = -out->i;
+                } else if (op.type == TOK_BTWSE_INV) {
+                    if (out->kind != CF_INT) return cfFail(c, op, "only an integer is inverted");
+                    out->i = ~out->i;
+                } else if (op.type == TOK_NOT) {
+                    if (out->kind != CF_BOOL) return cfFail(c, op, "'not' takes a Bool");
+                    out->i = !out->i;
+                } else {
+                    return CF_DEFER;
+                }
+            }
+            return CF_OK;
+        }
+        case SNTX_EXPR_BINARY: {
+            if (s->parts.len != 3) return CF_DEFER; //"not in"
+            struct token op = partAt(s, 1)->tok;
+            if (op.type == TOK_IN || op.type == TOK_AT) return CF_DEFER;
+            struct cfVal a, b;
+            enum cfRes ra = cfExpr(c, partSntx(s, 0), &a);
+            enum cfRes rb = cfExpr(c, partSntx(s, 2), &b);
+            enum cfRes w = cfWorst(ra, rb);
+            if (w != CF_OK) return w;
+            return cfBinary(c, op, a, b, out);
+        }
+        case SNTX_EXPR_COND: {
+            struct cfVal v, cond, other;
+            enum cfRes rv = cfExpr(c, partSntx(s, 0), &v);
+            enum cfRes rc = cfExpr(c, partSntx(s, 2), &cond);
+            enum cfRes ro = cfExpr(c, partSntx(s, 4), &other);
+            enum cfRes w = cfWorst(cfWorst(rv, rc), ro);
+            if (w != CF_OK) return w;
+            if (cond.kind != CF_BOOL) return cfFail(c, firstTokAnywhere(partSntx(s, 2)), "the condition is not a Bool");
+            *out = cond.i ? v : other;
+            return CF_OK;
+        }
+        default:
+            return CF_DEFER;
+    }
+}
+
+//G21: a constant argument evaluation proper has to decide - a call, a global computed by one - is computed once the
+//program has checked, and the program checked again with the value (B9c's loop). Keyed by where it is written and the
+//text written there, which every attempt reads alike, and by the constant variables it reads: in a generic each
+//instantiation computes its own
+struct constArgDecision { struct str key; long long n; bool ok; const char* why; };
+static struct list constArgDecisions;
+struct constArgPend { struct str key; struct syntax* node; struct semaModule* mod; struct list bindings; struct type slot;
+                      struct token tok; };
+static struct list constArgPends;
+
+static void spellSyntaxTokens(struct sbuf* b, struct syntax* s) {
+    //a variable is its name, written "<N>" or "N" and with or without the type its introduction may carry (G22)
+    if (s->type == SNTX_TYPE_VAR || s->type == SNTX_CONST_VAR) { sbufS(b, firstTokOfType(s, TOK_IDEN).str); sbufStr(b, " "); return; }
+    for (int i = 0; i < s->parts.len; i++) {
+        struct syntaxPart* p = partAt(s, i);
+        if (p->isToken) { sbufS(b, p->tok.str); sbufStr(b, " "); }
+        else spellSyntaxTokens(b, p->sntx);
+    }
+}
+
+static void typeSpell(struct sbuf* b, struct type t);
+static struct str constArgKey(struct syntax* node, struct list* bindings) {
+    struct sbuf b = {0};
+    struct token first = firstTokAnywhere(node);
+    struct str f = TokenGetFileName(first.owner);
+    sbufS(&b, f);
+    char line[32];
+    snprintf(line, sizeof(line), ":%d:", first.lineNr);
+    sbufStr(&b, line);
+    spellSyntaxTokens(&b, node);
+    for (int i = 0; bindings && i < bindings->len; i++) {
+        struct typeBinding* tb = ListGetIdx(bindings, i);
+        sbufStr(&b, "|");
+        sbufS(&b, tb->name);
+        sbufStr(&b, "=");
+        typeSpell(&b, tb->type);
+    }
+    return sbufTake(&b);
+}
+
+static struct constArgDecision* constArgDecisionFor(struct str key) {
+    for (int i = 0; i < constArgDecisions.len; i++) {
+        struct constArgDecision* d = ListGetIdx(&constArgDecisions, i);
+        if (StrCmp(d->key, key)) return d;
+    }
+    return NULL;
+}
+
+//decided by an earlier attempt: its value, or the error saying why it has none (reported, and 0 given)
+static bool constArgDecided(struct syntax* node, struct list* bindings, long long* out) {
+    struct constArgDecision* d = constArgDecisionFor(constArgKey(node, bindings));
+    if (!d) return false;
+    *out = d->ok ? d->n : 0;
+    if (!d->ok) Err(firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, d->why);
+    return true;
+}
+
+static void constArgPending(struct semaModule* mod, struct syntax* node, struct list* bindings, struct type slot) {
+    struct constArgPend p = (struct constArgPend){0};
+    p.key = constArgKey(node, bindings);
+    for (int i = 0; i < constArgPends.len; i++) if (StrCmp(((struct constArgPend*)ListGetIdx(&constArgPends, i))->key, p.key)) return;
+    p.node = node;
+    p.mod = mod;
+    p.bindings = ListInit(sizeof(struct typeBinding));
+    if (bindings) ListAddList(&p.bindings, *bindings);
+    p.slot = slot;
+    p.tok = firstTokAnywhere(node);
+    ListAdd(&constArgPends, &p);
+}
+
+//G25: a pattern's text - two patterns are one when they are written alike over the same variables. Spelled as a hash
+//where it is part of a name (typeSpell), since an instantiation's name has to be a symbol
+static struct str constPatternSource(struct type t) {
+    struct sbuf b = {0};
+    if (t.constExpr) spellSyntaxTokens(&b, t.constExpr);
+    return sbufTake(&b);
+}
+static struct str constPatternText(struct type t) {
+    struct str src = constPatternSource(t);
+    unsigned long long h = 1469598103934665603ULL;
+    for (int i = 0; i < src.len; i++) { h ^= (unsigned char)src.ptr[i]; h *= 1099511628211ULL; }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "-p%llx", h);
+    char* out = MallocOrCrash(strlen(buf) + 1);
+    memcpy(out, buf, strlen(buf) + 1);
+    return StrFromCStr(out);
+}
+struct str SemanticConstPatternSource(struct type t) {
+    struct str src = constPatternSource(t);
+    while (src.len && src.ptr[src.len - 1] == ' ') src.len--;
+    return src;
+}
+static bool constPatternSame(struct type a, struct type b) {
+    if (a.constExpr == b.constExpr) return true;
+    return StrCmp(constPatternSource(a), constPatternSource(b));
+}
+
+//a constant argument of type `slot` whose value is not known this attempt: it fits anything, so nothing about it is
+//reported twice, and the next attempt has its value
+static struct type constUndecided(struct type slot, struct token tok) {
+    struct type p = TypeConst(slot, 0);
+    p.unknown = true;
+    p.tok = tok;
+    return p;
+}
+
+//G24: does a constant argument read a constant variable these bindings (or, with none, the instantiation being checked)
+//leave unbound - one evaluation would need, so that it is a pattern until they are bound, whatever it calls
+static bool cfNamesGlobal(struct semaModule* mod, struct str name);
+static bool constArgReadsUnbound(struct syntax* s, struct semaModule* mod, struct list* bindings) {
+    if (!s) return false;
+    struct token bt = bareNameTok(s);
+    bool var = s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR;
+    if (!var && bt.type != TOK_NONE) {
+        //a bare name is a variable where one is in scope - in a substitution, wherever it names no global (D3a keeps
+        //the two apart)
+        struct str n = strFromTok(bt);
+        var = bindings ? (bindingGet(bindings, n) || !cfNamesGlobal(mod, n)) : bareVarAt(n, bt) > 0;
+    }
+    if (var) {
+        struct str n = strFromTok(bt.type != TOK_NONE ? bt : firstTokOfType(s, TOK_IDEN));
+        struct list* b = bindings ? bindings : currentBindings;
+        struct type* bound = b ? bindingGet(b, n) : NULL;
+        if (!bound) return true;
+        if (bound->bType == BASETYPE_CONST) return !bound->constKnown;
+        return TypeIsGeneric(*bound); //a type variable bound to a type is bound once that type is known
+    }
+    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && constArgReadsUnbound(partSntx(s, i), mod, bindings)) return true;
+    return false;
+}
+
+//G22: the first constant variable a constant argument reads that no declaration in scope has - a token of type TOK_NONE
+//when every one is. A variable written "<N>" after its introduction, or bare before it, is reported on the way
+static struct token constArgUnknownVar(struct syntax* s) {
+    if (!s) return (struct token){0};
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
+        struct token t = firstTokOfType(s, TOK_IDEN);
+        struct str n = strFromTok(t);
+        if (varWrittenAgain(t)) Err(t, ERR_VAR_WRITTEN_AGAIN, n, n, n);
+        if (currentBindings && bindingGet(currentBindings, n)) return (struct token){0};
+        if (currentConstVars && bindingGet(currentConstVars, n)) return (struct token){0};
+        for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
+            if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), n)) return (struct token){0};
+        return t;
+    }
+    struct token bt = bareNameTok(s);
+    if (bt.type != TOK_NONE && bareVarAt(strFromTok(bt), bt) < 0) Err(bt, ERR_VAR_BEFORE_INTRO, bt, strFromTok(bt));
+    for (int i = 0; i < s->parts.len; i++) {
+        if (partAt(s, i)->isToken) continue;
+        struct token t = constArgUnknownVar(partSntx(s, i));
+        if (t.type != TOK_NONE) return t;
+    }
+    return (struct token){0};
+}
+
+//G21: a constant argument written for the constant parameter whose type is `slot` - a constant variable written whole
+//("<N>", the variable itself), a value computed now, or a pattern computed per instantiation
+static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, struct type slot, struct str genericName,
+                                   struct str paramName) {
+    struct type bad = TypeConst(slot, 0);
+    bad.unknown = true;
+    //a constant variable as the whole argument - "<N>" where it is introduced, "N" after
+    struct syntax* ref = node->type == SNTX_TYPE_EXPR && node->parts.len == 1 && !partAt(node, 0)->isToken
+                         ? partSntx(node, 0) : NULL;
+    struct syntax* whole = ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 ? partSntx(ref, 0) : NULL;
+    bool written = whole && whole->type == SNTX_TYPE_VAR;
+    struct token bareTok = bareNameTok(whole);
+    int bare = bareTok.type == TOK_NONE ? 0 : bareVarAt(strFromTok(bareTok), bareTok);
+    if (bare < 0) { Err(bareTok, ERR_VAR_BEFORE_INTRO, bareTok, strFromTok(bareTok)); return bad; }
+    if (written || bare > 0) {
+        struct token nameTok = written ? firstTokOfType(whole, TOK_IDEN) : bareTok;
+        struct str vname = strFromTok(nameTok);
+        if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
+        //"<N I64>": a constant variable's type written where it is introduced - the parameter's type, or none at all
+        struct syntax* typeNode = written ? firstPartOfType(whole, SNTX_TYPE_EXPR) : NULL;
+        if (typeNode) {
+            struct type wt = resolveTypeExpr(mod, typeNode, NULL);
+            if (wt.bType == BASETYPE_INTERFACE) { Err(nameTok, ERR_CONST_VAR_CONSTRAINED, vname); return bad; }
+            if (!wt.unknown && !slot.unknown && !TypeIsSame(wt, slot)) { Err(nameTok, ERR_CONST_VAR_TWO_TYPES, vname, &wt, &slot); return bad; }
+        }
+        if (currentBindings) {
+            struct type* b = bindingGet(currentBindings, vname);
+            if (b) {
+                if (b->bType != BASETYPE_CONST && !b->isConstVar) { Err(nameTok, ERR_CONST_VAR_TYPE_AND_CONST, vname); return bad; }
+                return *b;
+            }
+        }
+        struct type* declared = currentConstVars ? bindingGet(currentConstVars, vname) : NULL;
+        if (declared && !declared->unknown && !slot.unknown && !TypeIsSame(*declared, slot)) {
+            Err(nameTok, ERR_CONST_VAR_TWO_TYPES, vname, declared, &slot);
+            return bad;
+        }
+        bool known = declared != NULL;
+        for (int i = 0; !known && currentTypeParamNames && i < currentTypeParamNames->len; i++) {
+            known = StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), vname);
+        }
+        if (!known) { Err(nameTok, ERR_CONST_VAR_UNKNOWN, vname); return bad; }
+        struct type tv = TypeVar(vname, nameTok);
+        tv.isConstVar = true;
+        tv.constOf = MallocOrCrash(sizeof(struct type));
+        *tv.constOf = slot;
+        return tv;
+    }
+    //a type where a value belongs: a marker, a type argument list, an array, a function type
+    if (node->type == SNTX_TYPE_EXPR && (!ref || ref->type != SNTX_TYPE_REF || ref->parts.len != 1
+            || partSntx(ref, 0)->type != SNTX_NAME)) {
+        Err(firstTokAnywhere(node), ERR_CONST_ARG_IS_TYPE, genericName, paramName, genericName);
+        return bad;
+    }
+    struct token unknownVar = constArgUnknownVar(node);
+    if (unknownVar.type != TOK_NONE) { Err(unknownVar, ERR_CONST_VAR_UNKNOWN, strFromTok(unknownVar)); return bad; }
+    //a type's name, where a value belongs - "Ring<I32, I32>"
+    if (ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 && partSntx(ref, 0)->type == SNTX_NAME
+            && partSntx(ref, 0)->parts.len == 1 && nameIsAType(mod, strFromTok(partAt(partSntx(ref, 0), 0)->tok))) {
+        Err(firstTokAnywhere(node), ERR_CONST_ARG_IS_TYPE, genericName, paramName, genericName);
+        return bad;
+    }
+    struct cfCtx c = (struct cfCtx){0};
+    c.mod = mod;
+    struct cfVal v = (struct cfVal){0};
+    enum cfRes r = cfExpr(&c, node, &v);
+    if (r == CF_ERROR) {
+        Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
+        return bad;
+    }
+    if (r == CF_DEFER && constArgReadsUnbound(node, mod, NULL)) r = CF_PATTERN; //"twice(<N>)" in a generic's signature
+    if (r == CF_PATTERN) {
+        struct type p = (struct type){0};
+        p.bType = BASETYPE_CONST;
+        p.constOf = MallocOrCrash(sizeof(struct type));
+        *p.constOf = slot;
+        p.constExpr = node;
+        p.constMod = mod;
+        p.tok = firstTokAnywhere(node);
+        return p;
+    }
+    if (r == CF_DEFER) {
+        long long n;
+        if (constArgDecided(node, currentBindings, &n)) {
+            if (!constFits(slot, n)) { Err(firstTokAnywhere(node), ERR_CONST_ARG_RANGE, n, &slot); return bad; }
+            struct type k = TypeConst(slot, n);
+            k.tok = firstTokAnywhere(node);
+            return k;
+        }
+        constArgPending(mod, node, currentBindings, slot);
+        return constUndecided(slot, firstTokAnywhere(node));
+    }
+    struct type of = slot;
+    bool kindOk = of.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
+                : of.bType == BASETYPE_CHOICE ? (v.kind == CF_ENUM && TypeIsSame(*v.enumType, of))
+                : v.kind == CF_INT;
+    if (!kindOk && !of.unknown) { Err(firstTokAnywhere(node), ERR_CONST_ARG_KIND, &slot); return bad; }
+    if (!constFits(of, v.i)) { Err(firstTokAnywhere(node), ERR_CONST_ARG_RANGE, v.i, &slot); return bad; }
+    struct type k = TypeConst(slot, v.i);
+    k.tok = firstTokAnywhere(node);
+    return k;
+}
+
+//G24/G25: a pattern's value once the constant variables it reads are bound by `bindings` - false while one is not.
+//One that cannot be computed is reported, at the instantiation (G16b), and taken as 0
+static bool constPatternValue(struct type p, struct list* bindings, long long* out) {
+    struct cfCtx c = (struct cfCtx){0};
+    c.mod = p.constMod;
+    c.bindings = bindings;
+    c.substituting = true;
+    struct cfVal v = (struct cfVal){0};
+    enum cfRes r = cfExpr(&c, p.constExpr, &v);
+    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, p.constMod, bindings))) return false;
+    *out = 0;
+    if (r == CF_OK) {
+        if (!constFits(*p.constOf, v.i)) Err(p.tok, ERR_CONST_ARG_RANGE, v.i, p.constOf);
+        else *out = v.i;
+        return true;
+    }
+    if (r == CF_DEFER) {
+        long long n;
+        if (constArgDecided(p.constExpr, bindings, &n)) { *out = n; return true; }
+        constArgPending(p.constMod, p.constExpr, bindings, *p.constOf);
+        return true;
+    }
+    Err(c.errTok.type != TOK_NONE ? c.errTok : p.tok, ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
+    return true;
+}
+
+//T7c: an array's length, known
+static struct operand* lengthOperand(long long n) {
+    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
+    *lenOp = (struct operand){0};
+    lenOp->type = TypeVanilla(BASETYPE_INT64);
+    lenOp->isLiteral = true;
+    lenOp->intLiteralVal = n;
+    return lenOp;
+}
+
+//T7c: an "Array<T, N>" with N known - from 0 to the largest length whose bytes fit an I64 (D14b). An element whose
+//size is not known yet (a type still being resolved) is judged by its count alone
+static void fixArrayLength(struct type* t, long long n, struct token tok) {
+    long long elemSize = 1;
+    if (t->arrElem && t->arrElem->bType == BASETYPE_BOOL) elemSize = 1;
+    else if (t->arrElem && PrimInfo(t->arrElem->bType)) elemSize = PrimInfo(t->arrElem->bType)->bits / 8;
+    if (n < 0 || n > ArrayLengthLimit(elemSize)) { Err(tok, ERR_ARRAY_LENGTH_RANGE, n); n = 0; }
+    t->arrMalloc = false;
+    t->arrLen = lengthOperand(n);
+    t->arrLenArg = NULL;
+}
+
+//T7c: an array type's length argument, resolved against the constant parameter "Array" declares for it (an I64): a
+//length known now, a pattern (a constant variable, or an expression of them), or undecided this attempt
+static void applyArrayLengthArg(struct type* t, struct type len, struct token tok) {
+    if (len.bType == BASETYPE_TYPEVAR) { //"<N>" - the length an instantiation binds
+        t->arrMalloc = false;
+        t->arrLen = NULL;
+        t->arrLenArg = MallocOrCrash(sizeof(struct type));
+        *t->arrLenArg = len;
+        return;
+    }
+    if (len.bType != BASETYPE_CONST) return;
+    if (len.unknown) { //undecided this attempt, or reported: fits anything
+        fixArrayLength(t, 0, tok);
+        t->unknown = true;
+        return;
+    }
+    if (!len.constKnown) { //"<N> * 2"
+        t->arrMalloc = false;
+        t->arrLen = NULL;
+        t->arrLenArg = MallocOrCrash(sizeof(struct type));
+        *t->arrLenArg = len;
+        return;
+    }
+    fixArrayLength(t, len.constVal, tok);
 }
 
 //base type a name resolves to, before any array suffixes on the reference are applied
@@ -2616,9 +3494,13 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
     *t.arrElem = TypeVanilla(BASETYPE_INT32);
     if (!argsNode) { Err(nameTok, ERR_MISSING_TYPE_ARGS, nameTok, StrFromCStr("Array")); return t; }
     struct list argNodes = allSyntaxParts(argsNode);
-    if (argNodes.len != 1) { Err(firstTokAnywhere(argsNode), ERR_TYPE_ARG_COUNT, StrFromCStr("Array"), 1, argNodes.len); return t; }
+    if (argNodes.len > 2) { Err(firstTokAnywhere(argsNode), ERR_ARRAY_TOO_MANY_ARGS, argNodes.len); return t; }
     //an element's marker naming a variable is the one error - not also whether that variable is visible here
     struct syntax* elemNode = *(struct syntax**)ListGetIdx(&argNodes, 0);
+    if (elemNode->type == SNTX_CONST_ARG) {
+        Err(firstTokAnywhere(elemNode), ERR_TYPE_ARG_IS_VALUE, StrFromCStr("Array"), StrFromCStr("T"));
+        return t;
+    }
     struct token named = markerNameIn(elemNode);
     if (named.type == TOK_IDEN) {
         ErrMsgMuteStart();
@@ -2632,11 +3514,21 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
         if (t.arrElem->scopeParam) Err(firstTokAnywhere(argsNode), ERR_NAMED_SCOPE_ON_ELEMENT);
     }
     //T7a: an array's storage lives apart from the value naming it, so copying an array of arrays would copy
-    //the inner arrays' names and share their storage - an element array is written as a reference
-    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc) Err(firstTokAnywhere(argsNode), ERR_ARRAY_NESTED_BY_VALUE, t.arrElem);
+    //the inner arrays' names and share their storage - an element array is written as a reference. A fixed-length
+    //one (T7c) holds its elements in itself, and is held by value as any value is
+    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc && t.arrElem->arrMalloc && !t.arrElem->unknown)
+        Err(firstTokAnywhere(argsNode), ERR_ARRAY_NESTED_BY_VALUE, t.arrElem);
+    //T7c: "Array<T, N>" - the length a constant argument of type I64
+    if (argNodes.len == 2) {
+        struct syntax* lenNode = *(struct syntax**)ListGetIdx(&argNodes, 1);
+        struct type len = resolveConstArg(mod, lenNode, TypeVanilla(BASETYPE_INT64), StrFromCStr("Array"), StrFromCStr("N"));
+        applyArrayLengthArg(&t, len, firstTokAnywhere(lenNode));
+    }
     return t;
 }
 static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, struct list* scopeParams);
+static struct type resolveTypeArgFor(struct semaModule* mod, struct type* found, int i, struct syntax* argNode,
+                                     struct list* scopeParams, bool* ok);
 
 //G19: a constraint is an interface - anything else is reported, and no constraint applies
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
@@ -2667,10 +3559,21 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (varNode) {
         struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
         struct str vname = strFromTok(nameTok);
+        //G22: a type variable following the introduction rule is written "<T>" once
+        if (bareTypeVars && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
         //inside an instantiation, a type variable IS its bound type - see currentBindings
         if (currentBindings) {
             struct type* bound = bindingGet(currentBindings, vname);
+            //G22: a constant variable is a value, written where a type belongs
+            if (bound && (bound->bType == BASETYPE_CONST || bound->isConstVar)) {
+                Err(nameTok, ERR_CONST_VAR_AS_TYPE, vname);
+                return unknownTypeStandIn();
+            }
             if (bound) return *bound;
+        }
+        if (currentConstVars && bindingGet(currentConstVars, vname)) {
+            Err(nameTok, ERR_CONST_VAR_AS_TYPE, vname);
+            return unknownTypeStandIn();
         }
         struct type tv = TypeVar(vname, nameTok);
         struct syntax* cNode = firstPartOfType(varNode, SNTX_TYPE_EXPR);
@@ -2686,6 +3589,20 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (idens.len == 1) {
         nameTok = *(struct token*)ListGetIdx(&idens, 0);
         struct str name = strFromTok(nameTok);
+        //G22: a variable written bare after its introduction - a constant one is a value, where a type belongs; a type
+        //variable is its type once type variables follow the rule
+        int bv = bareVarAt(name, nameTok);
+        if (bv != 0 && !TypeGetList(&mod->types, name)) {
+            struct type* bound = currentBindings ? bindingGet(currentBindings, name) : NULL;
+            if ((bound && (bound->bType == BASETYPE_CONST || bound->isConstVar)) || (currentConstVars && bindingGet(currentConstVars, name))) {
+                Err(nameTok, ERR_CONST_VAR_AS_TYPE, name);
+                return unknownTypeStandIn();
+            }
+            if (bareTypeVars) {
+                if (bv < 0) { Err(nameTok, ERR_VAR_BEFORE_INTRO, nameTok, name); return unknownTypeStandIn(); }
+                return bound ? *bound : TypeVar(name, nameTok);
+            }
+        }
         //G8: a bare IDEN here may name a type parameter in scope rather than a declared type, which is
         //what lets one generic be written in terms of another. Checked before the declared-type lookup so
         //G8b: a type variable is written "<T>" everywhere, type arguments included - "Cell<<T>>" - so a bare
@@ -2770,8 +3687,9 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         //naming anything ("&x", "&return") would name a scope of whoever wrote it, inside generic code that
         //cannot see it (O11) - rejected as written, and the argument resolved with that marker's own
         //diagnostics muted, so the one real error stands alone
-        b.type = resolveTypeArg(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
-        if (typeHasUnknown(b.type, 0)) return unknownTypeStandIn(); //reported - one error, not one per use of it
+        bool ok = true;
+        b.type = resolveTypeArgFor(mod, found, i, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams, &ok);
+        if (!ok) return unknownTypeStandIn(); //reported - one error, not one per use of it
         ListAdd(&bindings, &b);
     }
     return *instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -2802,6 +3720,28 @@ static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, s
     ErrMsgMuteEnd();
     t.scopeParam = NULL;
     t.scopeWritten = false;
+    return t;
+}
+
+//G8/G21: the i-th argument written for generic `found` - a constant argument where its parameter is a constant, a type
+//where it is a type: decided by the parameter, never by the spelling. *ok is false where it was reported, or is
+//decided only next attempt (G21) - the type it is part of then stands in as unknown
+static struct type resolveTypeArgFor(struct semaModule* mod, struct type* found, int i, struct syntax* argNode,
+                                     struct list* scopeParams, bool* ok) {
+    struct str pname = *(struct str*)ListGetIdx(&found->typeParams, i);
+    struct type* slot = i < found->constParams.len ? ListGetIdx(&found->constParams, i) : NULL;
+    if (slot && slot->bType != BASETYPE_VOID) {
+        struct type c = resolveConstArg(mod, argNode, *slot, found->name, pname);
+        if (c.unknown) *ok = false;
+        return c;
+    }
+    if (argNode->type == SNTX_CONST_ARG) {
+        Err(firstTokAnywhere(argNode), ERR_TYPE_ARG_IS_VALUE, found->name, pname);
+        *ok = false;
+        return unknownTypeStandIn();
+    }
+    struct type t = resolveTypeArg(mod, argNode, scopeParams); //G11
+    if (typeHasUnknown(t, 0)) *ok = false;
     return t;
 }
 
@@ -2860,43 +3800,10 @@ long long parseIntLiteralChecked(char* buf, bool* tooLarge) {
     return (long long)u;
 }
 
-long long parseIntLiteralText(char* buf) {
-    bool tooLarge;
-    return parseIntLiteralChecked(buf, &tooLarge);
-}
-
 //L10: is this literal's text decimal - not a hex or binary bit pattern (L10a/L10c)
 static bool intLiteralIsDecimal(struct str text) {
     return !(text.len > 1 && text.ptr[0] == '0' && (text.ptr[1] == 'x' || text.ptr[1] == 'X' || text.ptr[1] == 'b'
                                                     || text.ptr[1] == 'B'));
-}
-
-//attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
-//negated by a single leading unary '-') - used for compile-time-length array sizes, which must be known at compile time
-bool tryEvalConstIntExpr(struct syntax* s, long long* out) {
-    bool negate = false;
-    while (true) {
-        if (s->type == SNTX_EXPR_PRIMARY) {
-            if (s->parts.len != 1 || !partAt(s, 0)->isToken || partAt(s, 0)->tok.type != TOK_INT_LIT) return false;
-            struct token tok = partAt(s, 0)->tok;
-            char buf[tok.str.len +1];
-            memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
-            buf[tok.str.len] = '\0';
-            *out = parseIntLiteralText(buf);
-            if (negate) *out = -*out;
-            return true;
-        }
-        if (s->type == SNTX_EXPR_UNARY && s->parts.len == 2) {
-            struct syntax* opNode = partSntx(s, 0);
-            struct token opTok = partAt(opNode, 0)->tok;
-            if (opTok.type != TOK_SUB || negate) return false; //only a single leading '-' is supported
-            negate = true;
-            s = partSntx(s, 1);
-            continue;
-        }
-        if (s->parts.len != 1 || partAt(s, 0)->isToken) return false;
-        s = partSntx(s, 0);
-    }
 }
 
 //true if t is - or contains, at any depth through plain embedded array elements - a struct that declares
@@ -3018,6 +3925,7 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
 //`words` is kept in step with `vars` because a case's ordinal is its position, and the ordinal is what a
 //payload-free choice value still is at run time.
 void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out, struct list* scopeVars);
+static bool resolvingPayload; //T7c: resolveParamList is reading an enum case's payload
 static bool implicitParamScopes; //set while a signature's, constructor's or payload's parameters are resolved
 long long TypeGetSize(struct type t);
 
@@ -3051,7 +3959,10 @@ struct type resolveChoiceBody(struct semaModule* mod, struct token nameTok, stru
         struct syntax* params = firstPartOfType(c, SNTX_PARAM_LIST);
         bool prevImplicit = implicitParamScopes;
         implicitParamScopes = true; //T17c: a bare payload reference has its own scope, as a parameter does
+        bool prevPayload = resolvingPayload;
+        resolvingPayload = true; //T7b: a payload holds a fixed-length array by value
         if (params) resolveParamList(mod, params, &v.type.vars, &t.scopeVars);
+        resolvingPayload = prevPayload;
         implicitParamScopes = prevImplicit;
         ListAdd(&t.vars, &v);
         ListAdd(&t.words, &nTok);
@@ -3137,70 +4048,6 @@ void declareScopeVarsCheck(struct list scopeDeclNodes, struct list* scopeVars, s
 bool paramTypeNamesScope(struct type pt, struct var* sv);
 
 struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, struct token nameTok, struct list* scopeParams);
-bool tryEvalConstIntExpr(struct syntax* s, long long* out);
-//C2e: an "Array<T>(n)" constructor field is stored inline when n can be computed at compile time. The layout
-//has to be settled before any body is checked while n may need checked bodies to compute, so - as B9c does
-//for conditions - an attempt that meets an undecided n checks the program with that field in the arena,
-//computes n afterwards, and the next attempt lays the field out with the answer. Keyed by where the field's
-//name is written - file, line and name - which every attempt reads identically, and by the type it is a field of:
-//each instantiation of a generic type decides its own, since n may depend on the type's arguments.
-struct inlineDecision { struct str file; int line; struct str name; struct str typeName; long long n; }; //n < 0: arena
-static struct list inlineDecisions;
-struct inlinePending { struct str file; int line; struct str name; struct str typeName; struct operand* sizeOp; };
-static struct list inlinePendings;
-
-static struct inlineDecision* inlineDecisionFor(struct token tok, struct str typeName) {
-    struct str f = TokenGetFileName(tok.owner);
-    for (int i = 0; i < inlineDecisions.len; i++) {
-        struct inlineDecision* d = ListGetIdx(&inlineDecisions, i);
-        if (d->line == tok.lineNr && StrCmp(d->name, tok.str) && StrCmp(d->typeName, typeName) && StrCmp(d->file, f)) return d;
-    }
-    return NULL;
-}
-
-//C2e: a field n elements long, stored in the instance itself - the arena array type it would have, laid out inline
-static void inlineFieldType(struct var* v, struct type rt, long long n) {
-    struct operand* lenOp = MallocOrCrash(sizeof(struct operand));
-    *lenOp = (struct operand){0};
-    lenOp->type = TypeVanilla(BASETYPE_INT64);
-    lenOp->isLiteral = true;
-    lenOp->intLiteralVal = n;
-    v->type = rt;
-    v->type.arrMalloc = false;
-    v->type.arrLen = lenOp;
-    v->inlineState = 1;
-}
-
-//C2e: an instantiation's own decisions for the fields its generic left undecided
-static void applyInlineDecisions(struct type* spec) {
-    for (int i = 0; i < spec->vars.len; i++) {
-        struct var* v = ListGetIdx(&spec->vars, i);
-        if (v->inlineState != 2 || v->type.bType != BASETYPE_ARRAY) continue;
-        struct inlineDecision* d = inlineDecisionFor(v->tok, spec->name);
-        if (!d) continue;
-        if (d->n >= 0) inlineFieldType(v, v->type, d->n);
-        else v->inlineState = 3;
-    }
-}
-
-//"Array<T>(size[, fill])" as written, through any single-child wrapping: its type-args and size nodes
-static bool syntaxIsArrayCtorCall(struct syntax* s, struct syntax** targs, struct syntax** size) {
-    while (s && s->type != SNTX_EXPR_PRIMARY) {
-        if (s->parts.len != 1 || partAt(s, 0)->isToken) return false;
-        s = partSntx(s, 0);
-    }
-    if (!s) return false;
-    struct syntax* name = firstPartOfType(s, SNTX_NAME);
-    struct syntax* call = firstPartOfType(s, SNTX_EXPR_CALL);
-    if (!name || !call || name->parts.len != 1) return false;
-    if (!StrCmp(strFromTok(partAt(name, 0)->tok), StrFromCStr("Array"))) return false;
-    *targs = firstPartOfType(call, SNTX_TYPE_ARGS);
-    struct list args = allPartsOfType(firstPartOfType(call, SNTX_EXPR_ARGS), SNTX_EXPR);
-    if (!*targs || args.len < 1 || args.len > 2) return false;
-    *size = *(struct syntax**)ListGetIdx(&args, 0);
-    return true;
-}
-
 static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, struct syntax* ctorNode);
 void resolveStructCtorInto(struct semaModule* mod, struct type* t, struct syntax* ctorNode) {
     //this runs lazily, in the middle of resolving something else - another type's fields, a signature - so
@@ -3290,25 +4137,6 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
                                  //field specifically
             //T25c: a field written "mut" holds a writable reference, which a read-only parameter is not
             if (fieldDeclMut && TypeIsPermRef(v.type) && !v.type.refMut) Err(fieldNameTok, ERR_READ_ONLY_TO_WRITABLE);
-        }
-        //C2e: "m Array<T>(n)" written as a value field, with n computed at compile time, is n elements stored
-        //in the instance itself
-        struct syntax* arrTargs = NULL;
-        struct syntax* arrSize = NULL;
-        struct syntax* fieldRhs = firstPartOfType(f, SNTX_EXPR);
-        bool valueArrayType = !typeExprNode || (v.type.bType == BASETYPE_ARRAY && v.type.arrMalloc && !v.type.structMAlloc);
-        if (fieldRhs && valueArrayType && syntaxIsArrayCtorCall(fieldRhs, &arrTargs, &arrSize)) {
-            long long n = -1;
-            struct inlineDecision* d = inlineDecisionFor(fieldNameTok, t->name);
-            bool known = tryEvalConstIntExpr(arrSize, &n);
-            if (!known && d) { n = d->n; known = true; }
-            if (known && n >= 0) {
-                inlineFieldType(&v, builtinArrayType(mod, arrTargs, fieldNameTok, &t->scopeVars), n);
-            } else if (!known) {
-                v.inlineState = 2;
-            } else {
-                v.inlineState = 3; //decided: n cannot be computed, so the field stays in the arena
-            }
         }
         ListAdd(&t->vars, &v);
         ListAdd(&t->ctorFieldSyntax, &f);
@@ -3440,11 +4268,12 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         //hazard, arising from the marker's ABSENCE rather than its presence. Tested on structMAlloc (the
         //explicit marker) rather than on reference-shapedness, since T11 makes a runtime-length array
         //reference-SHAPED without one and that is exactly the case this rule exists to stop being implicit.
-        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) {
+        //T7b/T7c: an enum's payload holds an Array<T, N> by value, as a struct's field does - its elements are in it
+        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc && !(resolvingPayload && !v.type.arrMalloc)) {
             Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type);
         }
         struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
-        if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
+        if (defNode) v.defaultVal = newParamDefault(mod, defNode, v.type);
         if (implicitParamScopes) giveImplicitScope(&v, scopeVars); //O4b, at once, so a later parameter can name it
         ListAdd(out, &v);
     }
@@ -3675,6 +4504,81 @@ static void finishTypeVarResult(struct type* t, struct token tok) {
     t->resultViaTypeVar = t->resultScope != NULL;
 }
 
+//G22/G4: the variables a resolved signature names - each constant variable, written as a whole argument (with the type
+//of the parameter it fills) or read by a pattern, and each type variable
+struct sigVarUse { struct str name; struct type* of; struct token tok; bool constant; };
+static void collectPatternVarUses(struct syntax* s, struct list* out) {
+    if (!s) return;
+    struct token bt = bareNameTok(s); //G22: written bare after its introduction
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR || (bt.type != TOK_NONE && sigIntroOf(strFromTok(bt)))) {
+        struct token t = bt.type != TOK_NONE ? bt : firstTokOfType(s, TOK_IDEN);
+        struct sigVarUse u = { strFromTok(t), NULL, t, true };
+        ListAdd(out, &u);
+        return;
+    }
+    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken) collectPatternVarUses(partSntx(s, i), out);
+}
+static void collectSigVarUses(struct type t, struct list* out, int depth) {
+    if (depth > 48) return;
+    if (t.bType == BASETYPE_TYPEVAR) {
+        struct sigVarUse u = { t.name, t.isConstVar ? t.constOf : NULL, t.tok, t.isConstVar };
+        ListAdd(out, &u);
+        if (t.varConstraint) collectSigVarUses(*t.varConstraint, out, depth + 1);
+        return;
+    }
+    if (t.bType == BASETYPE_CONST) { if (!t.constKnown) collectPatternVarUses(t.constExpr, out); return; }
+    if (t.bType == BASETYPE_ARRAY) {
+        if (t.arrElem) collectSigVarUses(*t.arrElem, out, depth + 1);
+        if (t.arrLenArg) collectSigVarUses(*t.arrLenArg, out, depth + 1);
+        return;
+    }
+    if (typeIsDeclaredStruct(t)) {
+        for (int i = 0; t.genericOrigin && i < t.typeArgs.len; i++) collectSigVarUses(*(struct type*)ListGetIdx(&t.typeArgs, i), out, depth + 1);
+        return;
+    }
+    if (t.bType == BASETYPE_FUNC || t.bType == BASETYPE_STRUCT) {
+        for (int i = 0; i < t.vars.len; i++) collectSigVarUses(((struct var*)ListGetIdx(&t.vars, i))->type, out, depth + 1);
+        if (t.bType == BASETYPE_FUNC && t.hasRetType) collectSigVarUses(*t.retType, out, depth + 1);
+    }
+}
+static bool strListHas(struct list* l, struct str n) {
+    for (int i = 0; l && i < l->len; i++) if (StrCmp(*(struct str*)ListGetIdx(l, i), n)) return true;
+    return false;
+}
+//G22: a name is a type variable or a constant variable, never both, and every constant parameter one constant variable
+//fills has one type; and a constant variable is named apart from the module's globals, functions and build constants
+//and from the signature's parameters (D3a). G4: a constant variable is inferred only where a parameter's type holds it
+//as a whole argument. Names reported here are added to `reported`, so the ordinary G4 check on the result does not
+//report them again
+static void checkSigConstVars(struct semaModule* mod, struct type* ft, struct list* enclosing, struct list* reported) {
+    struct list uses = ListInit(sizeof(struct sigVarUse));
+    struct list named = ListInit(sizeof(struct str));
+    collectSigVarUses(*ft, &uses, 0);
+    for (int i = 0; i < uses.len; i++) {
+        struct sigVarUse* u = ListGetIdx(&uses, i);
+        if (!u->constant || strListHas(reported, u->name) || strListHas(enclosing, u->name)) continue;
+        bool bad = false;
+        for (int j = 0; j < uses.len && !bad; j++) {
+            struct sigVarUse* o = ListGetIdx(&uses, j);
+            if (!StrCmp(o->name, u->name)) continue;
+            if (!o->constant) { Err(o->tok, ERR_CONST_VAR_TYPE_AND_CONST, u->name); bad = true; }
+            else if (u->of && o->of && !u->of->unknown && !o->of->unknown && !TypeIsSame(*u->of, *o->of)) {
+                Err(o->tok, ERR_CONST_VAR_TWO_TYPES, u->name, u->of, o->of);
+                bad = true;
+            }
+        }
+        if (!bad && !strListHas(&ft->typeParams, u->name)) { Err(u->tok, ERR_CONST_VAR_ONLY_IN_EXPR, u->name); bad = true; }
+        if (bad) { ListAdd(reported, &u->name); continue; }
+        if (strListHas(&named, u->name)) continue;
+        ListAdd(&named, &u->name);
+        rejectConstVarClash(mod, u->name, u->tok);
+        for (int j = 0; j < ft->vars.len; j++) {
+            struct var* param = ListGetIdx(&ft->vars, j);
+            if (StrCmp(param->name, u->name)) Err(param->tok, ERR_CONST_VAR_SHADOWED, param->tok);
+        }
+    }
+}
+
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
@@ -3704,6 +4608,12 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         }
     }
     if (sigTypeVars.len > 0) currentTypeParamNames = &sigTypeVars;
+    //G22: the variables this signature introduces, each by its first "<X>". A signature inside it (a parameter's function
+    //type) introduces none of its own (G3a), and neither does one inside a generic's body, whose variables its own
+    //signature introduced
+    struct list* prevIntros = currentSigIntros;
+    struct list sigIntros = ListInit(sizeof(struct token));
+    if (!currentSigIntros && !currentBindings) { collectSigIntros(sigNode, &sigIntros); currentSigIntros = &sigIntros; }
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
     resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
@@ -3756,6 +4666,9 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //G4: a variable reachable only through the return type could never be determined at a call, since
         //inference matches arguments against parameters and nothing else. Reported here, at the
         //declaration, rather than at every call that fails to resolve it.
+        struct list constReported = ListInit(sizeof(struct str));
+        checkSigConstVars(mod, &t, prevTPN, &constReported); //G22, and G4 for a constant variable
+        if (constReported.len) *t.retType = unknownTypeStandIn();
         struct list retVars = ListInit(sizeof(struct str));
         TypeCollectVars(*t.retType, &retVars);
         for (int i = 0; i < retVars.len; i++) {
@@ -3777,12 +4690,16 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             }
         }
         finishResultScope(&t, firstTokAnywhere(retTypeNode));
+    } else {
+        struct list constReported = ListInit(sizeof(struct str));
+        checkSigConstVars(mod, &t, prevTPN, &constReported);
     }
     declareScopeVarsCheck(scopeDeclNodes, &t.scopeVars, &t.vars, NULL, t.hasRetType ? t.retType : NULL);
     //G19: the constraints written on the signature's type variables
     t.typeConstraints = ListInit(sizeof(struct type));
     TypeCollectConstraints(t, &t.typeConstraints);
     currentTypeParamNames = prevTPN;
+    currentSigIntros = prevIntros;
     scopeTagParams = prevTagParams;
     return t;
 }
@@ -3984,6 +4901,7 @@ void resolveTypeDecl(struct type* t) {
         //not. Captured before the body is resolved, so the body's own "<T>" references have something to
         //be checked against.
         struct list declaredParams = ListInit(sizeof(struct str));
+        struct list declaredToks = ListInit(sizeof(struct token));
         struct syntax* paramsNode = firstPartOfType(actual, SNTX_TYPE_PARAMS);
         struct list declaredConstraints = ListInit(sizeof(struct type));
         struct list constraintNodes = ListInit(sizeof(struct syntax*));
@@ -4004,21 +4922,51 @@ void resolveTypeDecl(struct type* t) {
                 if (dup) { Err(nameTok, ERR_DECLARED_TWICE, nameTok); continue; }
                 if (nameIsAType(owner, pname)) Err(nameTok, ERR_TYPE_VAR_NAMES_TYPE, nameTok); //G1
                 ListAdd(&declaredParams, &pname);
+                ListAdd(&declaredToks, &nameTok);
             }
         }
 
         //G8: this type's own parameters are in scope for everything it declares, so a field may be
         //written "Box<T>". The declared list is available here, before any field is resolved.
         struct list* prevTPN = currentTypeParamNames;
+        struct list* prevCV = currentConstVars;
         if (declaredParams.len > 0) currentTypeParamNames = &declaredParams;
-        //G19: each declared parameter's constraint, with the parameters in scope
+        //G19: each declared parameter's constraint, with the parameters in scope. G20: a name followed by a type that is
+        //no trait declares a constant parameter of that type instead
+        struct list constParams = ListInit(sizeof(struct type));
+        struct list constVars = ListInit(sizeof(struct typeBinding));
+        bool anyConst = false;
         for (int i = 0; i < declaredParams.len && i < constraintNodes.len; i++) {
             struct syntax* cn = *(struct syntax**)ListGetIdx(&constraintNodes, i);
-            if (!cn) continue;
-            struct type tv = TypeVar(*(struct str*)ListGetIdx(&declaredParams, i), firstTokAnywhere(cn));
-            tv.varConstraint = resolveConstraint(owner, firstPartOfType(cn, SNTX_TYPE_EXPR), NULL);
-            if (tv.varConstraint) ListAdd(&declaredConstraints, &tv);
+            struct type slot = TypeVanilla(BASETYPE_VOID);
+            if (cn) {
+                struct type tv = TypeVar(*(struct str*)ListGetIdx(&declaredParams, i), firstTokAnywhere(cn));
+                bool prevRC = resolvingConstraint;
+                resolvingConstraint = true;
+                struct type ct = resolveTypeExpr(owner, firstPartOfType(cn, SNTX_TYPE_EXPR), NULL);
+                resolvingConstraint = prevRC;
+                if (ct.bType == BASETYPE_INTERFACE) {
+                    tv.varConstraint = MallocOrCrash(sizeof(struct type));
+                    *tv.varConstraint = ct;
+                    ListAdd(&declaredConstraints, &tv);
+                } else {
+                    if (ct.placeholder && !ct.resolving && ct.owner) {
+                        struct type* decl = TypeGetList(&ct.owner->types, ct.name);
+                        if (decl) { resolveTypeDecl(decl); ct = *decl; }
+                    }
+                    if (!constParamTypeOk(ct)) { Err(firstTokAnywhere(cn), ERR_CONST_PARAM_TYPE, &ct); ct = unknownTypeStandIn(); }
+                    slot = ct;
+                    anyConst = true;
+                    struct typeBinding cb = { *(struct str*)ListGetIdx(&declaredParams, i), ct };
+                    ListAdd(&constVars, &cb);
+                    rejectConstVarClash(owner, cb.name, *(struct token*)ListGetIdx(&declaredToks, i)); //G22, D3a
+                }
+            }
+            ListAdd(&constParams, &slot);
         }
+        if (!anyConst) constParams = ListInit(sizeof(struct type));
+        t->constParams = constParams;
+        if (anyConst) currentConstVars = &constVars;
 
         struct syntax* ctorNode = firstPartOfType(actual, SNTX_STRUCT_CTOR);
         //O3a: a scope declaration is only meaningful on a constructor-bearing type - a plain struct has no
@@ -4043,6 +4991,7 @@ void resolveTypeDecl(struct type* t) {
             resolveStructCtorInto(owner, t, ctorNode);
             t->typeParams = declaredParams;
             t->typeConstraints = declaredConstraints;
+            t->constParams = constParams;
             //a generic type's constructor and destructor are generic too - marked as such here (they are
             //ordinary vars in mod->vars, so without this both the pass-3 body builder and codegen would
             //treat them as ordinary functions and try to emit a body still mentioning type variables).
@@ -4053,6 +5002,7 @@ void resolveTypeDecl(struct type* t) {
                 if (t->destructFunc) t->destructFunc->type.typeParams = declaredParams;
             }
             currentTypeParamNames = prevTPN;
+            currentConstVars = prevCV;
             if (hasTokOfType(actual, TOK_EXTENDS)) Err(firstTokOfType(actual, TOK_EXTENDS), ERR_EXTENDS_NOT_BASE);
             break;
         }
@@ -4096,6 +5046,7 @@ void resolveTypeDecl(struct type* t) {
         t->owner = ownerSave;
         t->typeParams = declaredParams;
         t->typeConstraints = declaredConstraints;
+        t->constParams = constParams;
         //T29f: "extends" - only a declared number or array has a base whose methods and operators it can take
         if (hasTokOfType(actual, TOK_EXTENDS)) {
             if (TypeIsNumeric(*t) || t->bType == BASETYPE_ARRAY) t->extendsBase = true;
@@ -4104,6 +5055,7 @@ void resolveTypeDecl(struct type* t) {
         struct syntax* primCtor = firstPartOfType(actual, SNTX_PRIM_CTOR);
         if (primCtor) resolvePrimCtor(owner, t, primCtor);
         currentTypeParamNames = prevTPN;
+        currentConstVars = prevCV;
         break;
     }
     t->placeholder = false;
@@ -4258,20 +5210,51 @@ static const struct operatorShape operatorShapes[] = {
     {"TryInc", 0, true, true, true}, {"TryDec", 0, true, true, true},
 };
 
-//a method named for an operator claims it, so it must have the operator's shape; and one operator may not be
-//claimed twice on one type, by its public and its private name
+//M6b: while the prelude's Equal and HashElements are checked for an instantiation - the element-wise "==" and the
+//supplied Hash of an array, operations of the language's own judged where they are written (E10, E10b) - no protocol
+//method is judged again inside them, and an explicit call by a protocol's capitalized name reaches its private spelling
+static int protocolHelperDepth;
+
+//M6b: the other methods the compiler calls by itself - their shapes are judged where they are used (a Next that does
+//not end with Exhausted is no iterator, S9a) - beside the operators above
+static const char* protocolNames[] = {"Call", "Next", "Iter", "RunFrom", "Has", "Contains", "Hash"};
+
+//M6b: whether name is the protocol method cap spelled public (capitalized, as cap is) or private (its first letter
+//lowercase) - *priv says which
+static bool protocolSpells(struct str name, const char* cap, bool* priv) {
+    size_t n = strlen(cap);
+    if ((size_t)name.len != n || strncmp(name.ptr + 1, cap + 1, n - 1) != 0) return false;
+    *priv = name.ptr[0] == cap[0] - 'A' + 'a';
+    return *priv || name.ptr[0] == cap[0];
+}
+
+//M6b: cap's private spelling - its first letter lowercase
+static char* protocolPrivateName(const char* cap) {
+    char* low = MallocOrCrash(strlen(cap) + 1);
+    strcpy(low, cap);
+    low[0] = (char)(low[0] - 'A' + 'a');
+    return low;
+}
+
+//M6b: the capitalized protocol method name a method named name spells, public or private, or NULL
+static const char* protocolOf(struct str name, bool* priv) {
+    for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
+        if (protocolSpells(name, operatorShapes[k].name, priv)) return operatorShapes[k].name;
+    for (size_t k = 0; k < sizeof(protocolNames) / sizeof(protocolNames[0]); k++)
+        if (protocolSpells(name, protocolNames[k], priv)) return protocolNames[k];
+    return NULL;
+}
+
+//a method named for an operator claims it, so it must have the operator's shape, under either spelling (M6b); and a
+//method the compiler calls may not be declared on one type by both its public and its private name
 static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct type* ra) {
-    for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++) {
-        const struct operatorShape* sh = &operatorShapes[k];
-        size_t n = strlen(sh->name);
-        if ((size_t)a->name.len != n || strncmp(a->name.ptr + 1, sh->name + 1, n - 1) != 0) continue;
-        char c = a->name.ptr[0];
-        bool pub = c == sh->name[0], priv = c == sh->name[0] - 'A' + 'a';
-        if (!pub && !priv) continue;
-        //E11c/E10a: only "Str" renders and only "Eq" compares - a "str" or an "eq" is an ordinary method. Equality and a
-        //rendering belong to the type, not to one module's view of it: a private "eq" would make "==" in the declaring
-        //module and in a Map from another disagree about the same two values
-        if (priv && (!strcmp(sh->name, "Str") || !strcmp(sh->name, "Eq"))) continue;
+    bool priv = false;
+    const char* cap = protocolOf(a->name, &priv);
+    if (!cap) return;
+    const struct operatorShape* sh = NULL;
+    for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
+        if (!strcmp(operatorShapes[k].name, cap)) sh = &operatorShapes[k];
+    if (sh) {
         //E31: At and SetAt (and their checked forms) take one index or several - "m[i, j]" is At(i, j)
         bool indexes = !strcmp(sh->name, "At") || !strcmp(sh->name, "SetAt") || !strcmp(sh->name, "TryAt")
                        || !strcmp(sh->name, "TrySetAt");
@@ -4281,7 +5264,17 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
             Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
         else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
-        else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
+        else if (a->type.errors.len > 0 && !sh->mayFail) {
+            //E31a: the operations that can fail have a checked form; the rest - Less, the bitwise ones, Len, Eq, Str -
+            //have none, so no "Try" to point at
+            char tn[32];
+            snprintf(tn, sizeof(tn), "Try%s", sh->name);
+            bool hasTry = false;
+            for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
+                hasTry = hasTry || !strcmp(operatorShapes[k].name, tn);
+            if (hasTry) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
+            else Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
+        }
         else if (a->type.errors.len == 0 && sh->mustFail) Err(a->tok, ERR_TRY_FORM_MUST_FAIL, sh->name);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) Err(a->tok, ERR_LEN_SHAPE);
@@ -4298,14 +5291,13 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
             }
             if (writes) Err(a->tok, ERR_EQ_STR_WRITES, sh->name);
         }
-        if (pub) {
-            char low[24];
-            snprintf(low, sizeof(low), "%s", sh->name);
-            low[0] = (char)(low[0] - 'A' + 'a');
-            if (varGetMethodIn(mod, StrFromCStr(low), *ra)) Err(a->tok, ERR_OPERATOR_BOTH_CASES, sh->name, sh->name, low);
-        }
-        return;
     }
+    char* low = protocolPrivateName(cap);
+    struct type bare = *ra;
+    bare.structMAlloc = false;
+    bare.refMut = false;
+    bare.scopeParam = NULL;
+    if (!priv && varGetMethodIn(mod, StrFromCStr(low), *ra)) Err(a->tok, ERR_PROTOCOL_BOTH_SPELLINGS, &bare, cap, cap, low);
 }
 
 //M19e: a type's own method meeting a default of a trait it satisfies is an override, which must have the default's
@@ -4386,8 +5378,13 @@ void checkMethodOverloads(struct semaModule* mod) {
             if (!receiverIsBuiltin(*ra) && ra->owner != mod) { Err(a->tok, ERR_METHOD_ON_FOREIGN_TYPE, ra); continue; }
             //T29e: an inherited method is not overridden - a type extending its base naming one is an error, except the
             //protocol methods the compiler consults (E10a, E10b, E11c): a type's own Eq, Hash or Str replaces its base's
-            bool protocol = StrCmp(a->name, StrFromCStr("Eq")) || StrCmp(a->name, StrFromCStr("Hash")) || StrCmp(a->name, StrFromCStr("Str"));
-            if (isDeclaredArray(*ra) && !protocol && varGetMethodIn(mod, a->name, underlyingArray(*ra))) {
+            //(in either spelling, M6b). Nor may a private spelling stand beside its inherited public one: that is both
+            bool privSpelt = false;
+            const char* proto = protocolOf(a->name, &privSpelt);
+            bool protocol = proto && (!strcmp(proto, "Eq") || !strcmp(proto, "Hash") || !strcmp(proto, "Str"));
+            if (isDeclaredArray(*ra) && !protocol
+                    && (varGetMethodIn(mod, a->name, underlyingArray(*ra))
+                        || (proto && privSpelt && varGetMethodIn(mod, StrFromCStr((char*)proto), underlyingArray(*ra))))) {
                 Err(a->tok, ERR_METHOD_CLASHES_INHERITED, ra, a->name);
                 continue;
             }
@@ -4395,7 +5392,8 @@ void checkMethodOverloads(struct semaModule* mod) {
             //bit-pattern methods on a type extending a float or an unsigned integer. A declaration of one was
             //accepted and then never called, the supplied method answering every call
             struct type suppliedT;
-            if (!receiverIsBuiltin(*ra) && ((ra->bType == BASETYPE_ARRAY && StrCmp(a->name, StrFromCStr("Len")))
+            if (!receiverIsBuiltin(*ra) && ((ra->bType == BASETYPE_ARRAY && (StrCmp(a->name, StrFromCStr("Len"))
+                                                                              || StrCmp(a->name, StrFromCStr("len"))))
                                             || suppliedBitsMethod(*ra, a->name, &suppliedT)
                                             || suppliedAtomicMethod(*ra, a->name) != OPERATION_NONE)) {
                 Err(a->tok, ERR_METHOD_CLASHES_SUPPLIED, a->name, ra);
@@ -4649,6 +5647,25 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
     if (StrCmp(name, StrFromCStr("_"))) Err(tok, ERR_UNDERSCORE_DECLARED);
 }
 
+//G22: whether a constant variable of the declaration being checked is named so - a struct's or trait's own parameter
+//while it is resolved, or one an instantiation binds while its body is checked
+static bool constVarNamed(struct str name) {
+    if (currentConstVars && bindingGet(currentConstVars, name)) return true;
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    return b && (b->bType == BASETYPE_CONST || b->isConstVar);
+}
+//G22, D3a: a constant variable may not be named as a global, a function or a build constant of its module. A type's
+//name is G1's to report, where any variable of the declaration is written
+static void rejectConstVarClash(struct semaModule* mod, struct str name, struct token tok) {
+    if (!mod || nameIsAType(mod, name)) return;
+    struct var* g = VarGetList(&mod->vars, name);
+    if (g) {
+        Err(tok, g->isFuncDecl ? ERR_SHADOWS_FUNCTION : ERR_SHADOWS_GLOBAL, tok);
+        if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
+    }
+    else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+}
+
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
 //global or a function), a build constant (B10), or the name of a type it sees - its own, the prelude's or a built-in
 //one, so that what follows "is" is a type exactly when it is a type's name (E10c, E32). A module is the unit that keeps a namespace small enough
@@ -4663,7 +5680,9 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (isPreludeWord(name)) Err(tok, ERR_PRELUDE_WORD_REDECLARED, tok); //M19f
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
+    else if (constVarNamed(name)) Err(tok, ERR_CONST_VAR_SHADOWED, tok); //G22
 }
 
 struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str name, struct token tok, struct type type, bool mut) {
@@ -4687,6 +5706,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
+    if (!v) v = preludeWordVar(name); //M19f: so are the prelude's words for writing text
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
@@ -4717,6 +5737,7 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
         struct var* v = scopeFindUse(ctx->scope, name, tok);
         if (v) return v;
         v = VarGetList(&ctx->mod->vars, name);
+        if (!v) v = preludeWordVar(name); //M19f
         if (v) return v;
         //not a var at all - "Type(args)" is legal exactly when Type declares a constructor; the synthetic
         //ctorFunc reuses every bit of ordinary call-site machinery from here on (arg checking, try/catch
@@ -5133,7 +6154,8 @@ enum typeFit {
     TYPE_FIT_LITERAL_RANGE, //LITERAL_NOT_REPRESENTABLE - numeric literal into a numeric target that can't hold it (T6)
     TYPE_FIT_ELEM_REF_SHAPE, //ELEM_REF_SHAPE_MISMATCH - same element type and length, elements differ in reference-shapedness
     TYPE_FIT_CTOR,          //T29d: a literal into a declared primitive type with a constructor
-    TYPE_FIT_READ_ONLY      //T25c: a read-only reference where a writable one is wanted
+    TYPE_FIT_READ_ONLY,     //T25c: a read-only reference where a writable one is wanted
+    TYPE_FIT_PRIVATE_CALL   //M6b: a value standing for a function through its private call, outside call's module
 };
 
 __extension__ typedef __int128 litWide;
@@ -5710,11 +6732,13 @@ static int numericFamilyRank(struct type t, int* family);
 bool NumericFlows(struct type src, struct type dst, bool sameWidthToBase);
 static void operandWidenInPlace(struct operand* op, struct type t);
 //D13c: a zero value a constructor gives - the call, where it is needed, and what needs it (an array's fill, or not)
-struct zeroRec { struct operand* call; struct token tok; bool forArray; };
+struct zeroRec { struct operand* call; struct token tok; bool forArray; struct token use; bool moved; };
 static struct list zeroRecs;
 
 //D13c: a value type with a constructor - its zero value is that constructor's, not zero bits
 static bool typeHasZeroCtor(struct type t) {
+    //T7c: a fixed-length array's zero value is its elements', where theirs is a constructor's
+    if (t.bType == BASETYPE_ARRAY && !t.arrMalloc && !t.structMAlloc && t.arrLen && t.arrElem) return typeHasZeroCtor(*t.arrElem);
     if (t.structMAlloc || t.isTuple || !t.ctorFunc || TypeIsGeneric(t)) return false;
     return t.bType == BASETYPE_STRUCT || (t.hasCtor && TypeIsNumeric(t));
 }
@@ -5733,7 +6757,7 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
         struct var* p = ListGetIdx(&ctor->type.vars, i);
         struct operand* a;
         if (p->defaultVal) a = defaultArgFor(p);
-        else if (typeHasZeroCtor(p->type) && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
+        else if (typeHasZeroCtor(p->type) && p->type.bType != BASETYPE_ARRAY && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
         else if (TypeIsNullable(p->type)) a = OperandNullLiteral(tok);
         else {
             a = operandNew(tok, OPERATION_ZERO, p->type);
@@ -5766,8 +6790,17 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
 //NULL for a type whose zero value is zero bits by definition
 static struct operand* zeroValueFor(struct checkCtx* ctx, struct type t, struct token tok, bool forArray) {
     if (!typeHasZeroCtor(t)) return NULL;
+    //T7c/D13c: an Array<T, N> - each of its N elements the elements' zero value
+    if (t.bType == BASETYPE_ARRAY) {
+        struct operand* fill = zeroValueFor(ctx, *t.arrElem, tok, true);
+        struct operand* z = operandNew(tok, OPERATION_ZERO, t);
+        z->type.scopeDepth = ctx ? ctx->blockDepth : 0;
+        if (fill) ListAdd(&z->args, &fill);
+        return z;
+    }
     struct operand* call = zeroCtorCall(ctx, t, tok, 0);
-    struct zeroRec r = { call, tok, forArray };
+    struct zeroRec r = { call, tok, forArray, tok, false };
+    r.moved = ErrMsgProgramUse(tok, &r.use); //B11: reported at the program's use of library code that needs it
     ListAdd(&zeroRecs, &r);
     return call;
 }
@@ -6070,6 +7103,9 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //E31: a value whose type declares a Call matching a function type fits it - a function value calling that very
     //instance's Call, so the instance must outlive the target as a reference to it would
     if (target.bType == BASETYPE_FUNC && op->type.bType != BASETYPE_FUNC && SemanticCallMatches(op->type, target)) {
+        //M6b: a private call stands for a function only in its own module - the code being checked's (M22)
+        struct var* cm = SemanticCallOf(op->type);
+        if (!isPublic(cm->name) && cm->owner != SemanticMethodScope && !protocolHelperDepth) return TYPE_FIT_PRIVATE_CALL;
         //T25c: a Call writing its receiver writes the instance the function value holds - only one this place may write
         struct var* recv = ListGetIdx(&SemanticCallOf(op->type)->type.vars, 0);
         if (recv->mut && !OperandGivesWritable(op)) return TYPE_FIT_READ_ONLY;
@@ -6172,7 +7208,7 @@ static enum diag ownOutliveDiag(struct operand* op, struct var* func) {
 void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
     if (fit == TYPE_FIT_SCOPE_MISMATCH) Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
     else if (fit == TYPE_FIT_SCOPE_OWN) Err(tok, ERR_OWN_CANNOT_OUTLIVE);
-    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH);
+    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
@@ -6180,60 +7216,36 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
     else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);
     else if (fit == TYPE_FIT_READ_ONLY) Err(tok, ERR_READ_ONLY_TO_WRITABLE);
+    else if (fit == TYPE_FIT_PRIVATE_CALL) {
+        struct type bare = op->type;
+        bare.structMAlloc = false;
+        bare.refMut = false;
+        Err(tok, ERR_PROTOCOL_PRIVATE, tok, &bare, SemanticCallOf(op->type)->name, "Call");
+    }
 }
 
-//D15: ":=" reads the declared type off the initializer, which is only legible when the type is written at
-//the declaration - a literal, a constructor call (the type name is right there), or a SLICE, whose type is
-//its base's element type with a runtime length: "s := a[1:3]" says as much about s as "s := int32[1,2,3]"
-//does. An ordinary call is still rejected: its return type lives in another declaration entirely.
-bool OperandTypeIsWrittenHere(struct operand* op) {
-    //T2a: "null" is the one literal that writes no type at all - it adapts to whatever it meets, so there
-    //is nothing for ":=" to read off it. "x := null" is rejected here rather than reaching codegen with a
-    //BASETYPE_NULL variable, which is what it did until this line existed.
-    if (op->isNullLiteral) return false;
-    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->isLambda) return true; //D16: its signature
-    //D15: any call, including a "try" one - its type is its callee's declared result, which the declaration
-    //then carries. A call returning nothing has no type to give.
-    if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
-    //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
-    //the atomic methods that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
-    //while "n := l.Len()" on a List compiled
-    if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST || op->suppliedCall) return true;
-    if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
-    //an expression with hidden locals ahead of it (holding an operand once) is what it ends with
-    if (op->opType == OPERATION_SEQ && op->args.len)
-        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, op->args.len - 1));
-    //E11a/E11b: a rendering or a join is always byte[], and the "$" or the quotes say so where it is written
-    if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
-    if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return true; //T7: "Array<T>(n)" names its type
-    if (op->opType == OPERATION_COMPREHENSION) return true; //E27: "Int32[...]" names its element type
-    if (op->opType == OPERATION_AS) return true; //E32: "x as T" names its type
-    if (op->opType == OPERATION_MATCH) { //S12b: when each value would, as a conditional's (E28)
-        struct list vs = SemanticMatchValues(op);
-        for (int i = 0; i < vs.len; i++) if (!OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&vs, i))) return false;
-        return vs.len > 0;
-    }
-    //E28: "x := a if c else b" - when each value would name its type for ":=" on its own
-    if (op->opType == OPERATION_COND && op->args.len == 3) {
-        return OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 1))
-            && OperandTypeIsWrittenHere(*(struct operand**)ListGetIdx(&op->args, 2));
-    }
-    //a conversion names its type as plainly as a constructor call does - "String(bytes)", "Int64(n)"
-    if (op->opType == OPERATION_NOMINAL_CONVERT || op->opType == OPERATION_NUMERIC_CONVERT || op->viaConversion) return true;
-    //D15: a field read - its type is the field's declared one, as a call's is its callee's result, and it is how
-    //a cursor starts: "c := l.head" takes the field's type and where its referent lives (O25a)
-    if (op->opType == OPERATION_MEMBER) return true;
-    //...and an element read, for the same reason: its type is the array's declared element type, and it is how
-    //generic code holds an element - "t := a[i]" lives where the element does, whatever the element is
-    if (op->opType == OPERATION_INDEX && !op->catchClauses.len) return true;
-    return op->isLiteral || op->opType == OPERATION_SLICE;
+//D15: ":=" declares the type of its initializer - any expression whose type is settled where it is written. Two have
+//none: "null", which adapts to whatever it meets (and so an expression whose type is null's, "null if c else null"),
+//and a call returning nothing. A call's several results are destructured instead (D8c, reported by the declaration).
+static bool operandHasDeclType(struct operand* op) {
+    if (op->isNullLiteral || op->type.bType == BASETYPE_NULL) return false;
+    return op->type.bType != BASETYPE_VOID;
 }
 
 //D15 + T29c: the type ":=" gives a declaration from its initializer - wherever ":=" appears (a local, a "for"
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (!OperandTypeIsWrittenHere(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
+    if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
+    else if (!operandHasDeclType(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
+    //...and an expression of numeric literals alone (E4a), computed while compiling, declares what its value written
+    //as one literal would (T6a): "x := 1 + 2" an I32, "x := 2147483647 + 1" an I64, as "x := 2147483648" is
+    if (!rhs->isLiteral && operandOnlyNumericLiterals(rhs)) {
+        struct operand saved = *rhs;
+        enum litValueFail why = literalExprFold(rhs);
+        if (why == LIT_VALUE_OK) markFoldedAway(&saved);
+        else if (why == LIT_VALUE_NONE) Err(rhs->tok, ERR_LITERAL_EXPR_NO_VALUE);
+    }
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(rhs)) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);
@@ -6385,26 +7397,65 @@ struct defaultRec { struct operand* op; struct type type; };
 static struct list defaultRecs;
 
 
+//D8a: a parameter's declared default, recorded where the signature is resolved and built on first need - not
+//there: a signature is resolved before the module's globals have types, so a default naming one ("m Mode =
+//DefaultMode") saw an unfinished global, and a constructor's, resolved with its type, always did
+static struct list paramDefaults; //struct paramDefault*: every one, so those no call needed are built too
+struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
+    struct paramDefault* d = MallocOrCrash(sizeof(struct paramDefault));
+    *d = (struct paramDefault){0};
+    d->syntax = defNode;
+    d->mod = mod;
+    d->type = paramType;
+    ListAdd(&paramDefaults, &d);
+    return d;
+}
+
 //D8a: builds a parameter's declared default. Deliberately checked in the DECLARING module's own context
 //- a caller's context would resolve a type name against the wrong module. It must be computable at compile
 //time (K1), so it has a value and no other behaviour - nothing it does can depend on which caller omitted
-//it - which is why one operand can serve every call site.
-struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
+//it - which is why one operand can serve every call site. One that does not fit its parameter is reported
+//here and stands in as the unknown type, so no call reports it again.
+static struct operand* buildParamDefault(struct paramDefault* d) {
     struct checkCtx dctx = {0};
-    dctx.mod = mod;
-    struct operand* def = buildExprFromSyntax(&dctx, defNode);
+    dctx.mod = d->mod;
+    struct operand* def = buildExprFromSyntax(&dctx, d->syntax);
     //G18: a default for a parameter whose type is a type variable ("alpha <T> = 1") has no type to fit yet - it is
     //fitted at each call, against the instantiation's, a literal adapting there as any literal argument does
-    if (TypeIsGeneric(paramType) && def->isLiteral) return def;
-    reportTypeFit(OperandFitsType(NULL, def, paramType), def->tok, def, paramType);
-    if (!def->isLiteral) ListAdd(&defaultRecs, &(struct defaultRec){def, paramType});
+    if (TypeIsGeneric(d->type) && def->isLiteral) return def;
+    int errs = ErrMsgGetNErrors();
+    reportTypeFit(OperandFitsType(NULL, def, d->type), def->tok, def, d->type);
+    if (ErrMsgGetNErrors() != errs) return unknownPlaceholder(def->tok);
+    if (!def->isLiteral) ListAdd(&defaultRecs, &(struct defaultRec){def, d->type});
     return def;
+}
+
+struct operand* paramDefaultOp(struct var* param) {
+    struct paramDefault* d = param->defaultVal;
+    if (!d) return NULL;
+    if (d->op) return d->op;
+    if (d->building) return unknownPlaceholder(firstTokAnywhere(d->syntax)); //a default reaching itself
+    d->building = true;
+    d->op = buildParamDefault(d);
+    d->building = false;
+    return d->op;
+}
+
+//D8a: every default no call has needed yet, built - so each is checked whether or not anything omits it
+static void buildParamDefaults(void) {
+    for (int i = 0; i < paramDefaults.len; i++) {
+        struct paramDefault* d = *(struct paramDefault**)ListGetIdx(&paramDefaults, i);
+        if (d->op || d->building) continue;
+        d->building = true;
+        d->op = buildParamDefault(d);
+        d->building = false;
+    }
 }
 
 //E14/G18: a parameter's default as one call's argument - a literal its own copy, which the call's fit check adapts to
 //the parameter's type there (a type-variable parameter's differs by instantiation) without touching another call's
 static struct operand* defaultArgFor(struct var* param) {
-    struct operand* d = param->defaultVal;
+    struct operand* d = paramDefaultOp(param);
     if (!d || !d->isLiteral || d->args.len) return d;
     struct operand* c = MallocOrCrash(sizeof(struct operand));
     *c = *d;
@@ -7559,6 +8610,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     if (func->type.typeParams.len != 0) {
         struct list bindings = ListInit(sizeof(struct typeBinding));
         struct list numBound = ListInit(sizeof(struct str)); //T6b: variables a numeric argument bound
+        unifyConstMismatch.set = false; //G24
         //E14: trailing parameters with defaults may be left off, and a "default" written in a slot binds nothing -
         //the parameter's own default fits the instantiation like any argument
         int requiredG = func->type.vars.len;
@@ -7658,7 +8710,11 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         }
         if (!ok) {
             if (args.len < requiredG || args.len > func->type.vars.len) reportArgCount(args, tok, requiredG, func->type.vars.len, func->isMethod); //D8d too
-            else if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
+            else if (unifyConstMismatch.set && unifyConstMismatch.runtimeLength) { //G24/E32b
+                Err(tok, ERR_CONST_VAR_NOT_IN_TYPE, &unifyConstMismatch.arrayType);
+            } else if (unifyConstMismatch.set) { //G24: one constant variable, two values
+                Err(tok, ERR_CONST_VAR_MISMATCH, unifyConstMismatch.name, unifyConstMismatch.a, unifyConstMismatch.b);
+            } else if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
                 Err(tok, ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, func->type.retType->name, func->type.retType->name);
             } else Err(tok, ERR_TYPE_ARGS_NOT_INFERABLE, func->name);
             struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
@@ -7996,7 +9052,7 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     //known there is nothing to defer - an out-of-range constant is an error at the point it is written
     //rather than undefined behaviour when it is reached. Free, and it covers every literal index into a
     //fixed-size array.
-    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen) {
+    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
         long long n = base->type.arrLen->intLiteralVal;
         if (index->intLiteralVal < 0 || index->intLiteralVal >= n) {
             Err(index->tok, ERR_INDEX_OUT_OF_RANGE, index->intLiteralVal, n);
@@ -8318,6 +9374,7 @@ static struct list strMethods = {0};
 //E11c: t's own Str, instantiated for t when t's type is generic
 static struct var* concreteStrMethod(struct type t) {
     struct var* f = VarGetMethod(t.owner, StrFromCStr("Str"), t);
+    if (!f) f = VarGetMethod(t.owner, StrFromCStr("str"), t); //its private spelling (M6b)
     if (!f || f->type.bType != BASETYPE_FUNC || f->type.vars.len != 1) return NULL;
     if (f->type.typeParams.len > 0) {
         struct list bindings = ListInit(sizeof(struct typeBinding));
@@ -8366,6 +9423,33 @@ static void noteStrMethods(struct type t, struct list* seen) {
             struct var* f = ListGetIdx(&v.vars, i);
             if (v.bType == BASETYPE_STRUCT) noteStrMethods(f->type, seen);
             else for (int k = 0; k < f->type.vars.len; k++) noteStrMethods(((struct var*)ListGetIdx(&f->type.vars, k))->type, seen);
+        }
+    }
+}
+
+//M6b: every Str "$" on t calls - t's own, or one of a part it renders, as noteStrMethods walks them - must be one code
+//in mod may call: a private str renders only in its own module
+static bool protocolReach(struct semaModule* mod, struct type t, struct var* m, struct token tok);
+static void renderReachWalk(struct semaModule* mod, struct type t, struct token tok, struct list* seen) {
+    if (seen->len > 256) return;
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    v.scopeParam = NULL;
+    v.scopeDepth = 0;
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return;
+    for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), v)) return;
+    ListAdd(seen, &v);
+    if (v.owner) {
+        struct var* m = concreteStrMethod(v);
+        if (m) { protocolReach(mod, v, m, tok); return; }
+    }
+    if (v.bType == BASETYPE_ARRAY && v.arrElem) renderReachWalk(mod, *v.arrElem, tok, seen);
+    if (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            if (v.bType == BASETYPE_STRUCT) renderReachWalk(mod, f->type, tok, seen);
+            else for (int k = 0; k < f->type.vars.len; k++) renderReachWalk(mod, ((struct var*)ListGetIdx(&f->type.vars, k))->type, tok, seen);
         }
     }
 }
@@ -8609,6 +9693,25 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         tv.structMAlloc = false;
         if (OperandIsWrittenText(a) && !OperandIsWrittenText(b) && TypeIsSame(b->type, tv)) a = OperandNominalConversion(tv, a, a->tok);
         else if (OperandIsWrittenText(b) && !OperandIsWrittenText(a) && TypeIsSame(a->type, tv)) b = OperandNominalConversion(tv, b, b->tok);
+    }
+    //T7d/E10: beside an Array<T>, an Array<T, N> meets it as an Array<T> - its own storage, the length beside it, so the
+    //lengths are compared first; and two literals of different lengths are two Array<T>s, as they are anywhere else
+    if ((opType == OPERATION_EQ || opType == OPERATION_NEQ) && a->type.bType == BASETYPE_ARRAY && b->type.bType == BASETYPE_ARRAY
+            && a->type.structMAlloc == b->type.structMAlloc && !a->type.arrLenArg && !b->type.arrLenArg
+            && a->type.arrElem && b->type.arrElem && typeSameNested(*a->type.arrElem, *b->type.arrElem)) {
+        bool bothLit = a->isLiteral && b->isLiteral && !TypeIsSame(a->type, b->type);
+        for (int k = 0; k < 2; k++) {
+            struct operand** side = k ? &b : &a;
+            struct operand* other = k ? a : b;
+            if ((*side)->type.arrMalloc || (!other->type.arrMalloc && !bothLit)) continue;
+            struct type rt = (*side)->type;
+            rt.arrMalloc = true;
+            rt.arrLen = NULL;
+            if (other->type.arrMalloc) { rt.owner = other->type.owner; rt.name = other->type.name; }
+            struct operand* conv = operandNew((*side)->tok, OPERATION_NOMINAL_CONVERT, rt);
+            ListAdd(&conv->args, side);
+            *side = conv;
+        }
     }
     //E4a: a literal-only expression ("1.0 / 3.0") adapts here as a literal does - "f32 < 1.0 / 3.0" compares F32s
     bool aLit = operandIsLiteralLike(a), bLit = operandIsLiteralLike(b), unfit = false;
@@ -8925,6 +10028,7 @@ struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, stru
     if (args.len != t.vars.len) { Err(tok, ERR_ARG_COUNT, t.vars.len, t.vars.len == 1 ? "" : "s", args.len); return op; }
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        if (!arg) continue; //a field whose declaration was reported
         struct type memberType = (*(struct var*)ListGetIdx(&t.vars, i)).type;
         reportTypeFit(OperandFitsType(callerFunc, arg, memberType), arg->tok, arg, memberType);
     }
@@ -8990,26 +10094,61 @@ static struct operand* operatorCall(struct checkCtx* ctx, struct operand* recv, 
     return operatorCallArgs(ctx, recv, args, name, tok);
 }
 
-//E31: the method an operator calls on a value of type t - its capitalized name, or the same name with a lowercase
-//first letter, which only the declaring module reaches. NULL when t declares neither.
-static const char* operatorMethodName(struct checkCtx* ctx, struct type t, const char* capName) {
-    if (methodNamedOn(t, capName)) return capName;
-    char* low = MallocOrCrash(strlen(capName) + 1);
-    strcpy(low, capName);
-    low[0] = (char)(low[0] - 'A' + 'a');
-    struct var* m = methodNamedOn(t, low);
-    return m && m->owner == ctx->mod ? low : NULL;
+//M6b: the method t declares for the protocol method cap - a method the compiler calls by itself - under cap or under
+//its private spelling, t's own before one it inherits (T29e), so a private Eq, Hash or Str replaces an inherited one as
+//a public one does. Found whichever module asks: whether the code asking may call it is protocolReach's question, and
+//one it may not call is an error there, never a fall back to the built-in operation.
+static struct var* protocolMethod(struct type t, const char* cap) {
+    struct var* pub = methodNamedOn(t, cap);
+    struct var* priv = methodNamedOn(t, protocolPrivateName(cap));
+    if (pub && priv) {
+        struct type* r = SemanticMethodReceiver(pub);
+        return r && receiverIsBuiltin(*r) && !receiverIsBuiltin(t) ? priv : pub;
+    }
+    return pub ? pub : priv;
 }
 
-//E10a: the Eq "==" on t calls, if t declares one of the right shape
+//M6b: whether code in mod may call m, the protocol method an operation at tok needs on t - a public one from anywhere,
+//a private one only from its own module. Reported where it may not, naming the method: the operation does not exist
+//there (M6), and nothing stands in for it
+static bool protocolReach(struct semaModule* mod, struct type t, struct var* m, struct token tok) {
+    if (!m || isPublic(m->name) || m->owner == mod || protocolHelperDepth) return true;
+    bool priv = false;
+    const char* cap = protocolOf(m->name, &priv);
+    struct type bare = t;
+    bare.structMAlloc = false;
+    bare.refMut = false;
+    bare.scopeParam = NULL;
+    Err(tok, ERR_PROTOCOL_PRIVATE, tok, &bare, m->name, cap ? cap : "public");
+    return false;
+}
+
+//E31: the method an operator calls on a value of type t - its capitalized name, or its private spelling (M6b), which
+//only the declaring module reaches (protocolReach, where the call is made). NULL when t declares neither.
+static const char* operatorMethodName(struct checkCtx* ctx, struct type t, const char* capName) {
+    (void)ctx;
+    struct var* m = protocolMethod(t, capName);
+    return m ? StrDupStr(m->name) : NULL;
+}
+
+//E10a: the Eq "==" on t calls - or its private spelling, eq (M6b) - if t declares one of the right shape
 static const char* eqMethodName(struct checkCtx* ctx, struct type t) {
     (void)ctx;
-    struct var* m = methodNamedOn(t, "Eq"); //always capitalized, as Str is (E11c)
-    return m && eqWellShaped(m) ? "Eq" : NULL;
+    struct var* m = protocolMethod(t, "Eq");
+    return m && eqWellShaped(m) ? StrDupStr(m->name) : NULL;
 }
 
 static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
                                         struct token tok) {
+    //M6b: a protocol method by its private spelling is called only from its own module - where it is not, what stands
+    //in has the method's result type, so nothing after it fails for the same reason again
+    struct var* pm = methodNamedOn(recv->type, name);
+    if (!protocolReach(ctx->mod, recv->type, pm, tok)) {
+        struct operand* standIn = unknownPlaceholder(tok);
+        if (pm->type.hasRetType && !pm->type.retType->isTuple && !TypeIsGeneric(*pm->type.retType))
+            standIn->type = *pm->type.retType;
+        return standIn;
+    }
     struct token mTok = tok;
     mTok.type = TOK_IDEN;
     mTok.str = StrFromCStr((char*)name);
@@ -9150,6 +10289,70 @@ static bool eqConsults(struct checkCtx* ctx, struct type t, int depth) {
     return false;
 }
 
+//M6b: every Eq "==" on t reaches - t's own, or a part's it compares by value, as eqConsults walks them - must be one code
+//in mod may call. Used where the comparison is the prelude's Equal (an array's elements), which is checked as the
+//language's own operation, not as code of the prelude's (protocolHelperDepth): judged here, where "==" is written
+static void eqReachWalk(struct semaModule* mod, struct type t, struct token tok, struct list* seen, int depth) {
+    if (depth > 64 || seen->len > 256) return;
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return;
+    if (v.owner) {
+        struct var* m = protocolMethod(v, "Eq");
+        if (m && eqWellShaped(m)) {
+            for (int i = 0; i < seen->len; i++) if (*(struct var**)ListGetIdx(seen, i) == m) return;
+            ListAdd(seen, &m);
+            protocolReach(mod, v, m, tok);
+            return;
+        }
+    }
+    if (t.structMAlloc) return; //a reference to a type with no Eq: identity
+    if (v.bType == BASETYPE_ARRAY && v.arrElem) eqReachWalk(mod, *v.arrElem, tok, seen, depth + 1);
+    if (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            if (v.bType == BASETYPE_STRUCT) eqReachWalk(mod, f->type, tok, seen, depth + 1);
+            else for (int k = 0; k < f->type.vars.len; k++)
+                eqReachWalk(mod, ((struct var*)ListGetIdx(&f->type.vars, k))->type, tok, seen, depth + 1);
+        }
+    }
+}
+
+//M6b: the same for the Hash the compiler supplies for an array (E10b), through the prelude's HashElements - every Hash
+//it reaches, as typeHasHash walks them
+static void hashReachWalk(struct semaModule* mod, struct type t, struct token tok, struct list* seen, int depth) {
+    if (depth > 64 || seen->len > 256) return;
+    struct type v = t;
+    v.structMAlloc = false;
+    v.refMut = false;
+    if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return;
+    struct var* m = protocolMethod(v, "Hash");
+    if (m) {
+        for (int i = 0; i < seen->len; i++) if (*(struct var**)ListGetIdx(seen, i) == m) return;
+        ListAdd(seen, &m);
+        protocolReach(mod, v, m, tok);
+        return;
+    }
+    if (t.structMAlloc) return;
+    if (v.bType == BASETYPE_ARRAY && v.arrElem) hashReachWalk(mod, *v.arrElem, tok, seen, depth + 1);
+    if (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < v.vars.len; i++) {
+            struct var* f = ListGetIdx(&v.vars, i);
+            if (v.bType == BASETYPE_STRUCT) hashReachWalk(mod, f->type, tok, seen, depth + 1);
+            else for (int k = 0; k < f->type.vars.len; k++)
+                hashReachWalk(mod, ((struct var*)ListGetIdx(&f->type.vars, k))->type, tok, seen, depth + 1);
+        }
+    }
+}
+
+//M6b: the prelude's Equal and HashElements - the element-wise "==" and the supplied Hash of an array, which the
+//language defines (E10, E10b) and the prelude only carries out
+static bool isElementwiseHelper(struct var* m) {
+    if (!m || !m->isMethod || !m->owner || !isPreludeModule(m->owner)) return false;
+    return StrCmp(m->name, StrFromCStr("Equal")) || StrCmp(m->name, StrFromCStr("HashElements"));
+}
+
 //x held once: itself when evaluating it twice is harmless (a literal, a variable), else a hidden local declared
 //by a statement appended to seq's body
 static struct operand* eqHold(struct checkCtx* ctx, struct operand* x, struct token tok, struct operand* seq) {
@@ -9249,7 +10452,10 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
         }
         if (!r) { r = OperandBoolLiteral(tok); r->intLiteralVal = 1; }
     } else if (v.bType == BASETYPE_ARRAY) {
-        //element by element, through the prelude's "Equal" - "==" on each pair, so each consults its Eq
+        //element by element, through the prelude's "Equal" - "==" on each pair, so each consults its Eq - judged here,
+        //where "==" is written (M6b)
+        struct list seen = ListInit(sizeof(struct var*));
+        if (v.arrElem) eqReachWalk(ctx->mod, *v.arrElem, tok, &seen, 0);
         struct list args = ListInit(sizeof(struct operand*));
         ListAdd(&args, &b);
         r = eqCallOr(ctx, operatorCallArgs(ctx, a, args, "Equal", tok), tok);
@@ -9284,7 +10490,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
 }
 
 //E10b: whether a type's == comes from an Eq it declares - then only a Hash it declares can agree with it
-static bool typeDeclaresEq(struct type v) { return methodNamedOn(v, "Eq") != NULL; }
+static bool typeDeclaresEq(struct type v) { return protocolMethod(v, "Eq") != NULL; } //either spelling (M6b)
 
 static struct type typeBare(struct type t) {
     t.structMAlloc = false;
@@ -9300,7 +10506,7 @@ static struct type typeBare(struct type t) {
 static bool typeHasHash(struct type t, int depth) {
     struct type v = typeBare(t);
     if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return false;
-    bool declared = methodNamedOn(v, "Hash") != NULL;
+    bool declared = protocolMethod(v, "Hash") != NULL;
     if (t.structMAlloc) return declared && typeDeclaresEq(v);
     return declared || typeAutoHashable(v, depth + 1);
 }
@@ -9309,7 +10515,7 @@ static bool typeHasHash(struct type t, int depth) {
 static bool typeAutoHashable(struct type t, int depth) {
     if (depth > 64 || t.structMAlloc) return false;
     struct type v = typeBare(t);
-    if (methodNamedOn(v, "Hash") || typeDeclaresEq(v)) return false;
+    if (protocolMethod(v, "Hash") || typeDeclaresEq(v)) return false; //a private eq or hash keeps it out too (M6b)
     if (v.bType == BASETYPE_ARRAY) return v.arrElem && typeHasHash(*v.arrElem, depth);
     if (v.bType == BASETYPE_STRUCT) {
         for (int i = 0; i < v.vars.len; i++) {
@@ -9345,10 +10551,12 @@ static struct operand* hashCombine(struct operand* acc, struct operand* part, st
 //E10b: x.Hash() - a reference held once and kept away from Hash when null (a null hashes to 0, as Eq never sees one)
 static bool hashNullGuarded = false;
 static struct operand* hashOf(struct checkCtx* ctx, struct operand* x, struct token tok, struct operand* seq) {
-    if (!x->type.structMAlloc) return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), "Hash", tok);
+    const char* hn = operatorMethodName(ctx, x->type, "Hash"); //or the private hash (M6b); none: the supplied one
+    if (!hn) hn = "Hash";
+    if (!x->type.structMAlloc) return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), hn, tok);
     struct operand* h = eqHold(ctx, x, tok, seq);
     hashNullGuarded = true;
-    struct operand* call = operatorCallArgs(ctx, h, ListInit(sizeof(struct operand*)), "Hash", tok);
+    struct operand* call = operatorCallArgs(ctx, h, ListInit(sizeof(struct operand*)), hn, tok);
     hashNullGuarded = false;
     struct operand* r = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_INT64));
     struct operand* isNull = OperandBinary(h, OperandNullLiteral(tok), OPERATION_EQ, tok);
@@ -9370,7 +10578,11 @@ static struct operand* seqResult(struct operand* seq, struct operand* r) {
 //an enum's case number first, then the payload of the case it holds; an array's elements through the prelude
 static struct operand* buildAutoHash(struct checkCtx* ctx, struct operand* x, struct token tok) {
     struct type v = typeBare(x->type);
-    if (v.bType == BASETYPE_ARRAY) return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), "HashElements", tok);
+    if (v.bType == BASETYPE_ARRAY) { //M6b: its elements' Hash judged here, where it is needed
+        struct list seen = ListInit(sizeof(struct var*));
+        if (v.arrElem) hashReachWalk(ctx->mod, *v.arrElem, tok, &seen, 0);
+        return operatorCallArgs(ctx, x, ListInit(sizeof(struct operand*)), "HashElements", tok);
+    }
     struct operand* seq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_INT64));
     seq->comprBody = ListInit(sizeof(struct statement));
     struct operand* hx = eqHold(ctx, x, tok, seq);
@@ -9452,7 +10664,16 @@ static bool refAndTemporary(struct operand* ref, struct operand* v) {
 }
 
 //E28: "a if c else b" - c decides which one is evaluated; both must have one type, a literal adapting to the other
+static int constCondValue(struct operand* cond, struct syntax* condNode);
+static bool syntaxReadsConstVar(struct syntax* s);
 static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
+    //G26: a condition reading a constant variable picks its value per instantiation - the other is not checked
+    if (currentBindings && syntaxReadsConstVar(partSntx(s, 2))) {
+        int errs = ErrMsgGetNErrors();
+        struct operand* c = buildExprFromSyntax(ctx, partSntx(s, 2));
+        int decided = ErrMsgGetNErrors() == errs ? constCondValue(c, partSntx(s, 2)) : -1;
+        if (decided >= 0) return buildExprFromSyntax(ctx, partSntx(s, decided ? 0 : 4));
+    }
     struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
     struct token ifTok = partAt(s, 1)->tok;
     struct operand* c = buildExprFromSyntax(ctx, partSntx(s, 2));
@@ -9566,10 +10787,13 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     bool whole = TypeIsSame(xt, ct) || (OperandIsWrittenText(x) && ct.bType == BASETYPE_ARRAY && ct.arrElem
                                         && ct.arrElem->bType == BASETYPE_BYTE);
     const char* mName = whole ? "Contains" : "Has";
-    if (!methodNamedOn(c->type, mName)) {
+    struct var* hm = protocolMethod(c->type, mName); //or its private spelling (M6b)
+    if (!hm) {
         Err(tok, ERR_MEMBERSHIP_NO_METHOD, mName, &c->type);
         return OperandBoolLiteral(tok);
     }
+    if (!protocolReach(ctx->mod, c->type, hm, tok)) return OperandBoolLiteral(tok);
+    mName = StrDupStr(hm->name);
     struct operand* seq = NULL;
     struct operand* arg = x;
     bool plain = operandIsLiteralLike(x) || x->isNullLiteral || OperandIsWrittenText(x) || x->opType == OPERATION_READ_VAR;
@@ -9658,6 +10882,10 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
             if (r) { result = r; continue; }
         }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
+        if (opTok.type == TOK_STR_OF) { //M6b: a private str renders only in its own module
+            struct list seen = ListInit(sizeof(struct type));
+            renderReachWalk(ctx->mod, (*(struct operand**)ListGetIdx(&result->args, 0))->type, opTok, &seen);
+        }
     }
     return result;
 }
@@ -9940,6 +11168,37 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         }
         return op;
     }
+    //E32b: "x as Array<T, N>&" - x's own storage seen as an array of length N: a slice of the whole of it, whose length
+    //is checked to be N, of the fixed-length reference type
+    if (isAs && xt.bType == BASETYPE_ARRAY && !xt.unknown) {
+        struct type want = resolveTypeExpr(ctx->mod, tNode, ctx->func ? &ctx->func->type.scopeVars : NULL);
+        if (want.unknown) { op->type = unknownTypeStandIn(); return op; }
+        bool fixedRef = want.bType == BASETYPE_ARRAY && !want.arrMalloc && want.arrLen && !want.owner;
+        if (!fixedRef || !want.structMAlloc || !TypeIsSame(*want.arrElem, *xt.arrElem)) {
+            Err(firstTokAnywhere(tNode), ERR_AS_ARRAY_SHAPE, &xt, &want);
+            op->type = unknownTypeStandIn();
+            return op;
+        }
+        long long n = want.arrLen->intLiteralVal;
+        if (!xt.arrMalloc && xt.arrLen && xt.arrLen->intLiteralVal != n) {
+            Err(kw, ERR_AS_ARRAY_LENGTH, xt.arrLen->intLiteralVal, n);
+            op->type = unknownTypeStandIn();
+            return op;
+        }
+        struct operand* hi = operandNew(kw, OPERATION_NONE, TypeVanilla(BASETYPE_INT64));
+        hi->isLiteral = true;
+        hi->intLiteralVal = n;
+        struct operand* sl = OperandSlice(x, NULL, hi, kw);
+        if (sl->opType != OPERATION_SLICE) return sl;
+        struct type rt = sl->type;
+        rt.arrMalloc = false;
+        rt.arrLen = want.arrLen;
+        rt.owner = NULL;
+        rt.name = (struct str){0};
+        sl->type = rt;
+        sl->sliceExact = true;
+        return sl;
+    }
     Err(kw, ERR_IS_AS_NOT_ENUM, &x->type);
     return op;
 }
@@ -10128,7 +11387,8 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             if (slName) {
                 if (!lo) lo = OperandIntLiteral(sq);
                 if (!hi) {
-                    if (methodNamedOn(result->type, "Len")) hi = operatorCall(ctx, result, NULL, "Len", sq);
+                    const char* ln = operatorMethodName(ctx, result->type, "Len"); //either spelling (M6b)
+                    if (ln) hi = operatorCall(ctx, result, NULL, ln, sq);
                     else { Err(sq, ERR_SLICE_NEEDS_LEN, &result->type); hi = OperandIntLiteral(sq); }
                 }
                 struct list sargs = ListInit(sizeof(struct operand*));
@@ -10680,8 +11940,9 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
     for (int i = 0; i < argNodes.len; i++) {
         struct typeBinding b = (struct typeBinding){0};
         b.name = *(struct str*)ListGetIdx(&found->typeParams, i);
-        b.type = resolveTypeArg(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams); //G11, as above
-        if (typeHasUnknown(b.type, 0)) return NULL; //reported where it was written
+        bool ok = true;
+        b.type = resolveTypeArgFor(ctx->mod, found, i, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams, &ok);
+        if (!ok) return NULL; //reported where it was written
         ListAdd(&bindings, &b);
     }
     return instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -10729,7 +11990,8 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER), litScopeVars);
     //an element is never itself a scope's name, only bare (T7), and an element array is a reference (T7a)
     if (elemType.scopeParam) Err(tok, ERR_NAMED_SCOPE_ON_ELEMENT);
-    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc) Err(tok, ERR_ARRAY_NESTED_BY_VALUE, &elemType);
+    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc && elemType.arrMalloc && !elemType.unknown)
+        Err(tok, ERR_ARRAY_NESTED_BY_VALUE, &elemType); //T7c: a fixed-length one holds its elements in itself
     //an error type has no constructible values at all - every element would fail to type-check anyway, but
     //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
     if (elemType.bType == BASETYPE_ERROR) {
@@ -10922,6 +12184,10 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(recvOp)) recvType = *textT;
     struct var* m = VarGetMethod(recvType.owner, mName, recvType);
+    //M6b: inside the prelude's element-wise helpers a protocol method is the one the type declares, either spelling
+    bool privSpelt = false;
+    if (!m && protocolHelperDepth && protocolOf(mName, &privSpelt) && !privSpelt)
+        m = VarGetMethod(recvType.owner, StrFromCStr(protocolPrivateName(protocolOf(mName, &privSpelt))), recvType);
     if (!m && SemanticMethodAmbiguous) {
         Err(mTok, ERR_METHOD_AMBIGUOUS, mTok);
         *reported = true;
@@ -10961,7 +12227,14 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct type p0 = (*(struct var*)ListGetIdx(&m->type.vars, 0)).type;
     if (!viaInterface && !MethodReceiverAccepts(p0, recvType)) return NULL;
     *reported = true;
-    if (m->owner != ctx->mod && !isPublic(mName)) {
+    //M6b: the element-wise "==" and supplied Hash of an array are judged here, where they are used, for every Eq or
+    //Hash they reach - not inside the prelude, which carries them out (protocolHelperDepth)
+    if (argsNode && isElementwiseHelper(m) && recvType.bType == BASETYPE_ARRAY && recvType.arrElem) {
+        struct list seen = ListInit(sizeof(struct var*));
+        if (StrCmp(m->name, StrFromCStr("Equal"))) eqReachWalk(ctx->mod, *recvType.arrElem, mTok, &seen, 0);
+        else hashReachWalk(ctx->mod, *recvType.arrElem, mTok, &seen, 0);
+    }
+    if (m->owner != ctx->mod && !isPublic(m->name) && !protocolHelperDepth) {
         Err(mTok, ERR_METHOD_IS_PRIVATE, mTok);
         return unknownPlaceholder(mTok);
     }
@@ -11013,7 +12286,36 @@ static void reportUnknownMethod(struct operand* recv, struct token name) {
 }
 
 struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s);
+//G23: "<N>" as a value - the instantiation's value of the constant, of its parameter's type. It is no literal and adapts
+//to no other type, so it is read as that literal converted to its own type, which emits nothing; and it is
+//configuration, so a condition reading it is never S8a's dead code (constVarValue)
+struct operand* OperandConstValue(struct type of, long long v, struct token tok) {
+    struct operand* lit = operandNew(tok, OPERATION_NONE, of);
+    lit->isLiteral = true;
+    lit->intLiteralVal = v;
+    if (of.bType == BASETYPE_CHOICE && v >= 0 && v < of.vars.len) lit->memberName = ((struct var*)ListGetIdx(&of.vars, (int)v))->name;
+    struct operand* op = operandNew(tok, OPERATION_NOMINAL_CONVERT, of);
+    ListAdd(&op->args, &lit);
+    op->constVarValue = true;
+    return op;
+}
+//G23: a constant variable read as a value - "N", or "<N>" written again (G22), reported and read as "N"
+static struct operand* buildConstVarExpr(struct token nameTok, bool written) {
+    struct str name = strFromTok(nameTok);
+    if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, name, name, name);
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    if (!b) { Err(nameTok, ERR_CONST_VAR_UNKNOWN, name); return unknownPlaceholder(nameTok); }
+    if (b->bType != BASETYPE_CONST) { Err(nameTok, ERR_TYPE_VAR_AS_VALUE, name); return unknownPlaceholder(nameTok); }
+    if (b->unknown || !b->constKnown) return unknownPlaceholder(nameTok);
+    return OperandConstValue(*b->constOf, b->constVal, nameTok);
+}
+
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_CONST_VAR)
+        return buildConstVarExpr(firstTokOfType(partSntx(s, 0), TOK_IDEN), true);
+    //G22/G23: a constant variable is written bare after its introduction - no local may have its name (D3a)
+    if (s->parts.len == 1 && partAt(s, 0)->isToken && partAt(s, 0)->tok.type == TOK_IDEN && boundConstVar(strFromTok(partAt(s, 0)->tok)))
+        return buildConstVarExpr(partAt(s, 0)->tok, false);
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
         switch (tok.type) {
@@ -11161,6 +12463,17 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 recvStart = i + 1;
             }
         }
+        //G22/G23: a constant variable as the receiver - "N.Hash()"
+        if (!recvVar && nameIdens.len == 2 && boundConstVar(strFromTok(recvTok))) {
+            bool mReported = false;
+            struct operand* recvOp = buildConstVarExpr(recvTok, false);
+            struct operand* mc = buildMethodCall(ctx, recvOp, nameTok, firstPartOfType(callNode, SNTX_EXPR_ARGS),
+                                                 scopeArgNodes, &mReported);
+            if (mc) return mc;
+            if (!mReported) reportUnknownMethod(recvOp, nameTok);
+            buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            return unknownPlaceholder(nameTok);
+        }
         //M12/M19: a case of an enum with no payload, written as the receiver - "Color.Red.Hash()", "lib.Dir.North.Hash()"
         if (!recvVar && nameIdens.len >= 3) {
             struct list head = ListInit(sizeof(struct token));
@@ -11196,6 +12509,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         //diagnostic for whatever the name turns out to be.
         struct type recvType = recvVar ? recvVar->type : (struct type){0};
         for (int i = recvStart; recvVar && i +1 < nameIdens.len; i++) {
+            //a value whose type is unknown was reported where its type was written - or is decided next attempt (G21):
+            //what is called on it is unknown too, and says nothing more
+            if (recvType.unknown) {
+                buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+                return unknownPlaceholder(nameTok);
+            }
             struct token fTok = *(struct token*)ListGetIdx(&nameIdens, i);
             struct var* f = recvType.bType == BASETYPE_STRUCT ? VarGetList(&recvType.vars, strFromTok(fTok)) : NULL;
             if (!f) { recvVar = NULL; break; }
@@ -11226,6 +12545,16 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list aArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(aArgs);
             ctx->allowFallibleCall = allowedArr;
+            //T8: "Array<T, N>()" - N elements, each T's zero value; a fill is a copy into one
+            if (!at.arrMalloc) {
+                if (aArgs.len) { Err(firstTokAnywhere(firstPartOfType(callNode, SNTX_EXPR_ARGS)), ERR_FIXED_ARRAY_CALL); return unknownPlaceholder(nameTok); }
+                if (at.unknown) return unknownPlaceholder(nameTok);
+                struct operand* z = zeroValueFor(ctx, at, nameTok, false);
+                if (z) return z;
+                z = operandNew(nameTok, OPERATION_ZERO, at);
+                z->type.scopeDepth = ctx->blockDepth;
+                return z;
+            }
             if (aArgs.len < 1 || aArgs.len > 2) { reportArgCount(aArgs, nameTok, 1, 2, 0); return OperandIntLiteral(nameTok); }
             struct operand* sizeOp = *(struct operand**)ListGetIdx(&aArgs, 0);
             if (!OperandIsInt(sizeOp)) Err(sizeOp->tok, ERR_ARRAY_LENGTH_NOT_INT, &sizeOp->type);
@@ -11236,7 +12565,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok, fill, *at.arrElem);
                 ListAdd(&alloc->args, &fill);
                 if (arrayHoldsExisting(alloc)) queueHereCheck(ctx, alloc); //T7: the fill lives where the array lands
-            } else {
+            } else if (!(sizeOp->isLiteral && sizeOp->intLiteralVal == 0)) { //"Array<T>(0)" has no element to zero
                 struct operand* zero = zeroValueFor(ctx, *at.arrElem, nameTok, true); //D13c: each element its zero
                 if (zero) ListAdd(&alloc->args, &zero);
             }
@@ -11989,11 +13318,12 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
             struct var* ev;
             int ed;
             bool eu;
+            //a value holding references is judged by where they live (O4b/O25h), not where its own slot is
             if ((asRef || (OperandNamesExistingStorage(e) && TypeHoldsReferences(e->type))) && !operandIsTemporary(ctx, e)
-                    && RefExactScope(ctx, e, asRef, &ev, &ed, &eu)) {
+                    && (asRef ? RefExactScope(ctx, e, true, &ev, &ed, &eu) : valueRefsScope(ctx, e, &ev, &ed, &eu))) {
                 bool ok;
                 if (eu) ok = !dstVar && !exact; //the program's scope outlives every scope of this function
-                else if (exact) ok = sameExactScope(ev, ed, dstVar, dstDepth);
+                else if (exact) ok = sameScopeOrObliged(ctx, ev, ed, dstVar, dstDepth); //two of ours: an obligation (O10c)
                 else ok = ev != SCOPE_AMBIGUOUS && dstVar != SCOPE_AMBIGUOUS
                           && scopeCanFlowInto(ctx->func, ev, normDepth(ed), dstVar, normDepth(dstDepth));
                 if (!ok) Err(e->tok, exact ? ERR_ELEM_NOT_IN_ARRAY_SCOPE : ERR_ELEM_OUTLIVED);
@@ -12319,6 +13649,7 @@ static enum tokenType compoundBinTokType(enum operation compoundOp) {
 }
 
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    if (target->args.len < 2) return (struct statement){0}; //an At call that failed, reported where it is written
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
     //E31: every index the place was written with ("x[i, j] = v" is SetAt(i, j, v)), in order
     struct list idxs = ListInit(sizeof(struct operand*));
@@ -12951,6 +14282,7 @@ void foldScopeBindingsBranch(struct list* acc, struct list* next) {
 //reaching one is simply not judged.
 static bool condIsConstant(struct operand* op, bool* build, int depth) {
     if (!op || depth > 64) return false;
+    if (op->constVarValue) { *build = true; return true; } //G26: configuration, as a build constant is
     switch (op->opType) {
         case OPERATION_NONE: return op->isLiteral && op->args.len == 0;
         case OPERATION_READ_VAR: {
@@ -13004,7 +14336,15 @@ static struct list* bodyStmts(int id) {
 //the checked condition of a queued local if, recorded where it is checked - in its own function's scope
 static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct operand* op) {
     struct pendingCond* p = SyntaxPendingFor(condNode);
-    if (p && p->local) { p->op = op; p->bodyId = ctx->bodyId; }
+    if (!p || !p->local) return;
+    //G26: in a generic with constant parameters one parse serves every instantiation, and what a local holds may be
+    //a constant's value - so such a condition is never decided once for all of them: it is an ordinary one, and a
+    //condition reading the constant itself is decided per instantiation where it is checked (buildIfStmnt)
+    for (int i = 0; currentBindings && i < currentBindings->len; i++) {
+        if (((struct typeBinding*)ListGetIdx(currentBindings, i))->type.bType == BASETYPE_CONST) op = NULL;
+    }
+    p->op = op;
+    p->bodyId = ctx->bodyId;
 }
 
 //a plain scalar value: nothing but its own name can reach it - there is no reference to a primitive - so a
@@ -13148,10 +14488,49 @@ static struct operand* fixedLocalInit(struct var* local, void* ctx) {
     return init;
 }
 
+//G26: does this expression read a generic's constant variable
+static bool syntaxReadsConstVar(struct syntax* s) {
+    if (!s) return false;
+    if (s->type == SNTX_CONST_VAR) return true;
+    struct token bt = bareNameTok(s);
+    if (bt.type != TOK_NONE && boundConstVar(strFromTok(bt))) return true; //G22: written bare
+    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && syntaxReadsConstVar(partSntx(s, i))) return true;
+    return false;
+}
+
+//G26: a condition reading a constant variable, in an instantiation, decided by evaluating it: 1 or 0, or -1 when it
+//cannot be evaluated while compiling - an ordinary condition then
+static int constCondValue(struct operand* cond, struct syntax* condNode) {
+    if (!currentBindings || !OperandIsBool(cond) || !syntaxReadsConstVar(condNode)) return -1;
+    struct ctVal* v = NULL;
+    if (!CtEvaluate(cond, TypeVanilla(BASETYPE_BOOL), &v, NULL, NULL, NULL)) return -1;
+    return v->i != 0;
+}
+
+//G26: the branch an instantiation chose, in the if's place - checked as a block of its own, the others not at all
+struct operand* typeMatchAlwaysTrue(struct token tok);
+struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s);
+static struct statement buildDecidedIf(struct checkCtx* ctx, struct syntax* s, bool value, struct token tok) {
+    struct list blocks = allPartsOfType(s, SNTX_BLOCK);
+    struct syntax* elseIfNode = firstPartOfType(s, SNTX_STMNT_IF);
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_IF;
+    stmt.op = typeMatchAlwaysTrue(tok);
+    if (value) stmt.block = buildBlock(ctx, *(struct syntax**)ListGetIdx(&blocks, 0));
+    else if (blocks.len == 2) stmt.block = buildBlock(ctx, *(struct syntax**)ListGetIdx(&blocks, 1));
+    else if (elseIfNode) return buildIfStmnt(ctx, elseIfNode);
+    else stmt.block = ListInit(sizeof(struct statement));
+    return stmt;
+}
+
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+    if (ErrMsgGetNErrors() == errs) {
+        int decided = constCondValue(cond, firstPartOfType(s, SNTX_EXPR));
+        if (decided >= 0) return buildDecidedIf(ctx, s, decided, cond->tok);
+    }
     //S8b: decided, if it can be, after this attempt - but one that does not check is the running program's, so the
     //attempt that follows reports what is wrong with it rather than deciding it from a value it cannot have
     noteLocalCond(ctx, firstPartOfType(s, SNTX_EXPR), ErrMsgGetNErrors() == errs ? cond : NULL);
@@ -13325,7 +14704,9 @@ static struct token forInHiddenTok(struct token at, const char* what) {
     return t;
 }
 
-//S9a: does a value of type t have a method called name taking nothing but its receiver
+//S9a: does a value of type t have a method called name taking nothing but its receiver - under name or its private
+//spelling (M6b), which only its own module's loops call (forInCall)
+static struct var* protocolMethod(struct type t, const char* cap);
 static struct var* forInMethod(struct type t, char* name) {
     if (t.bType == BASETYPE_INTERFACE) {
         for (int i = 0; i < t.vars.len; i++) {
@@ -13334,9 +14715,8 @@ static struct var* forInMethod(struct type t, char* name) {
         }
         return NULL;
     }
-    struct var* m = VarGetMethod(t.owner, StrFromCStr(name), t);
+    struct var* m = protocolMethod(t, name);
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.vars.len != 1) return NULL;
-    if (!MethodReceiverAccepts((*(struct var*)ListGetIdx(&m->type.vars, 0)).type, t)) return NULL;
     return m;
 }
 
@@ -13356,7 +14736,14 @@ static struct var* methodNamedOn(struct type t, const char* name) {
 }
 
 //"recv.name()" built exactly as the program would have written it
+static bool protocolReach(struct semaModule* mod, struct type t, struct var* m, struct token tok);
 static struct operand* forInCall(struct checkCtx* ctx, struct operand* recv, struct token at, char* name) {
+    //M6b: the spelling the type declares - a private one called only from its own module
+    struct var* pm = protocolMethod(recv->type, name);
+    if (pm) {
+        if (!protocolReach(ctx->mod, recv->type, pm, at)) return unknownPlaceholder(at);
+        name = StrDupStr(pm->name);
+    }
     struct syntax noArgs = (struct syntax){ SNTX_EXPR_ARGS, ListInit(sizeof(struct syntaxPart)) };
     struct token mTok = at;
     mTok.type = TOK_IDEN;
@@ -13603,7 +14990,7 @@ static void forInTryFinish(struct forInTry* ft) {
 //S9f: a collection's RunFrom - "RunFrom(at I64) Array<T>& ? Exhausted", the elements stored next to each other from
 //position at - or NULL when its type has none of that shape
 static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
-    struct var* m = methodNamedOn(t, "RunFrom");
+    struct var* m = protocolMethod(t, "RunFrom"); //or runFrom (M6b)
     if (!m || m->type.vars.len != 2 || !m->type.hasRetType) return NULL;
     struct type at = ((struct var*)ListGetIdx(&m->type.vars, 1))->type;
     struct type* rt = m->type.retType;
@@ -13688,7 +15075,9 @@ static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx*
     ListAdd(&args, &atArg);
     struct token mTok = kw;
     mTok.type = TOK_IDEN;
-    mTok.str = StrFromCStr("RunFrom");
+    struct var* rf = forInRunFrom(src->type, exhaustedT);
+    mTok.str = rf ? rf->name : StrFromCStr("RunFrom"); //the spelling declared (M6b)
+    if (rf && !protocolReach(wctx->mod, src->type, rf, kw)) return (struct statement){0};
     struct list* prevArgs = prebuiltMethodArgs;
     prebuiltMethodArgs = &args;
     octx.allowFallibleCall = true;
@@ -13879,6 +15268,10 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         atName = operatorMethodName(&wctx, src->type, "At");
         if (!atName) atName = tryOperatorName(&wctx, src->type, "At");
         lenName = operatorMethodName(&wctx, src->type, "Len");
+        //M6b: both called only where they may be - one error for the loop when either is private elsewhere
+        if (!protocolReach(wctx.mod, src->type, methodNamedOn(src->type, atName), kw)
+                || !protocolReach(wctx.mod, src->type, methodNamedOn(src->type, lenName), kw))
+            return (struct statement){0};
         struct type refT = forInBorrowType(src->type);
         bool unnamed = false;
         landDeclByObligations(&wctx, src); //O18c
@@ -13928,7 +15321,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         bool ok = nextM && rt && !rt->isTuple && ends;
         //S9e: a Next that can fail some other way too is not Iterator<T>'s, so its shape is what is checked - a
         //writable receiver, as Iterator<T> asks
-        if (ok && nextM->type.errors.len > 1) {
+        //...and so is a private next (M6b): Iterator<T> names Next, so only its shape can be asked of it
+        if (ok && (nextM->type.errors.len > 1 || !isPublic(nextM->name))) {
             struct var* r0 = nextM->type.vars.len ? ListGetIdx(&nextM->type.vars, 0) : NULL;
             ok = r0 && (r0->mut || r0->type.refMut);
         } else if (ok && src->type.bType != BASETYPE_INTERFACE) {
@@ -14418,15 +15812,76 @@ static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* a
     return m;
 }
 
-struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode, bool asValue) {
+//G26: "match <N>" - a constant variable's value picks the case, per instantiation: only the chosen arm is checked and
+//compiled, as G14 says of a type match's
+static int constCaseMatches(struct checkCtx* ctx, struct syntax* alt, struct type bound) {
+    struct cfCtx c = (struct cfCtx){0};
+    c.mod = ctx->mod;
+    struct cfVal v = (struct cfVal){0};
+    enum cfRes r = cfExpr(&c, alt, &v);
+    if (r == CF_ERROR) { Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(alt), ERR_CONST_ARG_NOT_COMPUTABLE, c.why); return -1; }
+    struct type of = *bound.constOf;
+    if (r != CF_OK) { //a call: evaluated as the expression it is
+        if (alt->type != SNTX_EXPR) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
+        struct operand* op = buildExprFromSyntax(ctx, alt);
+        reportTypeFit(OperandFitsType(ctx->func, op, of), op->tok, op, of);
+        struct ctVal* val = NULL;
+        const char* why = NULL;
+        if (!CtEvaluate(op, of, &val, NULL, &why, NULL)) { Err(op->tok, ERR_CONST_ARG_NOT_COMPUTABLE, why ? why : ""); return -1; }
+        return val->i == bound.constVal;
+    }
+    bool kindOk = of.bType == BASETYPE_BOOL ? v.kind == CF_BOOL
+                : of.bType == BASETYPE_CHOICE ? (v.kind == CF_ENUM && TypeIsSame(*v.enumType, of))
+                : v.kind == CF_INT;
+    if (!kindOk) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, &of); return -1; }
+    return v.i == bound.constVal;
+}
+static struct statement typeMatchValueArm(struct checkCtx* ctx, struct syntax* arm, struct token tok);
+static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct type bound, struct token opTok,
+                                             bool asValue) {
+    struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
+    struct syntax* chosen = NULL;
+    for (int i = 0; i < cases.len && !chosen; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        struct syntax* guard = firstPartOfType(c, SNTX_CASE_GUARD);
+        if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
+        for (int k = 0; k < c->parts.len && !chosen; k++) {
+            struct syntaxPart* p = partAt(c, k);
+            if (p->isToken) continue;
+            struct syntax* alt = p->sntx;
+            //"case Layout.RowMajor" in a value match is read as a pattern - an enum case with no payload list is its value
+            if (alt->type == SNTX_CASE_PATTERN) {
+                if (alt->parts.len != 1) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, bound.constOf); continue; }
+                alt = partSntx(alt, 0);
+            } else if (alt->type != SNTX_EXPR && alt->type != SNTX_TYPE_EXPR) continue;
+            if (constCaseMatches(ctx, alt, bound) == 1) chosen = c;
+        }
+    }
+    if (!chosen) chosen = firstPartOfType(s, SNTX_STMNT_NOMATCH);
+    if (asValue) {
+        if (!chosen) Err(opTok, ERR_TYPE_MATCH_UNCOVERED, &bound);
+        return typeMatchValueArm(ctx, chosen, opTok);
+    }
+    if (!chosen) return buildEmptyIfStmnt(ctx, opTok); //nothing is compiled for this instantiation, as an if none of whose branches is chosen
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_IF;
+    stmt.op = typeMatchAlwaysTrue(opTok);
+    struct operand* none = NULL;
+    buildCaseBody(ctx, chosen, false, &stmt.block, &none);
+    return stmt;
+}
+
+//G13/G26: "match <T>" or, after its introduction, "match N" (G22) - the variable is resolved directly against the
+//instantiation's own bindings rather than through the general type-expression path
+struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct token opTok, bool written, bool asValue) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
-    struct token opTok = firstTokAnywhere(varNode);
-    //the operand is a bare SNTX_TYPE_VAR, not wrapped in a SNTX_TYPE_EXPR, so it is resolved directly
-    //against the instantiation's own bindings rather than through the general type-expression path
-    struct str vname = strFromTok(firstTokOfType(varNode, TOK_IDEN));
+    struct str vname = strFromTok(opTok);
     struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
     if (!bound) { Err(opTok, ERR_UNKNOWN_TYPE_VAR, vname); return buildEmptyIfStmnt(ctx, opTok); }
+    if (written && (bareTypeVars || bound->bType == BASETYPE_CONST) && varWrittenAgain(opTok))
+        Err(opTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname); //G22: "match N"
+    if (bound->bType == BASETYPE_CONST) return buildConstMatchStmnt(ctx, s, *bound, opTok, asValue);
     struct type operandT = *bound;
 
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
@@ -14437,6 +15892,8 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
         if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
         //S13c: "case I32, I64 { }" - any one of the types selects the arm
         struct list caseTypeNodes = allPartsOfType(c, SNTX_TYPE_EXPR);
+        struct syntax* valueAlt = firstPartOfType(c, SNTX_EXPR);
+        if (valueAlt) Err(firstTokAnywhere(valueAlt), ERR_TYPE_MATCH_VALUE_CASE, vname);
         bool hit = false;
         for (int k = 0; k < caseTypeNodes.len && !hit; k++) {
             struct type caseT = resolveTypeExpr(ctx->mod, *(struct syntax**)ListGetIdx(&caseTypeNodes, k),
@@ -14680,7 +16137,12 @@ static bool patCaseCovered(struct list* rows, struct type t, int tag) { return p
 
 static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
-    if (varNode) return buildTypeMatchStmnt(ctx, s, varNode, asValue);
+    if (varNode) return buildTypeMatchStmnt(ctx, s, firstTokOfType(varNode, TOK_IDEN), true, asValue);
+    //G22/G26: "match N" over a constant variable picks its case per instantiation - and "match T" over a type variable,
+    //once type variables are written bare
+    struct token subj = bareNameTok(firstNodeOfChain(firstPartOfType(s, SNTX_EXPR)));
+    struct type* bound = subj.type != TOK_NONE && currentBindings ? bindingGet(currentBindings, strFromTok(subj)) : NULL;
+    if (bound && (bound->bType == BASETYPE_CONST || bareTypeVars)) return buildTypeMatchStmnt(ctx, s, subj, false, asValue);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
@@ -15842,7 +17304,7 @@ struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
 //every if/do-while condition already goes through
 //S18c: every assert, with the body it is in, checked at compile time once the program has checked cleanly
-struct assertRec { struct operand* op; struct operand* msg; int bodyId; bool inTest; };
+struct assertRec { struct operand* op; struct operand* msg; int bodyId; bool inTest; struct errContextSaved* where; };
 static struct list assertRecs;
 
 //S18c/S18a: a false assert's error carries its message, when the message can be computed while compiling as well
@@ -15876,7 +17338,7 @@ struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (!msg->type.unknown && !(TypeIsByteArray(msg->type) && msg->type.arrMalloc))
             Err(msg->tok, ERR_ASSERT_MESSAGE_NOT_TEXT, &msg->type);
     }
-    struct assertRec r = { cond, msg, ctx->bodyId, ctx->inTest };
+    struct assertRec r = { cond, msg, ctx->bodyId, ctx->inTest, ErrMsgSaveContext() }; //G27: in an instantiation, says which
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSERT;
@@ -16162,7 +17624,13 @@ void checkInstantiationBody(struct instantiation* inst) {
     struct semaModule* savedScope = SemanticMethodScope;
     SemanticMethodScope = inst->generic->type.owner; //M22: the generic's code sees the generic's imports
     ErrMsgPushContext(inst->site, instantiationNote(&inst->generic->type.typeParams, &inst->bindings)); //G16
+    int prevChain = instChain;
+    instChain = inst->chain; //G17
+    int savedHelper = protocolHelperDepth;
+    protocolHelperDepth = isElementwiseHelper(inst->generic) ? 1 : 0; //M6b: judged where it is used, not here
     checkInstantiationBodyIn(inst, spec);
+    protocolHelperDepth = savedHelper;
+    instChain = prevChain;
     ErrMsgPopContext();
     SemanticMethodScope = savedScope;
     spec->bodyState = 2;
@@ -16245,7 +17713,10 @@ void drainTypeInstantiations(void) {
             currentBindings = &p->bindings;
             struct type* origin = p->spec->genericOrigin;
             ErrMsgPushContext(p->site, origin ? instantiationNote(&origin->typeParams, &p->bindings) : NULL); //G16
+            int prevChain = instChain;
+            instChain = p->chain; //G17
             buildTypeBodies(p->spec->owner, p->spec);
+            instChain = prevChain;
             ErrMsgPopContext();
             currentBindings = saved; //restored, not nulled: instantiations can nest
         }
@@ -16349,19 +17820,8 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         //D13b's element fill. The only thing a field does that a local does not is outlive the call.
         struct operand* fieldOp;
         struct operand* fillValue = NULL;
-        if (rhsNode && field->inlineState == 1) {
-            //C2e: stored inline - the allocation the call would make is the field's own storage, zeroed or
-            //filled in place
-            struct operand* alloc = buildExprFromSyntax(&cctx, rhsNode);
-            fieldOp = NULL;
-            if (alloc->opType == OPERATION_SIZED_ARRAY_ALLOC && alloc->args.len > 1) fillValue = *(struct operand**)ListGetIdx(&alloc->args, 1);
-        } else if (rhsNode) {
+        if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
-            if (field->inlineState == 2 && fieldOp->opType == OPERATION_SIZED_ARRAY_ALLOC) {
-                struct inlinePending ip = { TokenGetFileName(field->tok.owner), field->tok.lineNr, field->name, t->name,
-                                            *(struct operand**)ListGetIdx(&fieldOp->args, 0) };
-                ListAdd(&inlinePendings, &ip);
-            }
             if (typeExprNode) {
                 reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok, fieldOp, field->type);
             } else { // ":=" - type read straight off the rhs (D15)
@@ -16415,15 +17875,13 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
             decl.op = fieldOp;
             decl.fillValue = fillValue;
             decl.ctorField = true;
-            decl.zeroFill = field->inlineState == 1 && !fillValue;
             StatementAdd(&t->ctorFunc->codeBlock, decl);
             fieldOp = OperandReadVar(local, field->tok);
         }
-        //T7a: a field holding an array by value would be shared, not copied, when the instance is
-        if (field->type.bType == BASETYPE_ARRAY && field->type.arrMalloc && !field->type.structMAlloc
-                && field->inlineState != 2) {
-            Err(field->tok, field->inlineState == 0 ? ERR_ARRAY_NESTED_BY_VALUE : ERR_INLINE_SIZE_UNKNOWN, &field->type);
-        }
+        //T7a: a field holding an array by value would be shared, not copied, when the instance is - unless its length is
+        //its type's (T7c), and its elements are in the instance itself
+        if (field->type.bType == BASETYPE_ARRAY && field->type.arrMalloc && !field->type.structMAlloc && !field->type.unknown)
+            Err(field->tok, ERR_ARRAY_NESTED_BY_VALUE, &field->type);
         ListAdd(&fieldArgs, &fieldOp);
     }
     struct operand* built = OperandStructLiteral(cctx.func, *t, fieldArgs, t->tok);
@@ -16634,6 +18092,8 @@ static void ensureBodyChecked(struct var* func) {
     hashNullGuarded = exitsCountLoopJumps = resolvingConstraint = implicitParamScopes = scopeTagByVariable = false;
     scopeTagParams = scopeTagFields = NULL;
     scopeTagBody = NULL;
+    int savedHelper = protocolHelperDepth;
+    protocolHelperDepth = 0; //M6b: another body is its own code, whatever is being checked around it
     onDemandDepth++;
     if (isInst) checkInstantiationBody(&inst);
     else {
@@ -16641,6 +18101,7 @@ static void ensureBodyChecked(struct var* func) {
         checkFuncBody(func->type.owner, func);
     }
     onDemandDepth--;
+    protocolHelperDepth = savedHelper;
     currentBindings = savedBindings;
     currentTypeParamNames = savedTypeParamNames;
     SemanticMethodScope = savedMethodScope;
@@ -16750,6 +18211,25 @@ int SemanticBuiltinErrorWord(char* word) {
 }
 
 
+//M19f: the prelude's words for writing text - print, println, eprint, eprintln - the functions every module reaches by
+//bare name, as it reaches a build constant. Lowercase as the language's own words are; the prelude's other lowercase
+//names stay its own (M6)
+static const char* preludeWords[] = {"print", "println", "eprint", "eprintln"};
+static bool isPreludeWord(struct str name) {
+    for (size_t i = 0; i < sizeof(preludeWords) / sizeof(preludeWords[0]); i++) {
+        if (StrCmp(name, StrFromCStr((char*)preludeWords[i]))) return true;
+    }
+    return false;
+}
+static struct var* preludeWordVar(struct str name) {
+    if (!isPreludeWord(name)) return NULL;
+    for (int i = 0; i < preludeModules.len; i++) {
+        struct var* v = VarGetList(&(*(struct semaModule**)ListGetIdx(&preludeModules, i))->vars, name);
+        if (v && v->isFuncDecl && !v->isMethod) return v;
+    }
+    return NULL;
+}
+
 static struct var* buildConstVar(struct str name) {
     return buildModule ? VarGetList(&buildModule->vars, name) : NULL;
 }
@@ -16761,17 +18241,75 @@ static void noteWhy(struct token at, struct token whyTok) {
     if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
 }
 
+//G21: a constant argument that needed evaluation proper - a call, a global computed by one - computed now that the
+//program has checked: built as an expression in its module, with the constant variables it reads bound as the
+//instantiation that asked for it binds them, and evaluated as a value of its parameter's type
+static void decideConstArg(struct constArgPend* p) {
+    struct constArgDecision d = { p->key, 0, false, NULL };
+    struct checkCtx ctx = {0};
+    ctx.mod = p->mod;
+    struct list* prevB = currentBindings;
+    struct semaModule* prevScope = SemanticMethodScope;
+    currentBindings = p->bindings.len ? &p->bindings : NULL;
+    SemanticMethodScope = p->mod;
+    ErrMsgMuteStart();
+    int before = ErrMsgGetNErrors();
+    struct syntax* n = p->node;
+    while ((n->type == SNTX_CONST_ARG || n->type == SNTX_TYPE_EXPR) && n->parts.len == 1 && !partAt(n, 0)->isToken) n = partSntx(n, 0);
+    struct operand* op = NULL;
+    if (n->type == SNTX_TYPE_REF) { //a name written alone: a global, of this module or another's
+        struct list idens = allTokOfType(firstPartOfType(n, SNTX_NAME), TOK_IDEN);
+        struct token last = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+        struct semaModule* m = idens.len > 1 ? resolveAliasChain(p->mod, idens, 1) : p->mod;
+        struct var* v = m ? VarGetList(&m->vars, strFromTok(last)) : NULL;
+        if (v && !v->isFuncDecl) op = OperandReadVar(v, last);
+    } else {
+        op = buildExprFromSyntax(&ctx, n);
+    }
+    while (SemanticHasPendingInstantiations()) {
+        semaDrainInstantiations();
+        drainTypeInstantiations();
+    }
+    bool clean = op && ErrMsgGetNErrors() == before && !op->type.unknown;
+    bool fits = clean && OperandFitsType(NULL, op, p->slot) == TYPE_FIT_OK;
+    ErrMsgMuteEnd();
+    currentBindings = prevB;
+    SemanticMethodScope = prevScope;
+    if (!clean) d.why = "it does not check as an expression of the module it is written in";
+    else if (!fits) d.why = "it is not a value of the parameter's type";
+    else {
+        struct ctVal* val = NULL;
+        const char* why = NULL;
+        if (CtEvaluate(op, p->slot, &val, NULL, &why, NULL)) { d.ok = true; d.n = val->i; }
+        else d.why = why ? why : "it cannot be evaluated while compiling";
+    }
+    ListAdd(&constArgDecisions, &d);
+}
+
+//B11: whether a file is the standard library's - the prelude or std/ - whose errors met for a use of its code by the
+//program are reported at that use (ErrMsgSetLibraryTest)
+static bool isLibraryFile(struct str file) {
+    for (int i = 0; i < allModules.len; i++) {
+        struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
+        if (!StrCmp(m->fileName, file)) continue;
+        return m->identity.len > 4 && !strncmp(m->identity.ptr, "std/", 4);
+    }
+    return false;
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
+    ErrMsgSetLibraryTest(isLibraryFile);
     nextBodyId = 0; //S8b: every attempt rebuilds every body
     fixedCacheReset();
     bodiesPhase = false; //O10b
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
+    paramDefaults = ListInit(sizeof(struct paramDefault*));
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
     literalShifts = ListInit(sizeof(struct operand*)); //E4a
     zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
-    inlinePendings = ListInit(sizeof(struct inlinePending)); //C2e
+    constArgPends = ListInit(sizeof(struct constArgPend)); //G21
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     bareErrorType = (struct type){0};
@@ -16864,6 +18402,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     }
     struct list inits = SemanticInitOrder();
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
+    buildParamDefaults(); //D8a: every global's type is known now
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
     //every instantiation discovered while checking those bodies, plus everything those discover in turn
     //one fixed point over both queues, not two in sequence: a function copy's body can instantiate a
@@ -16916,10 +18455,14 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             r->call->catchClauses = clauses;
             if (ok) {
                 if (CtIsZero(val)) r->call->zeroBits = true;
-                else if (r->forArray && !CtIsPlainData(val)) Err(r->tok, ERR_ZERO_VALUE_SHARED, &r->call->type);
+                else if (r->forArray && !CtIsPlainData(val)) {
+                    Err(r->use, ERR_ZERO_VALUE_SHARED, &r->call->type);
+                    if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
+                }
                 continue;
             }
-            Err(r->tok, ERR_NO_ZERO_VALUE, &r->call->type, why);
+            Err(r->use, ERR_NO_ZERO_VALUE, &r->call->type, why);
+            if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
             noteWhy(r->tok, whyTok);
         }
         CtReset();
@@ -16951,14 +18494,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 }
             }
         }
-        //C2e: an "Array<T>(n)" field whose n was undecided this attempt - computed now, laid out next attempt
-        for (int i = 0; i < inlinePendings.len; i++) {
-            struct inlinePending* p = ListGetIdx(&inlinePendings, i);
-            struct ctVal* val = NULL;
-            struct inlineDecision d = { p->file, p->line, p->name, p->typeName, -1 };
-            if (CtEvaluate(p->sizeOp, TypeVanilla(BASETYPE_INT64), &val, NULL, NULL, NULL) && val->i >= 0) d.n = val->i;
-            ListAdd(&inlineDecisions, &d);
-        }
+        //G21: a constant argument evaluation proper had to decide - computed now, used next attempt
+        for (int i = 0; i < constArgPends.len; i++) decideConstArg(ListGetIdx(&constArgPends, i));
         //D8a: every default that is not a literal must be computable now
         for (int i = 0; i < defaultRecs.len; i++) {
             struct defaultRec* r = ListGetIdx(&defaultRecs, i);
@@ -16990,7 +18527,11 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 continue;
             }
             if (v->i) r->op->ctProven = true;
-            else if (!assertFalseWithMessage(r)) Err(r->op->tok, ERR_ASSERT_FALSE);
+            else {
+                ErrMsgPushSaved(r->where); //G27/G16b: the instantiation it was false for
+                if (!assertFalseWithMessage(r)) Err(r->op->tok, ERR_ASSERT_FALSE);
+                ErrMsgPopSaved(r->where);
+            }
         }
     }
 
@@ -17082,14 +18623,14 @@ static bool decidePendingConditions(void) {
 
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     SyntaxResetConditionDecisions();
-    inlineDecisions = ListInit(sizeof(struct inlineDecision)); //C2e
+    constArgDecisions = ListInit(sizeof(struct constArgDecision)); //G21
     for (int attempt = 0; ; attempt++) {
         SyntaxClearPendingConditions();
         ErrMsgBufferStart();
-        int decidedBefore = inlineDecisions.len;
+        int constBefore = constArgDecisions.len;
         struct semaModule* root = analyzeOnce(fileName, requireMain);
-        //C2e: a field size computed this attempt changes a layout, so the program is checked again with it
-        bool layoutChanged = inlineDecisions.len > decidedBefore;
+        //G21: a constant argument computed this attempt changes the types written with it, so the program is checked again
+        bool layoutChanged = constArgDecisions.len > constBefore;
         struct list* pending = SyntaxPendingConditions();
         if (pending->len == 0 && !layoutChanged) { ErrMsgBufferFlush(); return root; }
         //each attempt decides the conditions it met, and a decided branch can hold further ones - bounded,

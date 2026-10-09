@@ -264,6 +264,39 @@ because what it finds about structure feeds the refactor.
 - QUEUED small fix: D13c's "no zero value" error for `List<Ticket>` (a constructor with an effect) is reported inside
   std/prelude/list.olang with the user's line only as a note - report it at the user's `List<Ticket>` (the type
   argument) naming `List<Ticket&>` as the fix. Goes with the next checker batch.
+- 15:35 CEST: THE USER IS AWAY UNTIL TOMORROW (2026-10-10): "keep going and make some hard decisions yourself if they
+  come up. I won't be available." Overnight plan, in order, paced at the five-hour cap with a send_later just after
+  each reset: merge chunkpool, langb, constgen, native, oann transformers as they finish; then (a) T-bare migration,
+  (b) the permissions batch, (c) a small checker batch (List<Ticket> D13c location, oann repro listzero/ctordefault),
+  in sequence since all three rewrite semantic.c and the corpus, with light work beside them (oann settling networks
+  after transformers, clean room); then the bootstrap/ move + modest refactor with nothing else in flight; then, if
+  all of that lands, start the port with the scanner (feedback_port_clean_design.md). Hard decisions: make them by
+  PRINCIPLES.md, record each in CLAUDE.md/HISTORY.md, and list them numbered in the morning report.
+  The user, 15:40 CEST: "If you have time over, keep building out Oann adding relevant features" - spare capacity goes
+  to oann (after transformers: settling networks per docs/settling.md, clean room; then checkpoints (save/load
+  parameters), BF16 training, convolution via im2col, a tokenizer, data loaders; whatever the transformer work showed
+  missing), each oann agent beside the compiler work, not instead of it.
+- 16:05 CEST: chunkpool merged (66ce3d1, pushed): per-thread size-class pool with an LRU cap at 1/8 of memory (O8b),
+  oann MNIST peak RSS 793MB -> 57MB, `linalg.GemmWorkspace` (a training step allocates nothing after its first).
+- 16:20 CEST: constgen merged (G20-G28, Array<T, N>, T7c/T7d replace C2e; constants bare after their introducing `<N>`,
+  `<N I64>` typed introductions; D3a for constant names). Type variables: one switch `bareTypeVars` in semantic.c, off;
+  the follow-up flips it and migrates (recipe in the merge's HISTORY: keep each name's first `<X`, later `<X>` -> `X`;
+  in a type item every listed name bare after the header; never the header). Known limit: a trait method returning
+  `T&` (built) is not met by one returning `T&p` (borrowed).
+- 16:50 CEST: constgen pushed (verified on master), langb merged by me (conflicts in semantic.c/errmsg/SPEC/checks
+  resolved, verified) and pushed as a3ed507: M6b protocol privacy, D15 any settled type, print/println, ctordefault and
+  listzero (List needs no zero value; library errors reported at the program's use, B11). wt-tbare started (type
+  variables bare after <T>, with a re-runnable migration script; oann migrated by it later). Running: native, oann
+  transformers, oann settling, tbare. Next after tbare: the permissions batch.
+- 16:40 CEST (14:40 UTC): oann phase 3 pushed (957c4b2): transformer ops/layers/training/generation with a KV cache,
+  numpy agreement over 40 steps, tiny Shakespeare 2,000 steps val 1.806, 554 ms/step (products 83% at ~11 GFLOPS),
+  checkpoints (raw), its own copy of the workspace Gemm in kernels.olang (stopgap: delete once oann's compiler has
+  linalg.GemmWorkspace). Started oann phase 3b (BPE tokenizer, safetensors, Conv2d/MaxPool via im2col + MNIST CNN).
+  QUEUED oann catch-up after tbare lands: move oannc2 to master, run tbare's migration script on oann, adopt
+  linalg.GemmWorkspace (delete kernels.olang), check C2e/privacy/print fallout. QUEUED compiler items from oann:
+  repro/ctorunstored (O26 over-rejects a constructor only reading a reference argument), repro/capturedfn (a lambda
+  capturing a function value keeps an indirect call per element - 3.1 vs 0.55 ns). linalg wants (after native lands):
+  batched causal-aware strided Gemm for attention (~3x on attention), Gemm with bias+activation epilogue.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
@@ -312,7 +345,7 @@ then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 size cap, Go-style); with it, stack SIMD alignment for local arrays (O8a covers the arena only).
 
 **Revisit only if:** ThinLTO if programs get big; M:N scheduling only with async I/O; `volatileLoad`/`volatileStore`
-builtins only for MMIO; the chunk pool reusing more than its head chunk if allocation patterns demand it.
+builtins only for MMIO. (The chunk pool's reuse beyond its head chunk was done 2026-10-09 - O8b size classes + an LRU cap.)
 
 **Small known debts found 2026-10-08:** the re-export-plus-import-cycle ordering fragility was worked around by
 reordering worker.olang's imports, never fixed at the cause; several "must not compile" shapes from early history were

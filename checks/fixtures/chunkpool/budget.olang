@@ -1,0 +1,42 @@
+# O8b: what the pool keeps is bounded - run with sysconf answering a machine of 8MB (sysconf.c, preloaded), so the
+# bound is 1MB. A phase holding 16MB at once gives all but the bound back to the system as it ends, least recently
+# given back first; an array larger than the bound goes back at once; and a loop whose arrays fit the bound keeps
+# taking the same chunks. Prints how far the resident set grew across each, in kB, and asserts it stayed within the bound
+import "std/os"
+import "std/io"
+
+# the resident set, in kB
+fn rssKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmRSS:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+# depth + 1 arrays of 512KB, all held at once by the frames of the recursion and filled, so their pages are resident
+fn hold(depth I64) F32 {
+    a := Array<F32>(131072, 1.0)
+    if depth == 0 { return a[131071] }
+    return a[0] + hold(depth - 1)
+}
+
+fn scratch(n I64) F32 {
+    a := Array<F32>(n, 2.0)
+    return a[n - 1]
+}
+
+fn main() ? {
+    s F32 = hold(0)
+    before := rssKb()
+    s += hold(31)                                    # 16MB at its deepest
+    afterPhase := rssKb()
+    s += scratch(1048576)                            # 4MB, beyond the bound by itself
+    afterBig := rssKb()
+    for i in range 200 { s += scratch(32768) }      # 128KB each time, within the bound
+    afterLoop := rssKb()
+    assert s == 1.0 + 32.0 + 2.0 + 200 * 2.0
+    try io.Print($(afterPhase - before) " " $(afterBig - afterPhase) " " $(afterLoop - afterBig) "\n")
+    assert afterPhase - before < 2048 and afterBig - afterPhase < 1024 and afterLoop - afterBig < 1024
+}

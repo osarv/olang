@@ -703,6 +703,23 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
 
 // ---- operators ----
 
+//an operand evaluating which does nothing but read - a variable, a field or element of one, at a literal or variable
+//index - so skipping it changes nothing
+static bool ctReadsOnly(struct operand* op) {
+    for (int depth = 0; depth < 64; depth++) {
+        if (op->opType == OPERATION_READ_VAR) return true;
+        if (op->opType == OPERATION_NONE) return op->isLiteral;
+        if (op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) return false;
+        if (op->isAtCall || op->catchClauses.len || op->checkRoot) return false;
+        if (op->opType == OPERATION_INDEX) {
+            struct operand* idx = *(struct operand**)ListGetIdx(&op->args, 1);
+            if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) return false;
+        }
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    }
+    return false;
+}
+
 static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     struct operand* aOp = *(struct operand**)ListGetIdx(&op->args, 0);
     struct operand* bOp = *(struct operand**)ListGetIdx(&op->args, 1);
@@ -1608,7 +1625,8 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     if (base->kind == CT_NULL) return ctFail(st, op->tok, "it slices a null array");
     if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
     long long l = ctDeref(lo)->i, h = ctDeref(hi)->i;
-    if (!(l >= 0 && l <= h && h <= base->n)) {
+    //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly
+    if (op->sliceExact ? h != base->n : !(l >= 0 && l <= h && h <= base->n)) {
         if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
         if (ctRun) ctRunAbort("slice bounds out of range\n");
         return ctFail(st, op->tok, CT_WHY_SLICE);
@@ -1863,7 +1881,19 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (!node) return NULL; //a checked index's own failure is taken by ctEval
             return node;
         }
-        case OPERATION_ZERO: return ctZero(op->type); //D13c
+        case OPERATION_ZERO: { //D13c
+            //T7c: an Array<T, N> whose elements' zero value a constructor gives - N copies of it
+            if (op->args.len && op->type.bType == BASETYPE_ARRAY && op->type.arrLen) {
+                struct ctVal* fill = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
+                if (!fill) return NULL;
+                struct ctVal* a = ctNew(CT_AGG, op->type);
+                a->n = (int)op->type.arrLen->intLiteralVal;
+                a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
+                for (int i = 0; i < a->n; i++) a->elems[i] = ctCopy(ctDeref(fill));
+                return a;
+            }
+            return ctZero(op->type);
+        }
         case OPERATION_FUNCCALL: {
             struct ctVal* r = ctCall(st, op);
             if (!r && op->isTried && st->flow == CF_ERROR) {
@@ -1874,7 +1904,12 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return r;
         }
         case OPERATION_LEN: {
-            struct ctVal* a = ctDeref(ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0)));
+            //K1/T7c: an Array<T, N>'s length is N whatever holds it - read off its type, where reading what holds it would
+            //do nothing (a variable, a field, an element): it need not be known
+            struct operand* arr = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (arr->type.bType == BASETYPE_ARRAY && !arr->type.arrMalloc && arr->type.arrLen && ctReadsOnly(arr))
+                return ctInt(op->type, arr->type.arrLen->intLiteralVal);
+            struct ctVal* a = ctDeref(ctEval(st, arr));
             if (!a) return NULL;
             if (a->kind == CT_NULL) return ctInt(op->type, 0);
             return ctInt(op->type, a->n);

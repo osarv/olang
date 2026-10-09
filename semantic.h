@@ -37,6 +37,9 @@ enum baseType {
                          //they do for a struct; the value itself is the two-word { itab, data } pair.
     BASETYPE_FUNC,
     BASETYPE_ERROR,
+    BASETYPE_CONST, //G20-G25: a constant argument - a value standing where a type argument would ("Array<F32, 3>",
+                    //"Matrix<F32, 784, 128>"): constOf is the value's type, constVal the value once known, constExpr
+                    //the expression of constant variables a pattern computes it by. Never the type of a value.
     BASETYPE_TYPEVAR, //a generic type variable ("<T>", §12.1 G1) - carries only its own name, and is
                        //replaced by a concrete type when the enclosing generic is instantiated (G16). No
                        //value ever has this type at run time; it exists purely between declaration and
@@ -175,6 +178,20 @@ struct type {
     //G19: BASETYPE_FUNC and a generic declared type - the constrained variables, one BASETYPE_TYPEVAR per
     //constrained name, each carrying its varConstraint
     struct list typeConstraints;
+    //G20: a generic struct type's or trait's parameters that are constants - index-aligned with typeParams, each the
+    //constant's type, or a BASETYPE_VOID entry for a type parameter. Empty when every parameter is a type
+    struct list constParams;
+    //G20-G25: BASETYPE_CONST - see the enum. Also on a BASETYPE_TYPEVAR that is a constant variable (isConstVar):
+    //constOf is its type (the parameter's it fills)
+    struct type* constOf;
+    long long constVal;
+    bool constKnown;
+    bool isConstVar;
+    struct syntax* constExpr;
+    struct semaModule* constMod;
+    //T7c: BASETYPE_ARRAY - a fixed-length array whose length is still a pattern (a constant variable, or an
+    //expression of them, as a BASETYPE_TYPEVAR or BASETYPE_CONST); arrLen is NULL until substitution knows it
+    struct type* arrLenArg;
     bool isExtern; //true for an "extern func" decl (§11) - never fallible (errors always empty), params/
                     //retType restricted to numeric primitives or arrays of them, codegen emits a bare C-ABI
                     //declare/call instead of the olang {code,payload} convention
@@ -272,6 +289,16 @@ struct scopeBinding {
 //a variable or function - the two share one namespace/list everywhere they're declared (module scope,
 //function params, struct members), so one struct covers both
 struct ctVal; //comptime.h
+//D8a: a parameter's default - its syntax, kept until the default is built (after every signature and global is
+//known: a default may name a global declared anywhere), and the checked operand once it is
+struct paramDefault {
+    struct syntax* syntax;
+    struct semaModule* mod;
+    struct type type; //the parameter's declared type, which the default fits
+    struct operand* op; //NULL until built
+    bool building;
+};
+
 struct var {
     struct semaModule* owner; //the module this was declared in; NULL for locals/params (never called or
                                //read cross-module by name, so codegen never needs it for those) - used to
@@ -340,20 +367,16 @@ struct var {
                                 //initializing operand at declaration time (see buildVarDeclStmnt), so a
                                 //later read of this var carries the same map its initializer had - see
                                 //the report on extending the static scope checker past one function's frame
-    //C2e, constructor fields only: 1 when an "Array<T>(n)" field is stored inline because n was computed at
-    //compile time (its type is then the fixed-length T[n]); 2 while n is still to be computed (see
-    //inlinePendings) - it is held in the arena until then, and T7a is not judged yet
-    int inlineState;
     //C2d: this is a constructor type's instance-scope variable (struct type.hereVar). A value with no
     //binding for it simply was not built from existing storage, so it carries no constraint - unlike an
     //ordinary scope variable, whose missing binding means nothing is known
     bool isInstanceScope;
     //O4b: the anonymous scope variable a parameter written with a bare reference marker is passed with
     bool isImplicitScope;
-    struct operand* defaultVal; //parameters only (D8a): the checked literal a call may omit or write
-                                 //"default" for. NULL when the parameter declares no default. Built once,
-                                 //in the DECLARING module's context - a literal has no call-site-dependent
-                                 //meaning, which is exactly why D8a admits nothing else.
+    struct paramDefault* defaultVal; //parameters only (D8a): the default a call may omit or write "default" for,
+                                      //NULL when the parameter declares none. Shared by every copy of the parameter
+                                      //and built once, on first need (paramDefaultOp), in the DECLARING module's
+                                      //context - after every global's type is known, which a default naming one needs
     struct syntax* bodySyntax; //generic functions only: the SNTX_BLOCK of the declaration, kept so each
                                 //instantiation can check the same body again against its own concrete
                                 //parameter types (G16). NULL for everything else.
@@ -448,9 +471,6 @@ struct statement {
     //VAR_DECL only: the local a constructor field declares (C2a). Its unnamed-scope references are built
     //in the scope the instance lands in (C2d), which the constructor receives as a hidden parameter
     bool ctorField;
-    //VAR_DECL only: a declared-size array with no fill is its type's zero value rather than uninitialized
-    //(an inline "Array<T>(n)" field, C2e - every "Array<T>(n)" is zero-filled)
-    bool zeroFill;
     struct operand* forInit;     //FOR only: the loop variable's initial value expression
     struct statement* forPost;   //FOR only: the post clause - an assignment or an S3 expression statement
     bool breakOuter;             //FOR only (S9f): the counted loop over one run of a for-in walking a collection run by
@@ -611,6 +631,9 @@ struct operand {
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
+    bool sliceExact; //E32b: an OPERATION_SLICE standing for "x as Array<T, N>&" - the whole of x, whose length must be N
+                     //(args[2]); its type is the fixed-length reference
+    bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
     bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
@@ -692,6 +715,7 @@ struct list SemanticInitOrder(void); //B5a: imports before importers //M22: whos
 //analysis does, since a method's symbol carries its receiver type.
 struct type* SemanticMethodReceiver(struct var* f);
 struct str typeShortName(struct type t); //a type as a symbol-safe name; used for built-in method receivers
+struct str SemanticConstPatternSource(struct type t); //G24: a constant argument still a pattern, as written
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed);
 
 struct semaImport {
@@ -795,7 +819,7 @@ struct list* SemanticAllInstantiations(void);
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
-                       struct token site; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+                       struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
 int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this

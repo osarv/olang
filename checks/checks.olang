@@ -30,7 +30,8 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "target"]
+                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
+                     "target"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -222,12 +223,14 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
+        case "print" { try printing(r) }
         case "s18c" { try s18c(r) }
         case "static" { try static(r) }
         case "k2" { try k2(r) }
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
         case "opvis" { try opvis(r) }
+        case "protopriv" { try protopriv(r) }
         case "enumwords" { try enumwords(r) }
         case "listloop" { try listloop(r) }
         case "preludestale" { try preludestale(r) }
@@ -239,6 +242,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "agree" { try agree(r) }
         case "fuzz" { try fuzz(r) }
         case "linalg" { try linalg(r) }
+        case "chunkpool" { try chunkpool(r) }
         case "target" { try target(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
@@ -583,6 +587,26 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
 }
 
+# M19f: print, println, eprint and eprintln write to the standard output and error with no try, built and interpreted
+# alike - and a write that fails ends the program as a failed check does, saying which function and stream
+test "print and println write without try, and abort when the write fails" { assert passed("print") }
+
+fn printing(r mut report&) ? Failed {
+    dir := fresh("print")
+    os.Run("cp checks/fixtures/print/* " $os.Quote(dir))
+    out := "n is 42\njoined 42 and 43\n\nthrough a value\n"
+    try r.expect(sh(dir, "\"$OLANG\" -b print.olang > out.txt 2>&1 && ./build/print > out.txt 2> err.txt") == 0,
+                 "print", dir)
+    try r.expect(outOf(dir) == out, "print: the standard output", dir)
+    try r.expect((try os.ReadFile($dir "/err.txt") catch default "") == "to the standard error\n",
+                 "print: the standard error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
+    try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
+    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 134, "print to a closed output does not abort", dir)
+    try r.expect(outOf(dir).StartsWith("print could not write to the standard output\n"),
+                 "print to a closed output: the message", dir)
+}
+
 # S18a: a failed assert, abort or unreachable says where it is - and an assert the message written after it - built,
 # interpreted, and inside a test before the FAIL line
 test "a failed check says where it is" { assert passed("assertloc") }
@@ -705,6 +729,26 @@ fn opvis(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/opvis/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0, "opvis", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b usepriv.olang > out.txt 2>&1") != 0, "usepriv.olang compiled", dir)
+}
+
+# M6b: every method the compiler calls by itself - operators, ==, $, indexing, for, in, Call, Hash - may be private: it
+# works in its own module, a generic of that module included, and using the operation anywhere else is an error naming
+# the method. A generic of another module sees with that module's eyes. Inside() is also baked while compiling (K2)
+test "a private protocol method works in its own module, and is an error elsewhere" { assert passed("protopriv") }
+
+fn protopriv(r mut report&) ? Failed {
+    dir := fresh("protopriv")
+    os.Run("cp checks/fixtures/protopriv/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0, "protopriv", dir)
+    try r.expect(sh(dir, "grep -q '@kk_Baked = .*i1 true' build/kk*.ll") == 0, "Inside() was not baked", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b bad.olang > out.txt 2>&1") != 0, "bad.olang compiled", dir)
+    for what in String&["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec's plus", "'>' needs Vec's less",
+                        "'[' needs Bag's at", "'for' needs Bag's at", "'in' needs Bag's has", "'for' needs Gen's next",
+                        "needs Adder's call", "'Hash' needs Key's hash", "compilation failed with 14 errors"] {
+        try r.expect(outOf(dir).Contains(what), "bad.olang: expected " $what, dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" -b badgen.olang > out.txt 2>&1") != 0, "badgen.olang compiled", dir)
+    try r.expect(outOf(dir).Contains("gen.olang:2:41: error[M6b]: '==' needs Mine's eq"), "badgen.olang: the error", dir)
 }
 
 # T17: an enum's payload is whole words, so copying one is word moves, not one byte at a time - which is what let
@@ -1002,6 +1046,19 @@ fn linalg(r mut report&) ? Failed {
     }
     try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i shapes.olang gemm > out.txt 2>&1") == 134, "-i gemm did not abort", dir)
+}
+
+# O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -
+# run with sysconf answering a machine of 8MB (a preloaded sysconf.c), so the bound is 1MB and a 16MB phase is far past
+# it. (That the pool finds any chunk big enough is a case, checks/cases/chunkpool.olang)
+test "the arena's chunk pool gives memory back beyond its bound" { assert passed("chunkpool") }
+
+fn chunkpool(r mut report&) ? Failed {
+    dir := fresh("chunkpool")
+    os.Run("cp checks/fixtures/chunkpool/* " $os.Quote(dir))
+    try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
+    try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
 }
 
 # B12: a build is for this machine unless -a names another target - its vectors and FMA where it has them, none of

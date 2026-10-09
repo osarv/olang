@@ -157,7 +157,7 @@ fn Exec(args Array<String&>&, input Array<U8>& = "") Output ? OsError {
     defer close(errs)
     pid := __olang_spawn(line, args.Len(), feed, out, errs)
     if pid < 0 { try raise(__olang_err()) }
-    waited := Array<I32>(1)
+    waited Array<I32, 1>
     if waitpid(pid, waited, 0) < 0 { try raise(__olang_err()) }
     status I32 = (waited[0] >> 8) & 0xFF
     if (waited[0] & 0x7F) != 0 { status = 128 + (waited[0] & 0x7F) }      # ended by a signal
@@ -269,7 +269,7 @@ type FileInfo struct(Kind FileKind, Size I64, ModTime I64) {
 
 # what is at "path", following a symbolic link to what it names
 fn Stat(path String&) FileInfo ? OsError {
-    out := Array<I64>(3)
+    out Array<I64, 3>
     try check(__olang_stat($path "\0", out))
     kind := FileKind.OTHER
     if out[0] == 1 { kind = FileKind.FILE }
@@ -279,13 +279,13 @@ fn Stat(path String&) FileInfo ? OsError {
 
 # whether anything is at "path" - a symbolic link counts only when what it names is there
 fn Exists(path String&) Bool {
-    out := Array<I64>(3)
+    out Array<I64, 3>
     return __olang_stat($path "\0", out) == 0
 }
 
 # whether "path" names a directory, directly or through a symbolic link
 fn IsDir(path String&) Bool {
-    out := Array<I64>(3)
+    out Array<I64, 3>
     return __olang_stat($path "\0", out) == 0 and out[0] == 2
 }
 
@@ -433,7 +433,7 @@ test "Create writes through a descriptor, a piece at a time" {
     try Close(fd) catch { fail }
     assert (try ReadFile("build/os_files/pieces") catch default "") == "one two"
     rd := try Open("build/os_files/pieces") catch default -1
-    buf := Array<U8>(16)
+    buf Array<U8, 16>
     got := try io.Read(rd, buf) catch default buf[:0]
     assert got.Len() == 7
     try Close(rd) catch { fail }

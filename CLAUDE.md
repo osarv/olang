@@ -333,7 +333,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   declaration", which a constructor call satisfies as plainly as a literal and a slice satisfies again (it
   is the base's element type with a runtime length). **Relaxed to any call (the user's call)**: `x := f()`
   is legal, since the callee's declared result is a type the reader can find and the rule was an irritant
-  for no safety gain; `null` and non-call expressions are still rejected. A `:=` reference local writes no
+  for no safety gain; `null` and non-call expressions are still rejected (relaxed 2026-10-09: any settled expression, D15). A `:=` reference local writes no
   scope tag and takes the call's exact scope (O25a) - copying the result type's tag verbatim at first put
   the *callee's* scope variable on the local, which the no-narrowing check then rejected. The parser is hand-written recursive descent, not table-driven,
   with a cheap top-level name-collection pre-pass (`ScanTopLevelDecls`) run before real parsing so
@@ -2180,7 +2180,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   any temporary (E12c) - so `return Array<Int32>(n)` is writable for the first time. Literals stay
   `Int32[1, 2, 3]`; `:=` from one declares an `Array<T>`, and D12a's length adoption went (it made a later
   assignment of another length abort). An array of arrays is `Array<Array<T>&>`.
-  **The in-struct problem, the user's way: compile-time evaluation (C2e).** A field written
+  **The in-struct problem, the user's way: compile-time evaluation (C2e; superseded 2026-10-09 by T7c - an inline field is written `Array<T, N>`, below).** A field written
   `m Array<Float32> = Array<Float32>(16)` (or `:=`) whose size the evaluator can compute - a literal, a constant,
   arithmetic, a call - is stored inline: the struct stays plain data and matches a C layout (`chan.olang`'s
   mutex blob). Layout must be settled before bodies are checked while the size may need checked bodies, so a
@@ -3259,7 +3259,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   a symbol longer than 120 characters spelled as its beginning and a 128-bit hash; **G17** fires at a type nesting 48 deep,
   once; an inline field's length is decided **per instantiation** (C2e); a **generic constructor binds an array value as a
   reference** (`Pair(1, "x")` is a `Pair<I32, String&>`, G10c); **only a capitalized `Eq`** takes over `==`, as only `Str`
-  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree); `x.f(args)` on a field calls the
+  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree; reversed the same day by the user's
+  M6b, below); `x.f(args)` on a field calls the
   function value it holds (E13b); a type variable may not be named after a type (G1); a type-parameter list is only for a
   struct or a trait (section 12); a method meeting a trait agrees in each parameter's `mut` and permission (T31); a
   generic call may leave off defaulted parameters (E14); a constraint reached by substitution is checked where the
@@ -3715,6 +3716,119 @@ Go through this for every change to what olang means - a rule added, revised or 
   ("the block opened on line N has no '}'") with the next item read from the declaration found, so a second one is found
   too; a checked-only index recovers as unknown (one error). Study leftovers kvtool:89, matrix:127, calc:157 and
   widgets:26 compile and run as first written (fixed by the merged batches; checked against their workarounds' output).
+- **The arena's chunk pool finds any chunk big enough, and is bounded (O8b, O8, O2b, P2a, 2026-10-09); `GemmWorkspace`.**
+  Found training oann: `__olang_new_chunk` tried only the pool's head, and a closing scope gave its chunks back newest
+  first, so a scope taking a large chunk and then a smaller one left the large one behind the small one - every later
+  call mapped a new large one and the old one was never taken again. `std/linalg`'s `Gemm` makes its B panel and then
+  its A panel, so every packed product lost one B panel: 793MB peak over three MNIST epochs (~245MB an epoch). **Now
+  (my design)**: per-thread **size classes**, four per power of two from 4KB (4096, 5120, 6144, 7168, 8192, ...), a new
+  chunk made at its class's size so every chunk of a class holds whatever the class is asked for; a request takes the
+  newest chunk of the smallest non-empty class up to eight classes (4x) above its own - one count of trailing zeros over
+  an `i128` bit per class - and maps a new one only when there is none; further up is left for a request its size. A
+  growing request settles too (a size creeping up 1KB at a time made a chunk per call). **Returned to the system
+  (decided on measurements)**: what a thread's pool holds is bounded by **an eighth of physical memory** (sysconf); a chunk
+  given back beyond it first returns the least recently given back chunks (munmap or free) - LRU by a stamp per chunk,
+  the oldest of a class being the one before its newest - or goes back itself when larger than the bound. Faulting fresh
+  pages costs ~1ms/MB on this machine (VM), 2-15x a reuse, so the bound is generous and per thread (no atomics); it
+  answers phase peaks and stale sizes, not steady loops. **Kept as cheap as the old pool**: one spare 4KB chunk sits
+  beside the classes, taken inline by `__olang_scope_alloc` and given inline by `__olang_scope_close`; the rest is
+  out of line (`__olang_new_chunk`, `__olang_pool_give_list`, `__olang_pool_make_room` noinline), and `scope_close` is
+  `alwaysinline` - at LLVM's cold-call threshold it stopped being inlined, the scope header escaped, and a loop body's
+  empty scope cost two stores and two tests a pass (`List` push 16 -> 36 instructions an element, found by callgrind).
+  Callgrind: equal or fewer instructions on binary-trees, List push and a scope-churn loop (19 -> 21 per call); CPU
+  time within the layout noise (an unchanged hot function measured 5% apart between the two binaries). D13c's fresh
+  flag, O8a's alignment, P2a's per-thread pools and P1f's drain at a retiring worker are unchanged. **`std/linalg`
+  (mine)**: `GemmWorkspace<T>()` holds the packing panels (the F32 ones for F16/BF16/F8) and grows, where it lives, to the
+  largest product given; `ws.Gemm(...)` packs into it, so a training step allocates nothing after its first; `Gemm`
+  packs into a workspace of its own scope. oann's trainer: 793MB -> 57MB peak over three epochs, same losses.
+- **Constant parameters and `Array<T, N>` (G20-G28, G16b, T7c/T7d, E32b; 2026-10-09, the user: "make the language
+  generics take constants (and comp time expressions) as parameters ... Expand it across arrays too ... Array<T,
+  size>") - BUILT the same day.** **Declaration**: a name
+  followed by a type in a struct's or trait's parameter list, `type Matrix<T, R I64, C I64>` - followed by a trait it is
+  a constraint (G19), by any other type a constant. Allowed types: integers, `Bool`, declared types over them (`Char`),
+  payload-free enums, none declaring `Eq` - identity is the value; floats are out (NaN, `-0.0`: Rust's reason), and so
+  are text, structs and payload enums for now. **Arguments**: any expression the evaluator can compute (K1) of the
+  parameter's type - literals adapting, narrower integers flowing, globals, `-D` constants, calls; comparisons and
+  shifts parenthesized inside `<...>` (C++'s rule). **A variable is introduced by its first `<N>` and written bare after
+  it (G22, the user's call, 2026-10-09: "can we make Ts appear as T after being given as generics with <T>?")** - in a
+  type by its parameter list (its fields, constructor and destructor write `N`), in a function by the first `<N>` read
+  left to right (receiver, parameters, results), which may carry its type (`<N I64>`); after it `N` everywhere - the
+  rest of the signature (`b Array<<T>, N>&`, `Array<<T>, N + M>`) and the body (`for i in range N`, `match N`,
+  `N.Hash()`). `<N>` again is an error saying to write `N`; a bare `N` before the introduction is one too. A value of its
+  type that does not adapt like a literal. (The first build wrote `<N>` everywhere, G8b's rule; replaced the same day.)
+  The rule is meant for type variables as well and is built behind one switch (`bareTypeVars` in semantic.c): until
+  it is flipped, a type variable is `<T>` everywhere (G8b).
+  **Inference binds by value only** (an `Array<F32, 3>` binds `N` = 3; two values for one variable is an error at the
+  call, so a matmul shape mismatch is a compile error); an expression (`<N> + <M>`) is computed, never solved for -
+  which sidesteps Rust's `generic_const_exprs` problem, since olang checks each instantiation anyway. **Identity** by
+  value (`Matrix<F32, 2 + 1, 4>` is `Matrix<F32, 3, 4>`), G16a spelling the value; G17 also stops a chain of more than
+  1,000 instantiations. **G26**: an `if`, conditional or `match N` whose condition reads a constant is decided per
+  instantiation and only the chosen branch is checked - D's `static if` / Zig's comptime `if` with no new keyword; it
+  is configuration, never S8a's dead code, and it is what ends a recursion on a constant. **G27**: a constraint on a
+  value is an `assert` in the constructor or body, decided per instantiation (S18c) and reported with the
+  instantiation's origin (G16b) - no where-clause. **Arrays (T7c/T7d)**: `Array<T, N>` is a value laid out in place, so
+  it is held by value in fields, elements and payloads (T7a's exception generalized; C2e superseded - an inline field
+  is spelled by its type, never by whether its size happens to be computable); `Array<Array<F32, 4>, 4>` is an array
+  of fixed arrays, not a revived 2-D feature. `Array<T, N>&` is one pointer, its length its type's - which reverses
+  T11a for fixed arrays (the length in a reference type is now compile-time knowledge), forced by D9a since every
+  array parameter is a reference. Fixed to run-time is implicit (borrow or copy, nothing lost); run-time to fixed is a
+  copy checked once per copy (C2e's rule) or the view `x as Array<T, N>&` (E32b, Go's slice-to-array-pointer conversion;
+  `OUT_OF_BOUNDS` under `try`). A literal adapts to `Array<T, k>` like a numeric literal, and stays `Array<T>` for `:=`.
+  `Array<T, N>()` is the zero value; there is no fill call (`Array<I64, 4>(4)` beside `Array<I64>(4)` would read as a
+  length). **Run-time-known dimensions are the library's** (confirmed by the user: "Do dynamic the way you want it"): a constant is always
+  a compile-time value; `std/linalg` declares a sentinel (`Dynamic I64 = -1`) and stores rows/cols in the instance,
+  `Rows()` choosing `R` or the field by G26 - so `Matrix<F32, Dynamic, 784> x Matrix<F32, 784, 128>` checks 784 at
+  compile time and gives `Matrix<F32, Dynamic, 128>`; a language-level `_` argument would need hidden storage and
+  hidden checks in every generic. Precedents weighed: C++ NTTPs and Eigen, Rust const generics, Zig comptime, Go's
+  `[N]T`, D value parameters (HISTORY.md). **Built - all three direction questions answered by the user: `Array<T, N>&`
+  carrying its length (D9a kept), `Dynamic` in the library, and the introduction rule above.** A constant argument is a type
+  of its own kind (`BASETYPE_CONST`: its type and value, or a pattern - the expression - until its variables are
+  bound), so bindings, substitution, unification, identity and G16a naming carry constants with no parallel machinery;
+  a fixed length is the representation literals already had. Arguments fold on their syntax while types resolve;
+  one needing evaluation proper (a call, a computed global) is decided once the program has checked and the program
+  checked again - C2e's loop, which is all of C2e that survives (the inline-field form is gone; four corpus fields
+  and five checks migrated). `N` in an expression is its value converted to its own type, so it never adapts like a
+  literal and S8a reads it as configuration. Decided while building: G26 decides an `if`/conditional whose condition
+  has `N` written in it, and `match N` (values in its cases, no guard) - not a general `match` on a constant expression; a
+  local condition in a generic with constants is never S8b-decided (one parse serves every instantiation); a
+  mismatching copy into fixed storage aborts and is not caught by `try` (view first with `try (x as Array<T, N>&)`);
+  M19's "a receiver with a length takes precedence" was dropped (only the prelude declares array methods, and it has
+  none). **Found and fixed on the way**: a variable named only inside a constraint (`<V Shaped<<R>>>`) was not the
+  signature's; a run-time array compared with a literal was rejected ("found Array<I32> and Array<I32>"); an extern
+  handed a fixed array a copy, so what the foreign function wrote was lost; codegen still left a declared-size local
+  array uninitialized (dead until now); a method called on a value of unknown type added "'x' is no import here"; and,
+  behind the switch, an `At` call that failed crashed `x[i] = v` and a struct field whose declaration failed crashed the
+  constructor's assembly. **G22 also keeps a constant variable's name apart** from the module's globals, functions and
+  build constants and from parameters and locals (D3a), so a bare `N` means one thing.
+- **Protocol methods follow privacy; `:=` infers; `print`; two checker fixes from oann (M6b, E6c, D15, M19f, D8a, D13c,
+  B11, 2026-10-09, the user's answers to my questions 1, 2, 3 and 6).** **M6b, the user: "call private ones if in
+  private and public if in public, if calling a private in public it can't be found and is an error. One may not
+  declare both public and private."** Every method the compiler calls by itself - the operators', `Len`, `Call`, the Try
+  forms, `Eq`, `Hash`, `Str`, `Next`, `Iter`, `RunFrom`, `Has`, `Contains` - is capitalized or lowercase, never both;
+  the lowercase one is held to the same shape, and an operation reaches whichever the type declares. In another module a
+  private one is an error naming it, never a fall-back to the built-in operation, a part-by-part `==`, a supplied `Hash`
+  or the default `$`. Reverses E10a's and E11c's "always capitalized" (the type review's call that morning). **Decided
+  (mine)**: an operation is judged from the module whose code it is written in - a generic's own module wherever it is
+  instantiated, so the prelude's `Map` and an array's `Has` cannot use a private `eq` (an error at the program's use) -
+  except what the language itself defines (`==` part by part, rendering parts, the supplied `Hash`, an array's
+  included), judged where written: the prelude's `Equal`/`HashElements` are checked transparently and the elements'
+  methods walked at the site (`HashElements` lost its `Hashable` constraint). A trait method is met only under its own
+  name (a note points at the private spelling); a private `eq`/`hash` keeps the supplied `Hash` out; on an extending type
+  a private `Eq`/`Hash`/`Str` replaces the inherited one, another private spelling of an inherited one is an error.
+  std/json's private `str()` reader became `string()`. **E6c** (the user: keep wrapping): stated deliberate. **D15** (the
+  user: relax): `:=` declares any settled expression's type; `null` and a call returning nothing are errors; a
+  literal-only expression declares what its value as one literal would (`x := 2147483647 + 1` an `I64`, mine).
+  **M19f** (the user: yes): `print`, `println`, `eprint`, `eprintln` in the prelude - one `String&` (println's defaulting
+  to `""`), the line end in the same write, a failed write ends the program as a failed check does with a stderr line
+  naming the function and stream; reached by bare name everywhere, the one exception to M6, and no module may declare
+  those names (all mine). **oann's bugs**: a default naming a global (D8a - defaults were built before globals had
+  types; now built on first need, after global initializers) and a `List` of a type with no zero value (D13c - a new
+  chunk is filled with the pushed element, `ToArray`/`Map`/`Filter` with an element, and `Array<T>(0)` needs no zero value). **B11 (mine)**: an error met in
+  the standard library's code while checked for the program's use (an instantiation) is reported at that use, with a
+  note at the library's line. **Found on the way**: an array filled from a by-value parameter holding references was
+  judged by the parameter's slot, and O25c's exactness between two of a function's scope variables was an error, not an
+  obligation (both over-rejections, closed soundly); a capitalized `Str`/`Eq`/`Less` declaring errors pointed at a
+  `TryStr` that does not exist. Not fixed: a type-variable array literal (`<T>[...]`, E19's grammar) does not parse.
 - **Builds are for this machine; `-a TARGET` names another (B12/B12a/B12b/B12c, B10a, X8, K1, 2026-10-09, the user:
   "by default compilation is always for the machine you are on. To cross compile, use the -arch= ... syntax").** The
   flag is **`-a`**, not `-arch=`: B1, the user's own rule of one character per flag (theirs to object to). Every

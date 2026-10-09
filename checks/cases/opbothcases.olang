@@ -1,5 +1,5 @@
-# check: fail error[E31]: this type declares Plus twice, as Plus and plus
-# E31: one operator, one method
+# check: fail error[M6b]: V declares Plus twice, public and private
+# M6b: a method the compiler calls is public or private, never both
 type V struct(x I32) {
     x
 }

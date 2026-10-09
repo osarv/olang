@@ -15,3 +15,10 @@ attribution guidance.
 and write messages in the repo's `<Rule>: <what>` style with nothing after them. The older commits' Claude-Session lines
 were stripped from all history on 2026-10-08 at the user's request ("strip Claude from old commits so it doesn't show
 up on GitHub"), so none remain to copy the style from.
+
+**Signing (2026-10-09):** the cloud environment turns on commit signing globally (`commit.gpgsign true`, an SSH key
+registered to Claude's identity), so a commit authored as the user was signed with that key and GitHub showed it as
+"Unverified" - and the environment's stop hook then asked to re-author it as Claude. In each repo set
+`git config commit.gpgsign false` (local config; worktrees share it): commits are then plainly unsigned, GitHub shows no
+badge, and the hook's signature check (which runs only while signing is on) stays quiet. The hook still asks to push
+unpushed commits, which is fine. Never re-author as Claude.

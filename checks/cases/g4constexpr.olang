@@ -1,0 +1,4 @@
+# check: fail error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can infer it
+# G4/G24: an expression of constant variables is computed once they are bound, never solved for
+fn onlyExpr(a Array<I32, <N> + 1>&) { }
+fn main() ? { }

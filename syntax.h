@@ -16,6 +16,10 @@ enum syntaxType {
     SNTX_TYPE_PARAMS,     //"<A, B>" after a type declaration's name - declares its parameters and, by
                            //their order, what a type-args list supplies positionally (§12.3 G6)
     SNTX_TYPE_ARGS,       //"<int32, T>" after a type name in a type-ref - instantiates a generic (G8)
+    SNTX_CONST_ARG,       //G21: a constant argument in a type-argument list that is no type - "3", "<N> + 1" - its
+                          //one part the SNTX_EXPR. A bare name or "<N>" alone parses as a type and is read by the
+                          //checker as a value when the parameter is a constant
+    SNTX_CONST_VAR,       //G23: "<N>" in an expression - a generic's constant variable used as a value
     SNTX_ELEM_REF_MARKER, //"&" / "&name" written BEFORE any array suffixes - marks the ELEMENT type as a
                            //reference ("Point&[3]" is an array of 3 references to Point)
     SNTX_REF_MARKER,      //"&" / "&name" written AFTER any array suffixes - marks the type as a whole

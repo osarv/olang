@@ -22,8 +22,9 @@ fn (a Array<<T>>&) Equal(b Array<<T>>&) Bool {
 }
 
 # the elements' hashes combined in order - the Hash the compiler supplies for an array value whose elements have one
-# (E10b), agreeing with "==" element by element
-fn (a Array<<T Hashable<<T>>>>&) HashElements() I64 {
+# (E10b), agreeing with "==" element by element. No Hashable constraint: an element type's Hash may be its private
+# hash, which the compiler judges where the array is hashed (M6b), not here
+fn (a Array<<T>>&) HashElements() I64 {
     h I64 = 0
     for y in a { h = h * 1099511628211 + y.Hash() }
     return h
@@ -74,11 +75,13 @@ fn (a Array<<T>>&) Count(keep fn(x <T>) Bool) I64 {
     return n
 }
 
-# a new array of f applied to every element, in order
+# a new array of f applied to every element, in order. Made filled with the first result rather than with U's zero value,
+# so a U without one (D13c) maps as any other
 fn (a Array<<T>>&) Map(f fn(x <T>) <U>) Array<<U>> {
-    out := Array<<U>>(a.Len())
-    for i, x in a {
-        out[i] = f(x)
+    if a.Len() == 0 { return Array<<U>>(0) }         # no element, so no zero value of U is needed (D13c)
+    out := Array<<U>>(a.Len(), f(a[0]))
+    for i in range 1, a.Len() {
+        out[i] = f(a[i])
     }
     return out
 }
@@ -91,7 +94,8 @@ fn (a Array<<T>>&) Filter(keep fn(x <T>) Bool) Array<<T>> {
         marks[i] = keep(x)
         if marks[i] { n++ }
     }
-    out := Array<<T>>(n)
+    if n == 0 { return Array<<T>>(0) }               # no element, so no zero value of T is needed (D13c)
+    out := Array<<T>>(n, a[0])            # filled with an element rather than T's zero value, which T may not have (D13c)
     j I64 = 0
     for i, x in a {
         if marks[i] {

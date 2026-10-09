@@ -1,0 +1,10 @@
+# check: fail error[G21]: Ring's parameter N is a constant - write a value, as 'Ring<..., 3>'
+# also: error[G21]: Ring's parameter T is a type, and this is a value
+# G21: whether an argument is a type or a value is decided by the parameter it is written for
+type Ring<T, N I64> struct() {
+    items mut Array<<T>, <N>>
+}
+fn main() ? {
+    f Ring<I32, I32>
+    g Ring<3, 4>
+}

@@ -99,6 +99,19 @@ Go's single bytes; pushing to a List during a loop over it is specified as built
 `-i`'s next stage, when -i matters, is the redesign (compact values, scope-mirroring freeing, destructors) - in
 next-steps.
 
+**DECIDED OVERNIGHT 2026-10-09/10, FOR THE USER'S REVIEW** (the user: "make some hard decisions yourself ... record
+them and tell me tomorrow/tonight"): append each hard decision here as it is made, numbered, one or two lines with the
+rule and where it is recorded; the morning report lists them all, then they move out of the ledger.
+1. (wt-langb, M19f) `print`/`println`/`eprint`/`eprintln` are LOWERCASE and reached bare in every module - stated as
+   "the one exception to M6" (capitalized = exported). Alternative: `Print`/`Println`. Kept: the user asked for
+   "print/println" by those names and they read like Python's; recorded in CLAUDE.md/SPEC.md.
+2. (wt-langb, M6b) a private protocol method (`eq`, `hash`, `str`...) is invisible to the prelude's generics, so a
+   `Map` keyed by a type with a private `eq` is an error at the program's use - the user's rule taken literally.
+3. (wt-langb, D15) `x := 1 + 2` declares an `I32` (what the value written as one literal would be).
+4. (wt-constgen, T7c) the C2e inline-field form (`m Array<F32> = Array<F32>(16)` stored inline) is gone: an inline
+   array is `Array<T, N>` now; typed introductions `<N I64>`.
+5. (wt-chunkpool, O8b) each thread's chunk pool keeps at most 1/8 of physical memory, least-recently-used returned.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"

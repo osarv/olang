@@ -1,0 +1,5 @@
+# check: fail error[G21]: '<<' in a type argument is written in parentheses, as '(1 << 12)'
+# G21: a comparison or shift in a constant argument would read across the list's own ">", so it is parenthesized
+fn main() ? {
+    h Array<U8, 1 << 12>
+}

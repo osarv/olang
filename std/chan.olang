@@ -12,9 +12,9 @@ import "cancel"
 # true size is a property of the architecture rather than of C: glibc's own headers define three different
 # values for pthread_mutex_t (40, 32, 24) by machine, and other platforms differ again. 8 words is 64
 # bytes, comfortably above all of them, for a few bytes per channel.
-# Words: the ELEMENT TYPE is what supplies the alignment. "I64" is 8-aligned, so "I64[8]" is 8-aligned
-# wherever it sits - inline in a struct, in a local, in the arena - which is what pthread needs. A
-# "U8[64]" would be alignment 1 and could land at any offset in its container: measured, a byte blob
+# Words: the ELEMENT TYPE is what supplies the alignment. "I64" is 8-aligned, so "Array<I64, 8>" is 8-aligned
+# wherever it sits - inline in a struct (T7c), in a local, in the arena - which is what pthread needs. An
+# "Array<U8, 64>" would be alignment 1 and could land at any offset in its container: measured, a byte blob
 # after a single byte field sits at offset 1, where a word blob sits at 8.
 # And they carry no "mut" because their bytes are pthread's, not ours - that stops olang writing them
 # while leaving pthread free to, since an extern-param carries no mutability and X3 hands over a bare
@@ -51,9 +51,9 @@ type Chan<T> struct(cap I32) {
     rendezvous Bool = cap == 0
     sent mut I64 = 0
     taken mut I64 = 0
-    lock Array<I64>& = Array<I64>(MutexWords)
-    notEmpty Array<I64>& = Array<I64>(CondWords)
-    notFull Array<I64>& = Array<I64>(CondWords)
+    lock Array<I64, MutexWords>                    # in the channel itself (T7c): its length is its type's
+    notEmpty Array<I64, CondWords>
+    notFull Array<I64, CondWords>
 }
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
@@ -119,7 +119,7 @@ fn Recv(c mut Chan<<T>>&) <T> {
 # was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
 # (cancel.WakeAt).
 fn SendUntil(c mut Chan<<T>>&, v <T>, tok cancel.Token&) ? cancel.Stopped {
-    ts := Array<I64>(2)
+    ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() {
         if tok.Cancelled() {
@@ -148,7 +148,7 @@ fn SendUntil(c mut Chan<<T>>&, v <T>, tok cancel.Token&) ? cancel.Stopped {
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty
 fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) <T> ? cancel.Stopped {
-    ts := Array<I64>(2)
+    ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == 0 {
         if tok.Cancelled() {
