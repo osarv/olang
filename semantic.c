@@ -6101,6 +6101,13 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     return v;
 }
 
+//whether lookupVar would find tok's name, reporting nothing
+static bool lookupVarQuiet(struct checkCtx* ctx, struct token tok) {
+    struct str name = strFromTok(tok);
+    return scopeFindUse(ctx->scope, name, tok) || VarGetList(&ctx->mod->vars, name) || buildConstVar(name)
+           || preludeWordVar(name) || (currentBindings && bindingGet(currentBindings, name));
+}
+
 //resolves a possibly-namespaced call-target name node ("func" or "alias.func", from SNTX_NAME) to a var -
 //the 1-identifier case is just lookupVar; the namespaced case looks up the target module directly and
 //requires public visibility, mirroring resolveErrorTypeName
@@ -10844,7 +10851,7 @@ static bool eqConsults(struct checkCtx* ctx, struct type t, int depth) {
     v.refMut = false;
     if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return false;
     if (v.owner && eqMethodName(ctx, v)) return true;
-    if (t.structMAlloc) return false;
+    if (t.structMAlloc && v.bType != BASETYPE_ARRAY) return false; //an array reference compares what it names (E10)
     if (v.bType == BASETYPE_ARRAY) return v.arrElem && eqConsults(ctx, *v.arrElem, depth + 1);
     if (v.bType == BASETYPE_STRUCT) {
         for (int i = 0; i < v.vars.len; i++) {
@@ -10880,7 +10887,7 @@ static void eqReachWalk(struct semaModule* mod, struct type t, struct token tok,
             return;
         }
     }
-    if (t.structMAlloc) return; //a reference to a type with no Eq: identity
+    if (t.structMAlloc && v.bType != BASETYPE_ARRAY) return; //a reference to a type with no Eq: identity
     if (v.bType == BASETYPE_ARRAY && v.arrElem) eqReachWalk(mod, *v.arrElem, tok, seen, depth + 1);
     if (v.bType == BASETYPE_STRUCT || v.bType == BASETYPE_CHOICE) {
         for (int i = 0; i < v.vars.len; i++) {
@@ -11026,12 +11033,26 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
         if (!r) { r = OperandBoolLiteral(tok); r->intLiteralVal = 1; }
     } else if (v.bType == BASETYPE_ARRAY) {
         //element by element, through the prelude's "Equal" - "==" on each pair, so each consults its Eq - judged here,
-        //where "==" is written (M6b)
+        //where "==" is written (M6b). Through two references the same, except that a null equals only a null (E10)
         struct list seen = ListInit(sizeof(struct var*));
         if (v.arrElem) eqReachWalk(ctx->mod, *v.arrElem, tok, &seen, 0);
+        struct operand* ha = t.structMAlloc ? eqHold(ctx, a, tok, seq) : a;
+        struct operand* hb = t.structMAlloc ? eqHold(ctx, b, tok, seq) : b;
         struct list args = ListInit(sizeof(struct operand*));
-        ListAdd(&args, &b);
-        r = eqCallOr(ctx, operatorCallArgs(ctx, a, args, "Equal", tok), tok);
+        ListAdd(&args, &hb);
+        r = eqCallOr(ctx, operatorCallArgs(ctx, ha, args, "Equal", tok), tok);
+        if (t.structMAlloc) {
+            struct operand* anyNull = OperandBinary(OperandBinary(ha, OperandNullLiteral(tok), OPERATION_EQ, tok),
+                                                    OperandBinary(hb, OperandNullLiteral(tok), OPERATION_EQ, tok),
+                                                    OPERATION_OR, tok);
+            struct operand* same = OperandBinary(ha, hb, OPERATION_EQ, tok);
+            same->identity = true;
+            struct operand* c = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_BOOL));
+            ListAdd(&c->args, &anyNull);
+            ListAdd(&c->args, &same);
+            ListAdd(&c->args, &r);
+            r = c;
+        }
     } else if (v.bType == BASETYPE_CHOICE) {
         //the same case, and that case's payload equal - each case asked with "is", its payload read with "as"
         struct operand* ha = eqHold(ctx, a, tok, seq);
@@ -11080,13 +11101,15 @@ static bool typeHasHash(struct type t, int depth) {
     struct type v = typeBare(t);
     if (v.bType == BASETYPE_INTERFACE || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return false;
     bool declared = protocolMethod(v, "Hash") != NULL;
-    if (t.structMAlloc) return declared && typeDeclaresEq(v);
+    if (t.structMAlloc && v.bType != BASETYPE_ARRAY) return declared && typeDeclaresEq(v);
     return declared || typeAutoHashable(v, depth + 1);
 }
 
 //E10b: a struct, enum or array value with no Hash and no Eq of its own, every part of which has a hash
 static bool typeAutoHashable(struct type t, int depth) {
-    if (depth > 64 || t.structMAlloc) return false;
+    //an array reference hashes the elements it names, as "==" compares them (E10, E10b); a null hashes to 0, as an empty
+    //array does
+    if (depth > 64 || (t.structMAlloc && t.bType != BASETYPE_ARRAY)) return false;
     struct type v = typeBare(t);
     if (protocolMethod(v, "Hash") || typeDeclaresEq(v)) return false; //a private eq or hash keeps it out too (M6b)
     if (v.bType == BASETYPE_ARRAY) return v.arrElem && typeHasHash(*v.arrElem, depth);
@@ -11666,7 +11689,9 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
         Err(kw, ERR_IS_NOT_ONE_TYPE, &a->type, &b->type);
         return OperandBoolLiteral(kw);
     }
-    return OperandBinary(a, b, OPERATION_EQ, kw);
+    struct operand* r = OperandBinary(a, b, OPERATION_EQ, kw);
+    r->identity = true;
+    return r;
 }
 
 //M12/M6a/E32/S13b: "[alias.]Type.Case" naming a case of xt's enum - the alias chain resolved and the type found as any
@@ -16525,7 +16550,35 @@ static void buildCaseBody(struct checkCtx* ctx, struct syntax* s, bool asValue, 
     if (asValue && !blockLeavesValue(block)) Err(firstTokAnywhere(b), ERR_CASE_BLOCK_STAYS);
 }
 
-//S13-S13e: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
+//S13f: the alternative "_" - written as a value, it is the name no variable has, and it matches every value
+static bool caseAltIsWildcard(struct syntax* alt) {
+    if (!alt || alt->type != SNTX_EXPR) return false;
+    struct syntax* core = exprCoreOf(alt);
+    if (!core || core->parts.len != 1 || !partAt(core, 0)->isToken) return false;
+    struct token t = partAt(core, 0)->tok;
+    return t.type == TOK_IDEN && StrCmp(strFromTok(t), StrFromCStr("_"));
+}
+
+//the name a value alternative is, when it is no more than one
+static bool caseAltLoneName(struct syntax* alt, struct token* out) {
+    if (!alt || alt->type != SNTX_EXPR) return false;
+    struct syntax* core = exprCoreOf(alt);
+    if (!core || core->parts.len != 1 || !partAt(core, 0)->isToken || partAt(core, 0)->tok.type != TOK_IDEN) return false;
+    *out = partAt(core, 0)->tok;
+    return true;
+}
+
+//whether a case clause is "case _" with no guard - every value selects it
+static bool caseIsCatchAll(struct syntax* c) {
+    if (firstPartOfType(c, SNTX_CASE_GUARD)) return false;
+    for (int j = 0; j < c->parts.len; j++) {
+        struct syntaxPart* part = partAt(c, j);
+        if (!part->isToken && caseAltIsWildcard(part->sntx)) return true;
+    }
+    return false;
+}
+
+//S13-S13f: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
 //guard and the body and nowhere else
 struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct operand* subject, bool asValue) {
     struct statement stmt = (struct statement){0};
@@ -16544,7 +16597,24 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
         alt.coversTag = -1;
         struct list bound = ListInit(sizeof(struct var*));
         struct token altTok = firstTokAnywhere(part->sntx);
-        if (part->sntx->type == SNTX_CASE_PATTERN) {
+        struct token lone;
+        if (caseAltIsWildcard(part->sntx)) { //S13f: "_" takes every value - and so is the clause's one alternative
+            int alts = 0;
+            for (int k = 0; k < s->parts.len; k++) {
+                struct syntaxPart* q = partAt(s, k);
+                if (!q->isToken && (q->sntx->type == SNTX_CASE_PATTERN || q->sntx->type == SNTX_EXPR)) alts++;
+            }
+            if (alts > 1) Err(altTok, ERR_WILDCARD_NOT_ALONE);
+            alt.test = typeMatchAlwaysTrue(altTok);
+        } else if (caseAltLoneName(part->sntx, &lone) && !lookupVarQuiet(ctx, lone)) {
+            //S13f: a lone unknown name was most likely meant to take the value - which "_" and a guard do. It is declared
+            //as though it had, so a guard reading it is not a second error for the same cause
+            reportUnknownName(ctx->mod, lone, ERR_CASE_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); //a near name: a typo
+            scopeDeclare(NULL, ctx->scope, strFromTok(lone), lone, subject ? subject->type : unknownTypeStandIn(), false);
+        } else if (caseAltLoneName(part->sntx, &lone) && subject && subject->opType == OPERATION_READ_VAR && subject->readVar
+                   && !subject->readVar->owner && scopeFindUse(ctx->scope, strFromTok(lone), lone) == subject->readVar) {
+            Err(lone, ERR_CASE_IS_SUBJECT, lone); //the matched local compared with itself: true, or never for a NaN
+        } else if (part->sntx->type == SNTX_CASE_PATTERN) {
             buildPatternAt(ctx, part->sntx, subject ? patPath(subject) : NULL,
                            subject ? subject->type : unknownTypeStandIn(), &stmt, &alt, altIdx, &bound, &alt.test);
         } else {
@@ -16662,6 +16732,13 @@ static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax
                 if (alt->parts.len != 1) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, bound.constOf); continue; }
                 alt = partSntx(alt, 0);
             } else if (alt->type != SNTX_EXPR && alt->type != SNTX_TYPE_EXPR) continue;
+            //S13f: "case _" takes every value - here, whatever the instantiation's constant is
+            struct list idens = allTokOfTypeDeep(alt, TOK_IDEN);
+            struct token only = idens.len == 1 ? *(struct token*)ListGetIdx(&idens, 0) : (struct token){0};
+            if (idens.len == 1 && StrCmp(strFromTok(only), StrFromCStr("_")) && firstTokAnywhere(alt).str.ptr == only.str.ptr) {
+                chosen = c;
+                continue;
+            }
             if (constCaseMatches(ctx, alt, bound) == 1) chosen = c;
         }
     }
@@ -16821,8 +16898,9 @@ static struct pat* patOfValue(struct syntax* expr) {
     return p;
 }
 
+static bool caseAltIsWildcard(struct syntax* alt);
 static struct pat* patOfSyntax(struct syntax* sx, struct type t) {
-    if (sx->type == SNTX_PAT_BIND) return patAnyNew();
+    if (sx->type == SNTX_PAT_BIND || caseAltIsWildcard(sx)) return patAnyNew();
     if (sx->type == SNTX_PAT_VALUE) return patOfValue(firstPartOfType(sx, SNTX_EXPR));
     if (sx->type != SNTX_CASE_PATTERN) return patOfValue(sx);
     struct pat* p = patAnyNew();
@@ -16978,8 +17056,11 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
 
     stmt.matchCases = ListInit(sizeof(struct statement));
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
+    bool catchAll = false; //S13f: an unguarded "case _" seen - every value is taken, and nothing after it is reached
     for (int i = 0; i < cases.len; i++) {
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        if (catchAll) Err(firstTokAnywhere(c), ERR_CASE_AFTER_WILDCARD);
+        catchAll = catchAll || caseIsCatchAll(c);
         struct statement caseStmt = buildCaseStmnt(ctx, c, matched->type.bType == BASETYPE_VOID ? NULL : matched, asValue);
         ListAdd(&stmt.matchCases, &caseStmt);
         struct list afterCase = snapshotScopeBindings(ctx->scope);
@@ -16988,6 +17069,7 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
     }
 
     struct syntax* nomatchNode = firstPartOfType(s, SNTX_STMNT_NOMATCH);
+    if (nomatchNode && catchAll) Err(firstTokAnywhere(nomatchNode), ERR_CASE_AFTER_WILDCARD);
     if (nomatchNode) {
         stmt.hasNomatch = true;
         buildCaseBody(ctx, nomatchNode, asValue, &stmt.nomatchBlock, &stmt.nomatchValue);
@@ -17003,9 +17085,9 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
     //bare or with names covers it whatever the payload holds, and payload patterns covering every value at each
     //position cover it too - "Service(true)" and "Service(false)", or every case of an enum in the payload. A Bool
     //is covered by "true" and "false" as an enum is by its cases.
-    bool covers = false;
+    bool covers = catchAll && !stmt.hasNomatch && !matched->type.unknown; //S13f: of any type
     if ((matched->type.bType == BASETYPE_CHOICE || matched->type.bType == BASETYPE_BOOL) && !stmt.hasNomatch
-            && !matched->type.unknown) {
+            && !matched->type.unknown && !covers) {
         struct list rows = matchPatternRows(s, matched->type);
         if (matched->type.bType == BASETYPE_BOOL) covers = patRowsCover(&rows, &matched->type, 1, 0);
         else {

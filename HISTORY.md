@@ -11612,3 +11612,100 @@ code (`'A'.Format(16)` is `41`), unlike PadStart, where a Char should pad its ch
 ParseInt's does, 0 included - ParseInt's base 0 reads any of a literal's three forms, and writing one would need a
 choice nobody asked for. I64's most negative is written whole (its magnitude computed in U64). Pure olang, so it bakes:
 `formatBaked`, every base over four values, is a constant in the IR and equals the run time's.
+
+### Study 3's batch: List and Map are handles; `==` compares arrays however held; `case _`; keywords as method names; located checks (T8, T11, E10, E10b, E10c, T2a, T7d, S12b, S13f, L9a, S18a, 2026-10-09)
+
+A usage study (13 programs, `/home/user/review/study3`) found two silent wrong answers and a handful of rough edges.
+This batch fixes its findings 1, 2, 3, 19, 24, 29 and 30; the scope findings went to other batches.
+
+**List and Map are handles (finding 1, the coordinator's decision).** A `List` was a struct value whose storage hung off
+reference fields (`chunks`, `tail`) while its counts (`count`, `used`, `nChunks` ...) were plain fields. `b := a` copied
+the counts and shared the chunks, so a `Push` to one overwrote the other's elements; a `Map` copied with `n := m` and
+then `n.Remove("a")` left `m.Len()` at 7 while walking it gave 6 keys; and `Array<Map<..>>(n, Map<..>())`, the only
+spelling D13c allowed, gave n maps sharing one bucket array and n counts. `-b` and `-i` agreed on the wrong answers.
+This is the "Vec rule" problem (C11's record: storage reachable through a name the copy duplicates) arriving through
+the counts rather than through the buffer.
+Now each holds a single field, a `mut` reference to a private record (`listState<T>`, `mapState<K, V>`) holding all of
+its state, built where the List or Map is constructed (C2d: a bare field lives with the instance). A copy of the value is
+a second name for the same collection, as a Go map is - consistently, through an assignment, a field, an element, a
+by-value argument or a fill - and `Clone()` makes the real copy, built where its result lands (O26a: the local it
+fills is returned). Map's Clone keeps the bucket count and copies each chain in order, so the clone walks in the
+original's order. The fill note went under T8: `Array<Map<K, V>>(n, Map<K, V>())` is n names for one map, as a fill
+copies one value. The alternative the study offered - reinstating the Vec rule as "a struct owning run-time storage
+is reference-only" - would have put `&` on every List field in the corpus. **What else changed with it**: a List's zero
+value now holds a reference, so it is one constructor call per declaration (D13c) rather than zero bits, and
+`Array<List<T>>(n)` with no fill is D13c's error (it was the silent-sharing case before); nothing in the corpus wrote
+either. StringBuilder holds a List, so it is a handle too. The scope checker needed nothing: a List already held
+references, so every rule about values holding references (O25h, O26a, O17) already applied - including O17 refusing
+`b.Push(x)` through a copy whose references live elsewhere, which is now a meaningful (and sound) refusal rather than
+the guard against a corrupting one.
+**Measured** (callgrind instruction counts, the machine being too loaded for stable times; `-a x86-64-v3` since
+valgrind cannot run AVX-512): List push 2M 29,184,229 -> 29,184,262; `for x in l` 8,722,310 -> 8,721,128;
+`l.Iter().Fold` 8,694,590 -> 8,694,513; `l[i]` 177.8M -> 176.6M; `l[i] =` 139.2M -> 139.5M; Map Put+Get 10.59M -> 11.15M
+(+5%, the one extra dependent load per call); `Map.Update` counting 58,302,662 -> 58,302,666; k-nucleotide 224.6M ->
+226.5M. Interleaved medians of 11 on the machine at load 12 on 4 cores, old -> new: push 20M 0.411s -> 0.432s, `for x in l`
+0.140s -> 0.152s, Fold 0.131s -> 0.162s (another run: 0.173s -> 0.176s), `l[i]` 0.897s -> 0.871s, `l[i] =` 1.302s ->
+1.339s, Map Put+Get 0.094s -> 0.092s, Update 0.127s -> 0.142s, k-nucleotide 1.070s -> 1.107s - within what the load moves
+from run to run, the instruction counts being the measurement to trust; the optimized IR has the same vector loops. **The header pointer is hoisted**: in the optimized IR of an
+indexing loop and of a walk the record's address is loaded once before the loop, and the inner loops are the same
+instructions as before. In a push loop the record's fields (`used`, `count`, the tail) are memory operations each
+iteration rather than registers, since the record lives in the arena and the cold path's call to the allocator may
+write anything - the same instruction count, and LICM cannot promote them past that call; caching them in the value
+would bring back finding 1.
+
+**`==` on array references compares contents (finding 3, the coordinator's decision under the revisit rule).** E10
+had `==` compare an `Array<T>` value element-wise, a `String&` by text (String's Eq) and an `Array<T>&` by identity -
+so `l.ToArray() == m.ToArray()`, the model check of an LRU cache, was false for equal contents while `$` printed them
+equal. Identity has had its own word since E10c (`a is b`), so `==` meaning identity on one kind of array only kept the
+trap. Now `==` through a reference to an array - `Array<T>&`, `Array<T, N>&`, a declared array type with no Eq of its
+own - compares lengths and then elements, each by its own `==`; struct and enum references keep identity unless they
+declare Eq, which avoids walking cyclic structures (an array cannot contain itself). **Decided (mine)**: a null equals
+only a null, as through a reference to a type declaring Eq - a null array reference has no storage, an empty array that
+was built has storage and is not null, so `p == null` stays the null test it was (T2a); a struct value holding an array
+reference compares it by contents too, since E10 applies its rule part by part; and an array reference now hashes its
+elements (E10b), since `==` compares them - so `Map<Array<I64>&, V>` works. Implementation: `is` marks its comparison
+(`identity`), and codegen (`cgIdentityEq`, a null test then `cgDeepEq` of the values) and the evaluator
+(`ctArrayRef`/`ctArrayRefNull`) follow; elements whose type consults an Eq go through the prelude's `Equal` with the
+null rule built around it. Migrated: one corpus helper that meant identity (`evTwoArr` -> `is`) and two T11 tests whose
+assertion was that two equal arrays compare unequal. Comparing an array value with an array reference stays a type
+error (E10's one type); that would be a further extension.
+
+**`Array<T, N>&` returned as the value `Array<T, N>` (finding 2)** stored the pointer as the aggregate - invalid IR in
+`return a`, `v := a; return v` and a `try (row as Array<F64, 3>&) catch default ...` returned. cgBoundaryValue's
+reference-to-value copy-out took structs and enums only (a by-value array parameter being D9a's error), and a result can
+be a fixed array value; fixed arrays on both sides now load the aggregate. A run-time-length array stays out on either
+side (E12's widening keeps the pointer). `-i` was right all along.
+
+**Every guaranteed check says where (finding 19, S18a).** A slice out of range, an array length out of range, an `as`
+that does not hold and a copy into fixed storage of another length aborted with the message alone; assert, abort and
+unreachable already gave `FILE:LINE:`. Each now names its operand's line (`cgCheckMsg`, falling back to the statement
+being emitted where there is no operand, as for the fixed-storage copy and a comprehension's reservation), built and
+under `-i` (`ctRunAbortTok`). The four `@__olang_msg_*` constants it replaced are gone. A checks fixture triggers each
+one built and interpreted.
+
+**`case _` (finding 29, S13f).** On a match over a number there was no guard-only clause: `case big if big > 100` and
+`case _ if n < 0` were unknown names, and the study's first attempt, `case v if v >= 32767.0` with `v` the matched
+variable, compiled by comparing `v == v` - silently false for a NaN. **Decided (the coordinator's)**: `_` at the top of
+a clause matches any value; with a guard a guarded catch-all, without one a plain catch-all like `nomatch`; no binding
+names at the top of a value match (a name there stays a value compared by `==`, the subject is in hand). **Decided
+(mine)**: `_` is its clause's only alternative (`case 1, _` says nothing more than `case _`); an unguarded `case _`
+covers every value (S13a, S12b - so a match value over a number needs no `nomatch`, and a statement whose clauses all
+leave leaves, D10a), and a clause or `nomatch` after it is a compile-time error, being dead (S8a's spirit, R11's for
+catch clauses); a lone unknown name in a case is an error saying to write `case _ if ...` (or did-you-mean, where a
+near name exists), and the name is then declared so a guard reading it is not a second error; `case v` where `v` is the
+matched local itself is an error naming the same fix. Lowered to an always-true test, so codegen and the evaluator
+needed nothing. A `match` over a constant variable (G26) takes `case _` too, as the arm chosen when no other case's value
+is the instantiation's constant.
+
+**Keywords as method names (finding 30, L9a).** `w.spawn()`, `p.fail(tok)`: a method is reached only through its
+receiver (M19), so nothing can be misread. Any keyword is a method's name after a receiver clause and after `.` where
+`(` follows (`acceptMethodName`); `true`, `false` and `null` are literals and stay out; a field keeps L9 (a
+constructor's fields are its locals), and so does a function with no receiver. `x.done` with no call still parses as
+it did.
+
+**A match value giving several results (finding 24)** said "expected '}', found ','". A comma after `=>` at bracket
+depth 0 on the same line is now `error[S12b, D8c]: a match gives one value - to give several, return them from each case
+of a match statement`.
+
+**Found on the way, not fixed**: `type Nest Array<Nest&>` is accepted but cannot be built - `Nest(Array<Nest&>(1))` is
+"representations differ" and `n[0] = n` says "expected Nest&, found Nest&".
