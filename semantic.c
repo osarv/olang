@@ -8239,7 +8239,11 @@ static void reportWriteBlocked(struct token tok, struct operand* in) {
     if (root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture)) Err(tok, ERR_CAPTURE_READ_ONLY);
     else if ((ro = writeBlockedByPermission(in))) {
         //T25b: a reference whose type is writable, read out of a read-only copy (or a local made from one)
-        if (ro->type.refMut) { Err(tok, ERR_READ_ONLY_COPY_WRITE); noteRoCopy(ro); }
+        //(a conditional's or match's type is its first value's - one of its others being read-only says nothing of copies)
+        if (ro->type.refMut && ro->opType != OPERATION_COND && ro->opType != OPERATION_MATCH) {
+            Err(tok, ERR_READ_ONLY_COPY_WRITE);
+            noteRoCopy(ro);
+        }
         else { Err(tok, ERR_READ_ONLY_REF_WRITE); noteReadOnlyTarget(in); }
     }
     else if (writeIntoCallValue(in)) Err(tok, ERR_WRITE_INTO_CALL_VALUE);
