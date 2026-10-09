@@ -10137,9 +10137,12 @@ from their original form.
   then builds it with the asserts at `-b` (an assert decided false is a finding, and is dropped to see the rest), runs
   that, interprets it with `-i`, and compares all three outputs. A finding keeps the program, the outputs and a program
   of the one case in `build/fz/found/<seed>`. `make fuzz` runs it (not part of `make verify`); two fixed seeds are a
-  `checks/checks.olang` scenario, so the driver and the generator keep compiling. The last full run checked 1,000
-  programs (seeds 2000-2999, 29,880 cases, every one of their globals baked while compiling); the runs before it, while
-  the generator grew, several hundred more.
+  `checks/checks.olang` scenario, so the driver and the generator keep compiling. Its last runs checked 2,400 programs
+  (seeds 2000-4399, 71,880 cases, every one of their globals baked while compiling): the first 1,000 while the bugs
+  below were being fixed, the next 1,000 finding (9), and the final 400, on the finished compiler, nothing. Two findings
+  of the first 1,000 (seeds 2711 and 2883, a value differing under `-b`) did not reproduce on the finished compiler,
+  standalone or through the driver, and the compiler gives byte-identical IR for them run after run - most likely the
+  compiler being rebuilt under the run. Several hundred programs ran before those, while the generator grew.
   **What it found.** Nine bugs, each a corpus test computing the value baked and at run time, and a reproducer in
   `fuzz/repro`. (1) A local named like a method and initialized by calling it (`lit := g.lit(k)`) called the method
   through the local, as though it held a function value: `cgNamedTarget` looked a plain function's name up among the
