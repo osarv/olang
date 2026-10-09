@@ -72,7 +72,7 @@ struct type;
     X(ERR_BIN_NO_DIGITS,                "L10c",  "'0b' needs binary digits") \
     X(ERR_HEX_DIGIT,                    "L10a",  "'%c' is not a hexadecimal digit") \
     X(ERR_BIN_DIGIT,                    "L10c",  "'%c' is not a binary digit") \
-    X(ERR_DIGIT_SEPARATOR,              "L10b",  "'_' in a number must be followed by a digit") \
+    X(ERR_DIGIT_SEPARATOR,              "L10b",  "'_' in a number must stand between two digits") \
     X(ERR_POINT_NO_DIGIT,               "L12",   "a decimal point needs a digit after it") \
     X(ERR_TWO_POINTS,                   "L12",   "a number has at most one decimal point") \
     /* ---- syntax ---- */ \

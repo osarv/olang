@@ -3882,6 +3882,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
   on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`
   spelling (`typeExprIsBareTypeVar`), so the prelude's `acc U = init` in `Fold` failed O25 - it reads `U` now.
+- **std for the port: a buffered writer, paths, padding, terminals, integer parsing in any base, a generator's state
+  (2026-10-09, the pieces study2's front end wrote by hand; details mine).** **`io.Writer(fd, size = 65536)`**:
+  `Write(t Array<U8>&)`, `WriteChar(c Char)`, `Flush() ? IoError`. Writing never fails where it is written: the first
+  write the system refuses is remembered, what follows is dropped, and every `Flush` fails with it (C's stdio, Go's
+  bufio); a write as large as the buffer goes straight through; the descriptor stays the caller's; `defer try w.Flush()
+  catch IoError { fail }` writes on every way out. **`print`/`println` stay unbuffered** - each call one write, so
+  output is never held back from stderr, other tasks or a crash; the Writer is the bulk path. Measured through a pipe,
+  76k lines: println 0.071s, Writer 0.0068s, StringBuilder + one print 0.014s, C's printf 0.020s, C's write per line
+  0.085s (760k: 0.87 / 0.025 / 0.075 / 0.086 / 1.0s). **`std/filepath`** (its own module: pure text, evaluable while
+  compiling, and not named `path`, which M20 would reserve in every importer): Go's path/filepath on `/` - `IsAbs`,
+  `Base`, `Ext` (borrows), `Dir` and `Clean` (`String&path`: the path's own beginning when that is the clean form, else
+  built where the path lives), `Join(a, b, c..f = "")` (empty parts left out, then cleaned) and `Rel(base, target) ?`.
+  **Padding**: `PadStart(width, fill = ' ')`/`PadEnd` on text (new text, never cut, width in Chars) and on every integer
+  type but `U8` (whose methods a `Char` inherits, T29f), zeros after a `-` (`(-7).PadStart(4, '0')` is `-007`).
+  **`os.IsTerminal(fd)`** over isatty. **`t.ParseInt(base = 10)`, `t.ParseUint(base = 10)`**: bases 2-36 read plain
+  digits; **base 0 reads an olang integer literal** (L10: `0x`/`0b`, `_` between digits; Go's and Python's convention
+  for "as the language writes it"), a hex/binary pattern being `ParseInt`'s `I64` reading (L10a) and `ParseUint`'s
+  value; a base outside those aborts as an assert. **`Rand.State()`** (`Array<U64, 4>`) and **`SetState(s)`** (four zeros
+  rejected), for oann's checkpoints. **Found and fixed on the way, all pre-existing**: the lexer took `0x_FF`, `0b_1`
+  and `1e_5` (and `-D` took `1__0`) - a `_` stands between two digits (L10b, grammar `[ "_" ]`); `x := f()` dropped the
+  length of an `Array<T, N>` result, which D15 says it declares; a result length a call computes (`Array<I32,
+  kTwice(N)>`) was `Array<I32, 0>` at every call site, its placeholder's errors keeping the program from ever checking
+  long enough to compute it (G21: it now fits anything until decided); `try g().Parse()` did not cover `Parse` and
+  `try a.F().G()` covered `F` too (E24: the chain's last call only); and a test binary a signal ended printed nothing,
+  losing the results stdio held - each result is flushed and the signal reported (B3a).
 - **A review of constant generics, fixed (G21, G16b, G20, G22, G23, D8a, D9a, D15, T29a, E32b, E10, E10c, T7c, T7d,
   2026-10-09).** Items 2-12 and 15 of the day's review. **Decided (mine)**: (1) `V3(a)`, `V3` over `Array<T, N>` and `a` of
   a run-time length, is the E32b view read as `V3` - checked once, `OUT_OF_BOUNDS` under `try` - never a copy (it was

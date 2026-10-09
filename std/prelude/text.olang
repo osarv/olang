@@ -284,40 +284,136 @@ fn (parts Array<String&>&) Join(sep String&) String {
     return out
 }
 
-# a decimal integer with an optional leading '-' or '+', and nothing else - no surrounding space, no
-# separators. The value is accumulated NEGATIVELY, since the negative range is the larger one: that is what
-# lets the most negative I64 parse without overflowing on its way in.
-fn (t String&) ParseInt() I64 ? ParseError {
-    if t.Len() == 0 {
-        error ParseError.EMPTY
+# ---- padding, for columns ----
+
+# the text made "width" characters wide by "fill" - a space unless another is given - before it, so it stands at the
+# right of a column: "7".PadStart(3) is "  7". Text already that wide is given whole, never cut. New text, built where
+# it is put. A character here is a Char, one byte, as everywhere in a String: text beyond ASCII counts its UTF-8 bytes
+fn (t String&) PadStart(width I64, fill Char = ' ') String {
+    if t.Len() >= width { return t }
+    out := String(Array<Char>(width, fill))
+    at := width - t.Len()
+    for i, c in t { out[at + i] = c }
+    return out
+}
+
+# the text made "width" characters wide by "fill" after it, so it stands at the left of a column: "ab".PadEnd(4, '.')
+# is "ab..". Given whole when already that wide, as PadStart's is
+fn (t String&) PadEnd(width I64, fill Char = ' ') String {
+    if t.Len() >= width { return t }
+    out := String(Array<Char>(width, fill))
+    for i, c in t { out[i] = c }
+    return out
+}
+
+# the integers made text and padded, for a column of numbers: "$n.PadStart(5)" right-aligns n in five characters, and
+# a line number before a source line is "$line.PadStart(4) " | "". Zeros go after a sign, as a number is written:
+# (-7).PadStart(4, '0') is "-007", where the text "-7".PadStart(4, '0') is "00-7". Every integer type but U8,
+# whose methods Char inherits (T29f) - and a Char padded should be the character, not its number: pad "$c" for that,
+# and "U32(b)" for a U8's number
+fn (n I8) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n I16) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n I32) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n I64) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n U16) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n U32) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n U64) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+
+# the integers made text and padded after, for a column of numbers standing at its left
+fn (n I8) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n I16) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n I32) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n I64) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n U16) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n U32) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+fn (n U64) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+
+# a number's text padded before: zeros after its sign
+fn padNumber(digits String&, width I64, fill Char) String {
+    if fill != '0' or digits[0] != '-' { return digits.PadStart(width, fill) }
+    return "-" $digits[1:].PadStart(width - 1, '0')
+}
+
+# ---- integers from their text ----
+
+# the integer the text writes: an optional '-' or '+', then digits of "base" - 2 to 36, the digits past 9 being the
+# letters in either case, so "ff".ParseInt(16) is 255 - and nothing else: no surrounding space ("t.Trim().ParseInt()"),
+# no prefix, no separators. Base 0 reads the digits as olang writes an integer literal (L10): "0x" or "0X" before
+# hexadecimal digits, "0b" or "0B" before binary ones, decimal otherwise (a leading 0 is no octal prefix), with a '_'
+# between any two digits ("1_000", "0xFF_FF") - and, as in a program, a hexadecimal or binary literal is a bit pattern,
+# read as an I64 (L10a): "0xFFFFFFFFFFFFFFFF".ParseInt(0) is -1, and a '-' before one negates that reading (wrapping,
+# E6c). Fails with EMPTY for no text, INVALID for anything else that is not such a number - a sign with no digits after
+# it included - and OVERFLOW for a number beyond I64's range. A base other than 0 or 2 to 36 is a mistake in the
+# program, stopped as a failed assert is
+fn (t String&) ParseInt(base I64 = 10) I64 ? ParseError {
+    if t.Len() == 0 { error ParseError.EMPTY }
+    neg := t[0] == '-'
+    digits := t[1:] if neg or t[0] == '+' else t[:]
+    if base == 0 and isPrefixed(digits) {
+        bits I64 = I64(try readDigits(digits, 0, ~U64(0)))
+        return -bits if neg else bits
     }
-    neg Bool = false
-    start I64 = 0
-    if t[0] == '-' or t[0] == '+' {
-        neg = t[0] == '-'
-        start = 1
-    }
-    if start == t.Len() {
-        error ParseError.INVALID
-    }
-    limit I64 = -922337203685477580        # the most negative I64 divided by ten, truncated toward zero
-    v I64 = 0
-    for i in range start, t.Len() {
-        c U8 = t[i]
-        if c < '0' or c > '9' {
-            error ParseError.INVALID
+    most U64 = (U64(1) << 63) if neg else (U64(1) << 63) - 1      # the magnitude of I64's most negative, or its largest
+    v := try readDigits(digits, base, most)
+    return -I64(v) if neg else I64(v)
+}
+
+# the unsigned integer the text writes, as ParseInt reads one - an optional '+', never a '-' - up to U64's largest,
+# 18446744073709551615: "ffffffffffffffff".ParseUint(16) is that. Base 0 reads an olang integer literal (L10) to the
+# value it is in a program: "18446744073709551615".ParseUint(0) and "0xFFFF_FFFF_FFFF_FFFF".ParseUint(0) are both U64's
+# largest, and a literal needing more than 64 bits fails with OVERFLOW, as it is an error in a program
+fn (t String&) ParseUint(base I64 = 10) U64 ? ParseError {
+    if t.Len() == 0 { error ParseError.EMPTY }
+    digits := t[1:] if t[0] == '+' else t[:]
+    return try readDigits(digits, base, ~U64(0))
+}
+
+# whether "digits" begins with a "0x" or "0b" prefix, in either case
+fn isPrefixed(digits String&) Bool {
+    if digits.Len() < 2 or digits[0] != '0' { return false }
+    p := digits[1]
+    return p == 'x' or p == 'X' or p == 'b' or p == 'B'
+}
+
+# what one character is worth as a digit: 0 to 9, then the letters from 10 in either case - 36 for anything else
+fn digitWorth(c Char) I64 {
+    if c >= '0' and c <= '9' { return I64(c - '0') }
+    if c >= 'a' and c <= 'z' { return I64(c - 'a') + 10 }
+    if c >= 'A' and c <= 'Z' { return I64(c - 'A') + 10 }
+    return 36
+}
+
+# the number "digits" writes in "base", at most "most": INVALID for text that is not one - no digits at all included -
+# and OVERFLOW above "most". Base 0 is an olang literal's digits (L10, L10a, L10b): a prefix choosing the base, and a '_'
+# allowed between two digits
+fn readDigits(digits String&, base I64, most U64) U64 ? ParseError {
+    assert base == 0 or (base >= 2 and base <= 36), "a base is 0 or 2 to 36, found " $base
+    b I64 = base
+    from I64 = 0
+    if base == 0 {
+        b = 10
+        if isPrefixed(digits) {
+            b = 16 if digits[1] == 'x' or digits[1] == 'X' else 2
+            from = 2
         }
-        d I64 = c - '0'
-        if v < limit or (v == limit and d > 8) {
-            error ParseError.OVERFLOW
-        }
-        v = v * 10 - d
     }
-    if not neg {
-        if v == limit * 10 - 8 {
-            error ParseError.OVERFLOW
+    if from == digits.Len() { error ParseError.INVALID }
+    ub := U64(b)
+    cutoff U64 = most / ub                      # past this, one more digit is too many
+    cutlim U64 = most % ub                      # ...and at it, so is a digit worth more than this
+    v U64 = 0
+    for i in range from, digits.Len() {
+        c := digits[i]
+        if c == '_' and base == 0 {
+            # between two digits: one before it, and the next one is checked as a digit when its turn comes
+            if i == from or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            continue
         }
-        return -v
+        d := digitWorth(c)
+        if d >= b { error ParseError.INVALID }
+        ud := U64(d)
+        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.OVERFLOW }
+        v = v * ub + ud
     }
     return v
 }

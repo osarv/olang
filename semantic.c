@@ -11733,11 +11733,13 @@ static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base
 struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     bool asTarget = ctx->buildingTarget; //this postfix is an assignment's target, its last part the place written
     ctx->buildingTarget = false;
-    //E13b: a "try" covers the chain's last call, not a call inside it
+    //E13b/E24: a "try" covers the chain's last call - a function value's or a method's - and no call inside it, so
+    //what the chain starts with is built with no allowance ("try g().Parse()" covers Parse, never g)
     struct syntaxPart* lastPart = partAt(s, s->parts.len - 1);
     bool allowLast = false;
-    if (s->parts.len > 1 && !lastPart->isToken && lastPart->sntx->type == SNTX_EXPR_VALUE_CALL) {
-        allowLast = ctx->allowFallibleCall;
+    if (s->parts.len > 1) {
+        allowLast = ctx->allowFallibleCall && !lastPart->isToken && (lastPart->sntx->type == SNTX_EXPR_VALUE_CALL
+                    || (lastPart->sntx->type == SNTX_EXPR_MEMBR && firstPartOfType(lastPart->sntx, SNTX_EXPR_ARGS)));
         ctx->allowFallibleCall = false;
     }
     int consumed = 1;
@@ -11832,8 +11834,11 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             struct syntax* argsNode = firstPartOfType(p->sntx, SNTX_EXPR_ARGS);
             if (argsNode) {
                 bool mReported = false;
+                bool prevAllow = ctx->allowFallibleCall;
+                ctx->allowFallibleCall = i == s->parts.len - 1 && allowLast;
                 struct operand* mc = buildMethodCall(ctx, result, memberTok, argsNode,
                                                      ListInit(sizeof(struct syntax*)), &mReported);
+                ctx->allowFallibleCall = prevAllow;
                 if (mc) { result = mc; continue; }
                 if (!result->type.unknown) reportUnknownMethod(result, memberTok);
                 result = unknownPlaceholder(memberTok); //one error: not also a discarded value, or a mismatch

@@ -121,6 +121,10 @@ rule and where it is recorded; the morning report lists them all, then they move
 8. (mine, from study2 grammar point 7) outside brackets, a line beginning with `if` always begins a statement - it
    never continues a conditional expression (`a if c else b` keeps `if` on its line or inside parentheses).
 
+9. (wt-stdport) `io.Writer` never fails on Write: the first refused write is remembered and every `Flush` fails with
+   it (C stdio, Go bufio); `print`/`println` stay unbuffered; paths in `std/filepath` (not `path`, which M20 would
+   reserve in every importer); `ParseInt(0)` reads olang literal syntax.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"

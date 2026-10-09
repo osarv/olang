@@ -6368,6 +6368,27 @@ test "E13b: a field holding a function is called as x.f(args)" {
     assert FieldFnGlobalE.f(5) == 10        # through a global, as through a local
 }
 
+# E24: "try" before a chain covers its last call - a method called on a call's result, an element or a parenthesized
+# value included (it reached only a method on a name chain: "try g().Parse()" said Parse was not tried)
+fn textE() String& { return " 42 " }
+fn textsE() Array<String&>& { return String&["7", "x8"] }
+type ParserE struct(t String&) { t }
+fn (p ParserE&) Text() String&p { return p.t }
+fn chainTriedE() I64 {
+    a := try textE().Trim().ParseInt() catch default -1
+    b := try textsE()[0].ParseInt() catch default -1
+    c := try textsE()[1].ParseInt() catch default -1
+    d := try (textE()).ParseInt() catch default -1
+    e := try ParserE("9").Text().ParseInt() catch default -1
+    return a * 10000 + b * 1000 + c * 100 + d * 10 + e
+}
+ChainTriedBakedE := chainTriedE()
+
+test "E24: try covers a chain's last call, whatever the chain starts with" {
+    assert chainTriedE() == 42 * 10000 + 7 * 1000 - 100 - 10 + 9
+    assert ChainTriedBakedE == chainTriedE()
+}
+
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
     y fn(a I32) I32 = doubleO
     (y)(2)
@@ -12312,6 +12333,23 @@ test "G24: constant variables are inferred, and an expression of them computed p
     assert kDot(a, b) == 32.0 and KDotBaked == 32
     c := kConcat(I32[1, 2], I32[3, 4, 5])
     assert c.Len() == 5 and c[4] == 5 and KConcatBaked.Len() == 5 and KConcatBaked[2] == 3
+}
+
+# D15: ":=" from an expression whose type is an Array<T, N> declares that type - a call's result, a fixed-length local -
+# and only an array literal's length is dropped, so a later assignment may give it another
+fn kFive(a Array<I32, 5>&) I32 { return a[4] }
+fn kFixedBack() I32 {
+    c := kConcat(I32[1, 2], I32[3, 4, 5])
+    d := c
+    d[4] = 9
+    return kFive(c) * 10 + kFive(d)
+}
+KFixedBackBaked := kFixedBack()
+test "D15: := keeps a fixed length, except a literal's" {
+    assert kFixedBack() == 59 and KFixedBackBaked == 59
+    lit := I32[1, 2]
+    lit = I32[1, 2, 3]
+    assert lit.Len() == 3
 }
 
 # G21/G22: a matrix whose storage length is computed from its dimensions, and a product whose shape the types check

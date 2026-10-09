@@ -3368,15 +3368,15 @@ static bool isIdentText(const char* p) {
 
 static bool literalIntValue(const char* text, int len, long long* out, bool* isU64);
 
-//L10b: a run of digits of one radix, each "_" followed by another digit; returns how many digits, or -1 for a misplaced
-//separator, and leaves *p past the run
+//L10b: a run of digits of one radix, each "_" standing between two digits; returns how many digits, or -1 for a
+//misplaced separator, and leaves *p past the run
 static int buildDigitRun(const char** p, bool (*isRadix)(char)) {
     int n = 0;
     while (true) {
         if (isRadix(**p)) { n++; (*p)++; continue; }
         if (**p != '_') return n;
-        while (**p == '_') (*p)++;
-        if (!isRadix(**p)) return -1;
+        if (n == 0 || !isRadix((*p)[1])) return -1;
+        (*p)++;
     }
 }
 
