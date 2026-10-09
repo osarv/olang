@@ -1,0 +1,17 @@
+# check: fail a reference never narrows
+# P1g/O25b: a task's result is stored into its target as an assignment's value is - here a reference into l, which
+# lives in a block r outlives. The store used to be checked for its type only
+type Node struct(v I64) {
+    v
+}
+fn keepOf(n mut Node&) mut Node&n { return n }
+N mut I64 = 1
+fn main() ? {
+    r Node& = null
+    if N > 0 {
+        l Node& = Node(4)
+        join {
+            spawn r = keepOf(l)
+        }
+    }
+}

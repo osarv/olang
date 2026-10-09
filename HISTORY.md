@@ -8749,3 +8749,78 @@ from their original form.
   `o18cstorage` and `o10ccycle` (the last caught only by the late pass); and a graph builder, a pairwise loop and two
   maps copied through parameters, written as a user would and run under `-b` and `-i`; the whole corpus and std
   otherwise unchanged.
+- **Where a value lands, answered once (T7b, O1b, O18a, O25h, P1g, P2, R9a, 2026-10-09).** The code generator's review
+  found the question "where is this temporary built" answered in about eight places with different fallbacks, and
+  six use-after-frees or leaks that came from the disagreements, all reproduced. Fixed together, with one function
+  answering it (`cgWhereBuilt`), fed by the checker's decision where it made one.
+  **(1) A returned array or text value pointed into the callee's closed scope (T7b).** `fn mk() Array<I32> { a :=
+  Array<I32>(8, 5); return a }` returned `{len, ptr}` into `a`'s block, which `return` closes; the caller, which takes
+  an array result as its own since the codegen review ("fresh arrays adopted"), read whatever reused the chunk
+  (`I32[99, ...]`), and a destructor allocating while the scope closed corrupted even an immediate copy. T7b already
+  said a result is built where the call's result is put; the code did it only for fresh storage and, since `defer`,
+  when deferred code was pending. Now an array value result that is not already in the result scope - a local, a
+  parameter's array (which also stopped `fn f(a Array&) Array { return a }` handing the caller the argument's own
+  buffer), a conditional with one fresh side - is copied there before the scopes close; a fresh one, a literal, or a
+  call whose own result landed in this result scope is not copied twice. Measured: no growth over a million calls in
+  a loop (1.6MB peak).
+  **(2) A temporary assigned to a global was built in the function's scope (O1b), and the checker let anything into a
+  global.** `GA = Node(n)` in a function built the node in the function's arena; `GA = mkNode(n)` built it in the
+  call's block. Decided by the principles: build there rather than reject - the program's scope is already where a
+  result borrowed from a global goes, and refusing would leave a global cache or registry unwritable from a function,
+  while O18a's own table ("an assignment's target: the scope the target's referent lives in") says the program's.
+  Constructors and calls landing at a global now land in the program's scope (`landCallIn`, a binding marked
+  `boundUnnamed`, a constructor `landedInProgram`), the same for a field or element reached from a global
+  (`GR.next = Node(1)`, `GE[i] = ...`, which O25's "a container this function cannot allocate into" used to reject - an
+  inconsistency, since `GA = Node(1)` was accepted). **Found on the way, pre-existing: `GA = x`, with `x` a local
+  reference, compiled** - the global's type carries no scope, which the fit check read as "accepts any scope", and
+  O25's exactness check skipped a target it could not name. Now an existing value stored into a global must already
+  live in the program's scope (`storageInProgram`: a global, something reached from one, a local that took one, or a
+  call's result built or borrowed there), else `GLOBAL_HOLDS_SHORTER`. A local that took a global's scope still may
+  not be built through (O25a's sentence, reworded: the program's scope is reached through a global or a binding, never
+  a local's tag).
+  **(3) The program's scope had no lock and tasks reached it.** Two tasks building results borrowed from one global
+  corrupted the heap under `-d` (`malloc.c:2599`); at `-O3` LLVM kept the bump cursor in a register and hid it. A lock
+  would cost every program-scope allocation; instead, as P2 already does for every scope a task is handed, each task
+  gets a private stand-in for the program's scope, folded into the spawner's at the join. Codegen reaches the
+  program's scope through a thread-local pointer (`@__olang_prog_scope`, initial-exec, pointing at the scope itself on
+  the main thread) that a task's trampoline points at its stand-in for the call. Cost: one 24-byte header and one empty
+  merge per spawn; 100,000 spawns measured the same before and after.
+  **(4) A task's private arena was folded into the join block, not the scope its call bound.** `cgSpawnScopeParent`
+  resolved a binding at the join's own depth, so `spawn fill(h, 5)` with `h` outside the join built `h.item` in the
+  join block. The parent is now what an ordinary call would pass (`cgBoundScopeArg`: the binding's own depth, the
+  program's scope for a global's). And `spawn r = mkNode(5)` showed the checker never landed a task's result at its
+  target: P1g checked the target's type and nothing else. A spawn target is now checked as the assignment it is
+  (`buildAssignCore`: landing, O25, O1b, permission) - which also closed a **pre-existing** hole, a read-only result
+  stored into a writable target, and a borrowed result into a target outliving its referent - and several targets
+  sharing one result scope must be in one scope (`SPAWN_RESULTS_DISAGREE`). A temporary built for a spawned call with
+  nowhere else to go is built in the join block, even where the spawn sits in a loop inside it.
+  **(5) A `catch default` was built in the innermost block (R9a).** `cgTrySlotType` fell back to the current block
+  when the result type named a callee's scope variable, so `a = try mk() catch default Node(6)` inside an `if` built
+  the default there. The call now records the scope it passed for its result (`cgResultScope`), and a default -
+  value or reference - is built there.
+  **(6) A value local's references lived in the function's scope (O18a).** `m := Link(i, Link(i + 2, null))` in a loop
+  landed in the function's own scope by O18a's table, deliberately, "so a copy of it out of an inner block cannot
+  dangle" - at 16 bytes a pass kept for the whole call (16MB over a million). Now such a local's references are in its
+  own block, as the local is, and the copy out is what is checked (O25h): assigning a value holding references from
+  one that already lives somewhere requires its references to outlive the target's - exactly, where something can be
+  stored through one of them (O25g) - else `VALUE_REFS_OUTLIVED`. A typed declaration copying such a value takes its
+  references' scope, as `:=` does. Corpus cost: one test, which existed to show the old rule (`h = tmp` out of a loop
+  body); it now builds the value where it is kept. The trade is deliberate: keeping a value past its block means
+  building it where it is kept, and nothing accumulates unseen.
+  **One function.** `cgWhereBuilt` answers for every temporary: the checker's landing (the program's scope, or a
+  constructor's), a scope its own type names (resolvable in this frame), the target being built into (a promotion, a
+  constructor's instance, a task's join block, a default), else the block it stands in - which is what O18a's "anywhere
+  else" row says, and where a constructor's fallback used to be the function's whole scope. Constructors, closures,
+  text, `Array<T>(n)`, comprehensions and try slots all go through it; call scope arguments through `cgBoundScopeArg`;
+  a reference's referent through `cgResolveEffectiveScope`, which now knows a global's is the program's.
+  **Also fixed (the parser review's finding): a stack-use-after-return in the checker.** A pending discharge (O18a)
+  kept a pointer to the checking context it was queued under - for a matched value held by `match`, a copy local to
+  `buildMatchCore`, gone by the time the statement ended and the discharge ran. ASan reported it on `-c` of worker,
+  runner and shared. A pending discharge now keeps its own copy of the context; ASan and UBSan are clean on all three.
+  **Checked:** the review's reproducers (a1, a3, a6, a7, a8, g2, g3, g5 under `-d`, s1, s2, td1, td2, lkA, lkB) and new
+  ones (globals reached through fields and elements, global-to-global stores, spawn targets narrowing or into a
+  global), under `-b` and `-i` where `-i` runs them; seven corpus tests in shared.olang, read back after churning the
+  arena, four failing on the previous compiler (the others need `-d` or memory limits, which `checks.olang`'s new
+  whole-build test applies: two tasks into the program's scope at `-d`, and ten million value locals under a 150MB
+  address-space limit, which the previous compiler exceeds); a global baked through an array result, text and a
+  default (K2, agreeing with the run time); `checks/cases` `o1bglobalshort`, `o25hcopyout` and `p1gtargetscope`.

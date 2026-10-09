@@ -8180,11 +8180,11 @@ test "O13/O26: built results and returned locals live where the result goes" {
     assert p.v + q.v == 3
 }
 
-test "O18a: a by-value result copied out of an inner block was built in the function's own scope" {
+test "O18a: a by-value result is built where it lands - a loop body's own block, or straight into an outer value" {
     h := oBuild(0)
     for i in range 1 {
-        tmp := oBuild(9)
-        h = tmp
+        tmp := oBuild(9)            # built in the loop body, reclaimed with it; "h = tmp" would be an error (O25h)
+        h = oBuild(tmp.n.v)         # built where h is
     }
     assert oxChurn() > 0
     assert h.n.v == 9
@@ -9737,4 +9737,190 @@ test "O18b/O23a: the same pushes computed while compiling and at run time" {
     assert ObListSumBaked == 45
     assert obListSum(6) == ObListSumBaked
     assert obListSum(obSix) == ObListSumBaked
+}
+
+# Where a value lands - each temporary is built where the checker decided it lives: an array value result in the result
+# scope (T7b), what a global holds in the program's scope (O1b), what a task builds where its call bound it (P2, P1g), a
+# "catch default" where the call's result is (R9a), a value local's references in its own block (O18a). Each is read
+# back after churning the arena; the calls are given a mutable global so they run rather than being decided (S18c)
+type WlNode struct(v I64) {
+    v
+}
+type WlBox struct(n WlNode&) {
+    n
+}
+type WlLink struct(v I64, next WlLink&) {
+    v
+    next
+}
+wlRun mut I64 = 5
+wlSink mut I64 = 0
+
+type WlDrop struct(n I32) {
+    n
+} destruct {
+    junk := Array<I32>(64, 99)          # a destructor allocating while its scope closes
+    wlSink = wlSink + junk.Len()
+}
+
+fn wlArr(n I64) Array<I64> {
+    d WlDrop& = WlDrop(1)
+    a := Array<I64>(n, 5)
+    a[0] = n * 10
+    return a
+}
+fn wlCopy(a Array<I64>&) Array<I64> { return a }
+fn wlText(n I64) String {
+    s := "item-" $n
+    return s
+}
+fn wlPadded(n I64) String {
+    s := "  item-" $n "  "
+    return s
+}
+
+# each reads its argument after allocating in a scope of its own - the one a closed callee's chunk is handed to next
+fn wlFirst(a Array<I64>&) I64 {
+    junk := Array<I64>(64, 99)
+    return a[0] + junk[1]
+}
+fn wlIsItem(t String&) Bool {
+    pad := "...................................................." $t.Len()
+    return t == "item-5" and pad.Len() > 0
+}
+
+test "T7b: an array or text value returned from a local is built in the result scope, before the callee's scopes close" {
+    assert wlFirst(wlArr(wlRun)) == 50 + 99
+    assert wlIsItem(wlText(wlRun))
+    assert wlIsItem(wlPadded(wlRun).Trim())
+    r := wlArr(wlRun)
+    obChurn()
+    assert r[0] == 50 and r[4] == 5 and r.Len() == 5
+    src := Array<I64>(3, 1)
+    c := wlCopy(src)
+    c[0] = 9
+    assert src[0] == 1 and c[0] == 9      # a value result is a copy, never the argument's own storage
+}
+
+WlGA mut WlNode& = null
+WlGS mut String& = null
+WlGB mut WlBox = WlBox(null)
+WlGW mut Array<I64> = Array<I64>(2, 0)
+
+fn wlMkNode(v I64) WlNode& { return WlNode(v) }
+fn wlMkBox(v I64) WlBox { return WlBox(WlNode(v)) }
+fn wlSetGlobals(n I64) {
+    WlGA = WlNode(n)
+    WlGS = "v=" $n
+    WlGB = wlMkBox(n + 1)
+    WlGW = Array<I64>(4, n)
+}
+fn wlSetGlobalCall(n I64) { WlGA = wlMkNode(n) }
+
+type WlCell struct() {
+    next mut WlNode& = null
+}
+WlGV mut WlCell = WlCell()
+WlGR mut WlCell& = WlCell()
+WlGE mut Array<mut WlNode&>& = Array<mut WlNode&>(2, null)
+fn wlSetInside(n I64) {
+    WlGV.next = WlNode(n)               # a field of a global value
+    WlGR.next = wlMkNode(n + 1)         # a field of a global's referent, from a call
+    WlGE[1] = WlNode(n + 2)             # an element of a global array
+}
+
+test "O1b: what a function assigns to a global, or into one, is built in the program's scope" {
+    wlSetGlobals(wlRun)
+    obChurn()
+    assert WlGA.v == 5 and WlGS == "v=5" and WlGB.n.v == 6 and WlGW.Len() == 4 and WlGW[3] == 5
+    wlSetGlobalCall(wlRun + 2)
+    wlSetInside(wlRun)
+    obChurn()
+    assert WlGA.v == 7 and WlGV.next.v == 5 and WlGR.next.v == 6 and WlGE[1].v == 7
+}
+
+WlG WlNode& = WlNode(5)
+fn wlFromG(p WlNode&, k I64) WlNode&p { return WlNode(p.v + k) }
+fn wlTask(n I64, out mut Array<I64>&, slot I64) {
+    bad I64 = 0
+    for i in range n {
+        x := wlFromG(WlG, i)            # built in the program's scope - this task's own stand-in for it
+        if x.v != 5 + i { bad++ }
+    }
+    out[slot] = bad
+}
+
+test "P2/O1b: tasks building into the program's scope at once each build into their own stand-in for it" {
+    bad := Array<I64>(2, 0)
+    join {
+        spawn wlTask(20000, bad, 0)
+        spawn wlTask(20000, bad, 1)
+    }
+    assert bad[0] == 0 and bad[1] == 0
+}
+
+type WlHolder struct() {
+    item mut WlNode& = null
+}
+fn wlFill(h mut WlHolder&, v I64) { h.item = WlNode(v) }
+
+test "P2/P1g: what a task builds lives where its call bound it, not in the join block" {
+    r WlNode& = null
+    h WlHolder& = WlHolder()
+    join {
+        spawn r = wlMkNode(wlRun)
+        spawn wlFill(h, wlRun + 1)
+    }
+    obChurn()
+    assert r.v == 5 and h.item.v == 6
+}
+
+error WlErr {
+    BAD
+}
+fn wlMaybe(x I64) WlNode& ? WlErr {
+    if x < 0 { error WlErr.BAD }
+    return WlNode(x)
+}
+fn wlWrap(x I64) WlNode& { return try wlMaybe(x) catch default WlNode(7) }
+
+test "R9a: a catch default is built where the call's result lives" {
+    a WlNode& = null
+    b WlNode& = null
+    if wlRun > 0 {
+        a = try wlMaybe(wlRun) catch default WlNode(6)
+        b = try wlMaybe(0 - wlRun) catch default WlNode(7)
+    }
+    c := wlWrap(0 - wlRun)
+    obChurn()
+    assert a.v == 5 and b.v == 7 and c.v == 7
+}
+
+test "O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration" {
+    t I64 = 0
+    for i in range wlRun {
+        m := WlLink(i, WlLink(i + 2, null))
+        obChurn()
+        t += m.next.v
+    }
+    assert t == 2 + 3 + 4 + 5 + 6
+}
+
+# the same results computed while compiling (K2) and at run time
+fn wlPureArr(n I64) Array<I64> {
+    a := Array<I64>(n, 5)
+    a[0] = n * 10
+    return a
+}
+fn wlBakeSum(n I64) I64 {
+    r := wlPureArr(n)
+    t := wlText(n)
+    c := wlWrap(0 - n)
+    return r[0] + r.Len() + t.Len() + c.v
+}
+WlBaked := wlBakeSum(3)
+
+test "T7b/R9a: the same results computed while compiling and at run time" {
+    assert WlBaked == 30 + 3 + 6 + 7
+    assert wlBakeSum(wlRun - 2) == WlBaked
 }

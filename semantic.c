@@ -5123,6 +5123,9 @@ enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct typ
 static bool bindingIsLanding(struct operand* op, struct var* sv);
 bool callIsLanding(struct operand* op);
 void landCall(struct operand* op, struct var* dst, int depth);
+static void landCallIn(struct operand* op, struct var* dst, int depth, bool program);
+bool storageInProgram(struct operand* op);
+bool valueRefsAdmitStores(struct type t);
 bool OperandGivesWritable(struct operand* op);
 static struct var* methodNamedOn(struct type t, const char* name);
 //E31: the Call method a value of type t has (public, or private when the caller could use it - judged by the caller),
@@ -5837,6 +5840,14 @@ int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDept
 struct pendingDischarge { struct checkCtx* ctx; struct operand* op; struct var* func; struct list args;
                           struct token tok; int obligation; int hereDepth; };
 static struct list pendingDischarges;
+//a pending discharge outlives the statement-building frame that queued it - a match's holding context, say, which is
+//gone by the time the statement ends - so it keeps its own copy of the context, never a pointer into a stack frame
+static struct checkCtx* keepCtx(struct checkCtx* ctx) {
+    if (!ctx) return NULL;
+    struct checkCtx* kept = MallocOrCrash(sizeof(struct checkCtx));
+    *kept = *ctx;
+    return kept;
+}
 static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                                 struct token tok, struct scopeObligation* o);
 
@@ -5878,6 +5889,8 @@ bool SemanticReferentScope(struct var* func, struct operand* op, struct var** to
     if (*to && !varIsOwnParam(*to, func)) return false;
     return true;
 }
+
+bool SemanticLandedInProgram(struct operand* callOp) { return callOp->ctorLanded && callOp->landedInProgram; }
 
 bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth) {
     if (!callOp->ctorLanded) return false;
@@ -5922,23 +5935,24 @@ bool callIsLanding(struct operand* op) {
 
 //O18a: the call's result lands in (dst, depth) - every scope that followed it is bound there, and so is every
 //call passed for a parameter whose scope followed it
-void landCall(struct operand* op, struct var* dst, int depth) {
+//program: lands in the program's scope (O1b) - dst NULL, the binding marked as the scope this function cannot name
+static void landCallIn(struct operand* op, struct var* dst, int depth, bool program) {
     if (dst && dst != SCOPE_AMBIGUOUS && dst->derivedFrom) { //O23a: nothing is built in a derived scope - where it is read
         dst = SemanticRuntimeScope(dst, &depth);                //through is where it would really be built
         if (dst) depth = 0;
     }
     if (op && opIsArrayLiteral(op)) {
-        for (int i = 0; i < op->args.len; i++) landCall(*(struct operand**)ListGetIdx(&op->args, i), dst, depth);
+        for (int i = 0; i < op->args.len; i++) landCallIn(*(struct operand**)ListGetIdx(&op->args, i), dst, depth, program);
         return;
     }
     if (op && op->opType == OPERATION_COND && op->args.len == 3) { //E28: whichever value is chosen lands there
-        landCall(*(struct operand**)ListGetIdx(&op->args, 1), dst, depth);
-        landCall(*(struct operand**)ListGetIdx(&op->args, 2), dst, depth);
+        landCallIn(*(struct operand**)ListGetIdx(&op->args, 1), dst, depth, program);
+        landCallIn(*(struct operand**)ListGetIdx(&op->args, 2), dst, depth, program);
         return;
     }
     if (op && op->opType == OPERATION_MATCH) { //S12b: the same, for each of a match's values
         struct list vs = SemanticMatchValues(op);
-        for (int i = 0; i < vs.len; i++) landCall(*(struct operand**)ListGetIdx(&vs, i), dst, depth);
+        for (int i = 0; i < vs.len; i++) landCallIn(*(struct operand**)ListGetIdx(&vs, i), dst, depth, program);
         return;
     }
     if (!op || (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0)) return;
@@ -5946,17 +5960,22 @@ void landCall(struct operand* op, struct var* dst, int depth) {
         op->ctorLanded = true;
         op->landedTo = dst;
         op->landedDepth = depth;
+        op->landedInProgram = program;
     }
     for (int i = 0; i < op->scopeBindings.len; i++) {
         struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
         if (!b->landing) continue;
         b->boundTo = dst;
         b->boundDepth = depth;
+        b->boundUnnamed = program;
         b->landing = false;
     }
-    for (int i = 0; i < op->landsWith.len; i++) landCall(*(struct operand**)ListGetIdx(&op->landsWith, i), dst, depth);
+    for (int i = 0; i < op->landsWith.len; i++)
+        landCallIn(*(struct operand**)ListGetIdx(&op->landsWith, i), dst, depth, program);
     op->landsWith.len = 0;
 }
+
+void landCall(struct operand* op, struct var* dst, int depth) { landCallIn(op, dst, depth, false); }
 
 //D8d: the call whose results an argument is one of, when it is one of several spread over a call's arguments
 static struct operand* spreadSourceOf(struct operand* arg) {
@@ -6399,7 +6418,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
     for (int i = 0; i < func->type.scopeObligations.len; i++) {
         struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
         if (bindingIsLanding(op, o->longer) || (!o->shorterViaParam && bindingIsLanding(op, o->shorter))) {
-            struct pendingDischarge pd = { ctx, op, func, args, tok, i, -1 };
+            struct pendingDischarge pd = { keepCtx(ctx), op, func, args, tok, i, -1 };
             if (!ErrMsgMuted()) ListAdd(&pendingDischarges, &pd); //a muted probe's would be reported unmuted later
             continue;
         }
@@ -10183,6 +10202,17 @@ bool RefNarrowingMatters(struct type t) {
     return refAdmitsStores(t, &seen, 0);
 }
 
+//O25h: whether a reference a value of type t holds - directly, or inside a value it holds - can be stored through
+bool valueRefsAdmitStores(struct type t) {
+    t.structMAlloc = false;
+    struct list kids = TypeValueChildren(t);
+    for (int i = 0; i < kids.len; i++) {
+        struct type k = *(struct type*)ListGetIdx(&kids, i);
+        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStores(k)) return true;
+    }
+    return false;
+}
+
 bool varIsParamOf(struct var* v, struct var* func);
 
 //O25: where the referent of a reference-shaped operand (asRef), or the storage of a value lvalue (!asRef),
@@ -10355,7 +10385,7 @@ static void bindEnumHere(struct checkCtx* ctx, struct operand* op, struct var* s
     int before = op->scopeBindings.len;
     bindHereFrom(ctx, op, synth, op->type.hereVar, NULL);
     if (op->scopeBindings.len == before) return;
-    struct pendingDischarge pd = { ctx, op, NULL, (struct list){0}, op->tok, 0, normDepth(ctx->blockDepth) };
+    struct pendingDischarge pd = { keepCtx(ctx), op, NULL, (struct list){0}, op->tok, 0, normDepth(ctx->blockDepth) };
     ListAdd(&pendingDischarges, &pd);
 }
 
@@ -10609,11 +10639,12 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     //C2d/O23: a local holding such a field's referent would claim a scope it does not really have
     if (rhs && ctx->hasOwnScope && declType.structMAlloc && RefNarrowingMatters(declType) && scopeViaFallback(rhs))
         ErrMsgSemantic(rhs->tok, BUILD_THROUGH_UNKNOWN_SCOPE);
-    //O18a: a by-value result holding references, landing in a value local, is built in the function's own
-    //scope - as a constructor's value instance is - so a copy of it out of an inner block cannot dangle
+    //O18a: a by-value result holding references, landing in a value local, is built in the local's own block - as the
+    //local is - so a loop body's value is reclaimed with the iteration; a copy of it out of that block is checked
+    //where it is made (O25h)
     if (rhs && !declType.structMAlloc && TypeHoldsReferences(declType) && callIsLanding(rhs) && ctx->hasOwnScope
             && !landedByOblig)
-        landCall(rhs, NULL, 1);
+        landCall(rhs, NULL, normDepth(ctx->blockDepth));
     bool unnamedScope = false;
     if (!homeChecked && (fillValue || !adoptInitializerScope(ctx, &declType, rhs, &unnamedScope))
             && !declType.scopeWritten)
@@ -10626,6 +10657,22 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         valueHomeOf(ctx, rhs, v);
     else if (rhs && landedByOblig && !declType.structMAlloc && TypeHoldsReferences(declType) && ctx->hasOwnScope)
         refsHomeOf(rhs, v);
+    //O25h: a value holding references copied from one that already lives somewhere keeps its references where they
+    //are, whatever the declaration writes - its own storage is still its block
+    else if (rhs && typeExprNode && !declType.structMAlloc && TypeHoldsReferences(declType) && ctx->hasOwnScope
+             && !rhs->type.structMAlloc && OperandIsLvalue(rhs)) {
+        struct var* hv;
+        int hd;
+        bool hu;
+        if (RefExactScope(ctx, rhs, false, &hv, &hd, &hu) && !hu && hv != SCOPE_AMBIGUOUS) {
+            v->valueHomeSet = true;
+            v->valueHome = hv;
+            v->valueHomeDepth = hv ? 0 : normDepth(hd);
+        }
+    }
+    //O1b: a local taking what lives in the program's scope - a global's referent, a global value's references
+    if (rhs && (declType.structMAlloc ? unnamedScope : TypeHoldsReferences(declType)) && storageInProgram(rhs))
+        v->inProgram = true;
     //propagated one hop, so a later read of v (OperandReadVar) can still resolve a scope tag that's one of
     //rhs's own callee's scope params - see resolveEffectiveScopeVar. rhs is NULL for a zero-filled fixed
     //array (nothing to propagate - v->scopeBindings just stays at its zero-initialized default).
@@ -10835,13 +10882,21 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         }
         //O18a: a call whose result's scope follows the result is built where the target's referent lives
         //- or, for a value holding references, where the target's own storage is (O18a)
+        struct var* troot = lvalueRootVar(target);
+        bool intoGlobal = troot && troot->owner && (target->type.structMAlloc || TypeHoldsReferences(target->type));
         if (callIsLanding(rhs) && ctx->hasOwnScope && (target->type.structMAlloc || TypeHoldsReferences(target->type))) {
             struct var* lv;
             int ld;
             bool lu;
-            if (RefExactScope(ctx, target, target->type.structMAlloc, &lv, &ld, &lu) && !lu && lv != SCOPE_AMBIGUOUS)
+            if (intoGlobal) landCallIn(rhs, NULL, 0, true); //O1b: a global's referent lives in the program's scope
+            else if (RefExactScope(ctx, target, target->type.structMAlloc, &lv, &ld, &lu) && !lu && lv != SCOPE_AMBIGUOUS)
                 landCall(rhs, lv, ld);
         }
+        //O1b: a global, and everything reached from it, lives in the program's scope - which nothing a function holds
+        //outlives, so what is stored there is built there or already lives there
+        if (intoGlobal && ctx->hasOwnScope && !rhs->isNullLiteral && (rhs->type.structMAlloc || OperandIsLvalue(rhs))
+                && !storageInProgram(rhs))
+            ErrMsgSemantic(rhs->tok, GLOBAL_HOLDS_SHORTER);
         //O22: the target's tag may still be a scope variable of the TYPE it is a field of - resolution
         //found no binding because the container arrived as a parameter and was built somewhere else. This
         //body cannot decide the relation and cannot name it in its own signature, so it records a DERIVED
@@ -10873,6 +10928,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         }
         reportTypeFit(OperandFitsType(ctx->func, rhs, targetType), opTok);
         //C2d: an instance assigned lands where the target's storage, or its referent, lives
+        int errsBeforeHere = ErrMsgGetNErrors();
         {
             struct var* hv;
             int hd;
@@ -10882,6 +10938,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 checkCtorHereFits(ctx, rhs, hv, hd, opTok);
             }
         }
+        bool hereReported = ErrMsgGetNErrors() != errsBeforeHere;
         //O25: a reference never narrows. Every reference-shaped target has an exact scope (RefExactScope),
         //and what is stored into it must match that scope - or, for a slot inside a container whose
         //referent holds no references, merely outlive it, since nothing can be written through such a
@@ -10919,6 +10976,21 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 } else if (ru || !scopeCanFlowInto(ctx->func, rv, normDepth(rd), tv, normDepth(td))) {
                     ErrMsgSemantic(opTok, NESTED_SLOT_OUTLIVES_VALUE);
                 }
+            }
+        }
+        //O25h: a value holding references keeps them where it was built, so a copy of one goes only where that outlives
+        //- and exactly there where a store through one of them could misplace what it builds (O25g)
+        if (ctx->hasOwnScope && !target->type.structMAlloc && TypeHoldsReferences(target->type)
+                && !rhs->type.structMAlloc && OperandIsLvalue(rhs) && !intoGlobal && !hereReported) {
+            struct var* hv;
+            struct var* tv;
+            int hd, td;
+            bool hu, tu;
+            if (RefExactScope(ctx, rhs, false, &hv, &hd, &hu) && RefExactScope(ctx, target, false, &tv, &td, &tu)
+                    && !hu && !tu && hv != SCOPE_AMBIGUOUS && tv != SCOPE_AMBIGUOUS) {
+                bool ok = valueRefsAdmitStores(target->type) ? sameExactScope(hv, hd, tv, td)
+                          : scopeCanFlowInto(ctx->func, hv, normDepth(hd), tv, normDepth(td));
+                if (!ok) ErrMsgSemantic(opTok, VALUE_REFS_OUTLIVED);
             }
         }
         //O20: a value stored into a slot inside a reference-shaped container must outlive that CONTAINER,
@@ -10959,7 +11031,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             int cd;
             bool cu = false;
             RefExactScope(ctx, cont, cont->type.structMAlloc, &cv, &cd, &cu);
-            if (cu) ErrMsgSemantic(opTok, BARE_REF_PARAM_CONTAINER_WRITE);
+            if (cu && !intoGlobal) ErrMsgSemantic(opTok, BARE_REF_PARAM_CONTAINER_WRITE); //O1b: a global's is the program's
         }
         if (inContainer) {
             //a container in one of this function's scope variables outlives everything of its own; one in a
@@ -12849,6 +12921,34 @@ struct var* lvalueRootVar(struct operand* op) {
     return op->opType == OPERATION_READ_VAR ? canonicalVar(op->readVar) : NULL;
 }
 
+//O1b: whether what op names lives in the program's scope - for a reference its referent, for a value what it holds:
+//a global, a slot reached from one with no scope of its own, a local that took such a thing, or a call's result that
+//was built or borrowed there. False where that is not known.
+bool storageInProgram(struct operand* op) {
+    switch (op->opType) {
+        case OPERATION_READ_VAR:
+            if (!op->readVar || op->readVar->isFuncDecl) return false;
+            return canonicalVar(op->readVar)->owner != NULL || canonicalVar(op->readVar)->inProgram || op->readVar->inProgram;
+        case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_AS:
+            if (op->opType == OPERATION_MEMBER && op->type.structMAlloc && op->type.scopeParam) {
+                for (int i = 0; i < op->scopeBindings.len; i++) {
+                    struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
+                    if (canonicalVar(b->typeParam) == canonicalVar(op->type.scopeParam) && !b->containerFallback)
+                        return b->boundUnnamed && !b->landing;
+                }
+            }
+            return op->args.len && storageInProgram(*(struct operand**)ListGetIdx(&op->args, 0));
+        case OPERATION_FUNCCALL: {
+            struct var* f = op->readVar;
+            if (!f || !f->type.hasRetType) return false;
+            if (opIsCtorCall(op)) return op->landedInProgram;
+            struct var* sv = f->type.retType->scopeParam ? f->type.retType->scopeParam : f->type.resultScope;
+            return sv && SemanticBindingIsUnnamed(op, sv);
+        }
+        default: return false;
+    }
+}
+
 //P1: "spawn { f(a)  g(b) }" - each statement in the block is one task, and the block's end is the join.
 //The lifetime half needs no new rule at all: a task's arguments are borrows of the spawner's storage
 //(E12c), and the spawner provably outlives every task because it cannot leave the block until they finish.
@@ -12983,14 +13083,45 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         int results = rt.isTuple ? rt.vars.len : (call->readVar->type.hasRetType ? 1 : 0);
         if (results == 0) ErrMsgSemantic(tok, SPAWN_RESULT_VOID);
         else if (results != stmt.spawnTargets.len) ErrMsgSemantic(tok, DESTRUCT_COUNT_MISMATCH);
+        bool fits = true;
         for (int i = 0; results == stmt.spawnTargets.len && i < results; i++) {
             struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
             if (!t) continue;
             struct type want = rt.isTuple ? (*(struct var*)ListGetIdx(&rt.vars, i)).type : rt;
-            if (!TypeIsSame(t->type, want)) ErrMsgSemantic(t->tok, SPAWN_RESULT_TYPE);
+            if (!TypeIsSame(t->type, want)) { ErrMsgSemantic(t->tok, SPAWN_RESULT_TYPE); fits = false; }
+            if (!OperandIsMutableLvalue(t)) fits = false;
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {
                 ErrMsgSemantic(t->tok, SPAWN_RESULT_TOO_SHORT);
+            }
+        }
+        //O18a/P1g: the result is stored into its target as an assignment's value is - so a result built where it lands
+        //is built where the target is, and one that already lives somewhere must suit the target as an assignment's
+        //would (O25, O1b). Several targets share one result scope: it lands where they all are, or nowhere
+        if (fits && results == stmt.spawnTargets.len && ctx->hasOwnScope) {
+            struct operand* t0 = *(struct operand**)ListGetIdx(&stmt.spawnTargets, 0);
+            struct token asTok = tok;
+            asTok.type = TOK_ASS; //checked as the plain assignment it is (no compound form exists, P1g)
+            if (results == 1 && t0) buildAssignCore(ctx, t0, call, asTok);
+            else if (callIsLanding(call)) {
+                struct var* lv = NULL;
+                int ld = 0;
+                bool have = false, agree = true, program = false;
+                for (int i = 0; i < results; i++) {
+                    struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
+                    if (!t || !(t->type.structMAlloc || TypeHoldsReferences(t->type))) continue;
+                    struct var* troot = lvalueRootVar(t);
+                    struct var* v;
+                    int d;
+                    bool u;
+                    if (troot && troot->owner) program = true;
+                    else if (!RefExactScope(ctx, t, t->type.structMAlloc, &v, &d, &u) || u || v == SCOPE_AMBIGUOUS) agree = false;
+                    else if (!have) { lv = v; ld = d; have = true; }
+                    else if (!sameExactScope(lv, ld, v, d)) agree = false;
+                }
+                if (program && !have && agree) landCallIn(call, NULL, 0, true);
+                else if (have && agree && !program) landCall(call, lv, ld);
+                else if (have || program) ErrMsgSemantic(tok, SPAWN_RESULTS_DISAGREE);
             }
         }
     }
