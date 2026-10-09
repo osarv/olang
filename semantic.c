@@ -12331,7 +12331,10 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
     //...text on a line of its own most often meant to continue the join on the line before (E11b)
-    if (!exprCanStandAsStatement(op) && !op->type.unknown) Err(op->tok, OperandIsWrittenText(op) ? ERR_JOIN_NEXT_LINE : ERR_NOT_A_STATEMENT);
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) {
+        if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
+        else Err(op->tok, ERR_NOT_A_STATEMENT);
+    }
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;
