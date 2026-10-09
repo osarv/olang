@@ -28,7 +28,11 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+1. (asked 2026-10-09; the user: "I don't like built-ins very much") replace the built-in `same(a, b)` with `a is b`
+   (identity when the right side names no case/type; Python's spelling, reuses `is`)? Default: `same` stays. Rec: yes.
+2. (asked 2026-10-09) turn the five atomics into methods on the integer types (`n.AtomicAdd(1)`), as len became
+   Len()? Default: builtins stay. Rec: yes.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
 expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
 T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default

@@ -94,6 +94,15 @@ because what it finds about structure feeds the refactor.
   ctor/extends/generic identity); Eq/Hash/Str may be declared on an extending type, replacing the inherited ones;
   anonymous enums are the same type iff same cases, order and payloads. Full verifies serialize on
   `flock /home/user/verify.lock`.
+- 06:15: review (3) statements/scopes reported 10 confirmed holes (F01-F10: try defaults checked before landing, match
+  alternatives taking the first binding's scope/permission, &of bindings falsified through unknown-binding writes,
+  by-value params holding refs returned unchecked, members/elements/slices of built call results never landing,
+  Array(n, fill) temps, spawn temporaries, enum-param payloads read as program scope, read-only refs written through
+  cond/match/as, Call adapters returned) plus over-rejections R01-R07 and a K2b baking bug (writable referents in
+  .rodata, shared instances split); being fixed in /home/user/wt/sfix (wt-sfix). Decided for it: a by-value parameter
+  holding references gets an implicit scope variable (O4b extended); a global argument binds a callee's scope variable
+  to the program scope (O25e relaxed, O1b); a conditional/match of a reference and temporaries of its referent type is
+  the reference type.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
