@@ -2080,7 +2080,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_SEQ: { //statements in the enclosing block, then the value
             for (int i = 0; i < op->comprBody.len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(&op->comprBody, i));
             if (st->flow != CF_NORMAL) return NULL;
-            if (!op->args.len) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID)); //E31: a "try x[i] = v" statement
+            //E31: a "try x[i] = v" statement, or an increment (S3a) - no value
+            if (!op->args.len) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
             return ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
         }
         case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended

@@ -2652,7 +2652,9 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     bool unmet = false;
     for (int i = 0; i < spec->type.vars.len && !unmet; i++)
         unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
-    if (unmet || tooDeep) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
+    //G4: nor the body of a generic whose signature names a variable no call can give a value - reported once, at its
+    //declaration, its body unchecked there and in every instantiation
+    if (unmet || tooDeep || generic->type.sigUninferable) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
     else ListAdd(&pendingInstances, &idx);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
@@ -6210,6 +6212,8 @@ struct checkCtx {
     struct list blockStmts;  //O26a: the statements (SNTX_STMNT) of the block being checked, and which one this is - a
     int blockStmtIdx;        //declaration looks ahead in its own block for a return of the local it declares
     bool inTextJoin; //E11b: building a piece of a text join - "(" after a piece is a call of it, never what was meant
+    struct list assignPlaces; //S4d: the value places an assignment being built writes over (struct operand*) - a borrow
+                              //of storage within one, kept in what the value builds, takes its old value (copiesOld)
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -7410,15 +7414,23 @@ bool SemanticCallMatches(struct type t, struct type fnType) {
     struct var* m = SemanticCallOf(t);
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.typeParams.len) return false;
     if (m->type.vars.len != fnType.vars.len + 1) return false;
-    //T22/T25b: compared as two function types are - each parameter's "mut" and its permission included, so a Call
-    //writing through a parameter never stands for a function type promising to only read it
+    //T22/T25b: fitted as a function value is - each parameter's permission included, so a Call writing through a
+    //parameter never stands for a function type promising to only read it, while one only reading it may stand for one
+    //that passes a writable reference, and a writable result for a read-only one
     for (int i = 0; i < fnType.vars.len; i++) {
         struct var* pm = ListGetIdx(&m->type.vars, i + 1);
         struct var* pf = ListGetIdx(&fnType.vars, i);
-        if (pm->mut != pf->mut || !TypeIsSameStrict(pm->type, pf->type)) return false;
+        struct type b = pm->type;
+        bool refs = TypeIsPermRef(pf->type) && TypeIsPermRef(b);
+        if (refs && pf->type.refMut) b.refMut = true;
+        if ((!refs && pm->mut != pf->mut) || !TypeIsSameStrict(pf->type, b)) return false;
     }
     if (m->type.hasRetType != fnType.hasRetType) return false;
-    if (m->type.hasRetType && !TypeIsSameStrict(*m->type.retType, *fnType.retType)) return false;
+    if (m->type.hasRetType) {
+        struct type b = *m->type.retType;
+        if (TypeIsPermRef(*fnType.retType) && TypeIsPermRef(b) && !fnType.retType->refMut) b.refMut = false;
+        if (!TypeIsSameStrict(*fnType.retType, b)) return false;
+    }
     if (m->type.errors.len != fnType.errors.len) return false;
     for (int i = 0; i < fnType.errors.len; i++) {
         if (!TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, i), **(struct type**)ListGetIdx(&fnType.errors, i))) return false;
@@ -7622,8 +7634,11 @@ static bool funcFitsByPermission(struct type want, struct type have) {
         struct var* va = ListGetIdx(&want.vars, i);
         struct var* vb = ListGetIdx(&have.vars, i);
         struct type b = vb->type;
-        if (TypeIsPermRef(va->type) && TypeIsPermRef(b) && va->type.refMut) b.refMut = true;
-        if (va->mut != vb->mut || !TypeIsSameStrict(va->type, b)) return false;
+        //a reference parameter's "mut" is its type's permission (T25b), compared through the types - the binding flag a
+        //written "mut" sets says the same thing again, and would refuse a read-only parameter for a writable one
+        bool refs = TypeIsPermRef(va->type) && TypeIsPermRef(b);
+        if (refs && va->type.refMut) b.refMut = true;
+        if ((!refs && va->mut != vb->mut) || !TypeIsSameStrict(va->type, b)) return false;
     }
     if (want.hasRetType != have.hasRetType) return false;
     if (want.hasRetType) {
@@ -8079,6 +8094,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
 
 bool OperandIsLvalue(struct operand* op) {
     if (op->catchClauses.len) return false; //R9b: "try a[i] catch default 0" is a value - on failure there is no element
+    if (op->copiesOld) return false; //S4d: the place's old value, copied - a temporary
     //a function named as a value (or a lambda) is no storage of anyone's - it is built where it lands, like any
     //temporary (D16)
     if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->isFuncDecl) return false;
@@ -9084,15 +9100,39 @@ static struct var* ownRegionVar(struct checkCtx* ctx, struct var* sv) {
     return NULL;
 }
 
-//O17: whether op is read out of the region of a parameter whose scope variable is sv - "l.chunks[k]" - so that putting
-//it into that region again brings in nothing from outside it
-static bool readFromRegion(struct checkCtx* ctx, struct operand* op, struct var* sv) {
-    while ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE) && op->args.len
-           && !op->isAtCall)
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
-    if (op->opType != OPERATION_READ_VAR || !op->readVar || !varIsParamOf(op->readVar, ctx->func)) return false;
-    struct var* p = canonicalVar(op->readVar);
-    return p->type.scopeParam && canonicalVar(p->type.scopeParam) == canonicalVar(sv);
+//O17: where what op names lies, seen from a parameter whose scope variable is sv - for a reference (asRef) where it
+//leads, for a value its own storage. REGION_LENT is the lent value's own storage: the parameter itself, a by-value
+//parameter's copy, and the fields, elements and views of either reached with no reference followed - which may be
+//anywhere its caller keeps the value. REGION_IN is the region: anything reached by following a reference out of that
+//storage, where the value's references lead. REGION_NONE is anything not rooted at the parameter
+enum regionPlace { REGION_NONE, REGION_LENT, REGION_IN };
+static enum regionPlace placeInRegion(struct checkCtx* ctx, struct operand* op, struct var* sv, bool asRef) {
+    if (op->opType == OPERATION_READ_VAR) {
+        if (!op->readVar || !varIsParamOf(op->readVar, ctx->func)) return REGION_NONE;
+        struct var* p = canonicalVar(op->readVar);
+        return p->type.scopeParam && canonicalVar(p->type.scopeParam) == canonicalVar(sv) ? REGION_LENT : REGION_NONE;
+    }
+    if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX && op->opType != OPERATION_SLICE) || !op->args.len
+            || op->isAtCall)
+        return REGION_NONE;
+    struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
+    enum regionPlace bp = placeInRegion(ctx, base, sv, base->type.structMAlloc);
+    if (bp == REGION_NONE) return REGION_NONE;
+    //a slice names the storage its base leads to or is; a reference read out of a slot leads where the value's
+    //references do; a field or an element is inside its base's storage
+    if (op->opType == OPERATION_SLICE) return bp;
+    return asRef ? REGION_IN : bp;
+}
+
+//O17: whether op, put into a slot of the region of a parameter whose scope variable is sv, brings in nothing from
+//outside that region - a reference read out of it ("l.chunks[k]"), a copy of a value whose references lead into it, or
+//storage borrowed (into a reference slot, intoRef) that is reached through such a reference ("b.head.data"). The
+//parameter itself and what lies in its own storage ("b", "b.data") are not in the region: they are the lent value,
+//which may live elsewhere than its references (O25h), and are what the caller has to be told about
+static bool readFromRegion(struct checkCtx* ctx, struct operand* op, struct var* sv, bool intoRef) {
+    if (op->type.structMAlloc) return placeInRegion(ctx, op, sv, true) == REGION_IN;
+    enum regionPlace p = placeInRegion(ctx, op, sv, false);
+    return intoRef ? p == REGION_IN : p != REGION_NONE;
 }
 
 //O17: whether a callee may store into the region its scope variable sv names - put there, through a slot reached from its
@@ -9114,9 +9154,11 @@ static bool calleeStoresRegion(struct var* func, struct var* sv) {
     return c->regionStored || c->regionHandedOut;
 }
 
-//O17: what a call into a body not yet known says - a store the callee may make into a region of the caller's own
-//(regionEdges), and a value lent to it whose own storage is not where its references are (lendChecks) - decided once
-//every body is checked, by settleRegions
+//O17: what a call into a declared function or a constructor says - a store the callee may make into a region of the
+//caller's own (regionEdges), and a value lent to it whose own storage is not where its references are (lendChecks) -
+//decided once every body is checked, by settleRegions. Every such call is recorded, its body known or not: a body checked
+//before the call may still reach a cycle whose answer is settled only at the end, and a caller that read the callee's
+//answer too early would keep a stale one
 struct regionEdge { struct var* r; struct var* func; struct var* sv; };
 struct lendCheck { struct var* func; struct var* sv; struct token tok; };
 static struct list regionEdges;
@@ -9223,9 +9265,12 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 //body is (settleRegions)
                 if (valueRefsScope(ctx, arg, &hv, &hd, &hu)
                         && (hu ? !argUnnamed : argUnnamed || !sameExactScope(hv, hd, argScope, argDepth))) {
-                    if (!calleeBodyKnown(func) && func->owner) { //a declared function's body, checked later (a cycle)
+                    //a declared function's answer, or a constructor's, may still change after this call - its body may
+                    //reach a cycle settled only at the end - so it is asked once every body is
+                    if (func->owner || calleeBodyKnown(func)) {
                         struct lendCheck lc = { func, sv, arg->tok };
                         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
+                        else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
                     } else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
                 }
                 //O25h/O13a: what the callee builds and keeps in the value's slots is where its storage is - which no
@@ -9295,16 +9340,19 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         //variable's region - whatever it hands back out lands here, and is judged here (a store through it, a return)
         struct var* r = determined ? ownRegionVar(ctx, boundTo) : NULL;
         if (r && !func->type.isExtern && !ErrMsgMuted()) {
-            if (!calleeBodyKnown(func) && func->owner) { //a declared function's body, checked later (a cycle)
-                struct regionEdge e = { r, func, sv };
-                ListAdd(&regionEdges, &e);
-            } else if (!func->owner && !func->name.len) { //D16c: a lambda's captures - stored through only where writable
+            if (!func->owner && !func->name.len) { //D16c: a lambda's captures - stored through only where writable
                 for (int j = 0; j < func->type.vars.len; j++) {
                     struct type ct = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
                     if (ct.scopeParam && canonicalVar(ct.scopeParam) == canonicalVar(sv) && (!TypeIsPermRef(ct) || ct.refMut))
                         r->regionStored = true;
                 }
-            } else if (!calleeBodyKnown(func) || (!func->bodyHadErrors && canonicalVar(sv)->regionStored)) r->regionStored = true;
+            } else if (func->owner || calleeBodyKnown(func)) {
+                //a declared function's body, or a constructor's: what it is known to store now, and an edge for what it
+                //may be found to store later - a body checked already can still call into a cycle settled at the end
+                struct regionEdge e = { r, func, sv };
+                ListAdd(&regionEdges, &e);
+                if (calleeBodyKnown(func) && !func->bodyHadErrors && canonicalVar(sv)->regionStored) r->regionStored = true;
+            } else r->regionStored = true; //a function value: its body is not known here
         }
     }
 
@@ -9779,6 +9827,7 @@ static void unifyLambdaWritten(struct operand* arg, struct type paramT, struct l
         if (TypeUnify(want, wt, &trial)) *bindings = trial;
     }
 }
+static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll);
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
     struct var* callerFunc = ctx ? ctx->func : NULL;
@@ -9987,6 +10036,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     //O17: every scope variable named by some parameter's type binds to that argument's own effective
     //scope; all parameters naming the same variable must agree. O18: one named by no parameter is
     //supplied by the caller's scope argument, defaulting to the caller's own scope (NULL).
+    copyOldBorrows(ctx, func, args, false); //S4d: before anything asks whether an argument is borrowed
     ensureBodyChecked(func); //O10b: its obligations, before this call is held to them
     int obligedNow = func->type.scopeObligations.len;
     bindCallScopeVars(ctx, op, func, args, tok, scopeArgNodes);
@@ -11219,6 +11269,7 @@ struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType,
     //O18: a scope variable no argument determined is supplied by a written scope argument, defaulting to
     //the caller's own scope. That is the only way to build a payload that is a FRESH value into a scope
     //outliving this function - an already-reference-shaped argument determines the tag by itself (O17).
+    copyOldBorrows(ctx, &synth, args, true); //S4d
     bindCallScopeVars(ctx, op, &synth, args, wordTok, (struct list){0});
     op->args = args;
     for (int i = 0; i < args.len; i++) {
@@ -12006,6 +12057,7 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
 //reference keeps x's own scope; a global's initializer, which has no block, gives the local a scope of its own.
 static int hiddenCounter = 0;
 static bool adoptInitializerScope(struct checkCtx* ctx, struct type* t, struct operand* init, bool* unnamed);
+static void valueHomeOf(struct checkCtx* ctx, struct operand* rhs, struct var* v);
 static void copyRefsHome(struct checkCtx* ctx, struct operand* rhs, struct var* v);
 struct statement buildVarDeclFromOperand(struct checkCtx* ctx, struct token nameTok, struct operand* rhs);
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
@@ -12038,6 +12090,15 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
     hv->scopeUnnamed = unnamed;
     hv->declInit = x;
     copyRefsHome(ctx, x, hv); //O25h: a held copy keeps its references where they are
+    //O25a/O18a: a value built for it keeps them where it was built - a parallel assignment's value, landed at its target
+    if (!dt.structMAlloc && !OperandIsLvalue(x) && TypeHoldsReferences(dt) && !hv->refsHomeSet && !hv->valueHomeSet) {
+        if (x->ctorLanded && x->landedInProgram) {
+            hv->refsHomeSet = true;
+            hv->refsHome = NULL;
+            hv->refsHomeDepth = 0;
+            hv->refsHomeUnnamed = true;
+        } else valueHomeOf(ctx, x, hv);
+    }
     hv->scopeBindings = x->scopeBindings;
     struct statement d = (struct statement){0};
     d.sType = STATEMENT_VAR_DECL;
@@ -12319,6 +12380,20 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
     return call;
 }
 
+//S4: a read of an assignment's own target that reads the place the statement computed (placeOf) rather than evaluating
+//the target again - "a[next()] += 5" calls next once. Its own lists, so nothing done to one reaches the other
+static struct operand* placeRead(struct operand* target) {
+    struct operand* cur = operandNew(target->tok, OPERATION_NONE, target->type);
+    *cur = *target;
+    if (target->args.elemSize) { cur->args = ListInit(target->args.elemSize); ListAddList(&cur->args, target->args); }
+    if (target->scopeBindings.elemSize) {
+        cur->scopeBindings = ListInit(target->scopeBindings.elemSize);
+        ListAddList(&cur->scopeBindings, target->scopeBindings);
+    }
+    cur->placeOf = target;
+    return cur;
+}
+
 //E31: "x++" / "x--" on a type that is not numeric - x = x.Inc() (Dec), a method the type may declare, or else
 //x = x + 1 (x - 1) through its Plus (Minus), for a type whose Plus takes the literal one. A statement only (S3a).
 //NULL when the type has neither, leaving the built-in form and its error.
@@ -12338,8 +12413,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
         op.str = StrFromCStr(inc ? "+=" : "-=");
         struct statement set = buildAssignCore(ctx, target, OperandIntLiteral(one), op);
         ListAdd(&seq->comprBody, &set);
-        ListAdd(&seq->args, &target);
-        return seq;
+        return seq; //S3a: no value - nothing reads one, and giving it the target's would evaluate the place again (S4)
     }
     if (target->type.bType == BASETYPE_TYPEVAR) return NULL;
     //under "try" (E31) a number's increment is "x = x + 1", which the try then checks for overflow
@@ -12366,16 +12440,17 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     struct token one = tok;
     one.type = TOK_INT_LIT;
     one.str = StrFromCStr("1");
-    struct operand* next = own ? operatorCall(ctx, target, NULL, own, tok)
-                         : arith ? operatorCall(ctx, target, OperandIntLiteral(one), arith, tok)
-                                 : OperandBinary(target, OperandIntLiteral(one), inc ? OPERATION_ADD : OPERATION_SUB, tok);
+    //S4: the place is evaluated once - the read the new value is made from is the place the assignment computes
+    struct operand* cur = placeRead(target);
+    struct operand* next = own ? operatorCall(ctx, cur, NULL, own, tok)
+                         : arith ? operatorCall(ctx, cur, OperandIntLiteral(one), arith, tok)
+                                 : OperandBinary(cur, OperandIntLiteral(one), inc ? OPERATION_ADD : OPERATION_SUB, tok);
     struct token eq = tok;
     eq.type = TOK_ASS;
     eq.str = StrFromCStr("=");
     struct statement set = buildAssignCore(ctx, target, next, eq);
     ListAdd(&seq->comprBody, &set);
-    ListAdd(&seq->args, &target);
-    return seq;
+    return seq; //S3a: no value (above)
 }
 
 //E32: "x is Enum.Case" / "x as Enum.Case" - on an enum value, "as" giving the case's payload: its one field, or
@@ -13386,6 +13461,7 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* comprNode = firstPartOfType(s, SNTX_COMPREHENSION);
     if (comprNode) return buildComprehension(ctx, elemType, s, comprNode, tok);
     struct operand* lit = buildArrLiteralLevel(ctx, elemType, firstPartOfType(s, SNTX_ARR_LIT_ARGS), tok);
+    if (opIsArrayLiteral(lit) && elemType.structMAlloc) copyOldBorrows(ctx, NULL, lit->args, true); //S4d
     if (opIsArrayLiteral(lit) && arrayHoldsExisting(lit)) queueHereCheck(ctx, lit); //T7: its elements live where it lands
     return lit;
 }
@@ -14037,6 +14113,7 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     innerCtx.blockDepth = ctx->blockDepth + 1;
     innerCtx.checkingTry = false; //a lambda's or a clause's block is no part of what a "try" checks
     innerCtx.inTextJoin = false;
+    innerCtx.assignPlaces = (struct list){0}; //S4d: a block's statements are its own, not the value of an assignment
 
     struct list result = ListInit(sizeof(struct statement));
     struct list stmts = allPartsOfType(blockNode, SNTX_STMNT);
@@ -14076,6 +14153,8 @@ static int destructCounter;
 //S4c: "t1, t2 = v1, v2" - every value evaluated, left to right, before any target is written, so "a, b = b, a"
 //swaps; a value no write could change (a literal) is used where it stands, every other one held in a hidden local
 //first. "t1, t2 := v1, v2" declares each name from its value, in order.
+static struct list placesWrittenOver(struct list targets);
+static void landAtTarget(struct checkCtx* ctx, struct operand* target, struct operand* rhs);
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct list* out);
 static void buildParallel(struct checkCtx* ctx, struct list targets, struct list values, bool declare,
@@ -14094,17 +14173,34 @@ static void buildParallel(struct checkCtx* ctx, struct list targets, struct list
         }
         return;
     }
-    struct list held = ListInit(sizeof(struct operand*));
-    for (int i = 0; i < values.len; i++) {
-        struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&values, i));
-        if (!(v->isLiteral || v->isNullLiteral)) v = OperandReadVar(holdInHidden(ctx, v, opTok, "par", out), opTok);
-        ListAdd(&held, &v);
-    }
+    //the targets are built first - nothing of theirs runs until their assignments do - so that the values know which
+    //places are written over (S4d)
+    struct list tops = ListInit(sizeof(struct operand*));
     for (int i = 0; i < targets.len; i++) {
         struct syntax* t = *(struct syntax**)ListGetIdx(&targets, i);
         struct token nameTok;
-        if (destructTargetName(t, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_"))) continue;
-        struct statement st = buildAssignCore(ctx, buildExprFromSyntax(ctx, t), *(struct operand**)ListGetIdx(&held, i), opTok);
+        struct operand* top = NULL;
+        if (!(destructTargetName(t, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) top = buildExprFromSyntax(ctx, t);
+        ListAdd(&tops, &top);
+    }
+    struct list prevPlaces = ctx->assignPlaces;
+    ctx->assignPlaces = placesWrittenOver(tops);
+    struct list held = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < values.len; i++) {
+        struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&values, i));
+        //a literal reading nothing - a number, text, an enum case with no payload, null - is used where it stands; an
+        //enum case built from values or an array literal reads them, and is held as anything else is - built, where it
+        //is built at all, where its target is (O18a), as an assignment's value is
+        struct operand* top = *(struct operand**)ListGetIdx(&tops, i);
+        if (top) landAtTarget(ctx, top, v);
+        if (!((v->isLiteral && !v->args.len) || v->isNullLiteral)) v = OperandReadVar(holdInHidden(ctx, v, opTok, "par", out), opTok);
+        ListAdd(&held, &v);
+    }
+    ctx->assignPlaces = prevPlaces;
+    for (int i = 0; i < targets.len; i++) {
+        struct operand* top = *(struct operand**)ListGetIdx(&tops, i);
+        if (!top) continue;
+        struct statement st = buildAssignCore(ctx, top, *(struct operand**)ListGetIdx(&held, i), opTok);
         ListAdd(out, &st);
     }
 }
@@ -15620,6 +15716,69 @@ struct var* lvalueRootVar(struct operand* op);
 
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok);
 
+//S4d: the places of these targets an assignment writes over in place (T11b) and whose value can hold a reference - a
+//value place, not a reference (assigning one repoints it, S4a) nor an At call (SetAt is a call)
+static struct list placesWrittenOver(struct list targets) {
+    struct list out = ListInit(sizeof(struct operand*));
+    for (int i = 0; i < targets.len; i++) {
+        struct operand* t = *(struct operand**)ListGetIdx(&targets, i);
+        if (t && !t->type.unknown && !t->isAtCall && !t->type.structMAlloc && OperandIsLvalue(t) && TypeHoldsReferences(t->type))
+            ListAdd(&out, &t);
+    }
+    return out;
+}
+
+//S4d: op's path from the variable it is rooted at - [root, step, step, ...] - or -1 when op is no such path
+static int lvaluePath(struct operand* op, struct operand** steps, int max) {
+    int n = 0;
+    while (n < max) {
+        steps[n++] = op;
+        if (op->opType == OPERATION_READ_VAR) break;
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return -1;
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    }
+    if (steps[n - 1]->opType != OPERATION_READ_VAR || !steps[n - 1]->readVar) return -1; //deeper than max, or no variable
+    for (int i = 0; i < n / 2; i++) { struct operand* t = steps[i]; steps[i] = steps[n - 1 - i]; steps[n - 1 - i] = t; }
+    return n;
+}
+
+//S4d: whether op names storage within the place p - p itself, or a field or an element of it reached with no reference
+//followed. Two elements of one array may be one (their indexes are not compared)
+static bool storageWithinPlace(struct operand* op, struct operand* p) {
+    struct operand* os[64];
+    struct operand* ps[64];
+    int on = lvaluePath(op, os, 64), pn = lvaluePath(p, ps, 64);
+    if (on < 0 || pn < 0 || on < pn || canonicalVar(os[0]->readVar) != canonicalVar(ps[0]->readVar)) return false;
+    for (int i = 1; i < pn; i++) {
+        if (os[i]->opType != ps[i]->opType) return false;
+        if (os[i]->opType == OPERATION_MEMBER && !StrCmp(os[i]->memberName, ps[i]->memberName)) return false;
+    }
+    for (int i = pn; i < on; i++) if (os[i - 1]->type.structMAlloc) return false; //a reference followed: other storage
+    return true;
+}
+
+//S4d: arguments func's call, an enum case or an array literal borrows (E12c) into what it builds, while the value of an
+//assignment is built - one naming storage within a place the assignment writes over would leave the value holding a
+//reference to its own storage, written over in place (T11b): it takes the place's old value instead, as a temporary
+//copy built where one there would be. Only where what is built can keep argument j: a call's result, as its body
+//says (calleeMayKeepArg), and an enum's payload or a literal's element always (keepsAll)
+static bool calleeMayKeepArg(struct var* m, int idx);
+static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll) {
+    if (!ctx || !ctx->assignPlaces.len) return;
+    for (int j = 0; j < args.len && (!func || j < func->type.vars.len); j++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&args, j);
+        struct type pt = func ? ((struct var*)ListGetIdx(&func->type.vars, j))->type : a->type;
+        if (func && (!pt.structMAlloc || pt.bType == BASETYPE_FUNC)) continue;
+        if (a->type.structMAlloc || !OperandIsLvalue(a)
+                || (a->type.bType != BASETYPE_STRUCT && a->type.bType != BASETYPE_ARRAY && a->type.bType != BASETYPE_CHOICE))
+            continue;
+        bool within = false;
+        for (int k = 0; k < ctx->assignPlaces.len && !within; k++)
+            within = storageWithinPlace(a, *(struct operand**)ListGetIdx(&ctx->assignPlaces, k));
+        if (within && (keepsAll || calleeMayKeepArg(func, j))) a->copiesOld = true;
+    }
+}
+
 struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* lhsNode = firstPartOfType(s, SNTX_EXPR_POSTFIX);
     //a target is a place, not a read: "x[i]" there is SetAt's business, which "try" reaches in buildSetAt (E31)
@@ -15632,7 +15791,14 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* opNode = firstPartOfType(s, SNTX_ASSIGN_OP);
     struct token opTok = partAt(opNode, 0)->tok;
     //G10c: a plain "=" expects the target's type
+    struct list prevPlaces = ctx->assignPlaces;
+    if (opTok.type == TOK_ASS) {
+        struct list one = ListInit(sizeof(struct operand*));
+        ListAdd(&one, &target);
+        ctx->assignPlaces = placesWrittenOver(one);
+    }
     struct operand* rhs = buildExpecting(ctx, firstPartOfType(s, SNTX_EXPR), opTok.type == TOK_ASS ? &target->type : NULL);
+    ctx->assignPlaces = prevPlaces;
     return buildAssignCore(ctx, target, rhs, opTok);
 }
 
@@ -15735,6 +15901,46 @@ static bool targetRefsScope(struct checkCtx* ctx, struct operand* target, struct
     return valueRefsScope(ctx, target, v, d, u);
 }
 
+//O18a: a call whose result's scope follows the result is built where the target's referent lives - or, for a value
+//holding references, where the target's references are (O25h); a global's in the program's scope (O1b)
+static void landAtTarget(struct checkCtx* ctx, struct operand* target, struct operand* rhs) {
+    if (!callIsLanding(rhs) || !ctx->hasOwnScope || !(target->type.structMAlloc || TypeHoldsReferences(target->type))) return;
+    struct var* troot = lvalueRootVar(target);
+    struct var* lv;
+    int ld;
+    bool lu;
+    if (troot && troot->owner) landCallIn(rhs, NULL, 0, true); //O1b: a global's referent lives in the program's scope
+    else if (targetRefsScope(ctx, target, &lv, &ld, &lu) && lv != SCOPE_AMBIGUOUS) {
+        if (lu) landCallIn(rhs, NULL, 0, true); //...and a value local's that copied one (O25h)
+        else landCall(rhs, lv, ld);
+    }
+}
+
+//O17: a store into a slot of the region one of this function's scope variables names - a slot holding references, or
+//one a value built for it lands in - of what that region does not already hold. Every store into a place counts: an
+//assignment's, and each target a task's results are stored into (P1g)
+static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct operand* rhs) {
+    if ((target->opType != OPERATION_MEMBER && target->opType != OPERATION_INDEX) || rhs->isNullLiteral || !ctx->hasOwnScope
+            || target->type.unknown || !(typeCarriesScopes(rhs->type) || typeCarriesScopes(target->type)))
+        return;
+    struct var* tv;
+    int td;
+    bool tu;
+    struct var* r = targetRefsScope(ctx, target, &tv, &td, &tu) && !tu ? ownRegionVar(ctx, tv) : NULL;
+    if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) r->regionStored = true;
+    //...and what is put there out of another such region, through which a store is possible, hands that region out:
+    //whoever later stores through it builds where this slot says, not where that region is
+    struct var* rv;
+    int rd;
+    bool ru;
+    bool asRef = rhs->type.structMAlloc;
+    if (asRef ? RefNarrowingMatters(rhs->type) : (OperandIsLvalue(rhs) && valueRefsAdmitStores(rhs->type))) {
+        struct var* rr = (asRef ? RefExactScope(ctx, rhs, true, &rv, &rd, &ru) : valueRefsScope(ctx, rhs, &rv, &rd, &ru)) && !ru
+                         ? ownRegionVar(ctx, rv) : NULL;
+        if (rr && rr != r) rr->regionStored = true;
+    }
+}
+
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     if (target->isAtCall) return buildSetAt(ctx, target, rhs, opTok);
     //D16a: a lambda is checked against what it is assigned to - before anything asks where it lives (D16d)
@@ -15749,27 +15955,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         struct var* root = lvalueRootVar(target);
         if (root && !root->owner && !root->type.structMAlloc) root->lentForStores = true;
     }
-    //O17: a store into a slot of the region one of this function's scope variables names - a slot holding references, or
-    //one a value built for it lands in - of what that region does not already hold
-    if ((target->opType == OPERATION_MEMBER || target->opType == OPERATION_INDEX) && !rhs->isNullLiteral && ctx->hasOwnScope
-            && !target->type.unknown && (typeCarriesScopes(rhs->type) || typeCarriesScopes(target->type))) {
-        struct var* tv;
-        int td;
-        bool tu;
-        struct var* r = targetRefsScope(ctx, target, &tv, &td, &tu) && !tu ? ownRegionVar(ctx, tv) : NULL;
-        if (r && !readFromRegion(ctx, rhs, r)) r->regionStored = true;
-        //...and what is put there out of another such region, through which a store is possible, hands that region out:
-        //whoever later stores through it builds where this slot says, not where that region is
-        struct var* rv;
-        int rd;
-        bool ru;
-        bool asRef = rhs->type.structMAlloc;
-        if (asRef ? RefNarrowingMatters(rhs->type) : (OperandIsLvalue(rhs) && valueRefsAdmitStores(rhs->type))) {
-            struct var* rr = (asRef ? RefExactScope(ctx, rhs, true, &rv, &rd, &ru) : valueRefsScope(ctx, rhs, &rv, &rd, &ru)) && !ru
-                             ? ownRegionVar(ctx, rv) : NULL;
-            if (rr && rr != r) rr->regionStored = true;
-        }
-    }
+    noteRegionStore(ctx, target, rhs);
 
     bool isCompound;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
@@ -15780,15 +15966,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         //S4: the place is evaluated once - the read inside the value is a copy of the target that reads the place the
         //statement computed, rather than the target itself, which evaluated its index twice and which the meeting rule
         //(T6b) could rewrite into a conversion in place, leaving the statement storing through a non-place
-        struct operand* cur = operandNew(target->tok, OPERATION_NONE, target->type);
-        *cur = *target;
-        //its own lists, so nothing done to one reaches the other
-        if (target->args.elemSize) { cur->args = ListInit(target->args.elemSize); ListAddList(&cur->args, target->args); }
-        if (target->scopeBindings.elemSize) {
-            cur->scopeBindings = ListInit(target->scopeBindings.elemSize);
-            ListAddList(&cur->scopeBindings, target->scopeBindings);
-        }
-        cur->placeOf = target;
+        struct operand* cur = placeRead(target);
         struct token binTok = opTok;
         binTok.type = compoundBinTokType(compoundOp);
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
@@ -15820,16 +15998,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         //- or, for a value holding references, where the target's own storage is (O18a)
         struct var* troot = lvalueRootVar(target);
         bool intoGlobal = troot && troot->owner && (target->type.structMAlloc || TypeHoldsReferences(target->type));
-        if (callIsLanding(rhs) && ctx->hasOwnScope && (target->type.structMAlloc || TypeHoldsReferences(target->type))) {
-            struct var* lv;
-            int ld;
-            bool lu;
-            if (intoGlobal) landCallIn(rhs, NULL, 0, true); //O1b: a global's referent lives in the program's scope
-            else if (targetRefsScope(ctx, target, &lv, &ld, &lu) && lv != SCOPE_AMBIGUOUS) {
-                if (lu) landCallIn(rhs, NULL, 0, true); //...and a value local's that copied one (O25h)
-                else landCall(rhs, lv, ld);
-            }
-        }
+        landAtTarget(ctx, target, rhs);
         //O1b: a global, and everything reached from it, lives in the program's scope - which nothing a function holds
         //outlives, so what is stored there is built there (a temporary - a lambda capturing only values too, D16d) or
         //already lives there
@@ -18962,7 +19131,10 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     bool prevAllow = ctx->allowFallibleCall;
     ctx->allowFallibleCall = true; //fallibility is rejected below with a message of its own
+    struct list prevPlaces = ctx->assignPlaces;
+    ctx->assignPlaces = placesWrittenOver(stmt.spawnTargets); //S4d: the targets are written over by the results
     struct operand* call = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    ctx->assignPlaces = prevPlaces;
     ctx->allowFallibleCall = prevAllow;
     //D16e: "spawn fn() { ... }" - a task running the lambda's body. Its closure is held by a hidden local built
     //in the JOIN block's scope, so it lasts as long as the task can run, and the task is a call through it.
@@ -19057,10 +19229,18 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (fv && !fv->owner && fv->type.bType == BASETYPE_FUNC && !fv->type.scopeParam
             && normDepth(fv->type.scopeDepth) > ctx->joinDepth) {
         Err(lambdaTask ? lam->tok : call->tok, lambdaTask ? ERR_SPAWN_CAPTURE_TOO_SHORT : ERR_SPAWN_FUNC_TOO_SHORT);
-    } else if (call->callee && operandIsTemporary(ctx, call->callee) && !argBindingsLastUntilJoin(ctx, call->callee)) {
-        //E13b: a function value computed for the task ("spawn id(f)()") holds what it was made from, which must last
-        //until the join as an argument's does - a function value passed through a call is the very one passed
-        Err(call->callee->tok, ERR_SPAWN_FUNC_TOO_SHORT);
+    } else if (call->callee) {
+        //E13b: a function value the task calls through that no variable names - computed for the task ("spawn id(f)()"),
+        //or read out of a field or an element ("spawn h.f()") - must last until the join as an argument does: a
+        //computed one holds what it was made from, and one read out of storage is held there, its closure no
+        //shorter-lived than that storage (D16d) and checked no further
+        struct operand* ce = call->callee;
+        struct var* sv;
+        int sd;
+        bool su;
+        bool tooShort = operandIsTemporary(ctx, ce) ? !argBindingsLastUntilJoin(ctx, ce)
+                        : RefExactScope(ctx, ce, true, &sv, &sd, &su) && !lastsUntilJoin(ctx, sv, sd, su);
+        if (tooShort) Err(ce->tok, ERR_SPAWN_FUNC_TOO_SHORT);
     }
     //P1g: the result is stored when the call returns, which is somewhere between the spawn and the join -
     //so the target has to still be there then, on exactly the terms an argument does. The store is a
@@ -19093,6 +19273,23 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             if (results == 1 && t0) buildAssignCore(ctx, t0, call, asTok);
             else if (callIsLanding(call) && !landAtTargets(ctx, call, &stmt.spawnTargets))
                 Err(tok, ERR_SPAWN_RESULTS_DISAGREE);
+            else {
+                //...and each target is the assignment of its result, as a destructuring's is (S4b): the result read
+                //through a holder carrying the call's bindings, each judged where its target is (O25, O1b) and each
+                //a store into whatever region the target is in (O17). Only checked - the task stores the results
+                char* nm = MallocOrCrash(24);
+                snprintf(nm, 24, "$results%d", destructCounter++);
+                struct type ht = call->type;
+                ht.scopeDepth = ctx->blockDepth;
+                struct var* hv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(nm), tok, ht, true);
+                hv->scopeBindings = call->scopeBindings;
+                for (int i = 0; i < results; i++) {
+                    struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
+                    if (!t) continue;
+                    struct var* field = ListGetIdx(&hv->type.vars, i);
+                    buildAssignCore(ctx, t, OperandMember(ctx->mod, OperandReadVar(hv, tok), field->name, tok), asTok);
+                }
+            }
         }
     }
     if (lambdaTask) { //the closure, then the task - one block, run as written

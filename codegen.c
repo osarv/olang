@@ -5216,6 +5216,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
                 return "";
             }
             for (int i = 0; i < op->comprBody.len; i++) cgStatement(ctx, ListGetIdx(&op->comprBody, i));
+            if (!op->args.len) return ""; //E31/S3a: an increment, a statement with no value
             return cgValue(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
         case OPERATION_NONE: return cgLiteral(ctx, op);
         case OPERATION_ATOMIC_LOAD:
