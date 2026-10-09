@@ -1195,6 +1195,28 @@ test "a generic type's destructor is monomorphized per instantiation" {
     assert resourcesClosed == 2
 }
 
+# O15/O16: destructors run in the reverse order the constructors completed - an argument's instance before the instance
+# it is passed to, however the storage was laid out (a promoted instance's slot is reserved before its arguments are
+# built, so the outermost sits first)
+OrderLog mut I64 = 0
+type OrderedRes struct(id I64, inner OrderedRes&) {
+    id
+    inner
+} destruct {
+    OrderLog = OrderLog * 10 + id
+}
+fn orderedChain(k I64) I64 {
+    o OrderedRes& = OrderedRes(k + 1, OrderedRes(k + 2, OrderedRes(k + 3, null)))
+    p OrderedRes& = OrderedRes(k + 4, null)
+    return o.inner.inner.id + p.id
+}
+
+test "O15: nested instances built into a reference destruct in reverse construction order" {
+    OrderLog = 0
+    assert orderedChain(I64(ctRuntimeZero)) == 7
+    assert OrderLog == 4123
+}
+
 # a constructor-declaring type is buildable BOTH ways (C6): "Type(...)" runs the constructor, "Type{...}"
 # assembles it field by field, positionally, in field-declaration order like any other struct literal.
 # The two forms are deliberately kept apart rather than folded into one: a literal is visibly infallible
