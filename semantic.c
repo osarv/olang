@@ -182,7 +182,7 @@ long long TypeGetSize(struct type t) {
         case BASETYPE_ARRAY: return getArraySize(t);
         case BASETYPE_STRUCT: return getStructSize(t);
         case BASETYPE_CHOICE: return t.structMAlloc ? PTR_SIZE : ChoiceHasPayload(t) ? 8 + ChoicePayloadSize(t) : CHOICE_SIZE;
-        case BASETYPE_FUNC: return PTR_SIZE;
+        case BASETYPE_FUNC: return 2 * PTR_SIZE; //T21: the (code, closure environment) pair codegen holds
         case BASETYPE_INTERFACE: return 2 * PTR_SIZE; //T33: the (concrete type, instance) pair
         case BASETYPE_ERROR: return ERROR_SIZE;
         case BASETYPE_SCOPE: return PTR_SIZE;
@@ -5626,7 +5626,9 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
     if (op->opType == OPERATION_COND && op->args.len == 3) {
         enum typeFit r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 1), target);
-        return r != TYPE_FIT_OK ? r : OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+        if (r == TYPE_FIT_OK) r = OperandFitsType(func, *(struct operand**)ListGetIdx(&op->args, 2), target);
+        if (r == TYPE_FIT_OK && TypeIsNumeric(target) && TypeIsNumeric(op->type)) op->type = target; //as a match's (S12b)
+        return r;
     }
     if (heldResult(op)) { //what hidden locals ahead of a value lead to is that value, judged as it is
         enum typeFit r = OperandFitsType(func, heldResult(op), target);
@@ -6032,7 +6034,15 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
         reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);
         return *textT;
     }
-    return declaredArrayType(rhs->type);
+    //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
+    //built where the declaration lives and registered there. A value took it in, and its destructor never ran
+    struct type t = declaredArrayType(rhs->type);
+    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
+        t.structMAlloc = true;
+        t.refMut = OperandGivesWritable(rhs);
+        reportTypeFit(OperandFitsType(func, rhs, t), rhs->tok, rhs, t);
+    }
+    return t;
 }
 
 bool OperandIsLvalue(struct operand* op) {

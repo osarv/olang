@@ -3411,6 +3411,41 @@ Go through this for every change to what olang means - a rule added, revised or 
   reclaimed each turn, so 5M lines read at a 2MB peak in 185ms (C's getline 115-190ms); keeping one is
   `kept.Push($line)`, which builds the copy where it is kept, and `kept.Push(line)` is O10c's error. A slice of the
   buffer was rejected: a kept line would silently change on the next read.
+- **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, 2026-10-09).** Four of
+  the benchmark findings were the code generator's; all four are fixed, measured A/B against the previous compiler
+  (interleaved medians on the shared machine). **(1) A function value is the pair `{code, environment}`** (my design
+  call, over `!invariant.group` on the old closure object): the code pointer is a value, so a lambda handed to a helper
+  that is inlined is a direct call and inlines; captures are read from the environment under a TBAA family of their
+  own (`!28`, written once where the closure is made, read only by its code). `!invariant.group` was rejected because
+  its soundness rests on launders at every construction and strips at every comparison against LLVM's equality
+  propagation - which is why clang still ships `-fstrict-vtable-pointers` off - and the README's own measurement of it
+  was 0.33s against 0.19s. The pair costs 16 bytes where a function value is stored; identity is both words equal (a
+  named function's value is its adapter `@f.fvt` with no environment, a capture-free lambda's its code, so T21's
+  "one value per function" holds across modules with no static object). `Array.Iter().Fold` with a capturing lambda
+  **1.63s -> 0.23s** (C 0.22s, hand loop 0.25s); `Count` with a capturing predicate **1.57s -> 0.56s** (hand loop
+  0.54s); `List.Iter().Fold` 2.13s -> 0.93s, the rest being `ListIter` (std's). **(2) A fresh array stored into a
+  reference is adopted** - `l.chunks[k] = Array<T>(n)`, a field, an element, a literal's part - no second allocation
+  and copy (`cgAdoptsFresh`); and **a zero-filled array from a freshly mapped chunk is not cleared again** (D13c
+  unchanged): a chunk of 128KB or more comes from `mmap`, flagged fresh until it is recycled through the pool, and
+  memory above a fresh chunk's bump offset has never been handed out, so it is still the system's zeros. `List` push
+  20M **0.51s -> 0.165s** (C 0.167s). **(3) A promoted instance's slot is bumped before its arguments are built**
+  (`cgPromote`), so `Node(tree(d - 1), tree(d - 1))` lays a tree out parent first; registration stays at construction
+  (O16), and O15 now says "reverse construction order", which is what it always was. The arena's fast path no longer
+  re-reads and re-rounds the cursor through a block shared with the slow path. binary-trees **0.51s -> 0.42s** (C arena
+  0.39s, ratio 1.32 -> 1.08); instructions at depth 16 780M -> 690M (C arena 591M). The order alone costs ~8
+  instructions per node built (one more register live across the recursion) and buys the walk more: fast path alone
+  measured 6% slower on the benchmark. **(4) A local array that is a function's result and nothing else** -
+  declared once in the body's own block from storage it makes, every return returning it, otherwise only indexed or
+  measured, its elements numbers, no `defer`/`join`, an infallible function - is built in the result scope, so T7b's
+  copy goes; anything else keeps the copy, since deferred code, a task or a destructor could otherwise write the
+  array after the result was computed. matmul unchanged within noise (1.25s -> 1.22s). **Found and fixed on the way**:
+  `v I64 = 7 if b else 9` (a conditional of literals into a non-default type) emitted invalid IR (E28 now takes the
+  target's type, as a match does); `return wrap(e) if e != null else Expr.Num(1.0)` crashed codegen - a value made in
+  an arm was built at the arm-type's tag, the callee's scope variable (S12b/E28: now where the checker landed it);
+  a module whose file name starts with a digit could not build (`@2go_helper`; B3b escapes a leading digit); and
+  **`x := R(...)` of a destructor-declaring type declared a value and never ran the destructor** - in a local, a
+  constructor field or a global (C11/D15: `:=` now declares the reference `x R&` would). The function-value
+  representation is not specified (T21 speaks of reference-shape and identity only), so the spec did not change for it.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

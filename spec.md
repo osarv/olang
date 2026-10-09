@@ -1278,7 +1278,9 @@ text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An arr
 `Array<T>` (T7): its length is not part of the type, and a later assignment may change it. It may not be
 `null`, a variable read, or any other expression built from these, which the reader would have to type
 in their head. A reference-shaped result writes no scope tag into the declaration: the local takes its
-initializer's exact scope (§8 O25a).
+initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
+(C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
+destructed when that scope closes.
 
 **D15a.** An array declared by either form holds its length beside its storage, so a later assignment may
 give it an array of any length: a value `Array<T>` gets its own copy of the new elements, a reference
@@ -3819,7 +3821,9 @@ run time (because it allocates into it, O6) is an implementation matter with no 
 
 **O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
 scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
-instances were allocated. A destructor-declaring type is reference-only (C11), so this is the sole
+instances were constructed - the order their constructor calls completed (O16). Where in the scope an
+instance's storage lies, and whether it was reserved before its constructor's arguments were built, is not
+observable. A destructor-declaring type is reference-only (C11), so this is the sole
 rule governing when a destructor runs: there is no plain-local, function-return-governed case.
 
 **O16.** An instance is registered with its scope at the point its **constructor call** completes
