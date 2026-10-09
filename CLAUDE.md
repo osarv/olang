@@ -3853,7 +3853,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   architectures known; anything else is an error. Without clang, `-i` takes `native` as the x86-64 level the processor
   has. **std/linalg** chooses its GEMM tile by the constants - 12 x 32 / 12 x 16 (F32 / F64) on AVX-512, 6 x 16 / 6 x 8
   on AVX, 4 x 12 / 4 x 6 on SSE - and fuses its products' multiply-adds where `TargetHasFma` (results then differ in
-  the last bits between targets, never between the program, `-i` and the evaluator). GEMM_RESULTS
+  the last bits between targets, never between the program, `-i` and the evaluator). Measured single-threaded: GEMM F32 15-17 ->
+  57-78 GFLOPS, F64 7.5-8 -> 25-33 (OpenBLAS 91-108 / 48; the gap 5-7x -> 1.3-1.9x), the 784-128-10 training step
+  2.3-2.9 -> 0.8-1.1 ms, oann's MNIST epoch through `linalg.GemmWorkspace` 2.6-2.9 -> 0.55 s. **The hazard the width
+  brings, measured**: a hand-tiled kernel whose rows are not whole vectors (oann's copy of linalg's old 4 x 12 F32
+  kernel) is SLP-vectorized across rows with gathers - 3x slower native (5.1-5.4 s an epoch) than at 256 bits (1.8 s);
+  tile by `TargetVectorBits`. Kept 512 for that price: the tuned width costs GEMM 1.4-1.5x and plain loops up to 1.3x.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

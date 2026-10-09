@@ -10845,7 +10845,7 @@ product, quotient or square root rounded to F32 and then to the narrow type is c
 innocuous); this CPU has F16C, which changes how conversions are done (`vcvtps2ph`, round to nearest even) and not what
 they give. The fuzzer's four LLVM 18 workarounds stay as they were (`-fast-isel=false` under `-d`, BF16 widened by a
 shift, F16 from an integer through a fenced double, the asm between half/bfloat bitcasts); `make fuzz SEED=1 COUNT=40`
-under the native default found nothing (FUZZ_RESULT).
+under the native default found nothing (40 programs, 1,200 cases, every global baked).
 
 **Objects (B12b)** - the same trap B4 has recorded five times: an object built for one CPU, reused for another, would
 run instructions the other lacks or miss ones it has. The resolved triple and attributes are mixed into every object's
@@ -10879,4 +10879,31 @@ step leaves 2^-24 fused and 0 unfused, decided while compiling and again at run 
 The first version wrote the micro-kernel as one loop nest over the tile's rows and columns, as the 4 x 12 one had been:
 at 12 x 32 LLVM no longer unrolled the row loop, so the accumulators lived in memory and the product ran at 3-5 GFLOPS.
 Writing each row's step on a line of its own (`rowStep`, inlined, its column loop unrolled with constant indices) gives
-the textbook inner loop: 12 broadcasts, 2 loads of B, 24 `vfmadd231ps` on `zmm`, no spills. GEMM_HISTORY
+the textbook inner loop: 12 broadcasts, 2 loads of B, 24 `vfmadd231ps` on `zmm`, no spills.
+
+**Measured** (single-threaded, best of several runs inside the program, load 3-9; bench/README.md has the tables).
+GEMM F32 at 256 / 512 / 1024 / 2048: 15.4 / 16.6 / 15.6 / 12.8 GFLOPS before, 56.6 / 65.0 / 73.4 / 77.8 native, 16.5 /
+13.4 / 16.3 / 16.1 at `-a x86-64` (the old 4 x 12 tile, as before), 47.9 / 51.7 / 44.6 / 47.3 at `-a x86-64-v3`, OpenBLAS
+106 / 108 / 91 / 104; F64 7.5-8 before, 25.5 / 30.2 / 31.3 / 32.6 native, 19.6-24.2 at v3, OpenBLAS ~48. The tuning of
+`kc`/`mc` was tried (kc 256 or 384, mc 96-192) and was within the noise, so they stayed. The 784-128-10 training step:
+2.3-2.9 ms -> 0.8-1.1 native (v3 1.3-1.4, OpenBLAS 0.4-0.5). oann's MNIST perceptron (its bench/train.olang, an epoch of
+forward, backward and AdamW) with its products through `linalg.GemmWorkspace` (merged the same day): 0.55 s native,
+0.68 s at v3, 2.1 s at `-a x86-64`, against 2.6-2.9 s before - the same losses and accuracy (93.49% after one epoch at
+either target).
+
+**Found by that measurement: what 512-bit vectors do to a kernel tiled for another width.** oann, as it stood, carried its
+own copy of linalg's earlier 4 x 12 F32 kernel (a stopgap until the workspace Gemm existed). Built native it ran 5.1-5.4
+s an epoch - 2x slower than before B12 and 3x slower than the same build told to prefer 256-bit vectors (1.8 s). Sampled
+with gdb, all of it was in that kernel, and the disassembly said why: LLVM's SLP vectorizer, allowed sixteen lanes,
+groups the accumulators sixteen at a time in memory order - row 0's twelve and four of row 1's - so each group needs B's
+twelve values and four of them again (a `vgatherqps`) and two different broadcasts (`vpermt2pd`/`vpermps`), every step.
+At 256 bits the groups of eight still straddle rows, less often. linalg's own kernels have rows of whole vectors (32 F32
+on AVX-512), which is the point of choosing them by `TargetVectorBits`, and they do not degrade. **So the width stayed
+512 (decided, mine)**, with the hazard stated in bench/README.md and here: against the tuned 256
+- which is also what C gets from `-march=native`, so the safe choice in the sense of "never slower than C" - the wider
+vectors measured GEMM F32 57-71 against 41-46 GFLOPS, F64 25-32 against 15-23, the training step 0.86-1.02 against
+1.19-1.38 ms, matmul 0.87 s against 1.15, the sums 0.10-0.12 against 0.14-0.16, and nothing slower in the suite. A kernel
+tiled for a narrower width is the price, and it is visible, measurable and fixed by reading one constant; the tuned
+width's price would be paid by every program on every AVX-512 machine. What would remove the choice altogether is a way
+to say the width per function or in a type - explicit SIMD vectors (`Vec<F32, 16>` lowering to `<16 x float>`) - which
+is a language feature and not built.
