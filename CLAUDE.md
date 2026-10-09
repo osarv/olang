@@ -4312,6 +4312,22 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   default - `-D` replaces its value, fitted to its type - and is configuration either way (S8a/S8b), **reversing** the
   confirmed "`Verbose := false; if Verbose` is an error"; an unknown name in a condition says "define it with -D". An
   empty comprehension gets storage of its own after its loop (not 100 reserved up front). Full story in HISTORY.md.
+- **The C compiler is `bootstrap/`, stage 0 (2026-10-10; the user: "give the C compiler its own directory ... keep a
+  way to re-bootstrap if the current compiler binary is lost", "keep it modest", "only split where modularisation is a
+  thing").** Every `.c`/`.h` moved with `git mv`, in a commit of renames only so other branches merge across it; the
+  binary is still `build/out`, built from `bootstrap/*.c`, so std, `-e`'s `SPEC.md`, checks, tools and oann find
+  everything where they did. The one split is a real module: the runtime's ~2,900 lines of LLVM IR text moved from
+  codegen.c to `bootstrap/runtime.c` (the target's architecture an argument), nothing else. Dead code went (six
+  functions, the unused C test macros, an enum, a field) and comments that called removed features current (interfaces,
+  scope names and declarations, struct literals, array suffixes, 2-D arrays) or wrote retired spellings (`func`,
+  `choice`, `int32`, `len(`) were rewritten, orphaned ones moved back to their functions - all but semantic.c's, which
+  another branch was editing. **Proof**: every IR file the compiler writes for the corpus, std, every checks case and
+  fixture, bench and fuzz - 743 files from `-t`, `-b`, `-c`, `-d` and `-r` builds - byte-identical before and after,
+  diagnostics too (clang stubbed out, so only the compiler's own output is compared), and `make verify`.
+  **Re-bootstrap** (`bootstrap/README.md`): no binary is committed; `make bootstrap` builds `build/stage0` (the same C at
+  `-O2`, its IR identical as well) and, once `compiler/` holds the olang compiler, will walk `bootstrap/CHAIN` (empty
+  today) and build stages 1-3 to a fixed point - a TODO in the makefile. From the port's start `bootstrap/` takes fixes
+  only (QB).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

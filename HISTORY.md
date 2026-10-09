@@ -12659,3 +12659,60 @@ findings outside the scope rules, plus one the fuzzer found.
    pushed nothing is given storage of its own after the loop - an allocation of nothing (8 bytes, O8a's minimum, E10's
    "storage of its own") - which costs one compare per comprehension and nothing for one that keeps elements. A corpus
    test compares the run time with a baked global and an assert decided while compiling.
+
+### The C compiler moves to `bootstrap/`; the runtime's IR to its own file; dead code and stale comments out (B, 2026-10-10)
+
+The user asked for a **modest** refactor before the port ("Yes keep it modest. Also give the C compiler its own
+directory. From now on we just bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current
+compiler binary is lost.") and against splitting for size ("splitting files is overrated. I prefer long files if they
+all do the same thing. Only split where modularisation is a thing."). The port is a redesign (compiler/DESIGN.md), so
+nothing was restructured that the port will replace anyway; the work is a move, one split, and a cleanup.
+
+1. **The move.** Every `.c` and `.h` went to `bootstrap/` with `git mv`, committed alone with only the paths that name
+   them (the makefile, checks.olang's diagnostic-table check, the checklist's `comptime.c`), so a branch editing
+   `semantic.c` (s4sem was) merges across the rename. The binary stays `build/out`: the compiler finds std and
+   `SPEC.md` beside itself (`<binary>/../std`, `../SPEC.md`), and tools, checks, the fuzzer, bench and oann's makefile
+   all name `build/out`, so none of them changed. The pattern rule became `build/%.o: bootstrap/%.c`; the `.d` files
+   name `bootstrap/` paths. Comments naming a file (`cgDeepEq in codegen.c`) stay - the files kept their names.
+2. **The split: `bootstrap/runtime.c`.** The runtime - the arena and its chunk pool, the worker cache, the checks'
+   failure paths and test unwinding, rendering, what std reaches through `extern fn`, the stack and crash support, the
+   dynamic call - is ~2,900 lines of LLVM IR in C string literals, a separate thing from generating a module's code
+   (the review's structure note, and DESIGN.md's `std/runtime/runtime.ll`). It moved verbatim. Its one link to codegen
+   was the static `cgArch`, read to pick a row of the C-library layout table; `emitRuntimeDecls` and
+   `emitDyncallRuntime` now take the architecture as an argument, the three copies of the row lookup became
+   `cgLibcLayoutFor`, and the include list split (codegen.c lost nine system headers only the runtime used). The
+   functions kept their names, so HISTORY, DESIGN.md and corpus comments that cite them still find them.
+3. **Dead code** (all but semantic.c). Found with `-ffunction-sections` and `--gc-sections --print-gc-sections` - the
+   linker's reachability, transitive - and gcc's `-Wunused-*` family: `TokenUnfeed`, `TokenGetCharCursor`,
+   `TokenGetLineNr`, `SyntaxResetBuildConsts`, `CallocOrCrash`, `ListRetract`; util.h's C unit-test macros (`TEST`,
+   `TEST_PASSED`, `TEST_FAILED`, never used) and `COLOR_FG_YELLOW`; errmsg.c's `enum severity`; `SNTX_NOT_FOUND`; and
+   `ctExternCall.argTypes`, written and never read (libffi's cif holds the pointer). Every diagnostic id in errmsg.h is
+   still used. **Left for semantic.c** (another branch was editing it): `TypeFromType`, `TypeDescribe`,
+   `VarListAddSetOrigin`, `findLoadedModule` with `semaModuleCmpForList`, `flushPendingDischarges`,
+   `typeHasNamedScopeTag`, `varCmpForList`, and the hand-kept walker `structContainsBareScopeField`.
+4. **Stale comments** (all but semantic.c). Rewritten where they described removed features as current - interface
+   values and dispatch tables, scope names and scope declarations (now parsed only so that they are reported, O3),
+   struct literals (a constructor assembles its instance, C6), array suffixes and per-level markers (T24's one marker),
+   multi-dimensional arrays and nested literal rows (E21: parsed only to be reported) - or wrote retired spellings in
+   examples: `func`, `extern func`, `choice`, `interface`, `int32`/`Int32`/`Float64`, `byte[]`, `T[N]`/`T[]`/`T[expr]`
+   (now `Array<T, N>`, `Array<T>`, `Array<T>(n)`), `Vec<int32>`, `len(a)`. The renames inside comments were done by a
+   script that touches comment text only (strings and code untouched), the rest by hand. Several comments had drifted
+   away from their functions as code was inserted between - the numeric conversion's (above the BF16 helpers), the
+   `len` one (above the atomics), a parameter-scope override's (above `cgIsCtor`, in the old `scope` syntax), half of
+   `dstHoldsLiveValue`'s (spliced into O8a's), and an array-literal one with nothing under it - and were moved back,
+   rewritten, or dropped where the function they described is gone.
+5. **`make bootstrap`, `bootstrap/README.md`, `bootstrap/CHAIN`** (DESIGN.md section 5). No binary is committed;
+   `make bootstrap` builds `build/stage0` - the same C at `-O2`, objects in `build/stage0.obj` - and says that is all
+   there is until `compiler/` holds the olang compiler; the walk of `CHAIN` and stages 1-3 with their fixed-point check
+   are a TODO in the makefile. `CHAIN` exists with its header and no entries. Building at `-O2 -Werror` found one gcc
+   `maybe-uninitialized` in `ErrMsgExplain` (a rule pointer set only where a rule is found; `-e ""` would compare it
+   with zero length) - it starts as `""` now, which keeps that case's behaviour exactly.
+
+**The proof, as before** (the T6b cleanup's): the emitted IR, compared byte for byte. clang was stubbed out by a
+wrapper on `PATH` - compiling a `.ll` only touched the object, a link wrote a program that exits 0, and anything else
+(the target probe, B12) went to the real clang - so every build stops right after the compiler's own output is written,
+and the corpus copy, its std (`OLANG_STD`) and the working directory were the same for both compilers. Compared: `-t`
+of every `make test` file (the root's harness object and every imported module's), `-b`, `-b -d` (DWARF) and `-b -r` of
+runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture, bench and fuzz program - 743 IR files
+and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
+`-O2` stage 0. `make verify` passes.
