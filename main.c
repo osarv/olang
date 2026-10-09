@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <sys/utsname.h>
 #include <ctype.h>
 #include <pthread.h>
@@ -348,9 +350,10 @@ int interpretProgram(char* file, int argc, char** argv) {
     return CtRunProgram(mainFunc, argc, argv);
 }
 
-//returns 0 if this file's tests all passed, nonzero otherwise - never exits the process, so the rest of
-//an -t file list still runs even if this one has semantic errors, fails to build, or fails a test
-int runTestFile(char* file, char* clang) {
+//returns 0 if this file's tests all passed, nonzero otherwise. A failure it can report - semantic errors, a failed
+//build or link, a failed test - it reports and returns; one it cannot (a fatal error, a crash) ends the process it runs
+//in, which under -t is a child of its own (runTestFileApart), so the rest of the list still runs either way
+static int runTestFile(char* file, char* clang) {
     //B3a: a listed file that is no file to build is reported, and the others still run
     struct stat st;
     char* unusable = stat(file, &st) != 0 ? "unable to open this file"
@@ -395,6 +398,35 @@ int runTestFile(char* file, char* clang) {
     char* run[] = { StrFmt("./%s", binPath), NULL };
     int runRc = RunProgram(run, false);
     return runRc == 0 ? 0 : 1;
+}
+
+//B3a: one listed file's build and test run, in a process of its own, forked from this one once the arguments are
+//read. A build frees nothing - the program analyzed, every attempt at it (B9c), its instantiations, the evaluator's
+//values - so one process building every listed file in turn held them all at once: the suite's compiler peaked at
+//11.1GiB where its largest file alone needs 3.0GiB. A child's memory goes back to the system when it exits. It also
+//makes each file's build independent in the one way it was not: the compiler ending on one file - a fatal error, or a
+//crash - ends that child, and the rest still run. The children run one after another, not side by side: what each
+//writes appears in the order the files were listed with nothing held back, two files importing one module never build
+//its object at once, and the suite needs the memory of its largest file, where memory is what bounds how much work a
+//machine can do at once.
+//Returns 0 if this file's tests all passed, nonzero otherwise.
+static int runTestFileApart(char* file, char* clang) {
+    fflush(NULL); //what this process has written is not written again by the child
+    pid_t pid = fork();
+    if (pid < 0) return runTestFile(file, clang); //no process to spare: built in this one, as before
+    if (pid == 0) exit(runTestFile(file, clang));
+    int st;
+    while (waitpid(pid, &st, 0) < 0) {
+        if (errno == EINTR) continue;
+        printf(COLOR_FG_RED "%s: lost track of its build, skipping\n" COLOR_RESET, file);
+        return 1;
+    }
+    if (WIFEXITED(st)) return WEXITSTATUS(st) != 0;
+    //a crash has said so already (ErrMsgInstallCrashHandler); a process killed from outside - by the system, out of
+    //memory - has not
+    printf(COLOR_FG_RED "%s: the compiler ended (%s), skipping\n" COLOR_RESET, file,
+           WIFSIGNALED(st) ? strsignal(WTERMSIG(st)) : "unknown status");
+    return 1;
 }
 
 //B10: "-D Name=value" (or "-DName=value") - one build constant
@@ -509,7 +541,7 @@ static int compilerMain(int argc, char** argv) {
         char* clang = findClang();
         int anyFailed = 0;
         for (int i = 2; i < argc; i++) {
-            if (runTestFile(argv[i], clang) != 0) anyFailed = 1;
+            if (runTestFileApart(argv[i], clang) != 0) anyFailed = 1;
         }
         return anyFailed;
     }

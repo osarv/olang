@@ -3229,6 +3229,16 @@ Go through this for every change to what olang means - a rule added, revised or 
   in every element; constant text in a read-only array literal was copied into the block rather than being the static
   data, so `for nm in String&["a", "b"] { m.Put(nm, 1) }` could not be written. **Not fixed** (recorded limit): an `At` result in operand position whose element type has `mut`
   reference fields still asks an exact scope it cannot show.
+- **`-t` builds each listed file in a process of its own (B3a, 2026-10-09).** A build frees nothing, so the one
+  process that built every listed file in turn held them all: the full suite's compiler peaked at 11.1GiB (12.3GiB with
+  what it ran) and was OOM-killed beside other work. The driver now forks per file once the arguments are read; the
+  child builds, links and runs that file's tests and exits, the parent waits and goes on. Peak 3.1GiB (the largest file,
+  runner.olang, 3.0GiB), wall 257s -> 241s. A fatal error or a crash of the compiler on one file now ends that file
+  alone (a check crashes it mid-list; the old compiler stopped there). **Decided (mine)**: children run one at a time,
+  not N side by side - memory, not cores, bounds parallel work on the shared machine, and the suite's time is mostly
+  `checks/checks.olang` (156s, one file), so two at a time would save ~45s (estimated from per-file times) for ~5.7GiB;
+  it would also need buffered output and atomic object writes (two files importing one module build one object path).
+  `-b`/`-c`/`-i` build one program; what they accumulate is within it (B9c's attempts are never freed).
 - **A review of the type checker, and what it fixed (T4, T7, T16, T25c, T27, T29, T29a, T29e, T31, G1, G4, G7, G10c,
   G12, G16a, G17, G19, C2e, E10a, E10b, E13b, E14, E28, M6a, M12, M20, R17, 2026-10-09).** A read-only review of the
   types/modules/generics half of semantic.c reproduced each finding; all are fixed, each with a corpus test or a check.
