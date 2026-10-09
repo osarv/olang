@@ -184,6 +184,14 @@ rule and where it is recorded; the morning report lists them all, then they move
    a protocol role (operator, Eq/Hash/Str/Next/Iter/Has/Contains/RunFrom/Len/Try forms) is decided by parameter count
    only - another shape is an ordinary method, and using the operator names it; a local passed in a return to a call
    that can keep it lives in the result scope.
+27. (wt-cgfix3) `spawn fn(){...}()` made correct (same path as the uncalled form; it built its closure in the loop
+   body - wrong answers); a task's temporary callee held to P2; F32->BF16 narrowing inline integer arithmetic (10-20 ->
+   0.7-1.0 ns, linalg BF16 product 3x faster; F64->BF16 still a libcall); function values cross calls as two words
+   (captured lambda 19-32 -> 1.4-2.7 ns); evaluator try-clause fix; linalg direct path only where measured faster.
+28. (wt-s3scope) a reference local the function returns (or that flows into what is returned) lives in the result
+   home; O17 by what the callee's body keeps (a fixed point after all bodies); R11 by-value defaults holding references
+   when the default builds everything it holds. Limits recorded: r06 (obligations can't tell storage from contents),
+   r10 (G11 one scope for chunks and element referents).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

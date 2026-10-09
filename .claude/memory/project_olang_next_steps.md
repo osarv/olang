@@ -428,6 +428,10 @@ because what it finds about structure feeds the refactor.
   self-referential struct, read-only List/Map writable through a copy (QC), evaluator copying an unwritten by-value
   array, ListIter after Clear endless, RunOnStack small stacks in -d (TLS, no comdat on linkonce_odr globals), `x mut T`
   local in a generic). Started wt-rvfix for all of them + Nest + Exec fd leak + SPEC T25b note.
+- 23:00 CEST: cgfix3 and s3scope merged locally (0a1b122, full verify running). Usage 20:49 UTC: five-hour 0.70,
+  weekly 0.66. Started (read-only, on /home/user/wt/s3c @ 0a1b122): review2 of chk4/cgfix3/s3scope (soundness first)
+  -> /home/user/review/tonight2, and study4 (systems, concurrency, scripting) -> /home/user/review/study4. Running:
+  oann-up, fuzz2, rvfix, review2, study4. After rvfix: bootstrap/ move (sources only, build/out stays) + modest cleanup.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
