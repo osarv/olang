@@ -855,6 +855,15 @@ fn agree(r mut report&) ? Failed {
                  "bfrand -d", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i bfrand.olang > i.txt 2>&1") == 0, "bfrand -i", dir)
     try r.expect(sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "bfrand output", dir)
+    # X8: the C math library's functions, computed while compiling, by the run time at -O3 and -O0, and under -i
+    try r.expect(sh(dir, "\"$OLANG\" -b math.olang > out.txt 2>&1 && ./build/math > b.txt 2>&1") == 0, "math", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d math.olang > out.txt 2>&1 && ./build/math.debug > d.txt 2>&1") == 0, "math -d", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i math.olang > i.txt 2>&1") == 0, "math -i", dir)
+    try r.expect(sh(dir, "test $(wc -l < b.txt) = 12 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
+    mll String& = " build/math.main.ll"
+    try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = global double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
+    try r.expect(sh(dir, "grep -q '^declare double @sqrt(double) memory(none) nounwind willreturn$'" $mll) == 0, "math exact", dir)
+    try r.expect(sh(dir, "grep -q '^declare double @exp(double) nobuiltin '" $mll) == 0, "math inexact", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b r17.olang > out.txt 2>&1") == 0, "r17", dir)
     try r.expect(sh(dir, "./build/r17 > b.txt 2>&1") == 1 and sh(dir, "\"$OLANG\" -i r17.olang > i.txt 2>&1") == 1,
                  "r17 did not end in its error, built and interpreted", dir)

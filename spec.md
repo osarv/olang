@@ -4404,6 +4404,29 @@ calls again.
 uses, such as `exit` or `strlen`) refers to that very function: it is not a second definition, and declaring it is not
 an error.
 
+**X8 (the C math library).** An `extern fn` declaring one of the C math library's functions below, under its C name
+and with its prototype - every parameter and the result `F64`, or every one `F32` for the name with `f` after it
+(`sqrtf`) - is that function, and the language knows what it does:
+
+| | Functions (parameters) |
+|---|---|
+| exact | `sqrt`, `floor`, `ceil`, `trunc`, `round`, `roundeven`, `fabs` (one); `copysign` (two); `fma` (three) |
+| other | `cbrt`, `exp`, `exp2`, `expm1`, `log`, `log2`, `log10`, `log1p`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `erf`, `erfc` (one); `pow`, `atan2`, `hypot` (two) |
+
+- A call of one has **no effect a program can observe**: it reads and writes no storage of the program's (the C library
+  may set `errno`, which `__olang_err` reports only after a call that reported failure, X6, and these report none). So
+  it is not opaque in X3b's sense, and it can be evaluated at compile time (K1) - by calling that function of the
+  platform's C math library, the one the program calls, so a value computed while compiling is the value the program
+  computes.
+- An **exact** one's result is the correctly rounded value IEEE 754 requires of it, so every implementation agrees -
+  where the machine has an instruction for it, the call may be that instruction.
+- **Any other** is always a call of the library's function, never replaced by another function or by an expression
+  that may round differently (`pow(x, 2.0)` by `x * x`), so its result is the library's wherever it is computed: while
+  compiling, by the built program, or under `-i`. Which value that is, beyond what IEEE 754 requires, is the library's
+  (implementation-defined).
+
+A declaration naming one of these with any other prototype is an ordinary external function.
+
 ## 12. Generics
 
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate
@@ -4614,8 +4637,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
-- call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
-  is known only when the call is reached;
+- call an `extern` function other than the C math library's (X8) - a call through a function value is evaluated when
+  the function it reaches is, which is known only when the call is reached;
 - spawn or join, use an atomic operation, or end the test or the process (`done`, `fail`, `abort`,
   `unreachable`);
 - fail an `assert`, or let an error escape that no clause handles;

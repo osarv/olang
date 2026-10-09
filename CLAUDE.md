@@ -3386,6 +3386,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   literal`, `a name`, `end of line`, as the error reads; and `$` rendered a function's reference parameters with their
   hidden scope names - `$pick` gave `pick(a Node&&a, b Node&&a) Node&&a` for `fn pick(a Node&, b Node&a) Node&a` - now
   as written, at run time and while compiling.
+- **`std/math`, `io.Lines`, and the C math library known to the compiler (X8, K1, 2026-10-09).** **`std/math`**:
+  `Sqrt Cbrt Exp Exp2 Expm1 Log Log2 Log10 Log1p Pow Hypot Fma Sin Cos Tan Asin Acos Atan Atan2 Sinh Cosh Tanh Erf Erfc
+  Floor Ceil Trunc Round RoundEven Abs CopySign SignBit IsNan IsInf IsFinite Min Max Clamp`, constants `Pi E Sqrt2 Ln2
+  Ln10 Inf NaN` (F64 - `F32(math.Pi)` for the F32 nearest). **Decided (mine)**: free functions generic over the four
+  floats by `match <T>` (`math.Sqrt(x)`), since only the prelude may give a built-in type methods (M19d) and one name
+  per type would be four; F64/F32 call C's function for their type, F16/BF16 compute in F32 (Fma in F64) and round once;
+  a domain error is IEEE's NaN/Inf, never an error - a check per call would cost what the call does, and a NaN carries
+  the failure to one IsNan; `Min`/`Max` are IEEE 754-2019's minimum/maximum for floats (a NaN propagates, -0 < +0, so
+  they commute) and `<` for any other type, `Clamp(x, lo, hi)` gives hi when lo > hi; `Round` is half away from zero
+  (C, Go, Rust), `RoundEven` ties-to-even; `Abs` takes integers too (the most negative stays, E6c). **X8 (the compiler
+  change, the one thing missing)**: an `extern fn` naming a C math function with its exact prototype is known. An exact
+  one (sqrt, fma, floor, ceil, trunc, round, roundeven, fabs, copysign) is declared `memory(none)`, so LLVM makes it an
+  instruction and vectorizes it; any other is declared as C's default -fmath-errno would (`memory(write)`, errno) plus
+  `nobuiltin`, so LLVM never rewrites it (`pow(x, 2.0)` into `x * x`) and the program calls exactly the function the
+  evaluator called. **K1**: the evaluator calls these while compiling, by libffi with the host's libm (target = host),
+  so a math global bakes and a math assert is decided - every value equal to the run time's at -O3, -O0 and under `-i`
+  (a checks fixture compares all three). Measured: `b[i] = math.Sqrt(a[i])` 0.20s, as C with -fno-math-errno (both
+  `sqrtpd`), C's default 0.40s; `math.Exp` level with C (libm in both). **`io.Lines(fd, size = 65536)`**: `for line in
+  try io.Lines(fd) { } catch io.IoError { }`, `Next() String& ? IoError + Exhausted`. **Decided (mine)**: a line excludes
+  its newline, and one `\r` before it or before the end of the file (Go's ScanLines); a final line needs no newline;
+  "a\n" is one line, an empty file none; the buffer doubles when one line fills it; a failed read fails Next, and calling
+  it again reads again. Each line is new text built where its caller puts it (O18a) - in a `for`, the body's scope,
+  reclaimed each turn, so 5M lines read at a 2MB peak in 185ms (C's getline 115-190ms); keeping one is
+  `kept.Push($line)`, which builds the copy where it is kept, and `kept.Push(line)` is O10c's error. A slice of the
+  buffer was rejected: a kept line would silently change on the next read.
 - **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, 2026-10-09).** Four of
   the benchmark findings were the code generator's; all four are fixed, measured A/B against the previous compiler
   (interleaved medians on the shared machine). **(1) A function value is the pair `{code, environment}`** (my design

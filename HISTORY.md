@@ -9616,6 +9616,80 @@ from their original form.
   `fn(n mut Node&&n)` - at run time and while compiling alike, since both use the one speller. It now renders as
   written; a corpus test pins both paths. And `t is T.C` with C no case of T said "after 'is' or 'as' comes one of its
   cases"; it says `T has no case 'C'` (T17) now, as a pattern does.
+- **`std/math`, `io.Lines`, and the C math library known to the compiler (X8, K1, 2026-10-09).** Two gaps in the
+  standard library a data or scripting program hits at once: no math functions, and no way to read a file line by line
+  without loading it whole (the std-gaps list from the usage study).
+  **The API shape.** Methods (`x.Sqrt()`) read best, but a method on a built-in type can only be declared by the prelude
+  (M19d), and putting forty math functions in every program's prelude to get that spelling was not this module's call
+  to make. So `std/math` offers free functions, `math.Sqrt(x)`, each generic over the four float types and dispatching
+  with `match <T>` - one name per function rather than `Sqrt`/`SqrtF32`/`SqrtF16`, and no cost, since a type match is
+  resolved per instantiation (G13). An integer argument is G15's "no case covers I32" at the instantiation: integers do
+  not flow into floats (T6b), so `math.Sqrt(2)` is written `math.Sqrt(2.0)`, as `F64(n)` is written for a variable. An
+  F64 or F32 goes to the C library's function for its type (`sqrt`, `sqrtf`); an F16 or BF16 widens to F32, calls the
+  F32 function and rounds once to its own type. For sqrt that is correctly rounded - double rounding is innocuous when
+  the wider format has at least 2p+2 bits, and F32's 24 cover F16's 11 and BF16's 8 - and for the other functions it is
+  as good as the F32 function is. Fma alone goes through F64, whose 53 bits hold an F16 or BF16 product exactly, so the
+  only rounding before the last one is the sum's - which can round a halfway case twice only when the product sits
+  exactly on a halfway point of the result's type and the addend is below 2^-53 of it, a corner recorded rather than
+  worked around.
+  **Domain errors are IEEE's.** `Sqrt(-1.0)` is NaN, `Log(0.0)` is -Inf, `Exp(1000.0)` is Inf. An error per call would
+  put `try` on every square root in a numeric kernel and a check on every element, the per-operation cost the language
+  refuses (principle 2); IEEE's answer is that a NaN or an infinity carries the failure through the rest of the
+  computation to the one place that asks, `IsNan`/`IsFinite`, which is also what NumPy, C, Go and Rust do. "Errors are
+  errors" is about absence and failure a caller must handle; a NaN is a value the type has.
+  **Min and Max** are IEEE 754-2019's minimum and maximum for floats: a NaN if either operand is one, and -0.0 below
+  0.0. NumPy's `minimum` and PyTorch's `min` propagate a NaN too; C's `fmin` drops it, which hides a failed computation
+  behind the other operand, and x86's `minsd` gives whichever operand is second, which makes `Min(a, b)` and `Min(b, a)`
+  differ. For any other type they are `<` (an integer, or a type declaring `Less`, E31), giving `a` on a tie. `Clamp(x,
+  lo, hi)` is `Min(Max(x, lo), hi)`, so hi when lo > hi - stated rather than checked, as C++'s `clamp` leaves it
+  undefined. `Round` rounds a half away from zero (C, Go and Rust's `round`), and `RoundEven` to even, IEEE's own and a
+  quantizer's (Python's `round` and NumPy's are the latter; offering both names says which is which). `Abs` takes
+  integers as well, and the most negative stays itself, as negation wraps (E6c).
+  **What the compiler lacked, and X8.** There was no way for std to reach an LLVM intrinsic: an `extern fn` is a plain
+  `declare` with no attributes, which LLVM's own library-call inference turns into C's default (-fmath-errno)
+  attributes, `memory(write)` - so `sqrt` stayed a call (with the instruction inlined behind an errno check) and never
+  vectorized, and every math call made the surrounding loads reload. And the evaluator refuses every extern (K1), so no
+  global using math could bake and no assert on math could be decided, against the standing rule that the evaluator
+  handles what it can. Adding syntax for either (an `intrinsic` declaration, a purity marker on `extern`) was weighed
+  and rejected for a table: the compiler knows the C math library's functions by name and prototype, as LLVM and every
+  C compiler do. An exact one - sqrt, fma, floor, ceil, trunc, round, roundeven, fabs, copysign, each correctly rounded
+  by IEEE 754 - is declared `memory(none) nounwind willreturn`: LLVM then lowers it to an instruction where the machine
+  has one (`sqrtsd`/`sqrtpd` here; floor and fma are libm calls on baseline x86-64, which set no errno - checked) and
+  vectorizes it. **The others are not `memory(none)`, and that is the one subtle part.** glibc sets errno in them (exp
+  past the range, log of a negative), and a `memory(none)` call may be moved - InstCombine sinks a call with no side
+  effects into the block using its result - so `x := math.Exp(y)` written before a failing `read` and used only in the
+  error branch could be sunk between the `read` and std/os's `__olang_err()`, which would then report ERANGE as the
+  read's failure. They are declared as C's default would be (`memory(write)`), which keeps them in program order. **And
+  they are `nobuiltin`**: LLVM otherwise rewrites `pow(x, 2.0)` into `x * x` and `pow(2.0, x)` into `exp2(x)` - checked
+  on this LLVM - and since glibc's pow is not correctly rounded, the rewritten program could differ in the last place
+  from the evaluator's `pow`, a disagreement between a baked global and the same expression at run time. With
+  `nobuiltin` the program calls exactly the function the evaluator called. The cost is that `Pow(x, 2.0)` stays a call;
+  `x * x` is the spelling for a square.
+  **The evaluator** calls an X8 function while compiling through the libffi path `-i` already had, so it is the
+  compiler process's libm - the same library the program links, since the target is the host. Each result is an
+  operation's NaN for E33a (its bits are not read while compiling). So `SqrtTwo F64 = math.Sqrt(2.0)` is
+  `global double 0x3FF6A09E667F3BCD`, an `F16` `Exp` bakes as `half 0xH3E98`, and an assert on a math function of
+  constants is decided while compiling; std/math's tests compare each baked global with the same call on a mutable
+  global's value at run time, and a checks fixture prints thirty-odd functions over all four types built, built `-d` and
+  interpreted - the three agree byte for byte.
+  **Measured** (4,000 passes over 50,000 F64s, interleaved medians on the shared machine): `b[i] = math.Sqrt(a[i])`
+  0.201s, C with -fno-math-errno 0.201s - the same `sqrtpd` loop - and C's default 0.396s, a scalar `sqrtsd` behind an
+  errno branch; `b[i] = math.Exp(a[i])` 0.38s against C's 0.42s and 0.34s with -fno-math-errno, all three calling libm's
+  exp, within the machine's noise.
+  **`io.Lines`.** `for line in try io.Lines(fd) { } catch io.IoError { }`: a struct holding the descriptor and a buffer,
+  whose `Next() String& ? IoError + Exhausted` is the iterator protocol with a real failure beside running out (S9a,
+  S9e). The one design question was what a line is, in memory. **A slice of the buffer** costs no copy and was rejected:
+  the next read reuses the buffer, so a line a caller kept would silently change, and nothing in the language can say
+  "valid until the next call". **Each line is new text built where its caller puts it** (a built result, O18a): in a
+  `for` loop the body's own scope, reclaimed as each turn ends - 5M lines read at a 2MB peak, in 185ms where C's
+  `getline` loop took 115-190ms - and kept with `kept.Push($line)`, which builds the copy in the list's scope, while
+  `kept.Push(line)` is O10c's error at the call. The buffer starts at 64KB (a constructor default, `io.Lines(fd, 4)` in
+  the tests to cross its edges) and doubles when one line fills it, so the memory is the longest line's; unread bytes
+  move to the front before each read. A line excludes its newline and one carriage return before it, or before the end
+  of the file (Go's `ScanLines`, so CRLF files read as LF ones); the last line needs no newline, "a\n" is one line and
+  an empty file none; a lone `\r` inside a line stays. A failed read fails `Next` with `IoError.FAILED` and leaves the
+  reader as it was, so calling again reads again; after the end every call is `Exhausted`. The tests read from a pipe
+  (`pipe` declared in std/io for them), which needs no file and exercises a reader that is not a regular file.
 - **Code generator gaps from the benchmarks, closed (T21/D16c, T7/E12c, D13c, E12c/O16, O8a, T7b, O15, C11/D15,
   2026-10-09).** The benchmarks against C (`bench/`) had diagnosed four gaps as the code generator's own; this work
   closed them, each measured A/B - the previous compiler's binary against the new one's, interleaved medians on the

@@ -6218,7 +6218,14 @@ void emitExternDecls(FILE* out) {
                 else llvmType(param->type, pty, sizeof(pty));
                 fprintf(out, "%s%s", p > 0 ? ", " : "", pty);
             }
-            fputs(")\n", out);
+            //X8: the C math library's functions. An exact one touches no memory - the library sets errno for none of
+            //them but sqrt, which LLVM then always makes the instruction - so LLVM lowers each to an instruction where
+            //there is one and vectorizes it. Another one writes errno and nothing else the program can see, and is always
+            //the library's own call, never rewritten into another (pow(x, 2.0) into x * x): the compile-time evaluator
+            //calls this very function, so the two agree
+            enum ctMathFn m = CtMathFn(v);
+            fputs(m == CT_MATH_EXACT ? ") memory(none) nounwind willreturn\n"
+                  : m == CT_MATH_INEXACT ? ") nobuiltin nofree nosync nounwind willreturn memory(write)\n" : ")\n", out);
         }
     }
 }
