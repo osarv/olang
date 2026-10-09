@@ -14,7 +14,8 @@
 #
 # Two kinds of operation, and the difference is what a loop pays:
 # - forms with a DESTINATION write into a matrix (or array) the caller already has and allocate nothing but Gemm's
-#   packing panels, in its own scope: Gemm, Gemv, Ger, Ger2, Map/Map2/Map3, Add, Sub, Scale, AddScaled, AddRow,
+#   packing panels, in its own scope - and not those either through a GemmWorkspace the caller keeps (ws.Gemm), so a
+#   training step allocates nothing at all: Gemm, Gemv, Ger, Ger2, Map/Map2/Map3, Add, Sub, Scale, AddScaled, AddRow,
 #   AddOuterDifference, AddScaledMasked, Clamp, Fill, Copy, Convert, NormalizeRows, RowSoftmax, the row and column
 #   reductions (RowSums, RowMax, RowMaxAbs, RowAbsSums, RowNorms, ArgMaxRows, ColumnSums, ColumnAbsSums) and the
 #   random fills. A training step is written with these.
@@ -627,8 +628,8 @@ fn gemv(rows I64, len I64, alpha <T>, mat Array<<T>>&, rs I64, cs I64, vec Array
     }
 }
 
-# Gemm in accumulation type A (the type of z)
-fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64, z <A>) {
+# Gemm in accumulation type A (the type of z), packing into ws
+fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64, ws mut GemmWorkspace<<T>>&, z <A>) {
     al := Cast(alpha, z)
     be := Cast(beta, z)
     nr := tileCols(z)
@@ -669,14 +670,14 @@ fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>
     }
     depthMax I64 = lesser(k, kc)
     colsMax I64 = lesser((n + nr - 1) / nr * nr, nc)
-    bp := Array<<A>>(depthMax * colsMax)
+    bp := ws.panelB(depthMax * colsMax, z)
     # tasks: each takes a run of rows, a multiple of 4; small products stay on the calling thread
     tasks I64 = lesser(threads, (m + 3) / 4)
     if m * n * k < 2000000 { tasks = 1 }
     share I64 = ((m + tasks - 1) / tasks + 3) / 4 * 4
     # the panels of A: each task's own, made once for the whole product
     panel I64 = lesser(mc, share) * depthMax
-    ap := Array<<A>>(tasks * panel)
+    ap := ws.panelsA(tasks * panel, z)
     for jc in range 0, n, nc {
         cols I64 = lesser(nc, n - jc)
         for pc in range 0, k, kc {
@@ -700,13 +701,53 @@ fn gemmIn(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>
 
 # C = alpha * op(A) op(B) + beta * C on arrays: an m x k op(A), a k x n op(B) and an m x n C, each row-major with a
 # row stride (lda, ldb, ldc) - op(A) is A, or A's transpose when transA, so A is then stored k x m
-fn gemm(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64) {
+fn gemm(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&, lda I64, b Array<<T>>&, ldb I64, beta <T>, c mut Array<<T>>&, ldc I64, threads I64, ws mut GemmWorkspace<<T>>&) {
     if m == 0 or n == 0 { return }
     match <T> {
-        case F16, BF16, F8E4M3, F8E5M2 { gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, F32(0)) }
+        case F16, BF16, F8E4M3, F8E5M2 { gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, ws, F32(0)) }
         nomatch {
             z <T>
-            gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, z)
+            gemmIn(transA, transB, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, threads, ws, z)
+        }
+    }
+}
+
+# The panels a product packs its operands into, kept from one product to the next: ws.Gemm(...) is Gemm packing into
+# ws rather than into storage of its own, so a loop of products - a training step's - allocates nothing once ws has
+# grown to the largest of them. GemmWorkspace<F32>() is empty; it grows where it lives, to what the largest product
+# given needs, and never shrinks. It holds no result, so one workspace serves products of any shapes, one at a time -
+# two at once on one workspace, from two tasks, write the same panels (a data race, P8b)
+type GemmWorkspace<T> struct() {
+    a mut Array<<T>>&           # A's panels, one per task, for element types computed in themselves
+    b mut Array<<T>>&           # B's panel
+    wideA mut Array<F32>&       # the same for F16, BF16 and the F8s, which are computed in F32
+    wideB mut Array<F32>&
+}
+
+# B's panel, with room for at least n elements of accumulation type A - made larger, where ws lives, when it has less
+fn (ws mut GemmWorkspace<<T>>&) panelB(n I64, z <A>) mut Array<<A>>&ws {
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 {
+            if ws.wideB == null or ws.wideB.Len() < n { ws.wideB = Array<F32>(n) }
+            return ws.wideB
+        }
+        nomatch {
+            if ws.b == null or ws.b.Len() < n { ws.b = Array<<T>>(n) }
+            return ws.b
+        }
+    }
+}
+
+# A's panels, the same way
+fn (ws mut GemmWorkspace<<T>>&) panelsA(n I64, z <A>) mut Array<<A>>&ws {
+    match <T> {
+        case F16, BF16, F8E4M3, F8E5M2 {
+            if ws.wideA == null or ws.wideA.Len() < n { ws.wideA = Array<F32>(n) }
+            return ws.wideA
+        }
+        nomatch {
+            if ws.a == null or ws.a.Len() < n { ws.a = Array<<T>>(n) }
+            return ws.a
         }
     }
 }
@@ -716,13 +757,20 @@ fn gemm(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<<T>>&,
 # c = alpha * op(a) op(b) + beta * c, where op(x) is x or, when its flag is set, x's transpose - read where x is, never
 # transposed in memory. beta = 1 accumulates (a gradient's second contribution, with no temporary); beta = 0 never
 # reads c, so c may hold anything. c must not overlap a or b. Allocates only the panels the product packs into, in
-# its own scope; a large product is split over up to threads tasks. alpha and beta are F64, so a literal is written as
-# it is whatever the element type; each is converted to it once
+# its own scope (ws.Gemm, below, packs into a workspace the caller keeps instead); a large product is split over up to
+# threads tasks. alpha and beta are F64, so a literal is written as it is whatever the element type; each is converted
+# to it once
 fn Gemm(c Matrix<<T>>&, a Matrix<<T>>&, transA Bool, b Matrix<<T>>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) {
+    ws := GemmWorkspace<<T>>()
+    ws.Gemm(c, a, transA, b, transB, alpha, beta, threads)
+}
+
+# Gemm, packing into ws: allocates nothing once ws has room for this product's panels
+fn (ws mut GemmWorkspace<<T>>&) Gemm(c Matrix<<T>>&, a Matrix<<T>>&, transA Bool, b Matrix<<T>>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) {
     assert productShape(c, a, transA, b, transB)
     k I64 = a.Rows if transA else a.Cols
     like <T>
-    gemm(transA, transB, c.Rows, c.Cols, k, Cast(alpha, like), a.Data, a.Stride, b.Data, b.Stride, Cast(beta, like), c.Data, c.Stride, threads)
+    gemm(transA, transB, c.Rows, c.Cols, k, Cast(alpha, like), a.Data, a.Stride, b.Data, b.Stride, Cast(beta, like), c.Data, c.Stride, threads, ws)
 }
 
 # y = alpha * op(a) x + beta * y, for vectors x and y: a matrix-vector product, a's rows dotted with x (trans false)
@@ -733,7 +781,8 @@ fn Gemv(y mut Array<<T>>&, a Matrix<<T>>&, trans Bool, x Array<<T>>&, alpha F64 
     k I64 = a.Rows if trans else a.Cols
     assert y.Len() == m and x.Len() == k
     like <T>
-    gemm(trans, false, m, 1, k, Cast(alpha, like), a.Data, a.Stride, x, 1, Cast(beta, like), y, 1, 1)
+    ws := GemmWorkspace<<T>>()        # never packed into: one column takes the matrix-vector path
+    gemm(trans, false, m, 1, k, Cast(alpha, like), a.Data, a.Stride, x, 1, Cast(beta, like), y, 1, 1, ws)
 }
 
 # a = alpha * x y^T + beta * a, for vectors x (a.Rows elements) and y (a.Cols): a rank-1 update (BLAS's ger, which
@@ -1686,6 +1735,57 @@ if TestBuild {
                 assert d == c
             }
         }
+    }
+
+    test "a workspace's Gemm is Gemm, and keeps its panels from one product to the next" {
+        r := rand.Rand(11)
+        ws := GemmWorkspace<F64>()
+        wide := GemmWorkspace<F16>()
+        for size in range 4 {
+            # a large product, then smaller ones, then the large one again: one workspace serves them all
+            m I64 = I64[300, 37, 64, 300][size]
+            n I64 = I64[270, 29, 784, 270][size]
+            k I64 = I64[517, 41, 128, 517][size]
+            for form in range 4 {
+                transA Bool = form % 2 == 1
+                transB Bool = form >= 2
+                a := Matrix<F64>(k, m) if transA else Matrix<F64>(m, k)
+                b := Matrix<F64>(n, k) if transB else Matrix<F64>(k, n)
+                a.FillUniform(r, -1.0, 1.0)
+                b.FillUniform(r, -1.0, 1.0)
+                want := Matrix<F64>(m, n)
+                Gemm(want, a, transA, b, transB, 2.0, 0.0, 1)
+                c := Matrix<F64>(m, n)
+                c.Fill(1.0)
+                ws.Gemm(c, a, transA, b, transB, 2.0, 0.0)
+                assert c == want
+                c.Fill(1.0)
+                ws.Gemm(c, a, transA, b, transB, 2.0, 1.0, 4)
+                assert c.Distance(want + 1.0) < 1e-9 * F64(k)
+                # F16 is packed in F32, into the workspace's F32 panels
+                a16 := a.ToF16()
+                b16 := b.ToF16()
+                want16 := Matrix<F16>(m, n)
+                Gemm(want16, a16, transA, b16, transB)
+                c16 := Matrix<F16>(m, n)
+                wide.Gemm(c16, a16, transA, b16, transB)
+                assert c16 == want16
+            }
+            if size == 0 {
+                # F64 is packed in its own panels, F16 in the F32 ones
+                assert ws.a != null and ws.b != null and ws.wideA == null and ws.wideB == null
+                assert wide.wideA != null and wide.wideB != null and wide.a == null and wide.b == null
+            }
+        }
+        # the largest product came first, so nothing after it needed more room: the panels are those it made
+        big := ws.b
+        bigWide := wide.wideB
+        x := Matrix<F64>(300, 517)
+        y := Matrix<F64>(517, 270)
+        z := Matrix<F64>(300, 270)
+        ws.Gemm(z, x, false, y, false)
+        wide.Gemm(Matrix<F16>(300, 270), x.ToF16(), false, y.ToF16(), false)
+        assert ws.b is big and wide.wideB is bigWide and ws.wideB == null and wide.b == null
     }
 
     test "the product operators, and products of views" {

@@ -1,0 +1,31 @@
+# check: run
+# O8b: a loop of matrix products keeps its memory flat. A plain Gemm packs B into a panel of its own, made after the
+# product's larger allocations and given back with them, and the pool hands the same panel to the next product (it
+# used to map a new one each time - 400KB a product here, 120MB over the loop); a GemmWorkspace keeps its panels from
+# one product to the next itself, so its loop allocates nothing at all
+import "std/linalg"
+import "std/os"
+
+# the most this process has held resident, in kB
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() ? {
+    a := linalg.Matrix<F32>(64, 128)
+    b := linalg.Matrix<F32>(128, 784)
+    c := linalg.Matrix<F32>(64, 784)
+    a.Fill(1.0)
+    b.Fill(0.5)
+    for i in range 300 { linalg.Gemm(c, a, false, b, false) }
+    ws := linalg.GemmWorkspace<F32>()
+    for i in range 300 { ws.Gemm(c, a, false, b, false, 1.0, 1.0) }
+    assert c.Get(0, 0) == 64.0 + 300.0 * 64.0 and c.Get(63, 783) == c.Get(0, 0)
+    kb := peakKb()
+    assert kb > 0 and kb < 30000
+}
