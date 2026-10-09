@@ -1445,6 +1445,26 @@ A private word does not make its **type** uncatchable. `catch Lib.Err` (no word)
 that type, including ones the catching module could not name — a caller can handle "some `Err`" without
 being told which ones exist.
 
+**M6b (the methods the compiler calls).** The methods the compiler calls by itself for an operation written in the
+program - the operators' (E31: `Plus` ... `MatMul`, `Neg`, `Less`, `At`, `SetAt`, `Slice`, the bitwise ones, `Inc`,
+`Dec`, `Call`, `Len`, and the checked forms `TryAt` ...), `Eq` (`==`, E10a), `Hash` (E10b), `Str` (`$`, E11c), `Next`,
+`Iter` and `RunFrom` (`for ... in`, S9a), `Has` and `Contains` (`in`, E29) - follow M6 as every name does. A type
+declares each under its capitalized name, public, or with its first letter lowercase (`plus`, `eq`, `hash`, `str`,
+`next`), private to its module; never both, which is a compile-time error. The private one is held to the same shape as
+the public one. An operation reaches whichever the type declares: written in the declaring module it calls the private
+one; written anywhere else the private one cannot be found, and the operation is a compile-time error naming it - never
+the built-in operation, a part-by-part `==`, a supplied `Hash` or the default rendering in its place. So `a == b` on a
+type with a private `eq` calls `eq` in its own module and is an error in any other.
+
+The module an operation is judged from is the one whose code it is written in. In a generic's body that is the
+generic's own module, wherever it is instantiated (§12 G16): a generic of the declaring module reaches the private
+method, and one of another module does not - the prelude's included, so a `Map` whose key's `eq` is private, or `x in a`
+over an array of such keys (an array's `Has` is the prelude's), is an error, reported at the program's use of the
+prelude's code (§10.6). What the language itself defines is judged where it is written, for every method it reaches,
+whatever code carries it out: `==` comparing a struct, an array or an enum part by part (E10), the rendering of a value's
+parts (E11a), the `Hash` the compiler supplies (E10b). A trait's method (§2.11) is met only under its own name, so a
+private spelling meets no constraint.
+
 **M19.** A **method** is a function declared with a receiver (§3.4 D7): `fn (p Point&) Norm() I32`.
 Methods live in a namespace of their own, keyed by receiver type, and a method is reached **only** as
 `receiver . IDEN ( args )` — a **method call**, resolved against the methods declared for the receiver
@@ -1945,17 +1965,18 @@ last-but-one word names one (a case, `Shape.Circle`), or a type that is no plain
 shares a type's name (D2, D3a), a name is never both. `not a is b`, `a is not b` and `not (a is b)` are one
 question (E7a).
 
-**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` - always capitalized, as `Str` is (E11c): equality
-belongs to the type, not to one module's view of it, so `==` in the declaring module and in a `Map` of another agree;
-an `eq` is an ordinary method. It takes one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
-no errors, and neither the receiver nor the parameter `mut`. Any other method named `Eq` is a compile-time error.
+**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
+`==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
+receiver's own type in either shape (`T` or `T&`), result `Bool`, no errors, and neither the receiver nor the parameter
+`mut`. Any other method named `Eq` or `eq` is a compile-time error.
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
 values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
 built-in type declares none; its `==` is the language's.
 
 **E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
-`Hash() I64` itself, and must when it declares `Eq`. Otherwise the compiler supplies one for a **struct, enum or
-array value** whose type declares neither `Hash` nor `Eq` and every part of which has a hash: the parts' hashes
+`Hash() I64` itself - or `hash`, private to its module (M6b) - and must when it declares `Eq` or `eq`. Otherwise the
+compiler supplies one for a **struct, enum or array value** whose type declares neither (in either spelling) and every
+part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
 prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type and `String`; a float has none,
 so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
@@ -2032,9 +2053,9 @@ total is made in the scope the result flows into, and each piece is written into
 linear in the result however many pieces there are. A `:=` declaration takes its type from a join or a
 `$` rendering (D15), since both are text by construction.
 
-**E11c (`Str`).** A type takes over its rendering by declaring the method `Str` - always the capitalized name, since
-a rendering belongs to the type wherever it is shown, never to one module's view of it: no parameters, result `String`, no errors, and a receiver that is not `mut`. Any other method named `Str` is a
-compile-time error. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
+**E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
+(M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
+no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` is a compile-time error. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
 sense of K1a, and a `Str` that is not is a compile-time error naming what stops it. That is what lets a rendering
 call it as often as building the text needs - once to measure, once to write, or not at all when the text is
 computed while compiling - with nothing to tell the difference.
@@ -2426,9 +2447,9 @@ type declares one:
 | `f(args)` on a value `f` | `Call` | any parameters, any result |
 | `x[lo:]`, `for x in c` (S9d) | `Len` | none, an `I64` |
 
-The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, reached - like any lowercase
-name (M6) - only within the declaring module. A type declaring an operator by both names is an error, as is a method
-by one of these names without its shape. None of them may declare errors except `Call`, which stands for a function
+The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, private to the declaring
+module (M6b): there the operator calls it, and anywhere else the operator is an error naming it. A type declaring an
+operator by both names is an error, as is a method by one of these names, in either spelling, without its shape. None of them may declare errors except `Call`, which stands for a function
 and is called `try f(x)` when it can fail.
 
 **E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
@@ -2473,8 +2494,8 @@ an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then 
 `Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
 error, as for any other non-numeric type.
 
-`==`, `!=` (E10) and `$` (E11a) are never declared, nor are `and`, `or`, `not` (they short-circuit, E7), `=`, `.`,
-`try` and `match`.
+`==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
+`.`, `try` and `match` are never declared.
 
 ### 5.16 `is` and `as`
 
@@ -2674,7 +2695,8 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   order, **copied** — assigning to `x` does not change the array; `a[i] = ...` through the index form does.
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
-- an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in trait.
+- an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in trait - or whose type declares the private
+  `next` (M6b) of its shape, in that type's own module.
   Each iteration calls `Next()`; `Exhausted` ends the loop - the loop takes it itself, so it needs no `try` - and
   `x` is the value otherwise. The loop holds its own
   copy of `e` (so a by-value iterator written as a variable is not advanced by the loop; a reference one
@@ -2695,8 +2717,9 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
 
-Anything else after `in` is a compile-time error. `break` and `continue` (S11) apply as in every loop;
-`continue` moves to the next value.
+Each method the loop calls - `Next`, `Iter`, `RunFrom`, `At`, `Len` - may be the type's private spelling, which only
+a loop in its own module calls (M6b). Anything else after `in` is a compile-time error. `break` and `continue` (S11)
+apply as in every loop; `continue` moves to the next value.
 
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
 a call, `Iter()`, `Next()`, `TryAt()` - and any of them may declare errors. Such a loop is written with `try` after
@@ -4479,6 +4502,10 @@ block of this function that closes too soon, and the place it has to live is whe
 the local it was made as - following what it was read or borrowed from - says to make it there:
 `'text' is made here, in a block that closes first - make it where 'st' lives: 'ReadFile&st(...)'`, or, for one not
 made by a call, to declare it there (`'c Counter&ok = ...'`).
+An error met in the **standard library's** code (the prelude or `std`) while it is checked for one of the program's uses
+of it - a generic instantiated with the program's types - is the program's, since the library cannot be changed where
+it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line
+(`in the standard library's code, here`) and the notes of the uses around it.
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 
