@@ -3512,12 +3512,17 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             for (int j = 0; j < t.typeParams.len; j++) {
                 if (StrCmp(*(struct str*)ListGetIdx(&t.typeParams, j), v)) { inParams = true; break; }
             }
-            //T35a: in a generic interface's method signature, the interface's own variable is fixed by the
-            //instantiation, not inferred at a call
-            for (int j = 0; !inParams && currentTypeParamNames && j < currentTypeParamNames->len; j++) {
-                if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, j), v)) inParams = true;
+            //T35a: in a generic trait's method signature, the trait's own variable is fixed by the instantiation, not
+            //inferred at a call - a variable of the enclosing declaration, not one this signature introduced (every
+            //"<T>" in the signature, its result included, is in sigTypeVars, so consulting that would excuse anything)
+            for (int j = 0; !inParams && prevTPN && j < prevTPN->len; j++) {
+                if (StrCmp(*(struct str*)ListGetIdx(prevTPN, j), v)) inParams = true;
             }
-            if (!inParams) ErrMsgSemantic(firstTokAnywhere(retTypeNode), TYPE_VAR_NOT_INFERABLE);
+            if (!inParams) {
+                ErrMsgSemantic(firstTokAnywhere(retTypeNode), TYPE_VAR_NOT_INFERABLE);
+                *t.retType = unknownTypeStandIn(); //one error: what is returned is not also checked against it
+                break;
+            }
         }
         finishResultScope(&t, firstTokAnywhere(retTypeNode));
     }
