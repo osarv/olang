@@ -112,6 +112,14 @@ repository or its code. Not legal advice; told the user so.
    be pluggable so a spiking neuron (leaky integrate-and-fire, learning from spike-count differences between the free
    and nudged phases) can replace the continuous one later - and is that the spiking direction meant for the FPGA?
    Default: a pluggable neuron enum, continuous neurons first.
+19. (asked 2026-10-09, from std/linalg) a native-target build option (tile sizes per target, AVX2/AVX-512) plus an
+   opt-in contraction of a*b + c into FMA? The 5-7x gap to OpenBLAS is the instruction set (olang targets baseline
+   x86-64/SSE2, no FMA). Default: no. Rec: yes, opt-in (a flag), since it changes float results.
+20. (asked 2026-10-09) `assert` with a message (so a shape mismatch can say which shapes)? Default: no. Rec: yes -
+   `assert cond, "text"` or adjacency `assert cond "text"`.
+21. (asked 2026-10-09) an opt-in fast-math mode (libmvec vector math, contraction) that gives up evaluator/run-time
+   agreement? Default: no (the matrix library ships FastExp/FastTanh/FastSigmoid approximations instead). Rec: only as
+   an explicit flag, if ever.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

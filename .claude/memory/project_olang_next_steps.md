@@ -232,6 +232,12 @@ because what it finds about structure feeds the refactor.
   claude/github-environment-setup-ftu9va was refused by the auto-mode classifier - waiting for the user to allow it or
   push themselves; until then normal pushes fail (diverged). oann: the tip commit is being replaced by
   docs/settling.md (amend) - needs the same force-push. Neither repo gets a licence file.
+- 12:10: std/linalg + std/rand merged LOCALLY (9b88d44; push on hold): Matrix<T>, GEMM 14-17 GFLOPS F32 single-thread
+  (= C same algorithm; OpenBLAS 5-7x ahead by instruction set), Gemv beats a C loop, MLP step 2.4ms vs OpenBLAS ~0.5ms.
+  Queued for small fixes: an immutable baked plain-data global is emitted `global` not `constant` (cost the GEMM
+  kernel 10.8 vs 17.5 GFLOPS; bench/repro/linalg_global_constant.olang). oann: settling.md amended locally (e9b5115,
+  force-push pending); phase 2 resumed with compiler /home/user/wt/oannc2 (the old oannc worktree is stale after the
+  history rewrite - remove it later).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
