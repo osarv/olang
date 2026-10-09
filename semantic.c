@@ -5954,6 +5954,30 @@ static bool opIsArrayLiteral(struct operand* op) {
            && op->tok.type != TOK_STR_LIT;
 }
 
+//T7/O5: the values an array built here holds - a literal's elements, or "Array<T>(n, v)"'s fill - which live where the
+//array lands. Empty for anything else
+static struct list arrayBuiltElems(struct operand* op) {
+    if (opIsArrayLiteral(op)) return op->args;
+    struct list out = ListInit(sizeof(struct operand*));
+    if (op->opType == OPERATION_SIZED_ARRAY_ALLOC && op->args.len > 1) ListAdd(&out, ListGetIdx(&op->args, 1));
+    return out;
+}
+
+//T7/O25c: whether an array built here holds existing storage among its elements - a reference, or a value holding
+//references, that already lives somewhere - which must suit wherever the array lands, as a store into its element would
+static bool operandIsTemporary(struct checkCtx* ctx, struct operand* op);
+static bool arrayHoldsExisting(struct operand* op) {
+    struct list es = arrayBuiltElems(op);
+    for (int i = 0; i < es.len; i++) {
+        struct operand* e = *(struct operand**)ListGetIdx(&es, i);
+        if (e->isNullLiteral) continue;
+        if ((e->type.structMAlloc || (OperandNamesExistingStorage(e) && TypeHoldsReferences(e->type)))
+                && !operandIsTemporary(NULL, e)) return true;
+        if (arrayHoldsExisting(e)) return true;
+    }
+    return false;
+}
+
 //O18a: a field, an element, a slice or a payload of a value - reading it reads the value, so where a call's value is
 //still to land, so is what is read out of it: it lands where the read is put
 static struct operand* projectionBase(struct operand* op) {
@@ -5965,9 +5989,12 @@ static struct operand* projectionBase(struct operand* op) {
 
 bool callIsLanding(struct operand* op) {
     if (projectionBase(op)) return callIsLanding(projectionBase(op));
-    if (opIsArrayLiteral(op)) {
-        for (int i = 0; i < op->args.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&op->args, i))) return true;
-        return false;
+    //an array built here lands with its elements - and, holding existing storage, is checked where it lands (T7, O25c)
+    if (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC) {
+        if (op->ctorLanded) return false;
+        struct list es = arrayBuiltElems(op);
+        for (int i = 0; i < es.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&es, i))) return true;
+        return arrayHoldsExisting(op);
     }
     //E28/S12b: a conditional or a match lands where its value does - each value it can give
     if (op->opType == OPERATION_COND && op->args.len == 3)
@@ -5994,8 +6021,14 @@ static void landCallIn(struct operand* op, struct var* dst, int depth, bool prog
         dst = SemanticRuntimeScope(dst, &depth);                //through is where it would really be built
         if (dst) depth = 0;
     }
-    if (op && opIsArrayLiteral(op)) {
-        for (int i = 0; i < op->args.len; i++) landCallIn(*(struct operand**)ListGetIdx(&op->args, i), dst, depth, program);
+    if (op && (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC)) {
+        if (op->ctorLanded) return;
+        op->ctorLanded = true; //where it was put, which what it holds is checked against (checkCtorHereFits)
+        op->landedTo = dst;
+        op->landedDepth = depth;
+        op->landedInProgram = program;
+        struct list es = arrayBuiltElems(op);
+        for (int i = 0; i < es.len; i++) landCallIn(*(struct operand**)ListGetIdx(&es, i), dst, depth, program);
         return;
     }
     if (op && projectionBase(op)) { //what is read lands with the value it is read from - the read's own copies too
@@ -6460,7 +6493,8 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         //T17c: an enum value built for the parameter, and a conditional or match giving one, land as a call's result does -
         //and so does what is read out of one still landing (a field, an element, a slice, a payload)
         bool lands = arg->opType == OPERATION_FUNCCALL || opIsEnumCtor(arg) || arg->opType == OPERATION_COND
-                     || arg->opType == OPERATION_MATCH || projectionBase(arg);
+                     || arg->opType == OPERATION_MATCH || projectionBase(arg) || opIsArrayLiteral(arg)
+                     || arg->opType == OPERATION_SIZED_ARRAY_ALLOC;
         if (!lands || !psv || !callIsLanding(arg)) continue;
         for (int k = 0; k < op->scopeBindings.len; k++) {
             struct scopeBinding* pb = ListGetIdx(&op->scopeBindings, k);
@@ -9557,6 +9591,7 @@ static struct comprSpec* comprActive = NULL;
 struct operand* buildComprehension(struct checkCtx* ctx, struct type elemType, struct syntax* s,
                                    struct syntax* comprNode, struct token tok);
 struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s);
+static void queueHereCheck(struct checkCtx* ctx, struct operand* op);
 struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* nameNode = firstPartOfType(s, SNTX_NAME);
     struct token tok = firstTokOfType(s, TOK_SQUARE_O);
@@ -9583,6 +9618,7 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct syntax* comprNode = firstPartOfType(s, SNTX_COMPREHENSION);
     if (comprNode) return buildComprehension(ctx, elemType, s, comprNode, tok);
     struct operand* lit = buildArrLiteralLevel(ctx, elemType, firstPartOfType(s, SNTX_ARR_LIT_ARGS), tok);
+    if (opIsArrayLiteral(lit) && arrayHoldsExisting(lit)) queueHereCheck(ctx, lit); //T7: its elements live where it lands
     return lit;
 }
 
@@ -10043,6 +10079,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 struct operand* fill = *(struct operand**)ListGetIdx(&aArgs, 1);
                 reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok);
                 ListAdd(&alloc->args, &fill);
+                if (arrayHoldsExisting(alloc)) queueHereCheck(ctx, alloc); //T7: the fill lives where the array lands
             } else {
                 struct operand* zero = zeroValueFor(ctx, *at.arrElem, nameTok, true); //D13c: each element its zero
                 if (zero) ListAdd(&alloc->args, &zero);
@@ -10609,8 +10646,22 @@ static bool scopeNamedByField(struct type* t, struct var* sv) {
 
 static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var* func, struct var* here,
                          struct type* namedBy);
+static void queueHereCheck(struct checkCtx* ctx, struct operand* op);
 void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) {
+    int before = call->scopeBindings.len;
     bindHereFrom(ctx, call, func, func->type.retType->hereVar, func->type.retType);
+    //C2d: held to wherever it lands once the statement ends - an argument's parameter, by O18a or O18b, as much as a
+    //declaration, an assignment or a return, which judge it at once
+    if (call->scopeBindings.len != before) queueHereCheck(ctx, call);
+}
+
+//C2d/T17c/T7: a value built here holding existing storage - an instance, an enum value, an array - judged where it
+//landed once its statement ends, or, never landed, against the block it was built in (unless a declaration, an
+//assignment or a return judged it first)
+static void queueHereCheck(struct checkCtx* ctx, struct operand* op) {
+    if (!ctx || !ctx->hasOwnScope || ErrMsgMuted()) return;
+    struct pendingDischarge pd = { keepCtx(ctx), op, NULL, (struct list){0}, op->tok, 0, normDepth(ctx->blockDepth), NULL, NULL };
+    ListAdd(&pendingDischarges, &pd);
 }
 
 //T17c/C2d: an enum value built with a payload - its instance scope bound from the existing storage stored in it, held
@@ -10618,9 +10669,7 @@ void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func) 
 static void bindEnumHere(struct checkCtx* ctx, struct operand* op, struct var* synth) {
     int before = op->scopeBindings.len;
     bindHereFrom(ctx, op, synth, op->type.hereVar, NULL);
-    if (op->scopeBindings.len == before) return;
-    struct pendingDischarge pd = { keepCtx(ctx), op, NULL, (struct list){0}, op->tok, 0, normDepth(ctx->blockDepth), NULL, NULL };
-    ListAdd(&pendingDischarges, &pd);
+    if (op->scopeBindings.len != before) queueHereCheck(ctx, op);
 }
 
 static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var* func, struct var* here,
@@ -10717,8 +10766,33 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
         for (int i = 0; i < vs.len; i++) checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&vs, i), dstVar, dstDepth, tok);
         return;
     }
-    if (opIsArrayLiteral(val) && val->type.arrElem && val->type.arrElem->bType == BASETYPE_CHOICE) { //its elements, there
-        for (int i = 0; i < val->args.len; i++) checkCtorHereFits(ctx, *(struct operand**)ListGetIdx(&val->args, i), dstVar, dstDepth, tok);
+    //T7/O25c: an array built here - its elements live where it does, so existing storage among them must be there
+    //(exactly, where something can be stored through it, O25g) or outlive it, and what is built for it is checked there
+    if ((opIsArrayLiteral(val) || val->opType == OPERATION_SIZED_ARRAY_ALLOC) && val->type.arrElem) {
+        if (!ctx || !ctx->hasOwnScope) return;
+        val->hereChecked = true;
+        struct type et = *val->type.arrElem;
+        bool exact = et.structMAlloc ? RefNarrowingMatters(et) : valueRefsAdmitStores(et);
+        struct list es = arrayBuiltElems(val);
+        for (int i = 0; i < es.len; i++) {
+            struct operand* e = *(struct operand**)ListGetIdx(&es, i);
+            if (e->isNullLiteral) continue;
+            bool asRef = e->type.structMAlloc;
+            struct var* ev;
+            int ed;
+            bool eu;
+            if ((asRef || (OperandNamesExistingStorage(e) && TypeHoldsReferences(e->type))) && !operandIsTemporary(ctx, e)
+                    && RefExactScope(ctx, e, asRef, &ev, &ed, &eu)) {
+                bool ok;
+                if (eu) ok = !dstVar && !exact; //the program's scope outlives every scope of this function
+                else if (exact) ok = sameExactScope(ev, ed, dstVar, dstDepth);
+                else ok = ev != SCOPE_AMBIGUOUS && dstVar != SCOPE_AMBIGUOUS
+                          && scopeCanFlowInto(ctx->func, ev, normDepth(ed), dstVar, normDepth(dstDepth));
+                if (!ok) ErrMsgSemantic(e->tok, exact ? ARRAY_ELEM_NOT_IN_SCOPE : ARRAY_ELEM_OUTLIVED);
+                continue;
+            }
+            checkCtorHereFits(ctx, e, dstVar, dstDepth, tok);
+        }
         return;
     }
     bool isEnum = val->type.bType == BASETYPE_CHOICE && !val->type.structMAlloc; //T17c: an enum's payload is its fields

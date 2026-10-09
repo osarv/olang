@@ -3222,7 +3222,10 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     if (op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) { //D13c: a zero-bits fill is the memset
         //T7: "Array<T>(n, v)" - every element is v
         struct operand* fillOp = *(struct operand**)ListGetIdx(&op->args, 1);
-        char* fillVal = cgValueForTarget(ctx, fillOp, elemT, NULL);
+        //the elements live where the array does (O5): a fill built here is built there, and one promoted into a
+        //reference element is allocated there - it was left at its own address in this frame, read back after a return
+        char* fillVal = typeNeedsMallocPromotion(elemT, fillOp->type) ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal)
+                                                                      : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
     } else if (!op->noZeroFill) {
         fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
