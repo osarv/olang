@@ -1775,6 +1775,9 @@ struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeVars) {
     struct var* named = scopeTagVariable(name);
     if (named) {
         scopeTagByVariable = true;
+        //O26a: a value local the function returns lives in the result scope, so "&x" names that
+        if (!named->type.structMAlloc && canonicalVar(named)->storeInResult && canonicalVar(named)->valueHome)
+            return canonicalVar(named)->valueHome;
         scopeTagDepth = named->type.scopeParam ? 0 : named->type.scopeDepth;
         return named->type.scopeParam;
     }
@@ -7374,6 +7377,7 @@ bool valueRefsAdmitStores(struct type t);
 static bool splitBorrowJudgedElsewhere = false;
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
+    if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
     bool isGlobal = false;
@@ -7614,11 +7618,40 @@ bool SemanticValueRefsHome(struct operand* op, struct var** to, int* depth, bool
 //O4b/O25h: where the references a value holds live - where its ":=" call or its parameter's scope put them (valueRefsHome),
 //else where it lives itself (its block, its container's scope, the program's for a global's). False when it has no
 //storage of its own to read that off (a temporary)
+//whether a value of type t holds, in its own storage (fields and elements by value, at any depth), a reference field
+//written "&p" - one whose referent is where the instance's construction bound p (C2d), not where the instance is
+static bool typeHasNamedScopeField(struct type t, int depth) {
+    if (depth > 16 || t.bType == BASETYPE_TYPEVAR) return true;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && !t.arrElem->structMAlloc && typeHasNamedScopeField(*t.arrElem, depth + 1);
+    if (t.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* c = ListGetIdx(&t.vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) {
+                struct type pt = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+                if (!pt.structMAlloc && typeHasNamedScopeField(pt, depth + 1)) return true;
+            }
+        }
+        return false;
+    }
+    if (t.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        if (f->type.structMAlloc) {
+            if (f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope) return true;
+        } else if (typeHasNamedScopeField(f->type, depth + 1)) return true;
+    }
+    return false;
+}
 static bool valueRefsScope(struct checkCtx* ctx, struct operand* op, struct var** v, int* d, bool* u) {
     *v = NULL;
     *d = 0;
     *u = false;
     if (valueRefsHome(op, v, d, u)) return true;
+    //O20: a value read through a reference ("p" copied out of a "List<T>&") holds what lives where its referent does -
+    //not where the reference's own slot is: every reference it holds in a field of its own (a bare one, C2d) lives there.
+    //A field written "&p" refers where its instance's binding says, which this does not know - the slot, as before
+    if (op->type.structMAlloc && TypeHoldsReferences(op->type) && !typeHasNamedScopeField(op->type, 0))
+        return RefExactScope(ctx, op, true, v, d, u);
     return RefExactScope(ctx, op, false, v, d, u);
 }
 
@@ -8443,6 +8476,9 @@ struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, b
             return NULL;
         }
         if (v->type.scopeParam) return v->type.scopeParam;
+        //O26a: a value local the function returns lives in the result scope - "f&x(...)" builds there
+        if (!v->type.structMAlloc && canonicalVar(v)->storeInResult && canonicalVar(v)->valueHome)
+            return canonicalVar(v)->valueHome;
         *depth = normDepth(v->type.scopeDepth);
         return NULL;
     }
@@ -9074,6 +9110,182 @@ static bool ownSlotsAdmitStores(struct type v, int depth) {
     return false;
 }
 
+//O17b: a handle - a struct whose only part is one reference, held in its one field, or one other handle held by value
+//("List", "Map", "StringBuilder"): a value whose only state is a reference. NULL for any other type; else that field
+static struct var* handleField(struct type t) {
+    if (t.bType != BASETYPE_STRUCT || t.unknown || t.vars.len != 1) return NULL;
+    struct var* f = ListGetIdx(&t.vars, 0);
+    if (f->type.structMAlloc) {
+        //a field written "&p" refers where the instance's construction bound p (C2d), not where the handle's state is
+        if (f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope) return NULL;
+        return f->type.bType == BASETYPE_FUNC ? NULL : f;
+    }
+    return handleField(f->type) ? f : NULL;
+}
+//whether a and b are one handle type, as a generic's pattern ("List<<T>>") and its instantiation ("List<I64>") are
+static bool sameHandleType(struct type a, struct type b) {
+    struct type* oa = a.genericOrigin ? a.genericOrigin : &a;
+    struct type* ob = b.genericOrigin ? b.genericOrigin : &b;
+    return a.bType == BASETYPE_STRUCT && b.bType == BASETYPE_STRUCT && oa->owner == ob->owner && StrCmp(oa->name, ob->name);
+}
+//the tokens of a body, each with whether it is inside a lambda - a type written there (its scope markers included) left
+//out, since a scope named "&p" is no use of p's storage
+struct bodyTok { struct token tok; bool inLambda; };
+static void bodyTokensInto(struct syntax* n, struct list* out, bool inLambda) {
+    if (n->type == SNTX_TYPE_EXPR || n->type == SNTX_SCOPE_ARG) return;
+    if (n->type == SNTX_LAMBDA) inLambda = true;
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&n->parts, i);
+        if (p->isToken) {
+            struct bodyTok b = { p->tok, inLambda };
+            ListAdd(out, &b);
+        } else bodyTokensInto(p->sntx, out, inLambda);
+    }
+}
+static struct token* btAt(struct list* toks, int i) {
+    return i >= 0 && i < toks->len ? &((struct bodyTok*)ListGetIdx(toks, i))->tok : NULL;
+}
+static bool btIs(struct list* toks, int i, enum tokenType tt) { struct token* k = btAt(toks, i); return k && k->type == tt; }
+static bool tokIsAssignOp(enum tokenType t) {
+    return t == TOK_ASS || (t >= TOK_ASS_ADD && t <= TOK_ASS_BTWSE_XOR);
+}
+//the function or constructor called by the "(" at toks[open] - "f(", "T(", "T<A, B>(" - and NULL where it is anything else
+//(a method of a value, a function value, a lambda)
+static struct var* handleCallAt(struct semaModule* mod, struct list* toks, int open) {
+    int j = open - 1;
+    if (btIs(toks, j, TOK_GRT) || btIs(toks, j, TOK_BTSFT_R)) { //type arguments: back over the balanced "<...>"
+        int depth = 0;
+        for (; j >= 0; j--) {
+            enum tokenType tt = btAt(toks, j)->type;
+            if (tt == TOK_GRT) depth++;
+            else if (tt == TOK_BTSFT_R) depth += 2;
+            else if (tt == TOK_LST || tt == TOK_BTSFT_L) {
+                depth -= tt == TOK_LST ? 1 : 2;
+                if (depth <= 0) { j--; break; }
+            }
+        }
+        if (depth != 0) return NULL;
+    }
+    if (!btIs(toks, j, TOK_IDEN) || btIs(toks, j - 1, TOK_DOT)) return NULL;
+    struct str fn = strFromTok(*btAt(toks, j));
+    struct type* ct = typeNamed(mod, fn);
+    if (ct) return ct->hasCtor && ct->ctorFunc ? ct->ctorFunc : NULL;
+    struct var* f = VarGetList(&mod->vars, fn);
+    return f && f->type.bType == BASETYPE_FUNC && !f->isMethod && !f->type.isExtern ? f : NULL;
+}
+
+//O17b: whether a call's parameter idx - a reference to a handle - is used by the callee's body only THROUGH the handle:
+//its reference read out (`l.s`, never assigned), or the parameter handed on to another such parameter (`l.Push(x)` on
+//the same handle, `fill(l)`), a fixed point over the program's calls. Read off the body's text, as written; a use of it
+//as anything else - kept in a local, stored, returned, captured by a lambda, compared, walked by "for" - and a callee
+//whose body is not known (an extern, a function value, a trait's default) say no. Such a callee holds no reference to
+//the handle's own storage past the call, so where that storage is says nothing about what it does: lending the handle
+//is lending its reference
+struct handleMemo { struct var* func; int idx; bool through; };
+static struct list handleMemos;
+struct handleVisit { struct var* func; int idx; };
+static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed);
+static bool handleThroughParam(struct var* func, int idx) {
+    struct list visiting = ListInit(sizeof(struct handleVisit));
+    bool assumed = false;
+    bool r = handleThroughAt(func, idx, &visiting, &assumed);
+    ListDestroy(visiting);
+    return r;
+}
+static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed) {
+    if (!func || func->type.bType != BASETYPE_FUNC || func->type.isExtern || func->isLambda || idx < 0
+            || idx >= func->type.vars.len)
+        return false;
+    struct var* key = canonicalVar(func);
+    for (int i = 0; i < handleMemos.len; i++) {
+        struct handleMemo* m = ListGetIdx(&handleMemos, i);
+        if (m->func == key && m->idx == idx) return m->through;
+    }
+    for (int i = 0; i < visiting->len; i++) { //a cycle: assumed to hold - what is decided under it is not kept
+        struct handleVisit* v = ListGetIdx(visiting, i);
+        if (v->func == key && v->idx == idx) { *assumed = true; return true; }
+    }
+    struct var* p = ListGetIdx(&func->type.vars, idx);
+    if (!p->type.structMAlloc || !handleField(p->type)) return false;
+    //the body: a constructor's is its type's, an instantiation's the generic's text
+    struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
+    bool isCtor = ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == key;
+    struct syntax* body = isCtor ? ct->ctorBodySyntax : func->bodySyntax;
+    struct semaModule* mod = func->owner ? func->owner : (isCtor ? ct->owner : NULL);
+    if (!body || !mod || !p->name.len) return false;
+    struct handleVisit me = { key, idx };
+    ListAdd(visiting, &me);
+    struct list toks = ListInit(sizeof(struct bodyTok));
+    bodyTokensInto(body, &toks, false);
+    bool through = true;
+    bool assumedHere = false;
+    for (int i = 0; i < toks.len && through; i++) {
+        struct bodyTok* bt = ListGetIdx(&toks, i);
+        if (bt->tok.type != TOK_IDEN || !StrCmp(strFromTok(bt->tok), p->name)) continue;
+        if (btIs(&toks, i - 1, TOK_DOT) || btIs(&toks, i - 1, TOK_BTWSE_AND)) continue; //a member named so, a scope named
+        if (bt->inLambda) { through = false; break; } //a lambda keeps what it captures
+        struct type cur = p->type;
+        cur.structMAlloc = false;
+        int k = i + 1;
+        bool ok = false;
+        for (;;) {
+            struct var* f = handleField(cur);
+            if (btIs(&toks, k, TOK_DOT) && btIs(&toks, k + 1, TOK_IDEN)) {
+                struct str m = strFromTok(*btAt(&toks, k + 1));
+                if (btIs(&toks, k + 2, TOK_PAREN_O)) { //a method of the handle: its receiver is passed on
+                    struct var* mv = VarGetMethod(cur.owner ? cur.owner : mod, m, cur);
+                    bool sub = false;
+                    ok = mv && mv->isMethod && handleThroughAt(mv, 0, visiting, &sub);
+                    if (sub) assumedHere = true;
+                    break;
+                }
+                if (f && StrCmp(m, f->name)) {
+                    if (f->type.structMAlloc) { ok = !(btAt(&toks, k + 2) && tokIsAssignOp(btAt(&toks, k + 2)->type)); break; }
+                    cur = f->type; //a handle held in it, by value
+                    k += 2;
+                    continue;
+                }
+                break;
+            }
+            //handed whole to a function or a constructor, for a reference to the same handle
+            if ((btIs(&toks, i - 1, TOK_PAREN_O) || btIs(&toks, i - 1, TOK_COMMA))
+                    && (btIs(&toks, k, TOK_PAREN_C) || btIs(&toks, k, TOK_COMMA))) {
+                int depth = 0, commas = 0, open = -1;
+                for (int j = i - 1; j >= 0; j--) {
+                    enum tokenType tt = btAt(&toks, j)->type;
+                    if (tt == TOK_PAREN_C || tt == TOK_SQUARE_C || tt == TOK_CURLY_C) depth++;
+                    else if (tt == TOK_PAREN_O || tt == TOK_SQUARE_O || tt == TOK_CURLY_O) {
+                        if (depth > 0) { depth--; continue; }
+                        if (tt == TOK_PAREN_O) open = j;
+                        break;
+                    } else if (tt == TOK_COMMA && depth == 0) commas++;
+                }
+                struct var* callee = open >= 0 ? handleCallAt(mod, &toks, open) : NULL;
+                if (callee && commas < callee->type.vars.len) {
+                    struct type q = ((struct var*)ListGetIdx(&callee->type.vars, commas))->type;
+                    if (q.structMAlloc && sameHandleType(q, cur)) {
+                        bool sub = false;
+                        ok = handleThroughAt(callee, commas, visiting, &sub);
+                        if (sub) assumedHere = true;
+                    }
+                }
+            }
+            break;
+        }
+        if (!ok) through = false;
+    }
+    ListDestroy(toks);
+    visiting->len--;
+    if (assumedHere) *assumed = true;
+    //a "no" never rests on an assumption; a "yes" does where a cycle was assumed to hold, and is kept only once the
+    //cycle's own start has decided
+    if (!through || !assumedHere || visiting->len == 0) {
+        struct handleMemo m = { key, idx, through };
+        ListAdd(&handleMemos, &m);
+    }
+    return through;
+}
+
 //D9: whether a callee may write what its parameter pv holds, and so build into the scope its references live in -
 //through a reference, as the reference's type permits (T25b); a by-value parameter is the callee's own copy, written
 //where its body writes it (D9b): known once that body is checked, assumed while it is not (a cycle, a function value)
@@ -9251,11 +9463,33 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             bool argUnnamed = false;
             if (ctx && ctx->hasOwnScope && !RefExactScope(ctx, arg, !borrowed, &argScope, &argDepth, &argUnnamed) && borrowed)
                 continue;
+            //O17b: a handle (List, Map, StringBuilder - a value whose only state is a reference) whose reference leads
+            //elsewhere than its own storage - a copy, a by-value parameter - is lent as that reference: to a callee that
+            //uses its parameter only through it, the variable is bound where the reference leads, as passing the reference
+            //itself would bind it, and the handle's own storage is no part of the call
+            bool handleLent = false;
+            if (borrowed && pt.structMAlloc && handleField(arg->type) && argScope != SCOPE_AMBIGUOUS) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (valueRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS && !argUnnamed
+                        && (hu || !sameExactScope(hv, hd, argScope, argDepth))
+                        && (hu || scopeOutlives(ctx->func, hv, normDepth(hd), argScope, normDepth(argDepth)))
+                        && handleThroughParam(func, j)) {
+                    argScope = hu ? NULL : hv;
+                    argDepth = hu ? 0 : hd;
+                    argUnnamed = hu;
+                    handleLent = true;
+                    arg->handleLent = true;
+                    struct var* root = lvalueRootVar(arg);
+                    if (root && !root->owner) root->lentForStores = true;
+                }
+            }
             //O17/O25h: a borrowed value's storage is where the callee's variable is bound - but a value whose references
             //live elsewhere (built by a scope argument, a copy of an element) would have what the callee builds and stores
             //through it put in that storage's scope, and its own claim broken. Only where nothing can be stored through
             //the parameter is that one scope enough
-            if (borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)
+            if (!handleLent && borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)
                     && ownSlotsAdmitStores(arg->type, 0)) {
                 struct var* hv;
                 int hd;
@@ -9618,10 +9852,15 @@ static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, s
         }
         //an operator's or a method's call has no "f(...)" written to put the marker on
         if (init->isAtCall || f->isMethod) return;
-        struct str callee = init->readVar->name;
-        for (int i = 0; i < callee.len; i++) if (callee.ptr[i] == '$') { callee.len = i; break; } //G16: as written
-        Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, callee, withName);
-        return;
+        //a scope argument builds the call's result where it says - which moves a reference local's referent, but never
+        //a value local's own storage, which is what is lent or stored ("p := Join&out(...)" is still p's block): a value
+        //is declared a reference where the other lives instead, below
+        if (made->type.structMAlloc) {
+            struct str callee = init->readVar->name;
+            for (int i = 0; i < callee.len; i++) if (callee.ptr[i] == '$') { callee.len = i; break; } //G16: as written
+            Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, callee, withName);
+            return;
+        }
     }
     //a value is borrowed where it stands, so declaring it a reference makes its storage where the reference lives
     if (!made->type.structMAlloc && !TypeHoldsReferences(made->type) && made->type.bType != BASETYPE_ARRAY
@@ -10303,7 +10542,13 @@ struct operand* OperandNumericConversion(struct type target, struct operand* arg
     return op;
 }
 
+static struct operand* operandIndexAt(struct operand* base, struct operand* index, struct token tok, bool underTry);
 struct operand* OperandIndex(struct operand* base, struct operand* index, struct token tok) {
+    return operandIndexAt(base, index, tok, false);
+}
+//underTry: the index is what a "try" being built checks (checkingTry) - E16d's bounds check, which fails with
+//OUT_OF_BOUNDS at run time, so a constant known to be out of range is no compile-time error there
+static struct operand* operandIndexAt(struct operand* base, struct operand* index, struct token tok, bool underTry) {
     if (base->type.bType != BASETYPE_ARRAY) {
         //an unknown base was reported where it was written. Either way the index keeps its operands, so what walks an
         //lvalue's chain (its mutability, its scope) finds them and nothing reads past the end of an empty list
@@ -10323,8 +10568,8 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     //E16: an index is not checked at run time, but where the index and the length are BOTH compile-time
     //known there is nothing to defer - an out-of-range constant is an error at the point it is written
     //rather than undefined behaviour when it is reached. Free, and it covers every literal index into a
-    //fixed-size array.
-    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
+    //fixed-size array. Under "try" the index is checked (E16d) and its failure is defined, so it is left to run time
+    if (!underTry && index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
         long long n = base->type.arrLen->intLiteralVal;
         if (index->intLiteralVal < 0 || index->intLiteralVal >= n) {
             Err(index->tok, ERR_INDEX_OUT_OF_RANGE, index->intLiteralVal, n);
@@ -12793,7 +13038,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 if (result->type.bType != BASETYPE_ARRAY && notOperatorError(result->type, storeInto ? "SetAt" : "At", sq,
                                                                               storeInto ? "'x[i] = v'" : "'x[i]'"))
                     result = unknownPlaceholder(sq);
-                else result = OperandIndex(result, idx, sq);
+                else result = operandIndexAt(result, idx, sq, ctx->checkingTry);
             }
             ctx->checkingTry = prevCheckingInc;
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
@@ -15175,6 +15420,118 @@ static bool flowNameIsValue(struct flowScan* fs, struct str name) {
     struct var* v = scopeFindLocalByCtx(fs->ctx, name);
     return v && !v->type.structMAlloc;
 }
+//whether a value of type t can carry a reference at all - a number, a Bool, a struct of them cannot, so nothing a local
+//refers to reaches the result through one (principle 1: what is built only to be measured stays in its block)
+static bool flowTypeCarries(struct type t) {
+    return t.unknown || t.structMAlloc || TypeHoldsReferences(t) || TypeIsGeneric(t) || t.bType == BASETYPE_FUNC
+           || t.bType == BASETYPE_TYPEVAR || structContainsBareScopeField(t);
+}
+//the type a chain of members and indices (toks[from, to)) reaches from a value of type t - "x.a[i].b" - false where it
+//cannot be told here (a method, an operator's At, a member no type declares)
+static bool flowChainType(struct type t, struct list* toks, int from, int to, struct type* out) {
+    for (int k = from; k < to; ) {
+        enum tokenType tt = ((struct token*)ListGetIdx(toks, k))->type;
+        if (tt == TOK_DOT && k + 1 < to && ((struct token*)ListGetIdx(toks, k + 1))->type == TOK_IDEN) {
+            if (t.bType != BASETYPE_STRUCT || t.unknown) return false;
+            struct var* f = VarGetList(&t.vars, strFromTok(*(struct token*)ListGetIdx(toks, k + 1)));
+            if (!f) return false;
+            t = f->type;
+            k += 2;
+        } else if (tt == TOK_SQUARE_O) {
+            if (t.bType != BASETYPE_ARRAY || !t.arrElem) return false;
+            int depth = 0;
+            bool slice = false; //"x[lo:hi]" is a view of the array, not an element of it
+            for (; k < to; k++) {
+                enum tokenType u = ((struct token*)ListGetIdx(toks, k))->type;
+                if (u == TOK_SQUARE_O || u == TOK_PAREN_O || u == TOK_CURLY_O) depth++;
+                else if ((u == TOK_SQUARE_C || u == TOK_PAREN_C || u == TOK_CURLY_C) && --depth == 0) { k++; break; }
+                else if (u == TOK_COLON && depth == 1) slice = true;
+            }
+            if (depth != 0) return false;
+            if (!slice) t = *t.arrElem;
+        } else return false;
+    }
+    *out = t;
+    return true;
+}
+//the type of the local named, where it is known while the flow is read - the one being decided, or one declared before it
+static bool flowNameType(struct flowScan* fs, struct str name, struct type* out) {
+    if (StrCmp(name, fs->root)) { *out = fs->rootType; return true; }
+    struct var* v = scopeFindLocalByCtx(fs->ctx, name);
+    if (!v) return false;
+    *out = v->type;
+    return true;
+}
+static struct var* callAround(struct checkCtx* ctx, struct list* toks, int i, int* idx);
+static bool calleeMayKeepArg(struct var* m, int idx);
+//O26a: whether expression e uses the local named as a whole value (syntaxMentionsName) where the value e gives can carry
+//what the local refers to: never as an argument of a call whose result cannot hold it (calleeMayKeepArg - "v :=
+//measure(line)" with measure giving an I64), nor through a field or an element holding no reference ("line.count").
+//A number or a Bool computed from a local is no flow of it: only a reference, or a value holding references, read out
+//of the local can take what it refers to into the result
+static bool flowMentionsName(struct flowScan* fs, struct syntax* e, struct str name, bool skipFirst) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(e, &toks);
+    struct type nt;
+    bool known = flowNameType(fs, name, &nt);
+    bool found = false;
+    for (int i = skipFirst ? 1 : 0; i < toks.len && !found; i++) {
+        struct token* t = ListGetIdx(&toks, i);
+        if (t->type != TOK_IDEN || !StrCmp(strFromTok(*t), name)) continue;
+        if (i > 0 && !tokStartsWhole(((struct token*)ListGetIdx(&toks, i - 1))->type)) continue;
+        int j = i + 1; //past ".m" members and "[...]" indices
+        for (;;) {
+            if (j + 1 < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_DOT
+                    && ((struct token*)ListGetIdx(&toks, j + 1))->type == TOK_IDEN) {
+                j += 2;
+                continue;
+            }
+            if (j < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_SQUARE_O) {
+                int depth = 0;
+                for (; j < toks.len; j++) {
+                    enum tokenType tt = ((struct token*)ListGetIdx(&toks, j))->type;
+                    if (tt == TOK_SQUARE_O) depth++;
+                    else if (tt == TOK_SQUARE_C && --depth == 0) { j++; break; }
+                }
+                continue;
+            }
+            break;
+        }
+        if (!(j >= toks.len || tokEndsWhole(((struct token*)ListGetIdx(&toks, j))->type))) continue;
+        struct type ct;
+        if (known && flowChainType(nt, &toks, i + 1, j, &ct) && !flowTypeCarries(ct)) continue; //a number read out of it
+        int idx = -1;
+        struct var* callee = callAround(fs->ctx, &toks, i, &idx);
+        if (callee && !calleeMayKeepArg(callee, idx)) continue; //handed to a call that keeps none of it
+        found = true;
+    }
+    ListDestroy(toks);
+    return found;
+}
+//whether a place written "x.a[i].b" (x a local declared before the one being decided, or that one) holds no reference -
+//a number put there carries nothing into the result
+static bool flowPlaceCarriesNothing(struct flowScan* fs, struct syntax* tgt, struct str root) {
+    struct type rt;
+    if (!flowNameType(fs, root, &rt)) return false;
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(tgt, &toks);
+    struct type ct;
+    bool r = toks.len > 0 && flowChainType(rt, &toks, 1, toks.len, &ct) && !flowTypeCarries(ct);
+    ListDestroy(toks);
+    return r;
+}
+//whether a type written for a declaration holds no reference - a primitive or a declared type named alone ("v I64")
+static bool flowWrittenTypeCarriesNothing(struct flowScan* fs, struct syntax* te) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(te, &toks);
+    bool alone = toks.len == 1 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN;
+    ListDestroy(toks);
+    if (!alone) return false;
+    ErrMsgMuteStart();
+    struct type t = resolveTypeExpr(fs->ctx->mod, te, NULL);
+    ErrMsgMuteEnd();
+    return !t.unknown && !flowTypeCarries(t);
+}
 //whether e is a plain copy of the local named into a value target - "f := e", "b = a" - which keeps its references
 //where its source's are (O25h): it is no flow of the source, whose storage stays where it is (the guard for copies of
 //existing storage). A reference target ("n Node& = v") borrows, which is a flow
@@ -15222,16 +15579,18 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct syntax* tgt = firstPartOfType(n, SNTX_EXPR_POSTFIX);
             struct syntax* e = firstPartOfType(n, SNTX_EXPR);
             struct str T;
-            if (!e || !tgt || !syntaxMentionsName(e, name, false) || !syntaxRootName(tgt, &T)) return false;
+            if (!e || !tgt || !flowMentionsName(fs, e, name, false) || !syntaxRootName(tgt, &T)) return false;
             //a whole value local assigned is a copy; a field or an element of one is a slot of it, which may hold a reference
             if (exprIsNameChain(tgt, T) && flowIsCopy(fs, e, name, flowNameIsValue(fs, T))) return false;
+            if (flowPlaceCarriesNothing(fs, tgt, T)) return false; //a number put in a field holding no reference
             return flowTarget(fs, T, after);
         }
         case SNTX_VAR_DECL: {
             struct syntax* e = firstPartOfType(n, SNTX_EXPR);
-            if (!e || !syntaxMentionsName(e, name, false)) return false;
+            if (!e || !flowMentionsName(fs, e, name, false)) return false;
             //":=" declares what its initializer is, a written type what it writes - a reference when it ends in a marker
             struct syntax* te = firstPartOfType(n, SNTX_TYPE_EXPR);
+            if (te && flowWrittenTypeCarriesNothing(fs, te)) return false; //a number declared from it
             bool valueTarget = te ? !syntaxEndsWithMarker(te) : flowNameIsValue(fs, name);
             if (flowIsCopy(fs, e, name, valueTarget)) return false;
             return flowExplore(fs, strFromTok(firstTokOfType(n, TOK_IDEN)), after);
@@ -15239,7 +15598,7 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
         case SNTX_STMNT_DESTRUCT: {
             struct list values = allPartsOfType(n, SNTX_EXPR);
             bool mentioned = false;
-            for (int i = 0; i < values.len && !mentioned; i++) mentioned = syntaxMentionsName(*(struct syntax**)ListGetIdx(&values, i), name, false);
+            for (int i = 0; i < values.len && !mentioned; i++) mentioned = flowMentionsName(fs, *(struct syntax**)ListGetIdx(&values, i), name, false);
             ListDestroy(values);
             if (!mentioned) return false;
             bool declare = hasTokOfType(n, TOK_ASS_INFER);
@@ -15256,7 +15615,7 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
         case SNTX_STMNT_EXPR: {
             struct syntax* e = n->parts.len ? partSntx(n, 0) : NULL;
             struct str T;
-            if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && syntaxMentionsName(e, name, true) && flowTarget(fs, T, after))
+            if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && flowMentionsName(fs, e, name, true) && flowTarget(fs, T, after))
                 return true;
             break;
         }
@@ -21056,6 +21415,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     regionEdges = ListInit(sizeof(struct regionEdge)); //O17
+    handleMemos = ListInit(sizeof(struct handleMemo)); //O17b
     lendChecks = ListInit(sizeof(struct lendCheck));
     bareErrorType = (struct type){0};
     bareErrorType.bType = BASETYPE_ERROR;

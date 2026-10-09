@@ -2419,8 +2419,11 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into a
-compile-time-length array — an out-of-range index is a **compile-time error**. That check costs nothing at
-run time and is not affected by the above.
+compile-time-length array — an out-of-range index written without `try` is a **compile-time error**. That check
+costs nothing at run time and is not affected by the above. Under `try` (E16d) the index is the checked form, whose
+failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
+(`fn third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }`) one instantiation may have the element and
+another not.
 
 **E16d.** `try base [ index ]` (§5.10 E15) **opts in to a bounds check**: the index is checked against
 `[0, base.Len())` and an out-of-range one produces `BuiltinError.OUT_OF_BOUNDS` (§7.7) rather than reading or
@@ -4140,7 +4143,8 @@ value where it dangles. Accordingly:
   whose references live in one of the function's own blocks is a compile-time error - a copy, an array or anything read
   out of one included - except a struct or enum built here, which is judged by what its constructor bound (O13a); a
   store of references into such a value afterwards puts them where the value's own references are, which its bindings
-  then say.
+  then say. A copy of a handle (O17b) is a second name for the one collection - its reference is where the source's is -
+  and is lent to a call as that reference.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it: the program's scope is reached through a global or a call's binding, never through a local's own tag.
@@ -4289,7 +4293,11 @@ returned). A plain copy of a value local into a value (`f := e`, `b = a`) is no 
 references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
 which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
 such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
-returned local is not followed. So the recursive-descent and Pratt idioms are correct as written:
+returned local is not followed. Only a reference, or a value holding references, carries what the local refers to: a
+value that can hold none - a number or a `Bool` computed from it, as an argument of a call whose result cannot hold it, a
+field or an element holding no reference, or anything declared or stored with a type holding none - is no flow of it,
+so a loop measuring each line it reads into a returned summary (`line := next(); v := measure(line); if v > s.best {
+s.best = v }`) leaves each line in the loop's block. So the recursive-descent and Pratt idioms are correct as written:
 
 ```
 fn (p mut Parser&) expr(minPrec I64) Expr& {
@@ -4376,7 +4384,8 @@ element, O25h) and the callee can keep something it builds in the value's own sl
 to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
 a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
-a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
+a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine; a handle is lent as its
+reference (O17b).
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
 value's slots when its body stores into the value's region a reference or a value holding references (a field, an
 element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
@@ -4405,6 +4414,29 @@ in the copy's block and hang the result off the source's node. The value itself 
 reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
 judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
 lives where the value's references do.
+
+**O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
+exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
+by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any such struct a program declares. A copy of one
+(O25h), a by-value parameter of one (O4b), or one read out of a collection holds its reference where its own storage is
+not, and is lent to a call **as that reference**: where the callee uses its parameter only **through** it - reads the
+reference out of the parameter (`l.s`, the field never assigned), or hands the parameter on, as a receiver or an argument,
+to another parameter that does (a fixed point over the program's calls, read off their bodies as written) - the call binds
+the parameter's scope variable where the reference leads, as passing the reference itself would, and the handle's own
+storage is no part of the call but to be alive through it. So the grouping idiom builds where the map's lists live:
+
+```
+for w in words {
+    l := try m.Get(key(w))       # a copy of the map's list - the same list (T8)
+    l.Push(w)                    # lent as its reference: the chunks are built where the map's lists are
+}
+```
+
+and a copy in an inner block, or a `List` or `Map` taken by value, is pushed onto, put into and read as the one
+collection. A callee that uses the parameter any other way - keeps it in a local, stores, returns or compares it, captures
+it in a lambda, walks it with `for`, assigns its field, or hands it where the body is not known (a function value, an
+`extern`, a trait's default) - is judged as O17 judges any lent value, by where the handle's storage is. A handle is still
+not held by reference (O17a), and a task's argument still lives until its join (P2).
 
 **O18.** *Supplying the result scope.* A scope argument (E25) binds the callee's result scope to where a
 variable of the caller lives. Without one, the result scope **follows the result** (O18a).

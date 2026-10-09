@@ -632,6 +632,8 @@ struct operand {
     int refinedDepth;
     bool refinedUnnamed;
     bool hereChecked; //C2d/T17c: checkCtorHereFits has judged this value where it landed - once is enough
+    bool handleLent; //O17b: a handle borrowed for a call that uses it only through its reference - lent as that reference,
+                     //so the call's scope variable is where the reference leads and the handle's own storage is no part of it
     struct list args; //list of struct operand*: operator operands, call args, or [base, index]/[base] for index/member
     enum operation opType;
     bool isLiteral;
