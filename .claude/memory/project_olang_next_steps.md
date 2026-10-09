@@ -457,6 +457,12 @@ because what it finds about structure feeds the refactor.
   #10 nested for-in copies), #7 O26a through ctors for assigned text, #12 match values of differing array lengths, #13
   error type as a value type rejected, diagnostics #14-#21, L9a for field names (`done`). Questions QD (`x := 0` I64)
   and QE (spawned functions failing) in the ledger.
+- 00:05 CEST (2026-10-10): fuzz2 merged and pushed (a17ffe9): the generator covers List/Map handles, == on arrays,
+  Array<T,N>, constant generics, case _, std/math, Format/ParseInt; 600 programs, 17,940 cases. Fixed: try clauses
+  catching an argument's computed-callee error (evaluator), `$` of a zero array value. Handed: empty comprehension is
+  null at run time -> s4cg item 9. QUEUED for s4sem: O17 refuses every method on a List/Map copy (fuzz/repro/
+  listalias.olang - rec 4 "a handle is lent as its reference"), E16 rejects a known out-of-range constant index even
+  under `try` (fuzz/repro/trygenericindex.olang - E16d says try asks for the check; decide: under try it is the check).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
