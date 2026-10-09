@@ -9253,6 +9253,62 @@ fn zeroAll() Bool {
 }
 ZeroBaked := zeroAll()
 
+# T7/E12c: a reference field or element given an array the expression makes itself - "Array<T>(n)", a comprehension,
+# a rendering - holds that very storage (it is built where the field lives), each one its own
+type AdoptHolder struct() {
+    a mut Array<I64>& = null
+    rows mut Array<mut Array<I64>&>& = null
+    s mut String& = null
+}
+fn adoptFresh(n I64) I64 {
+    h := AdoptHolder()
+    h.a = Array<I64>(n)
+    first := h.a
+    h.a = Array<I64>(n)
+    h.a[0] = 5
+    h.rows = Array<mut Array<I64>&>(2)
+    h.rows[0] = I64[x * 2 for x in range n]
+    h.rows[1] = h.rows[0]
+    h.rows[1][1] = 40
+    h.s = $(n * 11) "!"
+    assert not same(first, h.a) and first[0] == 0 and h.a.Len() == n and same(h.rows[0], h.rows[1])
+    return h.a[0] + h.rows[0][1] + h.rows[0][2] + I64(h.s.Len())
+}
+AdoptBaked I64 = adoptFresh(3)
+
+test "T7/E12c: a reference field or element adopts a fresh array, each its own storage" {
+    k I64 = I64(ctRuntimeZero)
+    assert adoptFresh(k + 3) == 5 + 40 + 4 + 3 and AdoptBaked == 52
+}
+
+# D13c: "Array<T>(n)" is zeros however its memory was got - a large one from a chunk the system has just mapped (and
+# so not cleared again), anything from a chunk recycled through the pool (cleared), and a later one bumped from the
+# untouched rest of a fresh chunk
+fn zeroSum(a Array<I64>&) I64 {
+    s I64 = 0
+    for x in a { s += x }
+    return s
+}
+fn zeroDirty(n I64) I64 {
+    a := Array<I64>(n)
+    b := Array<I64>(n / 4)
+    s I64 = zeroSum(a) + zeroSum(b)
+    for i in range n { a[i] = i + 1 }
+    for i in range n / 4 { b[i] = 7 }
+    return s
+}
+
+test "D13c: an Array<T>(n) is zeros, from a freshly mapped chunk or a recycled one" {
+    k I64 = I64(ctRuntimeZero)
+    total I64 = 0
+    for r in range 6 {
+        total += zeroDirty(k + 40000 + r)          # 320KB: a mapped chunk the first time, a recycled one after
+        total += zeroDirty(k + 600)                # small: bumped, and cleared
+        c := churnArena()
+    }
+    assert total == 0
+}
+
 test "D13c: a type with a constructor makes its own zero value" {
     assert zeroAll()
     assert ZeroBaked

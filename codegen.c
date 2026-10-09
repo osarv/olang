@@ -1648,6 +1648,19 @@ static char* cgFnPair(struct cgCtx* ctx, const char* code, const char* env) {
     return half;
 }
 
+//T7/E12c: an array the expression makes itself - "Array<T>(n)", a comprehension, a rendering or a join - is storage
+//nothing else holds, built where the target being stored into lands it (cgWhereBuilt falls through to the target's
+//scope: the checker placed it nowhere else). A reference target, or a value target holding nothing yet, ADOPTS that
+//storage - its descriptor is stored - rather than copying it into a second allocation of the same size in the same
+//scope. A value array already holding a value is written into instead (T11b), so it is never adopted.
+static bool cgAdoptsFresh(struct type dstT, struct operand* op, bool dstHoldsLiveValue) {
+    if (dstT.bType != BASETYPE_ARRAY || !dstT.arrMalloc || (dstHoldsLiveValue && !dstT.structMAlloc)) return false;
+    if (op->type.bType != BASETYPE_ARRAY || !op->type.arrMalloc || op->type.structMAlloc || op->type.scopeParam
+            || op->ctorLanded) return false;
+    return op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION
+           || op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT;
+}
+
 //E31: a value whose type declares Call, given where a function value is wanted - the adapter, paired with an
 //environment holding the instance and the instance's scope; the adapter takes the environment as any function value's
 //code does (then the function type's scope arguments and parameters) and calls the instance's Call with them
@@ -2076,7 +2089,8 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
             //an explicitly-tagged "&name" field ignores it and resolves its own named scope as usual
             char* fieldScope = fieldT.scopeParam ? NULL : ctx->targetScopeOverride;
             char* fieldVal = cgValueForTarget(ctx, arg, fieldT, fieldScope);
-            cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
+            if (cgAdoptsFresh(fieldT, arg, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", fieldVal, fieldAddr);
+            else cgStoreInto(ctx, fieldT, arg->type, fieldVal, fieldAddr, fieldScope, false, OperandIsLvalue(arg), false);
         }
         return slot;
     }
@@ -2099,7 +2113,8 @@ char* cgAggregateLiteral(struct cgCtx* ctx, struct operand* op) {
         }
         char* elemScope = elemT.scopeParam ? NULL : ctx->targetScopeOverride;
         char* elemVal = cgValueForTarget(ctx, arg, elemT, elemScope);
-        cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope, false, OperandIsLvalue(arg), true);
+        if (cgAdoptsFresh(elemT, arg, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", elemVal, elemAddr);
+        else cgStoreInto(ctx, elemT, arg->type, elemVal, elemAddr, elemScope, false, OperandIsLvalue(arg), true);
     }
     return slot;
 }
@@ -3361,7 +3376,11 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     //(E12c), otherwise in the block it is written in
     char* scopeVal = cgWhereBuilt(ctx, op);
     char* bytes = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
+    //D13c: zero-filled storage comes from the allocator's zeroed path, which skips the clearing for a large array the
+    //system has just handed over (__olang_scope_alloc_zeroed)
+    bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "", scopeVal,
+            byteSize);
     //D15b: a local "T[expr]" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
     //only at the local var-decl), since a field has no "= v" form to ask for a fill with.
@@ -3373,8 +3392,6 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         char* fillVal = typeNeedsMallocPromotion(elemT, fillOp->type) ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal)
                                                                       : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
-    } else if (!op->noZeroFill) {
-        fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
     }
 
     //register every one of this array's N slots for destruction up front, at allocation time - not
@@ -5126,13 +5143,9 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     if (here) ctx->targetScopeOverride = here;
     char* scope = here && !s->var.type.scopeParam ? here : NULL;
     char* rhs = cgValueForTarget(ctx, s->op, s->var.type, scope);
-    //T7/E12c: an array the initializer makes itself - "Array<T>(n)", a comprehension - was just built in this
-    //declaration's own scope (cgValueForTarget lands it where the copy would go) and nothing else holds it, so the
-    //declaration adopts it rather than copying it into a second allocation of the same size
-    bool adopt = s->var.type.bType == BASETYPE_ARRAY && s->var.type.arrMalloc && s->op->type.bType == BASETYPE_ARRAY
-                 && s->op->type.arrMalloc && !s->op->type.scopeParam
-                 && (s->op->opType == OPERATION_SIZED_ARRAY_ALLOC || s->op->opType == OPERATION_COMPREHENSION);
-    if (adopt) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", rhs, slot);
+    //T7/E12c: an array the initializer makes itself was just built in this declaration's own scope (cgValueForTarget
+    //lands it where the copy would go) - the declaration adopts it (cgAdoptsFresh)
+    if (cgAdoptsFresh(s->var.type, s->op, false)) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", rhs, slot);
     else cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, scope, false, OperandIsLvalue(s->op), false);
     ctx->targetScopeOverride = prev;
 }
@@ -5166,6 +5179,13 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     s->target->cgPlace = addr;
     char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
     s->target->cgPlace = outerPlace;
+    //T7/E12c: a reference field or element given a fresh array ("l.chunks[k] = Array<T>(n)") repoints at it - built
+    //in the target's scope by cgValueForTarget, it is not copied into another (cgAdoptsFresh)
+    if (cgAdoptsFresh(s->target->type, s->op, true)) {
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s%s\n", val, addr,
+                cgTbaa(s->target->type, s->target->opType == OPERATION_INDEX));
+        return;
+    }
     cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride, true, OperandIsLvalue(s->op),
                 s->target->opType == OPERATION_INDEX);
 }
@@ -6082,6 +6102,8 @@ void emitRuntimeDecls(FILE* out) {
         "declare ptr @malloc(i64)\n"
         "declare ptr @aligned_alloc(i64, i64)\n"
         "declare void @free(ptr)\n"
+        "declare ptr @mmap(ptr, i64, i32, i32, i32, i64)\n"
+        "declare i32 @munmap(ptr, i64)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i64 @llvm.ctlz.i64(i64, i1)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
@@ -6221,7 +6243,9 @@ void emitScopeRuntime(FILE* out) {
         //chunk is now allocated 64-aligned and its header padded to 64, which makes the data area 64-aligned
         //too; __olang_scope_alloc then aligns each allocation by its own size. 40 bytes per >=4096-byte
         //chunk is under 1%.
-        "%olang.chunk = type { ptr, i64, i64, [40 x i8] }\n"
+        //next, used, cap, the length mmap gave it (0 for one from aligned_alloc), whether it is fresh from the system and
+        //zero above "used" (__olang_scope_alloc_zeroed), then padding out to 64 bytes
+        "%olang.chunk = type { ptr, i64, i64, i64, i64, [24 x i8] }\n"
         "%olang.dtornode = type { ptr, ptr, ptr }\n"
         //P1: one node per task, bump-allocated from the join block's own scope - which is exactly the
         //lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
@@ -6252,6 +6276,8 @@ void emitScopeRuntime(FILE* out) {
         //private stand-in while a task runs, folded back at its join - so no two threads ever bump it at once
         "@__olang_prog_scope = linkonce_odr thread_local(initialexec) global ptr @__olang_global_scope\n"
         "\n"
+        "", out);
+    fputs(
         //size >= the requested amount, either reused from the free-list's head (kept at its own, possibly
         //larger, original capacity) or freshly malloc'd at max(4096, size) bytes
         "define linkonce_odr ptr @__olang_new_chunk(i64 %size) {\n"
@@ -6270,16 +6296,38 @@ void emitScopeRuntime(FILE* out) {
         "  store ptr %next, ptr @__olang_chunk_pool\n"
         "  %usedptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 1\n"
         "  store i64 0, ptr %usedptr.p\n"
+        //it has been used: what it holds is whatever its last scope left there
+        "  %freshptr.p = getelementptr %olang.chunk, ptr %pool, i32 0, i32 4\n"
+        "  store i64 0, ptr %freshptr.p\n"
         "  ret ptr %pool\n"
         "fresh:\n"
         "  %big = icmp ugt i64 %size, 4096\n"
         "  %reqsize = select i1 %big, i64 %size, i64 4096\n"
         "  %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64\n"
         "  %total0 = add i64 %hdrsize, %reqsize\n"
+        //D13c: a large chunk (128KB up, where glibc's malloc itself turns to mmap) is mapped here, in whole pages - mapped
+        //memory comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
+        "  %huge = icmp uge i64 %reqsize, 131072\n"
+        "  br i1 %huge, label %map, label %heap\n"
+        "map:\n"
+        "  %mt1 = add i64 %total0, 4095\n"
+        "  %mtotal = and i64 %mt1, -4096\n"
+        //PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS (Linux)
+        "  %m = call ptr @mmap(ptr null, i64 %mtotal, i32 3, i32 34, i32 -1, i64 0)\n"
+        "  %mfailed = icmp eq ptr %m, inttoptr (i64 -1 to ptr)\n"
+        "  %mchunk = select i1 %mfailed, ptr null, ptr %m\n"
+        "  br label %got\n"
+        "heap:\n"
         //aligned_alloc requires a size that is a multiple of the alignment
         "  %total1 = add i64 %total0, 63\n"
-        "  %total = and i64 %total1, -64\n"
-        "  %new = call ptr @aligned_alloc(i64 64, i64 %total)\n"
+        "  %htotal = and i64 %total1, -64\n"
+        "  %h = call ptr @aligned_alloc(i64 64, i64 %htotal)\n"
+        "  br label %got\n"
+        "got:\n"
+        "  %new = phi ptr [ %mchunk, %map ], [ %h, %heap ]\n"
+        "  %total = phi i64 [ %mtotal, %map ], [ %htotal, %heap ]\n"
+        "  %maplen = phi i64 [ %mtotal, %map ], [ 0, %heap ]\n"
+        "  %zeroed = phi i64 [ 1, %map ], [ 0, %heap ]\n"
         //the allocator declining is a broken guarantee, as a thread that will not start is (P1c): reported, never
         //written through - a null chunk used to be filled in as though it were one
         "  call void @__olang_alloc_check(ptr %new)\n"
@@ -6288,6 +6336,10 @@ void emitScopeRuntime(FILE* out) {
         "  %capptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 2\n"
         "  %realcap = sub i64 %total, %hdrsize\n"
         "  store i64 %realcap, ptr %capptr.n\n"
+        "  %mapptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 3\n"
+        "  store i64 %maplen, ptr %mapptr.n\n"
+        "  %freshptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 4\n"
+        "  store i64 %zeroed, ptr %freshptr.n\n"
         "  ret ptr %new\n"
         "}\n\n"
         //bump-allocates size bytes from scope, growing (linking on one more chunk) if the current one
@@ -6353,6 +6405,31 @@ void emitScopeRuntime(FILE* out) {
         "  %newused = add i64 %curused, %size\n"
         "  store i64 %newused, ptr %curusedptr\n"
         "  ret ptr %result\n"
+        "}\n\n", out);
+    fputs(
+        //D13c: size bytes of ZEROS from scope - an "Array<T>(n)" with no fill. Bumped as any allocation is, then cleared -
+        //unless it came from a chunk the system has just handed over (__olang_new_chunk maps a large one, and mapped memory
+        //is zero) that no scope has used before: there, everything at or above the chunk's bump offset has never been
+        //handed out, so it is still zero and its pages are first touched by the program's own writes. A chunk that comes
+        //back through the pool is dirty and is cleared as any other.
+        "define linkonce_odr noalias ptr @__olang_scope_alloc_zeroed(ptr %scope, i64 %rawsize) {\n"
+        "entry:\n"
+        "  %p = call ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize)\n"
+        "  %big = icmp uge i64 %rawsize, 4096\n"
+        "  br i1 %big, label %check, label %clear\n"
+        "check:\n"
+        //the chunk p was bumped from is the scope's head: __olang_scope_alloc takes it from there or puts a new one there
+        "  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
+        "  %head = load ptr, ptr %headptr\n"
+        "  %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4\n"
+        "  %fresh = load i64, ptr %freshptr\n"
+        "  %untouched = icmp ne i64 %fresh, 0\n"
+        "  br i1 %untouched, label %done, label %clear\n"
+        "clear:\n"
+        "  call void @llvm.memset.p0.i64(ptr %p, i8 0, i64 %rawsize, i1 false)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret ptr %p\n"
         "}\n\n", out);
     fputs(
         //P2a: returns this thread's whole chunk pool to the allocator. The pool is thread_local, so a task
@@ -6614,10 +6691,21 @@ void emitScopeRuntime(FILE* out) {
         "  %empty = icmp eq ptr %p0, null\n"
         "  br i1 %empty, label %done, label %walk\n"
         "walk:\n"
-        "  %cur = phi ptr [ %p0, %entry ], [ %next, %walk ]\n"
+        "  %cur = phi ptr [ %p0, %entry ], [ %next, %freed ]\n"
         "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
         "  %next = load ptr, ptr %nextptr\n"
+        //a chunk mmap gave (__olang_scope_alloc_zeroed) goes back the way it came
+        "  %mapptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 3\n"
+        "  %maplen = load i64, ptr %mapptr\n"
+        "  %ismapped = icmp ne i64 %maplen, 0\n"
+        "  br i1 %ismapped, label %unmap, label %release\n"
+        "unmap:\n"
+        "  %ur = call i32 @munmap(ptr %cur, i64 %maplen)\n"
+        "  br label %freed\n"
+        "release:\n"
         "  call void @free(ptr %cur)\n"
+        "  br label %freed\n"
+        "freed:\n"
         "  %atend = icmp eq ptr %next, null\n"
         "  br i1 %atend, label %done, label %walk\n"
         "done:\n"
