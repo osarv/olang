@@ -463,6 +463,10 @@ because what it finds about structure feeds the refactor.
   null at run time -> s4cg item 9. QUEUED for s4sem: O17 refuses every method on a List/Map copy (fuzz/repro/
   listalias.olang - rec 4 "a handle is lent as its reference"), E16 rejects a known out-of-range constant index even
   under `try` (fuzz/repro/trygenericindex.olang - E16d says try asks for the check; decide: under try it is the check).
+- 00:05 CEST: five-hour window reset; usage at 22:02 UTC five-hour 0.01, weekly 0.72 (weekly resets 04:00 UTC =
+  06:00 CEST: 28% left over 6 h, ~flat out). send_later armed for 03:03 UTC (05:03 CEST). oannc2 moved to master
+  db2af5d; started oann wt-oann-p7 (catch-up, BF16 re-measure after inline narrowing, consolidator wired into the agent
+  = settling open question 11, FastExp in the softmax). Running: rvfix, rv2fix, qc, s4cg, oann-p7.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
