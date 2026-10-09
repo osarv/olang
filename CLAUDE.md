@@ -61,7 +61,7 @@ Go through this for every change to what olang means - a rule added, revised or 
 
 1. **Spec first**: write or revise the rule in `SPEC.md`, grammar included.
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
-3. **Compile-time evaluator** (`comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
+3. **Compile-time evaluator** (`bootstrap/comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
    or a global it bakes, K2) beside the run-time test.
 4. **Tests**: corpus tests for what now works (read back after an arena churn where scopes are involved), and
@@ -4271,6 +4271,63 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   **S4c (pre-existing)**: a parallel assignment's enum case or array literal reading a target was evaluated after it was
   written (`n, e = 5, E.Lit(n)` gave `Lit(5)`), and a held value holding references kept them in the statement's block
   (O25h's error from a loop body) - each value now lands at its target before it is held.
+- **A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision
+  QC, recommended by the coordinator).** Shallow permission let a read-only `List`/`Map` - any value holding a `mut`
+  reference - be changed through a copy: `x := G; x.Push(1)` changed an immutable global's list (the review of tonight's
+  merges, #4). Now a value whose type holds writable references (O25g's walk: fields, payloads, fixed-array elements by
+  value, never through a reference) copied out of a place reached read-only - an immutable global, what a read-only
+  reference names and anything reached through one, a capture, a read-only copy - is read-only itself: it is not lent
+  writably, nothing is written through its `mut` references, and it is not stored where it can be written (assigned,
+  an array literal's element or fill, a payload, a by-value result); `x T = G` is an error naming `G.Clone()` (or "from
+  its parts"), `x := G` the read-only copy. Permission stays shallow: the place's own references keep their types'
+  permission (`EvHold.a[0] = 9` through an immutable global's `mut` field stands). **Decided (mine)**: for-in elements and
+  match bindings are read-only exactly when the collection walked / place matched is (any alternative reading one making
+  a binding so); a **by-value parameter's** need is read off the callee's body (written through, lent writably, stored, or
+  passed to a callee that does - a fixed point once every body is checked; an unchecked body is assumed to need it), so
+  readers take read-only copies and only writers refuse them, at the call; a function made a **value** (named, lambda,
+  `Call`) may have no such parameter, since its callers cannot see its body - treating every call through a function
+  value as writing would have refused `Map`/`Filter`/`Fold` over arrays of handles; R11 already keeps a read-only copy
+  out of a `catch default`. **std/linalg**: destination forms (`Set`, `Fill`, `Map`, `Gemm`'s `c`, `Activate`'s `y` ...)
+  take `mut` - a signature shows what a call writes (D9), and a read-only receiver writing through `Data` would have let a
+  read-only copy be filled - while views (`Row`, `RowRange`, `Block`, `Reshape`, `T()` ...) keep read-only receivers
+  and hand out writable views, shallowly: with no permission polymorphism a read-only view of a read-only matrix would
+  otherwise be inexpressible, so `x := G; x.Block(...).Fill(0)` still writes G's elements (recorded limit). **B11**: the
+  "declare it 'p mut T&'" note now reaches parameters and receivers and the arms of a conditional or match, so
+  `tools/perm_mut.py` migrates code using linalg's destinations (oann: 54 `mut`s in eight files, after which it all
+  compiles). Compile-time only: the evaluator needed nothing, shown by a global it bakes through read-only copies
+  beside the same computation at run time.
+- **From study 4: null reads trap, process handles, `chan.Close`, `-i` runs joins, defaults for build constants (T2b, P7,
+  E27, O8c, X6, B3e, B10c, 2026-10-09).** Every generated function carries `null_pointer_is_valid`, so a null read is a
+  trap T2b now guarantees (an optimizer-visible one used to delete `main`'s return; callgrind: the bench within 0.02%,
+  text +0.78%); E16e/X1a list a data race in its place. Under `-r` the OnCrash handler is uninstrumented (it could block
+  on TSan's own lock); P7 also states TSan's limit of ~200,000 frames. `StringBuilder.Clear`; O8c states that nothing is
+  reclaimed before its scope closes. `io.Lines` never remembers the end of a file (tail -f). `chan.Close`: buffered
+  values drain, then `Recv`/`RecvUntil` fail with `ChanError.CLOSED` (Recv is fallible now) and `for v in c` ends; a Send
+  on a closed channel stops the program (decided: a protocol mistake, as Go panics - not an error on every Send); closing
+  twice changes nothing. `os.Exec(..., dir)`, `os.ExecUntil(args, tok)` killing the child when the token fires,
+  `os.Start` -> `Process` (`Wait`, `WaitUntil`, `Kill`, `Pid`); the runtime's spawn takes a directory (addchdir_np,
+  weak, else /bin/sh with the directory as an argument). `-i` runs a join's tasks in sequence as K1 does, stops on a
+  wait another task would end, and runs deferred code of the blocks it is in when it stops on what it does not run.
+  **B10c**: an immutable top-level global outside std of type Bool/I32/I64/U64/F64/String is a build constant's
+  default - `-D` replaces its value, fitted to its type - and is configuration either way (S8a/S8b), **reversing** the
+  confirmed "`Verbose := false; if Verbose` is an error"; an unknown name in a condition says "define it with -D". An
+  empty comprehension gets storage of its own after its loop (not 100 reserved up front). Full story in HISTORY.md.
+- **The C compiler is `bootstrap/`, stage 0 (2026-10-10; the user: "give the C compiler its own directory ... keep a
+  way to re-bootstrap if the current compiler binary is lost", "keep it modest", "only split where modularisation is a
+  thing").** Every `.c`/`.h` moved with `git mv`, in a commit of renames only so other branches merge across it; the
+  binary is still `build/out`, built from `bootstrap/*.c`, so std, `-e`'s `SPEC.md`, checks, tools and oann find
+  everything where they did. The one split is a real module: the runtime's ~2,900 lines of LLVM IR text moved from
+  codegen.c to `bootstrap/runtime.c` (the target's architecture an argument), nothing else. Dead code went (six
+  functions, the unused C test macros, an enum, a field) and comments that called removed features current (interfaces,
+  scope names and declarations, struct literals, array suffixes, 2-D arrays) or wrote retired spellings (`func`,
+  `choice`, `int32`, `len(`) were rewritten, orphaned ones moved back to their functions - all but semantic.c's, which
+  another branch was editing. **Proof**: every IR file the compiler writes for the corpus, std, every checks case and
+  fixture, bench and fuzz - 743 files from `-t`, `-b`, `-c`, `-d` and `-r` builds - byte-identical before and after,
+  diagnostics too (clang stubbed out, so only the compiler's own output is compared), and `make verify`.
+  **Re-bootstrap** (`bootstrap/README.md`): no binary is committed; `make bootstrap` builds `build/stage0` (the same C at
+  `-O2`, its IR identical as well) and, once `compiler/` holds the olang compiler, will walk `bootstrap/CHAIN` (empty
+  today) and build stages 1-3 to a fixed point - a TODO in the makefile. From the port's start `bootstrap/` takes fixes
+  only (QB).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

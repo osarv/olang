@@ -1,0 +1,11 @@
+# check: fail error[T25c]: a copy of a read-only Box cannot be stored where it can be written
+# T25c: an array literal's element is writable storage
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn main() ? {
+    a := Box[GB]
+    a[0].P[0] = 1
+}

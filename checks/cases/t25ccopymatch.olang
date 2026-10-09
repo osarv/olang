@@ -1,0 +1,19 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# also: note: 'b' copies a place reached read-only, so it is read-only
+# T25c: a match binding copies the payload of the place matched - of an immutable global, read-only
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+type Opt enum {
+    None
+    Some(b Box)
+}
+GO Opt = Opt.Some(Box(Array<I64>(2)))
+fn main() ? {
+    match GO {
+        case Opt.Some(b) { b.P[0] = 1 }
+        nomatch { }
+    }
+}

@@ -469,6 +469,27 @@ because what it finds about structure feeds the refactor.
   = settling open question 11, FastExp in the softmax). Running: rvfix, rv2fix, qc, s4cg, oann-p7.
 - 00:30 CEST: rvfix merged and pushed (e046142, its own verify on the merged code). qc and rv2fix told to merge
   master. Running: qc, rv2fix, s4cg, oann-p7.
+- 00:45 CEST: rv2fix merged and pushed (0a1a5df). Started wt-s4sem (study4 checker items + fuzz listalias/
+  trygenericindex + L9a fields), told to write adversarial UAF tests for each relaxation; RUN A SOUNDNESS REVIEW on its
+  diff before merging. Running: qc, s4cg, s4sem, oann-p7. Then the bootstrap/ move.
+- 01:00 CEST: qc merged and pushed (999ae6c, its own verify). oann breaks on it until migrated (perm_mut adds ~54 mut):
+  oann-p7 told to migrate as its last step against /home/user/wt/oannc3 (master 999ae6c) and point the makefile there.
+  Running: s4cg, s4sem, oann-p7.
+- 01:20 CEST: s4cg merged and pushed (a9fdf1b, verified). Started wt-boot: C sources into bootstrap/ (build/out
+  stays), runtime IR into bootstrap/runtime.c, dead code + stale comments outside semantic.c (semantic.c after s4sem),
+  `make bootstrap`, bootstrap/README.md; acceptance = identical normalized IR + verify. Running: s4sem, oann-p7,
+  review3 (rvfix/rv2fix/qc soundness), boot. NEXT when boot lands and s4sem is reviewed + merged: start the port, M1
+  scanner (and M2 diagnostics), C compiler fixes only (QB).
+- 01:45 CEST: review3 (/home/user/review/tonight3): 10 confirmed, mostly PRE-EXISTING use-after-frees (a spawned
+  lambda building into the spawner's arena from the task's thread; copies out of a returned/borrowed reference in four
+  shapes; slices/views of split values), a conditional-literal regression (E8a skipped), QC holes (global initializers,
+  slices/views/for-in of read-only copies), E11c purity missing writes through references, S4d missing compound
+  assignment, and QC over-rejections in the prelude (Map.Get on a Map of Lists!). Started wt-rv3fix for all of them.
+  STRATEGIC (for the morning report): three reviews tonight each found new UAFs; valgrind is blind to arena reuse.
+  NEXT after boot lands: a SCOPE SANITIZER - under -d, poison a closed scope's chunks (and optionally quarantine/
+  mprotect them) so a read of freed memory gives a recognisable value or faults; extend the fuzzer with scope-stress
+  programs (lend, copy out, return, spawn, slice) whose -d/-i difference then flags a UAF mechanically. The same oracle
+  serves the port's M6 acceptance.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

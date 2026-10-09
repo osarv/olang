@@ -29,7 +29,7 @@ enum tokenType {
     TOK_CONTINUE, //S11: ends the current iteration, same unwinding
     TOK_ABORT,       //S16c: stop now, violently - no cleanup, a core dump, the OS's abort status
     TOK_UNREACHABLE, //S16d: control was believed never to get here; aborts if it does
-    TOK_EXTENDS,     //T29f: "type Meters extends Int32" - the declared type inherits its base's methods and operators
+    TOK_EXTENDS,     //T29f: "type Meters extends I32" - the declared type inherits its base's methods and operators
     TOK_DONE,
     TOK_FAIL,
     TOK_ASSERT, //"assert EXPR" - a statement, takes its operand directly like "return" does, not a
@@ -131,7 +131,6 @@ bool TokenSplitShiftLeft(TokenCtx tc);
 int TokenEditMark(TokenCtx tc);
 void TokenEditRewind(TokenCtx tc, int mark);
 int TokenListVersion(TokenCtx tc);
-void TokenUnfeed(TokenCtx tc);
 int TokenGetStrStart(struct token tok);
 int TokenGetLineStart(TokenCtx tc, int charIdx);
 int TokenGetStrLen(struct token tok);
@@ -140,8 +139,6 @@ char TokenGetChar(TokenCtx tc, int charIdx);
 int TokenGetCharCount(TokenCtx tc); //the file's bytes, and the '\0' after them
 int TokenGetCursor(TokenCtx tc);
 void TokenSetCursor(TokenCtx tc, int cursor);
-int TokenGetCharCursor(TokenCtx tc);
-int TokenGetLineNr(TokenCtx tc);
 char* TokenStrFromType(enum tokenType type);
 struct token TokenBefore(struct token t);
 struct token TokenAfter(struct token t);

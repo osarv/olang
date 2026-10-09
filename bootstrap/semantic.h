@@ -323,7 +323,17 @@ struct var {
               //trait method in a signature: declared "mut" - a writable reference (T25b), or a writable receiver (T30)
     bool paramWritten; //D9b: a signature parameter its body writes, or makes a writable reference to - a by-value array
                        //it is bound to is then the callee's own copy
-    bool permByType;   //B11: a local whose written reference type, without "mut", made it read-only (T25b)
+    bool permByType;   //B11: a local or parameter whose written reference type, without "mut", made it read-only (T25b)
+    //T25c: a local taking its permission from its initializer (declInit) - ":=", a hidden or loop local, a bare type
+    //variable's - so a copy of a value reached read-only, holding writable references, is read-only too
+    bool roInherit;
+    bool roCopy;          //T25c: ...a local read-only whatever its initializer says (a match binding some alternative reads
+                          //out of a read-only place)
+    struct operand* roFrom; //T25c: ...a local read-only exactly when this is: a for-in element (the collection walked), a
+                            //match binding (the place it reads)
+    bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
+    bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
+                          //through, lends writably or stores where it can be written - no read-only value may be passed
     //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
     //reached through it something not read out of that region (built, or handed in), itself or through a callee
     //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
@@ -354,6 +364,9 @@ struct var {
     bool refsHomeUnnamed;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
+    bool buildDefault; //B10c: an immutable global of a type a -D value can have, outside std - a -D of its name gives
+                       //its value, and a condition reading it depends on the build either way
+    bool buildDefaultAsked; //B10c: declared with the name of a constant -D defines - judged once its type is known
     bool isGlobalVar; //module-level only: declared as a global variable - storage, whatever its type, a function type
                       //included (a function-typed global holds a function value; it is not a function)
     bool isFuncDecl; //module-level only: this name was declared by "func"/"extern func" rather than as a

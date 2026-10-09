@@ -99,6 +99,7 @@ DROP = [
     ("D11a", "a local is always writable - 'mut' is for a reference"),
     ("D11a", "':=' gives a local its initializer's permission"),
 ]
+NEXT_NAME = re.compile(r"[ \t]*,[ \t]*[A-Za-z_][A-Za-z0-9_]*")
 DECLARE = re.compile(r"'([A-Za-z_][A-Za-z0-9_]*)' is declared read-only here - declare it '")
 
 
@@ -218,6 +219,12 @@ def apply(edits):
                 if text[at:at + len(name)] != name:
                     continue
                 after = at + len(name)
+                # one of several names sharing a type (D12b): "mut" goes once, before the type, after the last name
+                while True:
+                    m = NEXT_NAME.match(text, after)
+                    if not m:
+                        break
+                    after = m.end()
                 if text[after:after + 4] == " mut":
                     continue
                 lines[line - 1] = text[:after] + " mut" + text[after:]

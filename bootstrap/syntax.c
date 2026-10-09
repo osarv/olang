@@ -34,8 +34,8 @@ struct syntaxContext {
     struct token furthestTok;
     char* furthestExpected;
     void* typeCtx;
-    TypeNameLookup isKnownType; //see the report on struct syntax's declaration - only ever consulted to
-                                //tell a struct literal's type name apart from an ordinary variable/block
+    TypeNameLookup isKnownType; //see TypeNameLookup in syntax.h - only ever consulted to tell a type's name apart
+                                //from a value's
     struct list localNames; //S8b: every parameter and local declared so far in the current top-level item
                             //- over-approximated (never removed as blocks close), which errs toward
                             //treating a name as a local and a condition as a runtime one
@@ -174,18 +174,18 @@ struct token prevTok(SyntaxCtx sc) {
 bool acceptStmntEnd(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_STMNT_END).type == TOK_STMNT_END) return true;
     //a closing "}" terminates the statement before it, so a whole block can be written on one line
-    //("func g(a int32) int32 { return a }"). Peeked, never consumed - the "}" is the enclosing block's
+    //("fn g(a I32) I32 { return a }"). Peeked, never consumed - the "}" is the enclosing block's
     //own, and whoever is parsing that block still needs it. No newline precedes it, so the tokenizer
     //synthesizes no STMNT_END of its own; nothing else can follow a statement inside a block either, so
     //this can never swallow something a longer parse would have wanted.
     if (peekTok(sc).type == TOK_CURLY_C) return true;
     enum tokenType prev = prevTok(sc).type;
-    //TOK_GRT/TOK_BTSFT_R: a type's argument list closing a declaration with no initializer ("none <T>",
-    //"q Pair<Int32, <T>>") - a "greater than" is never a complete statement's last token, since the
+    //TOK_GRT/TOK_BTSFT_R: a type's argument list closing a declaration with no initializer ("x List<I32>",
+    //"q Pair<I32, List<T>>") - a "greater than" is never a complete statement's last token, since the
     //expression parser always goes on to its right operand, so this cannot end a comparison early
     if (prev == TOK_CURLY_C) return true;
     if (!(prev == TOK_BTWSE_AND || prev == TOK_GRT || prev == TOK_BTSFT_R)) return false;
-    //L20a: only as the LAST token - one the line goes on past ("state Array<Float32>(n)") is not a statement's end
+    //L20a: only as the LAST token - one the line goes on past ("state Array<F32>(n)") is not a statement's end
     struct token next = peekTok(sc);
     return next.type == TOK_NONE || next.lineNr > prevTok(sc).lineNr;
 }
@@ -254,10 +254,10 @@ struct list parseScopeDecls(SyntaxCtx sc);
 //identifiers are alias hops through a chain of re-exports - see resolveAliasChain in semantic.c; that's a
 //semantic question, not a grammar one, so this commits to any dotted chain unconditionally). Never fails
 //if a leading IDEN is present; callers check the leading token first. Used for type refs and call targets,
-//both parsed from a position the parser already knows is unambiguous, and also for a struct/array
-//literal's own type name (parseExprPrimary's TOK_IDEN case) - there, the parser's own type-name-awareness
-//(nameIsKnownType/isKnownTypeForParsing) decides whether to commit to literal syntax, and walks this same
-//chain hop by hop to any depth (not limited to one or two hops) before answering. A choice value
+//both parsed from a position the parser already knows is unambiguous, and also for an array literal's or a
+//constructor call's own type name (parseExprPrimary's TOK_IDEN case) - there, the parser's own type-name-awareness
+//(nameIsKnownType/isKnownTypeForParsing) decides whether to commit to that syntax, and walks this same
+//chain hop by hop to any depth (not limited to one or two hops) before answering. An enum value
 //(trailingWordFollowsKnownType) works the same way, just one identifier further left: everything but the
 //trailing word must name a known type, so "lib.Dir.North" resolves through an import like any other name.
 static struct token acceptFnKeyword(SyntaxCtx sc) {
@@ -353,7 +353,7 @@ struct syntax* parseTypeVar(SyntaxCtx sc) {
     if (open.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) return parseFail(sc, cur);
-    //G19: "<T Iterator<Int32>>" - a constraint, an interface T must satisfy
+    //G19: "<T Iterator<I32>>" - a constraint, a trait T must satisfy
     struct syntax* constraint = NULL;
     enum tokenType next = peekTok(sc).type;
     if (next != TOK_GRT && next != TOK_BTSFT_R) {
@@ -373,7 +373,7 @@ struct syntax* parseTypeVar(SyntaxCtx sc) {
 
 //"<" type-expr ("," type-expr)* ">" - a type-argument list instantiating a generic (G8), or, with
 //IDEN-only items, a type-parameter list on a declaration (G6 - same shape, so one parser serves both,
-//with the node type telling them apart). Nested generics ("Vec<Vec<int32>>") close with a single ">>"
+//with the node type telling them apart). Nested generics ("List<List<I32>>") close with a single ">>"
 //token, so a TOK_BTSFT_R at the end of an argument list is split into two ">"s - the same fix C++11,
 //Rust, Java and C# all make, and the only place this grammar needs it.
 struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
@@ -450,8 +450,8 @@ struct syntax* parseConstArg(SyntaxCtx sc) {
     return a;
 }
 
-//"NAME ARR_SFX* (TOK_BTWSE_AND IDEN?)?" - the optional trailing "&name" names which scope a heap-indirect
-//reference belongs to; bare "&" means the value's own private scope - see the report. Fourth and final
+//"&", "&x" or "&return" after a type: a reference - bare, it lives where the declaration it is written in says;
+//"&x" lives where the variable x lives, "&return" in the result scope (O3). The marker's fourth and final
 //spelling: "{}"/"{name}", briefly "&"/"&name", back to "{}", then "<>"/"<name>", now "&"/"&name" again -
 //see HISTORY.md for the full story. The move back off "<>" is what frees "<>" for generic type
 //parameters/arguments; "<>"'s own justification was that it "reads the way a type-parameter annotation
@@ -464,7 +464,7 @@ struct syntax* parseConstArg(SyntaxCtx sc) {
 //Note "&" here marks scope-tagged heap indirection, NOT a borrow or an address - olang has no pointer that
 //ever surfaces and no general borrow checker, only the static scope-containment checker (see the report).
 //"&" IDEN? as its own node - there is nothing to backtrack over, since a "&" in a type position is always
-//a marker (olang has no unary "&", no pointers, so no address-of operator), so the optional scope name is
+//a marker (olang has no unary "&", no pointers, so no address-of operator), so the optional variable name is
 //the only thing left to look for.
 struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
     int before = TokenGetCursor(sc->tc);
@@ -474,9 +474,9 @@ struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
     addTok(s, marker);
     int beforeIden = TokenGetCursor(sc->tc);
     struct token iden = TokenFeed(sc->tc);
-    //the scope name must sit on the marker's own line. "&" is not a stmntEndTriggerType (it can't be, see
+    //the variable name must sit on the marker's own line. "&" is not a stmntEndTriggerType (it can't be, see
     //acceptStmntEnd), so no STMNT_END is synthesized after a bare marker and an IDEN opening the NEXT line
-    //would otherwise be swallowed as this marker's scope name - "x Point&" followed by a line starting
+    //would otherwise be swallowed as this marker's variable - "x Point&" followed by a line starting
     //"q := 5" would silently parse as "x Point&q". No valid program reaches that (a no-initializer
     //reference var-decl is rejected outright), but without this the diagnostic would point somewhere
     //baffling. The old "<...>" spelling got this for free from its closing ">".
@@ -489,28 +489,24 @@ struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
 
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    //the head is either a type variable ("<T>") or a name, optionally instantiated ("Vec<int32>"). Both
-    //then share the identical tail below - array suffixes and reference markers apply to a type variable
-    //exactly as to a named type (G2), so "<T>&[3]&" is well-formed and needs no separate grammar.
+    //the head is either a type variable ("<T>") or a name, optionally instantiated ("List<I32>"). Both
+    //then share the identical tail below - a reference marker applies to a type variable exactly as to a
+    //named type (G2), so "<T>&" is well-formed and needs no separate grammar.
     struct syntax* head = parseTypeVar(sc);
     if (!head) head = parseName(sc);
     if (!head) return NULL;
     struct syntax* s = newNode(SNTX_TYPE_REF);
     addSntx(s, head);
     if (head->type == SNTX_NAME) {
-        //"Vec<int32>" - a type-args list instantiating a generic, always immediately after the name and
-        //before any marker or array suffix (G8)
+        //"List<I32>" - a type-args list instantiating a generic, always immediately after the name and
+        //before any marker (G8)
         struct syntax* args = parseTypeArgs(sc);
         if (args) addSntx(s, args);
     }
-    //T24: a marker binds to whatever is written immediately to its left - the head marker to the element
-    //type ("Point&[3]" - 3 references to Point), each suffix's own marker to the level that suffix
-    //introduces ("Point[3]&" - one reference to an array of 3 Points, since the first suffix is the
-    //outermost level). Suffix markers are consumed by parseArrSfx itself.
+    //T24: one marker, after the type it makes a reference
     struct syntax* elemMarker = parseRefMarker(sc, SNTX_ELEM_REF_MARKER);
     if (elemMarker) addSntx(s, elemMarker);
-    //nothing above leaves a marker unconsumed, so anything still here is a SECOND marker on a level that
-    //already has one ("Point&s&a", "Point[3]&s&a"). Parsed rather than left to fail as an unexpected token
+    //anything still here is a SECOND marker on a type that already has one ("Point&a&b"). Parsed rather than left to fail as an unexpected token
     //purely so resolveTypeRef can report DOUBLE_REFERENCE_MARKER, which says what is actually wrong.
     struct syntax* dup = parseRefMarker(sc, SNTX_REF_MARKER);
     if (dup) addSntx(s, dup);
@@ -518,7 +514,7 @@ struct syntax* parseTypeRef(SyntaxCtx sc) {
     return s;
 }
 
-//one case of a choice type: "IDEN" (a bare tag) or "IDEN ( params )" (a tag carrying a payload). The
+//one case of an enum type: "IDEN" (a bare tag) or "IDEN ( params )" (a tag carrying a payload). The
 //payload is written exactly as a parameter list, and becomes one anonymous struct behind the scenes, so
 //sizing, comparison and field access all reuse machinery that already exists for structs.
 struct syntax* parseParamList(SyntaxCtx sc);
@@ -567,7 +563,7 @@ struct syntax* parseChoiceBody(SyntaxCtx sc) {
     addTok(s, open);
     //cases are STMNT_END-separated, not comma-separated: the same move the constructor body made, and for
     //the same reason - a case is a declaration, not an item in a list, and a trailing comma after a
-    //payload's ")" reads as noise. L20 still lets a one-case choice sit on a single line.
+    //payload's ")" reads as noise. L20 still lets a one-case enum sit on a single line.
     bool any = false;
     while (true) {
         int before = TokenGetCursor(sc->tc);
@@ -680,21 +676,20 @@ struct syntax* parseTypeDecl(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) return parseFail(sc, cur);
-    //"type Vec<T> struct(...)" - the parameter list sits after the NAME, mirroring the use site
-    //("Vec<int32>") rather than attaching to "struct"; it also scopes over the whole declaration, not
+    //"type List<T> struct(...)" - the parameter list sits after the NAME, mirroring the use site
+    //("List<I32>") rather than attaching to "struct"; it also scopes over the whole declaration, not
     //just the body (G6), and keeps type parameters out of the anonymous struct-shape grammar (T3)
     struct syntax* typeParams = parseTypeArgsInto(sc, SNTX_TYPE_PARAMS);
     struct token ext = acceptTok(sc, TOK_EXTENDS); //T29f
-    //"type T&s struct(...)" - same fallback declaration, attached to the constructor node below (a plain
-    //struct has no signature for a scope variable to mean anything in, and is rejected semantically)
+    //"type T&s struct(...)" - a scope is never named (O3), so this is parsed only so that it is reported: attached
+    //to the constructor node below, or to the type expression when there is no constructor
     struct list scopeDecls = parseScopeDecls(sc);
-    //a constructor-bearing struct ("struct(params) { ... }") is only ever reachable here, never as a
-    //general type expression - disambiguated purely by "(" immediately following "struct", so a plain
-    //"struct { ... }" (parseTypeExpr's path, unchanged) never even attempts this
+    //a struct ("struct(params) { ... }", built by its constructor - T13) is only ever reachable here, never as
+    //a general type expression
     struct syntax* ctor = parseStructCtor(sc);
     struct syntax* type = ctor ? ctor : parseTypeExpr(sc);
     if (!type) return parseFail(sc, cur);
-    //T29d: "type Percent Int32(v mut Int32) { ... }" - a constructor for a declared primitive type, written on
+    //T29d: "type Percent I32(v I32) { ... }" - a constructor for a declared primitive type, written on
     //the same line as the type it is declared over
     struct syntax* primCtor = NULL;
     if (!ctor) {
@@ -1060,9 +1055,9 @@ static struct syntax* parseFuncHead(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptFnKeyword(sc);
     if (kw.type == TOK_NONE) return NULL;
-    //M19: "func (recv T) Name(...)". The receiver clause is what makes a function a method - nothing is
-    //inferred from a parameter's type any more - and it is parsed as an ordinary param, so "mut", a "&"
-    //marker and a scope tag all read exactly as they would anywhere else.
+    //M19: "fn (recv T) Name(...)". The receiver clause is what makes a function a method - nothing is
+    //inferred from a parameter's type any more - and it is parsed as an ordinary param, so "mut" and a "&"
+    //marker read exactly as they would anywhere else.
     struct syntax* receiver = NULL;
     struct token rOpen = acceptTok(sc, TOK_PAREN_O);
     if (rOpen.type != TOK_NONE) {
@@ -1076,8 +1071,8 @@ static struct syntax* parseFuncHead(SyntaxCtx sc) {
     }
     struct token name = receiver ? acceptMethodName(sc, false) : acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) return parseFail(sc, cur);
-    //O3: "func f&b(...)" - scope declarations ride on the signature node, where resolveFuncSig finds them
-    //alongside everything else it needs
+    //"fn f&b(...)" - a scope is never named (O3), so this is parsed only so that it is reported, from the
+    //signature node where resolveFuncSig finds it
     struct list scopeDecls = parseScopeDecls(sc);
     struct syntax* sig = parseFuncSig(sc);
     if (!sig) return parseFail(sc, cur);
@@ -1195,7 +1190,7 @@ struct syntax* parseExternParamList(SyntaxCtx sc) {
     return s;
 }
 
-//"extern func IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level declaration only (see the
+//"extern fn IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level declaration only (see the
 //report on §11): no error-list (an external function is never fallible in olang's own sense, X4), and
 //no body at all - STMNT_END ends the declaration directly where an ordinary parseFuncDef's own block
 //would begin. Reuses parseRetType as-is (already bare, no marker, see the signature-reorder entry in
@@ -1757,7 +1752,7 @@ struct syntax* parseStmntDo(SyntaxCtx sc) {
 }
 
 //S13b/S13d: "[alias.]Type.Case [ ( sub-pattern {, sub-pattern} ) ]" - a case of an enum, and what its payload must
-//hold. Committed to only when everything before the last name is a known type (the test a choice value's own
+//hold. Committed to only when everything before the last name is a known type (the test an enum value's own
 //syntax makes), so "Point(1, 2)", "lib.f(x)" and "v.m(1)" stay calls, and only when every position parses as a
 //sub-pattern: anything else is read as an ordinary expression case, compared by "==" (S13).
 static struct syntax* parseSubPattern(SyntaxCtx sc);
@@ -2463,7 +2458,7 @@ struct syntax* parseExprArgs(SyntaxCtx sc) {
     return s;
 }
 
-//E25: "&s" written between a call target's name and its "(", as in "makeVec&a()" or "Vec<int32>&a(4)".
+//E25: "&x" written between a call target's name and its "(", as in "makeList&a()" or "List<I32>&a()".
 //Adjacency is the whole disambiguator: "f&a(x)" and "f & a(x)" tokenize identically, and the second is a
 //legal bitwise-and expression, so the "&" must physically touch the name and the IDEN must touch the "&"
 //- checked on the source pointers, since every real token points into the one source buffer.
@@ -2488,15 +2483,8 @@ struct syntax* parseScopeMarkerRun(SyntaxCtx sc, enum syntaxType nodeType) {
 
 struct syntax* parseScopeArg(SyntaxCtx sc) { return parseScopeMarkerRun(sc, SNTX_SCOPE_ARG); }
 
-//O3: "func f&b(...)" / "type T&s struct(...)" - declares a scope variable for the one case appearance
-//alone cannot cover: a scope the signature's own types never mention, used only inside the body. Adjacent
-//to the name, same rule as a call's scope argument and for the same reason.
-//O3b: at most ONE. Two adjacent markers were the only construct in the language where "&x&y" meant a
-//list rather than the double reference T24 forbids everywhere else, and that collision is not worth what
-//it bought: a signature needing two scope variables that no argument determines is a signature that
-//should take a reference instead, which determines one of them (O17). Keeping the list also kept the
-//"own" keyword alive, whose sole purpose was filling a positional slot - with one slot there is nothing
-//to fill, since O18 already reads an omitted scope as the caller's own.
+//"fn f&b(...)" / "type T&s struct(...)" - a scope declaration, adjacent to the name as a call's scope argument is.
+//A scope is never named (O3), so one is parsed only so that it is reported.
 struct list parseScopeDecls(SyntaxCtx sc) {
     struct list decls = ListInit(sizeof(struct syntax*));
     struct syntax* d = parseScopeMarkerRun(sc, SNTX_SCOPE_DECL);
@@ -2597,14 +2585,8 @@ struct syntax* parseArrLiteralArgs(SyntaxCtx sc) {
     return s;
 }
 
-//"NAME [ ARR_LIT_ARGS ]" - array literal. NAME states the base (scalar) element type once; dimensionality
-//and each level's size come entirely from the argument list's own bracket nesting and item counts (see
-//parseArrLiteralArgs/parseArrLiteralNestedGroup) - no separate "[N]"/"[]" size/length-kind suffix on the
-//literal itself any more (that's now decided by whatever the literal is checked against - see the report).
-//This also incidentally fixes the old gap where a single-value (or empty) value list was indistinguishable
-//from a trailing array suffix and silently swallowed by a suffix loop: there is no more suffix loop here.
-//true for one of the fixed set of built-in primitive type names ("int32[1, 2, 3]" needs this gate just as
-//much as a struct/choice/error name does - see parseExprPrimary - but primitives were never added to
+//true for one of the fixed set of built-in primitive type names ("I32[1, 2, 3]" needs this gate just as
+//much as a struct/enum/error name does - see parseExprPrimary - but primitives were never added to
 //declaredTypeNames/isKnownType, which only ever tracked user "type"/"error" declarations). Mirrors the
 //exact same name set resolveLiteralBaseType (semantic.c) falls back to for a name isKnownType doesn't
 //recognize either. Never alias-qualified - a primitive name is always exactly one identifier.
@@ -2629,13 +2611,13 @@ static bool nameIsGenericVar(SyntaxCtx sc, struct syntax* name) {
 
 //"NAME [ ARR_LIT_ARGS ]" - array literal tail. `name` is already parsed and confirmed by the caller
 //(parseExprPrimary) to be a known type or a primitive name before this is ever reached - see the report
-//for why that's what makes this safe to commit to hard, the same reasoning choice values
+//for why that's what makes this safe to commit to hard, the same reasoning enum values
 //rely on: without it, "NAME [ ARR_LIT_ARGS ]" is structurally identical to ordinary indexing
-//("variable[index]"), since this grammar (unlike the old suffix-then-args shape) is always exactly one
-//bracket group - type-name-awareness is now load-bearing here, not just a convenience.
+//("variable[index]"), since this grammar is always exactly one bracket group - type-name-awareness is
+//load-bearing here, not just a convenience. NAME states the element type once; the length is the item count.
 struct syntax* parseArrayLiteralTail(SyntaxCtx sc, struct syntax* name, struct token open) {
     struct syntax* args = parseArrLiteralArgs(sc);
-    //E27: one item followed by "for" is a comprehension - "Int32[x * 2 for x in a if x > 3]"
+    //E27: one item followed by "for" is a comprehension - "I32[x * 2 for x in a if x > 3]"
     struct syntax* compr = NULL;
     if (args->parts.len == 1 && peekTok(sc).type == TOK_FOR) {
         compr = parseComprehensionClause(sc);
@@ -2669,16 +2651,16 @@ bool nameIsKnownType(SyntaxCtx sc, struct syntax* name) {
 }
 
 //true if a qualified name's last-but-one identifier, reached through however many alias hops precede it,
-//names a known type - i.e. the name has the shape "[alias.]* Type . word", which is a choice value (M12).
+//names a known type - i.e. the name has the shape "[alias.]* Type . word", which is an enum value (M12).
 //Everything but the trailing word is asked of isKnownType exactly as nameIsKnownType asks it, so
-//"lib.Dir.North" resolves through an import the same way "wk.Base.BasePoint{...}" already does.
-//This used to consult only the FIRST identifier with an empty alias chain, so a choice value could never be
+//"lib.Dir.North" resolves through an import the same way "wk.Base.BasePoint(...)" does.
+//This used to consult only the FIRST identifier with an empty alias chain, so an enum value could never be
 //alias-qualified: the restriction predated the chain-walking lookup (added for struct/array literals) and
 //was then kept as "by design", which had become circular - it was by design because the parser could not,
 //and stayed because it was by design. The ambiguity it avoided is with an ordinary "localVar.field.sub"
 //member access, and that is the same ambiguity the local case always had ("Direction.NORTH" vs a variable
 //named Direction with a field NORTH); asking whether the qualified name is a known type answers it the
-//same way at any depth. Wrong guesses cost nothing: this only decides whether to COMMIT to choice syntax,
+//same way at any depth. Wrong guesses cost nothing: this only decides whether to COMMIT to enum syntax,
 //and buildChoiceValueExpr re-checks everything for real, privacy included.
 bool trailingWordFollowsKnownType(SyntaxCtx sc, struct syntax* name) {
     if (!sc->isKnownType) return false;
@@ -2782,17 +2764,17 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             //binary "&", so put the tokens back and let the ordinary branches below see them
             int afterName = TokenGetCursor(sc->tc);
             struct list scopeArgs = ListInit(sizeof(struct syntax*));
-            struct syntax* sa = parseScopeArg(sc); //O3b: at most one
+            struct syntax* sa = parseScopeArg(sc); //at most one
             if (sa) ListAdd(&scopeArgs, &sa);
             if (scopeArgs.len != 0 && peekTok(sc).type != TOK_PAREN_O) {
                 TokenSetCursor(sc->tc, afterName);
                 scopeArgs.len = 0;
             }
             struct token after = peekTok(sc);
-            //T17: "Shape.Circle(3)" is a choice value carrying a payload, not a cross-module call - and
-            //the two have the same shape, so the choice test has to come first. It commits only when the
-            //name's last-but-one identifier is a genuinely known choice/struct type (the same predicate
-            //the payload-free form already used), which "alias.func(args)" never satisfies.
+            //T17: "Shape.Circle(3)" is an enum value carrying a payload, not a cross-module call - and
+            //the two have the same shape, so the enum test has to come first. It commits only when the
+            //name's last-but-one identifier is a genuinely known enum/struct type (the same predicate
+            //the payload-free form already used), which "alias.f(args)" never satisfies.
             if (after.type == TOK_PAREN_O && trailingWordFollowsKnownType(sc, name)) {
                 struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
                 struct syntax* vv = newNode(SNTX_EXPR_CHOICE_VALUE);
@@ -2825,14 +2807,13 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 }
                 TokenSetCursor(sc->tc, save);
             } else if (trailingWordFollowsKnownType(sc, name)) {
-                //"Type.WORD" - a choice value (see the report on communicating a fixed set/selection, not
-                //a C-enum-style number). Committed the same way struct literals are: "Direction" being a
-                //known local type here is never a coincidence worth backtracking out of.
+                //"Type.WORD" - an enum value. Committed on the type name alone: "Direction" being a known
+                //local type here is never a coincidence worth backtracking out of.
                 struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
                 struct syntax* vv = newNode(SNTX_EXPR_CHOICE_VALUE);
                 addSntx(vv, name);
                 //T17: a payload-carrying case is constructed by writing its payload - "Shape.Circle(3)".
-                //A bare tag takes no parens at all, exactly as every case did before payloads existed.
+                //A bare tag takes no parens at all.
                 int beforeArgs = TokenGetCursor(sc->tc);
                 struct token argOpen = acceptTok(sc, TOK_PAREN_O);
                 if (argOpen.type != TOK_NONE) {
@@ -2844,11 +2825,11 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 addSntx(s, vv);
                 return s;
             } else if ((after.type == TOK_LST || after.type == TOK_BTSFT_L) && nameIsKnownType(sc, name)) {
-                //"Pair<int32, int64>{...}" or "Vec<int32>[...]" - a literal of an instantiated generic
-                //type. This is the one genuinely ambiguous position for type arguments (a bare "a < b" is
-                //a comparison, and inside a call "f(Pair<int32, int64>{1,2})" the commas could be argument
-                //separators - the exact C++ ambiguity), so it commits only once the whole "<...>" list has
-                //parsed AND a "{" or "[" follows it. Anything else backtracks and leaves "<" as an
+                //"Pair<I32, I64>(...)" or "Array<I32>[...]" - a constructor call or an array literal of an
+                //instantiated generic type. This is the one genuinely ambiguous position for type arguments (a
+                //bare "a < b" is a comparison, and inside a call "f(Pair<I32, I64>(1, 2))" the commas could be
+                //argument separators - the exact C++ ambiguity), so it commits only once the whole "<...>" list
+                //has parsed AND a "(" or "[" follows it. Anything else backtracks and leaves "<" as an
                 //operator. A generic FUNCTION call needs no such branch: its arguments are inferred (G9)
                 //and are never written.
                 int save = TokenGetCursor(sc->tc);
@@ -2856,10 +2837,10 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 struct syntax* targs = parseTypeArgs(sc);
                 if (targs) {
                     int afterArgs = TokenGetCursor(sc->tc);
-                    //"Vec<int32>&a(4)" - a scope argument (E25) sits between the type-argument list and
+                    //"List<I32>&a()" - a scope argument (E25) sits between the type-argument list and
                     //the "(", exactly as it does after a plain name above
                     struct list gScopeArgs = ListInit(sizeof(struct syntax*));
-                    struct syntax* gsa = parseScopeArg(sc); //O3b: at most one
+                    struct syntax* gsa = parseScopeArg(sc); //at most one
                     if (gsa) ListAdd(&gScopeArgs, &gsa);
                     int afterScope = TokenGetCursor(sc->tc);
                     struct token open2 = TokenFeed(sc->tc);
@@ -2870,8 +2851,8 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                         open2 = TokenFeed(sc->tc);
                     }
                     if (open2.type == TOK_PAREN_O) {
-                        //"Vec<int32>(...)" - a CONSTRUCTOR call on an instantiated generic type. Same
-                        //commit rule as the two literal forms below; the type arguments ride on the call
+                        //"List<I32>(...)" - a CONSTRUCTOR call on an instantiated generic type. Same
+                        //commit rule as the array literal below; the type arguments ride on the call
                         //node, where resolveCallTarget picks them up to instantiate the type and reach
                         //that copy's own monomorphized constructor (G10/G16).
                         TokenSetCursor(sc->tc, afterScope); //parseExprCall consumes the "(" itself
@@ -2888,7 +2869,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                         TokenEditRewind(sc->tc, mark);
                         return parseFail(sc, start);
                     }
-                    //"Array<Int32>&[r0, r1]" - an array literal whose element type is a reference to an
+                    //"Array<I32>&[r0, r1]" - an array literal whose element type is a reference to an
                     //instantiated type; the marker is committed only once a "[" follows it
                     struct syntax* litMarker = NULL;
                     if (open2.type == TOK_BTWSE_AND && peekTok(sc).type == TOK_SQUARE_O) {
@@ -2935,10 +2916,9 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
                 TokenSetCursor(sc->tc, save);
             } else if (after.type == TOK_SQUARE_O && (nameIsKnownType(sc, name) || nameIsPrimitiveTypeName(name)
                                                       || nameIsGenericVar(sc, name))) {
-                //"NAME [ ... ]" is structurally identical to indexing ("variable[index]") now that array
-                //literals no longer restate a size/length-kind suffix before the value list - see
-                //parseArrayLiteralTail. Committed the same way struct literals are: name being a known
-                //type (or a primitive - never a real variable either) here is never a coincidence.
+                //"NAME [ ... ]" is structurally identical to indexing ("variable[index]") - see
+                //parseArrayLiteralTail. Committed on the name alone: a known type (or a primitive - never a
+                //real variable either) here is never a coincidence.
                 struct token open = advanceTok(sc); //consume the "[" now that we're committing
                 struct syntax* lit = parseArrayLiteralTail(sc, name, open);
                 if (lit) {
@@ -3024,8 +3004,8 @@ struct syntax* parseExprMembr(SyntaxCtx sc) {
     addTok(s, iden);
     //M19/M19a: a method call whose receiver is not a plain name chain - "arr[i].M()", "f(x).M()". The
     //call form built around an alias-chain name (parseExprPrimary) covers only identifiers, so without
-    //this the single most ordinary thing to write about a collection of interface values - call a method
-    //on an element - did not parse at all.
+    //this the single most ordinary thing to write about a collection - call a method on an element - did not
+    //parse at all.
     int beforeParen = TokenGetCursor(sc->tc);
     struct token open = acceptTok(sc, TOK_PAREN_O);
     if (open.type == TOK_NONE) return s;
@@ -3436,7 +3416,6 @@ static void buildConstsInit(void) {
 }
 
 struct list* SyntaxBuildConsts(void) { buildConstsInit(); return &buildConsts; }
-void SyntaxResetBuildConsts(void) { buildConstsReady = false; buildConstsInit(); }
 
 
 static bool isIdentText(const char* p) {
@@ -3698,14 +3677,17 @@ static struct condDecision* condDecisionFor(TokenCtx tc, int at) {
 //an immutable global. Set by the loader before it scans or parses the module.
 static struct list condFiles;
 static bool condFilesReady;
-void SyntaxSetConditionFiles(struct list* tcs) {
+static bool condFilesStd; //B10c: the module is the standard library's, whose globals are no build constant's default
+void SyntaxSetConditionFiles(struct list* tcs, bool inStd) {
     condFiles = ListInit(sizeof(TokenCtx));
     for (int i = 0; i < tcs->len; i++) ListAdd(&condFiles, ListGetIdx(tcs, i));
     condFilesReady = true;
+    condFilesStd = inStd;
 }
 
 static struct condVal condOr(struct condCtx* c);
 static struct condVal condGlobal(struct condCtx* c, struct token name);
+static struct condGlobalDecl* condDeclOf(struct token name);
 
 //a value no evaluation produced - what a failure leaves behind, of no kind any check could object to
 static struct condVal condNone(void) {
@@ -3873,6 +3855,8 @@ static struct condVal condPrimary(struct condCtx* c) {
                     }
                 }
             }
+            //B10c: the module's own declaration of the name first - a build constant's default, or the B10 error
+            if (condDeclOf(t)) return condGlobal(c, t);
             struct list* bcs = SyntaxBuildConsts();
             for (int i = 0; i < bcs->len; i++) {
                 struct buildConst* b = ListGetIdx(bcs, i);
@@ -4190,9 +4174,52 @@ static struct condVal condAsDeclared(struct condCtx* c, struct token name, struc
     }
 }
 
-//a name that is not a local or a build constant: a global this module declares - immutable, found by condIndexFor,
-//whose initializer evaluates - or else something only compile-time evaluation can read (a function, a computed global,
-//another module's name, B9c)
+//the module's own top-level declaration of a name, outside every conditional - NULL when it declares none
+static struct condGlobalDecl* condDeclOf(struct token name) {
+    if (!condFilesReady) return NULL;
+    for (int f = 0; f < condFiles.len; f++) {
+        struct condGlobalIndex* ix = condIndexFor(*(TokenCtx*)ListGetIdx(&condFiles, f));
+        for (int i = 0; i < ix->decls.len; i++) {
+            struct condGlobalDecl* x = ListGetIdx(&ix->decls, i);
+            if (x->name.len == name.str.len && !strncmp(x->name.ptr, name.str.ptr, (size_t)name.str.len)) return x;
+        }
+    }
+    return NULL;
+}
+
+//B10c: the constant -D defined with this name (never one of B10a's), or NULL
+static struct buildConst* condDefined(struct token name) {
+    struct list* bcs = SyntaxBuildConsts();
+    for (int i = 0; i < bcs->len; i++) {
+        struct buildConst* b = ListGetIdx(bcs, i);
+        if (!b->builtin && b->name.len == name.str.len && !strncmp(b->name.ptr, name.str.ptr, (size_t)name.str.len)) return b;
+    }
+    return NULL;
+}
+
+//B10c: a value of a type a -D value can have - Bool, I32, I64, U64, F64 or String - as this evaluator types it
+static bool condBuildType(struct condVal v) {
+    if (v.anyKind) return false;
+    if (v.kind == BUILD_BOOL || v.kind == BUILD_STR) return true;
+    if (v.kind == BUILD_FLOAT) return v.bits == 64;
+    return v.kind == BUILD_INT && (v.uns ? v.bits == 64 : v.bits == 32 || v.bits == 64);
+}
+
+//B10c: the value -D gave a default's name, as its literal would be read - then fitted to the declaration as condAsDeclared
+//fits any value
+static struct condVal condDefinedValue(struct condCtx* c, struct token name, struct buildConst* b) {
+    struct condVal v = (struct condVal){0};
+    if (b->kind == BUILD_INT && b->u64) return condDefer(c, name); //beyond the 64-bit signed arithmetic here (B9c)
+    v.kind = b->kind;
+    v.i = b->i;
+    v.f = b->f;
+    v.s = b->text;
+    return v;
+}
+
+//a name that is not a local: a global this module declares - immutable, found by condIndexFor, whose initializer
+//evaluates (or, for a build constant's default, -D's value, B10c) - or else something only compile-time evaluation
+//can read (a function, a computed global, another module's name, B9c)
 static struct condVal condGlobal(struct condCtx* c, struct token name) {
     if (!condFilesReady) return condDefer(c, name);
     if (c->depth > 64) return condFail(c, name, ERR_COND_CYCLE);
@@ -4207,6 +4234,20 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
         if (!d) continue;
         if (d->mut) return condRuntime(c, name, ERR_COND_MUTABLE);
         struct condGlobalDecl decl = *d; //the index may be rebuilt while its initializer is read
+        //B10c: a written type a -D value can have makes the global a build constant's default - read from -D when it
+        //defines the name, and configuration either way
+        struct buildConst* defined = condFilesStd ? NULL : condDefined(name);
+        if (!condFilesStd && decl.declared != DECLARED_NONE && decl.declared != DECLARED_OTHER) {
+            struct condVal typed = (struct condVal){0};
+            typed.kind = decl.declared == DECLARED_INT ? BUILD_INT : decl.declared == DECLARED_FLOAT ? BUILD_FLOAT
+                       : decl.declared == DECLARED_BOOL ? BUILD_BOOL : BUILD_STR;
+            typed.bits = decl.bits;
+            typed.uns = decl.uns;
+            if (condBuildType(typed)) {
+                if (!c->skip) c->usedBuild = true;
+                if (defined) return condAsDeclared(c, name, &decl, condDefinedValue(c, name, defined));
+            }
+        }
         int saved = TokenGetCursor(tc);
         TokenSetCursor(tc, decl.init);
         struct condCtx inner = *c;
@@ -4229,7 +4270,27 @@ static struct condVal condGlobal(struct condCtx* c, struct token name) {
         }
         //more than tokens can evaluate - a method call, a member, an index: compile-time evaluation can (B9c)
         if (!whole) return condDefer(c, name);
-        return condAsDeclared(c, name, &decl, v);
+        struct condVal typed = condAsDeclared(c, name, &decl, v);
+        //B10c: a ":=" default takes its initializer's type - -D's value fitted to it, as a literal written there would be
+        if (!condFilesStd && decl.declared == DECLARED_NONE && condBuildType(typed)) {
+            if (!c->skip) c->usedBuild = true;
+            if (defined) {
+                struct condVal dv = condDefinedValue(c, name, defined);
+                if (dv.anyKind) return dv;
+                if (typed.kind == BUILD_FLOAT && dv.kind == BUILD_INT) {
+                    double fv;
+                    if (!intAsFloat(dv, &fv)) return condDefer(c, name);
+                    dv.kind = BUILD_FLOAT;
+                    dv.f = fv;
+                }
+                if (dv.kind != typed.kind) return condDefer(c, name); //the checker reports it (B10c)
+                if (dv.kind == BUILD_INT && !intFits(dv.i, typed.bits, typed.uns)) return condDefer(c, name);
+                dv.bits = typed.bits;
+                dv.uns = typed.uns;
+                return dv;
+            }
+        }
+        return typed;
     }
     return condDefer(c, name);
 }
@@ -4833,7 +4894,7 @@ static bool parseTopBranch(SyntaxCtx sc, struct list* out) {
 
 //B9: a top-level "if [else if ...] [else]" is conditional compilation. Only the taken branch is parsed;
 //the others are skipped by matching braces and never looked at again - not merely left unchecked, but
-//unparsed, because parsing itself depends on which type names exist ("T{...}" is a literal only when T is
+//unparsed, because parsing itself depends on which type names exist ("T[...]" is a literal only when T is
 //a type), and in a branch not taken those names may exist only on another target.
 static bool skipTopBranch(SyntaxCtx sc) {
     if (acceptTok(sc, TOK_CURLY_O).type == TOK_NONE) return false;

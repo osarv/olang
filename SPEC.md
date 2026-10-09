@@ -364,11 +364,16 @@ reference equals only a null), so `p == null` needs no operator of its own - for
 null only when it has no storage, and so differs from an empty array that has.
 
 **T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
-Reading a field or element through a null reference, or calling through a null function value, is
-**undefined behaviour** — in practice a deterministic trap, address zero being unmapped, which is why null
-is the all-zero representation rather than merely a convention. This is the cost of `null`: §8 continues to
-guarantee that a reference never outlives what it points at, and no longer guarantees that it points at
-anything.
+Reading or writing a field or element through a null reference, or calling through a null function value,
+**traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
+writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
+per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
+faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
+moves code on that assumption. A field further into a struct than the unmapped range reaches (64KB on Linux) is
+not covered, and reading it through null is undefined as an index out of range is (E16e); an element of a null
+array is out of range already, its length being 0. While compiling (K1) and under `-i` (§10 B3e), a read through
+null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
+never outlives what it points at, and no longer guarantees that it points at anything.
 
 **T3.** An anonymous struct or enum shape (written inline rather than through a `type` declaration)
 is a valid type, but has no name and so can never be the target of struct-literal or enum-value
@@ -854,7 +859,8 @@ fn grab(l mut List&) mut Node&l    a writable one
 ```
 
 It is **shallow**: a reference stored inside a referent keeps the permission its own type gives, whichever
-reference it was reached through.
+reference it was reached through. A **copy** of a value holding such references, made out of a place reached
+read-only, is read-only itself (T25c) - the place's own references stay as their types say.
 
 **`mut` speaks only about what a reference reaches**, in every position: a type argument or element, a field, a
 local, a parameter, a receiver, a result. Whether a **binding** may be assigned is never written: a local (D11) and a
@@ -884,6 +890,41 @@ a read-only one otherwise. A slice (E16a) has its base's
 permission; a conditional or a match value (E28, S12b) is writable only when every value it can give is; `as` (E32)
 gives the payload's own permission, and a checked index (`try c[i]`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
+
+**Read-only copies.** A value whose type **holds writable references** - a `mut` reference among its fields, its enum
+payloads or the elements of its fixed arrays held by value, never looked for through a reference (O25g's walk) - shares
+those references with every copy of it. So a copy made out of a place reached **read-only** is **read-only** itself:
+otherwise copying a read-only `List` (whose state is reached through a writable reference) and pushing to the copy
+would change the list the read-only place holds. A place is reached read-only when it is an immutable global; what a
+read-only reference names, and any field, element, slice or payload reached through one; a captured value (D16c); or a
+read-only copy, and what is held in it by value. The copy is read-only whichever way it is made: a `:=` local
+(`x := G`), a local the language makes for its own use, a for-in element (exactly when the collection walked is reached
+read-only), a match binding (exactly when the matched place is, any alternative reading one making it so), a by-value
+parameter (below). A read-only copy:
+
+- is not **lent writably**: not as a `mut` receiver, not to a `mut &` parameter, not borrowed into a `mut T&` (E12c);
+- **writes nothing through** its writable references - no assignment through one, and none passed on or kept where it
+  may be written through. Its own plain parts are its own storage and may be assigned, and the local itself may be
+  assigned anew;
+- is not **stored where it can be written**: assigned into writable storage held by value, made an array literal's
+  element, an array's fill or an enum case's payload, or returned as a by-value result (which its caller holds
+  writably).
+
+A **written type declares a writable value**, so `x List<I64> = G` from a read-only `G` is an error: `x := G` is the
+read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type (`G.Clone()`) or from
+its parts. A fresh value - a call's result, a literal, an instance - is writable as always, and so is a copy of
+anything reached writably.
+
+A **by-value parameter** is the callee's own copy (D9), and whether that copy must be writable is read off the
+callee's **body**: a parameter whose copy the body writes through, lends writably or stores - or passes to a callee
+that does, settled over every call once every body is checked - takes only a writable argument, and passing a
+read-only copy to it is an error at the call; any other accepts either. A function used as a **value** - a named
+function, a lambda (D16), a type's `Call` (E31) - may have no such parameter, since a call through a function value
+cannot see whose body it reaches. A constructor is a callee like any other: a field punning a parameter keeps it, so
+the argument must be writable.
+
+This is permission in the type checker only: it changes no value and no run time, and the evaluator (K1) is
+unaffected by it.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
 compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element)
@@ -1296,9 +1337,10 @@ the call. The compile-time evaluator (K1) gives both the same meaning.
 without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
 reference parameter names - the **caller's own instance** - may be written only when its type is a writable
 reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
-parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing. Whether
-a call writes to the caller's value is therefore readable from the signature alone: `&` says whose instance it is,
-`mut` says whether it may be written, and the two are independent. A parameter's reference marker may
+parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
+where it holds writable references and the body writes through them, lends it writably or keeps it, the argument
+may not be a read-only copy (T25c). Whether a call writes to the caller's value is therefore readable from the
+signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. A parameter's reference marker may
 name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
@@ -2443,8 +2485,8 @@ cover it. This is the mirror of E16c, which opts a *slice* out of its abort — 
 the failure as an error I handle". An index written without `try` is unchecked and costs nothing.
 
 **E16e (memory safety).** An out-of-range index written without `try` is, with `extern fn` (§11 X1a) and
-a null dereference (T2b), one of the places where memory safety rests on something the compiler does not
-check. This is deliberate: the check E16 used to make cost about 50% on indexing whose bounds the optimizer
+a data race (§6.8 P8b), one of the places where memory safety rests on something the compiler does not
+check (a null dereference is not: it traps, T2b). This is deliberate: the check E16 used to make cost about 50% on indexing whose bounds the optimizer
 cannot establish, and nothing at all where it can. Every other guarantee in this specification — §8's scope
 containment above all — is stated as holding for programs that do not index out of range. What remains
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
@@ -2610,7 +2652,8 @@ built in the scope of whatever it lands in. The element expression and the condi
 the condition first, in the order the values are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
-length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full.
+length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. A
+comprehension that keeps nothing is an empty array with storage of its own, never a null one (T2a).
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
@@ -2925,8 +2968,8 @@ instantiation of a generic, a constant parameter does (§12.7 G26).
 
 **S8a.** A condition that is **fixed on every build** decides nothing, so one of its branches is dead code: a
 condition that can be evaluated at compile time (K1) — however it is computed, calls included, and reading only locals
-whose values are **fixed** (S8c) — and reads **no** build constant (B10) and no constant variable of a generic (§12.7
-G26), directly or through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an
+whose values are **fixed** (S8c) — and reads **no** build constant (B10) - a default for one (B10c) included - and no
+constant variable of a generic (§12.7 G26), directly or through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an
 `assert` is not an `if`.)
 
 **S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `U8`, or an enum without
@@ -3495,6 +3538,12 @@ and another reuses is ordered for the detector exactly as it is for the program.
 linker free to keep either copy. An instrumented object is therefore a distinct artifact from a clean one
 (§10 B4) and is named accordingly.
 
+Two limits are the detector's own. The handler `os.OnCrash` installs is never instrumented, since it may run while
+ThreadSanitizer's own state is inconsistent - a fault inside its bookkeeping - so a crash still ends the process with
+its signal. And ThreadSanitizer records each thread's calls on a stack of fixed size that it does not check, so a call
+chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
+crash, abort, or hang inside the detector, and only a build without `-r` runs it as written.
+
 **P4.** A spawned function may not declare an error set (§7): an error raised on another thread has nowhere
 to propagate to, since the join carries no value and the spawner is no longer at the call site. A spawned
 call's return value, if any, is discarded — `spawn` is a statement, never an expression.
@@ -3965,6 +4014,13 @@ implementation may set aside in the local's block's scope (unobservably, since i
 **O8.** Closing a scope (O1) reclaims every allocation made into it. Beyond O8b, this specification does not
 guarantee when or by what underlying storage is reused: it is valid until the owning scope closes, and invalid
 after.
+
+**O8c (nothing earlier).** Nothing a scope holds is reclaimed before the scope closes - not when no reference to it
+is left. So what a loop puts into a scope that outlives the loop stays until that scope closes, however many times the
+loop runs: a field of a struct declared outside it replaced each turn (the old value's storage stays where the struct
+lives), text sent through a channel that outlives it (built where the channel lives, std/chan), an element a List
+removed (`Pop`, `RemoveAt`). A loop meant to run indefinitely builds what one turn needs in its own body, reclaimed each
+turn (O2b), and reuses what it keeps: `List.Clear` and `StringBuilder.Clear` empty a container and keep its storage.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
@@ -4823,12 +4879,22 @@ the interpreting process, `done` and `fail` end it with status 0 and 1, an error
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
-out of range, reading through a null reference, dividing by zero, a shift or conversion out of range - the
-interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
-tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
-initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
-same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
-X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
+reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. A `join` block's tasks
+(§6.8) run as K1 runs them: one after another, at the join - after its body and its deferred code - each to
+completion, in the order they were spawned. That is one of the orders the built program may run them in, so a program
+whose tasks only compute, or hand values on through a channel with room for them, runs as built; one whose tasks need
+each other at once cannot: a wait for another thread - a condition variable waited on, as a channel's `Send` to a full
+channel or `Recv` from an empty one does - made by a task, or while tasks wait to run, or without a time limit at all,
+stops the interpreter, saying so and naming the task, since nothing else runs to end it. (A wait with a time limit
+and no task in sight waits that time out, as the built program would with nothing to wake it.) Values whose type
+declares a destructor are **not yet interpreted** - except directly in a global's own initializer, whose instance
+lands in the program's scope and is never destructed (K2c); reaching one stops the same way, as does an `extern`
+function with an `F16` or `BF16` parameter or result (an array of either is passed, X3). Whenever the interpreter
+stops a program on something it does not run, the blocks it is in are still left as the built program, which would
+go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
+program itself ends - `done`, `fail`, `os.Exit`, a check failing - deferred code runs only where the built program's
+does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build, and `-a` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
@@ -4929,7 +4995,7 @@ S8a and S8b say when its condition is dead code and when the build decides it.
 **B9a.** A top-level condition decides which declarations exist, so it is decided before the module's
 types are resolved where it can be: when it uses only **literals**, **build constants** (B10), and
 **immutable globals** the module declares at its top level outside every conditional — in any of its files
-— whose own initializers are built the same way; combined with parentheses, `not`, unary `-`, `* / % + -`,
+— whose own initializers are built the same way, or whose value `-D` gives (a build constant's default, B10c); combined with parentheses, `not`, unary `-`, `* / % + -`,
 the six comparisons, `and` and `or`. It must evaluate to a `Bool`. Text (a string literal, a text build constant,
 or a global holding one) compares with `==` and `!=` **by content**. A mutable global has no value a build
 could decide on and is rejected, as are globals defined in terms of each other.
@@ -4971,7 +5037,19 @@ at most 64 bits; and a float that is not an infinity. A malformed or out-of-rang
 flag that gave it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
-compile-time error, as is defining one name twice.
+compile-time error, unless the declaration gives it a default (B10c), as is defining one name twice.
+
+**B10c (a build constant's default).** An immutable global declared at the top level of a module outside the standard
+library, whose type is one a `-D` value can have - `Bool`, `I32`, `I64`, `U64`, `F64` or `String` - is a **build
+constant with a default**: `-D` of its name replaces its initializer, the value read as B10 reads it and fitted to the
+declared type as a literal written there would be (`-D Port=443` for `Port I64 = 8080` is an `I64`); a value that does
+not fit is an error naming the flag. Without `-D`, the declaration's own value stands. The declaration stays its
+module's global - its bare name in the module, `m.Name` from an importer - while `-D Name=value` still defines the
+build constant `Name` every module sees (B10), the two holding one value; every such declaration of the name takes it.
+Whether `-D` names it or not, it is configuration as a build constant is: a condition reading it depends on the build
+(S8a, S8b). Any other top-level declaration of a name `-D` defines - a function, a type, a mutable global, a global of
+another type, one in the standard library - is B10's error; and a condition naming a name that exists nowhere (B9c,
+S8b) says it may be a build constant `-D` did not define.
 
 **B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
@@ -5081,9 +5159,9 @@ resolved by the platform's linker at build time. Unlike an ordinary `func-decl` 
 `error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
 ordinary function's body would otherwise begin.
 
-**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a null
-dereference (§2.1 T2b), one of the places in the language where memory safety rests on something the
-compiler does not check. A declaration states a prototype, and the compiler takes it at its
+**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a data race
+(§6.8 P8b), one of the places in the language where memory safety rests on something the compiler does not
+check. A declaration states a prototype, and the compiler takes it at its
 word: it verifies nothing about the function that actually links, its real signature, its calling
 convention, or what it does with the pointer an array parameter marshals to (X3). A wrong prototype is
 undefined behaviour, and a wrong *size* for a foreign type reached through a reserved array — a
@@ -5184,7 +5262,7 @@ must state exactly the prototype below (X1a).
 | `__olang_stat(path Array<U8>, out Array<I64>) I32` | what is at `path`, a symbolic link followed: `out[0]` its kind (`1` a regular file, `2` a directory, `0` anything else), `out[1]` its size in bytes, `out[2]` its modification time in nanoseconds since the Unix epoch, to the resolution the file system keeps; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64` | the names of the entries of the directory `path`, `.` and `..` left out, each followed by a zero byte, in the order the directory gives them: copies as many whole names as fit in `cap` bytes into `buf` and returns the bytes all of them take — `-1` when the directory cannot be read |
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
-| `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error; returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function) |
+| `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, a `done` or a `fail` inside `f` ends the test as it would have had `f` been called directly (S16a, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `-i` as the call `f()`, the evaluator's own limits on depth standing for the stack |
 | `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |

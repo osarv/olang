@@ -129,6 +129,10 @@ struct type;
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
     X(ERR_NAME_IS_TYPE,                 "D2",    "%n is already a type's name in this module - choose another") \
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
+    X(ERR_BUILD_DEFAULT_MUT,            "B10c",  "%n is a build constant, and a declaration giving it a default is immutable - drop 'mut'") \
+    X(ERR_BUILD_DEFAULT_TYPE,           "B10c",  "%n is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found %t") \
+    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-D %S=%S does not fit %n, which is %t") \
+    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-D %S=VALUE', or declare it with a default") \
     X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
@@ -250,6 +254,16 @@ struct type;
     X(ERR_READ_ONLY_TO_WRITABLE,        "T25c",  "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") \
     X(ERR_READ_ONLY_TO_BUILT_RESULT,    "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '%S'") \
     X(ERR_READ_ONLY_TO_BUILT_RESULT_NO, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through") \
+    X(ERR_READ_ONLY_COPY_DECL,          "T25c",  "this copies a read-only %t, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own %s") \
+    X(ERR_READ_ONLY_COPY_STORED,        "T25c",  "a copy of a read-only %t cannot be stored where it can be written - store one of its own, made %s") \
+    X(ERR_READ_ONLY_COPY_RETURNED,      "T25c",  "a copy of a read-only %t cannot be returned as a writable value - return one of its own, made %s, or a read-only reference") \
+    X(ERR_READ_ONLY_COPY_ARG,           "T25c",  "'%S' writes through or keeps its parameter '%S', and this %t is a read-only copy - pass one of its own, made %s") \
+    X(ERR_READ_ONLY_COPY_LENT,          "T25c",  "a read-only copy cannot be passed where it may be written - pass one of its own, made %s") \
+    X(ERR_READ_ONLY_COPY_WRITE,         "T25c",  "this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares") \
+    X(ERR_READ_ONLY_COPY_REF,           "T25c",  "a reference a read-only copy holds is read-only - it cannot be passed or kept where it may be written through") \
+    X(ERR_READ_ONLY_FUNC_VALUE,         "T25c",  "%s writes through or keeps its by-value parameter '%S', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made %s") \
+    X(NOTE_READ_ONLY_COPY,              "",      "'%S' copies a place reached read-only, so it is read-only") \
+    X(NOTE_READ_ONLY_COPY_OF,           "",      "'%S' copies '%S', reached read-only, so it is read-only - '%S := %S.Clone()' would be one of its own") \
     X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and a call returning nothing has none") \
     X(ERR_DECL_FROM_NULL,               "D15",   "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") \
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
@@ -503,6 +517,7 @@ struct type;
     X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
+    X(ERR_COND_UNKNOWN_BUILD,           "B10",   "unknown name %s") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
     X(ERR_GLOBAL_READS_ITSELF,          "B5a",   "%S's initializer reads %S, which is not set until the initializer is done") \
     X(ERR_GLOBALS_CYCLE,                "B5a",   "these globals' initializers read each other, so none can be set first: %s") \

@@ -1,0 +1,4 @@
+# check: fail error[B10c]: 'Port' is a build constant, and a declaration giving it a default is immutable - drop 'mut'
+# flags: -D Port=1
+Port mut I64 = 8080
+fn main() ? { }

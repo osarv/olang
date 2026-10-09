@@ -12470,3 +12470,249 @@ builds where its targets are, as single assignments do.
 Checked: the eight reproducers (`-b`/`-d`/`-i` agreeing, or the error), `make verify`; the S4d program crashes the
 previous compiler's test binary. Not done here: borrowing a split value into a reference local or a for-in (the review's
 #4) is wt-rvfix's O17a, merged beside it.
+
+### A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision QC)
+
+**The hole.** The review of tonight's merges (#4) found that shallow permission (T25b, the user's call of 2026-10-07)
+let anything read-only be changed through a copy of it, wherever its type held a `mut` reference: `x := G; x.Push(1)`
+with `G` an immutable global `List` changed `G`'s list. It did so before List and Map became handles too - the copy
+shared the chunks then - and it reached every value holding a `mut` reference field: a `Matrix` copied out of a
+read-only parameter could be filled. `G.Push(1)` itself was refused (an immutable global is lent read-only); the copy
+was a writable local, so lending it to `Push`'s `mut` receiver was allowed, and `Push` wrote through the reference the
+copy shared with `G`. The options put to the user: deep permission (reversing their shallow call), List and Map as
+reference-only types (every List field and local would carry `&`), or one rule about copies. They chose the rule.
+
+**The rule.** A value whose type holds writable references - a `mut` reference among its fields, its payloads, or the
+elements of its fixed arrays held by value, never looked for through a reference (O25g's walk, `TypeHoldsWritableRefs`)
+- copied out of a place reached read-only is read-only itself. It is not lent writably (a `mut` receiver, a `mut &`
+parameter, a borrow into a `mut T&`), nothing is written through its `mut` references (an assignment through one, or
+one passed on or kept where it may be written through), and it is not stored where it can be written: assigned into
+writable storage held by value, made an array literal's element, a fill or an enum case's payload, or returned as a
+by-value result (its caller holds that writably). A written type declares a writable value, so `x List<I64> = G` is
+an error naming `G.Clone()` - or "from its parts" for a type with no `Clone` - and `x := G` is the read-only copy. Its
+own plain parts remain its own storage, and the local may be assigned anew.
+
+**What was settled while building it (mine, within the user's decision).**
+1. *Places reached read-only*: an immutable global; what a read-only reference names, and any field, element, slice or
+   payload reached through one; a captured value (D16c); a read-only copy and what it holds by value. The place itself
+   stays shallow: its references keep their types' permission, so `EvHold.a[0] = 9` through an immutable global's `mut`
+   field - a corpus test of K1 - stands. The asymmetry is deliberate: a copy is where the place's read-only-ness was being
+   lost, since its own storage is writable and could be lent, and a copy that wrote through what it shares would be a
+   writable alias of the place under another name.
+2. *Copies*: a `:=` local takes its initializer's read-only-ness (`roInherit`), as do the hidden locals the language
+   makes (a membership test's, a parallel assignment's); a for-in element is read-only exactly when the collection it
+   walks is reached read-only, whichever way the loop walks it - an index, `At`, `RunFrom`, an iterator (`roFrom` points
+   at the collection, not at the walk's own temporaries); a match binding exactly when the place matched is, and a later
+   alternative reading a read-only place makes it so (`roCopy`).
+3. *By-value parameters*: a parameter is the callee's own copy (D9), so whether its argument may be a read-only copy is
+   read off the body - a parameter whose copy the body writes through, lends writably or stores, or passes to a callee
+   that does, needs a writable argument (`roNeedsWritable`). A use whose read-only-ness depends on a parameter marks it
+   rather than erroring, and the marks are settled by a fixed point once every body is checked (a call may be checked
+   before its callee, and a callee's need may come from its own callee - `settleReadOnlyArgs`); then each call passing a
+   read-only copy to a parameter that needs a writable one is the error, with a note at the parameter. A body never
+   checked is assumed to need it; an extern needs nothing. This keeps by-value readers (`fn total(l List<I64>) I64`)
+   usable with read-only arguments, where "a by-value parameter of such a type takes only writable arguments" would have
+   refused them.
+4. *Function values*: a call through a function value cannot see whose body it reaches, so a function made a value - a
+   named function, a lambda, a type's `Call` (E31) - may have no parameter needing a writable argument. The other way,
+   treating every call through a function value as one that writes, would have refused `Map`, `Filter`, `Fold` and
+   `Sort` over arrays of handles (`Array<Matrix<F32>>`), which pass their elements by value to the callback.
+5. *Catch defaults* needed nothing: R11 admits a by-value default holding references only when it builds everything it
+   holds, so a read-only copy cannot be one.
+6. *Diagnostics*: one row each, in T25c's words, naming the fix; a note at the local the copy was made as (`'x' copies
+   'G', reached read-only, so it is read-only - 'x := G.Clone()' would be one of its own`). B11's note "'p' is declared
+   read-only here - declare it 'p mut T&'" now reaches parameters and receivers (the parameter's written type, recorded
+   as `permByType`) and the arms of a conditional or a match, which is what lets `tools/perm_mut.py` migrate code using
+   linalg's destination forms.
+
+**std/linalg.** A `Matrix` is a handle (`Data mut Array<T>&`), so it is exactly such a type - and its destination forms
+had read-only receivers and parameters, writing the elements through `Data` shallowly. With them read-only the rule
+protected nothing: `x := G; x.Fill(0)` lent the read-only copy read-only to `Fill`, which wrote `G`'s elements. They take
+`mut` now - `Set`, `Fill`, `SetIdentity`, `Copy`, `Add`, `Sub`, `Scale`, `AddScaled`, `AddRow`, `AddOuterDifference`,
+`Clamp`, `AddScaledMasked`, `NormalizeRows`, the random fills, `Map`/`Map2`/`Map3`'s destination, `RowSoftmax`, `Convert`,
+`Activate`'s `y`, `ActivationBackward`'s `dz`, every product's `c` (and `GemmAct`'s `pre`), `Im2col`'s `cols`, `Ger`'s `a`,
+the column reductions' `out` - which is also what D9 asks: a signature says what a call writes. The **views** (`Row`,
+`RowRange`, `ColRange`, `Block`, `Reshape`, `Heads`, `Stacked`, `Batch.At`, `T()`) keep read-only receivers and hand out
+writable views, shallowly. With no permission polymorphism the alternative - `mut` receivers - would have made a
+read-only view of a read-only matrix inexpressible (oann reads rows and blocks of read-only inputs everywhere), so
+`x := G; x.Block(0, 0, 1, 1).Fill(0)` still writes `G`'s elements: a recorded limit of shallow permission, the library's
+choice. (A first version gave `Row` a `mut` receiver; it went back, for consistency with the other views.)
+
+**oann** (read only; its sources copied and migrated in a scratch directory): every module compiled with no error on the
+previous compiler and 1-337 errors on this one, nearly all the same few in `ops.olang` and `conv.olang` repeated through
+their importers - oann's functions take `y linalg.Matrix<T>&` read-only and call linalg's destination forms on it.
+`tools/perm_mut.py` with this compiler migrates it in three rounds, adding 54 `mut`s (46, then 8) in eight files -
+`ops.olang` most, then `conv`, `layers`, `nn`, `agent`, `sparse`, `bench/attention` and a repro - after which every module
+and example compiles with `-c`. The tool needed one fix on the way, found on `bench/fused.olang`: a note at one of
+several names sharing a type (`q, k, v linalg.Matrix<F32>& = ...`, D12b) put `mut` after that name (`q mut, k`), which
+does not parse; it now goes once, after the last name, before the type. The repository's own bench programs using
+linalg (`fused`, `mlp`, `repro/captured_value`) were migrated with it (18 `mut`s).
+
+**The evaluator** needed nothing: this is permission in the type checker, changing no value. A corpus global
+(`QcBaked`) is baked through read-only copies - a `:=` copy, a for-in over a read-only parameter, a by-value reader,
+`Clone()` then pushes - and asserted equal to the same computation at run time.
+
+**Merged with rvfix's batch**: its test of O25h (`rvCopyOut`) copied a value out of a read-only parameter
+(`d rvHold = src`, `src rvHold&`) and wrote through the copy's `mut` element references - exactly what T25c now refuses;
+the parameter became `mut rvHold&`, which keeps what the test is about (where the copy's references live).
+
+**Found on the way, left as is**: pushing to a for-in copy of a `List` element (`for l in ls { l.Push(1) }`) is O17's
+error whatever the collection's permission - the recorded r06 limit (an obligation cannot tell a copy's storage from its
+contents) - so the corpus test writes through a writable collection's `Box` elements instead.
+### From study 4's systems, concurrency and scripting programs: null reads trap, a crash handler TSan cannot hang, Clear, a following io.Lines, chan.Close, process handles, -i runs joins, defaults for build constants (T2b, P7, E27, O8c, X6, B3e, B10c, 2026-10-09)
+
+Study 4 (`/home/user/review/study4`) wrote thirteen systems, concurrency and scripting programs; this batch took its
+findings outside the scope rules, plus one the fuzzer found.
+
+1. **A null read the optimizer could see miscompiled (T2b).** `s.top.v` with `top` defaulted to null, read in an
+   inlined `Peek`, let LLVM prove the load undefined and delete everything from it on - `main`'s return included - so
+   control fell into the C `main` that calls it and the program printed its first lines forever (r02; other shapes
+   exited 48, printed garbage and exited 0, or printed a line twice). T2b said "undefined behaviour - in practice a
+   deterministic trap", which held only at `-d`. Every function the compiler writes, the runtime's included, now
+   carries LLVM's `null_pointer_is_valid` - the kernel's `-fno-delete-null-pointer-checks` - so the optimizer may no
+   longer assume a pointer it sees read through is non-null: the load stays a load and faults. T2b now says a null read
+   **traps**, as a guarantee, with the one honest limit: a field further into a struct than the unmapped range (64KB on
+   Linux) is not covered, and is undefined as an out-of-range index is. E16e and X1a no longer list a null dereference
+   among the unchecked holes; they list a data race instead. The evaluator and `-i` report a null read as before.
+   **Measured** (callgrind, `-a x86-64-v3`, every bench program before and after, identical output): nbody, spectral-norm,
+   mandelbrot, fannkuch, k-nucleotide, List push/walk/fold, Array walk/fold, parallel all within 0.001%; binary-trees
+   +0.010%; matmul +0.022%; text +0.78% - three instructions per iteration in `main`, a null check the optimizer used to
+   remove because a load had proved the pointer non-null. Two checks pin it: the r02 shape built `-b` and `-d` ends with
+   status 139 and OnCrash's message, and `-i` stops naming it.
+2. **`-r` with `os.OnCrash` could hang (P7).** A fault inside ThreadSanitizer's own bookkeeping ran the crash handler,
+   whose instrumented atomic load waited for the slot lock its own thread held. The handler is now emitted with an
+   attribute group of its own, without `sanitize_thread` (`cgWriteWithAttributes` recognizes it), so a crash ends with
+   its signal. Found while checking it: the recursion that triggers this (r11, 400,000 frames on a RunOnStack stack)
+   corrupts TSan's state on its own, OnCrash or not - TSan pushes every call on a fixed-size shadow stack whose overrun
+   is checked only in its debug builds - and a run then crashes, exits 66 or spins in `MetaMap::FreeRange` freeing a
+   block. Measured: 100,000 frames always clean, 200,000 sometimes 139, 300,000 sometimes a hang with no OnCrash at all.
+   That is the detector's limit, not olang's; P7 now states both.
+3. **`StringBuilder.Clear()` (O8c).** Empties the builder and keeps its chunks, as `List.Clear` does: r22's loop
+   replacing a builder field per turn peaked at 193MB over a million turns, and Clear-ing it at 10MB. **O8c** states the
+   arena's rule where people meet it: nothing is reclaimed before its scope closes, so what a loop puts into a scope
+   that outlives it - a replaced field's old value, text sent through a long-lived channel, an element a List removed -
+   stays until that scope closes; std/chan's and std/io's docs say the same.
+4. **`io.Lines` reads again after the end (r21).** It latched the end of the file, so it could not follow a file still
+   being written. Every `Next` now reads when it has nothing buffered, `Exhausted` meaning "no more lines now" - one
+   system call per call at the end - so `tail -f` is a loop with a wait. A test in std/os appends to a file between calls.
+   **Decided**: the end of the file still ends a line without a newline (Python's `readline` and Go's `ReadString` do the
+   same), so a writer that writes a line in pieces can be read as two; one that writes whole lines is read line by line.
+5. **`chan.Close`, `ChanError.CLOSED`, `for v in c`.** Close says no more values will be sent; what is buffered is still
+   received, in order, and then `Recv` and `RecvUntil` fail with `ChanError.CLOSED` - so `Recv` is fallible now (`try`),
+   which is "errors are errors" for a channel that can end. A channel is its own iterator (`Next() T ? Exhausted`), so
+   `for v in c` receives until the channel is closed and drained, and the iterator helpers work on one. **Decided**: a
+   `Send` on a closed channel - or one still blocked, or a rendezvous value not yet taken, when it closes - **stops the
+   program** ("send on a closed channel", an assert after letting go of the lock), as Go panics, rather than failing:
+   the side that sends is the side that closes, so it is a protocol mistake, and an error would put `try` on every
+   `Send` of every program that never closes. Closing twice changes nothing (Go panics; that panic is a common source
+   of shutdown bugs and buys nothing here). `IsClosed` for a look. checks.olang and the fuzzer's worker pools close
+   their queues instead of sending -1 markers. Tests: drain-then-CLOSED, `for v in c` over buffered and rendezvous
+   channels across tasks, a close waking three walkers and a `RecvUntil`, all three times under `-r` with no report; a
+   check that a send after close aborts with status 134.
+6. **Processes (X6).** `os.Exec` takes `dir` (the program's working directory; a relative program path is found from
+   it); `os.Start` gives a running `Process` with `Wait() Output ? OsError`, `WaitUntil(tok)`, `Kill()` (SIGKILL;
+   nothing once waited for, since the pid may be reused) and `Pid()`; `os.ExecUntil(args, tok, ...)` is Exec with a
+   cancel token whose firing kills the child and fails with the token's reason. **Decided**: the token is a function of
+   its own, named as chan's `SendUntil`/`RecvUntil` are, so `Exec`'s error set is unchanged; a wait with a token polls
+   `waitpid(WNOHANG)` with a sleep doubling from 50us to `cancel.PollNs`, which works the same under `-i` (a pidfd would
+   need a newer glibc and a raw syscall); a missing or non-directory `dir` is `NOT_FOUND`/`NOT_DIR`, checked before
+   spawning so it cannot be mistaken for a missing program; a second `Wait` fails with FAILED. The runtime's
+   `__olang_spawn` takes the directory and uses `posix_spawn_file_actions_addchdir_np`, declared `extern_weak`; where
+   the C library lacks it (glibc before 2.29) the program runs through `/bin/sh -c 'cd -- "$0" && exec "$@"'` with the
+   directory and arguments as the shell's arguments, never its script - checked by hand on the IR with the weak symbol
+   forced null. `-i`'s spawn does the same. Tests in std/os; the interp check builds and interprets a fixture using all
+   of it.
+7. **`-i` runs joins (B3e).** A join's tasks run as K1 already ran them: in sequence at the join, after its body and its
+   deferred code, each to completion in spawn order - one of the orders the built program may take, so fan-outs and
+   channel hand-offs with room run as built (r23 prints what `-b` prints). A task that needs another running at the same
+   time cannot: a condition-variable wait (`pthread_cond_wait`/`timedwait` - what a channel's Send and Recv block in)
+   made inside a task, while tasks wait to run, or untimed at all, stops `-i` with "it waits for another task, and -i
+   runs a join's tasks one after another, never beside each other - here in the task spawned at FILE:LINE". A timed wait
+   with no task in sight still waits its time out (a `RecvUntil` with a deadline on the main thread times out as built).
+   **Deferred code when -i stops**: an error leaving `main` already ran it on the way out, and `done`/`fail`/`os.Exit`/a
+   failed check end the process without it, as the built program does (S19c); what changed is a stop on something -i
+   does not run (a destructor, a task's wait, recursion beyond its stack): the blocks it is in are still left as the
+   built program, which would go on, leaves them - their deferred code runs, innermost first, and the first stop is the
+   one reported - so a script's temporary directory goes.
+8. **A default for a build constant (B10c).** `Profile := "dev"` at a module's top level, built with `-D Profile=prod`,
+   used to be B10's "is a build constant - choose another name"; a program configured by `-D` could not be built
+   without it (r15). Now an immutable global outside std whose type is one a `-D` value can have - `Bool`, `I32`, `I64`,
+   `U64`, `F64`, `String` - is a default: `-D` replaces its initializer, fitted to its declared type as a literal
+   written there would be (`-D Port=443` into `Port I64`), and a value that does not fit is an error naming the flag.
+   **Decided**: it is configuration whether or not `-D` names it - a condition reading one depends on the build, so S8a
+   no longer calls it dead and S8b decides it as conditional compilation. That **reverses a consequence the user
+   confirmed** when S8a was made ("`Verbose := false; if Verbose` in source is an error - configuration knobs belong in
+   -D"): the knob now has a default in source, which was the study's whole point; three S8a cases moved to a `U8`
+   global. `-D Name` still defines the build constant every module sees (B10), the declaration stays its module's
+   global, the two hold one value, and every such declaration of the name takes it (Go's `-ldflags -X` without the
+   package path, since the declaring module is the only one whose name it is). std's globals are never defaults - its
+   constants are its own - and a function, a type, a mutable global or one of another type is still B10's error (B10c
+   saying which). The token evaluator (B9a) reads -D's value for a default, typed as the declaration, and counts a
+   default as a build constant for S8b; `SemanticIsBuildConst` and S8a's `condIsConstant` do the same in the checker
+   and evaluator. **Diagnostics**: a condition naming a name nothing declares and nothing is near now says "unknown name
+   'Profile' - if it is a build constant, define it with '-D Profile=VALUE', or declare it with a default", at the top
+   level (B9c's report, which said only that the condition used "what exists only in the branches it decides") and in a
+   function. Eight check cases.
+9. **An empty comprehension had no storage (E27, the fuzzer's seed 3193).** A comprehension over an iterator that gave
+   nothing was `null` at run time and an empty array while compiling and under `-i`. **Decided**: rather than reserve
+   100 elements before every such loop, as the finding suggested, a comprehension that reserved nothing up front and
+   pushed nothing is given storage of its own after the loop - an allocation of nothing (8 bytes, O8a's minimum, E10's
+   "storage of its own") - which costs one compare per comprehension and nothing for one that keeps elements. A corpus
+   test compares the run time with a baked global and an assert decided while compiling.
+
+### The C compiler moves to `bootstrap/`; the runtime's IR to its own file; dead code and stale comments out (B, 2026-10-10)
+
+The user asked for a **modest** refactor before the port ("Yes keep it modest. Also give the C compiler its own
+directory. From now on we just bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current
+compiler binary is lost.") and against splitting for size ("splitting files is overrated. I prefer long files if they
+all do the same thing. Only split where modularisation is a thing."). The port is a redesign (compiler/DESIGN.md), so
+nothing was restructured that the port will replace anyway; the work is a move, one split, and a cleanup.
+
+1. **The move.** Every `.c` and `.h` went to `bootstrap/` with `git mv`, committed alone with only the paths that name
+   them (the makefile, checks.olang's diagnostic-table check, the checklist's `comptime.c`), so a branch editing
+   `semantic.c` (s4sem was) merges across the rename. The binary stays `build/out`: the compiler finds std and
+   `SPEC.md` beside itself (`<binary>/../std`, `../SPEC.md`), and tools, checks, the fuzzer, bench and oann's makefile
+   all name `build/out`, so none of them changed. The pattern rule became `build/%.o: bootstrap/%.c`; the `.d` files
+   name `bootstrap/` paths. Comments naming a file (`cgDeepEq in codegen.c`) stay - the files kept their names.
+2. **The split: `bootstrap/runtime.c`.** The runtime - the arena and its chunk pool, the worker cache, the checks'
+   failure paths and test unwinding, rendering, what std reaches through `extern fn`, the stack and crash support, the
+   dynamic call - is ~2,900 lines of LLVM IR in C string literals, a separate thing from generating a module's code
+   (the review's structure note, and DESIGN.md's `std/runtime/runtime.ll`). It moved verbatim. Its one link to codegen
+   was the static `cgArch`, read to pick a row of the C-library layout table; `emitRuntimeDecls` and
+   `emitDyncallRuntime` now take the architecture as an argument, the three copies of the row lookup became
+   `cgLibcLayoutFor`, and the include list split (codegen.c lost nine system headers only the runtime used). The
+   functions kept their names, so HISTORY, DESIGN.md and corpus comments that cite them still find them.
+3. **Dead code** (all but semantic.c). Found with `-ffunction-sections` and `--gc-sections --print-gc-sections` - the
+   linker's reachability, transitive - and gcc's `-Wunused-*` family: `TokenUnfeed`, `TokenGetCharCursor`,
+   `TokenGetLineNr`, `SyntaxResetBuildConsts`, `CallocOrCrash`, `ListRetract`; util.h's C unit-test macros (`TEST`,
+   `TEST_PASSED`, `TEST_FAILED`, never used) and `COLOR_FG_YELLOW`; errmsg.c's `enum severity`; `SNTX_NOT_FOUND`; and
+   `ctExternCall.argTypes`, written and never read (libffi's cif holds the pointer). Every diagnostic id in errmsg.h is
+   still used. **Left for semantic.c** (another branch was editing it): `TypeFromType`, `TypeDescribe`,
+   `VarListAddSetOrigin`, `findLoadedModule` with `semaModuleCmpForList`, `flushPendingDischarges`,
+   `typeHasNamedScopeTag`, `varCmpForList`, and the hand-kept walker `structContainsBareScopeField`.
+4. **Stale comments** (all but semantic.c). Rewritten where they described removed features as current - interface
+   values and dispatch tables, scope names and scope declarations (now parsed only so that they are reported, O3),
+   struct literals (a constructor assembles its instance, C6), array suffixes and per-level markers (T24's one marker),
+   multi-dimensional arrays and nested literal rows (E21: parsed only to be reported) - or wrote retired spellings in
+   examples: `func`, `extern func`, `choice`, `interface`, `int32`/`Int32`/`Float64`, `byte[]`, `T[N]`/`T[]`/`T[expr]`
+   (now `Array<T, N>`, `Array<T>`, `Array<T>(n)`), `Vec<int32>`, `len(a)`. The renames inside comments were done by a
+   script that touches comment text only (strings and code untouched), the rest by hand. Several comments had drifted
+   away from their functions as code was inserted between - the numeric conversion's (above the BF16 helpers), the
+   `len` one (above the atomics), a parameter-scope override's (above `cgIsCtor`, in the old `scope` syntax), half of
+   `dstHoldsLiveValue`'s (spliced into O8a's), and an array-literal one with nothing under it - and were moved back,
+   rewritten, or dropped where the function they described is gone.
+5. **`make bootstrap`, `bootstrap/README.md`, `bootstrap/CHAIN`** (DESIGN.md section 5). No binary is committed;
+   `make bootstrap` builds `build/stage0` - the same C at `-O2`, objects in `build/stage0.obj` - and says that is all
+   there is until `compiler/` holds the olang compiler; the walk of `CHAIN` and stages 1-3 with their fixed-point check
+   are a TODO in the makefile. `CHAIN` exists with its header and no entries. Building at `-O2 -Werror` found one gcc
+   `maybe-uninitialized` in `ErrMsgExplain` (a rule pointer set only where a rule is found; `-e ""` would compare it
+   with zero length) - it starts as `""` now, which keeps that case's behaviour exactly.
+
+**The proof, as before** (the T6b cleanup's): the emitted IR, compared byte for byte. clang was stubbed out by a
+wrapper on `PATH` - compiling a `.ll` only touched the object, a link wrote a program that exits 0, and anything else
+(the target probe, B12) went to the real clang - so every build stops right after the compiler's own output is written,
+and the corpus copy, its std (`OLANG_STD`) and the working directory were the same for both compilers. Compared: `-t`
+of every `make test` file (the root's harness object and every imported module's), `-b`, `-b -d` (DWARF) and `-b -r` of
+runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture, bench and fuzz program - 743 IR files
+and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
+`-O2` stage 0. `make verify` passes.

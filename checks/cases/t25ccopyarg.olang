@@ -1,0 +1,12 @@
+# check: fail error[T25c]: 'setFirst' writes through or keeps its parameter 'b', and this Box is a read-only copy
+# also: note: 'b' is declared here
+# T25c: a by-value parameter the callee writes through needs a copy it may write - decided from the callee's body
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn setFirst(b Box) { b.P[0] = 1 }
+fn main() ? {
+    setFirst(GB)
+}

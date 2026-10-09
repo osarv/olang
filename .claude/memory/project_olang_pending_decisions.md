@@ -201,6 +201,24 @@ rule and where it is recorded; the morning report lists them all, then they move
    literals adapts like a literal (linalg ActivationSlope at F32); O17a: a value whose references live outside its own
    storage cannot be held by reference (only lent as a call argument); for-in over one hands elements the references'
    scope.
+30. (wt-rv2fix, S4d) in an assignment over a value place, a value that borrows storage within the place (the place,
+   a field, an element of the same array, reached without a reference) takes the place's OLD value as a copy - so
+   `x = E.Neg(x)` no longer builds a cycle; only where what is built can keep the borrow (payload, held ctor arg, array
+   literal element, a call that can hand it back). Parallel assignment builds targets before values (n, e = 5, E.Lit(n)
+   gave Lit(5)). O17 lend checks decided after the fixed point; P2 for any computed callee; `Call` follows T22.
+31. (wt-qc, the user's QC, details mine) a value holding `mut` references copied from a place reached read-only
+   (immutable global, through a read-only reference, a capture, another read-only copy) is read-only: not lent writably,
+   not written through, not stored where writable; `x T = G` is an error naming `G.Clone()`; for-in elements and match
+   bindings follow their source; a by-value parameter's need is read off the callee's body (fixed point) so readers
+   accept read-only copies; a function used as a value may not have a parameter that needs writable; std/linalg's
+   destination forms take `mut` (views keep read-only receivers). Left: a view of a read-only copy (`x.Block().Fill`)
+   still writes - views are a known hole of shallow permission, recorded.
+32. (wt-s4cg) a null read traps (T2b, `null_pointer_is_valid` on every function; +0.02%, text +0.78%); a Send on a
+   closed channel stops the program (as Go panics), `Recv` now `? ChanError` (CLOSED), `for v in c` ends at the close;
+   `os.ExecUntil`, `os.Start`/Process, `Exec(dir)`; `-i` runs joins sequentially; B10c: an immutable top-level global
+   (outside std) of a -D-able type is a default `-D` replaces. REVERSES a consequence the user confirmed (2026-10-0x,
+   S8a): `Verbose := false; if Verbose` is configuration now (S8b decides it), no longer a dead-branch error -
+   tell the user.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
