@@ -170,10 +170,14 @@ because what it finds about structure feeds the refactor.
   scope, r16 cascades from one unknown type, G19 bodies still checked after a constraint error, `v := e; return v`
   losing O13c bindings; over-rejections r08 List of Lists element as receiver/loop source, r10 compose(f, g), r11
   rebuilding an enum field from its own payload, r13 Fold with a reference accumulator (O25a+D15 leave no spelling),
-  r14 Pair inference taking `mut`; Bool-payload match exhaustiveness; diagnostics: name the declaration to change
+  r14 Pair inference taking `mut`; Bool-payload match exhaustiveness; a static text literal's elements stored into a longer-lived array rejected by O20 (scratchpad/rep/lit2.olang);
+  diagnostics: name the declaration to change
   ("declare text where st lives"), text-join pieces ("write $x"), keyword field names, misplaced destruct. Then a
   std-gaps agent: ParseFloat, Join, ToUpper/Replace/Repeat, a line reader, List Pop/Clear/Remove/Sort/List(n, fill),
   a math module, Map Keys/Values/Clear.
+- 09:35: checksfan (checks four at a time: make verify 366s -> ~190s) sent back to merge master (conflicts with
+  isatom's checks changes). Note: the suite's largest process is now `-i bfrand.olang` at 3.5GB (-i frees nothing) -
+  shrink that fixture or fix -i memory (stage 2).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
