@@ -28,11 +28,13 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
-1. (asked 2026-10-09; the user: "I don't like built-ins very much") replace the built-in `same(a, b)` with `a is b`
-   (identity when the right side names no case/type; Python's spelling, reuses `is`)? Default: `same` stays. Rec: yes.
-2. (asked 2026-10-09) turn the five atomics into methods on the integer types (`n.AtomicAdd(1)`), as len became
-   Len()? Default: builtins stay. Rec: yes.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**Decided 2026-10-09 (the user: "Yes, do both"), queued after the tfix/sfix merges (both touch buildIsAs and method
+resolution):** `same(a, b)` becomes `a is b` (identity when the right side names no case or type; a case/type on the
+right is the existing test, read through a reference); the five atomics become methods on the integer types
+(`n.AtomicAdd(1)`, `n.AtomicLoad()`...). With it, my call: D3a extended - a local or parameter may not reuse a
+type's name either (today `Circle := 3` beside `type Circle` compiles, which would make `x is Circle` ambiguous once
+`any Trait&` brings type tests back).
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
 expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
 T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default
