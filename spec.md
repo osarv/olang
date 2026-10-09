@@ -570,7 +570,10 @@ arguments always name distinct instantiations. A declared type argument is disti
 and name** (T29), matching the identity rule the type itself has, so two modules each declaring a `Point`
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type, its length, and whether it is reference-shaped — every part of what makes an array type distinct
-(T25a).
+(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors
+(T22); a reference argument by its permission (T25b), so `List<Node&>` and `List<mut Node&>` are two; and a declared
+array type from the array it is declared over (T29a). No argument is too long to tell apart: there is no limit on how
+deeply type arguments nest short of G17's.
 
 Instantiations are emitted by every object that uses one and deduplicated at link time, so several modules
 instantiating one generic over one type is ordinary and costs nothing beyond the duplicate compilation.
@@ -4405,8 +4408,9 @@ been written out by hand — including destructor registration (§9.3), scope co
 structural comparison (E10).
 
 **G17.** Instantiation may not be unbounded: a generic whose own instantiation requires an
-ever-growing set of further instantiations is a compile-time error. The depth at which this is
-reported is implementation-defined.
+ever-growing set of further instantiations is a compile-time error, reported once. The depth at which this is
+reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
+element, an instance its arguments, a function its parameters and result) is taken to be one.
 
 ## 13. Compile-time evaluation
 

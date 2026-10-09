@@ -249,9 +249,27 @@ void CodegenCheckModuleNames(void) {
     }
 }
 
+//G16a: an instantiation's name has no length limit - it is its identity - but a symbol need not spell all of it. A name
+//longer than this is written as its beginning and a 128-bit hash of the whole, so every symbol fits the buffers it is
+//written into, two different names still never share one, and every object derives the same symbol from the same name
+#define CG_SYM_PART_MAX 120
+static struct str cgSymPart(struct str name) {
+    if (name.len <= CG_SYM_PART_MAX) return name;
+    unsigned long long h1 = 1469598103934665603ULL, h2 = 7809847782465536322ULL;
+    for (int i = 0; i < name.len; i++) {
+        h1 = (h1 ^ (unsigned char)name.ptr[i]) * 1099511628211ULL;
+        h2 = (h2 ^ (unsigned char)name.ptr[i]) * 1099511628211ULL + (unsigned long long)i;
+    }
+    char* out = MallocOrCrash(CG_SYM_PART_MAX + 1);
+    int keep = CG_SYM_PART_MAX - 35;
+    snprintf(out, CG_SYM_PART_MAX + 1, "%.*s.h%016llx%016llx", keep, name.ptr, h1, h2);
+    return StrFromCStr(out);
+}
+
 void mangleGlobal(struct semaModule* mod, struct str name, char* buf, size_t n) {
     char prefix[256];
     mangleModPrefix(mod, prefix, sizeof(prefix));
+    name = cgSymPart(name);
     snprintf(buf, n, "@%s_%.*s", prefix, name.len, name.ptr);
 }
 
@@ -267,18 +285,21 @@ void mangleFuncSym(struct var* f, char* buf, size_t n) {
     //element alone, since that is all a built-in method's identity depends on (M19): "int32[4]&" and
     //"int32[]&" are receivers of the same method
     struct str rn = recv->name;
-    char shape[300];
     if (!(recv->owner && recv->name.len)) {
         struct str e = typeShortName(recv->bType == BASETYPE_ARRAY ? *recv->arrElem : *recv);
-        snprintf(shape, sizeof(shape), "%s%.*s", recv->bType == BASETYPE_ARRAY ? "arr_" : "", e.len, e.ptr);
+        char* shape = MallocOrCrash((size_t)e.len + 8);
+        snprintf(shape, (size_t)e.len + 8, "%s%.*s", recv->bType == BASETYPE_ARRAY ? "arr_" : "", e.len, e.ptr);
         rn = StrFromCStr(shape);
     }
-    snprintf(buf, n, "@%s.%.*s.%.*s", prefix, rn.len, rn.ptr, f->name.len, f->name.ptr);
+    rn = cgSymPart(rn);
+    struct str fn = cgSymPart(f->name);
+    snprintf(buf, n, "@%s.%.*s.%.*s", prefix, rn.len, rn.ptr, fn.len, fn.ptr);
 }
 
 void mangleTypeName(struct semaModule* mod, struct str name, char* buf, size_t n) {
     char prefix[256];
     mangleModPrefix(mod, prefix, sizeof(prefix));
+    name = cgSymPart(name);
     snprintf(buf, n, "%s.%.*s", prefix, name.len, name.ptr);
 }
 

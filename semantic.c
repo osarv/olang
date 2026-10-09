@@ -2022,14 +2022,6 @@ bool bindingsMatch(struct list* a, struct list* b) {
 
 //a short printable name for a type, used only to build a unique instantiation name below
 //a heap copy of buf, as a struct str - the dynamic cases below outlive their own frame
-static struct str strDup(const char* buf) {
-    struct str out = (struct str){0};
-    out.len = (int)strlen(buf);
-    out.ptr = MallocOrCrash((size_t)out.len + 1);
-    memcpy(out.ptr, buf, (size_t)out.len + 1);
-    return out;
-}
-
 //G16: this name IS an instantiation's identity, so it has to distinguish every type argument that is a
 //DIFFERENT type. Two things used to collapse and both were real bugs. A struct contributed only its bare
 //name, so two modules each declaring a "Point" - different types by owner+name - shared one instantiation
@@ -2048,51 +2040,121 @@ static struct str modBaseName(struct semaModule* mod) {
     return StrFromCStr(out);
 }
 
-struct str typeShortName(struct type t) {
-    char buf[512];
-    if (PrimInfo(t.bType) && !t.owner) return StrFromCStr((char*)PrimInfo(t.bType)->name); //T4
-    switch (t.bType) {
-        case BASETYPE_BOOL: return StrFromCStr("Bool");
-        case BASETYPE_ARRAY: {
-            struct str e = typeShortName(*t.arrElem);
-            //the length matters as much as the element: T[2] and T[4] are different types (T25a)
-            if (t.arrMalloc) snprintf(buf, sizeof(buf), "arrN_%.*s", e.len, e.ptr);
-            else snprintf(buf, sizeof(buf), "arr%lld_%.*s",
-                          t.arrLen ? t.arrLen->intLiteralVal : 0, e.len, e.ptr);
-            //and reference-shapedness is part of identity too (T25a)
-            if (t.structMAlloc) strncat(buf, "_r", sizeof(buf) - strlen(buf) -1);
-            return strDup(buf);
-        }
-        default:
-            if (!t.name.len) return StrFromCStr("t");
-            //owner-qualified: a declared type's identity is owner+name, so its short name must be too - and,
-            //since G11 admits a reference as a type argument, its reference-shapedness (T25a)
-            if (!t.owner) snprintf(buf, sizeof(buf), "%.*s", t.name.len, t.name.ptr);
-            else snprintf(buf, sizeof(buf), "%.*s_%.*s",
-                          modBaseName(t.owner).len, modBaseName(t.owner).ptr, t.name.len, t.name.ptr);
-            if (t.structMAlloc) strncat(buf, "_r", sizeof(buf) - strlen(buf) -1);
-            return strDup(buf);
+//a growable text buffer: a type's spelling has no length limit, and one cut short would name a different type
+struct sbuf { char* p; size_t len, cap; };
+static void sbufAdd(struct sbuf* b, const char* s, size_t n) {
+    if (b->len + n + 1 > b->cap) {
+        b->cap = (b->len + n + 1) * 2;
+        b->p = ReallocOrCrash(b->p, b->cap);
     }
+    memcpy(b->p + b->len, s, n);
+    b->len += n;
+    b->p[b->len] = '\0';
+}
+static void sbufStr(struct sbuf* b, const char* s) { sbufAdd(b, s, strlen(s)); }
+static void sbufS(struct sbuf* b, struct str s) { sbufAdd(b, s.ptr, (size_t)s.len); }
+static struct str sbufTake(struct sbuf* b) {
+    if (!b->p) sbufAdd(b, "", 0);
+    return Str(b->p, (int)b->len);
 }
 
-//"max$int32", "pairUp$int32$byte" - one name per distinct type-argument set, in the generic's own
-//declared parameter order so the same arguments always produce the same name. Only has to be unique
-//and stable; it is mangled again by codegen under the owning module like any other name.
+//G16a: a type spelled as a symbol-safe name that tells apart every two types that are not the same type (T27) - an
+//instantiation's name is its identity, so two different type arguments spelling alike would share one instantiation.
+//A declared type is its module and name ("std_map.Node"; a generic one's instance "G-std_map.Box$I32-g"), a
+//primitive its name; the rest are spelled by structure, each compound form bracketed so that what follows it can never
+//be read as part of it: "A-" element "-n" (or "-<length>") "-e" an array, "F-" ... "-f" a function ("m-" a "mut"
+//parameter, each parameter closed by "-p", the result in "R-" ... "-q", each error in "E-" ... "-x"), "T-" ... "-u" a
+//tuple or an anonymous struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+static void typeSpell(struct sbuf* b, struct type t) {
+    if (t.unknown) {
+        sbufStr(b, "unknown");
+    } else if (PrimInfo(t.bType) && !t.owner) {
+        sbufStr(b, PrimInfo(t.bType)->name); //T4
+    } else if (t.bType == BASETYPE_BOOL && !t.owner) {
+        sbufStr(b, "Bool");
+    } else if (t.owner && t.name.len) {
+        bool instance = memchr(t.name.ptr, '$', (size_t)t.name.len) != NULL;
+        if (instance) sbufStr(b, "G-");
+        sbufS(b, modBaseName(t.owner));
+        sbufStr(b, ".");
+        sbufS(b, t.name);
+        if (instance) sbufStr(b, "-g");
+    } else if (t.bType == BASETYPE_TYPEVAR) {
+        sbufS(b, t.name);
+    } else if (t.bType == BASETYPE_ARRAY) {
+        sbufStr(b, "A-");
+        if (t.arrElem) typeSpell(b, *t.arrElem);
+        char len[32];
+        snprintf(len, sizeof(len), "-%lld", t.arrLen ? t.arrLen->intLiteralVal : 0);
+        sbufStr(b, t.arrMalloc ? "-n" : len);
+        sbufStr(b, "-e");
+    } else if (t.bType == BASETYPE_FUNC) {
+        sbufStr(b, "F-");
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* v = ListGetIdx(&t.vars, i);
+            if (v->mut) sbufStr(b, "m-");
+            typeSpell(b, v->type);
+            sbufStr(b, "-p");
+        }
+        if (t.hasRetType) {
+            sbufStr(b, "R-");
+            typeSpell(b, *t.retType);
+            sbufStr(b, "-q");
+        }
+        for (int i = 0; i < t.errors.len; i++) {
+            struct type* e = *(struct type**)ListGetIdx(&t.errors, i);
+            sbufStr(b, "E-");
+            if (e->owner && e->name.len) typeSpell(b, *e);
+            else sbufStr(b, "default"); //R15: the default error, which has no name
+            sbufStr(b, "-x");
+        }
+        sbufStr(b, "-f");
+    } else if (t.bType == BASETYPE_CHOICE) {
+        sbufStr(b, "C-");
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* c = ListGetIdx(&t.vars, i);
+            sbufS(b, c->name);
+            sbufStr(b, "-");
+            struct type payload = c->type;
+            payload.structMAlloc = false;
+            typeSpell(b, payload);
+            sbufStr(b, "-c");
+        }
+        sbufStr(b, "-d");
+    } else if (t.bType == BASETYPE_STRUCT || t.isTuple) {
+        sbufStr(b, "T-");
+        for (int i = 0; i < t.vars.len; i++) {
+            typeSpell(b, ((struct var*)ListGetIdx(&t.vars, i))->type);
+            sbufStr(b, "-t");
+        }
+        sbufStr(b, "-u");
+    } else {
+        sbufStr(b, "t");
+    }
+    //reference-shapedness is part of identity (T27), and so is a reference's permission (T25b)
+    if (t.structMAlloc) sbufStr(b, t.bType == BASETYPE_FUNC || !t.refMut ? "-r" : "-w");
+}
+
+struct str typeShortName(struct type t) {
+    struct sbuf b = {0};
+    typeSpell(&b, t);
+    return sbufTake(&b);
+}
+
+//"max$I32", "pairUp$I32$U8" - one name per distinct type-argument set, in the generic's own declared parameter order,
+//so the same arguments always produce the same name and different ones never do (G16a). It is mangled again by
+//codegen under the owning module like any other name, and has no length limit.
 struct str instantiationNameFor(struct str base, struct list* typeParams, struct list* bindings) {
-    char buf[512];
-    int n = snprintf(buf, sizeof(buf), "%.*s", base.len, base.ptr);
+    struct sbuf b = {0};
+    sbufS(&b, base);
     for (int i = 0; i < typeParams->len; i++) {
         struct str pname = *(struct str*)ListGetIdx(typeParams, i);
         struct type* bound = bindingGet(bindings, pname);
-        struct str tn = bound ? typeShortName(*bound) : StrFromCStr("x");
-        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "$%.*s", tn.len, tn.ptr);
-        if (n >= (int)sizeof(buf)) break;
+        sbufStr(&b, "$");
+        if (bound) typeSpell(&b, *bound);
+        else sbufStr(&b, "x");
     }
-    struct str out = (struct str){0};
-    out.len = (int)strlen(buf);
-    out.ptr = MallocOrCrash((size_t)out.len + 1);
-    memcpy(out.ptr, buf, (size_t)out.len + 1);
-    return out;
+    return sbufTake(&b);
 }
 
 struct str instantiationName(struct var* generic, struct list* bindings) {
@@ -2106,11 +2168,54 @@ struct str instantiationName(struct var* generic, struct list* bindings) {
 //semaDrainInstantiations.
 static void assignImplicitParamScopes(struct type* ft);
 static void finishTypeVarResult(struct type* t, struct token tok);
+//G17: how deeply a type nests other types - an array its element, an instance its arguments, a function its
+//parameters and result. An instantiation needing arguments nested deeper than any program writes is one whose
+//instantiations would never stop growing ("deep(Box<<T>>(x))", a "Grow<T>" holding a "Grow<Array<<T>>&>")
+#define INSTANTIATION_DEPTH_LIMIT 48
+static int typeNestingDepth(struct type t, int depth) {
+    if (depth > INSTANTIATION_DEPTH_LIMIT) return depth;
+    int d = 0;
+    if (t.bType == BASETYPE_ARRAY && t.arrElem) d = typeNestingDepth(*t.arrElem, depth + 1);
+    for (int i = 0; t.genericOrigin && i < t.typeArgs.len; i++) {
+        int k = typeNestingDepth(*(struct type*)ListGetIdx(&t.typeArgs, i), depth + 1);
+        if (k > d) d = k;
+    }
+    if (t.bType == BASETYPE_FUNC || t.isTuple) {
+        for (int i = 0; i < t.vars.len; i++) {
+            int k = typeNestingDepth(((struct var*)ListGetIdx(&t.vars, i))->type, depth + 1);
+            if (k > d) d = k;
+        }
+        if (t.bType == BASETYPE_FUNC && t.hasRetType) {
+            int k = typeNestingDepth(*t.retType, depth + 1);
+            if (k > d) d = k;
+        }
+    }
+    return d > depth ? d : depth;
+}
+static bool bindingsTooDeep(struct list* typeParams, struct list* bindings) {
+    for (int i = 0; i < typeParams->len; i++) {
+        struct type* b = bindingGet(bindings, *(struct str*)ListGetIdx(typeParams, i));
+        if (b && typeNestingDepth(*b, 0) > INSTANTIATION_DEPTH_LIMIT) return true;
+    }
+    return false;
+}
+//G17: reported once, at the declaration of the generic whose instantiation first went too deep - the others
+//growing with it (a generic instantiating another with its own argument) are the same cycle
+static struct list unboundedReported;
+static void reportUnbounded(struct token tok) {
+    if (unboundedReported.len) return;
+    if (!unboundedReported.elemSize) unboundedReported = ListInit(sizeof(struct token));
+    ListAdd(&unboundedReported, &tok);
+    ErrMsgSemantic(tok, UNBOUNDED_INSTANTIATION);
+}
+
 struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i < instantiations.len; i++) {
         struct instantiation* inst = ListGetIdx(&instantiations, i);
         if (inst->generic == generic && bindingsMatch(&inst->bindings, bindings)) return inst->specialized;
     }
+    bool tooDeep = bindingsTooDeep(&generic->type.typeParams, bindings);
+    if (tooDeep) reportUnbounded(generic->tok);
     struct var* spec = VarAllocSetOrigin();
     *spec = *generic;
     spec->name = instantiationName(generic, bindings);
@@ -2135,7 +2240,7 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.specialized = spec;
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
-    ListAdd(&pendingInstances, &idx);
+    if (!tooDeep) ListAdd(&pendingInstances, &idx); //G17: its body would only instantiate a deeper one
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -2262,6 +2367,13 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     spec->name = name;
     spec->vars = ListInit(sizeof(struct var));
     ListAdd(&typeInstantiations, &spec);
+    if (bindingsTooDeep(&generic->typeParams, bindings)) { //G17: its fields would only instantiate a deeper one
+        reportUnbounded(generic->tok);
+        spec->typeParams = ListInit(sizeof(struct str));
+        spec->ctorFunc = NULL;
+        spec->destructFunc = NULL;
+        return spec;
+    }
     *spec = TypeSubstitute(*generic, bindings);
     spec->name = name;
     //G8a: remember what this was applied from, and with what. TypeSubstitute needs both to re-derive the
@@ -14643,6 +14755,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
+    unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
     allModules = ListInit(sizeof(struct semaModule*));

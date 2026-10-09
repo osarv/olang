@@ -2343,6 +2343,57 @@ test "G16a: and a generic function over both" {
     assert rb[3] == 9
 }
 
+# G16a: and every other difference between two types - two function types (they were all one name), a reference's
+# permission, a declared array type and the array it is declared over, a reference and a value holding one - and a
+# name of any length, written into symbols as its beginning and a hash of the whole
+fn G16Id(x <T>) <T> { return x }
+fn g16Dbl(n I32) I32 { return n * 2 }
+fn g16Half(n F64) F64 { return n / 2.0 }
+type G16Node struct(v I32) { v mut }
+type G16Nums Array<I32>
+type G16Box<T> struct(v <T>) { v }
+type G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<T> struct(v <T>) { v }
+G16Ro G16Node& = G16Node(1)
+fn g16Funcs(k I32) F64 {
+    f := G16Id(g16Dbl)
+    g := G16Id(g16Half)
+    return F64(f(21 + k)) + g(5.0)
+}
+G16FuncsBaked := g16Funcs(0)
+fn g16Kinds(k I32) I64 {
+    a := G16Id(G16Ro)
+    m G16Node& = G16Node(2 + k)
+    b := G16Id(m)
+    b.v = 7
+    n G16Nums = G16Nums(I32[1, 2])
+    arr Array<I32> = I32[3, 4, 5]
+    ro := List<G16Node&>()
+    ro.Push(G16Ro)
+    rw := List<mut G16Node&>()
+    rw.Push(m)
+    x := rw[0]
+    x.v = x.v + 1
+    return I64(a.v) * 1000 + I64(m.v) * 100 + G16Id(n).Len() * 10 + G16Id(arr).Len() + ro.Len() * 10000
+}
+G16KindsBaked := g16Kinds(0)
+fn g16Long(k I32) F64 {
+    a := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>(7 + k)))
+    b := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>(2.5)))
+    return F64(a.v.v.v) + b.v.v.v
+}
+G16LongBaked := g16Long(0)
+
+test "G16a: function types, permissions, declared array types and long names each make their own instantiation" {
+    k I32 = ctRuntimeZero
+    assert g16Funcs(k) == 44.5 and G16FuncsBaked == 44.5
+    assert g16Kinds(k) == 11823 and G16KindsBaked == 11823
+    assert g16Long(k) == 9.5 and G16LongBaked == 9.5
+    c := G16Box<G16Node&>(G16Ro)
+    d := G16Box<mut G16Node&>(G16Node(3))
+    d.v.v = 4
+    assert c.v.v == 1 and d.v.v == 4
+}
+
 # G8a: generics COMPOSE - a type variable may be written as a type argument, so one generic can be
 # expressed in terms of another. Before this, generics worked for leaf types (Chan<I32>) and for
 # functions over a bare <T>, but "Vec<T>" could not be written at all: the type-args resolver only looked
