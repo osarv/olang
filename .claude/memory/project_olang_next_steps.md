@@ -147,6 +147,9 @@ because what it finds about structure feeds the refactor.
   `-e RULE`, converting token/syntax/main; phase 2 - semantic.c's ~460 sites - only after isatom and efix merge, then
   resume it with SendMessage). Left by tfix for the evaluator: -i keeps an error's name past an R17 bare-? boundary;
   -i cannot call through a Call adapter (handed to efix).
+- 08:45: efix merged (d08eefb) - every batch from the three reviews is on master. Left over: `x := "abc" if c else "no"`
+  still rejected by E28/D15 (checker); std/cancel "a busy task stops..." seen flaky once (handed to isatom). Running:
+  isatom, bench, checksfan, errmsg (phase 2 after isatom merges).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

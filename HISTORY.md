@@ -9222,6 +9222,126 @@ from their original form.
   **Found, not fixed (another agent's area)**: under `-i` an error leaving a bare-`?` function keeps its original name
   ("unhandled error: Err.Loud") where the built program reports the default error ("unhandled error") - the evaluator does
   not re-encode at the R17 boundary; and `-i` cannot call through a `Call` adapter.
+
+- **The evaluator and the run time agree, from a review (K1/K2b, B5a, E10, T11b, T25d, T21/O1b, T4/E26, E11a, S12b, C2e,
+  E30, B3e, 2026-10-09).** Review area (5) of the overnight plan read `comptime.c` (the evaluator, and so `-i`) against
+  the code generator: every reproducer printed a baked global beside the same computation done at run time from a
+  `mut` global's value, and ran the program under `-i` too. Twelve confirmed disagreements; all are fixed here, each with
+  a corpus test that compares a baked global or a decided assert with the run time, and a checks scenario
+  (`agree`) that builds a program, builds it at `-d`, interprets it, and requires the three outputs to be identical and
+  right.
+  **Globals holding writable storage (findings 1a-c).** An immutable global holding a `mut` reference was treated as
+  constant data three ways. The evaluator read its contents as constant, so `assert f() == 0` with `f` reading `G.a[0]`
+  was decided at compile time while `main` wrote `G.a[0] = 7` first - the built program contradicted its own assert,
+  `-i` failed it, `-d` segfaulted. It wrote through it, so `P I32 = poke()` (writing `G.a[0] = 5`) was baked, its write
+  happened only at compile time, and `Q = G.a[0]` was baked from the written value. And codegen wrote the referent as
+  `internal constant` because it held no reference itself (`CtIsPlainData`), so a write through the field faulted at
+  `-d` and was folded away at `-O3`. The coordinator's decision: such a global is not constant - the evaluator neither
+  reads its contents as constant nor writes through it - and its referents are emitted writable; baking it is still
+  fine, its own initializer having built what it holds. Built as two node sets keyed by address: `ctOwned` (every
+  aggregate a cached global value reaches, owned by the first global that reached it) and `ctWritable` (what a
+  reference whose static type has `refMut` reaches, with its by-value parts; a slice marks its base). A write whose
+  container is owned is refused (`CT_WHY_WRITES_GLOBAL`), a read of a global whose value reaches writable storage is
+  refused for every reader but its own bake, and codegen emits `constant` only for what is not writable - which also
+  makes a referent holding references read-only data when nothing can write it. The sets survive `CtReset`, since
+  B9c's `decidePendingConditions` resets the evaluator after the K2 pass whose values codegen writes out; a node is never
+  freed, so no later node can be mistaken for one of them. Function values matter here too: a closure capturing a
+  `mut` reference reaches what it names, so the writability walk follows captures.
+  **Aliasing lost in baking (finding 10).** `A Node& = mk(); B Node& = A` - `same(A, B)` was decided true and was false
+  at run time, because each global's private data was emitted with its own node map, and the bake loop evaluated each
+  initializer afresh rather than through the cache other evaluations used (so even the evaluator's own `B` was a
+  different node from the `A` it baked). And a slice baked beside its base was a separate copy. Now the bake loop reads
+  globals through the cache (`CtEvaluateGlobal`), one node map serves every global of the module, and a slice records
+  its base (`viewOf`/`viewOff`) and is written as a `getelementptr` into the base's data. Across modules a node is not
+  duplicated: a global reaching an instance another module's global holds is set at startup, reading it there, which
+  is also the answer for the sliced global of another module. Within a module the same holds for an instance a global
+  set at startup holds - set at startup, it is built anew there - to a fixed point. An empty array with storage is
+  written as one element's room, so it is an instance of its own.
+  **Init order (finding 15).** `Early mut I32 = Late + 1` before `Late I32 = Mut2 + 10`: 11 when `Late` was baked, 1 when
+  set at startup, 11 under `-i`, which initialized lazily. The coordinator decided dependency order with a cycle error.
+  Built in `comptime.c` beside the K1a scan (`CtOrderGlobals`): each global's initializer is walked, following direct
+  calls into bodies; functions named as values are collected and walked only if a call through a value is made
+  somewhere along the walk, and a global read whose type can hold a function value contributes the functions its
+  initializer names - so `G fn() I32 = fn() I32 { return G() }`, a recursive lambda in a global, is not a cycle while
+  `X I32 = apply(fn() { return Y })` does depend on `Y`. Kahn's order, smallest declaration index first; a cycle is
+  reported along the reads (`A -> B -> A`), a self-read in words of its own. Codegen's init function and `ctRunMain` both
+  read `mod->globalOrder`.
+  **Value arrays assigned in place (finding 14).** After `b = Array<I32>(3, k)` a slice of `b` saw the new elements
+  (the buffer was reused); after `a = I32[k, 8, 9]` the slice kept the old ones (the literal was promoted into fresh
+  storage); the evaluator always kept the old. CLAUDE.md had called the reuse "unobservable by construction". The
+  coordinator decided to specify the run time's behaviour (T11b) and apply it everywhere: the literal path now goes
+  through the same reuse-or-allocate copy (`cgCopyRuntimeLengthArray` over a borrowed `{N, literal}`), and the
+  evaluator's `ctAssign` writes an aggregate of the same shape part by part into the nodes it has - which also makes a
+  reference to a struct value's field see the struct's reassignment, as it does at run time.
+  **Static literal identity (finding 9).** Two `I32[1, 2]` literals compared identical at run time because the linker
+  merged `private unnamed_addr` constants; one literal site reached twice was the same at run time and two instances in
+  the evaluator. Decided: a site is one instance. `unnamed_addr` is gone from static literals, codegen keeps one
+  constant per site per object (deferred code is emitted once per way out, so one site can be written out several
+  times), and the evaluator keeps one node per site and module (`ctFitBoundary`, at the call and return boundaries
+  where `cgStaticLiteral` applies) - per module because a parameter's default is one operand spliced into every calling
+  module's code, each object with its own constant. `CtIsStaticLiteral` is the one predicate both ask.
+  **Array identity (finding 11).** `same(arr[1:3], arr[1:2])` was true at run time (only the pointer was compared) and
+  any two empty arrays were the same in the evaluator. Now both compare storage and length. That exposed the run
+  time's own nondeterminism: an allocation of zero bytes returned the bump cursor, so two `Array<I32>(0)` were the same
+  exactly when nothing was allocated between them - which no evaluator can model. The allocator's minimum is now 8
+  bytes (one compare and a select), and the evaluator gives an empty zero value no storage, which is what `{0, null}`
+  is - the same bits as a null array reference, so the two compare the same in both.
+  **Function-typed globals (finding 5).** `F mut fn(x I32) I32 = dbl` compiled to `define i32 @iglob_F(i32) { ret i32
+  zeroinitializer }`: every place that iterated a module's vars took "has a function type" for "is a function". A var
+  now records `isGlobalVar`, set where a global declaration is collected; codegen gives such a global storage, sets it
+  at startup (a function value has no constant form yet), and calls through it as through a local; the evaluator reads
+  it and calls through the value. `F = tri` was rejected under O1b although a named function's value is static:
+  `storageInProgram` now says so for a named function and a lambda capturing nothing.
+  **Integer to float (finding 12).** `F32(1152921573326323713)` baked `1568669696`, the run time `1568669697`: the
+  evaluator went through a double, rounding twice, and so did the checker's adaptation of an integer literal
+  (`Lit F32 = 1152921573326323713` was wrong in both). `IntRoundTo` (util.c) cuts the exact integer to the type's
+  significant bits with ties to even, leaving overflow to `FloatRoundTo` - the first version applied it itself and made
+  `half(70000)` an infinity, which the T6 fit check accepts as "already infinite"; the corpus's own check case caught it.
+  Comparing a program built, built at `-d` and interpreted then found the same bug in LLVM: `sitofp i64 ... to bfloat`
+  goes through a float at `-O0` (23936) and not at `-O3` (23937). Codegen now converts an integer to `BF16` with a
+  runtime function (`__olang_int_bf16`, a `ctlz` and integer rounding); F16 needed nothing, since any integer a float
+  holds inexactly overflows it anyway. 3,600 random conversions agree three ways.
+  **The rest.** `$` of `F64` `-0.0` printed `0` at run time (`fadd double %v, 0.0` is `+0`; now `-0.0`). A function
+  returning a value read out of a reference returned the reference in the evaluator, so `f(a) == b` compared
+  identities (`assert f(P(4)) == P(4)` was a false compile error, and a top-level `if` took the other branch); `return`
+  now lands its value in the declared result as every other place does (`ctFit`). A `match` used as a value built text
+  literals in the match block's own scope and returned them after it closed - `cgIsFreshTemp` now counts a literal
+  promoted into a conditional's or match's run-time-length type, so the result scope is the target. The evaluator did
+  not check a copy into an inline field's fixed storage (C2e). E30 cached a chain's shared operand on the operand node,
+  so the same chain re-evaluated inside its own `Less` read the outer chain's values; the cache is a stack in the
+  evaluator's state now, valid only for the call that pushed it. The evaluator's comprehension stack was a fixed 64.
+  `-i` recursion crashed the compiler near 70,000 calls - each interpreted call takes ~15KB of C stack at `-O0` - so a
+  guard reads the thread's stack bounds (`pthread_getattr_np`) and stops 8MB short of the end, with the existing
+  message; reducing the frames was considered (`struct type` passed by value makes them large) and left to the
+  refactor. A comprehension's up-front reservation of a huge range was not checked under `-i`. And the compiler's own
+  `++` and atomic add overflowed a signed `long long` at `I64`'s maximum (undefined behaviour in C), now unsigned.
+  `-i` refused an `extern` taking an array of `F16` or `BF16` ("a parameter type -i cannot pass"), though X3 hands over
+  only the elements' bytes; it now writes and reads them back by their bit patterns (E33's `FloatBits`), as it does
+  `F32`'s. A scalar `F16`/`BF16` parameter is still refused - libffi has no half-precision type.
+  **Found on the way, not fixed (not this batch's)**: `x := "abc" if c else "no"` is rejected - neither literal adapts to
+  the other's length (E28); writing `String(...)` around one works. Reading a global `List` or `Map` (`G.Len()`,
+  `1 in GM`) was rejected by O25e while this was written; the statements/scopes batch, merged first, fixed that. That
+  batch's D16a change - a lambda finalized against its target before anything asks where it lives - in turn made O1b's
+  check see `EvF = fn(x I32) I32 { return x + k }` as a lambda that "lives in a scope that closes first": a lambda
+  capturing only values is a temporary (D16d), built in the program's scope like any temporary stored into a global,
+  and the check now says so (verified: the closure is allocated from `@__olang_prog_scope`, and one capturing a local
+  reference is still rejected).
+  **After the merges.** The stack guard's 8MB spare assumed the compiler's own 1GB thread; where that cannot be made
+  (`ulimit -v 800000`, as the check of `-t` past a crash runs it) the compiler runs on the process's 256KB stack and
+  every evaluation stopped at once - every global and condition then "recursed too deep", so `-t`'s untouched files
+  failed. The spare is now a quarter of the stack when that is less. The type checker's review left two `-i`
+  disagreements to this batch, both small, both fixed: an error leaving a bare-`?` function kept its own name under
+  `-i` ("unhandled error: Err.LOUD") where the built program re-encodes it as the function's default error at the
+  boundary (R17) - the evaluator now does the same where a call returns, so the report reads "unhandled error"; and a
+  value whose type declares `Call`, given where a function value is wanted (E31), was refused ("a function value
+  compile-time evaluation does not model"). It is now a function value naming `Call` and holding a reference to the
+  instance - the very one where it has storage, a copy of a temporary, as the generated adapter holds it - so `-i`
+  calls through it and a global computed through one bakes; the writability walk follows the receiver's permission,
+  and B5a counts a `Call` method as named wherever a value of its type appears (conservatively: a wrong order would
+  be silent, a spurious cycle is not). Checked three ways in the `agree` fixture, and by a baked corpus global.
+  **Flaky, not fixed**: std/cancel's "a busy task stops when the token is cancelled" asserts the task counted at least
+  once in the 5ms before `Cancel()`; under three concurrent verifies the task can start after it, and the test failed
+  once in four full runs here (it passed three times alone).
 - **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
   the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
   both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day

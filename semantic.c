@@ -1522,6 +1522,7 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     v.tok = nameTok;
     v.mut = mut;
     v.isFuncDecl = isFuncDecl;
+    v.isGlobalVar = !isFuncDecl;
     v.type.placeholder = true;
     ListAdd(&mod->vars, &v);
 }
@@ -5047,8 +5048,17 @@ static litWide intLiteralExact(struct operand* lit) {
 }
 
 //a numeric literal's value as a float - what it holds once it adapts to a float type
-static double literalAsFloat(struct operand* lit) {
-    return TypeIsFloat(lit->type) ? lit->floatLiteralVal : (double)intLiteralExact(lit);
+static enum floatKind floatKindOf(struct type t) {
+    return t.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : t.bType == BASETYPE_F16 ? FLOAT_KIND_F16
+         : t.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
+}
+
+//a numeric literal's value as float type `to` holds it - an integer rounded once, straight to `to` (T4): through a
+//double first, "Lit F32 = 1152921573326323713" rounded twice and came out one step off
+static double literalAsFloat(struct operand* lit, struct type to) {
+    if (TypeIsFloat(lit->type)) return lit->floatLiteralVal;
+    litWide v = intLiteralExact(lit);
+    return IntRoundTo(v < 0, (unsigned long long)(v < 0 ? -v : v), floatKindOf(to));
 }
 
 //can an integer literal's value be represented in integer type `to`? an unsigned type's range starts at 0 (T4), so
@@ -5064,9 +5074,7 @@ static bool intLiteralFitsIntType(litWide v, struct type to) {
 //"f F32 = 1e39", "70000" into an F16. Rounding the other way, to zero or a subnormal, still fits. An infinity or a NaN
 //already (a float division by zero, E6a) is a value of every float type.
 static bool floatValueFitsType(double v, struct type to) {
-    enum floatKind k = to.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : to.bType == BASETYPE_F16 ? FLOAT_KIND_F16
-                     : to.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
-    return !isfinite(v) || isfinite(FloatRoundTo(v, k));
+    return !isfinite(v) || isfinite(FloatRoundTo(v, floatKindOf(to)));
 }
 
 //E4a: whether op is a literal-only expression - built only from numeric literals and the arithmetic, bitwise and shift
@@ -5220,7 +5228,7 @@ static void checkLiteralShifts(void) {
 bool numericLiteralFits(struct operand* lit, struct type to) {
     if (!TypeIsNumeric(lit->type) || !TypeIsNumeric(to)) return false;
     if (TypeIsFloat(lit->type)) return TypeIsFloat(to) && floatValueFitsType(lit->floatLiteralVal, to);
-    if (TypeIsFloat(to)) return floatValueFitsType(literalAsFloat(lit), to);
+    if (TypeIsFloat(to)) return floatValueFitsType(literalAsFloat(lit, to), to);
     return intLiteralFitsIntType(intLiteralExact(lit), to);
 }
 
@@ -5232,7 +5240,7 @@ static bool operandAdaptLiteral(struct operand* op, struct type to) {
     if (!op->isLiteral && literalExprFold(op) != LIT_VALUE_OK) return false;
     if (!numericLiteralFits(op, to)) { *op = saved; return false; }
     markFoldedAway(&saved);
-    if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op);
+    if (TypeIsFloat(to)) op->floatLiteralVal = literalAsFloat(op, to);
     op->type = to;
     return true;
 }
@@ -5687,7 +5695,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             && !op->type.owner && TypeIsNumeric(op->type) && TypeIsNumeric(target) && target.ctorFunc) {
         struct type base = TypeVanilla(target.bType);
         if (!TypeIsSame(op->type, base) && !numericLiteralFits(op, base)) return TYPE_FIT_LITERAL_RANGE;
-        if (TypeIsFloat(base)) op->floatLiteralVal = literalAsFloat(op);
+        if (TypeIsFloat(base)) op->floatLiteralVal = literalAsFloat(op, base);
         if (!op->litCtorPending) {
             struct operand* arg = MallocOrCrash(sizeof(struct operand));
             *arg = *op;
@@ -5895,7 +5903,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         //nothing in the existing test suite passed a bare int literal where a float was expected;
         //surfaced immediately by a mixed int/float array literal built while testing the array-literal
         //rework.
-        if (TypeIsFloat(target)) op->floatLiteralVal = literalAsFloat(op);
+        if (TypeIsFloat(target)) op->floatLiteralVal = literalAsFloat(op, target);
         op->type = target;
         return TYPE_FIT_OK;
     }
@@ -11833,9 +11841,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 landCall(rhs, lv, ld);
         }
         //O1b: a global, and everything reached from it, lives in the program's scope - which nothing a function holds
-        //outlives, so what is stored there is built there or already lives there
+        //outlives, so what is stored there is built there (a temporary - a lambda capturing only values too, D16d) or
+        //already lives there
         if (intoGlobal && ctx->hasOwnScope && !rhs->isNullLiteral && (rhs->type.structMAlloc || OperandIsLvalue(rhs))
-                && !storageInProgram(rhs))
+                && !argIsFreshTemp(rhs) && !storageInProgram(rhs))
             ErrMsgSemantic(rhs->tok, GLOBAL_HOLDS_SHORTER);
         //O22: the target's tag may still be a scope variable of the TYPE it is a field of - resolution
         //found no binding because the container arrived as a parameter and was built somewhere else. This
@@ -13967,7 +13976,9 @@ struct var* lvalueRootVar(struct operand* op) {
 bool storageInProgram(struct operand* op) {
     switch (op->opType) {
         case OPERATION_READ_VAR:
-            if (!op->readVar || op->readVar->isFuncDecl) return false;
+            //a named function's value - or a lambda's that captures nothing - is static, made once for the whole run (D16)
+            if (op->readVar && op->readVar->isFuncDecl) return !(op->readVar->isLambda && op->readVar->lambdaCaptures.len);
+            if (!op->readVar) return false;
             if (op->type.structMAlloc && (op->readVar->scopeUnnamed || canonicalVar(op->readVar)->scopeUnnamed)) return true;
             return canonicalVar(op->readVar)->owner != NULL || canonicalVar(op->readVar)->inProgram || op->readVar->inProgram;
         case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_AS:
@@ -15666,6 +15677,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation
     //runs the checked program, and a program with errors has parts that were never checked.
     if (ErrMsgGetNErrors() == errsAtStart) {
+        CtOrderGlobals(); //B5a: which global is set before which - every body is checked now
         CtReset();
         //T29d: a literal entering a type with a constructor stands for what the constructor makes of it - decided
         //first, since a global baked or an assert decided below may read it
@@ -15718,9 +15730,9 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             struct semaModule* mod = *(struct semaModule**)ListGetIdx(&order, m);
             for (int i = 0; i < mod->vars.len; i++) {
                 struct var* v = ListGetIdx(&mod->vars, i);
-                if (v->type.bType == BASETYPE_FUNC || !v->initExpr || v->mut || v->isMethod) continue;
+                if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || !v->initExpr || v->mut || v->isMethod) continue;
                 struct ctVal* val;
-                if (CtEvaluateGlobalInit(v->initExpr, v->type, &val)) {
+                if (CtEvaluateGlobal(v, &val)) {
                     if (CtIsPlainData(val)) v->constVal = val;
                     else v->bakeVal = val; //K2a
                 }

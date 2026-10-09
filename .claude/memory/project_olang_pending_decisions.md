@@ -28,7 +28,13 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]): none open.
+**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+1. (asked 2026-10-09; the user wondered whether lowercase and uppercase Eq should differ, and asked for precedent)
+   one rule - the compiler only ever calls CAPITALIZED methods (drop E31's lowercase private operators, used only by
+   three tests), or keep private operators and make a lowercase eq/hash/str an error instead of silently ignored?
+   Default (in effect): private operators kept; lowercase eq/hash/str ordinary, ignored by ==/Map/$ (tfix's decision F).
+   Rec: drop them (Go's fmt, Rust impls and Python dunders are all type-global; no mainstream language has
+   module-private operators).
 **Decided 2026-10-09 (the user: "Yes, do both"), queued after the tfix/sfix merges (both touch buildIsAs and method
 resolution):** `same(a, b)` becomes `a is b` (identity when the right side names no case or type; a case/type on the
 right is the existing test, read through a reference); the five atomics become methods on the integer types
