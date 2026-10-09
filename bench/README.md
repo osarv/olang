@@ -473,7 +473,10 @@ products, which the load disturbs least).
 
 - **BF16**: `fptrunc float to bfloat` was a call of `__truncsfbf2` (LLVM 18 has no other lowering on x86 once B12c
   takes AVX512-BF16 away); the code generator now narrows in integers on the F32's bits, inline, and every loop above
-  vectorizes. Identical bits on all 2^32 F32 patterns. `bench/repro/bf16_narrow.olang`.
+  vectorizes. Identical bits on all 2^32 F32 patterns. A BF16 compare widens both sides first too: left as an `fcmp
+  bfloat`, instruction selection rounded a promoted value back through `__truncsfbf2`, the one call left in the
+  exhaustive test's loop - which, every F32 narrowed and every BF16 through `+ - * /` against ten others, took 43.8 s
+  with the previous compiler and 8.5 s now. `bench/repro/bf16_narrow.olang`.
 - **The lambda**: `Map$F32` was inlined where its function value was a constant pair (a capture-free lambda) and not
   where it was built around an environment, so the capturing lambda was called indirectly per element. A function
   value is now passed as two words, its code a constant argument either way. `bench/repro/captured_value.olang`.
