@@ -695,6 +695,8 @@ struct operand {
                                 //by what the call bound them to - which the default is stored against
     void* pendingLambda; //D16: a lambda not checked yet - it is checked where its expected type is known
     bool isMoveSource;   //T7b: a destructured result's element - its array is taken, not copied
+    bool copiesOld;      //S4d: a borrow, in the value an assignment writes over a place, of storage within that place -
+                         //it takes the place's old value instead: a temporary copy, built where one there would be
     bool cgEnvOnStack;   //D16c (codegen): a capturing lambda passed to a callee that cannot keep it - its environment is
                          //the caller's frame's, where LLVM can see through it
     struct operand* callee; //E13b: a call through the function value this expression gives, rather than through a
@@ -840,6 +842,7 @@ bool TypeHoldsReferences(struct type t);
 bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth);
 bool SemanticLandedInProgram(struct operand* callOp);
 bool SemanticReferentScope(struct var* func, struct operand* op, struct var** to, int* depth);
+bool SemanticValueRefsHome(struct operand* op, struct var** to, int* depth, bool* unnamed);
 bool varIsOwnParam(struct var* scopeVar, struct var* func);
 int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDepth);
 struct var* SemanticRuntimeScope(struct var* sv, int* depth); //O23a: a derived scope's run-time stand-in

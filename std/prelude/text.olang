@@ -252,7 +252,7 @@ type LineIter struct(of String&) {
 }
 
 fn (it mut LineIter&) Next() String&it ? Exhausted {
-    if it.at == it.text.Len() { error Exhausted.END }
+    if it.at >= it.text.Len() { error Exhausted.END }
     start := it.at
     end I64 = start
     for end < it.text.Len() and it.text[end] != '\n' { end++ }

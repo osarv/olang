@@ -1,0 +1,9 @@
+# E10: "==" walks data that holds itself without end, as any unbounded recursion does; -i stops where the evaluator's
+# depth limit is, with a message, rather than running off its own stack
+type S struct(xs mut Array<S>&) { xs }
+fn main() ? {
+    xs mut Array<S>& = Array<S>(1)
+    s := S(xs)
+    xs[0] = s
+    println($(s == s))
+}

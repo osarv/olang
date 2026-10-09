@@ -197,7 +197,7 @@ fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<K, V> ? Exhausted {
 # on to the next slot, which becomes the one given - failing with Exhausted when every slot has been
 fn (it mut MapIter<<K>, <V>>&) advance() ? Exhausted {
     for it.slot == null {
-        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        if it.bucket >= it.m.buckets.Len() { error Exhausted.END }
         it.slot = it.m.buckets[it.bucket]
         it.bucket++
     }

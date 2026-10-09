@@ -926,7 +926,10 @@ A type may be declared over a primitive, an array, or another declared type over
 it is then a new name over the same representation and takes **none** of the other type's constructor (T29d),
 destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a trait or a generic type's instance
 (`type Names List<String&>`) is a compile-time error - such a type has no representation apart from its identity; a
-struct holding it as a field is the way to name one.
+struct holding it as a field is the way to name one. A type declared over an array may not hold **itself** through its
+elements - `type Nest Array<Nest&>`, or two such types each over an array of the other: its representation would be
+spelled in terms of a type not yet declared, and it is a compile-time error at the declaration. A struct holding the
+array (`type Nest struct(kids Array<Nest&>&)`) is how a value holds others of its own type.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
 constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] { ... }`.
@@ -1391,7 +1394,8 @@ on it belongs to its type, `x mut T&` a writable reference and `x T&` a read-onl
 
 **D11a.** `mut` before a local's value type (`x mut I32`), or before `:=` (`x mut := e`, which gives the local `e`'s
 permission already), is a compile-time error: it would state nothing, and its absence elsewhere would read as
-immutability that does not exist.
+immutability that does not exist. Before a type variable written bare (`x mut T = v`) it is T2's "writable when bound
+to a reference", as on a parameter or a field, and states nothing where an instantiation binds `T` to a value type.
 
 **D12.** In the first form (explicit type), `= expr` is **optional for every declared type**: a
 declaration with no initializer is D13's zero value. When present, `expr`'s type must fit the declared type
@@ -1676,7 +1680,9 @@ number, and takes `i` from `0` to `Len() - 1` (`RemoveAt`) or `Len()` (`Insert`)
 program, checked once per call, and stops it as an `assert` does. `Reverse()` reverses the elements in place, and
 `Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. A `List` of texts has
 `Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
-leaves which elements the rest of the walk gives unspecified.
+leaves which elements the rest of the walk gives unspecified - but a walk only ever gives elements the list holds or
+held, and it ends: once the list holds no more than the walk has given (after a `Clear()`, or `Pop()`s below its
+position) the next step is its end.
 A `List` is a **handle**: its chunks and its counts are one record, made where the `List` is constructed (C2d), and
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
@@ -1993,6 +1999,13 @@ or a build constant included - does not, nor does a conversion, a call, or an ex
 is a checked computation in its literals' own types. With nothing adapting it, a literal-only expression is an
 ordinary expression of its literals' own types (T6a).
 
+A **conditional of literals** - `a if c else b` (E28), or a `match` used as a value (S12b), every value of which is a
+numeric literal, a literal-only expression or itself such, as `1.0 if x > 0.0 else 0.0` - adapts wherever a literal
+does, as a literal-only expression does: beside the values of a conditional or match it stands in (E28, S12b), beside
+a typed operand (E6d), to a target, in an inference (G9a). Every value it can give adapts, or - one of them not
+fitting - none does, and the error is that value's. Its condition still runs, so it is no constant; only its type is
+its literals'. With nothing adapting it, its type is its values', the widest of them (E28).
+
 ### 5.2 Operators
 
 **E5.** Binary operators, loosest to tightest (all left-associative — a chain of same-precedence
@@ -2047,8 +2060,8 @@ Wrapping is deliberate, not a gap: it is the one defined result that costs nothi
 would be a cost the code does not show. Division is the exception, by E6a.
 
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
-(T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value - does not adapt;
-the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
+(T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value, or a conditional of
+literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
 float) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
 type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
 `I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
@@ -2124,6 +2137,13 @@ the type, and a type may say it itself:
 - a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `a is b` (E10c).
+
+The comparison takes no shortcut through identity, and it walks only what these rules say: a value whose parts reach
+values of its own type - a struct holding an array of references to its own type, `type S struct(xs Array<S>&)` - is
+compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element naming the
+array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a comparison
+evaluated while compiling (K1), or under `-i`, stops with a message instead, each level it descends counting as a call
+does against the evaluator's depth limit. A struct or enum reference (identity, above) ends any such walk.
 
 **E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
 same instance - for a reference to an array, whose value is a length paired with a pointer, the same storage from the
@@ -2600,8 +2620,9 @@ expression's value. It binds looser than every binary operator and groups to the
 is `a if c else (b if d else e)`. An `if` with no `else` after its condition does not begin one.
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
-E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
+E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c) - a conditional or match of
+numeric literals counting as one (E4a), so `(1.0 if x > 0.0 else 0.0) if c else f` with `f` an `F32` is an `F32`;
+two numeric literals take the wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
 two arrays of it, whatever their lengths (T7: the length is no part of the type). A reference and a **new value** of its
 referent type (a temporary, E12c: a call's value, a constructor call, an enum case, an array built here - not existing
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
@@ -2689,7 +2710,9 @@ A type declaring only the checked form of an operation (`TryAt` and no `At`) has
 `x[i]` without it is an error. A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
-result and errors are exactly the function type's (and a generic function type's variables are inferred from them):
+result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
+parameter where the type passes a writable one, or a writable result where it gives a read-only one), and a generic
+function type's variables are inferred from them:
 the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would -
 passed, stored or returned (O14: a function's own instance is not a value it may hand back) - and
 state `Call` changes is visible through the instance afterwards. A temporary is built where the function value lands. The
@@ -2713,7 +2736,8 @@ value a call returned. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
-`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
+`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`, the place evaluated once as
+a compound assignment's is (S5): `a[next()]++` calls `next` once. A type with neither is an
 error, as for any other non-numeric type. An element of a type indexed through `At` and `SetAt` is incremented as it
 is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once), and `try x[i]++` checks
 the store and the element's addition as `try x[i] += 1` does (R21).
@@ -2844,6 +2868,17 @@ An assignment is evaluated **left to right**: first the target's **place** - the
 written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
 the index is the first call and the value the second, and a value whose evaluation changes what the target's base
 refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+
+**S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
+(S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
+of storage within it (a field, or an element - any element of an array standing for any other, their indexes not
+compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
+where a temporary in that position would be (O18a), and the borrow names the copy. It applies where what the value
+builds can keep the borrow - an enum case's payload, a constructor field holding the argument (C2d), an array literal's
+element, the result of a call whose body can hand the argument back in it (O14c, O10b) - so `x = E.Neg(x)` is the
+negation of the old `x`, `n = Node(n)` puts the old node behind the new one, and no assignment makes a value hold its
+own storage. The same holds for the targets of a parallel assignment (S4c) and of a spawn (P1g). A reference written in
+the value is the program's own: with `r` a reference to `x`, `x = E.Neg(r)` makes the cycle it says.
 
 **S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
@@ -3044,8 +3079,9 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
 error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
-written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
-the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
+written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
+counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
+values that are all numeric literals (or such) take the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
@@ -3342,7 +3378,8 @@ the `join` block, on precisely the terms P2 states for an argument: one declared
 the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2): a result
 built where it lands (§8 O18a) is built where the target is - several targets sharing one result scope must all be in
 one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
-value would (§8 O25, O1b).
+value would (§8 O25, O1b). With several targets each is judged as the assignment of its own result, as a
+destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
 
 The target's address is taken **at the `spawn`**, not when the task runs, which is what makes
 `spawn out[i] = f(i)` inside a loop mean slot `i`. Reading the target before the `join` is a data race
@@ -3356,7 +3393,9 @@ block *inside* the join does not. Such a spawn is rejected. The same holds for a
 call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
 through it is rejected. A spawned lambda (D16e), called where it is written or not, is instead built to last until the join, and the
 references it captured must outlive the join block on the same terms as an argument. A function value computed for the
-call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise. The same holds for everything an argument
+call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise, and one read out of
+storage (`spawn h.f()`, `spawn fs[i]()`) is held there - its closure lives no shorter than that storage (D16d) - so the
+storage must last until the join, as an argument's would. The same holds for everything an argument
 **holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
 built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
 last until the join. Each task gets its own scope, as any
@@ -3894,8 +3933,12 @@ A parameter passed **by value** whose type holds references (T17c, C2d: a struct
 or a type variable bound to one) has a scope variable too, `&x` for parameter `x`: where the references it holds live,
 bound by the argument - an existing value's references' scope (O25h), or, for a temporary, wherever the call places
 it. A reference read out of the parameter - a field, an element, a payload bound by `match` or taken by `as` - lives
-there, never in the program's scope nor in the function's own. A by-value result handing such references back is
-O14c's obligation.
+there, never in the program's scope nor in the function's own: a temporary stored through one (`fn grow(b Box) {
+b.n.next = N(9) }`) is built in that scope. So a callee may build into a by-value parameter's scope variable as into a
+reference parameter's - wherever something can be stored through what the parameter holds (O25g), decided by its type as
+a reference parameter's is by its permission, whether its body writes the parameter itself or not - and an argument
+whose references live where the caller cannot say (O12, a `&p` field, O23a) is not passed for one (O25e). A by-value
+result handing such references back is O14c's obligation.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations (field access,
 indexing, calls) are valid; it only constrains where the value may be allocated (§8.3) and where a reference
@@ -4103,8 +4146,9 @@ value where it dangles. Accordingly:
 - **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
   its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
-  or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), the program's scope for a
-  copy of a global's - while the local's own storage is its block. That is a claim, as a reference local's scope is:
+  or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), where the referent is for a
+  copy out of a reference (`d Box = r`, O20), the program's scope for a copy of a global's - while the local's own
+  storage is its block, and such a value is not held by reference (O17a). That is a claim, as a reference local's scope is:
   assigning such a value from one that already lives somewhere requires the source's references to outlive the
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
   one of them (O25g), which between two of the function's scope variables is an equality its callers show (O10c:
@@ -4353,15 +4397,33 @@ a value claiming the other: a compile-time error naming the fix, to declare it a
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
 a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
-value's slots when its body assigns into the value's region a reference or a value holding references (a field, an
-element, through any depth), when it returns a reference into that region that can be stored through (the caller could
-then build through it), or when it passes the region on to a call that does either - a fixed point over the program's
-calls, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is not known keeps
-everything. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+value's slots when its body stores into the value's region a reference or a value holding references (a field, an
+element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
+that region that can be stored through (the caller could then build through it), or when it passes the region on to a
+call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
+checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
+not known keeps everything. Only what is read out of the region by following a reference from the parameter brings in
+nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
+storage it is - its inline fields and elements, a view of them (`b`, `b.data`) - are the lent value, which may live
+elsewhere than its references, so storing one of them into the region is a store like any other. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
 count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
+
+**O17a.** *A split value is not held by reference.* A value whose references live where its own storage does not - a
+copy of existing storage (O25h, a copy out of a reference included: its references are where the referent is, O20), a
+by-value parameter (O4b), a value built where a scope argument says (O25a), a copy in an inner block of an outer one's
+value - is borrowed into a reference only as a call's argument, which O17 judges by the callee's body. Anywhere else - a
+reference local's initializer (`br mut Box& = b`), an assignment to a reference (`r = b`, `a[0] = b`), a constructor's
+reference parameter (whose instance keeps it, which counts as handing the region out, O17) - it is a compile-time error
+where something can be stored through what the value holds (O25g, by its type), read-only or not: a reference to a value
+takes everything reached through it to live where the value does (O20), so building through `br.head.next` would build
+in the copy's block and hang the result off the source's node. The value itself is written through instead
+(`b.head.next = Node()` builds where `b`'s references live, O25h). `for x in b.items` over such a value walks it through a
+reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
+judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
+lives where the value's references do.
 
 **O18.** *Supplying the result scope.* A scope argument (E25) binds the callee's result scope to where a
 variable of the caller lives. Without one, the result scope **follows the result** (O18a).
@@ -4755,7 +4817,8 @@ does (S19c), and an error leaving `main` runs it on the way out, as in the built
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
 implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
-interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
+interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of data that
+holds itself (E10).
 
 **B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -5577,8 +5640,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
   a hang: evaluation that would run out of the stack it runs on stops there, refused (under `-i`, with that message),
-  every turn of a loop counts toward the first, and an array too long for the memory budget is refused before it is
-  made.
+  every turn of a loop counts toward the first, each level `==` descends into a value (E10) toward the second, and an
+  array too long for the memory budget is refused before it is made.
 
 An atomic operation (P9) is evaluated as the plain operation on its place, since no task runs beside an evaluation:
 it reads or writes that place under the rules above, so one on a local or on what a local's references reach is

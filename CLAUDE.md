@@ -4203,6 +4203,74 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   binds the callee's scope variable to the copy's storage (the loop body), and an obligation cannot tell the referent's
   storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles -
   which the error's note now says.
+- **A review of tonight's merges, fixed (O1b/P2, O4b/D9, E10/K1, D9b, S9c, B3, D11a, T29, X6, E4a/E28, O17a/O25h,
+  2026-10-09).** A read-only review (`/home/user/review/tonight`) reproduced eight bugs and traced three more; all
+  fixed, each with a test. (1) **os.RunOnStack's thread reaches the program's scope as its caller does** - a task's
+  private stand-in (P2) - where it started with the real one, so f's on two tasks bumped one arena unlocked (heap
+  corruption; `-r` found it). (2) **A temporary stored through a reference a by-value parameter holds is built in that
+  parameter's scope variable** (O4b): `fn grow(b Box) { b.n.next = N(9) }` built N(9) in grow's own scope and stored it
+  in the caller's node - a use-after-free, pre-existing; a generic's array taken by value now has the scope variable O4b
+  always promised it (a build through `x[0]` did the same). (3) **`==` on a struct that comes round to its own type**
+  through array references (`type S struct(xs Array<S>&)`) is a function per type, as an enum's payload is - inline it
+  expanded without end and crashed the compiler; data that holds itself is compared without end at run time, as any
+  unbounded recursion (E10 says so), and stops the evaluator and `-i` with a message where they segfaulted. (4) The
+  evaluator shares a by-value array argument whenever the run time does - through a reference or a slice too (D9b; it
+  copied, so a baked global and an assert disagreed with the program). (5) **ListIter ends at `at >= count`**: after
+  `Clear()` or `Pop()` below it, it walked past the chunks (MapIter, LineIter likewise; SPEC: such a walk gives only
+  what the list holds or held, and ends). (6) **The runtime's `linkonce_odr` globals and constants are in comdats**, as
+  clang puts an inline variable - a `-d` link kept every object's copy of its TLS (0x4680 bytes, now 0x470; `-r` 0x2ab8
+  -> 0xc60) - and RunOnStack's least stack is glibc's own answer, `__pthread_get_minstack` found by dlsym as Rust's std
+  does (else PTHREAD_STACK_MIN, at least 16KB), so `-d` no longer aborts at 20000 bytes. (7) `x mut T = v` in a generic
+  is T2's "writable when bound to a reference" on a local too (D11a). (8) **`type Nest Array<Nest&>`**, or two such
+  types over each other, is an error at the declaration (T29) - it finished with its element a snapshot and nothing
+  could be converted into it. (9) os.Exec closes the first memory file when the second fails. (11) **A conditional or
+  match value all of whose values are literals counts as one wherever a type is chosen** (E4a/E28/S12b; oann's
+  `condliteral`) - beside its sibling values, an operator's operand (`f32 * (2.0 if c else 0.5)` is an `F32` product),
+  in inference - adapting every value or none; linalg's `ActivationSlope`/`ActivationBackward` now compile at `F32`, and
+  a value that does not fit is reported at itself, not at the `if`. (12) **A value whose references live elsewhere than
+  its storage is not held by reference** (O17a; a second review's finding 4, `/home/user/review/tonight2`): `br mut Box&
+  = b`, an assignment or element store of `b`, a read-only borrow read through, and a constructor keeping `b` (which now
+  hands its region out, O17) all built through `b`'s references in its block - use-after-frees; a for-in over such a
+  value is made correct instead, each element given the references' scope. The review's first finding 4 - a copy of a
+  `List`/`Map` taken out of a read-only place writes the shared state - is left to its own batch (the user: close it).
+  **Decided (mine)**: (a) a callee may build into a by-value parameter's scope variable wherever what it holds can be
+  stored through (O25g) - by the type, as a reference parameter's by its permission, not by whether the body writes the
+  parameter (the review's P1: `paramWritten` never saw a build through a reference field); (b) each level `==` descends
+  (a part of an aggregate, the array a reference names) counts as one call against the evaluator's depth limit (2000
+  while compiling, 100,000 under `-i`) and its stack guard - at run time each level of such a type is a call too; (c)
+  every program links `-ldl` (an empty library on glibc 2.34+); (d) comdats for the runtime's globals and constants,
+  not its functions (those cost only code size outside LTO); (e) the self-holding array type is rejected rather than made
+  buildable - a type whose element is itself would make every walker through elements cycle, and a struct holding the
+  array says the same thing; (f) a conditional of literals is no constant (its condition runs), so only where a type is
+  chosen does it count as a literal; (g) a split value is refused by its type, read-only borrows included (shallow
+  permission lets a writable reference be read out), rather than given a second scope that would have to follow the
+  reference through every store and argument; call arguments stay O17's, judged by the callee's body; a for-in's own
+  calls are judged by what the callee stores, not what it hands back. **Found on the way**: the checks harness ran a
+  `# flags: -d` case's binary under its plain name (fixed: `-d`/`-r` binaries are found by their suffix); a value copied
+  out of a reference (`d Ix = src`) recorded nothing about where its references live, so building through them built in
+  its block - O25h now gives them the referent's scope, as a declaration and as an assignment's source. **Not changed**:
+  `bad == I64[0, 0]` with `bad` an `Array<I64>&` is "one type" error - a literal does not adapt to an array reference
+  in `==`; a split iterator walked by value is still refused at its `Next` by O17, as before.
+- **A soundness review of the evening's merges, fixed (O17, P1g, P2, S4/S5/E31, T22, G4, S4c, S4d, 2026-10-09).** Eight
+  reproduced findings. **O17**: what a callee stores "out of the region" is only what it reaches by following a reference
+  from the parameter (`b.head.next`, `b.head.data`) - the parameter itself and its own inline storage (`b`, `b.data`) are
+  the lent value, which may live elsewhere, so storing them is a store (`tie(b) { b.head.owner = b }` was accepted: a
+  use-after-free); every call to a declared function or constructor takes part in the fixed point, its body checked
+  before it or not, and every lend is decided once it settles (a caller that read a cycle's answer early kept a stale
+  one); a spawn's several targets are each the assignment of their result - an O17 store and an O25 check each (both
+  were skipped). **P2**: a task's function value read out of storage (`spawn h.f()`) is held to the join by that storage.
+  **S5/E31**: an increment's place is evaluated once through At/SetAt and through Plus/Inc (the index ran two or three
+  times). **T22**: a written `mut` on a reference parameter is its type's permission, so a read-only parameter fits it;
+  **decided (mine)**: a `Call` fits a function type on T22's terms too (E31 said exactly). **G4**: a generic whose
+  constant no call can give has no instantiation's body checked. **S4d, decided (mine)**: a borrow, in the value an
+  assignment writes over a value place, of storage within that place takes the place's old value - a copy built where a
+  temporary there would be - where what the value builds can keep it (an enum payload, a constructor field, an array
+  literal's element, a call handing it back); `x = E.Neg(x)` built a value holding itself, written over in place. Storage
+  containing the place (`x.inner = Inner(x)`, a parent link) and references are left as written. Built as `copiesOld`,
+  read by `OperandIsLvalue`, so the checker, codegen and the evaluator treat it as a temporary with nothing of their own.
+  **S4c (pre-existing)**: a parallel assignment's enum case or array literal reading a target was evaluated after it was
+  written (`n, e = 5, E.Lit(n)` gave `Lit(5)`), and a held value holding references kept them in the statement's block
+  (O25h's error from a loop body) - each value now lands at its target before it is held.
 - **From study 4: null reads trap, process handles, `chan.Close`, `-i` runs joins, defaults for build constants (T2b, P7,
   E27, O8c, X6, B3e, B10c, 2026-10-09).** Every generated function carries `null_pointer_is_valid`, so a null read is a
   trap T2b now guarantees (an optimizer-visible one used to delete `main`'s return; callgrind: the bench within 0.02%,

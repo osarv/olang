@@ -414,6 +414,7 @@ static struct ctVal* ctFitBoundary(struct ctState* st, struct operand* op, struc
 static void ctExec(struct ctState* st, struct statement* s);
 static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** out, struct type want);
 static void ctExecBlock(struct ctState* st, struct list* block);
+static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struct ctVal* y, int depth);
 
 //B3e: whether this thread's stack is nearly used up - its lowest address found once, from the thread's own attributes
 static _Thread_local uintptr_t ctStackLow; //0: not looked up yet, 1: not known
@@ -766,22 +767,24 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     b = b->kind == CT_REF && !ctIsRef(op->type) && op->opType != OPERATION_EQ && op->opType != OPERATION_NEQ ? ctDeref(b) : b;
     switch (op->opType) {
         case OPERATION_EQ: case OPERATION_NEQ: {
-            bool eq;
-            extern bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y);
+            bool eq = false;
+            int deep = -2;
             if (op->identity) { //E10c: "a is b"
                 eq = ctSameIdentity(a, b);
             } else if (ctArrayRef(a) && ctArrayRef(b)) { //E10: the arrays two references name
-                eq = ctDeepEqPublic(a, b);
+                deep = ctDeepEq(st, op->tok, a, b, 0);
             } else if (ctIsIdentity(a) || ctIsIdentity(b)) {
                 eq = ctSameIdentity(a, b);
             } else if (a->kind == CT_AGG || b->kind == CT_AGG) {
                 //a value compares structurally - through ctDeepEq below
-                eq = ctDeepEqPublic(a, b);
+                deep = ctDeepEq(st, op->tok, a, b, 0);
             } else if (a->kind == CT_FLOAT || b->kind == CT_FLOAT) {
                 eq = ctAsF(a) == ctAsF(b);
             } else {
                 eq = a->i == b->i;
             }
+            if (deep == -1) return NULL;
+            if (deep >= 0) eq = deep;
             return ctBool(op->opType == OPERATION_EQ ? eq : !eq);
         }
         case OPERATION_LST: case OPERATION_LSE: case OPERATION_GRT: case OPERATION_GRE: {
@@ -885,18 +888,30 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     }
 }
 
-bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y) {
+//E10: "==" through values, and through the arrays references name. Each level it descends - an aggregate's parts, an
+//array a reference names - counts against the depth budget as a call does (K1), since at run time a type that comes
+//round to itself is compared by a function calling itself per level (cgStructEqFn): data holding itself is compared
+//without end there, and here stops where a recursion would, with the same message. 1 equal, 0 not, -1 stopped
+static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struct ctVal* y, int depth) {
+    if (st->depth + depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
+        ctFail(st, tok, ctRun ? "the comparison recurses deeper than -i allows"
+                              : "the comparison recurses deeper than compile-time evaluation allows");
+        return -1;
+    }
     if (ctArrayRef(x) && ctArrayRef(y)) { //E10: what two array references name, a null equal only to a null
         bool nx = ctArrayRefNull(x), ny = ctArrayRefNull(y);
         if (nx || ny) return nx && ny;
-        return ctDeepEqPublic(ctDeref(x), ctDeref(y));
+        return ctDeepEq(st, tok, ctDeref(x), ctDeref(y), depth + 1);
     }
     if (ctIsIdentity(x) || ctIsIdentity(y)) return ctSameIdentity(x, y);
     if (x->kind == CT_AGG || y->kind == CT_AGG) {
-        if (x->kind != y->kind || x->n != y->n) return false;
-        if (x->type.bType == BASETYPE_CHOICE && x->i != y->i) return false; //T17a: the live case, then its payload
-        for (int i = 0; i < x->n; i++) if (!ctDeepEqPublic(x->elems[i], y->elems[i])) return false;
-        return true;
+        if (x->kind != y->kind || x->n != y->n) return 0;
+        if (x->type.bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
+        for (int i = 0; i < x->n; i++) {
+            int r = ctDeepEq(st, tok, x->elems[i], y->elems[i], depth + 1);
+            if (r != 1) return r;
+        }
+        return 1;
     }
     if (x->kind == CT_FLOAT || y->kind == CT_FLOAT) return ctAsF(x) == ctAsF(y);
     return x->i == y->i;
@@ -1587,11 +1602,17 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         struct var* p = ListGetIdx(&func->type.vars, i);
         struct operand* a = *(struct operand**)ListGetIdx(&op->args, i - recv);
         //D9b: a by-value run-time-length array the body never writes is the caller's array itself, elements shared, as
-        //the generated code hands over the caller's { length, storage } pair
+        //the generated code hands over the caller's { length, storage } pair - whatever the argument is: a value held
+        //somewhere, or what a reference or a slice names (a temporary is the callee's alone either way)
         bool shareArr = !ctIsRef(p->type) && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc && !p->paramWritten
-                        && OperandIsLvalue(a) && !ctIsRef(a->type);
-        struct ctVal* v = shareArr ? ctLvalue(st, a, false) : ctFitBoundary(st, a, p->type);
+                        && (OperandIsLvalue(a) || ctIsRef(a->type));
+        struct ctVal* v = !shareArr ? ctFitBoundary(st, a, p->type)
+                        : OperandIsLvalue(a) && !ctIsRef(a->type) ? ctLvalue(st, a, false) : ctEval(st, a);
         if (v && shareArr) v = ctDeref(v);
+        if (v && shareArr && v->kind != CT_AGG) { //a null reference: the empty array the pair { 0, null } is
+            v = ctCopy(v);
+            v->type = p->type;
+        }
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
             if (st->flow == CF_ERROR && ctTried(st, op) && st->errCheckRoot != op) st->errBypass = true;
@@ -1602,6 +1623,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         //never writes is the caller's array itself, its elements shared, as at run time
         struct ctVal* node = ctNew(CT_INT, p->type);
         *node = *(ctIsRef(p->type) || (shareArr && v->kind == CT_AGG) ? v : ctCopy(v));
+        if (shareArr && v->kind == CT_AGG) node->type = p->type;
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }
@@ -2063,7 +2085,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_SEQ: { //statements in the enclosing block, then the value
             for (int i = 0; i < op->comprBody.len && st->flow == CF_NORMAL; i++) ctExec(st, ListGetIdx(&op->comprBody, i));
             if (st->flow != CF_NORMAL) return NULL;
-            if (!op->args.len) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID)); //E31: a "try x[i] = v" statement
+            //E31: a "try x[i] = v" statement, or an increment (S3a) - no value
+            if (!op->args.len) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
             return ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
         }
         case OPERATION_COMPREHENSION: { //E27: its loop run, each pushed element appended

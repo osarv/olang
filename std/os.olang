@@ -117,9 +117,9 @@ fn Exit(code I32) {
 # thread of its own made with that stack - reserved, its pages taken only as they are used - and nothing runs beside
 # it: this call waits, so it is the call f() would be, and what f does is seen when it returns. A failed check, "done"
 # or "fail" inside f ends what it would have ended (S16a): the test running, as a direct call would. A stack smaller than
-# the least the system allows a thread is made that size; one the system will not make stops the program as a failed
-# check does. While compiling, and under -i, f is simply called, the evaluator's own limits on depth standing for the
-# stack's
+# the least the system allows a thread - which counts the thread-local storage it also holds - is made that size; one
+# the system will not make stops the program as a failed check does. While compiling, and under -i, f is simply called,
+# the evaluator's own limits on depth standing for the stack's
 fn RunOnStack(bytes I64, f fn()) {
     __olang_run_on_stack(bytes, f)
 }
@@ -227,9 +227,11 @@ fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir S
     lseek(feed, 0, 0)
     out I32 = -1                                        # -1: this program's own, which the child inherits
     errs I32 = -1
-    if capture {
+    if capture {                                        # the Process keeps both: closed by Wait, or here if Start fails
         out = try memFile()
-        errs = try memFile()
+        e := memfd_create("olang\0", 1)
+        if e < 0 { try closeAndRaise(out, __olang_err()) }
+        errs = e
     }
     pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir "\0")
     if pid < 0 {
@@ -248,8 +250,18 @@ fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir S
 fn (p mut Process&) Wait() Output ? OsError {
     if p.waited { error OsError.FAILED }
     waited Array<I32, 1>
-    if waitpid(p.pid, waited, 0) < 0 { try raise(__olang_err()) }
+    if waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
     return try p.ended(waited[0])
+}
+
+# a wait that failed: there is no program left to wait for - its descriptors closed, and the failure named
+fn (p mut Process&) lost(code I32) ? OsError {
+    p.waited = true
+    if p.capture {
+        close(p.out)
+        close(p.errs)
+    }
+    try raise(code)
 }
 
 # Wait, killing the program once tok fires and it has not ended: then it fails with the token's reason, once the
@@ -263,11 +275,11 @@ fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? OsError + cancel.Stopp
     step I64 = 50000                                    # nanoseconds, doubling up to cancel.PollNs
     for {
         got := waitpid(p.pid, waited, 1)                # WNOHANG
-        if got < 0 { try raise(__olang_err()) }
+        if got < 0 { try p.lost(__olang_err()) }
         if got == p.pid { return try p.ended(waited[0]) }
         if tok.Cancelled() {
             p.Kill()
-            if waitpid(p.pid, waited, 0) < 0 { try raise(__olang_err()) }
+            if waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
             try p.ended(waited[0]) catch OsError { }
             try tok.Reason()
         }
@@ -999,5 +1011,34 @@ if TestBuild {
 
     test "the test before ended with f's scopes closed" {
         assert stackDrops == 1
+    }
+
+    # O1b/P2: f reaches the program's scope as the task that called RunOnStack reaches it - through the task's private
+    # stand-in, folded back at its join - so two tasks' threads never share one arena unlocked. The thread started with
+    # the real scope: -r reported the race, and now and then an element was overwritten by another task's allocation
+    type stackNode struct(v I64) {
+        v
+        pad Array<I64>& = Array<I64>(8, v)
+    }
+    stackSlots mut Array<mut stackNode&>& = Array<mut stackNode&>(4, stackNode(0))
+    fn stackFill(t I64) I64 {
+        bad I64 = 0
+        for i in range 5000 {
+            stackSlots[t] = stackNode(t * 1000000 + i)          # built in the program's scope, as a global's is
+            for x in stackSlots[t].pad { if x != t * 1000000 + i { bad++ } }
+        }
+        return bad
+    }
+    test "RunOnStack from tasks builds into the program's scope through each task's own stand-in" {
+        bad mut Array<I64>& = Array<I64>(4)
+        join {
+            for t in range 4 {
+                spawn fn() { RunOnStack(1 << 20, fn() { bad[t] = stackFill(t) }) }
+            }
+        }
+        churn()
+        for t in range 4 {
+            assert bad[t] == 0 and stackSlots[t].v == t * 1000000 + 4999 and stackSlots[t].pad[7] == t * 1000000 + 4999
+        }
     }
 }
