@@ -9936,3 +9936,76 @@ from their original form.
   the body (C7). A field named like its constructor's parameter (`n I32 = n + 1`) said "declared twice"; it now says to
   write it bare or name it apart, with a note at the parameter (C2a). A parameter named like a module function says so,
   with a note at the function (D3a). New check cases pin each, and the counts where a cascade was cut.
+
+- **Constant parameters and `Array<T, N>`, designed (G20-G28, G16b, T7c/T7d, E32b, 2026-10-09; not yet built).** The
+  user: "we should make the language generics take constants (and comp time expressions) as parameters. This is a
+  natural fit. Expand it across arrays too to make them more natural with Array<T, size>." The motivation is the
+  matrix library the user had just decided on (2-D `Matrix`, not a tensor): weights are `Matrix<F32, 784, 128>`,
+  checked and specialized while compiling, while the batch dimension is known only at run time. Designed spec-first on
+  a branch, the rules marked in spec.md's Status until the implementation lands; the compiler's generics were being
+  changed by two other agents at the time.
+  **Precedent, and what was taken from each.** *C++ non-type template parameters*: values of structural types, used by
+  bare name, deduced only from a whole argument (an expression `N + 1` is a non-deduced context) - taken: deduction by
+  value only, and parenthesizing `>` inside an argument list. *Eigen* `Matrix<float, Dynamic, 784>`: one type whose
+  dimensions are each a constant or a sentinel meaning "stored in the object" - taken as a *library* pattern, not a
+  language one (below). *Rust const generics*: `const N: usize`, restricted to integers, `bool` and `char`, because a
+  type's identity must be decidable by comparing values and a float's equality is no equivalence; arithmetic in a
+  generic signature (`{N + 1}`) is still unstable in Rust because Rust checks a generic once, at its definition, and
+  must prove such an expression well-formed for every `N` - taken: the type restriction and its reason. olang checks
+  each instantiation (G16/G18), as C++, Zig and D do, so `<N> + <M>` in a result type is simply computed per
+  instantiation and needs no proof. *Zig*: comptime parameters are ordinary values and a comptime `if` analyses only
+  the branch taken - taken: any compile-time-computable argument (the user's "comp time expressions", K1), and the
+  per-instantiation `if` (G26). *D*: template value parameters and `static if` - the same per-instantiation decision,
+  which olang gets from its ordinary `if` with no new keyword, as S8b already does for build constants. *Go*: `[N]T`
+  arrays are values whose length is in the type, `==`-comparable, distinct from slices, and Go 1.17's `(*[4]T)(s)`
+  converts a slice to an array pointer with a run-time length check - taken: `Array<T, N>` as a value type beside
+  `Array<T>`, and `x as Array<T, N>&` as that conversion. Go has no constant type parameters at all (its proposal was
+  declined), which is what makes its arrays awkward in generic code.
+  **Decisions (mine, under the user's delegation of details).** (1) A constant parameter is declared `R I64` in the
+  type's list - olang's name-then-type, and unambiguous beside G19's `K Hashable<<K>>` because a trait and a value type
+  are never the same thing. (2) Integers, `Bool`, declared types over them and payload-free enums only, none declaring
+  `Eq`; text, structs and payload enums are additive later if wanted. (3) **A constant variable is `<N>` everywhere,
+  in expressions too** (`for i in range <N>`). The alternative, bare `N` in a body, reads better and is what every
+  other language does - but they all have declaration lists; olang's functions introduce generic parameters by
+  writing `<X>`, and the user's G8b decision was precisely that one variable has one spelling. `<N>` also keeps
+  constant variables out of the value namespace and shows the reader that a bound is the instantiation's constant.
+  The cost: `i < <N>` needs its space (`<<` is always a shift in an expression). Flagged to the user. (4) `<N>` does
+  not adapt like a literal - it is a value of its parameter's type (`I32(<N>)` narrows), or `x U8 = <N>` would compile
+  for some instantiations and not others. (5) Inference binds by value and never solves; a constant no parameter
+  carries is G4's error, and a value of such a type comes from its constructor (G10a, or G10c's expected type). No
+  explicit arguments at a function call were added (a turbofish would be the first written generic argument outside a
+  type). (6) G17 gains a chain bound (1,000), since a constant can grow without its type's nesting growing. (7) G26:
+  an `if`/conditional/`match` reading a constant is decided per instantiation, the untaken branch parsed but not
+  checked, as G14 does for a type match - needed both to write code valid only for some sizes (`if <N> > 0 { a[0] }`)
+  and to end recursion on a constant, and exempt from S8a because it is configuration. (8) Value constraints are
+  `assert`s, decided per instantiation by S18c - in a constructor body for every instantiation of the type; a
+  where-clause would be a second syntax for what an assert already says. G16b states the instantiation-origin note the
+  type checker's review had added (so a failed assert inside a library names the user's line).
+  **Arrays.** `Array<T, N>` is the representation the compiler already had for literals and C2e's inline fields - a
+  length known while compiling, elements in place - made nameable. Being a value of fixed size it may sit in fields,
+  elements and payloads by value, which generalizes T7a's one exception and **supersedes C2e**: an inline field is
+  written `m Array<F32, 16>`, so whether a field is inline is decided by its type, never by whether its size happened to
+  be computable (C2e's re-check loop stays useful for constant arguments that need a call). Nested fixed arrays
+  (`Array<Array<F32, 4>, 4>`) are allowed as plain composition - the user's removal of 2-D arrays was of a syntax and of
+  jagged run-time rows, and nothing is added for this (no `[i, j]`, no 2-D literal). `Array<T, N>&` is one pointer,
+  which revisits T11a ("make the size in the type irrelevant"): then a reference always carried its length at run time
+  and a size in its type said nothing; now the size is compile-time knowledge (unrolling, inference, a shape checked
+  while compiling), and D9a makes every array parameter a reference, so a function over fixed arrays needs it. The
+  alternative - fixed arrays passed by value - is the item the user put on hold. Conversions: fixed to run-time is
+  implicit (nothing lost); run-time to fixed is a copy checked once per copy (C2e's existing rule, per construction) or
+  the view `as` (an abort, or `OUT_OF_BOUNDS` under `try` - the word every length check uses, though an enum `as`
+  fails with `INVALID`). Rejected along the way: a slice with constant bounds getting a fixed type (it would change what
+  `x := s[0:3]` declares and break reassigning it, D15a); `Array<T, N>(v)` as a fill (`Array<I64, 4>(4)` beside
+  `Array<I64>(4)` reads as a length) - `Array<T, N>()` is the zero value and nothing else; and `:=` from a literal
+  declaring a fixed array (it would break `y := I32[1, 2]` then `y = Array<I32>(7)`) - a literal adapts to `Array<T, k>`
+  where one is wanted and is an `Array<T>` otherwise.
+  **Run-time-known dimensions** (the matrix's batch dimension). Two routes were weighed. A language-level "this
+  argument is known at run time" (`Matrix<F32, _, 784>`) would make every constant parameter two-mode: the instance
+  would carry hidden storage for the value, a function binding `<K>` from two arguments would need a hidden run-time
+  check that they agree, and a constructor would need a hidden way to receive it - the hidden costs principle 2 rules
+  out, for one library's need. The library route needs nothing new: `std/linalg` declares a sentinel (`Dynamic I64 =
+  -1`), a `Matrix` always stores its rows and columns, and `Rows()` is `<R>` or the field, decided per instantiation
+  (G26). Ordinary inference then does the work: `Matrix<F32, Dynamic, 784>` times `Matrix<F32, 784, 128>` binds `K` to
+  784 from both (checked while compiling) and gives `Matrix<F32, Dynamic, 128>`; the gradient `xT x dY` contracts over
+  `Dynamic` on both sides and checks that one at run time, once per product. Mixing a fixed and a `Dynamic` size of
+  the same dimension takes a conversion the library writes. Recommended; put to the user as a direction question.

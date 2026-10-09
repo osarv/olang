@@ -3507,6 +3507,41 @@ Go through this for every change to what olang means - a rule added, revised or 
   `note:` at the other declaration. Found already working: `x := "abc" if c else "no"` (E28/D15, pinned by a test).
   **Not fixed (the scope agent's)**: `for w in root.kids` over `List<mut Widget&>` with `Widget` holding a `mut`
   reference field still fails inside `ListIter.Next` (C2d, the recorded `At`/element limit).
+- **Constant parameters and `Array<T, N>` (G20-G28, G16b, T7c/T7d, E32b; 2026-10-09, the user: "make the language
+  generics take constants (and comp time expressions) as parameters ... Expand it across arrays too ... Array<T,
+  size>") - DESIGNED, NOT YET BUILT** (spec.md's Status names every rule it adds or changes). **Declaration**: a name
+  followed by a type in a struct's or trait's parameter list, `type Matrix<T, R I64, C I64>` - followed by a trait it is
+  a constraint (G19), by any other type a constant. Allowed types: integers, `Bool`, declared types over them (`Char`),
+  payload-free enums, none declaring `Eq` - identity is the value; floats are out (NaN, `-0.0`: Rust's reason), and so
+  are text, structs and payload enums for now. **Arguments**: any expression the evaluator can compute (K1) of the
+  parameter's type - literals adapting, narrower integers flowing, globals, `-D` constants, calls; comparisons and
+  shifts parenthesized inside `<...>` (C++'s rule). **Variables are `<N>` everywhere** - G8b's one spelling extended:
+  a function introduces one by writing `<N>` as a whole constant argument (its type the slot's), and `<N>` is also a
+  primary expression in the body (`for i in range <N>`), a value of its type that does not adapt like a literal (my
+  call over bare `N` in expressions, which reads better but would give one variable two spellings - flagged).
+  **Inference binds by value only** (an `Array<F32, 3>` binds `N` = 3; two values for one variable is an error at the
+  call, so a matmul shape mismatch is a compile error); an expression (`<N> + <M>`) is computed, never solved for -
+  which sidesteps Rust's `generic_const_exprs` problem, since olang checks each instantiation anyway. **Identity** by
+  value (`Matrix<F32, 2 + 1, 4>` is `Matrix<F32, 3, 4>`), G16a spelling the value; G17 also stops a chain of more than
+  1,000 instantiations. **G26**: an `if`, conditional or `match` whose condition reads a constant is decided per
+  instantiation and only the chosen branch is checked - D's `static if` / Zig's comptime `if` with no new keyword; it
+  is configuration, never S8a's dead code, and it is what ends a recursion on a constant. **G27**: a constraint on a
+  value is an `assert` in the constructor or body, decided per instantiation (S18c) and reported with the
+  instantiation's origin (G16b) - no where-clause. **Arrays (T7c/T7d)**: `Array<T, N>` is a value laid out in place, so
+  it is held by value in fields, elements and payloads (T7a's exception generalized; C2e superseded - an inline field
+  is spelled by its type, never by whether its size happens to be computable); `Array<Array<F32, 4>, 4>` is an array
+  of fixed arrays, not a revived 2-D feature. `Array<T, N>&` is one pointer, its length its type's - which reverses
+  T11a for fixed arrays (the length in a reference type is now compile-time knowledge), forced by D9a since every
+  array parameter is a reference. Fixed to run-time is implicit (borrow or copy, nothing lost); run-time to fixed is a
+  copy checked once per copy (C2e's rule) or the view `x as Array<T, N>&` (E32b, Go's slice-to-array-pointer conversion;
+  `OUT_OF_BOUNDS` under `try`). A literal adapts to `Array<T, k>` like a numeric literal, and stays `Array<T>` for `:=`.
+  `Array<T, N>()` is the zero value; there is no fill call (`Array<I64, 4>(4)` beside `Array<I64>(4)` would read as a
+  length). **Run-time-known dimensions are the library's** (recommended, a direction question): a constant is always
+  a compile-time value; `std/linalg` declares a sentinel (`Dynamic I64 = -1`) and stores rows/cols in the instance,
+  `Rows()` choosing `<R>` or the field by G26 - so `Matrix<F32, Dynamic, 784> x Matrix<F32, 784, 128>` checks 784 at
+  compile time and gives `Matrix<F32, Dynamic, 128>`; a language-level `_` argument would need hidden storage and
+  hidden checks in every generic. Precedents weighed: C++ NTTPs and Eigen, Rust const generics, Zig comptime, Go's
+  `[N]T`, D value parameters (HISTORY.md).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
