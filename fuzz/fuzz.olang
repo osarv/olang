@@ -100,9 +100,9 @@ fn runSeed(seed I64, dir String&) {
     out := read(dir, "d.txt")
     lines := out.Split("\n")
     for line in lines {
-        at := line.Find(": ")
-        bar := line.Find(" | ")
-        if at < 0 or bar < at { continue }
+        at := try line.Find(": ") catch { continue }
+        bar := try line.Find(" | ") catch { continue }
+        if bar < at { continue }
         ci := try line[:at].ParseInt() catch default -1
         if ci < 0 or ci >= Cases { continue }
         k := line[at + 2:bar]
@@ -154,14 +154,11 @@ fn falseAsserts(diag String&) List<I64>& {
     bad List<I64>&return = List<I64>()
     rest := diag[:]
     for {
-        at := rest.Find("error[S18c]")
-        if at < 0 { break }
+        at := try rest.Find("error[S18c]") catch { break }
         rest = rest[at:]
-        c := rest.Find("assert $c")
-        if c < 0 { break }
+        c := try rest.Find("assert $c") catch { break }
         rest = rest[c + 9:]
-        end := rest.FindByte('(')
-        if end < 0 { break }
+        end := try rest.FindByte('(') catch { break }
         ci := try rest[:end].ParseInt() catch default -1
         if ci >= 0 { bad.Push(ci) }
     }
@@ -177,7 +174,7 @@ fn compare(dir String&, seed I64, want String&, got String&, mode String&) {
         if i < g.Len() and g[i] == line { continue }
         detail String& = $line "\n<missing>"
         if i < g.Len() { detail = $line "\n" $g[i] }
-        at := line.Find(": ")
+        at := try line.Find(": ") catch default 0
         ci := try line[:at].ParseInt() catch default -1
         finding(dir, seed, ci, $mode " disagrees with the -d run", detail)
     }
