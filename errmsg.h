@@ -433,6 +433,8 @@ struct type;
     X(ERR_NO_ZERO_VALUE,                "D13c",  "%t has no zero value, so this needs one - its constructor does not run on zeros while compiling: %s") \
     X(ERR_DEFAULT_NOT_COMPUTABLE,       "D8a",   "a default is computed while compiling, and this one cannot be: %s") \
     X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
+    X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
+    X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
     /* ---- the program as a whole ---- */ \
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \

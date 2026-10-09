@@ -1,0 +1,13 @@
+type G struct() {
+    n mut I32 = 0
+}
+fn (g mut G&) lit(t I32) I32 { return t + g.n }
+fn f(g mut G&, k I32) I32 {
+    lit := g.lit(k)
+    return lit
+}
+run mut I32 = 3
+fn main() ? {
+    g := G()
+    assert f(g, run) == 3
+}

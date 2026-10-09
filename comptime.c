@@ -7,10 +7,11 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, spawn/join, atomics, a call through a function value or an interface whose target cannot be,
-//done/fail/abort/unreachable, a failing assert, integer division by zero or an out-of-range shift or
-//conversion (undefined at run time - refused here rather than guessed), and running out of the step
-//budget. Every one of those is reported with the operation that caused it.
+//the write), an extern call, a call through a function value whose target cannot be, done/fail, reaching
+//abort/unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
+//shift or conversion (undefined at run time - refused here rather than guessed), and running out of the step
+//budget. Every one of those is reported with the operation that caused it. A join's tasks run in sequence, each
+//to completion at the join, in the order spawned (K1).
 //
 //Memory is unbounded and never reclaimed during an evaluation: scopes do not exist here, and none is
 //needed, because a value that still holds a reference when evaluation ends is not plain data and is not
@@ -49,6 +50,9 @@ void RdSpellType(struct type t, char* buf, size_t n);
 void RdSpellSig(struct type f, char* buf, size_t n);
 
 #define CT_STEP_BUDGET 20000000
+//K1: how much memory one evaluation may take - values are never reclaimed while it runs, so a loop that never ends
+//would otherwise exhaust the machine long before the step budget ends it
+#define CT_MEM_BUDGET ((size_t)1 << 28)
 #define CT_DEPTH_BUDGET 2000
 //B3e: how deep an interpreted program may recurse - its stack (CtRunProgram's thread) is sized for it
 #define CT_RUN_DEPTH_BUDGET 100000
@@ -99,12 +103,34 @@ struct ctState {
     int comprDepth, comprAlloc;
     struct ctChainVal* chain; //E30, innermost last
     int chainLen, chainAlloc;
+    struct list* tasks;       //P1/K1: the innermost join block's tasks, spawned and not yet run (struct ctTask)
+    size_t memAt;             //what had been allocated (ctAllocated) when this evaluation first measured it
+    bool memSet;
 };
+
+//a call made ready to run: the function it reaches, and its parameters (and a lambda's captures) bound
+struct ctCallFrame { struct var* func; struct list locals; };
+
+//P1/K1: a task spawned while compiling - its call bound and its targets' places taken where the spawn is written (P8,
+//P1g), run to completion at its join, in the order spawned
+struct ctTask { struct operand* op; struct ctCallFrame frame; struct list targets; };
 
 bool SemanticIsBuildConst(struct var* v);
 
 //why a function with a branch still being decided (S8b) is not evaluated: its body is not yet the program's
 const char* CT_WHY_INCOMPLETE = "it calls a function one of whose branches is still being decided";
+
+//K1: what aborts the program when reached - evaluation ends there, and where a value is required that is an error
+static const char* CT_WHY_UNREACHABLE = "it reaches unreachable code, which aborts the program";
+static const char* CT_WHY_ABORT = "it reaches abort, which aborts the program";
+static const char* CT_WHY_ASSERT = "an assertion in it fails, which aborts the program";
+static const char* CT_WHY_SLICE = "it slices out of range, which aborts the program";
+static const char* CT_WHY_LENGTH = "it makes an array of a length out of range, which aborts the program";
+static const char* CT_WHY_FIXED = "it copies an array of another length into fixed storage, which aborts the program";
+bool CtWhyAborts(const char* why) {
+    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ABORT || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
+           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED;
+}
 
 //immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang). writable: its value reaches
 //storage a writable reference can change while the program runs (K1)
@@ -191,7 +217,11 @@ static bool ctIsOwnAssembly(struct var* func, struct type t) {
 }
 static const char* CT_WHY_DESTRUCTOR = "it builds a value whose destructor runs when its scope closes";
 
+//every value the evaluator has made, in bytes - the memory budget (CT_MEM_BUDGET) is measured against it
+static size_t ctAllocated;
+
 static struct ctVal* ctNew(enum ctKind k, struct type t) {
+    ctAllocated += sizeof(struct ctVal);
     struct ctVal* v = MallocOrCrash(sizeof(struct ctVal));
     *v = (struct ctVal){0};
     v->kind = k;
@@ -359,10 +389,20 @@ static bool ctStackNearEnd(void) {
     return ctStackLow > 1 && at > ctStackLow && at - ctStackLow < ctStackSpare;
 }
 
+//K1: whether this evaluation, having made `more` bytes of values besides, would be past its memory budget - which is
+//refused with a reason, as running too long is. Measured from the first time it is asked
+static bool ctOverMemory(struct ctState* st, struct token tok, size_t more) {
+    if (ctRun) return false; //B3e: a program takes what it takes
+    if (!st->memSet) { st->memSet = true; st->memAt = ctAllocated; }
+    if (ctAllocated - st->memAt + more <= CT_MEM_BUDGET) return false;
+    ctFail(st, tok, "the computation takes more memory than compile-time evaluation allows");
+    return true;
+}
+
 static bool ctStep(struct ctState* st, struct token tok) {
     if (ctRun) return true; //B3e: a program runs as long as it runs
     if (++st->steps > CT_STEP_BUDGET) { ctFail(st, tok, "the computation runs longer than compile-time evaluation allows"); return false; }
-    return true;
+    return !ctOverMemory(st, tok, 0);
 }
 
 // ---- locals ----
@@ -1014,10 +1054,11 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             ctScanWrite(sc, *(struct operand**)ListGetIdx(&op->args, 0));
             break;
-        case OPERATION_ATOMIC_LOAD: case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
-        case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-            ctScanFail(sc, op->tok, "it uses an atomic operation");
-            return;
+        //P9/K1: no task runs while compiling, so an atomic operation is the plain one - refused only where an ordinary
+        //write or read of its place would be (a global, which the running program would then not see written)
+        case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
+            ctScanWrite(sc, *(struct operand**)ListGetIdx(&op->args, 0));
+            break;
         case OPERATION_NONE:
             //a constructor assembling its own instance is the construction its call already is, not another
             if (op->isLiteral && ctHasDestructor(op->type) && !ctIsOwnAssembly(sc->func, op->type)) {
@@ -1041,12 +1082,17 @@ static void ctScanStmt(struct ctScan* sc, struct statement* s) {
     if (sc->why) return;
     struct token tok = s->op ? s->op->tok : s->var.tok;
     switch (s->sType) {
-        case STATEMENT_DONE: case STATEMENT_FAIL: case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
+        case STATEMENT_DONE: case STATEMENT_FAIL: //K1: abort and unreachable stop an evaluation only where reached
             ctScanFail(sc, tok, "it ends the test or the process");
             return;
-        case STATEMENT_JOIN: case STATEMENT_SPAWN:
-            ctScanFail(sc, tok, "it starts tasks");
-            return;
+        case STATEMENT_SPAWN: //K1: a task is run at its join, in sequence - what it does is what is scanned
+            for (int i = 0; i < s->spawnTargets.len && !sc->why; i++) {
+                struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+                if (!t) continue;
+                ctScanWrite(sc, t);
+                ctScanOp(sc, t);
+            }
+            break;
         case STATEMENT_ASSIGN:
             ctScanWrite(sc, s->target);
             ctScanOp(sc, s->target);
@@ -1375,41 +1421,56 @@ void CtOrderGlobals(void) {
 
 static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var* func);
 
+static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
+static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
+
 //the call itself: parameters bound, body run. A reference parameter is bound to the argument's own node, so
 //writing through a "mut &" parameter writes the caller's value - exactly E12c's borrow.
 static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
     struct var* func = op->readVar;
-    if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
-        if (ctRun) return ctFail(st, op->tok, "it builds a value whose type declares a destructor, which -i does not run yet");
-        return ctFail(st, op->tok, CT_WHY_DESTRUCTOR);
-    }
     //B3e, X8: -i calls every extern; while compiling only the C math library's, which has no effect to skip
     if (func && func->type.isExtern && (ctRun || CtMathFn(func))) return ctExtern(st, op, func);
-    if (!func || func->type.isExtern) return ctFail(st, op->tok, "it calls an external function");
+    struct ctCallFrame fr;
+    if (!ctCallBind(st, op, &fr)) return NULL;
+    return ctCallRun(st, op, &fr);
+}
+
+//the first half of a call: the function it reaches, decided now, and its parameters bound from the arguments - false
+//when it cannot be made (st says why). A spawn makes it where it is written and runs it at its join (K1)
+static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr) {
+    struct var* func = op->readVar;
+    if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
+        ctFail(st, op->tok, ctRun ? "it builds a value whose type declares a destructor, which -i does not run yet" : CT_WHY_DESTRUCTOR);
+        return false;
+    }
+    if (!func || func->type.isExtern) { ctFail(st, op->tok, "it calls an external function"); return false; }
     struct ctVal* through = NULL;
     if ((!func->owner || func->isGlobalVar) && !op->isCtorCall) {
         //a call through a function value: the function it names, decided now (K1a) - computed (E13b), a local's, or
         //the one a function-typed global holds
         struct ctVal* fv = op->callee ? ctEval(st, op->callee)
                            : func->isGlobalVar ? ctReadGlobal(st, op, canonicalVar(func)) : ctFindLocal(st, func->name);
-        if (!fv && (op->callee || func->isGlobalVar)) return NULL;
+        if (!fv && (op->callee || func->isGlobalVar)) return false;
         if (fv) fv = ctDeref(fv);
-        if (!fv || fv->kind == CT_NULL) return ctFail(st, op->tok, "it calls through a null function value");
-        if (fv->kind != CT_FUNC) return ctFail(st, op->tok, "it calls through a function value compile-time evaluation does not model");
+        if (!fv || fv->kind == CT_NULL) { ctFail(st, op->tok, "it calls through a null function value"); return false; }
+        if (fv->kind != CT_FUNC) { ctFail(st, op->tok, "it calls through a function value compile-time evaluation does not model"); return false; }
         func = canonicalVar(fv->fn);
         through = fv;
     }
-    if (func->type.typeParams.len) return ctFail(st, op->tok, "it calls a generic that has no instantiation here");
+    if (func->type.typeParams.len) { ctFail(st, op->tok, "it calls a generic that has no instantiation here"); return false; }
     if (!ctRun) {
         //K3: a function that can never be evaluated is rejected before running any of it, with the
         //operation that stops it as the reason - the same answer whatever arguments reached it
         struct token whyTok;
         const char* why = ctFuncWhy(func, &whyTok);
-        if (why) return ctFail(st, whyTok, why);
+        if (why) { ctFail(st, whyTok, why); return false; }
     }
-    if (func->codeBlock.len == 0 && func->type.hasRetType) return ctFail(st, op->tok, "it calls a function whose body is not available");
+    if (func->codeBlock.len == 0 && func->type.hasRetType) { ctFail(st, op->tok, "it calls a function whose body is not available"); return false; }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd())
-        return ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+    {
+        ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        return false;
+    }
 
     struct list locals = ListInit(sizeof(struct ctLocal));
     //E31: through a Call adapter, Call's receiver is the instance the adapter holds, and the call's arguments are the rest
@@ -1429,7 +1490,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
             if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
-            return NULL;
+            return false;
         }
         //a parameter is a node of its own: a value one holds a copy, a reference one points where the
         //argument does - so repointing the parameter (S4a) moves only the callee's cursor
@@ -1446,10 +1507,18 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
         struct ctLocal l = { in->name, node };
         ListAdd(&locals, &l);
     }
+    fr->func = func;
+    fr->locals = locals;
+    return true;
+}
+
+//the second half: the body run in the frame ctCallBind made
+static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ctCallFrame* fr) {
+    struct var* func = fr->func;
     struct list* saved = st->locals;
     struct var* savedFunc = st->func;
     struct semaModule* savedMod = st->mod;
-    st->locals = &locals;
+    st->locals = &fr->locals;
     st->func = func;
     st->mod = func->owner ? func->owner : st->mod;
     st->depth++;
@@ -1533,7 +1602,7 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     if (op->sliceExact ? h != base->n : !(l >= 0 && l <= h && h <= base->n)) {
         if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
         if (ctRun) ctRunAbort("slice bounds out of range\n");
-        return ctFail(st, op->tok, "it slices out of range, which aborts at run time");
+        return ctFail(st, op->tok, CT_WHY_SLICE);
     }
     struct type vt = op->type;
     vt.structMAlloc = false;
@@ -1911,7 +1980,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             struct type elem = *st->compr[st->comprDepth - 1]->type.arrElem;
             if ((unsigned long long)n->i > (unsigned long long)ArrayLengthLimit(TypeGetSize(elem))) {
                 if (ctRun) ctRunAbort("array length out of range\n");
-                return ctFail(st, op->tok, "it makes an array of a length out of range");
+                return ctFail(st, op->tok, CT_WHY_LENGTH);
             }
             return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
         }
@@ -1934,14 +2003,18 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             bool bad = n->i < 0 || n->i > ArrayLengthLimit(TypeGetSize(*op->type.arrElem));
             if (bad && op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //R20
             if (bad && ctRun) ctRunAbort("array length out of range\n");
-            if (bad) return ctFail(st, op->tok, "it makes an array of a length out of range");
+            if (bad) return ctFail(st, op->tok, CT_WHY_LENGTH);
             if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
+            //every element is at least one value: measured before any is made, so a long array is refused, not made
+            if (ctOverMemory(st, op->tok, (size_t)n->i * sizeof(struct ctVal))) return NULL;
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
             struct ctVal* fill = NULL;
-            if (op->args.len > 1) { //T7: "Array<T>(n, v)"
-                fill = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 1));
+            if (op->args.len > 1) { //T7: "Array<T>(n, v)" - v fitted to the element once, as the generated code fits it:
+                //a reference element names one instance in every element (the very one an lvalue is, one temporary
+                //built for them all, or a static literal's data), a value element is a copy each
+                fill = ctFitBoundary(st, *(struct operand**)ListGetIdx(&op->args, 1), *op->type.arrElem);
                 if (!fill) return NULL;
             }
             for (int i = 0; i < a->n; i++) a->elems[i] = fill ? ctCopy(fill) : ctZero(*op->type.arrElem);
@@ -1976,8 +2049,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return ctBinary(st, op);
         case OPERATION_ATOMIC_LOAD: case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS: {
-            if (!ctRun) return ctFail(st, op->tok, "it uses an atomic operation");
-            //B3e/P9: no task runs beside it, so an atomic operation is the plain one
+            //K1/P9: no task runs beside an evaluation, compiling or under -i (B3e), so an atomic operation is the plain one
+            //on its place - which is refused where an ordinary write (or, for AtomicLoad, read) of it would be
             struct ctVal* node = ctDeref(ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), op->opType != OPERATION_ATOMIC_LOAD));
             if (!node) return NULL;
             struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), node->type) : NULL;
@@ -2077,7 +2150,7 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     if (dst.bType == BASETYPE_ARRAY && !dst.arrMalloc && dst.arrLen && v->kind == CT_AGG
             && v->type.bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
         if (ctRun) ctRunAbort("array length does not match its fixed storage\n");
-        return ctFail(st, op->tok, "it copies an array of another length into fixed storage, which aborts at run time");
+        return ctFail(st, op->tok, CT_WHY_FIXED);
     }
     //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
@@ -2251,9 +2324,45 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
         else ctExecBlock(st, &s->nomatchBlock);
     } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
         if (ctRun) ctRunAbort("reached unreachable code\n");
-        ctFail(st, s->op ? s->op->tok : (struct token){0}, "it reaches unreachable code");
+        ctFail(st, s->op ? s->op->tok : (struct token){0}, CT_WHY_UNREACHABLE);
     }
     st->locals->len = outer;
+}
+
+//K1/P1: a join's tasks, run in the order they were spawned, each to completion, each result stored into its targets
+//(P1g). What the block was doing when it was left - a return's value, an error in flight, a loop jump - waits for them,
+//as the running program's does (P1b); a task that cannot be evaluated ends the evaluation
+static void ctRunTasks(struct ctState* st, struct list* tasks) {
+    if (st->flow == CF_FAIL || !tasks->len) return;
+    enum ctFlow flow = st->flow;
+    struct ctVal* ret = st->ret;
+    struct type errType = st->errType;
+    long long errWord = st->errWord;
+    struct operand* errCheckRoot = st->errCheckRoot;
+    bool errBypass = st->errBypass;
+    st->flow = CF_NORMAL;
+    st->ret = NULL;
+    for (int i = 0; i < tasks->len; i++) {
+        struct ctTask* t = ListGetIdx(tasks, i);
+        struct ctVal* v = ctCallRun(st, t->op, &t->frame);
+        if (!v || st->flow != CF_NORMAL) { //a task declares no error (P4), so only a failure stops it
+            if (st->flow != CF_FAIL) ctFail(st, t->op->tok, "a task it starts does not finish");
+            return;
+        }
+        for (int k = 0; k < t->targets.len; k++) {
+            struct ctVal* node = *(struct ctVal**)ListGetIdx(&t->targets, k);
+            if (!node) continue; //"_"
+            struct ctVal* r = t->targets.len > 1 ? ctDeref(v)->elems[k] : v; //D8c: several results, one each
+            ctAssign(node, r);
+        }
+        ListDestroy(t->targets);
+    }
+    st->flow = flow;
+    st->ret = ret;
+    st->errType = errType;
+    st->errWord = errWord;
+    st->errCheckRoot = errCheckRoot;
+    st->errBypass = errBypass;
 }
 
 static void ctExec(struct ctState* st, struct statement* s) {
@@ -2292,6 +2401,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             decl.op = s->forInit;
             if (s->forInit) ctVarDecl(st, &decl);
             while (st->flow == CF_NORMAL) {
+                if (!ctStep(st, tok)) break; //each turn is a step: a loop with an empty body still ends the budget
                 if (s->op && !ctTruth(st, s->op)) break;
                 if (st->flow != CF_NORMAL) break;
                 ctExecBlock(st, &s->block);
@@ -2304,7 +2414,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             return;
         }
         case STATEMENT_DO: {
-            while (st->flow == CF_NORMAL) {
+            while (st->flow == CF_NORMAL && ctStep(st, tok)) {
                 ctExecBlock(st, &s->block);
                 if (st->flow == CF_BREAK) { st->flow = CF_NORMAL; break; }
                 if (st->flow == CF_CONTINUE) st->flow = CF_NORMAL;
@@ -2333,7 +2443,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
         case STATEMENT_ASSERT:
             if (!ctTruth(st, s->op) && st->flow == CF_NORMAL) {
                 if (ctRun) ctRunAbort("assertion failed\n");
-                ctFail(st, tok, "an assertion in it fails");
+                ctFail(st, tok, CT_WHY_ASSERT);
             }
             return;
         case STATEMENT_ERROR:
@@ -2365,12 +2475,43 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 if (s->sType == STATEMENT_FAIL) exit(1);
                 ctRunAbort(s->sType == STATEMENT_ABORT ? "aborted\n" : "reached unreachable code\n");
             }
-            ctFail(st, tok, "it ends the test or the process");
+            //K1: abort and unreachable end the evaluation where reached, as they end the program; done and fail end a
+            //test or the process, which only a running program has
+            ctFail(st, tok, s->sType == STATEMENT_ABORT ? CT_WHY_ABORT : s->sType == STATEMENT_UNREACHABLE ? CT_WHY_UNREACHABLE
+                            : "it ends the test or the process");
             return;
         case STATEMENT_DEFER: return; //S19: registered by the block it is in (ctExecBlock), and run on its way out
-        case STATEMENT_JOIN: case STATEMENT_SPAWN:
-            ctFail(st, tok, ctRun ? "it starts tasks, which -i does not run yet" : "it starts tasks");
+        case STATEMENT_JOIN: {
+            if (ctRun) { ctFail(st, tok, "it starts tasks, which -i does not run yet"); return; }
+            //K1/P1b: the block, then - on whichever way it is left, after its deferred code - every task it spawned, in
+            //order, each to completion; the edges P8 states hold in that sequence
+            struct list tasks = ListInit(sizeof(struct ctTask));
+            struct list* outer = st->tasks;
+            st->tasks = &tasks;
+            ctExecBlock(st, &s->block);
+            st->tasks = outer;
+            ctRunTasks(st, &tasks);
+            ListDestroy(tasks);
             return;
+        }
+        case STATEMENT_SPAWN: {
+            //P8, P1g: the arguments and the targets' places are taken here, where the spawn is written
+            if (ctRun || !st->tasks) { ctFail(st, tok, ctRun ? "it starts tasks, which -i does not run yet" : "it starts a task outside a join"); return; }
+            struct operand* op = s->op;
+            if (op->readVar && op->readVar->type.isExtern) { ctFail(st, op->tok, "it calls an external function"); return; }
+            struct ctTask t = (struct ctTask){0};
+            t.op = op;
+            t.targets = ListInit(sizeof(struct ctVal*));
+            for (int i = 0; i < s->spawnTargets.len; i++) {
+                struct operand* to = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+                struct ctVal* node = to ? ctLvalue(st, to, true) : NULL;
+                if (to && !node) return;
+                ListAdd(&t.targets, &node);
+            }
+            if (!ctCallBind(st, op, &t.frame)) return;
+            ListAdd(st->tasks, &t);
+            return;
+        }
         case STATEMENT_CASE:
             return;
     }
@@ -2384,7 +2525,7 @@ bool CtEvaluate(struct operand* op, struct type want, struct ctVal** out, struct
     return ctEvaluateTop(op, want, out, whyTok, why, usedBuild, NULL, NULL, false);
 }
 
-bool CtEvaluateGlobal(struct var* v, struct ctVal** out) {
+bool CtEvaluateGlobal(struct var* v, struct ctVal** out, struct token* whyTok, const char** why) {
     struct ctState st = (struct ctState){0};
     struct list locals = ListInit(sizeof(struct ctLocal));
     st.locals = &locals;
@@ -2393,7 +2534,11 @@ bool CtEvaluateGlobal(struct var* v, struct ctVal** out) {
     at.tok = v->tok;
     struct ctVal* val = ctReadGlobalAs(&st, &at, canonicalVar(v), true);
     ListDestroy(locals);
-    if (!val || st.flow != CF_NORMAL) return false;
+    if (!val || st.flow != CF_NORMAL) {
+        if (whyTok) *whyTok = st.whyTok;
+        if (why) *why = st.why;
+        return false;
+    }
     *out = val;
     return true;
 }

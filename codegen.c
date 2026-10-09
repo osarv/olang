@@ -1630,6 +1630,10 @@ static bool cgIsFreshTemp(struct operand* op) {
         for (int i = 0; i < vs.len; i++) if (cgValueIsFresh(*(struct operand**)ListGetIdx(&vs, i), op->type)) return true;
         return false;
     }
+    //T29a/T29c: a conversion names its argument's storage, so it is fresh exactly when its argument is - text written in
+    //place, a literal made a String by being one of a conditional's values ("return "yes" if c else "no""), included
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1)
+        return cgValueIsFresh(*(struct operand**)ListGetIdx(&op->args, 0), op->type);
     return op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT || cgIsFreshClosure(op)
            || op->opType == OPERATION_SIZED_ARRAY_ALLOC || op->opType == OPERATION_COMPREHENSION;
 }
@@ -2810,7 +2814,9 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 //hidden first argument every function reached through a value takes
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
-    struct cgLocal* local = cgFindLocal(ctx, func->name);
+    //only a local or parameter holding a function value is called through the local of its name: a declared function
+    //or method shares no namespace with locals (a method has its own, M19), so "lit := g.lit(t)" calls the method
+    struct cgLocal* local = func->owner ? NULL : cgFindLocal(ctx, func->name);
     if (local || func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
         char g[256];
         if (!local) mangleGlobal(func->owner, func->name, g, sizeof(g));
@@ -3244,6 +3250,26 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
 //T4: the instructions converting val from one numeric type to another - none between two of one width and kind (a
 //retag, or I32 and U32 which share a representation), an extension or truncation chosen by the source's signedness,
 //and between F16 and BF16 (one width, neither containing the other) a trip through float
+//a BF16 widened to F32 (wide "float") or F64 ("double"): its bits are the top half of the F32 holding the same value, so
+//by an integer shift - exact for every value and payload. Not "fpext bfloat": LLVM 18's InstCombine takes a value
+//extended from bfloat to fit in any type of at least bfloat's precision, so "fptrunc (fdiv (fpext b), (fpext b)) to
+//half" became an F16 division of b narrowed to F16, where bfloat's range does not fit - 2^-126 / 2^-126 was 0 / 0, a
+//NaN (found by the fuzzer, fuzz/repro/bf16shrink.ll)
+static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide) {
+    char* bits = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast bfloat %s to i16\n", bits, val);
+    char* z = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = zext i16 %s to i32\n", z, bits);
+    char* sh = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = shl i32 %s, 16\n", sh, z);
+    char* f = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = bitcast i32 %s to float\n", f, sh);
+    if (!strcmp(wide, "float")) return f;
+    char* d = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = fpext float %s to %s\n", d, f, wide);
+    return d;
+}
+
 static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to, char* val) {
     char fromTy[16], toTy[16];
     llvmType(from, fromTy, sizeof(fromTy));
@@ -3254,12 +3280,13 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
     const char* instr;
     if (fromF && toF) {
         if (fb == tb) { //F16 <-> BF16
-            char* wide = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
+            char* wide = from.bType == BASETYPE_BF16 ? cgWidenBF16(ctx, val, "float") : cgNewTmp(ctx);
+            if (from.bType != BASETYPE_BF16) fprintf(ctx->fnOut, "  %s = fpext %s %s to float\n", wide, fromTy, val);
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = fptrunc float %s to %s\n", r, wide, toTy);
             return r;
         }
+        if (tb > fb && from.bType == BASETYPE_BF16) return cgWidenBF16(ctx, val, toTy);
         instr = tb > fb ? "fpext" : "fptrunc";
     } else if (fromF) instr = TypeIsUnsigned(to) ? "fptoui" : "fptosi";
     else if (toF && to.bType == BASETYPE_BF16) { //T4: rounded once, by the runtime's own conversion
@@ -3281,6 +3308,19 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
         }
         char* r = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call bfloat @__olang_int_bf16(i64 %s, i1 %s)\n", r, mag, neg);
+        return r;
+    }
+    else if (toF && to.bType == BASETYPE_F16) {
+        //T4/E26: through a double, which holds every integer that does not overflow F16 exactly, so this rounds once. Not
+        //"sitofp ... to half": LLVM 18 folds "fpext (sitofp x to half)" - which every use of an F16 makes - into "sitofp
+        //x to double" whenever x has at most 11 significant bits, losing F16's overflow to infinity (65536 printed as
+        //65536). The fence keeps it from folding the double back into the half (found by the fuzzer, fuzz/repro/f16fold.ll)
+        char* d = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = %s %s %s to double\n", d, TypeIsUnsigned(from) ? "uitofp" : "sitofp", fromTy, val);
+        char* fenced = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call double @llvm.arithmetic.fence.f64(double %s)\n", fenced, d);
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = fptrunc double %s to half\n", r, fenced);
         return r;
     }
     else if (toF) instr = TypeIsUnsigned(from) ? "uitofp" : "sitofp";
@@ -3316,7 +3356,8 @@ static void cgCheckConvert(struct cgCtx* ctx, struct operand* op, struct type fr
     bool u = TypeIsUnsigned(to);
     if (fromF) {
         char* d = val;
-        if (from.bType != BASETYPE_FLOAT64) {
+        if (from.bType == BASETYPE_BF16) d = cgWidenBF16(ctx, val, "double");
+        else if (from.bType != BASETYPE_FLOAT64) {
             d = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", d, fromTy, val);
         }
@@ -3428,8 +3469,10 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         struct operand* fillOp = *(struct operand**)ListGetIdx(&op->args, 1);
         //the elements live where the array does (O5): a fill built here is built there, and one promoted into a
         //reference element is allocated there - it was left at its own address in this frame, read back after a return
-        char* fillVal = typeNeedsMallocPromotion(elemT, fillOp->type) ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal)
-                                                                      : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
+        //...and a literal reaching a run-time-length element is that element's value, promoted (or its static data, T25d) -
+        //it was stored as the literal's own fixed-length address: invalid IR for "Array<String&>(n, "")"
+        bool promote = typeNeedsMallocPromotion(elemT, fillOp->type) || typeNeedsRuntimeLengthPromotion(elemT, fillOp->type);
+        char* fillVal = promote ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal) : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
     }
 
@@ -4155,6 +4198,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     char* wide = cgNewTmp(ctx);
     //E11a: "x + -0.0" is x for every x - a negative zero included, which "+ 0.0" would turn into a positive one
     if (t.bType == BASETYPE_FLOAT64) fprintf(ctx->fnOut, "  %s = fadd double %s, -0.0\n", wide, v);
+    else if (t.bType == BASETYPE_BF16) fprintf(ctx->fnOut, "  %s = fadd double %s, -0.0\n", wide, cgWidenBF16(ctx, v, "double"));
     else if (isFloat) fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", wide, ty, v);
     else if (TypeGetSize(t) == 8) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
     else fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", wide, TypeIsUnsigned(t) ? "zext" : "sext", ty, v);
@@ -4845,6 +4889,15 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             char from[64], to[64];
             llvmType(src->type, from, sizeof(from));
             llvmType(op->type, to, sizeof(to));
+            //LLVM 18's InstCombine takes a bitcast between half and bfloat for a no-op cast, so it merges
+            //F16 bits made into a BF16 (or the reverse) with the conversion that follows: fpext, fptosi and
+            //the rest then read the bits as the other type (fuzz/repro/bf16bitcastfold.ll). An empty asm
+            //on the integer keeps the two bitcasts apart; it emits no instruction.
+            if (op->type.bType == BASETYPE_F16 || op->type.bType == BASETYPE_BF16) {
+                char* opaque = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = call i16 asm \"\", \"=r,0\"(i16 %s)\n", opaque, v);
+                v = opaque;
+            }
             char* r = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = bitcast %s %s to %s\n", r, from, v, to);
             return r;
@@ -6305,6 +6358,7 @@ void emitRuntimeDecls(FILE* out) {
         "declare i32 @munmap(ptr, i64)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i64 @llvm.ctlz.i64(i64, i1)\n"
+        "declare double @llvm.arithmetic.fence.f64(double)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an

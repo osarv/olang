@@ -27,10 +27,10 @@ Workers I32 = 4
 # the scenarios below, by the directory each runs in - the longest first, so the last check to finish is a short one. A
 # scenario is a function reporting into a report (r.expect(ok, what, dir) for each thing it checks), named here and in
 # scenario(), with a test reporting it: one missing from either is reported as a failure, never skipped.
-Scenarios := String&["cgreview", "agree", "objnames", "remote", "interp", "landing", "typereview", "manymods",
+Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag"]
+                     "nestdeep", "nestparse", "diag", "linalg"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -236,6 +236,8 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "cgreview" { try cgreview(r) }
         case "typereview" { try typereview(r) }
         case "agree" { try agree(r) }
+        case "fuzz" { try fuzz(r) }
+        case "linalg" { try linalg(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -953,6 +955,23 @@ fn literalAfter(t String&, from I64) (I64, I64) {
     return open + 1, cLiteralEnd(t, open)
 }
 
+# std/linalg: a shape that does not fit aborts as a failed assert does - built and interpreted - and is
+# ShapeError.MISMATCH under try
+test "a matrix shape that does not fit aborts, or is an error under try" { assert passed("linalg") }
+
+fn linalg(r mut report&) ? Failed {
+    dir := fresh("linalg")
+    os.Run("cp checks/fixtures/linalg/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b shapes.olang > out.txt 2>&1") == 0, "shapes.olang did not build", dir)
+    for which in String&["add", "matmul", "gemm"] {
+        try r.expect(sh(dir, "./build/shapes " $which " > out.txt 2>&1") == 134, $which " did not abort", dir)
+        out := outOf(dir)
+        try r.expect(out.Contains("assertion failed") and not out.Contains("not reached"), $which " printed", dir)
+    }
+    try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i shapes.olang gemm > out.txt 2>&1") == 134, "-i gemm did not abort", dir)
+}
+
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {
     table := try os.ReadFile("errmsg.h") catch default ""
     spec := try os.ReadFile("spec.md") catch default ""
@@ -1016,4 +1035,16 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     }
     assert calls > 0
     assert bad == 0
+}
+
+# K1: the differential fuzzer (fuzz/), on a few fixed seeds - each program built at -O3, built at -O0 and interpreted,
+# every value computed while compiling the same as the run time's, and every output the same; "make fuzz" runs it longer
+test "the differential fuzzer finds nothing on its fixed seeds" { assert passed("fuzz") }
+
+fn fuzz(r mut report&) ? Failed {
+    dir := fresh("fuzz")
+    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
+    # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
 }

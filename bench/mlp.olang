@@ -1,0 +1,100 @@
+# mlp: training steps of a 784-128-10 multilayer perceptron (ReLU, softmax cross-entropy, plain SGD) on a batch of
+# 64, in F32 - MNIST's shape, on made-up data - written with std/linalg's destination forms, so a step allocates
+# nothing but the packing panels Gemm takes from its own scope. Prints the loss of the first and the last step and
+# the time per step. The C version (bench/c/mlp.c) does the same steps with plain loops ("naive") or OpenBLAS
+# ("blas"). Arguments: steps, threads
+import "std/io"
+import "std/os"
+import "std/time"
+import "std/math"
+import "std/rand"
+import "std/linalg"
+
+batch I64 = 64
+inputs I64 = 784
+hidden I64 = 128
+classes I64 = 10
+
+type Net struct(seed U64) {
+    W1 := linalg.Matrix<F32>(hidden, inputs)
+    B1 := linalg.Matrix<F32>(1, hidden)
+    W2 := linalg.Matrix<F32>(classes, hidden)
+    B2 := linalg.Matrix<F32>(1, classes)
+    # activations and gradients, made once
+    H := linalg.Matrix<F32>(batch, hidden)
+    A := linalg.Matrix<F32>(batch, hidden)
+    O := linalg.Matrix<F32>(batch, classes)
+    P := linalg.Matrix<F32>(batch, classes)
+    DA := linalg.Matrix<F32>(batch, hidden)
+    DW1 := linalg.Matrix<F32>(hidden, inputs)
+    DB1 := linalg.Matrix<F32>(1, hidden)
+    DW2 := linalg.Matrix<F32>(classes, hidden)
+    DB2 := linalg.Matrix<F32>(1, classes)
+    RowMax mut Array<F32>& = Array<F32>(batch)
+    r := rand.Rand(seed)
+    W1.FillNormal(r, 0.0, math.Sqrt(2.0 / F64(inputs)))
+    W2.FillNormal(r, 0.0, math.Sqrt(2.0 / F64(hidden)))
+}
+
+# one step on (x, labels): forward, loss, backward, update. Returns the mean loss before the update
+fn (n Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, threads I64) F32 {
+    linalg.Gemm(n.H, x, false, n.W1, true, 1, 0, threads)          # H = x W1^T
+    n.H.AddRow(n.B1)
+    n.A.Map(n.H, fn(v) { return v if v > 0.0 else 0.0 })             # A = relu(H)
+    linalg.Gemm(n.O, n.A, false, n.W2, true, 1, 0, threads)        # O = A W2^T
+    n.O.AddRow(n.B2)
+    # softmax, its cross-entropy, and its gradient (P - onehot) / batch, row by row
+    n.O.RowMax(n.RowMax)
+    loss F32 = 0.0
+    for r in range batch {
+        o := n.O.Row(r)
+        p := n.P.Row(r)
+        s F32 = 0.0
+        for c in range classes {
+            e := math.Exp(o[c] - n.RowMax[r])
+            p[c] = e
+            s += e
+        }
+        for c in range classes { p[c] = p[c] / s }
+        k := labels[r]
+        loss -= math.Log(p[k])
+        p[k] = p[k] - 1.0
+    }
+    n.P.Scale(1.0 / F32(batch))
+    linalg.Gemm(n.DW2, n.P, true, n.A, false, 1, 0, threads)       # dW2 = dO^T A
+    n.P.ColumnSums(n.DB2)
+    linalg.Gemm(n.DA, n.P, false, n.W2, false, 1, 0, threads)      # dA = dO W2
+    n.DA.Map2(n.DA, n.H, fn(g, v) { return g if v > 0.0 else 0.0 })  # dH = dA relu'(H)
+    linalg.Gemm(n.DW1, n.DA, true, x, false, 1, 0, threads)        # dW1 = dH^T x
+    n.DA.ColumnSums(n.DB1)
+    n.W1.AddScaled(n.DW1, -rate)
+    n.B1.AddScaled(n.DB1, -rate)
+    n.W2.AddScaled(n.DW2, -rate)
+    n.B2.AddScaled(n.DB2, -rate)
+    return loss / F32(batch)
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 3 { error }
+    steps := try args[1].ParseInt()
+    threads := try args[2].ParseInt()
+    net := Net(7)
+    # made-up data with something to learn: each label's inputs are brighter in a stripe of its own
+    data := rand.Rand(11)
+    x := linalg.Matrix<F32>(batch, inputs)
+    x.FillUniform(data, 0.0, 1.0)
+    labels := Array<I32>(batch)
+    for r in range batch {
+        labels[r] = I32(data.Below(classes))
+        row := x.Row(r)
+        for c in range 78 { row[I64(labels[r]) * 78 + c] += 1.0 }
+    }
+    first := net.Step(x, labels, 0.05, threads)
+    last F32 = first
+    t0 := time.Now()
+    for s in range steps { last = net.Step(x, labels, 0.05, threads) }
+    per F64 = F64(time.Since(t0)) / F64(steps) / 1000.0
+    perText := per.Fixed(1)
+    try io.Print("loss " $first.Fixed(4) " -> " $last.Fixed(4) ", " $perText "us a step\n")
+}
