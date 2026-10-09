@@ -771,48 +771,9 @@ fn (r reader&) digitAt(i I64) Bool { return i < r.src.Len() and r.src[i].IsDigit
 
 # ---- writing a number: the shortest text that reads back ----
 
-# v, finite, as the shortest text that reads back as it - the closest such, when several are as short - laid out as "$v"
-# lays a number out: positional when its decimal exponent is from -4 to 16, "d.ddde+XX" otherwise
-fn writeNumber(sb mut StringBuilder&, v F64) {
-    if v.Bits() >> 63 == 1 { sb.PushChar('-') }
-    if v == 0.0 {
-        sb.PushChar('0')
-        return
-    }
-    f, e := try v.ShortestDecimal() catch { unreachable }
-    digits := String(Array<Char>(20))
-    n I64 = 0
-    for f > 0 {
-        digits[19 - n] = Char(f % 10) + '0'
-        f = f / 10
-        n++
-    }
-    d := digits[20 - n:]
-    x I64 = e + n - 1
-    if x < -4 or x >= 17 {
-        sb.PushChar(d[0])
-        if n > 1 {
-            sb.PushChar('.')
-            sb.Push(d[1:])
-        }
-        sb.PushChar('e')
-        sb.PushChar('-' if x < 0 else '+')
-        ax I64 = -x if x < 0 else x
-        if ax < 10 { sb.PushChar('0') }
-        sb.Push($ax)
-    } else if x >= n - 1 {
-        sb.Push(d)
-        for i in range x + 1 - n { sb.PushChar('0') }
-    } else if x >= 0 {
-        sb.Push(d[:x + 1])
-        sb.PushChar('.')
-        sb.Push(d[x + 1:])
-    } else {
-        sb.Push("0.")
-        for i in range -x - 1 { sb.PushChar('0') }
-        sb.Push(d)
-    }
-}
+# v, finite, as the shortest text that reads back as it - the closest such, when several are as short - which is what
+# "$v" writes (E11a)
+fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 
 # ---- writing ----
 

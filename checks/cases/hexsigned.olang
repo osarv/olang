@@ -1,0 +1,6 @@
+# check: fail error[T6]: '0xFFFFFFFF' does not fit I32
+# L10a: adapting to a signed type a hexadecimal literal is worth its I64 reading - 0xFFFFFFFF is 4294967295, too large for
+# an I32 (it is never -1 there)
+fn main() ? {
+    c I32 = 0xFFFFFFFF
+}
