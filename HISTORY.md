@@ -9097,6 +9097,47 @@ from their original form.
   **Not fixed**: an `At` result used as an operand (`$l[0].v`) of a `List` whose element type has `mut` reference fields
   still asks an exact scope it cannot show - the limit the recursive-enums entry recorded. **Skipped**: R03 (a function
   value in a field, the types agent's), R05 (`same(...)`, being replaced by `a is b`).
+- **`-t` builds each listed file in a process of its own (B3a, 2026-10-09).** `olang -t f1 f2 ...` has always built and
+  run each listed file as an independent build (B3a), but in one compiler process, and the compiler frees nothing: a
+  build keeps the program it analyzed, every attempt at it (B9c re-analyzes the whole program, prelude included, and
+  drops the previous attempt's lists without freeing them), its instantiations and the evaluator's values. Building
+  every file in turn therefore held every file's build at once. Measured on the full suite (`make test`'s list, a cold
+  build directory, sampled every 0.1s over the whole process tree, under the shared verify lock): **the compiler peaked
+  at 11.06GiB and the tree at 12.34GiB**, against a memory cgroup of 14.3GB shared by every agent's commands - the first
+  attempt at that measurement was OOM-killed in `checks/checks.olang` while other work ran, and a test binary it had
+  started kept running orphaned. So only one full `make verify` could run at a time.
+  **The fix is in the driver alone.** Once the arguments are read, `-t` forks per listed file; the child runs
+  `runTestFile` - analyze, emit, link, run the tests - and exits with its status, and the parent waits and goes on to
+  the next. Nothing is analyzed before the fork, and no cross-file cache existed to lose: `analyzeOnce` already rebuilt
+  everything, the prelude included, for each file. A child's memory is returned when it exits. **After: the tree peaked
+  at 3.11GiB, the largest file being runner.olang (2.97GiB; shared.olang 2.70GiB, worker.olang 2.96GiB), and the run
+  took 240.8s against 257.3s** - not slower, and plausibly a little faster for working in a small heap, but that is one
+  run each on a machine other agents were using, so the time is indicative. The child's exit runs the ordinary exit path (diagnostics flushed by the atexit hook); the parent flushes
+  stdio before each fork so nothing it buffered is written twice. If `fork` fails the file is built in the parent, as
+  before.
+  **It also closed a gap in B3a's own promise.** "A compile-time error in one listed file does not prevent the others"
+  held for errors the compiler reports and returns from, not for the ones that end it: a fatal error (`ErrMsgFatal`
+  exits) or a crash - and a few exits deep in the passes (`comprehensions nest too deeply`, 65 levels, exits from
+  codegen) - stopped the whole list, with every later file never run. Each now ends only its child; the parent reports
+  a child killed by a signal (`deep.olang: the compiler ended (Segmentation fault), skipping` - the crash handler has
+  already said "internal compiler error"; a child killed from outside, by the OOM killer say, has not) and counts the
+  file as failed. Pinned by a check that crashes the compiler on the middle file of three - forced as the
+  one-stream check forces a crash, an address-space limit that keeps the 1GB compiler thread from starting plus a
+  256KB stack and 5,000 nested parentheses - and asserts the other two ran and `-t` exited 1. On the previous compiler
+  that check fails: the run ends at the crash.
+  **Decided (mine): one child at a time.** Running N side by side was measured rather than assumed. Per-file times from
+  the forked run: everything but `checks/checks.olang` takes 84s, `checks.olang` alone 156s (it is itself a sequential
+  driver of a few hundred small compiles). In list order with two at a time, `checks.olang` starts at about 40s, so the
+  run would take about 196s - 45s saved - while runner.olang and shared.olang overlap for a peak near 5.7GiB, and four
+  at a time cannot beat the 156s critical path either. Against that saving: memory, not cores, is what bounds how much
+  work the shared machine can do at once (the 14.3GB cgroup holds about four suites run one file at a time, about two run two at a time); two
+  children importing one module would build the same object at the same path (`emitModuleObject` writes
+  `build/<base>.ll` and then the object in place), which needs per-process IR names and atomic renames first; and the
+  output would have to be held back per child and replayed in list order, merging each child's stdout and stderr into
+  one stream to keep their interleaving. The lever for the suite's wall time is inside `checks.olang` - its cases are
+  independent builds in separate directories, which `join`/`spawn` could fan out - not in the driver.
+  `-b`, `-c` and `-i` build one program each, so nothing accumulates across programs; what accumulates within one build
+  is B9c's attempts, each a full re-analysis whose predecessor is never freed - a matter for the checker.
 - **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
   the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
   both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day

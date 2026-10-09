@@ -54,3 +54,17 @@ completion or check-in, and set the number of agents so the burn matches the tar
 matters when it would hit 100% before its own reset (then idle time is lost, so trim). Over a normal full week that is
 ~0.85% of the week per active hour - far fewer agents than a fresh window invites; a short remainder of a week (like
 after the 2026-10-09 upgrade, which reset the weekly to 0 with Sat 04:00 UTC still the reset) allows far more.
+
+**Distribute the load (the user, 2026-10-09: "Make sure the tasks distribute the load reasonably so we don't get
+bottlenecks. Record that.").** The shared resources are: 4 cores, ~15GB RAM, ONE full-verify slot (`flock
+/home/user/verify.lock`, ~5 min per run, the suite peaking ~11GB), the coordinator's merging, and file-level merge
+conflicts. Seen 08:00 that day: four compiler agents queued on the verify lock at once while the load average was 1.2
+of 4 - memory, not CPU, was the bottleneck. So: (1) mix task kinds - at most ~2 agents expected to need a full verify
+in the same stretch; fill the rest with light work (reviews, benchmarks, design write-ups, docs, std code verified with
+targeted tests); (2) agents develop on targeted tests and run the full verify once, at the end; a merged result is
+re-verified only when its code differs from a verified tip; (3) split work by file/area, and run the
+touches-everything changes (error messages, the bootstrap/ move, the refactor) when nothing else is in flight; (4)
+before starting an agent, look at the verify queue (`pgrep -af "flock /home/user/verify.lock"`) and the load average -
+a queue of 2+ means start light work, not compiler work; (5) merge finished batches promptly so I am not the
+bottleneck. Once the -t per-file child processes land (wt-tfork), re-measure the suite's peak; if two full verifies fit
+in RAM, use two lock files as a two-slot semaphore.
