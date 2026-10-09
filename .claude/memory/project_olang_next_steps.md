@@ -225,6 +225,13 @@ because what it finds about structure feeds the refactor.
   then O10d; TryAt chain; missing final `}`); the study leftovers: kvtool:89 and matrix:127 invalid IR, calc:157 crash,
   widgets:26 generic snapshot (/home/user/review/study, programs migrated in chk2scope's notes); std-gaps (List
   Pop/Clear/Remove/Sort/List(n, fill), Map Keys/Values/Clear, Join, String ToUpper/ToLower/Replace/Repeat).
+- 11:55 (the user: "remove the mention of [the inspiration] from anything in the project ever. Be thorough about
+  both commits and specs. We don't license either Oann or Olang"): olang's whole local history rewritten with
+  git-filter-repo (every file in every commit and every message; verified zero matches), active worktrees (constgen,
+  fuzz, linalg) scrubbed and re-synced, backup bundle /home/user/olang-pre-scrub.bundle. The FORCE-PUSH of master and
+  claude/github-environment-setup-ftu9va was refused by the auto-mode classifier - waiting for the user to allow it or
+  push themselves; until then normal pushes fail (diverged). oann: the tip commit is being replaced by
+  docs/settling.md (amend) - needs the same force-push. Neither repo gets a licence file.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
