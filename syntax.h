@@ -82,6 +82,7 @@ enum syntaxType {
                           //parse this attempt - skipped; the attempt is redone once it is decided
     SNTX_COND_DEAD,       //S8a: marks an if whose condition compile-time evaluation found fixed, build-free
     SNTX_BODY_INCOMPLETE, //S8b: marks a top-level item holding an SNTX_STMNT_UNDECIDED
+    SNTX_BODY_UNPARSED,   //marks a function definition whose body failed to parse (reported): declared, never checked
     SNTX_STMNT_CHOSEN, //S8b: a local if the build decides, reduced at parse time to the branch it chose
                        //(its one SNTX_BLOCK part), or to nothing when it chose none
     SNTX_FOR_INIT,

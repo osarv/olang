@@ -85,6 +85,62 @@ because what it finds about structure feeds the refactor.
   the rest was already there: `-t` builds every listed file in one process and frees nothing between them. Each file
   is an independent build, so releasing a file's state before the next (or an arena per build) is the real fix - put
   it in the refactor.
+- 06:10 (2026-10-09): reviews (2) types/generics, (3) statements/scopes and (5) evaluator/driver/std started at 05:37
+  against /home/user/wt/review @ 9a6c8c9 (reproducers /home/user/review/{types,scopes,eval}). (2) reported 21
+  confirmed findings (enum auto-Hash abort, read-only refs written through Call adapters and nominal conversions,
+  self-holding inline arrays crashing, non-injective/truncated instantiation names, G4/G1 unenforced, alias-blind case
+  names, extends types never meeting traits...); being fixed in /home/user/wt/tfix (wt-tfix). Decided for it: a
+  declared type over a struct/enum/generic instantiation is an error (over a declared number/array it inherits no
+  ctor/extends/generic identity); Eq/Hash/Str may be declared on an extending type, replacing the inherited ones;
+  anonymous enums are the same type iff same cases, order and payloads. Full verifies serialize on
+  `flock /home/user/verify.lock`.
+- 06:15: review (3) statements/scopes reported 10 confirmed holes (F01-F10: try defaults checked before landing, match
+  alternatives taking the first binding's scope/permission, &of bindings falsified through unknown-binding writes,
+  by-value params holding refs returned unchecked, members/elements/slices of built call results never landing,
+  Array(n, fill) temps, spawn temporaries, enum-param payloads read as program scope, read-only refs written through
+  cond/match/as, Call adapters returned) plus over-rejections R01-R07 and a K2b baking bug (writable referents in
+  .rodata, shared instances split); being fixed in /home/user/wt/sfix (wt-sfix). Decided for it: a by-value parameter
+  holding references gets an implicit scope variable (O4b extended); a global argument binds a callee's scope variable
+  to the program scope (O25e relaxed, O1b); a conditional/match of a reference and temporaries of its referent type is
+  the reference type.
+- 06:15: review (5) evaluator/driver/std reported 21 confirmed (globals with mut refs treated as constant and baked
+  into .rodata, baked aliasing lost, value-returning-from-ref compared by identity in the evaluator, function-typed
+  globals compiled to `ret 0`, match-value String UAF, inline-length check missing in comptime, static-literal and
+  array identity, double rounding I64->F32/BF16, -0 rendering, value-array reassignment visible through slices, global
+  init order, -i limits, SHELL INJECTION in remote fetch, stale objects reused across programs, -t stopping on one bad
+  file, truncated link command, FormatInt(min), complex division, F8 -0, exported std test globals, generic Chan).
+  Fixing in /home/user/wt/efix (evaluator/codegen) and /home/user/wt/dfix (driver/security/std/diagnostics). Decided:
+  a global reaching mut-writable storage is not constant (not read/written at compile time, baked referents writable);
+  each static literal site is one instance (no unnamed_addr merging); array identity = same pointer and length;
+  value-array assignment reuses storage when the length is unchanged (an earlier borrow sees the new elements) and
+  takes new storage otherwise - specified, evaluator matches; globals initialize in dependency order within a module,
+  a cycle is an error; object names injective in the module's real identity (incl. a remote's commit); git run via
+  exec with validated parts; Chan capacity >= 1 unless a rendezvous is clean.
+- Error messages remade (the user 2026-10-09: "shorten down the error messages and keep them concise ... preferably
+  on one row ... keep the rule number probably, it's better for agents ... you can remake the error message system
+  completely, it's very crude still"). After the four fix batches merge and the `a is b`/atomics change, before the
+  refactor (it touches every diagnostic call site). Plan (my design): `file:line:col: error[RULE]: message` on one
+  row, then the source line and a caret under the token; messages short and naming the actual names/types involved
+  (`expected I32, found F64`) instead of generic prose - a table of ids with rule and format string, ErrMsg calls take
+  arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
+  notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
+  characters, ~470 call sites, no arguments. The user approved this plan ("Yes do that", 2026-10-09).
+- 07:15 (plan upgraded; the user: "add more agents, we wanna speed things up"): six agents. Fixing: tfix, efix
+  (resumed), sfix. New: wt-isatom (`a is b` + atomic methods + D3a for type names), wt-tfork (-t runs each file in a
+  forked child, so the suite's peak RSS is one file's - unblocks parallel verifies). A lexer-port spike was started
+  and stopped at once (the user: "Don't do the self hosting yet ... finish the bug fixes and refactor first"). Error-message remake waits for tfix
+  (it is adding an "instantiated from" note to errmsg.c).
+- **Decided 2026-10-09 (the user: "Yes keep it modest. Also give the C compiler its own directory. From now on we just
+  bootstrap as much as possible. Remember to keep a way to re-bootstrap if the current compiler binary is lost."):**
+  the refactor is MODEST (move the C compiler into its own directory `bootstrap/`, dead code and stale comments, NO
+  splitting for size - the user: "splitting files is overrated. I prefer long files if they all do the same thing.
+  Only split where modularisation is a thing" (e.g. the ~900 lines of runtime IR inside codegen.c are a separate
+  thing; semantic.c stays one file), -t memory, the error-message remake - no deep restructuring, since the port is a redesign). After the
+  port the C compiler is frozen as stage 0 and new compiler work happens in olang. Re-bootstrap (my design): no
+  committed binaries; `make bootstrap` builds the C stage 0, uses it to build the olang compiler, which rebuilds
+  itself (stage 2 == stage 3 checked). The olang compiler's own source stays compilable by stage 0; when it needs a
+  feature stage 0 lacks, the last commit stage 0 can build is recorded in `bootstrap/CHAIN` and `make bootstrap` walks
+  that chain (Go's and Rust's approach), so a lost binary is always rebuildable from C plus the repo.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
@@ -93,7 +149,7 @@ because what it finds about structure feeds the refactor.
   (interfaces, scope names, O10e...); unify hand-kept duplicate walkers (structContainsBareScopeField). One agent per
   file at a time; the makefile gets the new files.
 Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
-Then the port: C compiler frozen as stage 0, module by module, acceptance = identical normalized IR over the corpus,
+Then the port (a redesign, see feedback_port_clean_design.md): C compiler frozen as stage 0, module by module, acceptance = the test suite plus per-stage diffs where cheap (was: identical normalized IR),
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):

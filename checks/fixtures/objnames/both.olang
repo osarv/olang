@@ -1,0 +1,6 @@
+import "std/io"
+import "geom/rect"
+import "geom_rect"
+fn main() ? io.IoError {
+    try io.Print($rect.Area() " " $geom_rect.Area() "\n")
+}

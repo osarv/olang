@@ -99,17 +99,17 @@ test "a token with a deadline fires by itself" {
 }
 
 # a task doing work checks the token itself, at points where stopping is safe
-fn spin(t Token&, n mut Count&) {
+fn spin(t Token&, n mut spinCount&) {
     for not t.Cancelled() { n.v++ }
 }
 
-type Count struct() {
+type spinCount struct() {
     v mut I64 = 0
 }
 
 test "a busy task stops when the token is cancelled" {
     t Token& = Token()
-    n Count& = Count()
+    n spinCount& = spinCount()
     join {
         spawn spin(t, n)
         start := NowNs()

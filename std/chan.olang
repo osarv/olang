@@ -35,13 +35,22 @@ extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 # Both are gone now: P3 could never be sound without an ownership discipline this language does not have,
 # so it stopped claiming and was then removed outright, and an exemption from a rule that no longer exists
 # has nothing to mean. A channel handed to a producer and a consumer is once again just a channel.
+#
+# A channel's capacity is how many values it holds before Send blocks. Capacity 0 is a RENDEZVOUS, as an unbuffered
+# channel is in Go: Send hands its value over directly, returning only once a Recv has taken it. Underneath it is a
+# one-slot ring whose sender then waits for that one value to be taken - values are taken in the order they were
+# placed, so a sender knows its own by counting (sent, taken). A negative capacity is out of range, as an array's
+# length is (D14b).
 type Chan<T> struct(cap I32) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
-    data mut Array<<T>>& = Array<<T>>(cap)
+    data mut Array<<T>>& = Array<<T>>(1 if cap == 0 else cap)
     head mut I64 = 0
     tail mut I64 = 0
     count mut I64 = 0
+    rendezvous Bool = cap == 0
+    sent mut I64 = 0
+    taken mut I64 = 0
     lock Array<I64>& = Array<I64>(MutexWords)
     notEmpty Array<I64>& = Array<I64>(CondWords)
     notFull Array<I64>& = Array<I64>(CondWords)
@@ -49,47 +58,67 @@ type Chan<T> struct(cap I32) {
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
 # final address of the mutex and the constructed value has not reached its home yet.
-fn Init(c mut Chan<I32>&) {
+fn Init(c mut Chan<<T>>&) {
     pthread_mutex_init(c.lock, 0)
     pthread_cond_init(c.notEmpty, 0)
     pthread_cond_init(c.notFull, 0)
 }
 
-# blocks while the channel is full, then appends. "while" is spelled as a do-loop guarded by a re-check,
-# since a condition variable may wake spuriously and the count must be re-read under the lock either way.
-fn Send(c mut Chan<I32>&, v I32) {
+# v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
+fn place(c mut Chan<<T>>&, v <T>) I64 {
+    c.data[c.tail] = v
+    c.tail = (c.tail + 1) % c.data.Len()
+    c.count = c.count + 1
+    c.sent = c.sent + 1
+    pthread_cond_broadcast(c.notEmpty)
+    return c.sent - 1
+}
+
+# the oldest value out of the ring, the lock held and the ring not empty
+fn take(c mut Chan<<T>>&) <T> {
+    v := c.data[c.head]
+    c.head = (c.head + 1) % c.data.Len()
+    c.count = c.count - 1
+    c.taken = c.taken + 1
+    pthread_cond_broadcast(c.notFull)   # a sender waiting for a slot, or for its value to be taken
+    return v
+}
+
+# blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
+# taken. "while" is spelled as a do-loop guarded by a re-check, since a condition variable may wake spuriously and the
+# count must be re-read under the lock either way.
+fn Send(c mut Chan<<T>>&, v <T>) {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == c.data.Len() {
             pthread_cond_wait(c.notFull, c.lock)
         }
     } for c.count == c.data.Len()
-    c.data[c.tail] = v
-    c.tail = (c.tail + 1) % c.data.Len()
-    c.count = c.count + 1
-    pthread_cond_broadcast(c.notEmpty)
+    ticket := place(c, v)
+    for c.rendezvous and c.taken <= ticket {
+        pthread_cond_wait(c.notFull, c.lock)
+    }
     pthread_mutex_unlock(c.lock)
 }
 
 # blocks while the channel is empty, then takes the oldest value
-fn Recv(c mut Chan<I32>&) I32 {
+fn Recv(c mut Chan<<T>>&) <T> {
     pthread_mutex_lock(c.lock)
     do {
         if c.count == 0 {
             pthread_cond_wait(c.notEmpty, c.lock)
         }
     } for c.count == 0
-    v I32 = c.data[c.head]
-    c.head = (c.head + 1) % c.data.Len()
-    c.count = c.count - 1
-    pthread_cond_broadcast(c.notFull)
+    v := take(c)
     pthread_mutex_unlock(c.lock)
     return v
 }
 
-# Send, giving up - with the token's reason - once the token fires while the channel is still full. The wait
-# wakes at the token's deadline, and every few milliseconds besides to notice a Cancel() (cancel.WakeAt).
-fn SendUntil(c mut Chan<I32>&, v I32, tok cancel.Token&) ? cancel.Stopped {
+# Send, giving up - with the token's reason - once the token fires while the channel is still full, or, on a
+# rendezvous channel, while the value has not been taken yet: it is withdrawn, so a value either reached a Recv or
+# was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
+# (cancel.WakeAt).
+fn SendUntil(c mut Chan<<T>>&, v <T>, tok cancel.Token&) ? cancel.Stopped {
     ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() {
@@ -100,15 +129,25 @@ fn SendUntil(c mut Chan<I32>&, v I32, tok cancel.Token&) ? cancel.Stopped {
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notFull, c.lock, ts)
     }
-    c.data[c.tail] = v
-    c.tail = (c.tail + 1) % c.data.Len()
-    c.count = c.count + 1
-    pthread_cond_broadcast(c.notEmpty)
+    ticket := place(c, v)
+    for c.rendezvous and c.taken <= ticket {
+        if tok.Cancelled() {
+            # still in the one slot - values leave in order, and none was placed after it while the slot was full
+            c.tail = 0
+            c.count = 0
+            c.sent = c.sent - 1
+            pthread_cond_broadcast(c.notFull)
+            pthread_mutex_unlock(c.lock)
+            try tok.Reason()
+        }
+        tok.WakeAt(ts)
+        pthread_cond_timedwait(c.notFull, c.lock, ts)
+    }
     pthread_mutex_unlock(c.lock)
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty
-fn RecvUntil(c mut Chan<I32>&, tok cancel.Token&) I32 ? cancel.Stopped {
+fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) <T> ? cancel.Stopped {
     ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == 0 {
@@ -119,10 +158,7 @@ fn RecvUntil(c mut Chan<I32>&, tok cancel.Token&) I32 ? cancel.Stopped {
         tok.WakeAt(ts)
         pthread_cond_timedwait(c.notEmpty, c.lock, ts)
     }
-    v I32 = c.data[c.head]
-    c.head = (c.head + 1) % c.data.Len()
-    c.count = c.count - 1
-    pthread_cond_broadcast(c.notFull)
+    v := take(c)
     pthread_mutex_unlock(c.lock)
     return v
 }
@@ -136,20 +172,20 @@ fn produce(c mut Chan<I32>&, n I32) {
     }
 }
 
-fn consume(c mut Chan<I32>&, n I32, total mut Sum&) {
+fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
     for i in range n {
         total.v = total.v + Recv(c)
     }
 }
 
-type Sum struct(start I32) {
+type sumBox struct(start I32) {
     v mut I32 = start
 }
 
 test "a bounded channel carries values between two tasks" {
     c Chan<I32>& = Chan<I32>(4)
     Init(c)
-    total Sum& = Sum(0)
+    total sumBox& = sumBox(0)
     join {
         spawn produce(c, 100)
         spawn consume(c, 100, total)
@@ -162,7 +198,7 @@ test "a bounded channel carries values between two tasks" {
 test "the ring buffer wraps" {
     c Chan<I32>& = Chan<I32>(4)
     Init(c)
-    total Sum& = Sum(0)
+    total sumBox& = sumBox(0)
     for round in range 5 {
         produce(c, 4)
         consume(c, 4, total)
@@ -185,7 +221,7 @@ test "a wait with a token returns what is there, and gives up when the deadline 
     fail
 }
 
-fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut Sum&) {
+fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut sumBox&) {
     got.v = try RecvUntil(c, tok) catch cancel.Stopped.CANCELLED default -1 catch default -2
 }
 
@@ -193,7 +229,7 @@ test "Cancel wakes a task blocked in a wait" {
     c Chan<I32>& = Chan<I32>(1)
     Init(c)
     tok cancel.Token& = cancel.Token()
-    got Sum& = Sum(0)
+    got sumBox& = sumBox(0)
     start := cancel.NowNs()
     join {
         spawn waitFor(c, tok, got)
@@ -202,4 +238,67 @@ test "Cancel wakes a task blocked in a wait" {
     }
     assert got.v == -1
     assert cancel.NowNs() - start < 1000000000
+}
+
+# a channel of any element type - here a struct, carried by value, and text, each across tasks
+type reading struct(sensor I32, value F64) {
+    sensor
+    value
+}
+
+fn sendReadings(c mut Chan<reading>&, n I32) {
+    for i in range n { Send(c, reading(i, F64(i) * 0.5)) }
+}
+
+fn sumReadings(c mut Chan<reading>&, n I32, total mut sumBox&) {
+    for i in range n {
+        r := Recv(c)
+        total.v = total.v + r.sensor
+    }
+}
+
+test "a channel carries any element type" {
+    c Chan<reading>& = Chan<reading>(3)
+    Init(c)
+    total sumBox& = sumBox(0)
+    join {
+        spawn sendReadings(c, 50)
+        spawn sumReadings(c, 50, total)
+    }
+    assert total.v == 1225
+    f Chan<F64>& = Chan<F64>(2)
+    Init(f)
+    Send(f, 1.5)
+    Send(f, 2.25)
+    assert Recv(f) + Recv(f) == 3.75
+    t Chan<String&>& = Chan<String&>(2)
+    Init(t)
+    Send(t, "one")
+    Send(t, $(1 + 1))
+    assert Recv(t) == "one" and Recv(t) == "2"
+}
+
+# capacity 0: each Send returns only once its value has been received, so the sender is never more than one value
+# ahead of the receiver
+fn sendCounting(c mut Chan<I32>&, n I32, sentAll mut sumBox&) {
+    for i in range n { Send(c, i) }
+    sentAll.v = 1
+}
+
+test "a channel of capacity 0 is a rendezvous" {
+    c Chan<I32>& = Chan<I32>(0)
+    Init(c)
+    total sumBox& = sumBox(0)
+    sentAll sumBox& = sumBox(0)
+    join {
+        spawn sendCounting(c, 100, sentAll)
+        spawn consume(c, 100, total)
+    }
+    assert total.v == 4950 and sentAll.v == 1
+    # nobody receives, so a send with a deadline gives up - and its value is withdrawn, not left behind
+    tok := cancel.After(20)
+    try SendUntil(c, 7, tok) catch cancel.Stopped.TIMED_OUT { } catch { fail }
+    assert c.count == 0
+    tok2 := cancel.After(20)
+    assert (try RecvUntil(c, tok2) catch cancel.Stopped.TIMED_OUT default -1 catch default -2) == -1
 }

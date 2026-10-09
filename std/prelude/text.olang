@@ -401,9 +401,24 @@ fn builtText() String& {
     return b.ToString()
 }
 
-BuiltBaked := builtText()
+builtBaked := builtText()
 
 test "a StringBuilder, evaluated while compiling as at run time" {
-    assert BuiltBaked == "0,1,2,end"
-    assert builtText() == BuiltBaked
+    assert builtBaked == "0,1,2,end"
+    assert builtText() == builtBaked
+}
+
+# mutable, so the check below is made at run time, where the arena is - and the reason it exists: ToString's text is
+# built through the conversion String(...), and the call inside it used to land in ToString's own scope, closed by its
+# return, so the next scope to take a chunk - here scribble's own - wrote over the text
+churnBytes mut I64 = 100
+fn scribble(n I64) I64 {
+    a := Array<Char>(n, 'z')
+    return a.Len()
+}
+test "a StringBuilder's text lives where the caller keeps it" {
+    b := StringBuilder()
+    b.Push("import \"std/io\"\n")
+    t := b.ToString()
+    assert scribble(churnBytes) == churnBytes and t == "import \"std/io\"\n"
 }

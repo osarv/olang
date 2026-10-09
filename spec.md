@@ -1322,7 +1322,10 @@ checkout under `OLANG_CACHE`, default `~/.cache/olang`, one directory per commit
 later compilation reads the cached copy and needs no network; nothing is ever re-fetched implicitly, so a build
 does not change because the remote did. Two different `@REF`s of one repository are two separate
 fetches and two separate sets of modules. A fetch that fails is a compile-time error, reported against the
-import.
+import, and leaves nothing in the cache: a repository is placed there only once it holds the commit it should, so an
+interrupted or failed fetch is never later taken for a fetched one. `HOST`, `OWNER`, `REPO` and `REF` may hold only
+letters, digits, `.`, `_` and `-`, none may begin with `.` or `-`, and none may hold `..` - anything else is a
+compile-time error, since they name the repository to the version-control tool and the cache's directories.
 
 **M23b (the lock file).** `olang.lock`, in the root module's directory, names the commit each remote repository is
 built from: one line per repository, its `HOST/OWNER/REPO[@REF]` and the commit, sorted, `#` beginning a comment. A
@@ -1330,7 +1333,8 @@ repository with a line is built from that commit and no other - fetched by it wh
 ref has moved since. A repository without one is resolved to its ref's current commit (the default branch's, with no
 `@REF`), fetched, and its line written. So deleting a line, or the file, updates that repository on the next build,
 and committing the file makes every checkout build the same code. A commit names its exact content, so the lock needs
-no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock.
+no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock, and so is a line
+whose commit is not a commit name (40 hexadecimal digits, or 64 in a repository using SHA-256).
 
 **M23c (updating).** `-u` is a **modifier**, valid in any position alongside any mode (B2b). Every remote
 repository the compilation reaches is resolved as though the lock file had no line for it - fetched at its ref's
@@ -1439,12 +1443,15 @@ new `String` in the caller's scope, independent of the builder afterwards. A val
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
-(E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type.
+(E31), `Conj()`, `Norm()` (the squared magnitude) and `Scale(k)`, each computed in the part's own type - except
+division, which never squares a part of the divisor, so a quotient is as accurate as the type allows wherever it is
+representable: `C16` and `C32` divide in `F64` and round once, `C64` divides by Smith's method.
 
 The prelude declares two 8-bit float formats as storage types: `F8E4M3` (4 exponent bits, bias 7, 3 mantissa bits;
 no infinity, one NaN, largest value 448) and `F8E5M2` (5 exponent bits, bias 15, 2 mantissa bits; IEEE-style, with
 infinities and NaNs, largest finite value 57344). Conversion into either **saturates**: a value beyond the largest
-finite one, an infinity included, becomes that value with its sign, and NaN stays NaN. `==` compares values as IEEE 754 does: a NaN
+finite one, an infinity included, becomes that value with its sign, NaN stays NaN, and a zero keeps its sign (as does
+a value rounding to zero). `==` compares values as IEEE 754 does: a NaN
 equals nothing, itself included, and `-0` equals `0`. Each is a struct holding its `Bits` (a `U8`), built
 from a number - `F8E4M3(x)` rounds `x` to nearest, ties to even - and read back with `F64()`; it renders as the value
 it holds. They are for storing values compactly, not for computing in: arithmetic is done after converting.
@@ -3976,14 +3983,20 @@ for.
 that module's own source **or than any source it transitively imports** — an object depends on the
 signatures it was compiled against, so a change to an import invalidates it even though its own source
 did not change. Every module counts as importing the prelude (§4 M19d), so an edit to a prelude file
-invalidates every object.
+invalidates every object. An object's name carries, beside its module's identity made readable, a hash of the
+identity and the real source path of every module it is compiled against - its own, its transitive imports' and the
+prelude's - so an object is only ever taken for the build of the files it was built from: two modules whose readable
+names coincide (`geom/rect`, `geom_rect`), two roots of one file name outside the working directory, and one module
+compiled against two commits of a remote repository (M23a's checkouts are different directories) or two standard
+libraries each have objects of their own, whatever the files' times are.
 
 **B3a.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
 root module (transitively pulling in its own imports, exactly as `-b` would) and runs every
 `test { }` block declared *directly in that file* (§10.4) — not those declared in any module it
 merely imports. `main` is not required in this mode, and is not run even if present. Each listed
-file's compilation and test run is independent: a compile-time error in one listed file does not
-prevent the others from being checked and run.
+file's compilation and test run is independent: a compile-time error in one listed file - or a listed file that does
+not exist or is a directory - does not prevent the others from being checked and run, and the exit status is nonzero
+when any listed file failed to build or failed a test.
 
 **B3e.** `-i <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `-b` - `main` is required (B4), and every compile-time error is reported the
@@ -4009,9 +4022,11 @@ program's command line (B4a) is `<file>`, as written, followed by those argument
 
 **B3b.** A symbol a module defines is named from that module's **identity** (§4 M22a) — its path — never from
 anything about the compilation it happens to be part of: an object compiled on its own has to agree with one
-compiled as part of a whole program. Two modules whose identities coincide therefore collide, and that is a
-compile-time error. A std module named directly on the command line takes the identity its importers give
-it.
+compiled as part of a whole program. The naming is injective - distinct identities, and distinct names within
+them, never give one symbol (`geom/rect` and `geom_rect` are two modules of one program; module `a` declaring `b_c`
+and module `a/b` declaring `c` define different symbols). Two modules whose identities coincide - possible only for
+modules identified by a file name alone (M22a) - therefore collide, and that is a compile-time error. A std module
+named directly on the command line takes the identity its importers give it.
 
 **B3c.** The language's own runtime support is emitted by **every** module's object, under one shared
 name, and the duplicates are discarded at link time.

@@ -77,24 +77,18 @@ fn PrintErr(data Array<U8>&) ? IoError {
 # 20 bytes anyway. "buf mut Array<U8>&" and not "buf mut Array<U8>": the marker is what makes this the caller's
 # own array rather than a copy of it, and so what makes this an out-parameter at all - D9a rejects the
 # unmarked spelling outright rather than let a call copy an array.
+# The digits are taken from the NEGATIVE of n's magnitude, as ParseInt accumulates: the negative range is the larger, so
+# I64's minimum has a magnitude there, where negating it to a positive wraps back to itself.
 fn FormatInt(n I64, buf mut Array<U8>&) I32 {
-    if n == 0 {
-        buf[0] = '0'
-        return 1
-    }
-    v I64 = n
-    neg Bool = false
-    if v < 0 {
-        neg = true
-        v = -v
-    }
-        # least-significant digit first, reversed in place below
+    neg Bool = n < 0
+    v I64 = n if neg else -n
+    # least-significant digit first, reversed in place below; v % 10 is in -9 .. 0, since division truncates
     used I32 = 0
     do {
-        buf[used] = U8(v % 10) + '0'
+        buf[used] = U8(-(v % 10)) + '0'
         v = v / 10
         used++
-    } for v > 0
+    } for v < 0
     if neg {
         buf[used] = '-'
         used++
@@ -157,6 +151,12 @@ test "Read returns a slice of the caller's own buffer" {
 
 test "FormatInt renders decimals, including zero and negatives" {
     buf := Array<U8>(24)
+
+    # the extremes: I64's minimum has no positive counterpart to format from
+    n0 := FormatInt(-9223372036854775807 - 1, buf)
+    assert String(buf[:n0]) == "-9223372036854775808"
+    n0 = FormatInt(9223372036854775807, buf)
+    assert String(buf[:n0]) == "9223372036854775807"
 
     n I32 = FormatInt(0, buf)
     assert n == 1

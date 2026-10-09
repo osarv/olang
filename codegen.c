@@ -218,22 +218,28 @@ struct cgCtx {
 //given module however a client happens to spell the path it imports it by.
 //M22a: symbols are mangled from a module's identity - its path - so "std/list" and a local "list.olang"
 //never collide
+//B3b: a module's identity as a symbol prefix, injectively - a letter or digit as itself, '/' as '_', and every other
+//byte as '$' and two hexadecimal digits - so "geom/rect" is geom_rect while "geom_rect" is geom$5Frect and "a.b" is
+//a$2Eb. Every prefix is therefore one identity's only (identities are paths, so the common ones read as before).
 void mangleModPrefix(struct semaModule* mod, char* buf, size_t n) {
     struct str f = mod->identity;
-    int start = 0;
-    int end = f.len;
     size_t w = 0;
-    for (int i = start; i < end && w +1 < n; i++) {
-        char c = f.ptr[i];
-        buf[w++] = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                    || (c >= '0' && c <= '9') || c == '_') ? c : '_';
+    for (int i = 0; i < f.len && w + 1 < n; i++) {
+        unsigned char c = (unsigned char)f.ptr[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) buf[w++] = (char)c;
+        else if (c == '/') buf[w++] = '_';
+        else {
+            if (w + 4 > n) break;
+            w += (size_t)snprintf(buf + w, n - w, "$%02X", c);
+        }
     }
     buf[w] = '\0';
 }
 
-//B3b: two modules whose base names match would mangle to the same prefix and so define the same symbols.
-//Checked once per compilation, before anything is emitted, rather than left to surface as a duplicate
-//symbol at link time - which is where it would otherwise appear, naming mangled symbols rather than files.
+//B3b: two modules sharing an identity would mangle to the same prefix and so define the same symbols - which only
+//modules named by a file name alone can (a root outside the working directory, an import by absolute path). Checked
+//once per compilation, before anything is emitted, rather than left to surface as a duplicate symbol at link time -
+//which is where it would otherwise appear, naming mangled symbols rather than files.
 void CodegenCheckModuleNames(void) {
     struct list* all = SemanticAllModules();
     for (int i = 0; i < all->len; i++) {
@@ -266,11 +272,21 @@ static struct str cgSymPart(struct str name) {
     return StrFromCStr(out);
 }
 
+//a global's or function's symbol: its module's prefix, '_', and its name with each '_' written "$5F" - so the last '_'
+//is always the one between them, and module "a" naming "b_c" (a_b$5Fc) never meets module "a/b" naming "c" (a_b_c).
+//The escaped name is shortened afterwards (G16a), so the shortening can never cut an escape in two
 void mangleGlobal(struct semaModule* mod, struct str name, char* buf, size_t n) {
     char prefix[256];
     mangleModPrefix(mod, prefix, sizeof(prefix));
-    name = cgSymPart(name);
-    snprintf(buf, n, "@%s_%.*s", prefix, name.len, name.ptr);
+    char* esc = MallocOrCrash((size_t)name.len * 3 + 1);
+    size_t w = 0;
+    for (int i = 0; i < name.len; i++) {
+        if (name.ptr[i] != '_') { esc[w++] = name.ptr[i]; continue; }
+        memcpy(esc + w, "$5F", 3);
+        w += 3;
+    }
+    struct str part = cgSymPart(Str(esc, (int)w));
+    snprintf(buf, n, "@%s_%.*s", prefix, part.len, part.ptr);
 }
 
 //M21: a method's symbol carries its receiver type, because a module may declare several methods sharing

@@ -922,7 +922,9 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     return s;
 }
 
-struct syntax* parseFuncDef(SyntaxCtx sc) {
+//"fn [(receiver)] NAME [scope declarations] SIG" - everything of a function definition but its body. Leaves the cursor
+//after the signature and returns the definition node without its block, or NULL (cursor restored) on failure.
+static struct syntax* parseFuncHead(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptFnKeyword(sc);
     if (kw.type == TOK_NONE) return NULL;
@@ -930,12 +932,11 @@ struct syntax* parseFuncDef(SyntaxCtx sc) {
     //inferred from a parameter's type any more - and it is parsed as an ordinary param, so "mut", a "&"
     //marker and a scope tag all read exactly as they would anywhere else.
     struct syntax* receiver = NULL;
-    int beforeRecv = TokenGetCursor(sc->tc);
     struct token rOpen = acceptTok(sc, TOK_PAREN_O);
     if (rOpen.type != TOK_NONE) {
         struct syntax* rp = parseParam(sc);
         struct token rClose = rp ? acceptTok(sc, TOK_PAREN_C) : (struct token){0};
-        if (!rp || rClose.type == TOK_NONE) return parseFail(sc, beforeRecv);
+        if (!rp || rClose.type == TOK_NONE) return parseFail(sc, cur);
         receiver = newNode(SNTX_RECEIVER);
         addTok(receiver, rOpen);
         addSntx(receiver, rp);
@@ -963,15 +964,47 @@ struct syntax* parseFuncDef(SyntaxCtx sc) {
         rpart.sntx = ((struct syntaxPart*)ListGetIdx(&receiver->parts, 1))->sntx;
         ListInsertIdx(&plist->parts, 0, &rpart);
     }
-    struct syntax* block = parseBlock(sc);
-    if (!block) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_FUNC_DEF);
     addTok(s, kw);
     addTok(s, name);
     addSntx(s, sig);
-    addSntx(s, block);
     if (receiver) addSntx(s, receiver);
     return s;
+}
+
+struct syntax* parseFuncDef(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    struct syntax* s = parseFuncHead(sc);
+    if (!s) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) return parseFail(sc, cur);
+    //the block goes before the receiver, where every reader of a definition finds it
+    struct syntaxPart bpart = {0};
+    bpart.sntx = block;
+    ListInsertIdx(&s->parts, 3, &bpart);
+    return s;
+}
+
+//a function definition whose body did not parse, as the declaration its signature still is: the body empty and marked
+//unparsed (SNTX_BODY_UNPARSED), so calls to it are checked against the signature instead of each being an unknown
+//function, and the body - its error already reported - is never checked. NULL unless a whole signature and the body's
+//"{" are there. The cursor is left where it was.
+static struct syntax* salvageFuncDecl(SyntaxCtx sc, int start) {
+    int resume = TokenGetCursor(sc->tc);
+    TokenSetCursor(sc->tc, start);
+    struct syntax* s = parseFuncHead(sc);
+    struct token open = s ? peekTok(sc) : (struct token){0};
+    TokenSetCursor(sc->tc, resume);
+    if (!s || open.type != TOK_CURLY_O) return NULL;
+    struct syntax* block = newNode(SNTX_BLOCK);
+    addTok(block, open);
+    struct syntaxPart bpart = {0};
+    bpart.sntx = block;
+    ListInsertIdx(&s->parts, 3, &bpart);
+    addSntx(s, newNode(SNTX_BODY_UNPARSED));
+    struct syntax* top = newNode(SNTX_TOP_DECL);
+    addSntx(top, s);
+    return top;
 }
 
 //"IDEN type-expr" - unlike parseParam, never accepts "mut" (see the report on §11 X2) - reuses the
@@ -4224,6 +4257,8 @@ static void parseTopItem(SyntaxCtx sc, struct list* out) {
     if (!decl) {
         reportTopItemFailure(sc, start);
         skipTopItem(sc, start);
+        struct syntax* salvaged = salvageFuncDecl(sc, start);
+        if (salvaged) ListAdd(out, salvaged);
         return;
     }
     if (sc->itemIncomplete) addSntx(partSntxOf(decl), newNode(SNTX_BODY_INCOMPLETE)); //S8b

@@ -40,4 +40,17 @@ container, so have agents commit as they finish.
 **Memory, not just tokens (2026-10-08):** the test compiler grows to ~7GB on the big corpus files (~11GB for the full-suite process since 2026-10-09) and the container has
 ~15GB, so two full `make test`/`make verify` runs at once can be OOM-killed. Tell agents to run only targeted tests
 while others are verifying, and run full verifies one at a time (I run the merged one). The scratchpad is shared too: an agent's log there was
-overwritten by another's - tell agents to write logs inside their own worktree (e.g. build/verify.log).
+overwritten by another's - tell agents to write logs inside their own worktree root (verify.log - NOT build/, which make verify deletes), and serialize full verifies with `flock /home/user/verify.lock`.
+
+**Plan upgraded 2026-10-09 ~07:09 UTC** (the user: "You have a lot more usage now" - after asking about Max 5x vs 20x):
+both windows read 0 right after, the five-hour one resetting at 12:00. On the old plan four agents spent a window in
+~80 minutes; measure again before assuming the new rate, and keep pacing by rate_limit_event.
+
+**Pacing rule (the user, 2026-10-09): "time the usage limit reset for maximum efficiency. Too slow and you lose credits.
+Too quick and you lose quality. ... the weekly limit ... is basically the entire bottleneck. Base your calculations on a
+70% uptime over a week."** Method: target weekly burn per active hour = (1 - weekly utilization) / (0.7 x hours to the
+weekly reset). Measure the actual burn (weekly % per hour, per running agent) from rate_limit_events at every agent
+completion or check-in, and set the number of agents so the burn matches the target; the five-hour window only
+matters when it would hit 100% before its own reset (then idle time is lost, so trim). Over a normal full week that is
+~0.85% of the week per active hour - far fewer agents than a fresh window invites; a short remainder of a week (like
+after the 2026-10-09 upgrade, which reset the weekly to 0 with Sat 04:00 UTC still the reset) allows far more.

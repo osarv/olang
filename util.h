@@ -37,6 +37,23 @@ void CheckAllocPtr(void* ptr);
 void* MallocOrCrash(size_t size);
 void* CallocOrCrash(size_t size);
 void* ReallocOrCrash(void* oldPtr, size_t size);
+//a formatted string of its own length, on the heap - never truncated
+char* StrFmt(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+//s as a NUL-terminated string on the heap
+char* StrDupStr(struct str s);
+
+//runs the program argv[0] (looked up on PATH unless it holds a '/'), with argv, NULL-terminated - never through a
+//shell, so no argument is ever read as shell syntax, and the argument list has no length limit of ours. quiet sends
+//its standard output and error to /dev/null. Returns its exit status, 128 + the signal that ended it, or -1 when it
+//could not be started. What this process has buffered is written out first.
+int RunProgram(char* const argv[], bool quiet);
+//RunProgram, with the program's standard output read into out (at most n - 1 bytes, NUL-terminated) and its standard
+//error discarded
+int RunProgramCapture(char* const argv[], char* out, size_t n);
+//path and everything under it removed, symbolic links never followed - 0, also when path does not exist, or -1
+int RemoveTree(const char* path);
+//path made a directory, with every missing parent - 0 when it is one afterwards, or -1
+int MakeDirs(const char* path);
 
 //members may be read but not manipulated outside the functions
 struct list {

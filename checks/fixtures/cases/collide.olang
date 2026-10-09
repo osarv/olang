@@ -1,6 +1,0 @@
-# B3b: two modules whose paths spell one symbol prefix
-import "a_b"
-import "a/b"
-fn main() ? {
-  p I32 = a_b.Mk() + b.Mk()
-}

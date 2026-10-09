@@ -179,11 +179,11 @@ fn lookupBoth() I32 {
     return (try m.Get(4) catch default 0) + (try m.Get(5) catch default 1)
 }
 
-LookupBaked := lookupBoth()
+lookupBaked := lookupBoth()
 
 test "a miss is an error, evaluated while compiling as at run time" {
-    assert LookupBaked == 41
-    assert lookupBoth() == LookupBaked
+    assert lookupBaked == 41
+    assert lookupBoth() == lookupBaked
 }
 
 test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
@@ -225,11 +225,11 @@ fn hashKeys() Bool {
     arrays Bool = I32[1, 2].Hash() == I32[1, 2].Hash() and I32[1, 2].Hash() != I32[2, 1].Hash()
     return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
 }
-HashKeysBaked := hashKeys()
+hashKeysBaked := hashKeys()
 
 test "E10b: a struct, an enum or an array is a key with no Hash written" {
     assert hashKeys()
-    assert HashKeysBaked
+    assert hashKeysBaked
 }
 
 # E10b: an enum one of whose cases holds a reference - each case's payload is read only where that case holds, so
@@ -292,13 +292,13 @@ fn walkedKeys() I64 {
     return total
 }
 
-WalkedBaked := walkedKeys()
+walkedBaked := walkedKeys()
 
 test "walking a Map of text keys, evaluated while compiling as at run time" {
-    assert walkedKeys() == WalkedBaked
+    assert walkedKeys() == walkedBaked
     n I64 = 0
     for i in range 200 { n += i * ($i).Len() }
-    assert WalkedBaked == 1 * 3 + 2 * 3 + 3 * 5 + n
+    assert walkedBaked == 1 * 3 + 2 * 3 + 3 * 5 + n
 }
 
 # O18b: a key rendered in a loop body is built where the map lives, so it survives the loop's arena being reused - read
