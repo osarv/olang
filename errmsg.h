@@ -213,6 +213,7 @@ struct type;
     X(ERR_SPREAD_COUNT,                 "D8d",   "these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'") \
     X(ERR_SCOPE_ARG_NOT_ACCEPTED,       "E25",   "%S builds no result a scope argument could place") \
     X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
+    X(ERR_BORROW_SPLIT_SCOPES,          "O17",   "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") \
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
@@ -415,6 +416,8 @@ struct type;
     /* ---- the program as a whole ---- */ \
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
+    X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
+    X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
@@ -443,6 +446,10 @@ void ErrFatal(struct str file, enum diag d, ...);
 void ErrUsage(enum diag d, ...);
 //a note on the error just reported, about the token at
 void Note(struct token at, enum diag d, ...);
+//B11: between Start and End (a statement), only the first error about where something lives is reported; End takes
+//what Start returned, so groups nest
+int ErrMsgScopeGroupStart(void);
+void ErrMsgScopeGroupEnd(int saved);
 //B11a: prints rule's text from the specification; the process's exit status
 int ErrMsgExplain(char* rule);
 //code, a terminal colour, where diagnostics go to a terminal, and "" where they do not (a file, a pipe, an agent)

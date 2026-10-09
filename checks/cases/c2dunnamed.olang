@@ -1,7 +1,9 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
+# check: fail error[O26]: this value refers to this function's own storage
+# never: error[O10c]
 # a function may return something built from a bare "&" parameter into its result scope: the parameter's
 # scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
-# This caller cannot - its argument lives in its own scope, and the result would outlive it
+# This caller cannot - its argument lives in its own scope, and the result would outlive it: one error for the one cause
+# (B11), the returned instance's binding (O13a) found before the obligation
 type P struct(x I32) { x }
 type NB struct(inner P&) { inner }
 fn wrap(p P&) NB& { return NB(p) }

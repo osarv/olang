@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <dirent.h>
+#include <errno.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include "util.h"
 #include "token.h"
@@ -7511,6 +7513,81 @@ void emitOsRuntime(FILE* out) {
                  "fail:\n"
                  "  ret i64 -1\n"
                  "}\n\n", offsetof(struct dirent, d_name));
+
+    //the program named by the count NUL-terminated entries of args, started with them as its command line - the first
+    //looked up through PATH as posix_spawnp does - and with in, out and err (each -1 for this process's own) as its
+    //standard input, output and error, without a shell; its process id, or -1 when it could not be started (errno says
+    //why - posix_spawnp gives its error as its result, which is put where __olang_err looks)
+    fprintf(out, "declare i32 @posix_spawn_file_actions_init(ptr)\n"
+                 "declare i32 @posix_spawn_file_actions_destroy(ptr)\n"
+                 "declare i32 @posix_spawn_file_actions_adddup2(ptr, i32, i32)\n"
+                 "declare i32 @posix_spawnp(ptr, ptr, ptr, ptr, ptr, ptr)\n"
+                 "@environ = external global ptr\n\n"
+                 "define linkonce_odr i32 @__olang_spawn(ptr %%args, i64 %%count, i32 %%in, i32 %%out, i32 %%err) {\n"
+                 "entry:\n"
+                 "  %%fa = alloca [%zu x i8], align 16\n"
+                 "  %%pid = alloca i32\n"
+                 "  %%none = icmp slt i64 %%count, 1\n"
+                 "  br i1 %%none, label %%inval, label %%start\n"
+                 "inval:\n"
+                 "  %%ep0 = call ptr @__errno_location()\n"
+                 "  store i32 %d, ptr %%ep0\n"
+                 "  ret i32 -1\n"
+                 "start:\n"
+                 "  %%n1 = add i64 %%count, 1\n"
+                 "  %%bytes = mul i64 %%n1, 8\n"
+                 "  %%argv = call ptr @malloc(i64 %%bytes)\n"
+                 "  br label %%loop\n"
+                 "loop:\n"
+                 "  %%i = phi i64 [ 0, %%start ], [ %%i1, %%step ]\n"
+                 "  %%p = phi ptr [ %%args, %%start ], [ %%p1, %%step ]\n"
+                 "  %%more = icmp slt i64 %%i, %%count\n"
+                 "  br i1 %%more, label %%step, label %%built\n"
+                 "step:\n"
+                 "  %%slot = getelementptr ptr, ptr %%argv, i64 %%i\n"
+                 "  store ptr %%p, ptr %%slot\n"
+                 "  %%len = call i64 @strlen(ptr %%p)\n"
+                 "  %%len1 = add i64 %%len, 1\n"
+                 "  %%p1 = getelementptr i8, ptr %%p, i64 %%len1\n"
+                 "  %%i1 = add i64 %%i, 1\n"
+                 "  br label %%loop\n"
+                 "built:\n"
+                 "  %%end = getelementptr ptr, ptr %%argv, i64 %%count\n"
+                 "  store ptr null, ptr %%end\n"
+                 "  %%fi = call i32 @posix_spawn_file_actions_init(ptr %%fa)\n"
+                 "  %%hasIn = icmp sge i32 %%in, 0\n"
+                 "  br i1 %%hasIn, label %%dupIn, label %%doneIn\n"
+                 "dupIn:\n"
+                 "  %%d0 = call i32 @posix_spawn_file_actions_adddup2(ptr %%fa, i32 %%in, i32 0)\n"
+                 "  br label %%doneIn\n"
+                 "doneIn:\n"
+                 "  %%hasOut = icmp sge i32 %%out, 0\n"
+                 "  br i1 %%hasOut, label %%dupOut, label %%doneOut\n"
+                 "dupOut:\n"
+                 "  %%d1 = call i32 @posix_spawn_file_actions_adddup2(ptr %%fa, i32 %%out, i32 1)\n"
+                 "  br label %%doneOut\n"
+                 "doneOut:\n"
+                 "  %%hasErr = icmp sge i32 %%err, 0\n"
+                 "  br i1 %%hasErr, label %%dupErr, label %%doneErr\n"
+                 "dupErr:\n"
+                 "  %%d2 = call i32 @posix_spawn_file_actions_adddup2(ptr %%fa, i32 %%err, i32 2)\n"
+                 "  br label %%doneErr\n"
+                 "doneErr:\n"
+                 "  %%env = load ptr, ptr @environ\n"
+                 "  %%prog = load ptr, ptr %%argv\n"
+                 "  %%rc = call i32 @posix_spawnp(ptr %%pid, ptr %%prog, ptr %%fa, ptr null, ptr %%argv, ptr %%env)\n"
+                 "  %%fd = call i32 @posix_spawn_file_actions_destroy(ptr %%fa)\n"
+                 "  call void @free(ptr %%argv)\n"
+                 "  %%ok = icmp eq i32 %%rc, 0\n"
+                 "  br i1 %%ok, label %%started, label %%failed\n"
+                 "started:\n"
+                 "  %%v = load i32, ptr %%pid\n"
+                 "  ret i32 %%v\n"
+                 "failed:\n"
+                 "  %%ep = call ptr @__errno_location()\n"
+                 "  store i32 %%rc, ptr %%ep\n"
+                 "  ret i32 -1\n"
+                 "}\n\n", sizeof(posix_spawn_file_actions_t), EINVAL);
 }
 
 //B5a: one initializer per module, since one module is one object. The entry point calls them all, in

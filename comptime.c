@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <limits.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include "comptime.h"
 #include "errmsg.h"
@@ -2670,12 +2671,30 @@ static long long ctRtRealpath(const char* path, unsigned char* buf, long long ca
     free(r);
     return len;
 }
+extern char** environ;
+static int ctRtSpawn(const char* args, long long count, int in, int out, int err) {
+    if (count < 1) { errno = EINVAL; return -1; }
+    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 1));
+    for (long long i = 0; i < count; i++) { argv[i] = (char*)args; args += strlen(args) + 1; }
+    argv[count] = NULL;
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    if (in >= 0) posix_spawn_file_actions_adddup2(&fa, in, 0);
+    if (out >= 0) posix_spawn_file_actions_adddup2(&fa, out, 1);
+    if (err >= 0) posix_spawn_file_actions_adddup2(&fa, err, 2);
+    pid_t pid;
+    int rc = posix_spawnp(&pid, argv[0], &fa, NULL, argv, environ);
+    posix_spawn_file_actions_destroy(&fa);
+    free(argv);
+    if (rc != 0) { errno = rc; return -1; }
+    return pid;
+}
 typedef void (*ctRtFn)(void);
 static ctRtFn ctRuntimeSym(const char* name) {
     static const struct { const char* name; ctRtFn fn; } syms[] = {
         { "__olang_arg_count", (ctRtFn)ctRtArgCount }, { "__olang_arg", (ctRtFn)ctRtArg }, { "__olang_env", (ctRtFn)ctRtEnv },
         { "__olang_err", (ctRtFn)ctRtErr }, { "__olang_stat", (ctRtFn)ctRtStat }, { "__olang_dir", (ctRtFn)ctRtDir },
-        { "__olang_realpath", (ctRtFn)ctRtRealpath },
+        { "__olang_realpath", (ctRtFn)ctRtRealpath }, { "__olang_spawn", (ctRtFn)ctRtSpawn },
     };
     for (size_t i = 0; i < sizeof(syms) / sizeof(syms[0]); i++) if (!strcmp(syms[i].name, name)) return syms[i].fn;
     return NULL;

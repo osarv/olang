@@ -11547,3 +11547,357 @@ test "C2d: a constructor field builds an entry from the constructor's parameters
     obChurn()
     assert s.e.K == 2 and s.next.e.K == 1 and l.Len() == 1 and s.next.e.V.Len() == 1
 }
+
+# ---- the scope study, batch 2 (2026-10-09): what realistic programs wrote first, accepted ----
+
+sbRun mut I64 = 1
+
+# churns the arena: text made and dropped in a loop body, reusing whatever chunk a scope closed before - a reference
+# left pointing into one reads someone else's bytes after this
+fn sbChurn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i $i "-" $(i * 7)
+        t += s.Len() + I64(s[0]) + I64(s[s.Len() - 1])
+    }
+    return t + I64(getpid() * 0)        # an opaque call: nothing read after it is forwarded from before it
+}
+
+# O25h: a copy of an element holding references keeps them where the element's are - a swap through a temporary, a
+# parallel swap, Sort (which swaps through one), a loop's copy pushed outward, and an argmin all store such a copy back
+type sbWC struct(word String&, count I64) {
+    word
+    count
+}
+fn sbSwap(a mut Array<sbWC>&, i I64, j I64) {
+    t := a[i]
+    a[i] = a[j]
+    a[j] = t
+}
+fn sbSwap2(a mut Array<sbWC>&, i I64, j I64) {
+    a[i], a[j] = a[j], a[i]
+}
+fn sbMost(xs Array<sbWC>&) sbWC {
+    best := xs[0]
+    for x in xs {
+        if x.count > best.count { best = x }
+    }
+    return best
+}
+fn sbRecords(n I64) String& {
+    a := Array<sbWC>(4)
+    for i in range 4 { a[i] = sbWC($(n + i) "w", (i * 3) % 4) }
+    sbSwap(a, 0, 3)
+    sbSwap2(a, 1, 2)
+    a.Sort(fn(x sbWC, y sbWC) Bool { return x.count < y.count })
+    odd := List<String&>()
+    for wc in a { if wc.count % 2 == 1 { odd.Push(wc.word) } }
+    m := sbMost(a)
+    sbChurn()
+    return $a[0].word $a[3].word "/" $odd[0] $odd[1] "/" $m.word
+}
+test "O25h: copies of records holding text are swapped, sorted, pushed outward and kept as an argmin" {
+    r := $sbRecords(sbRun)
+    assert r == "1w2w/4w2w/2w"
+}
+
+# O18c (in a statement): a catch clause's own statements discharge only their own obligations, so the call around them
+# still lands where its obligations say - the map's node, where the map lives
+type sbNode struct(v I64) {
+    v mut
+    next mut sbNode& = null
+}
+type sbIndex struct() {
+    nodes mut Map<I64, mut sbNode&>& = Map<I64, mut sbNode&>()
+}
+fn (c mut sbIndex&) bump(k I64) I64 ? {
+    n := try c.nodes.Get(k) catch {
+        error
+    }
+    n.v++
+    n.next = sbNode(n.v * 10)
+    return n.v
+}
+test "O18c: a call with a catch block lands as a call with no clause does" {
+    c := sbIndex()
+    c.nodes.Put(1, sbNode(5))
+    assert (try c.bump(1) catch default -1) == 6
+    sbChurn()
+    n := try c.nodes.Get(1) catch { unreachable }
+    assert n.next.v == 60
+    assert (try c.bump(2) catch default -1) == -1
+}
+
+# O18c: a call's result passed on as a receiver or a loop's source lands where its obligations say - an element of a
+# list of lists, where the outer list lives - as "inner := adj[a]" does
+fn sbAdd(adj mut List<mut List<String&>&>&, a I64, v String&adj) {
+    adj[a].Push(v)
+}
+fn sbJoin(adj List<mut List<String&>&>&, a I64) String& {
+    b := StringBuilder()
+    for x in adj[a] { b.Push(x) }
+    return b.ToString()
+}
+test "O18c: an element of a list of lists, used as a receiver and as a loop's source" {
+    adj := List<mut List<String&>&>()
+    adj.Push(List<String&>())
+    adj.Push(List<String&>())
+    for i in range 3 {
+        t String&adj = $(i + sbRun) "."
+        sbAdd(adj, i % 2, t)
+    }
+    sbChurn()
+    a := $sbJoin(adj, 0) "|" $sbJoin(adj, 1)
+    assert a == "1.3.|2."
+}
+
+# a number read out of a list carries no scope: indexing with it reads the element, as with a literal
+fn sbWalk(adj List<mut List<I32>&>&, src I32) I64 {
+    queue := List<I32>()
+    queue.Push(src)
+    v I32 = queue[0]
+    out := adj[v]
+    return out.Len()
+}
+test "a number read out of a list is a number" {
+    adj := List<mut List<I32>&>()
+    adj.Push(List<I32>())
+    adj[0].Push(4)
+    assert sbWalk(adj, 0) == 1
+}
+
+# O13c/O25a: "v := e; return v" keeps what "return e" keeps - a hand-written iterator over a list of references to nodes
+# that can be stored through, handing out each element through a local
+type sbIt<T> struct(of Array<<T>>&) {
+    a Array<<T>>&of = of
+    i mut I64 = 0
+}
+fn (it mut sbIt<<T>>&) Next() <T> ? Exhausted {
+    if it.i == it.a.Len() { error Exhausted.END }
+    v := it.a[it.i]
+    it.i++
+    return v
+}
+test "O13c: an iterator returning its element through a local" {
+    nodes := Array<mut sbNode&>(3)
+    for i in range 3 { nodes[i] = sbNode(I64(i) + sbRun) }
+    keep := List<mut sbNode&>()
+    for n in sbIt<mut sbNode&>(nodes) { keep.Push(n) }
+    keep[1].next = sbNode(70)
+    sbChurn()
+    assert keep.Len() == 3 and keep[0].v == 1 and keep[2].v == 3 and nodes[1].next.v == 70
+}
+
+# D16d: a lambda returned where it is made, capturing references from several scopes, is built in the result scope -
+# each scope it captures from outliving that, which is the caller's to show
+fn sbCompose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return g(f(x)) }
+}
+fn sbTwice(f fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return f(f(x)) }
+}
+fn sbInc(x I64) I64 { return x + 1 }
+test "D16d: compose returns a lambda capturing both of its function parameters" {
+    k I64 = 10 * sbRun
+    addK fn(x I64) I64 = fn(x I64) I64 { return x + k }
+    h := sbCompose(addK, sbTwice(sbInc))
+    sbChurn()
+    assert h(1) == 13 and sbCompose(sbInc, sbTwice(sbInc))(1) == 4
+}
+
+# O25h/T17c: an enum field's case rebuilt from its own payload's reference - which lives where the enum's container does
+type sbKind enum {
+    Label(text String&)
+    Button(text String&, clicks I32)
+}
+type sbWidget struct(kind sbKind) {
+    kind mut
+}
+fn sbBump(w mut sbWidget&) {
+    match w.kind {
+        case sbKind.Button(t, n) { w.kind = sbKind.Button(t, n + 1) }
+        nomatch { }
+    }
+}
+test "O25h: an enum field's case rebuilt from its own payload" {
+    w sbWidget& = sbWidget(sbKind.Button($sbRun "OK", 0))
+    sbBump(w)
+    sbBump(w)
+    sbChurn()
+    k := $w.kind
+    assert k == "sbKind.Button(\"1OK\", 2)"
+}
+
+# O25a/O14b/T22a: a local written as a bare type variable takes its initializer's scope, so Fold's accumulator can be a
+# reference; and a lambda handing back one of its arguments fits Fold's callback, whose type-variable result says each
+# argument outlives the result - which Fold, and each call through the callback, is held to
+type sbTextIt struct(of Array<String&>&) {
+    a Array<String&>&of = of
+    i mut I64 = 0
+}
+fn (it mut sbTextIt&) Next() String&it ? Exhausted {
+    if it.i == it.a.Len() { error Exhausted.END }
+    it.i++
+    return it.a[it.i - 1]
+}
+fn sbLongest(n I64) String& {
+    words := List<String&>()
+    arr := Array<String&>(3)
+    for i in range 3 {
+        full String&words = $(n * 10) "abcd"
+        t String&words = full[:I64(i) * 2 + 1]
+        words.Push(t)
+        arr[i] = t
+    }
+    a := words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
+    b := sbTextIt(arr).Fold(arr[0], fn(best, w) { return best if best.Len() >= w.Len() else w })
+    sbChurn()
+    return $a "/" $b
+}
+test "O14b/T22a: Fold keeping one of its elements" {
+    r := $sbLongest(sbRun)
+    assert r == "10abc/10abc"
+}
+test "O25a: Fold with a reference accumulator" {
+    words := List<String&>()
+    for i in range 3 { words.Push($(i + sbRun) "x") }
+    all := words.Iter().Fold(words[0], fn(acc String&, w String&) String& { return $acc $w })
+    sbChurn()
+    r := $all
+    assert r == "1x1x2x3x"
+}
+
+# T25d/O20: a static literal's elements are constant data, as long-lived as the program - stored into an array that
+# outlives the loop that read them
+fn sbNames() Array<String&>& {
+    all Array<String&>&return = Array<String&>(2)
+    for i, s in String&["alpha", "beta"] { all[i] = s }
+    return all
+}
+test "T25d: a static literal's elements stored into a longer-lived array" {
+    a := sbNames()
+    sbChurn()
+    r := $a[0] $a[1]
+    assert r == "alphabeta"
+}
+
+# O1b/O25h: a value local copied from a global's element holds what lives in the program's scope - so what is assigned
+# to it is built there too, and stays valid once copied back into the global
+sbG mut Array<sbWC> = Array<sbWC>(2)
+fn sbPut(n I64) {
+    best := sbG[0]
+    best = sbWC($n $n, n)
+    sbG[1] = best
+}
+test "O1b: a copy of a global's element keeps building in the program's scope" {
+    sbG[0] = sbWC("a", 1)
+    sbPut(sbRun + 6)
+    sbChurn()
+    w := $sbG[1].word
+    assert w == "77" and sbG[0].word == "a"
+}
+
+# the same shapes, evaluated while compiling (K2) as at run time - a scope rule changes what compiles, never what runs
+fn sbSorted(n I64) String& {
+    a := Array<sbWC>(3)
+    for i in range 3 { a[i] = sbWC($(n + i) "w", (i * 2) % 3) }
+    sbSwap(a, 0, 2)
+    a.Sort(fn(x sbWC, y sbWC) Bool { return x.count < y.count })
+    best := sbMost(a)
+    return $a[0].word $a[1].word $a[2].word "/" $best.word
+}
+SbSortedBaked String& = sbSorted(1)
+SbComposeBaked I64 = sbCompose(sbInc, sbTwice(sbInc))(1)
+test "O25h/D16d: sorted copies and a composed lambda, evaluated while compiling as at run time" {
+    r := $sbSorted(sbRun)
+    assert SbSortedBaked == "1w3w2w/2w" and r == SbSortedBaked
+    assert SbComposeBaked == 4 and sbCompose(sbInc, sbTwice(sbInc))(sbRun) == SbComposeBaked
+}
+
+# C2d/O10c: a Map of lists reusing a removed key's slot - the entry rebuilt whole in the slot, from the key and the list
+# it is given, which must live where the map does (an equality its callers show, as the slot the key first went into)
+fn sbRegroup(n I64) String& {
+    groups := Map<I64, mut List<String&>&>()
+    for i in range 4 {
+        if i not in groups { groups.Put(i, List<String&>()) }
+        g := try groups.Get(i) catch { unreachable }
+        g.Push($(i + n) "g")
+    }
+    if not groups.Remove(1) { return "lost" }
+    fresh List<String&>&groups = List<String&>()
+    fresh.Push($n "new")
+    groups.Put(9, fresh)
+    sbChurn()
+    b := StringBuilder()
+    for k in range 10 {
+        if k in groups {
+            l := try groups.Get(k) catch { unreachable }
+            for w in l { b.Push(w) }
+        }
+    }
+    return b.ToString()
+}
+test "C2d: a Map of lists reuses a removed key's slot" {
+    r := $sbRegroup(sbRun)
+    assert r == "1g3g4g1new"
+}
+
+# O13c: a function's result built fresh in it carries what its body gave it, never what its arguments were bound to - a
+# new value made from a local's operands is returned (it used to be taken for the local's own storage, O26)
+type sbBox struct(n I64, from Array<I64>& = null) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+fn sbCopyOf(b Array<I64>&) sbBox {
+    c := sbBox&return(b.Len() + 2)
+    for i in range b.Len() { c.Data[i] = b[i] }
+    return c
+}
+fn (b sbBox&) size() I64 { return b.Data.Len() }
+fn sbFill(d mut Array<I64>&, v I64) { for i in range d.Len() { d[i] = v } }
+# O17/O25h: a value built in the result scope is borrowed by a read-only method, and its field passed on, where it lives
+fn sbMade(n I64) sbBox {
+    id := sbBox(n, null)
+    sbFill(id.Data, 3)
+    b := sbBox&return(n + id.size())
+    sbFill(b.Data, 7)
+    assert b.size() == n + n
+    return b
+}
+fn sbFresh(n I64) I64 {
+    id := sbBox(n, null)
+    sbFill(id.Data, 5)
+    c := sbCopyOf(id.Data)
+    m := sbMade(n)
+    sbChurn()
+    return c.Data[0] * 100 + c.Data.Len() * 10 + m.Data[m.size() - 1]
+}
+# G18: a literal default for a type-variable parameter is fitted at each call, as a literal argument is
+fn sbScale(x <T>, alpha <T> = 2) <T> { return x * alpha }
+SbFreshBaked I64 = sbFresh(2)
+test "O13c/O17: fresh results from a local's operands; a value built in the result scope lent and passed on" {
+    assert sbFresh(sbRun + 1) == 547 and SbFreshBaked == 547
+    assert sbScale(I32(3)) == 6 and sbScale(F32(1.5)) == 3.0 and sbScale(I64(4), 5) == 20
+}
+
+# O25h/O10c: List.Push storing a value holding a reference that can be stored through asks the list and the value's
+# references to be in one scope - an equality Push's callers show, as a JSON object's fields are built where it lives
+type sbJNode struct(v I64) {
+    v mut
+    next mut sbJNode& = null
+}
+fn sbFields(n I64) List<Pair<String&, sbJNode&>>& {
+    fields List<Pair<String&, sbJNode&>>&return = List<Pair<String&, sbJNode&>>()
+    for i in range n {
+        key String&fields = $i "k"
+        value sbJNode&fields = sbJNode(I64(i) * 10)
+        fields.Push(Pair<String&, sbJNode&>(key, value))
+    }
+    return fields
+}
+test "O25h/O10c: pairs holding text and nodes pushed where their list lives" {
+    f := sbFields(sbRun + 2)
+    sbChurn()
+    last := f[2]
+    r := $last.First $last.Second.v
+    assert r == "2k20"
+}
