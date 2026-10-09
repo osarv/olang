@@ -7586,7 +7586,17 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 paramType.scopeDepth = 0;
             }
         }
-        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok, arg, paramType);
+        enum typeFit argFit = OperandFitsType(callerFunc, arg, paramType);
+        reportTypeFit(argFit, arg->tok, arg, paramType);
+        //B11: an argument living too briefly for the scope another argument determined - say where it is made
+        struct var* psv = (*(struct var*)ListGetIdx(&func->type.vars, i)).type.scopeParam;
+        if ((argFit == TYPE_FIT_SCOPE_OWN || argFit == TYPE_FIT_SCOPE_MISMATCH) && psv) {
+            for (int k = 0; k < args.len; k++) {
+                if (k == i || !paramTypeNamesScope((*(struct var*)ListGetIdx(&func->type.vars, k)).type, psv)) continue;
+                noteMakeWhere(ctx, arg, *(struct operand**)ListGetIdx(&args, k));
+                break;
+            }
+        }
         //E12a is gone: an lvalue argument now BORROWS the caller's instance (E12c) instead of being
         //copied into the parameter, so "&" reliably names what the caller passed - which is exactly the
         //property E12a used to secure by rejecting the case outright, at the cost of forcing every
@@ -11610,6 +11620,15 @@ static bool bareParamScopesOnly(struct var* func, struct scopeBinding* b) {
     return true;
 }
 
+//O25/O10c: two scopes that must be one - the same, or two of this function's scope variables, which it cannot order and
+//its callers bind equal (an obligation both ways)
+static bool sameScopeOrObliged(struct checkCtx* ctx, struct var* a, int ad, struct var* b, int bd) {
+    if (sameExactScope(a, ad, b, bd)) return true;
+    return a && b && a != SCOPE_AMBIGUOUS && b != SCOPE_AMBIGUOUS && varIsOwnParam(canonicalVar(a), ctx->func)
+           && varIsOwnParam(canonicalVar(b), ctx->func) && scopeCanFlowInto(ctx->func, a, 1, b, 1)
+           && scopeCanFlowInto(ctx->func, b, 1, a, 1);
+}
+
 //C2d: a constructed value landing in (dstVar, dstDepth) - NULL at a depth being one of this function's own
 //block scopes - may not outlive the storage its constructor call stored by reference
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok) {
@@ -11675,16 +11694,15 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
             for (int k = 0; ok && k < b->candidates.len; k++) {
                 struct var* c = *(struct var**)ListGetIdx(&b->candidates, k);
                 bool ex = k < b->candidateExact.len ? *(bool*)ListGetIdx(&b->candidateExact, k) : b->needExact;
-                ok = c && (ex ? (sameExactScope(c, 0, dstVar, dstDepth)
-                                 || (dstVar && dstVar != SCOPE_AMBIGUOUS && varIsOwnParam(canonicalVar(c), ctx->func)
-                                     && varIsOwnParam(canonicalVar(dstVar), ctx->func)
-                                     && scopeCanFlowInto(ctx->func, c, 1, dstVar, 1) && scopeCanFlowInto(ctx->func, dstVar, 1, c, 1)))
+                ok = c && (ex ? sameScopeOrObliged(ctx, c, 0, dstVar, dstDepth)
                               : scopeCanFlowInto(ctx->func, c, 1, dstVar, normDepth(dstDepth)));
             }
         }
         //a caller's scope this function cannot name outlives every scope of this function, and nothing else
         else if (b->boundUnnamed) ok = !dstVar && !b->needExact;
-        else if (b->needExact) ok = sameExactScope(b->boundTo, b->boundDepth, dstVar, dstDepth);
+        //one scope: exactly the landing's - which, between two of this function's scope variables, is an equality its
+        //callers show (O10c), as it is where several arguments gave several scopes
+        else if (b->needExact) ok = sameScopeOrObliged(ctx, b->boundTo, b->boundDepth, dstVar, dstDepth);
         else ok = scopeCanFlowInto(ctx->func, b->boundTo, normDepth(b->boundDepth), dstVar, normDepth(dstDepth));
         if (!ok) Err(tok, isEnum ? ERR_PAYLOAD_OUTLIVED : b->viaFieldOnly ? ERR_INSTANCE_OUTLIVES_REFERENT : ERR_INSTANCE_OUTLIVES_ARG);
     }
@@ -12023,6 +12041,8 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
     return wrap;
 }
 
+static void noteBindAssign(struct checkCtx* ctx, struct var* v, struct list bindings);
+static void noteBindReturn(struct checkCtx* ctx, struct operand* val, struct type et, struct var* home);
 //O25/O25h: where what is stored into a target goes - a reference's referent's exact scope, or, for a value holding
 //references, where the references it holds live (a copy's are where its source's were, a global's in the program's)
 static bool targetRefsScope(struct checkCtx* ctx, struct operand* target, struct var** v, int* d, bool* u) {
@@ -12294,6 +12314,8 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     //x's own binding alone, same as before (this doesn't attempt to track *field-level* reassignment).
     if (!isCompound && target->opType == OPERATION_READ_VAR) {
         target->readVar->scopeBindings = value->scopeBindings;
+        if (!target->readVar->owner && !target->type.structMAlloc && TypeHoldsReferences(target->type))
+            noteBindAssign(ctx, target->readVar, value->scopeBindings); //O13a: seen by a return earlier in its loop
     }
     //O13a/O25h: a store of references into a value local built here - a field of it, an element, deeper in its value -
     //puts them where the local's own references are (its block, or where they were put), which what its constructor
@@ -12324,6 +12346,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 ListAdd(&kept, &b);
             }
             r->readVar->scopeBindings = kept;
+            noteBindAssign(ctx, r->readVar, kept); //O13a
         }
     }
 
@@ -12837,6 +12860,52 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//O13a/O25h: a loop body runs again after itself, so a return in it may see what an assignment anywhere in the same loop
+//put in a local declared outside it - one written after the return included, which the flow-sensitive bindings the
+//return was judged by had not seen yet. Each such return, and each such assignment, is recorded; when the loop's body
+//is built, each return in it is judged again by every assignment in it to the same local
+struct bindReturn { struct checkCtx* ctx; struct var* v; struct type et; struct var* home; struct token tok; bool reported; };
+struct bindAssign { struct var* v; struct list bindings; };
+static struct list bindReturns, bindAssigns;
+struct loopMark { int r, a, depth; };
+static struct loopMark loopMarkAt(struct checkCtx* ctx) {
+    if (!bindReturns.elemSize) {
+        bindReturns = ListInit(sizeof(struct bindReturn));
+        bindAssigns = ListInit(sizeof(struct bindAssign));
+    }
+    return (struct loopMark){ bindReturns.len, bindAssigns.len, ctx->blockDepth };
+}
+static void noteBindReturn(struct checkCtx* ctx, struct operand* val, struct type et, struct var* home) {
+    if (!ctx->inLoop || !ctx->hasOwnScope || val->opType != OPERATION_READ_VAR || !val->readVar || val->readVar->owner
+            || val->type.structMAlloc || !TypeHoldsReferences(val->type) || !bindReturns.elemSize)
+        return;
+    struct bindReturn r = { keepCtx(ctx), canonicalVar(val->readVar), et, home, val->tok, false };
+    ListAdd(&bindReturns, &r);
+}
+static void noteBindAssign(struct checkCtx* ctx, struct var* v, struct list bindings) {
+    if (!ctx->inLoop || !bindAssigns.elemSize) return;
+    struct bindAssign a = { canonicalVar(v), bindings };
+    ListAdd(&bindAssigns, &a);
+}
+void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok);
+void checkReturnedScopeBindings(struct operand* val, struct type retType, struct token tok);
+static void recheckLoopReturns(struct loopMark m) {
+    for (int i = m.r; i < bindReturns.len; i++) {
+        struct bindReturn* r = ListGetIdx(&bindReturns, i);
+        if (r->reported || normDepth(r->v->type.scopeDepth) > normDepth(m.depth)) continue; //declared in the loop
+        for (int k = m.a; k < bindAssigns.len && !r->reported; k++) {
+            struct bindAssign* a = ListGetIdx(&bindAssigns, k);
+            if (a->v != r->v) continue;
+            struct operand* op = OperandReadVar(r->v, r->tok);
+            op->scopeBindings = a->bindings;
+            int errs = ErrMsgGetNErrors();
+            checkReturnedScopeBindings(op, r->et, r->tok);
+            if (r->home) checkCtorHereFits(r->ctx, op, r->home, 0, r->tok);
+            if (ErrMsgGetNErrors() != errs) r->reported = true;
+        }
+    }
+}
+
 //S9: "for { }" and "for cond { }" - a loop with no variable of its own and no post clause, and for the
 //first no condition either
 static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct syntax* s) {
@@ -12844,12 +12913,14 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     stmt.sType = STATEMENT_FOR;
     struct syntax* condNode = firstPartOfType(s, SNTX_EXPR);
     struct list baseline = snapshotScopeBindings(innerCtx->scope);
+    struct loopMark mark = loopMarkAt(innerCtx); //O13a
     innerCtx->inLoop = true;
     if (condNode) {
         stmt.op = buildExprFromSyntax(innerCtx, condNode);
         if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     }
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(innerCtx->scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -13060,6 +13131,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     loop.forPost->op = OperandUnary(rangeRead(vC, kw), OPERATION_POSTFIX_INC, kw);
 
     struct list baseline = snapshotScopeBindings(l.scope);
+    struct loopMark mark = loopMarkAt(ctx); //O13a
     l.inLoop = true;
     struct list body = ListInit(sizeof(struct statement));
     if (idxTok) { struct statement d = buildVarDeclFromOperand(&l, *idxTok, rangeRead(vC, kw)); ListAdd(&body, &d); }
@@ -13069,6 +13141,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct list user = forInBody(&l, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
+    recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(l.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -13221,6 +13294,7 @@ static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx*
                                           struct comprSpec* spec, struct type* exhaustedT) {
     struct type refT = forInBorrowType(src->type);
     bool unnamed = false;
+    landDeclByObligations(wctx, src); //O18c: a call's result walked lands where its obligations say, as ":=" from it does
     if (!adoptInitializerScope(wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx->blockDepth;
     reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
     struct token ct = forInHiddenTok(kw, "Col");
@@ -13297,6 +13371,7 @@ static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx*
     inner.forPost->sType = STATEMENT_EXPR;
     inner.forPost->op = OperandUnary(OperandReadVar(j, kw), OPERATION_POSTFIX_INC, kw);
     struct list baseline = snapshotScopeBindings(ictx.scope);
+    struct loopMark mark = loopMarkAt(ctx); //O13a
     struct list body = ListInit(sizeof(struct statement));
     if (idxTok) {
         struct operand* i = OperandBinary(OperandReadVar(at, kw), OperandReadVar(j, kw), OPERATION_ADD, kw);
@@ -13311,6 +13386,7 @@ static struct statement buildForRunsStmnt(struct checkCtx* ctx, struct checkCtx*
     struct list user = forInBody(&ictx, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     inner.block = body;
+    recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(ictx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -13406,6 +13482,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         refT.structMAlloc = true;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         bool unnamed = false;
+        landDeclByObligations(&wctx, src); //O18c
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         struct token at = forInHiddenTok(kw, "Arr");
         arr = scopeDeclare(wctx.mod, wctx.scope, at.str, at, refT, true);
@@ -13438,6 +13515,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         lenName = operatorMethodName(&wctx, src->type, "Len");
         struct type refT = forInBorrowType(src->type);
         bool unnamed = false;
+        landDeclByObligations(&wctx, src); //O18c
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         struct token ct = forInHiddenTok(kw, "Col");
@@ -13539,6 +13617,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
 
     struct list baseline = snapshotScopeBindings(lctx.scope);
+    struct loopMark mark = loopMarkAt(ctx); //O13a
     lctx.inLoop = true;
     //the body starts with what the loop hands it; the program's own statements follow
     struct list body = ListInit(sizeof(struct statement));
@@ -13565,6 +13644,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list user = forInBody(&lctx, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
+    recheckLoopReturns(mark);
     forInTryFinish(&ft);
     if (nextCall && nextCall->opType == OPERATION_FUNCCALL) {
         //S9a: running out ends the loop - Next's Exhausted taken first, by a clause of the loop's own
@@ -13659,6 +13739,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     //tracked binding outright (reusing foldScopeBindingsBranch against its own unchanged starting point -
     //see the flow-sensitive scope-binding tracking block above). Safe and conservative, never unsound.
     struct list baseline = snapshotScopeBindings(innerCtx.scope);
+    struct loopMark mark = loopMarkAt(&innerCtx); //O13a
     innerCtx.inLoop = true; //S11
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
     //the post clause runs after the body, so it is checked after it - which also puts a reassignment it
@@ -13666,6 +13747,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.forPost = MallocOrCrash(sizeof(struct statement));
     *stmt.forPost = postNode->type == SNTX_STMNT_ASSIGN ? buildAssignStmnt(&innerCtx, postNode)
                                                        : buildExprStmnt(&innerCtx, postNode);
+    recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(innerCtx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -13678,8 +13760,10 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
     struct list baseline = snapshotScopeBindings(ctx->scope);
     struct checkCtx loopCtx = *ctx;
+    struct loopMark mark = loopMarkAt(ctx); //O13a
     loopCtx.inLoop = true; //S11
     stmt.block = buildBlock(&loopCtx, firstPartOfType(s, SNTX_BLOCK));
+    recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(ctx->scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -14321,6 +14405,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                 int errsBound = ErrMsgGetNErrors();
                 checkReturnedScopeBindings(v, et, v->tok);
                 checkValueResult(ctx, v, et, ErrMsgGetNErrors() != errsBound); //O14c, per result
+                noteBindReturn(ctx, v, et, home); //O13a: and by what its loop assigns it later
             }
             val = OperandStructLiteral(ctx->func, rt, vals, tok);
         }
@@ -14375,6 +14460,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         int errsBound = ErrMsgGetNErrors();
         checkReturnedScopeBindings(val, *ctx->func->type.retType, val->tok);
         checkValueResult(ctx, val, *ctx->func->type.retType, ErrMsgGetNErrors() != errsBound); //O14c
+        noteBindReturn(ctx, val, *ctx->func->type.retType, resultHome); //O13a: and by what its loop assigns it later
         noteResultBindings(ctx, val); //O13c
         //C2d: a returned instance lands in the scope the return type names; a by-value one cannot hold an
         //unnamed-scope reference at all (O14)

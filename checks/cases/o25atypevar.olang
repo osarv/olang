@@ -1,0 +1,17 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# O25a: a local written as a bare type variable takes its initializer's scope - here x's - so pushing it into l is an
+# obligation x outlive l, which this caller, passing a node from a loop body, does not meet
+type Node struct(v I64) {
+    v
+}
+fn put(l mut List<<T>>&, x <T>) {
+    v <T> = x
+    l.Push(v)
+}
+fn main() ? {
+    l := List<Node&>()
+    for i in range 2 {
+        n Node& = Node(i)
+        put(l, n)
+    }
+}

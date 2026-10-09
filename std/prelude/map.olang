@@ -42,8 +42,7 @@ fn (m mut Map<<K>, <V>>&) add(i I64, key <K>, value <V>) {
     } else {
         s mapSlot<<K>, <V>>&m = m.free
         m.free = s.next
-        s.entry.Key = key
-        s.entry.Value = value
+        s.entry = MapEntry<<K>, <V>>(key, value)
         s.next = m.buckets[i]
         m.buckets[i] = s
     }
