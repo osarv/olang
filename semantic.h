@@ -173,6 +173,8 @@ struct type {
     //which is the whole point: without it, substituting T later rewrites the field types but leaves the
     //name derived from the OLD arguments, so "Box$T" never becomes "Box$int32" and nothing matches.
     struct type* genericOrigin;   //the generic this was applied from; NULL if it is not an instantiation
+    struct type* ctorTwinOf;      //G10d: a non-generic type whose constructor is generic, as one call's bindings construct
+                                  //it - the same type (name, identity, layout), with that instantiation of the constructor
     struct list typeArgs;         //list of struct type, index-aligned with genericOrigin->typeParams
     struct list typeParams; //list of struct str: for BASETYPE_FUNC, every distinct type variable in this
                              //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
@@ -646,6 +648,8 @@ struct operand {
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
+    bool identity; //E10c: an OPERATION_EQ standing for "a is b" - the same instance, where "==" on two array references
+                   //compares what they name (E10)
     bool ctProven; //S18c: an assert's condition proven true at compile time - no run-time check is emitted
     bool sliceExact; //E32b: an OPERATION_SLICE standing for "x as Array<T, N>&" - the whole of x, whose length must be N
                      //(args[2]); its type is the fixed-length reference
@@ -836,6 +840,7 @@ struct list* SemanticAllInstantiations(void);
 //list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
+struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);

@@ -118,6 +118,7 @@ struct type;
     X(ERR_UNKNOWN_NUMBER_TYPE,          "T4",    "unknown type %n - the numbers are named by kind and width: did you mean '%S'?") \
     X(ERR_UNKNOWN_NAME,                 "",      "unknown name %n") \
     X(ERR_UNKNOWN_NAME_MEANT,           "",      "unknown name %n - did you mean '%S'?") \
+    X(ERR_TYPE_NOT_A_VALUE,             "",      "%n is a type, not a value") \
     X(ERR_UNKNOWN_FUNCTION,             "",      "unknown function or type %n") \
     X(ERR_UNKNOWN_FUNCTION_MEANT,       "",      "unknown function or type %n - did you mean '%S'?") \
     X(ERR_UNKNOWN_ERROR_TYPE,           "R1",    "unknown error type %n") \
@@ -198,8 +199,7 @@ struct type;
     X(ERR_GENERIC_NOT_STRUCT,           "G6",    "only a struct or a trait takes type parameters") \
     X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
     /* ---- methods and operators ---- */ \
-    X(ERR_OPERATOR_ARITY,               "E31",   "%s's parameters besides its receiver: expected %d, found %d") \
-    X(ERR_OPERATOR_ARITY_MIN,           "E31",   "%s's parameters besides its receiver: expected at least %d, found %d") \
+    X(ERR_NOT_THE_OPERATOR,             "E31",   "%t's %S takes %s besides its receiver - an ordinary method, not the one %s calls, which takes %s") \
     X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'try' on several indices needs %t to declare %s - a check derived from Len checks one position") \
     X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
@@ -210,7 +210,7 @@ struct type;
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
-    X(ERR_STR_SHAPE,                    "E11c",  "Str takes no parameters and gives a String") \
+    X(ERR_STR_SHAPE,                    "E11c",  "Str gives a String") \
     X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
     X(ERR_PROTOCOL_BOTH_SPELLINGS,      "M6b",   "%t declares %s twice, public and private - keep one: %s, or %s for its own module only") \
     X(ERR_PROTOCOL_PRIVATE,             "M6b",   "%n needs %t's %S, which is private to its module - declare it %s to use it here") \
@@ -264,6 +264,10 @@ struct type;
     X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '%S&' - only a struct, an enum or an array can") \
     X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
     X(ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, "G10c",  "the type arguments of %S cannot be inferred from these arguments - write them: %S<...>(...)") \
+    X(ERR_CTOR_VARS_NOT_INFERABLE,      "G10d",  "what %S's constructor introduces cannot be inferred from these arguments") \
+    X(ERR_CTOR_FIELD_NAMES_VAR,         "G10d",  "the type of field %n names %S, which only the constructor introduces - for a field to hold it, declare it the type's parameter: 'type %S<%S>'") \
+    X(ERR_CTOR_GENERIC_INFERRED_FIELD,  "G10d",  "field %n takes its type from ':=', and the constructor introduces %S, so its body is checked per call - write the field's type") \
+    X(ERR_CTOR_VAR_OF_GENERIC,          "G10d",  "%S is not one of %S's parameters, and a generic type's constructor introduces none of its own - add %S to the type's list") \
     X(ERR_DEFAULT_ARG_NO_DEFAULT,       "E14a",  "parameter %S declares no default, so 'default' cannot stand in for it") \
     X(ERR_ATOMIC_NOT_PLACE,             "P9",    "an atomic operation acts on a place - a variable, a field or an element") \
     X(ERR_ATOMIC_NOT_WRITABLE,          "P9",    "this atomic operation writes its place, which must be writable") \
@@ -287,8 +291,11 @@ struct type;
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
+    X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \
+    X(NOTE_ZERO_REFERENCE_HAS_ONE,      "",      "a reference has one, null - hold %t as '%t&' where this use names it") \
+    X(NOTE_OTHER_SIGNATURE,             "",      "'%S' is declared here, with another signature") \
     X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
-    X(NOTE_PROTOCOL_SPELLING,           "",      "'%S' is %s's private spelling, held to %s's shape - a helper of another shape needs another name") \
+    X(NOTE_PROTOCOL_SPELLING,           "",      "'%S' is %s's private spelling with %s's parameters, so it is held to its shape") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(NOTE_DECLARE_WRITABLE,            "",      "'%S' is declared read-only here - declare it '%S mut %t' to write through it") \
     X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
@@ -410,6 +417,11 @@ struct type;
     X(ERR_MATCH_VALUE_TYPES,            "S12b",  "every value of this match is %t, found %t") \
     X(ERR_MATCH_NOT_EXHAUSTIVE,         "S13a",  "case %S of %t is not covered - add it, or 'nomatch { }'") \
     X(ERR_MATCH_VALUE_NEEDS_NOMATCH,    "S12b",  "a match over %t gives a value only when its cases cover every value - add 'nomatch => v'") \
+    X(ERR_MATCH_VALUE_ONE,              "S12b, D8c", "a match gives one value - to give several, return them from each case of a match statement: 'case P { return a, b }'") \
+    X(ERR_WILDCARD_NOT_ALONE,           "S13f",  "'_' matches every value, so it is its case's only alternative") \
+    X(ERR_CASE_AFTER_WILDCARD,          "S13f",  "no value reaches this - an earlier 'case _' with no guard takes every one") \
+    X(ERR_CASE_UNKNOWN_NAME,            "S13f",  "unknown name %n - a name in a case is a value compared by '=='; to take any value and test it, write 'case _ if ...'") \
+    X(ERR_CASE_IS_SUBJECT,              "S13f",  "%n is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'") \
     /* ---- return and error ---- */ \
     X(ERR_RETURN_BORROW_AS_BUILT,       "O14",   "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") \
     X(ERR_RETURN_OWN_STORAGE,           "O26",   "this value refers to this function's own storage, which dies at the return - build it in '&return'") \

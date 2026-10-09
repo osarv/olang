@@ -1,6 +1,6 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# O25h/O14c: a copy of an element holding references keeps them where the element's are - here text made in this
-# function's own block, which closes at the return. It used to be returned unchecked and read freed storage
+# check: run
+# O25h/O26a: an element of a local array, returned, is read where the result is put, so the array - built here -
+# lives there with what its elements refer to, and the copy returned keeps it. It used to be an error (O26)
 type WC struct(word String&, count I64) {
     word
     count
@@ -12,5 +12,16 @@ fn mk(n I64) WC {
 }
 fn main() ? {
     w := mk(12)
-    assert w.count == 1
+    churn()
+    assert w.count == 1 and w.word == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
 }

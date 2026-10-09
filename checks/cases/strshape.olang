@@ -1,9 +1,11 @@
-# check: fail error[E31]: Str's parameters besides its receiver: expected 0, found 1
-# E11c: a method named Str claims "$", so it must have that shape
+# check: run
+# E11c/E31: a method named Str with a parameter is not "$"'s shape, so it is an ordinary method - "$" renders the value
+# by default and the method is called by its name
 type Pt struct(n I32) {
     n
 }
-fn (p Pt&) Str(n I32) String { return "pt" }
+fn (p Pt&) Str(n I32) String { return "pt" $n }
 fn main() ? {
-    s := $Pt(1)
+    assert $Pt(1) == "Pt(1)"
+    assert Pt(1).Str(7) == "pt7"
 }

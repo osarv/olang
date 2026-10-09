@@ -154,10 +154,15 @@ static struct ctVal* ctFail(struct ctState* st, struct token tok, const char* wh
     return NULL;
 }
 
-//B3e: a check the language guarantees failed while a program runs - the built program's message, and its abort
-static void ctRunAbort(const char* msg) {
+//B3e: a check the language guarantees failed while a program runs - the built program's message, and its abort; and
+//like it (S18a), where the check was written
+static void ctRunAbortTok(struct token tok, const char* what) {
     fflush(NULL);
-    fputs(msg, stderr);
+    if (tok.owner && tok.lineNr > 0) {
+        struct str file = TokenGetFileName(tok.owner);
+        fprintf(stderr, "%.*s:%d: ", file.len, file.ptr, tok.lineNr);
+    }
+    fputs(what, stderr);
     abort();
 }
 
@@ -274,6 +279,22 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     }
     if (x->kind == CT_NULL || y->kind == CT_NULL) return x->kind == y->kind; //a null is the same only as a null
     return a == b;
+}
+
+//E10: a reference to an array - "==" compares the array it names, where any other reference compares by identity. A
+//null one has no storage: the null literal, or a reference to an array value's zero value ({ 0, null } at run time)
+static bool ctArrayRef(struct ctVal* v) {
+    if (v->kind == CT_NULL) return v->type.bType == BASETYPE_ARRAY;
+    if (v->kind != CT_REF) return false;
+    struct ctVal* t = v->target;
+    while (t && t->kind == CT_REF) t = t->target;
+    return t && t->kind == CT_AGG && t->type.bType == BASETYPE_ARRAY;
+}
+static bool ctArrayRefNull(struct ctVal* v) {
+    if (v->kind == CT_NULL) return true;
+    struct ctVal* t = v->target;
+    while (t && t->kind == CT_REF) t = t->target;
+    return !t || (t->kind == CT_AGG && t->n == 0 && !t->elems);
 }
 
 //a fresh, independent copy: an aggregate's elements are copied, a reference keeps pointing where it did
@@ -741,11 +762,15 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     switch (op->opType) {
         case OPERATION_EQ: case OPERATION_NEQ: {
             bool eq;
-            if (ctIsIdentity(a) || ctIsIdentity(b)) {
+            extern bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y);
+            if (op->identity) { //E10c: "a is b"
+                eq = ctSameIdentity(a, b);
+            } else if (ctArrayRef(a) && ctArrayRef(b)) { //E10: the arrays two references name
+                eq = ctDeepEqPublic(a, b);
+            } else if (ctIsIdentity(a) || ctIsIdentity(b)) {
                 eq = ctSameIdentity(a, b);
             } else if (a->kind == CT_AGG || b->kind == CT_AGG) {
                 //a value compares structurally - through ctDeepEq below
-                extern bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y);
                 eq = ctDeepEqPublic(a, b);
             } else if (a->kind == CT_FLOAT || b->kind == CT_FLOAT) {
                 eq = ctAsF(a) == ctAsF(b);
@@ -856,6 +881,11 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
 }
 
 bool ctDeepEqPublic(struct ctVal* x, struct ctVal* y) {
+    if (ctArrayRef(x) && ctArrayRef(y)) { //E10: what two array references name, a null equal only to a null
+        bool nx = ctArrayRefNull(x), ny = ctArrayRefNull(y);
+        if (nx || ny) return nx && ny;
+        return ctDeepEqPublic(ctDeref(x), ctDeref(y));
+    }
     if (ctIsIdentity(x) || ctIsIdentity(y)) return ctSameIdentity(x, y);
     if (x->kind == CT_AGG || y->kind == CT_AGG) {
         if (x->kind != y->kind || x->n != y->n) return false;
@@ -1665,7 +1695,7 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly
     if (op->sliceExact ? h != base->n : !(l >= 0 && l <= h && h <= base->n)) {
         if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
-        if (ctRun) ctRunAbort("slice bounds out of range\n");
+        if (ctRun) ctRunAbortTok(op->tok, "slice bounds out of range\n");
         return ctFail(st, op->tok, CT_WHY_SLICE);
     }
     struct type vt = op->type;
@@ -2043,7 +2073,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (!n) return NULL;
             struct type elem = *st->compr[st->comprDepth - 1]->type.arrElem;
             if ((unsigned long long)n->i > (unsigned long long)ArrayLengthLimit(TypeGetSize(elem))) {
-                if (ctRun) ctRunAbort("array length out of range\n");
+                if (ctRun) ctRunAbortTok(op->tok, "array length out of range\n");
                 return ctFail(st, op->tok, CT_WHY_LENGTH);
             }
             return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
@@ -2066,7 +2096,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             //D14b: a negative length, or one whose byte count would not fit an I64, as the run time checks it
             bool bad = n->i < 0 || n->i > ArrayLengthLimit(TypeGetSize(*op->type.arrElem));
             if (bad && op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //R20
-            if (bad && ctRun) ctRunAbort("array length out of range\n");
+            if (bad && ctRun) ctRunAbortTok(op->tok, "array length out of range\n");
             if (bad) return ctFail(st, op->tok, CT_WHY_LENGTH);
             if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
             //every element is at least one value: measured before any is made, so a long array is refused, not made
@@ -2143,7 +2173,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
                     if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
-                    if (ctRun) ctRunAbort("'as' named what the value is not\n");
+                    if (ctRun) ctRunAbortTok(op->tok, "'as' named what the value is not\n");
                     return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
                 }
                 if (!op->type.isTuple) return ctCopy(v->elems[0]);
@@ -2213,7 +2243,7 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     //aborts, as the generated code checks it
     if (dst.bType == BASETYPE_ARRAY && !dst.arrMalloc && dst.arrLen && v->kind == CT_AGG
             && v->type.bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
-        if (ctRun) ctRunAbort("array length does not match its fixed storage\n");
+        if (ctRun) ctRunAbortTok(op->tok, "array length does not match its fixed storage\n");
         return ctFail(st, op->tok, CT_WHY_FIXED);
     }
     //a number is made afresh at its target's type, which is already the copy - no second one first

@@ -1,7 +1,7 @@
-# check: fail error[O17]: this value's references live where its own storage does not
-# O17/O25h: a value built in the result scope keeps its storage in this block - lending it to a callee that can store
-# through it would put what that builds in the block, under a value claiming the result scope. A read-only lend is fine.
-# A local returned itself lives in the result scope, storage and all (O26a, o17borrowsplit.olang)
+# check: run
+# O17/O26a: a value returned inside another one lives where the result goes, its storage included, so lending it to a
+# callee that stores through it builds what that stores there too (o17borrowsplit.olang returns the local itself).
+# It used to keep its storage in this block, a compile-time error (O17)
 type Box struct(n I64) {
     Data mut Array<I64>& = Array<I64>(n)
 }
@@ -20,5 +20,16 @@ fn make(n I64) W {
 }
 fn main() ? {
     w := make(3)
+    churn()
     assert w.b.Data[0] == 7
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
 }

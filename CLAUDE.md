@@ -507,7 +507,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   **T11 is gone, and with it the last place storage leaked into semantics.** Whether an array is
   reference-shaped is decided by its marker and nothing else, identically for `T[N]` and `T[]`: both
   unmarked forms are values (`==` element-wise, assignment copies the elements into storage of the target's
-  own), both marked forms are references (`==` identity, assignment repoints). When a length becomes known
+  own), both marked forms are references (`==` identity, assignment repoints; `==` compares contents since
+  2026-10-09, E10, and identity is `is`). When a length becomes known
   is a difference in *representation* - `T[N]` inline, `T[]` a length paired with its own storage, since a
   runtime length cannot be embedded - and a representation difference is not a behaviour difference. What
   the old rule cost was visible in three places at once: `&` meant "make this a reference" on one array and
@@ -2575,7 +2576,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Mul`, `Div`, `Rem`, `MatMul` (`@`, no built-in meaning), `Neg` (unary `-`), `Less` (`<`, with `> <= >=` derived and
   chaining), and for indexing `At` (`x[i]`), `SetAt` (`x[i] = v`, `x[i] op= v`) and `Slice` (`x[lo:hi]`, an absent end
   meaning `Len()`). A lowercase first letter (`plus`) is the module's private operator; declaring both spellings is
-  an error. Ordinary methods otherwise, callable by name. Not declarable: `==`/`!=`, `$`. This replaced, the same
+  an error. Ordinary methods otherwise, callable by name. (Since 2026-10-09 a method is the operator only in the
+  operator's shape; one of another shape is an ordinary method - the E31/G10d entry near the end.) Not declarable: `==`/`!=`, `$`. This replaced, the same
   day, a first version where the method was named by the symbol itself (`fn (a V) +(b V) V`): the user noticed
   those were private across modules (the hidden name was not capitalized) and that the compiler already talks to
   types through named methods (`Next`, `Iter`, `Has`, `Contains`), so names make visibility M6's rule and the design
@@ -3299,7 +3301,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   writes into its storage when the length is unchanged (T11b)**, a struct or enum value field by field; only a new
   length gets new storage. The literal path did not, and the evaluator never did. **(5) One instance per static
   literal site (T25d)**: no `unnamed_addr`, one constant per site per object, one evaluator node per site and module.
-  **(6) Array identity is the same storage, start and length (E10)**; an allocation of nothing gets storage of its
+  **(6) Array identity is the same storage, start and length (E10; `is` since 2026-10-09, `==` comparing contents)**; an allocation of nothing gets storage of its
   own (the allocator's minimum is now 8 bytes - two `Array<T>(0)` shared an address only when nothing was allocated
   between them), and an array value's zero value, with no storage, is the same as a null array reference, bit for bit.
   **(7) A function-typed global is a variable (T21/O1b)** - it compiled to an empty function returning 0, and `-i` could
@@ -4039,6 +4041,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   -> 0.62s/190MB, binary-trees unchanged. **`n.Format(base = 10)`** on every integer type, U8 included (a Char gives its
   code), lowercase, `-` before a negative's digits, a base outside 2-36 aborts. ThreadSanitizer faults past ~260,000
   nested calls (its own call record), so std/os's deep test recurses less under `RaceBuild`.
+- **List and Map are handles; `==` compares arrays however held; `case _`; keywords as method names; every guaranteed
+  check says where (T8, T11, E10, E10b, E10c, T2a, T7d, S12b, S13f, L9a, S18a, 2026-10-09; from study 3, the
+  coordinator's decisions under the revisit rule, details mine).** **List/Map**: a `List` was a struct value whose chunks
+  hung off reference fields while its counts were plain fields, so `b := a` shared the elements but not the counts and a
+  push to one overwrote the other's (and a copied `Map`'s `Remove` left the other's count wrong) - silently, `-b` and
+  `-i` agreeing. Each now holds one `mut` reference to a private record (`listState`, `mapState`) of all its state,
+  built where it is constructed (C2d): a copy of the value is a second name for the same collection, as a Go map is,
+  and `Clone()` is the real copy, built where its result lands (a Map's walks in the same order). T8 says it:
+  `Array<Map<K, V>>(n, Map<K, V>())` is n names for one map. StringBuilder, holding a List, follows. A List's zero value
+  now holds a reference (one constructor call per declaration, D13c; `Array<List<T>>(n)` with no fill is D13c's error).
+  Measured with callgrind (the machine too loaded for times): push, walking, `l[i]` and `Map.Update` the same
+  instruction counts, Map Put+Get +5% (one dependent load per call); the record's address is hoisted out of indexing and
+  walking loops, while a push loop keeps the record's counts in memory (the allocator call on its cold path may write
+  anything; caching them in the value would bring the bug back). **`==`**: through a reference to an array (`Array<T>&`,
+  `Array<T, N>&`, a declared array type with no Eq) it compares lengths then elements, each by its own `==`, where it
+  was identity - `l.ToArray() == m.ToArray()` was false for equal contents; identity is `is` (E10c). Struct and enum
+  references keep identity unless they declare Eq (no cycles walked). **Decided (mine)**: a null equals only a null (a
+  null array reference has no storage; `Array<T>(0)` has some), so `p == null` is the null test it was; a struct value
+  holding an array reference compares it by contents too; an array reference hashes its elements (E10b), so it is a Map
+  key. `is` marks its comparison (`identity`) for codegen and the evaluator; one corpus helper that meant identity moved
+  to `is`. **T7d**: an `Array<T, N>&` returned as the value `Array<T, N>` stored the pointer as the aggregate (invalid IR);
+  it is copied out. **S18a**: a slice out of range, an array length out of range, an `as` that does not hold and a copy
+  into fixed storage of another length say `FILE:LINE:` too, built and under `-i`. **S13f**: `_` at the top of a clause
+  matches any value - `case _ if cond` a guarded catch-all, `case _` a plain one; **decided (mine)**: it is its clause's
+  only alternative, an unguarded one covers every value (a match value over a number needs no `nomatch`), a clause or
+  `nomatch` after it is a dead-code error, and `case v` with `v` unknown, or the matched local itself (`v == v`, false for
+  a NaN), is an error naming `case _ if ...`; no binding names at the top of a value match. **L9a**: any keyword is a
+  method's name after a receiver clause and after `.` where `(` follows (`w.spawn()`, `p.fail(tok)`); fields and plain
+  functions keep L9. **S12b/D8c**: `case P => a, b` says a match gives one value. **Found, not fixed**: `type Nest
+  Array<Nest&>` is accepted but cannot be built ("expected Nest&, found Nest&").
 - **std/linalg for oann: batched causal products, a product with its epilogue, convolutions from the images (G9a,
   2026-10-09; oann's DESIGN.md section 13, details mine).** **`ws.GemmBatch(c, a, transA, b, transB, alpha, beta,
   triangular, diagonal, threads)`** runs a product per matrix of `Batch<T>`s - Groups x Members matrices of one shape in
@@ -4097,6 +4129,35 @@ Go through this for every change to what olang means - a rule added, revised or 
   5.45 -> 1.66. bench/README.md has the measurements, bench/repro the two reproducers. **Found by the fuzzer (K1/R10,
 pre-existing)**: the evaluator let a try *statement's* clauses take an error its call's argument's own `try` propagates
 (`try h(try g()) catch { }`), where the program leaves the function - fixed, as the expression form was.
+- **A method is an operator only in the operator's shape; a constructor may introduce type variables; a value built
+  from a local the return reads lives with the result (E31, M6b, E10a/E10b/E11c, G10d, O26a, D13c/B11, 2026-10-09).**
+  From oann and the usage studies. **E31 revisited (mine, under the revisit rule; oann's `repro/operatornames`)**: a
+  graph builder's `g.Mul(a, b)` and `g.MatMul(a, b, transA, transB)` could not be declared - E31 reserved the names for
+  every method. Now a method is the operator - and every method the compiler calls by itself (M6b: `Eq`, `Hash`, `Str`,
+  `Next`, `Iter`, `Has`, `Contains`, `RunFrom`, `Len`, `Call`, the Try forms) - only when it takes the role's number of
+  parameters; another shape is an ordinary method, called by name, and may sit beside the role's method of the other
+  spelling. Using the operator on such a type is the error, naming the method and what it takes (`Graph's MatMul takes 4
+  parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one`); an ordinary `Hash`
+  holds the name, so none is supplied (E10b) and a constraint's error notes it. **G10d (the coordinator's decision)**:
+  the constructor of a type with no parameters may introduce type variables its parameters use (`type Dense struct(g
+  mut Graph<<T>>&, n I64)`, oann's layers holding only graph handles), instantiated per call as a generic function is -
+  each call's instantiation a twin of the type (same owner and name, so one type: a `List<Dense>` mixes graphs of
+  F32 and I64) with its own constructor, emitted by the root object as instantiations are (B3d), the destructor shared.
+  **Decided (mine)**: no field's type may name such a variable (the fix, `type Dense<T>`, is named), no field takes its
+  type from `:=`, a call binding none is an error, the type has no zero value (D13c), and a generic type's constructor
+  introduces none of its own. **O26a extended (mine)**: `return Node.Many(l.ToArray())` was O26 - a local holding
+  references is now also moved into the result scope when a returned value reads it where what is built from it can be
+  handed back: an argument or receiver of a call that can keep it (its result borrowed from that parameter, an
+  obligation of its body holding that parameter's scope to outlive the result scope, a constructor holding it per
+  C2d's analysis, or a generic or unchecked callee) - never a rendering, a field holding no reference, or a call that
+  cannot keep it (`p := Parser(src); return p.parse()` leaves the parser and its block-local text where they are). Where
+  a borrowed result (`T&p`) is put counts as its home too. So the five `...wrap`/`slice` cases that kept O26/O17 for a
+  local returned inside another value became run cases, and three cases built on a copy keep the errors. **D13c/B11**: a
+  library's need for a zero value (`chan.Chan<Ticket>`) is reported at the program's type argument with a note naming
+  `Chan<Ticket&>`. **Found on the way**: prelude paths in diagnostics read `.../build/../std/prelude`; diagnostics spelled
+  a type variable `<T>` where G8b writes `T`; a type's name met as a value said "unknown name 'Res' - did you mean
+  'Res'?" (now "'Res' is a type, not a value"). Confirmed gone on this compiler: oann's `ctorpush`, `ctorunstored` and
+  `capturedfn` (captured 0.52 ns an element against 0.55 direct).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

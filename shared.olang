@@ -3269,13 +3269,15 @@ test "reference into value copies out rather than aliasing the reference" {
     assert r[0] == 0
 }
 
-test "a marked runtime-length array is a reference: assignment repoints, == is identity" {
+# E10/E10c: "==" through an array reference compares the elements it names, as through an array value; whether two
+# references name one array is "is"
+test "a marked runtime-length array is a reference: assignment repoints, 'is' is identity" {
     n I32 = 3
     a mut Array<I32>& = Array<I32>(n)
     b mut Array<I32>& = Array<I32>(n)
-    assert a != b
+    assert a is not b and a == b              # two arrays, holding the same elements
     b = a
-    assert b == a
+    assert b is a
     b[0] = 9
     assert a[0] == 9
 }
@@ -3285,9 +3287,11 @@ test "a marked compile-time-length array is a reference too - same rule, other l
     qv := I32[1, 2, 3]
     p Array<I32>& = pv
     q Array<I32>& = qv
-    assert p != q
+    assert p is not q and p == q
     r Array<I32>& = p
-    assert r == p
+    assert r is p
+    qv[0] = 7
+    assert p != q
 }
 
 # T27: reference-shapedness IS part of a type's identity - "Cell" and "Cell&" are different types, one an
@@ -11108,7 +11112,7 @@ test "T7d: a copy into fixed storage of its length, while compiling and at run t
 # T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
 # new instance each time one site was reached)
 fn evTwo(a String&, b String&) Bool { return a is b }
-fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }
+fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a is b }   # E10c: "==" on arrays compares their elements
 fn evSites(n I64) String {
     l := List<String&>()
     for i in range n { l.Push("hello") }
@@ -13168,4 +13172,315 @@ test "D16d: a lambda capturing a function value, made for one call in a loop" {
     for i in range 3 { t += c3Through(xs, fn(x) { return x + 1.0 }, F64(i)) }
     assert t == 27.0
     assert c3Through(xs, fn(x) { return x * x }, 2.0) == 28.0
+}
+
+# E10: "==" through two array references compares the arrays they name - lengths, then elements by "==" - so two lists'
+# ToArray() compare by what they hold; a null equals only a null, an empty array that was built is no null; "is" is
+# identity (E10c). A struct value holding an array reference compares it the same way, and an array reference is a Map
+# key, hashed by its elements (E10b)
+type s3Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p s3Pt&) Eq(q s3Pt&) Bool { return p.x == q.x }       # y is not compared
+fn (p s3Pt&) Hash() I64 { return p.x }
+type s3Holder struct(a Array<I64>&) {
+    a
+}
+fn s3ArrayRefEq() I64 {
+    a Array<I64>& = I64[1, 2, 3]
+    b Array<I64>& = I64[1, 2, 3]
+    s I64 = 0
+    if a == b { s += 1 }
+    if a is not b { s += 2 }
+    if a[:2] == b[:2] and a[1:3] != b[:2] { s += 4 }
+    n Array<I64>& = null
+    e Array<I64>& = Array<I64>(0)
+    e2 Array<I64>& = Array<I64>(0)
+    if n != a and n == null and e != n and e != null and e == e2 and e is not e2 { s += 8 }
+    if s3Holder(a) == s3Holder(b) { s += 16 }
+    f Array<I64, 3>& = I64[1, 2, 3]
+    if f == a[0:3] { s += 32 }
+    ps Array<s3Pt&>& = s3Pt&[s3Pt(1, 5), s3Pt(2, 6)]
+    qs Array<s3Pt&>& = s3Pt&[s3Pt(1, 7), s3Pt(2, 8)]
+    if ps == qs and ps is not qs { s += 64 }               # each element by its own Eq
+    l := List<I64>()
+    for i in range 20 { l.Push(i) }
+    if l.ToArray() == l.ToArray() { s += 128 }
+    m := Map<Array<I64>&, I64>()
+    m.Put(I64[4, 5], 9)
+    k Array<I64>& = I64[4, 5]
+    if (try m.Get(k) catch default -1) == 9 and I64[4, 5] in List<Array<I64>&>() == false { s += 256 }
+    return s
+}
+S3ArrayRefEqBaked := s3ArrayRefEq()
+
+test "E10: == through array references compares the elements they name, while compiling and at run time" {
+    assert S3ArrayRefEqBaked == 511
+    assert s3ArrayRefEq() == S3ArrayRefEqBaked
+    assert s3ArrayRefEq() == 511                  # decided while compiling (S18c)
+}
+
+# T7d: a reference to a fixed array returned where the result is the value - copied out, as a declaration copies it
+fn s3CopyOut(a Array<F64, 3>&) Array<F64, 3> { return a }
+fn s3CopyOutLocal(a Array<F64, 3>&) Array<F64, 3> {
+    v := a
+    return v
+}
+fn s3RowOf(row Array<F64>&) Array<F64, 3> ? {
+    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+    return v
+}
+fn s3BigOut(a Array<I64, 40>&) Array<I64, 40> { return a }     # big enough to be returned through memory
+fn s3FixedOut() F64 {
+    y Array<F64, 3> = F64[1.0, 2.0, 3.0]
+    a := s3CopyOut(y)
+    y[0] = 9.0                                    # the result is a copy, not the caller's storage
+    b := s3CopyOutLocal(y)
+    c := try s3RowOf(F64[4.0, 5.0, 6.0]) catch { unreachable }
+    d := try s3RowOf(F64[1.0]) catch { unreachable }
+    big Array<I64, 40> = Array<I64, 40>()
+    big[39] = 7
+    g := s3BigOut(big)
+    return a[0] + b[0] * 10.0 + c[2] * 100.0 + d[0] + F64(g[39]) * 1000.0
+}
+S3FixedOutBaked := s3FixedOut()
+
+test "T7d: a fixed array's reference returned as its value, while compiling and at run time" {
+    assert S3FixedOutBaked == 1.0 + 90.0 + 600.0 + 7000.0
+    assert s3FixedOut() == S3FixedOutBaked
+}
+
+# S13f: "case _" takes every value - with a guard, the multiway test a range or a NaN asks for; with none, the rest
+fn s3Classify(x F64) String {
+    return match x {
+        case 0.0 => "zero"
+        case _ if x >= 32767.0 => "big"
+        case _ if x != x => "nan"
+        case _ => "other"
+    }
+}
+fn s3Saturate(v I64) I64 {
+    r I64 = v
+    match v {
+        case _ if v > 10 { r = 10 }
+        case _ if v < -10 { r = -10 }
+    }
+    return r
+}
+type s3Shape enum {
+    Dot
+    Circle(r F64)
+    Square(s F64)
+}
+fn s3Kind(s s3Shape) I32 {
+    match s {
+        case s3Shape.Dot { return 0 }
+        case _ if s is s3Shape.Circle { return 1 }
+        case _ { return 2 }                       # covers the rest, so the match leaves (D10a)
+    }
+}
+S3MatchBaked := $s3Classify(40000.0) " " $s3Classify(0.0 / 0.0) " " $s3Saturate(99) $s3Saturate(-99) $s3Saturate(3) " " $s3Kind(s3Shape.Square(1.0))
+
+type s3Grid<N I64> struct() {
+    cells Array<I64, N>
+}
+fn (g s3Grid<<N>>&) kind() String {
+    return match N {
+        case 1 => "one"
+        case _ => "many"                          # G26: chosen per instantiation
+    }
+}
+
+test "S13f: 'case _' with a guard and without one, while compiling and at run time" {
+    assert s3Grid<1>().kind() == "one" and s3Grid<4>().kind() == "many"
+    assert S3MatchBaked == "big nan 10-103 2"
+    zero F64 = 0.0
+    assert s3Classify(zero) == "zero" and s3Classify(zero / zero) == "nan" and s3Classify(5.0) == "other"
+    assert s3Kind(s3Shape.Dot) == 0 and s3Kind(s3Shape.Circle(1.0)) == 1 and s3Kind(s3Shape.Square(2.0)) == 2
+}
+
+# L9a: a method's name may be a keyword - it is only ever reached through its receiver, after "." or in its declaration
+type s3World struct() {
+    next I32 = 0
+    errors I32 = 0
+}
+fn (w mut s3World&) spawn() I32 {
+    w.next++
+    return w.next
+}
+fn (w s3World&) done() Bool { return w.next >= 2 }
+fn (w mut s3World&) fail(why String&) ? {
+    w.errors++
+    error
+}
+fn (w s3World&) in(lo I32, hi I32) Bool { return lo <= w.next <= hi }
+fn s3Keywords() I32 {
+    w := s3World()
+    for not w.done() { w.spawn() }
+    try w.fail("stop") catch { }
+    worlds := Array<s3World&>(1, w)
+    return w.next * 100 + w.errors * 10 + (1 if worlds[0].in(1, 2) else 0)
+}
+S3KeywordsBaked := s3Keywords()
+
+test "L9a: keywords as method names" {
+    assert S3KeywordsBaked == 211
+    assert s3Keywords() == S3KeywordsBaked
+}
+
+# E31: a method named for an operator is the operator only in the operator's shape - with other parameters it is an
+# ordinary method called by name (a graph's Mul(a, b) adding a node), beside the type's own operator of that name's
+# other spelling, and the evaluator calls it as the run time does
+type c4Graph struct() {
+    ops List<I64>
+}
+fn (g mut c4Graph&) Mul(a I64, b I64) I64 {
+    g.ops.Push(a * b)
+    return g.ops.Len() - 1
+}
+fn (g mut c4Graph&) MatMul(a I64, b I64, transA Bool, transB Bool) I64 {
+    g.ops.Push((b if transA else a) * 10 + (a if transB else b))
+    return g.ops.Len() - 1
+}
+fn (g c4Graph&) Neg(i I64) I64 { return -g.ops[i] }
+fn (g c4Graph&) Hash(seed U64) U64 { return seed + U64(g.ops.Len()) }
+type c4V struct(x I64) { x }
+fn (a c4V) plus(b c4V) c4V { return c4V(a.x + b.x) }
+fn (a c4V) Plus(b c4V, c c4V) c4V { return c4V(a.x + b.x + c.x) }
+fn c4Graphed(k I64) I64 {
+    g := c4Graph()
+    m := g.Mul(3, 4 + k)
+    t := g.MatMul(1, 2, true, false)
+    return g.Neg(m) * 1000 + g.ops[t] * 10 + I64(g.Hash(U64(k)))
+}
+C4GraphBaked := c4Graphed(0)
+test "E31: a method named for an operator with another shape is an ordinary method" {
+    k I64 = I64(ctRuntimeZero)
+    assert C4GraphBaked == -12000 + 220 + 2
+    assert c4Graphed(k) == C4GraphBaked
+    v := c4V(1) + c4V(2)
+    w := c4V(1).Plus(c4V(2), c4V(k + 3))
+    assert v.x == 3 and w.x == 6
+}
+
+# G10d: the constructor of a type with no parameters may introduce type variables its parameters use - checked and
+# compiled per call as a generic function is - while every instance is one type: layers built over graphs of two
+# element types sit in one List, and the evaluator builds one as the run time does
+type c4G<T> struct(name String&, seed T) {
+    name
+    seed
+    n I64 = 0
+    total mut List<T>& = List<T>()
+}
+fn (g mut c4G<<T>>&) Param(x T) I64 {
+    g.n++
+    g.total.Push(x)
+    return g.n
+}
+C4Dropped mut I64 = 0
+type c4Dense struct(g mut c4G<<T>>&, inputs I64, label String&) {
+    {
+        w T = g.seed
+        g.total.Push(w)
+    }
+    W I64 = g.Param(g.seed)
+    In I64 = inputs
+    label
+    tag String& = g.name
+}
+type c4Res struct(g mut c4G<<T>>&) {
+    id I64 = g.Param(g.seed)
+} destruct {
+    C4Dropped++
+}
+fn c4Layers(gf mut c4G<F32>&, gi mut c4G<I64>&) List<c4Dense> {
+    l := List<c4Dense>()
+    l.Push(c4Dense(gf, 3, "a"))
+    l.Push(c4Dense(gi, 4, "b"))
+    l.Push(c4Dense(gf, 5, "c"))
+    return l
+}
+fn c4BakeOne(k I64) I64 {
+    g := c4G<I64>("k", 2 + k)
+    d := c4Dense(g, 7, "z")
+    return d.W * 100 + d.In + g.total[0]
+}
+C4GenBaked := c4BakeOne(0)
+test "G10d: a constructor introducing a type variable, called with two element types" {
+    gf := c4G<F32>("floats", 1.5)
+    gi := c4G<I64>("ints", 9)
+    l := c4Layers(gf, gi)
+    sbChurn()
+    assert l.Len() == 3
+    assert l[0].W == 1 and l[1].W == 1 and l[2].W == 2
+    assert l[0].In + l[1].In + l[2].In == 12
+    assert l[2].label == "c" and l[1].tag == "ints" and l[0].tag == "floats"
+    assert gf.total.Len() == 4 and gi.total[0] == 9 and gf.total[1] == 1.5
+    {
+        r := c4Res(gf)
+        assert r.id == 3
+    }
+    assert C4Dropped == 1
+    assert C4GenBaked == 109
+    assert c4BakeOne(I64(ctRuntimeZero)) == C4GenBaked
+}
+
+# O26a: a local the returned value is built from - a List whose ToArray becomes a case's payload - lives where the
+# result is put, so the elements it holds are there too; through a built result, a result borrowed from a reference
+# parameter, and a global the evaluator builds
+type c4Node enum {
+    Leaf(v I64)
+    Many(items Array<c4Node&>&)
+}
+type c4Parser struct() {
+    pos I64 = 0
+}
+fn (p mut c4Parser&) leaf() c4Node&p {
+    p.pos++
+    return c4Node.Leaf(p.pos)
+}
+fn (p mut c4Parser&) many(n I64) c4Node&p {
+    l := List<c4Node&>()
+    for i in range n { l.Push(p.leaf()) }
+    return c4Node.Many(l.ToArray())
+}
+fn (p mut c4Parser&) maybe(b Bool) c4Node&p {
+    items := Array<c4Node&>(0)
+    if b { items = c4Node&[p.leaf(), p.leaf()] }
+    return c4Node.Many(items)
+}
+fn c4Build(n I64) c4Node {
+    l := List<c4Node&>()
+    for i in range n { l.Push(c4Node.Leaf(i)) }
+    return c4Node.Many(l.ToArray())
+}
+fn c4BuildRef(n I64) c4Node& {
+    l := List<c4Node&>()
+    for i in range n { l.Push(c4Node.Leaf(i * 2)) }
+    return c4Node.Many(l.ToArray())
+}
+fn c4Sum(n c4Node&) I64 {
+    match n {
+        case c4Node.Leaf(v) { return v }
+        case c4Node.Many(items) {
+            t I64 = 0
+            for x in items { t += c4Sum(x) }
+            return t
+        }
+        nomatch { return 0 }
+    }
+}
+C4Built := c4Build(5)
+test "O26a: a returned value built from a local List's elements keeps them where the result lives" {
+    k I64 = I64(ctRuntimeZero)
+    p := c4Parser()
+    a := p.many(3 + k)
+    b := p.maybe(true)
+    c := c4Build(5 + k)
+    d := c4BuildRef(4 + k)
+    sbChurn()
+    assert c4Sum(a) == 6 and c4Sum(b) == 9 and c4Sum(c) == 10 and c4Sum(d) == 12
+    assert c4Sum(C4Built) == 10 and c4Sum(C4Built) == c4Sum(c)
+    assert (c as c4Node.Many).Len() == 5
 }
