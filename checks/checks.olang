@@ -264,6 +264,22 @@ test "-t runs every file it can, whatever another one is" {
     assert outOf(dir).Contains("nosuch.olang") and outOf(dir).Contains("a module is a file") or failed("-t reports", dir)
 }
 
+# B3a: each listed file is built in a process of its own, so the compiler ending on one - here a crash, forced as the
+# check below forces one, on a small stack with nesting that overflows it - ends that file's build alone, and the files
+# after it still run
+test "-t goes on past a file the compiler crashed on" {
+    dir := fresh("tcrash")
+    os.Run("cp checks/fixtures/ttolerant/* " $os.Quote(dir))
+    deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
+    try os.WriteFile($dir "/deep.olang", deep) catch { }
+    # (the status is kept in a file, so the shell that saw a crash is not the one that reports it)
+    run String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
+    assert sh(dir, $run " && test $(cat rc.txt) -eq 1") == 0 or failed("-t did not fail for the crash, or crashed itself", dir)
+    out := outOf(dir)
+    assert out.Contains("internal compiler error") and out.Contains("deep.olang: the compiler ended") or failed("crash", dir)
+    assert out.Contains("ok - one") and out.Contains("ok - two") or failed("-t stopped at the crash", dir)
+}
+
 # B3: a program's link is an argument list, never one command line cut to a fixed length - forty modules with 200-byte
 # names used to lose the end of it
 test "a program of many long-named modules links" {
