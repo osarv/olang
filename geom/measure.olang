@@ -27,3 +27,9 @@ GeomUnits String = "cm"
 test "B9a: a condition reads a global of an imported module" {
     assert rect.UnitName().Eq("cm")
 }
+
+# G19: a key type whose Eq and Hash are declared here, named as a Map's key in rect.olang's signatures - and rect.olang
+# is resolved before this module, so the constraint on the key waits until every signature is
+type Tag extends Array<Char>
+fn (a Tag&) Eq(b Tag&) Bool { return a.Len() == 0 and b.Len() == 0 or a.Len() > 0 and b.Len() > 0 and a[0] == b[0] }
+fn (a Tag&) Hash() I64 { return 0 if a.Len() == 0 else I64(a[0]) }

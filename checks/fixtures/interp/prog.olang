@@ -2,7 +2,6 @@
 # file written and read back through the C library, deferred code (S19), a tree of enums held by reference (T17d), the
 # atomic methods (P9) and identity (E10c), and main ending in an error nothing catches
 import "std/io"
-import "std/map"
 import "std/os"
 
 extern fn sqrt(x F64) F64
@@ -52,7 +51,7 @@ fn steps() String {
 fn main() ? Oops + io.IoError + os.OsError {
     defer try io.Print("main's deferred code ran\n") catch { }
     Count++
-    m := map.Map<String&, I32>()
+    m := Map<String&, I32>()
     for i, n in Names { m.Put(n, I32(i) + Count) }
     total I32 = 0
     for e in m { total += e.Value }

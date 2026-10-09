@@ -1,6 +1,6 @@
-# S9d: List has At and Len, and its own Iter - so a loop over it, a comprehension, an iterator helper, and a loop in
-# generic code that knows it only as Indexable all walk it through ListIter.Next, and none of them calls At. I16
-# so that nothing in the prelude instantiates it too.
+# S9f/S9d: List has At and Len, its own Iter and RunFrom - so a loop over it, a comprehension and a loop in generic code
+# that knows it only as Indexable all walk it run by run through RunFrom, an iterator helper walks its chunks, and none
+# of them calls At. I16 so that nothing in the prelude instantiates it too.
 
 fn total(c <C Indexable<<T>>>&) I64 {
     s I64 = 0

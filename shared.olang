@@ -9147,7 +9147,8 @@ LamVowels I64 = "olang inherits".Count(fn(c) { return c == 'a' or c == 'e' or c 
 test "T29e: String and a program's own array type inherit the array methods" {
     s := "hello world"
     assert s.Count(fn(c) { return c == 'o' }) == 2 and s.Any(fn(c) { return c == ' ' })
-    assert s.FindIndex(fn(c) { return c == 'w' }) == 6 and s.Find("world") == 6   # String's own Find too
+    assert (try s.FindIndex(fn(c) { return c == 'w' }) catch default -1) == 6
+    assert (try s.Find("world") catch default -1) == 6   # String's own Find too
     n := LamNums(I32[3, 1, 2])
     n.Sort(fn(x, y) { return x < y })
     assert n[0] == 1 and n.Total() == 6
@@ -9570,6 +9571,30 @@ PrimsBaked := primAll(1)
 test "T4: signed, unsigned and half-width float types" {
     assert primAll(WdMutable / 2000000000)
     assert PrimsBaked
+}
+
+# E11a: an integer renders in decimal - written by the runtime with a digit count and a two-digits-at-a-time writer -
+# at every digit-count boundary, both signs, the extremes of each width; the same text at run time as while compiling
+fn renderInts(k I64) String {
+    lo I64 = -9223372036854775807 - k
+    edges := I64[0, 9, 10, 99, 100, 999999999, 1000000000, 999999999999999999, 1000000000000000000, -1, -10, -100]
+    t := StringBuilder()
+    for v in edges { t.Push($v " ") }
+    t.Push($lo " " $(lo + 1) " " $(U64(0) - U64(k)) " " $U64(10000000000000000000) " " $U8(200) " " $I8(-128) " ")
+    t.Push($I32(-2147483647 - k) " " $U32(4294967295) " " $U16(65535) " " $I16(-32768) " " $(I64(9223372036854775807) * k))
+    return t.ToString()
+}
+RenderIntsBaked := renderInts(1)
+
+test "E11a: integers render in decimal at every digit-count boundary, at run time as while compiling" {
+    w := StringBuilder()
+    w.Push("0 9 10 99 100 999999999 1000000000 999999999999999999 1000000000000000000 -1 -10 -100 ")
+    w.Push("-9223372036854775808 -9223372036854775807 18446744073709551615 10000000000000000000 200 -128 ")
+    w.Push("-2147483648 4294967295 65535 -32768 9223372036854775807")
+    want := w.ToString()
+    assert RenderIntsBaked == want
+    assert renderInts(WdMutable / 2000000000) == want        # a String value beside a String&: the value is held for
+                                                              # Eq in this block (it crashed the code generator)
 }
 
 # T4: an F16 or BF16 zero is zero. MinifloatFrom, which rounds a value to either while compiling, read zero as a normal
@@ -11019,4 +11044,119 @@ EvAdaptersBaked I64 = evAdapters(2)
 test "E31: a Call adapter, evaluated while compiling as at run time" {
     assert EvAdaptersBaked == 45000000 + 240000 + 2600 + 26
     assert evAdapters(I32(evRun) + 1) == EvAdaptersBaked
+}
+
+# E10/E10b/T29e/G19, from the prelude Map's tests: keys that rely on the hash the compiler supplies, or that a type
+# inherits through extends - here rather than in std/prelude/map.olang, whose tests every test build compiles
+test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
+    a := Pair(1, I64(2))
+    assert a == Pair(1, I64(2)) and a != Pair(2, I64(2))
+    m := Map<Pair<I32, I64>, I32>()
+    m.Put(a, 7)
+    assert try m.Get(Pair(1, I64(2))) catch default 0 == 7
+}
+
+# E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
+type hPt struct(x I32, y I32) {
+    x
+    y
+}
+type hTagged struct(name String&, at hPt) {
+    name
+    at
+}
+type hShape enum {
+    Circle(r I32)
+    Rect(w I32, h I32)
+    Blank
+}
+fn hashKeys() Bool {
+    m := Map<hPt, I32>()
+    m.Put(hPt(1, 2), 5)
+    m.Put(hPt(2, 1), 6)
+    t := Map<hTagged, I32>()
+    s String& = "ab"
+    t.Put(hTagged(s, hPt(0, 0)), 1)
+    e := Map<hShape, I32>()
+    e.Put(hShape.Rect(1, 2), 4)
+    e.Put(hShape.Circle(1), 7)
+    n String& = null
+    pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
+    tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
+    shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
+    arrays Bool = I32[1, 2].Hash() == I32[1, 2].Hash() and I32[1, 2].Hash() != I32[2, 1].Hash()
+    return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
+}
+hashKeysBaked := hashKeys()
+
+test "E10b: a struct, an enum or an array is a key with no Hash written" {
+    assert hashKeys()
+    assert hashKeysBaked
+}
+
+# E10b: an enum one of whose cases holds a reference - each case's payload is read only where that case holds, so
+# hashing a value of another case reads nothing it does not have
+type hLabel enum {
+    Unnamed
+    Named(s String&)
+    Pos(n I64, m U8)
+}
+fn labelKeys() Bool {
+    m := Map<hLabel, I32>()
+    m.Put(hLabel.Named("ab"), 1)
+    m.Put(hLabel.Pos(5, 6), 2)
+    m.Put(hLabel.Unnamed, 3)
+    got Bool = try m.Get(hLabel.Named("ab")) catch default 0 == 1 and try m.Get(hLabel.Pos(5, 6)) catch default 0 == 2
+    rest Bool = try m.Get(hLabel.Unnamed) catch default 0 == 3 and not (hLabel.Pos(5, 7) in m)
+    u := hLabel.Unnamed
+    h := hTagged("ab", hPt(1, 2)).Hash()           # D15: a supplied Hash names its type as a call does
+    return got and rest and u.Hash() != hLabel.Named("ab").Hash() and h == hTagged("ab", hPt(1, 2)).Hash()
+}
+LabelKeysBaked := labelKeys()
+
+test "E10b: an enum whose cases hold references hashes whichever case it holds" {
+    assert labelKeys()
+    assert LabelKeysBaked
+}
+
+# T29e/T29f/G19: a type extending I64 has I64's Hash, and an inherited method meets a trait as it answers a direct
+# call - so it is a key with nothing written; one declaring its own Eq declares its own Hash, replacing the base's
+type hExtId extends I64
+type hModId extends I64
+fn (a hModId) Eq(b hModId) Bool { return I64(a) % 100 == I64(b) % 100 }
+fn (a hModId) Hash() I64 { return I64(a) % 100 }
+fn (a hModId) Str() String { return "mod" $(I64(a) % 100) }
+fn extKeys() Bool {
+    m := Map<hExtId, I32>()
+    m.Put(hExtId(105), 1)
+    n := Map<hModId, I32>()
+    n.Put(hModId(105), 2)
+    plain Bool = try m.Get(hExtId(105)) catch default 0 == 1 and not (hExtId(5) in m)
+    return plain and try n.Get(hModId(205)) catch default 0 == 2 and $hModId(7) == "mod7"
+}
+ExtKeysBaked := extKeys()
+
+test "T29e/G19: a type extending a number is a key through its inherited Hash, or through its own" {
+    assert extKeys()
+    assert ExtKeysBaked
+}
+
+# C2d: a value a constructor field builds from the constructor's own parameters lands in the instance, its references
+# held as the instance holds the parameter's argument - an entry holding a writable List reference, inside a slot
+type C2Ent struct(k I64, v mut List<I64>&) {
+    K mut I64 = k
+    V mut List<I64>& = v
+}
+type C2Slot struct(k I64, v mut List<I64>&, next mut C2Slot&) {
+    e mut C2Ent = C2Ent(k, v)
+    next mut
+}
+
+test "C2d: a constructor field builds an entry from the constructor's parameters" {
+    l := List<I64>()
+    s C2Slot& = C2Slot(1, l, null)
+    s = C2Slot(2, l, s)
+    s.e.V.Push(7)
+    obChurn()
+    assert s.e.K == 2 and s.next.e.K == 1 and l.Len() == 1 and s.next.e.V.Len() == 1
 }

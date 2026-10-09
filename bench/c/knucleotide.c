@@ -1,5 +1,5 @@
 /* k-nucleotide: counting every k-long run of a generated DNA sequence in a chained hash table - the same hash
-   (FNV-1a), the same growth (doubling at three-quarters full) and the same bucket layout as olang's std/map, written
+   (FNV-1a), the same growth (doubling at three-quarters full) and the same bucket layout as olang's Map, written
    as C would: one find-or-insert per run, slots from malloc, keys pointing into the sequence */
 #include "common.h"
 

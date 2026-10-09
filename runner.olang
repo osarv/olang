@@ -215,12 +215,11 @@ test "B5a: an importer's global initializer sees its import's globals already se
 # B9: an import inside a top-level if exists only when its branch is taken - the pre-scan that loads imports
 # evaluates the same condition. This one, and the test using it, exist only in a test build.
 if TestBuild {
-    import "std/map"
+    import "std/time"
 
     test "B9: a conditional import is loaded when its branch is taken" {
-        m := map.Map<I32, I32>()
-        m.Put(3, 4)
-        assert m.Len() == 1
+        start := time.Now()
+        assert time.Since(start) >= 0
     }
 }
 

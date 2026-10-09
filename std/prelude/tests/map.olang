@@ -1,0 +1,279 @@
+# the prelude Map's tests - a module of their own, not part of the prelude (only std/prelude's own files are), so the
+# Maps they make are compiled only when these tests are run, never into every program and every other test build
+
+test "put, get, replace, remove" {
+    m := Map<I32, I64>()
+    m.Put(1, 10)
+    m.Put(2, 20)
+    assert (try m.Get(1) catch default -1) == 10
+    m.Put(1, 11)
+    assert (try m.Get(1) catch default -1) == 11 and m.Len() == 2
+    assert (try m.Get(3) catch default -1) == -1
+    missed := false
+    try m.Get(3) catch { missed = true }
+    assert missed
+    assert m.Remove(1) and not m.Remove(1)
+    assert not m.Has(1) and m.Has(2) and m.Len() == 1
+}
+
+test "Update counts in one lookup, inserting f(init) for a missing key" {
+    text String& = "a b a c a b"
+    m := Map<String&, I64>()
+    for w in text.Split(" ") { m.Update(w, 0, fn(n) { return n + 1 }) }
+    assert m.Len() == 3
+    assert (try m.Get("a") catch default 0) == 3 and (try m.Get("b") catch default 0) == 2
+    assert (try m.Get("c") catch default 0) == 1
+    d := Map<I32, I32>()
+    d.Update(7, 10, fn(v) { return v * 2 })            # missing: f(init) goes in
+    assert (try d.Get(7) catch default 0) == 20
+    d.Update(7, 10, fn(v) { return v * 2 })            # present: f(its value)
+    assert (try d.Get(7) catch default 0) == 40 and d.Len() == 1
+    g := Map<I32, I32>()
+    for i in range 3000 { g.Update(I32(i % 1000), 0, fn(v) { return v + 1 }) }     # grows while updating
+    assert g.Len() == 1000
+    for i in range 1000 { assert (try g.Get(I32(i)) catch default 0) == 3 }
+}
+
+# the same, computed while compiling (K2) - the evaluator runs Update and its lambda as the run time does
+fn wordCounts() I64 {
+    text String& = "to be or not to be"
+    m := Map<String&, I64>()
+    for w in text.Split(" ") { m.Update(w, 0, fn(n) { return n + 1 }) }
+    return (try m.Get("to") catch default 0) * 100 + (try m.Get("be") catch default 0) * 10 + m.Len()
+}
+
+wordCountsBaked := wordCounts()
+
+test "Update, evaluated while compiling as at run time" {
+    assert wordCountsBaked == 224
+    assert wordCounts() == wordCountsBaked
+}
+
+test "a map grows, and keeps every key through it" {
+    m := Map<I32, I32>()
+    for i in range 1000 { m.Put(i, i * i) }
+    assert m.Len() == 1000
+    for i in range 1000 {
+        assert (try m.Get(i) catch default -1) == i * i
+    }
+}
+
+test "text keys compare by what they say" {
+    m := Map<String&, I32>()
+    m.Put("apple", 1)
+    m.Put("pear", 2)
+    key := String(U8['p', 'e', 'a', 'r'])
+    assert (try m.Get(key) catch default -1) == 2
+}
+
+test "for ... in visits every entry once" {
+    m := Map<I32, I32>()
+    for i in range 50 { m.Put(I32(i), I32(i) * 2) }
+    keys I64 = 0
+    values I64 = 0
+    for e in m {
+        keys = keys + e.Key
+        values = values + e.Value
+    }
+    assert keys == 1225 and values == 2450
+}
+
+test "a pair is a key when both its parts are" {
+    m := Map<Pair<I32, I32>, I32>()
+    for i in range 20 { m.Put(Pair(I32(i), I32(i) + 1), I32(i)) }
+    assert (try m.Get(Pair(7, 8)) catch default -1) == 7
+    assert not m.Has(Pair(8, 7))
+}
+
+test "membership in a Map is by key" {
+    m := Map<String&, I32>()
+    m.Put("k", 1)
+    assert "k" in m
+    assert "z" not in m
+}
+
+# a lookup and a miss, computed while compiling (K2) - the same answers as at run time
+fn lookupBoth() I32 {
+    m := Map<I32, I32>()
+    m.Put(4, 40)
+    return (try m.Get(4) catch default 0) + (try m.Get(5) catch default 1)
+}
+
+lookupBaked := lookupBoth()
+
+test "a miss is an error, evaluated while compiling as at run time" {
+    assert lookupBaked == 41
+    assert lookupBoth() == lookupBaked
+}
+
+# MapIter holds the slot it is at, so a walk follows one link per entry, over chains of any length, with text keys
+# as with any other; and the evaluator walks it as the run time does (K2)
+fn walkedKeys() I64 {
+    m := Map<String&, I64>()
+    m.Put("one", 1)
+    m.Put("two", 2)
+    m.Put("three", 3)
+    for i in range 200 { m.Put($i, i) }        # renderings, built where the map lives
+    total I64 = 0
+    for e in m { total += e.Value * e.Key.Len() }
+    return total
+}
+
+walkedBaked := walkedKeys()
+
+test "walking a Map of text keys, evaluated while compiling as at run time" {
+    assert walkedKeys() == walkedBaked
+    n I64 = 0
+    for i in range 200 { n += i * ($i).Len() }
+    assert walkedBaked == 1 * 3 + 2 * 3 + 3 * 5 + n
+}
+
+# O18b: a key rendered in a loop body is built where the map lives, so it survives the loop's arena being reused - read
+# back after churning the arena hard; and one map's entries go into another through its iterator, which reads where
+# the first map lives (O23a)
+mapRuntime mut I64 = 50 #mutable, so the test runs (a call given a constant would be decided while compiling, S18c)
+
+fn mapChurn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    return t
+}
+
+test "O18b/O23a: text keys put in a loop survive it, and one map's entries go into another" {
+    m := Map<String&, I64>()
+    for i in range mapRuntime {
+        m.Put($i, i)
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    mapChurn()
+    total I64 = 0
+    for i in range mapRuntime { total += try m.Get($i) catch default 1000 }
+    assert total == 1225
+    m2 := Map<String&, I64>()
+    for e in m { m2.Put(e.Key, e.Value) }
+    mapChurn()
+    assert m2.Len() == 50 and (try m2.Get("49") catch default -1) == 49
+}
+
+# O18c: an entry walked out of a Map that arrived as a parameter keeps its key where that map keeps it, so the key may
+# go into another map or be returned as the map's own - keys rendered in a loop, read back after churning the arena
+fn mapCopyInto(from Map<String&, I64>&, into mut Map<String&, I64>&) {
+    for e in from { into.Put(e.Key, e.Value) }
+}
+fn mapAnyKey(from Map<String&, I64>&) String&from {
+    for e in from { return e.Key }
+    return ""
+}
+
+test "O18c: a Map's entries, walked through a parameter, go into another map and out as its own keys" {
+    m := Map<String&, I64>()
+    for i in range mapRuntime { m.Put($i, i) }
+    m2 := Map<String&, I64>()
+    mapCopyInto(m, m2)
+    k := mapAnyKey(m)
+    mapChurn()
+    total I64 = 0
+    for i in range mapRuntime { total += try m2.Get($i) catch default 1000 }
+    assert total == 1225 and m2.Len() == 50
+    assert (try m.Get(k) catch default -1) == (try k.ParseInt() catch default -2)
+}
+
+# T25d: constant text elements of a read-only array literal walked by for-in are the static data itself, so they may go
+# into a map anywhere; O1b/O25e: a global map read through read-only receivers binds their scope to the program's
+fn mapGlobalMade() Map<I32, I32>& {
+    m Map<I32, I32>&return = Map<I32, I32>()
+    m.Put(1, 2)
+    return m
+}
+MapGlobal Map<I32, I32>& = mapGlobalMade()
+
+test "T25d/O1b: constant text keys put from a for-in, and a global map read through read-only receivers" {
+    m := Map<String&, I64>()
+    if mapRuntime > 0 {
+        for nm in String&["ann", "bobby"] { m.Put(nm, nm.Len()) }
+    }
+    mapChurn()
+    assert (try m.Get("bobby") catch default -1) == 5 and m.Len() == 2
+    assert 1 in MapGlobal and (try MapGlobal.Get(1) catch default -1) == 2 and MapGlobal.Len() == 1
+}
+
+# a Map whose values are Lists - a group-by, a multimap - is filled through Get and walked by "for ... in": an entry is a
+# copy of one the map holds, so its Value is the very List
+fn groupInto(groups mut Map<I64, mut List<I64>&>&, n I64) ? {
+    for i in range n {
+        k I64 = i % 3
+        if k not in groups { groups.Put(k, List<I64>()) }
+        g := try groups.Get(k)
+        g.Push(i)
+    }
+}
+
+fn groupBy(n I64) I64 {
+    groups := Map<I64, mut List<I64>&>()
+    try groupInto(groups, n) catch { }                 # every key is put before it is got
+    total I64 = 0
+    for e in groups { total += e.Key * 1000 + e.Value.Len() }
+    return total
+}
+
+groupByBaked := groupBy(10)
+
+test "a Map of Lists is filled and walked" {
+    assert groupBy(10) == groupByBaked
+    assert groupByBaked == 0 * 1000 + 4 + 1 * 1000 + 3 + 2 * 1000 + 3
+}
+
+# a struct or an enum with a Bool part is a key: Bool has a Hash (E10b)
+type mapFlagged struct(on Bool, n I32) {
+    on
+    n
+}
+type mapToggle enum {
+    Off
+    On(fast Bool)
+}
+test "keys with Bool parts" {
+    m := Map<mapFlagged, I32>()
+    m.Put(mapFlagged(true, 1), 10)
+    m.Put(mapFlagged(false, 1), 20)
+    assert (try m.Get(mapFlagged(true, 1)) catch default 0) == 10 and (try m.Get(mapFlagged(false, 1)) catch default 0) == 20
+    t := Map<mapToggle, I32>()
+    t.Put(mapToggle.On(true), 1)
+    t.Put(mapToggle.Off, 2)
+    assert mapToggle.On(true) in t and mapToggle.On(false) not in t and mapToggle.Off in t
+}
+
+# a removed key's slot is reused by the next key put, so a Map whose keys come and go keeps the size of what it holds
+# (checks/cases/mapchurn measures it) - and every key keeps its own value through the reuse
+test "keys come and go, and each keeps its own value" {
+    m := Map<I64, I64>()
+    for i in range 10000 {
+        m.Put(i, i * 3)
+        if i >= 50 { assert m.Remove(i - 50) }
+    }
+    assert m.Len() == 50
+    for i in range 9950, 10000 { assert (try m.Get(i) catch default -1) == i * 3 }
+    assert 9949 not in m and 0 not in m
+    n I64 = 0
+    for e in m { n += e.Key - e.Value / 3 + 1 }
+    assert n == 50
+}
+
+# the entry a walk just gave may be removed while the walk goes on - the walk has already moved past it - so filtering a
+# map in place is one loop
+test "removing the entry just given, during a walk" {
+    m := Map<I32, I32>()
+    for i in range 100 { m.Put(I32(i), I32(i)) }
+    seen I32 = 0
+    for e in m {
+        seen++
+        if e.Key % 2 == 0 { assert m.Remove(e.Key) }
+    }
+    assert seen == 100 and m.Len() == 50
+    for e in m { assert e.Key % 2 == 1 and e.Value == e.Key }
+}

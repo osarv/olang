@@ -116,11 +116,9 @@ fn (r mut report&) expect(ok Bool, what String&, dir String&) ? Failed {
 
 # the text after "<prefix>" on the line that starts with it, or "" when no line does
 fn lineAfter(src String&, prefix String&) String&src {
-    at := src.Find(prefix)
-    if at < 0 { return src[0:0] }
+    at := try src.Find(prefix) catch { return src[0:0] }
     rest := src[at + prefix.Len():]
-    end := rest.FindByte('\n')
-    if end < 0 { return rest }
+    end := try rest.FindByte('\n') catch { return rest }
     return rest[:end]
 }
 
@@ -167,22 +165,18 @@ fn runCase(name String&) String& {
         if not outOf(dir).Contains(want) { return failure($name ": expected '" $want "'", dir) }
         rest := src[:]
         for {
-            at := rest.Find("# also: ")
-            if at < 0 { break }
+            at := try rest.Find("# also: ") catch { break }
             line := rest[at + 8:]
-            end := line.FindByte('\n')
-            if end < 0 { end = line.Len() }
+            end := try line.FindByte('\n') catch default line.Len()
             also := line[:end]
             if not outOf(dir).Contains(also) { return failure($name ": expected '" $also "'", dir) }
             rest = line[end:]
         }
         rest = src[:]
         for {
-            at := rest.Find("# never: ")
-            if at < 0 { break }
+            at := try rest.Find("# never: ") catch { break }
             line := rest[at + 9:]
-            end := line.FindByte('\n')
-            if end < 0 { end = line.Len() }
+            end := try line.FindByte('\n') catch default line.Len()
             never := line[:end]
             if outOf(dir).Contains(never) { return failure($name ": did not expect '" $never "'", dir) }
             rest = line[end:]
@@ -267,7 +261,7 @@ fn landing(r mut report&) ? Failed {
 
 # M22a: a std module and a local file with the same base name are two modules - but one module may not
 # import both under the one alias the name gives them
-test "std/map beside a local map.olang" { assert passed("twolists") }
+test "std/io beside a local io.olang" { assert passed("twolists") }
 
 fn twolists(r mut report&) ? Failed {
     dir := fresh("twolists")
@@ -685,17 +679,16 @@ fn enumwords(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0, "no payload of words", dir)
 }
 
-# S9d: a type's own Iter wins over At and Len - a List, which has all three, is still walked by its iterator: by
-# "for ... in", by a comprehension, by an iterator helper and in generic code constrained by Indexable, none of which
-# calls At
-test "a List is walked by its iterator, not by At" { assert passed("listloop") }
+# S9f/S9d: a List, which has RunFrom, Iter, At and Len, is walked run by run - by "for ... in", by a comprehension and
+# in generic code constrained by Indexable - and its iterator's helpers walk its chunks; none of them calls At
+test "a List is walked run by run, not by At" { assert passed("listloop") }
 
 fn listloop(r mut report&) ? Failed {
     dir := fresh("listloop")
     os.Run("cp checks/fixtures/listloop/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop") == 0, "listloop", dir)
-    try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.ListIter.I16.Next.I16' build/loop.main.ll") == 0,
-                 "no call of Next", dir)
+    try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.RunFrom.I16' build/loop.main.ll") == 0,
+                 "no call of RunFrom", dir)
     try r.expect(sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.At.I16' build/loop.main.ll") != 0,
                  "a call of At", dir)
 }
@@ -951,7 +944,7 @@ fn callShape(t String&, open I64) (I64, I64, I64) {
 
 # the C string literal starting at the first quote at or after from, and where it ends
 fn literalAfter(t String&, from I64) (I64, I64) {
-    open I64 = from + t[from:].FindByte('"')
+    open I64 = from + (try t[from:].FindByte('"') catch default -1)
     return open + 1, cLiteralEnd(t, open)
 }
 
@@ -964,12 +957,11 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     # each entry's rules - "L10a, L10c" names two
     rest String& = table
     for {
-        at := rest.Find("    X(")
-        if at < 0 { break }
+        at := try rest.Find("    X(") catch { break }
         rs, re := literalAfter(rest, at)
         rules := rest[rs:re]
         for rules.Len() > 0 {
-            comma := rules.Find(", ")
+            comma := try rules.Find(", ") catch default -1
             end I64 = rules.Len() if comma < 0 else comma
             r := rules[:end]
             if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
@@ -993,15 +985,14 @@ test "every diagnostic's call fits its message, and every rule it names is in th
         for fname in String&["Err(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
             from := I64(0)
             for {
-                hit := src[from:].Find(fname)
-                if hit < 0 { break }
+                hit := try src[from:].Find(fname) catch { break }
                 at I64 = from + hit
                 from = at + fname.Len()
                 if at > 0 and isIdentChar(src[at - 1]) { continue }
                 s, e, after := callShape(src, at + fname.Len() - 1)
                 if s < 0 { continue }
                 id := src[s:e]
-                entry := table.Find("    X(" $id ",")
+                entry := try table.Find("    X(" $id ",") catch default -1
                 if entry < 0 {
                     try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch { }
                     bad++
