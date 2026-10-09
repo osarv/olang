@@ -1,9 +1,13 @@
-# check: fail error[E31]: At's parameters besides its receiver: expected at least 1, found 0
-# E31: At takes one index or several, never none
+# check: fail error[E31]: Box's At takes no parameters besides its receiver - an ordinary method, not the one 'x[i]' calls, which takes at least one
+# also: note: 'At' is declared here
+# E31: At takes one index or several, never none - an At of no parameters is an ordinary method, which indexing does not
+# call, and indexing then says so
 type Box struct() {
     n I64 = 0
 }
 fn (b Box&) At() I64 { return b.n }
 fn main() ? {
     b := Box()
+    assert b.At() == 0
+    x := b[0]
 }

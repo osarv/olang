@@ -173,6 +173,8 @@ struct type {
     //which is the whole point: without it, substituting T later rewrites the field types but leaves the
     //name derived from the OLD arguments, so "Box$T" never becomes "Box$int32" and nothing matches.
     struct type* genericOrigin;   //the generic this was applied from; NULL if it is not an instantiation
+    struct type* ctorTwinOf;      //G10d: a non-generic type whose constructor is generic, as one call's bindings construct
+                                  //it - the same type (name, identity, layout), with that instantiation of the constructor
     struct list typeArgs;         //list of struct type, index-aligned with genericOrigin->typeParams
     struct list typeParams; //list of struct str: for BASETYPE_FUNC, every distinct type variable in this
                              //signature, in first-appearance order (G3); for BASETYPE_STRUCT, the names
@@ -838,6 +840,7 @@ struct list* SemanticAllInstantiations(void);
 //list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
+struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);

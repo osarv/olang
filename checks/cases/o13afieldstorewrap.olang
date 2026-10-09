@@ -1,7 +1,7 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# O13a/O25h: a value built here is judged at a return by what its constructor bound - until something is stored into it,
-# which puts references where its own are (its block): here text that dies at the return. A local the function returns
-# itself lives in the result scope (O26a, o13afieldstore.olang); one returned inside another value does not
+# check: run
+# O13a/O26a: a value built here and returned inside another one ("return W(e)", W holding it) lives where the result
+# goes, as one returned itself does (o13afieldstore.olang) - so text stored into it is built there and outlives the
+# return, read back after an arena churn. It used to be built in this block, a compile-time error (O26)
 type H struct(r mut String&) {
     r
 }
@@ -16,5 +16,16 @@ fn mk(n I64, s mut String&) W {
 fn main() ? {
     q mut String& = "x"
     w := mk(12, q)
-    assert w.h.r.Len() == 4
+    churn()
+    assert w.h.r.Len() == 4 and w.h.r == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
 }

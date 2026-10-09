@@ -2576,7 +2576,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `Mul`, `Div`, `Rem`, `MatMul` (`@`, no built-in meaning), `Neg` (unary `-`), `Less` (`<`, with `> <= >=` derived and
   chaining), and for indexing `At` (`x[i]`), `SetAt` (`x[i] = v`, `x[i] op= v`) and `Slice` (`x[lo:hi]`, an absent end
   meaning `Len()`). A lowercase first letter (`plus`) is the module's private operator; declaring both spellings is
-  an error. Ordinary methods otherwise, callable by name. Not declarable: `==`/`!=`, `$`. This replaced, the same
+  an error. Ordinary methods otherwise, callable by name. (Since 2026-10-09 a method is the operator only in the
+  operator's shape; one of another shape is an ordinary method - the E31/G10d entry near the end.) Not declarable: `==`/`!=`, `$`. This replaced, the same
   day, a first version where the method was named by the symbol itself (`fn (a V) +(b V) V`): the user noticed
   those were private across modules (the hidden name was not capitalized) and that the compiler already talks to
   types through named methods (`Next`, `Iter`, `Has`, `Contains`), so names make visibility M6's rule and the design
@@ -4103,6 +4104,35 @@ Go through this for every change to what olang means - a rule added, revised or 
   inferred"; a variable only null reaches still cannot be. **Recorded, not fixed**: the non-causal batched backward at
   T 256 is slower than a Gemm per head (a head's P stays in L2 across its three products only when they run back to
   back).
+- **A method is an operator only in the operator's shape; a constructor may introduce type variables; a value built
+  from a local the return reads lives with the result (E31, M6b, E10a/E10b/E11c, G10d, O26a, D13c/B11, 2026-10-09).**
+  From oann and the usage studies. **E31 revisited (mine, under the revisit rule; oann's `repro/operatornames`)**: a
+  graph builder's `g.Mul(a, b)` and `g.MatMul(a, b, transA, transB)` could not be declared - E31 reserved the names for
+  every method. Now a method is the operator - and every method the compiler calls by itself (M6b: `Eq`, `Hash`, `Str`,
+  `Next`, `Iter`, `Has`, `Contains`, `RunFrom`, `Len`, `Call`, the Try forms) - only when it takes the role's number of
+  parameters; another shape is an ordinary method, called by name, and may sit beside the role's method of the other
+  spelling. Using the operator on such a type is the error, naming the method and what it takes (`Graph's MatMul takes 4
+  parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one`); an ordinary `Hash`
+  holds the name, so none is supplied (E10b) and a constraint's error notes it. **G10d (the coordinator's decision)**:
+  the constructor of a type with no parameters may introduce type variables its parameters use (`type Dense struct(g
+  mut Graph<<T>>&, n I64)`, oann's layers holding only graph handles), instantiated per call as a generic function is -
+  each call's instantiation a twin of the type (same owner and name, so one type: a `List<Dense>` mixes graphs of
+  F32 and I64) with its own constructor, emitted by the root object as instantiations are (B3d), the destructor shared.
+  **Decided (mine)**: no field's type may name such a variable (the fix, `type Dense<T>`, is named), no field takes its
+  type from `:=`, a call binding none is an error, the type has no zero value (D13c), and a generic type's constructor
+  introduces none of its own. **O26a extended (mine)**: `return Node.Many(l.ToArray())` was O26 - a local holding
+  references is now also moved into the result scope when a returned value reads it where what is built from it can be
+  handed back: an argument or receiver of a call that can keep it (its result borrowed from that parameter, an
+  obligation of its body holding that parameter's scope to outlive the result scope, a constructor holding it per
+  C2d's analysis, or a generic or unchecked callee) - never a rendering, a field holding no reference, or a call that
+  cannot keep it (`p := Parser(src); return p.parse()` leaves the parser and its block-local text where they are). Where
+  a borrowed result (`T&p`) is put counts as its home too. So the five `...wrap`/`slice` cases that kept O26/O17 for a
+  local returned inside another value became run cases, and three cases built on a copy keep the errors. **D13c/B11**: a
+  library's need for a zero value (`chan.Chan<Ticket>`) is reported at the program's type argument with a note naming
+  `Chan<Ticket&>`. **Found on the way**: prelude paths in diagnostics read `.../build/../std/prelude`; diagnostics spelled
+  a type variable `<T>` where G8b writes `T`; a type's name met as a value said "unknown name 'Res' - did you mean
+  'Res'?" (now "'Res' is a type, not a value"). Confirmed gone on this compiler: oann's `ctorpush`, `ctorunstored` and
+  `capturedfn` (captured 0.52 ns an element against 0.55 direct).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

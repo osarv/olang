@@ -1403,9 +1403,10 @@ whose zero value is zero bits this is the loader's zeroed storage — real BSS, 
 **D13c (a constructor's zero value).** The zero value of a type with a constructor is that constructor called with
 each parameter's declared default (D8a), or that parameter's own zero value where it declares none - evaluated
 **while compiling** (K1), once the program has checked. It must evaluate: a constructor that fails on those
-arguments, or that cannot be evaluated at compile time at all (it writes a global, calls an `extern`, ...), leaves
-the type with **no zero value**, and a declaration of it with no initializer - or `Array<T>(n)` of it with no fill,
-or a constructor field of it with none - is a compile-time error naming why. So a constructor with an effect runs
+arguments, or that cannot be evaluated at compile time at all (it writes a global, calls an `extern`, ...), or that
+introduces a type variable (G10d), which no zero binds, leaves the type with **no zero value**, and a declaration of
+it with no initializer - or `Array<T>(n)` of it with no fill, or a constructor field of it with none - is a
+compile-time error naming why. So a constructor with an effect runs
 exactly as often as `T(...)` is written. One that evaluates is pure, so how often it runs cannot be observed: a zero
 value that is all zero bits is the zero fill (nothing runs), and any other is the constructor's value - a
 constant, or, where it holds references, a constructor call for each declaration, each with storage of its own.
@@ -1577,10 +1578,13 @@ program - the operators' (E31: `Plus` ... `MatMul`, `Neg`, `Less`, `At`, `SetAt`
 `Dec`, `Call`, `Len`, and the checked forms `TryAt` ...), `Eq` (`==`, E10a), `Hash` (E10b), `Str` (`$`, E11c), `Next`,
 `Iter` and `RunFrom` (`for ... in`, S9a), `Has` and `Contains` (`in`, E29) - follow M6 as every name does. A type
 declares each under its capitalized name, public, or with its first letter lowercase (`plus`, `eq`, `hash`, `str`,
-`next`), private to its module; never both, which is a compile-time error. The private one is held to the same shape as
-the public one. An operation reaches whichever the type declares: written in the declaring module it calls the private
-one; written anywhere else the private one cannot be found, and the operation is a compile-time error naming it - never
-the built-in operation, a part-by-part `==`, a supplied `Hash` or the default rendering in its place. So `a == b` on a
+`next`), private to its module; never both, which is a compile-time error. A method has one of these roles only when it
+takes the role's parameters besides its receiver (E31) - in either spelling, and then it is held to the rest of the
+role's shape; a method of another number of parameters is an ordinary method whatever its name (two such, or one and a
+method of the role, may share the type in either spelling). An operation reaches whichever the type declares: written
+in the declaring module it calls the private one; written anywhere else the private one cannot be found, and the
+operation is a compile-time error naming it - never the built-in operation, a part-by-part `==`, a supplied `Hash` or
+the default rendering in its place. So `a == b` on a
 type with a private `eq` calls `eq` in its own module and is an error in any other.
 
 The module an operation is judged from is the one whose code it is written in. In a generic's body that is the
@@ -2138,7 +2142,8 @@ question (E7a).
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
 receiver's own type in either shape (`T` or `T&`), result `Bool`, no errors, and neither the receiver nor the parameter
-`mut`. Any other method named `Eq` or `eq` is a compile-time error.
+`mut`. Any other method named `Eq` or `eq` taking one parameter is a compile-time error; one taking another number is an
+ordinary method (E31), and `==` on the type is the language's.
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
 values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
 built-in type declares none; its `==` is the language's.
@@ -2152,7 +2157,8 @@ prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer
 so neither does a value holding one. A **reference** has a hash exactly where `==` compares what it names: one to an
 array whose elements have one (its elements' hashes, as an array value's), or one whose type declares `Eq` and `Hash`;
 one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null reference is `0`. A supplied `Hash`
-is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key.
+is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key - so a type declaring a method named `Hash`
+(or `hash`) of another shape, an ordinary method (E31) holding the name, has none supplied.
 
 There is no expression that produces a value of an error type (§2.6): an error word is never a
 first-class comparable value, only a function's own result (§7).
@@ -2232,7 +2238,9 @@ linear in the result however many pieces there are. A `:=` declaration takes its
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
 (M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
-no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` is a compile-time error. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
+no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` taking no parameters is a
+compile-time error; one taking parameters is an ordinary method (E31), and `$` renders the type's values as it would
+with none declared. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
 sense of K1a, and a `Str` that is not is a compile-time error naming what stops it. That is what lets a rendering
 call it as often as building the text needs - once to measure, once to write, or not at all when the text is
 computed while compiling - with nothing to tell the difference.
@@ -2635,9 +2643,18 @@ type declares one:
 | `f(args)` on a value `f` | `Call` | any parameters, any result |
 | `x[lo:]`, `for x in c` (S9d) | `Len` | none, an `I64` |
 
+A method is the operator **only when it takes the operator's parameters** besides its receiver - the number in the
+table (for `At` and `SetAt`, any number from it up; `Call`, any) - and the methods the compiler calls for other
+operations alike (M6b): `Eq`, `Has`, `Contains` and `RunFrom` take one, `Str`, `Hash`, `Next` and `Iter` none. A method
+of another number of parameters, whatever its name, is an **ordinary method**, called only by its name: a graph builder's
+`g.Mul(a, b)` or `g.MatMul(a, b, transA, transB)` is no operator. The operation is then as though the type declared no
+method of that name, and where it has nothing else to do - `a * b` on a struct, `x[i]` on a type with no `At` of that
+shape - it is a compile-time error naming the method and the parameters it takes. A method that does take the
+operator's parameters is held to the rest of its shape: the result the table names, and no errors.
+
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, private to the declaring
 module (M6b): there the operator calls it, and anywhere else the operator is an error naming it. A type declaring an
-operator by both names is an error, as is a method by one of these names, in either spelling, without its shape. None of them may declare errors except `Call`, which stands for a function
+operator by both names is an error. None of them may declare errors except `Call`, which stands for a function
 and is called `try f(x)` when it can fail.
 
 **E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
@@ -4192,7 +4209,13 @@ returned when, in the rest of the block declaring it, a `return` gives it (or a 
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
 here, its zero value (D13c), a result destructured into it (S4b) - when it holds references (T17c, O4b), or when the
-function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). So
+function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). A
+local holding references is also returned when a returned value reads it where what is built from it can be what is
+handed back - as an argument or a receiver (`return Node.Many(l.ToArray())`, `return wrap(l)`), but not through a
+method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new:
+what is built from it holds what it holds, which must live where the result does. Where the result is put is the
+result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
+referent lives in, which the function builds into (O4b). So
 
 ```
 fn mk(n I64) List<I64> {
@@ -4874,7 +4897,9 @@ made by a call, to declare it there (`'c Counter&ok = ...'`).
 An error met in the **standard library's** code (the prelude or `std`) while it is checked for one of the program's uses
 of it - a generic instantiated with the program's types - is the program's, since the library cannot be changed where
 it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line
-(`in the standard library's code, here`) and the notes of the uses around it.
+(`in the standard library's code, here`) and the notes of the uses around it. Where the use names the type argument
+the error is about (a zero value the library needs, D13c), it is reported at that argument, with a note naming the
+reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero value is null`).
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 
@@ -5194,6 +5219,18 @@ instantiation gets its own, built from the generic's own field list and `destruc
 instantiation's substituted types. C11 applies unchanged — an instantiation of a type declaring
 `destruct` is reference-only, and each instantiation's destructor is a distinct one, running for the
 instances of that instantiation only.
+
+**G10d (a generic constructor).** The constructor of a struct type that declares **no** type parameters is generic
+when its parameters introduce a type variable (G3, G8b): `type Dense struct(g mut Graph<<T>>&, n I64) { ... }`. It
+is instantiated per call as a generic function is - its variables inferred from the arguments (G9), never written,
+since the type takes none (G7), and a call binding none of them a compile-time error - and its body is checked once
+per instantiation, with the variables bound (G16). The type itself is **not** generic: every instantiation
+constructs the same type, so values built from different calls are one type and mix freely (a `List<Dense>` holds
+layers built over graphs of any element type). So no field's type may name such a variable - a field written so,
+or a pun of a parameter whose type names one, is a compile-time error naming the fix, to declare the variable as the
+type's own parameter (G6) - and no field takes its type from `:=`, which would read it off each instantiation's body.
+Such a type has no zero value (D13c): no zero binds the variables. A generic type's constructor introduces no
+variable of its own - one its parameters name that is not in the type's list is a compile-time error.
 
 **G11.** A type argument may be a **reference**, written with a bare marker (`List<String&>`): wherever
 the instantiation holds a value of that type, the reference lives in its container's scope (O5), as an

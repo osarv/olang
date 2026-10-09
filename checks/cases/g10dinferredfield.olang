@@ -1,0 +1,10 @@
+# check: fail error[G10d]: field 'x' takes its type from ':=', and the constructor introduces T
+# also: write the field's type
+# G10d: a constructor introducing a type variable is checked per call, so a field's type cannot be read off its body
+type G<T> struct() {
+    n I64 = 0
+}
+type D struct(g G<<T>>&, n I64) {
+    x := n
+}
+fn main() ? { d := D(G<I64>(), 3) }
