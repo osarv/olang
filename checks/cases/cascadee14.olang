@@ -15,7 +15,7 @@ fn (r R&) find(name String&) String&r ? {
     error
 }
 fn make(url String&) R ? {
-    hs Array<H>&return = Array<H>(1)
+    hs mut Array<H>&return = Array<H>(1)
     hs[0] = H("a", "b")
     return R(hs)
 }

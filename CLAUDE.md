@@ -468,7 +468,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   then made unnecessary: once `T[]` follows the marker like every other array, `byte[]` and `byte[]&` are
   different types too and nothing is carved out.
 - **Parameter mutability and reference arguments: `&` says whose instance, `mut` says whether it can be
-  written.** Two independent axes, so whether a call writes to the caller's value is readable from the
+  written.** (Since 2026-10-09 a by-value parameter is always the callee's to write and takes no `mut` - the
+  permissions entry near the end.) Two independent axes, so whether a call writes to the caller's value is readable from the
   signature alone with no reasoning about scopes or durability: `p Point` / `p mut Point` are copies (the
   caller is unaffected either way, `mut` only makes the callee's own copy writable), while `p Point&` is
   the caller's own instance read-only and `p mut Point&` is it writable. D9 always specified the `mut`
@@ -1348,7 +1349,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   layout, alloca and arena propagation - to express something the type system already says. The one thing
   the element-type route cannot reach is an alignment larger than a primitive's, currently 8, which no
   foreign type in view needs; that limit is stated in X3a rather than left implied.
-  **Opacity cost nothing: drop `mut`.** Writing is the only operation that can corrupt a live mutex, and a
+  **Opacity cost nothing: drop `mut`** (since 2026-10-09 a field's `mut` no longer decides whether it may be written,
+  and opacity rests on the fields being private - the permissions entry near the end). Writing is the only operation that can corrupt a live mutex, and a
   field declared without `mut` rejects it - verified, `variable is immutable`, even inside the declaring
   module. It does not restrict pthread at all, because an `extern-param` carries no mutability (X2) and X3
   hands over a bare pointer; both channel tests still pass. It is sound because `mut` is a front-end check
@@ -1838,7 +1840,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   unneeded; O25 had already turned every relation between reference-holding values into an equality,
   visible as a shared scope name.
 
-- **`mut` on a local is a compile-time error (D11a).** Locals were always mutable - D11 said so, and `mut` on
+- **`mut` on a local is a compile-time error (D11a).** (Narrowed 2026-10-09: before a reference type a local's `mut` is
+  its permission, `x mut T&` - the permissions entry near the end.) Locals were always mutable - D11 said so, and `mut` on
   one was accepted and ignored - while parameters, globals and fields do enforce `mut`. So the keyword on a
   local stated nothing, and its absence read as immutability that did not exist: `b int32 = 3` then `b = 4`
   compiled. The options were to enforce it (immutable-by-default locals, as parameters are) or to forbid
@@ -2424,7 +2427,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   `List<mut Node&>`, a result `mut Node&p`). At the top of a declaration `mut` is both the binding's and the
   reference's (`v mut Point&` is a writable global reference); locals take no `mut` (D11a kept, the user's call:
   "locals are mutable by default") - a typed local is writable unless its initializer is read-only, and `:=`
-  copies the permission. Writable converts to read-only at the outermost level only; read-only never converts to
+  copies the permission. (Both halves revised 2026-10-09: `mut` is the binding's only on a global, and a local's
+  written type decides its permission - the permissions entry near the end.) Writable converts to read-only at the outermost level only; read-only never converts to
   writable - which makes "passing immut to mut" an error everywhere (the user's requirement), including through
   a borrowed result: **the pre-existing hole that started this** - `x := G.Trim(); x[0] = 'z'` changed an
   immutable global G, and `same(p P&) P&p` did the same for any struct (and the evaluator disagreed with the run
@@ -3882,6 +3886,42 @@ Go through this for every change to what olang means - a rule added, revised or 
   point is an introduction error left alone. The evaluator needed nothing; a generic global written bare bakes. **Found
   on the way**: O25a's "a local written as a bare type variable takes its initializer's scope" read only the `<U>`
   spelling (`typeExprIsBareTypeVar`), so the prelude's `acc U = init` in `Fold` failed O25 - it reads `U` now.
+- **`mut` speaks only about what a reference reaches; a binding's reassignability is never written (T25b, D9, D9b,
+  D11/D11a, C3, C4, S6, O25g, X3a, 2026-10-09; designed by the coordinator, confirmed by the user: "Your decisions are
+  fine" - their questions 4, "aren't locals always mutable?", and 5, a reassignable field could not hold a read-only
+  reference).** `mut T&` is writable and `T&` read-only in every position - type arguments and elements as before, and
+  now fields, locals, parameters, receivers and results alike. **Locals** may always be assigned and their written type
+  decides their permission: `path String& = ""` then `path = args[1]` works (study2's r08), `x mut T& = e` is writable
+  and `e` must be (T25c), `:=` copies; `mut` before a local's value type or before `:=` is D11a's error (two messages).
+  **Parameters and receivers** are the callee's own copy or cursor, always assignable; `mut` before a by-value one is
+  D9's error. **Fields** are assigned exactly where the instance is reached writably (Rust's model): `x mut I32` is C3's
+  error, `next mut Node&` says only that the referent is writable, and a read-only reference field is reassigned through
+  a writable instance - so **per-field immutability is gone** (the user accepted this), and X3a's pthread blobs are
+  opaque because their fields are private, not because they lack `mut`. **Globals** keep `mut` as the binding's (and a
+  reference global's single `mut` is both, T25c) - a mutable global holding a read-only reference is inexpressible,
+  recorded. A trait method's `mut` is its receiver's, unchanged.
+  **Decided (mine)**: (1) a bare pun takes its parameter's type, permission included, and has no `mut` - the `x mut`
+  spelling is gone, with L18's `mut` statement end and L20a's mention (it only ever asserted what the parameter said);
+  (2) likewise a lambda parameter whose type is left out (`fn(a mut)` gone); (3) a match binding is a local and may be
+  reassigned (it was immutable, the one binding immutability nothing could lift); (4) a captured value stays read-only
+  (D16c, unlike a parameter), a captured reference's copy may be repointed within the call as before; (5) `mut` before
+  a by-value type variable at the top of a declaration means only "writable when bound to a reference" (T2) - the six
+  corpus uses that meant the binding were dropped by hand; (6) **D9b**: a generic's by-value parameter bound to a
+  run-time-length array is copied exactly when its body writes it or makes a writable reference to it (a slice, a
+  writable borrow), from the checked body (`paramWritten`), and is the caller's array otherwise - and the evaluator now
+  shares it too (it always copied, so `permSee(a, a)` writing `a` through its other parameter read 5 baked and 70 at run
+  time); (7) the same analysis says whether a callee may build into a by-value parameter's scope variable (O4b),
+  assumed while the body is unchecked; (8) **O25g**: through a writable reference every field can be assigned, so a
+  writable reference to a struct with any reference-holding field asks exactness (read-only references never do); (9)
+  a borrowed value gives a writable reference when it is a local, a parameter's copy, a `mut` global, or a field or
+  element of those or of a writable reference (T25c); (10) B11: writing through, or passing on, a local made read-only by
+  its written type adds a note at the local naming `x mut T&` - which is what drives the migration; the old "is not
+  'mut'" error is now S6's "only a local, a parameter or a 'mut' global can". **Migration**: `tools/perm_mut.py`,
+  re-runnable (oann: `python3 /home/user/olang/tools/perm_mut.py --olang /home/user/olang/build/out /home/user/oann`):
+  puns by text, the rest from the compiler's own D9/C3/D11a errors and the note above, iterated to a fixed point.
+  Over the repository: 125 pun `mut`s, 212 value `mut`s on parameters, receivers and fields removed, 331 locals given
+  `mut`, six type-variable `mut`s and the fuzzer's generated puns by hand. The evaluator needed only D9b: it already
+  treated every part of a writably reached aggregate as changeable (K1's ownership is by address).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

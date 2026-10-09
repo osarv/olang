@@ -9,7 +9,7 @@ N mut I64 = 1
 fn main() ? {
     r Node& = null
     if N > 0 {
-        l Node& = Node(4)
+        l mut Node& = Node(4)
         join {
             spawn r = keepOf(l)
         }

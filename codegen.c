@@ -8708,9 +8708,10 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
         }
     }
-    //D9: a "mut" parameter holding a run-time-length array by value - a generic's, instantiated with one (D9a) - is the
+    //D9b: a parameter holding a run-time-length array by value - a generic's, instantiated with one (D9a) - is the
     //callee's own copy, as a struct's is: it was handed the caller's { length, storage } pair, and writing through that
-    //changed the caller's array (or faulted on a constant one)
+    //changed the caller's array (or faulted on a constant one). Copied where the body writes it, or makes a writable
+    //reference to it (paramWritten); one it only reads is the caller's array itself
     struct list ownCopies = ListInit(sizeof(int));
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* p = ListGetIdx(&func->type.vars, i);
@@ -8739,7 +8740,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         //cgStoreInto's by-ref branch which expects our internal ptr-to-storage convention
         fprintf(ctx->fnOut, "  store %s %%arg%d, ptr %s\n", pty, i, slot);
         cgDbgVar(ctx, slot, p->name, p->type, func->tok.lineNr, i + 1);
-        if (p->mut && !p->type.structMAlloc && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc) ListAdd(&ownCopies, &i);
+        if (p->paramWritten && !p->type.structMAlloc && p->type.bType == BASETYPE_ARRAY && p->type.arrMalloc) ListAdd(&ownCopies, &i);
     }
 
     //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the

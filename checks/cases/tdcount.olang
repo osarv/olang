@@ -2,7 +2,7 @@
 error E { X }
 fn two() (I32, I32) ? E { return 1, 2 }
 fn none() ? E { }
-type P struct(v I32) { v mut }
+type P struct(v I32) { v }
 fn ref(p P&) P&p ? E { return p }
 fn main() ? E { }
 fn count() { a, b := try two() catch default 1 }

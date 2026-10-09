@@ -3,7 +3,7 @@
 # which puts references where its own are (its block): here text that dies at the return. It used to be judged by the
 # constructor's binding alone, and returned freed storage
 type H struct(r mut String&) {
-    r mut
+    r
 }
 fn mk(n I64, s mut String&) H {
     e := H(s)
@@ -11,7 +11,7 @@ fn mk(n I64, s mut String&) H {
     return e
 }
 fn main() ? {
-    q String& = "x"
+    q mut String& = "x"
     w := mk(12, q)
     assert w.r.Len() == 4
 }

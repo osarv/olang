@@ -147,7 +147,7 @@ test "O18b/O23a: text keys put in a loop survive it, and one map's entries go in
     m := Map<String&, I64>()
     for i in range mapRuntime {
         m.Put($i, i)
-        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch mut Array<I64>& = Array<I64>(8, 999)
         scratch[0] = 5
     }
     mapChurn()
@@ -186,7 +186,7 @@ test "O18c: a Map's entries, walked through a parameter, go into another map and
 # T25d: constant text elements of a read-only array literal walked by for-in are the static data itself, so they may go
 # into a map anywhere; O1b/O25e: a global map read through read-only receivers binds their scope to the program's
 fn mapGlobalMade() Map<I32, I32>& {
-    m Map<I32, I32>&return = Map<I32, I32>()
+    m mut Map<I32, I32>&return = Map<I32, I32>()
     m.Put(1, 2)
     return m
 }

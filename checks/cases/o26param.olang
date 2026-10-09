@@ -5,7 +5,7 @@ type N struct(v I32, nx N&) {
     next mut N& = nx
 }
 fn f(l mut N&) {
-    x N&return = N(1, null)
+    x mut N&return = N(1, null)
     l.next = x
 }
 fn main() ? { }

@@ -2,10 +2,10 @@
 # D16d: a lambda returned where it is made is built in the result scope, each scope it captures from outliving that -
 # which this function's own block does not
 type Counter struct() {
-    n mut I64 = 0
+    n I64 = 0
 }
 fn mk(f fn(x I64) I64) fn(x I64) I64 {
-    c Counter& = Counter()
+    c mut Counter& = Counter()
     return fn(x I64) I64 {
         c.n++
         return f(x) + c.n

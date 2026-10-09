@@ -6,7 +6,7 @@ type Node struct(v I64) {
     v
 }
 type Box struct() {
-    n mut I64 = 0
+    n I64 = 0
 }
 type Cursor struct(of Box&) {
     box Box&of = of
@@ -16,8 +16,8 @@ fn (c mut Cursor&) Set(n mut Node&c) { c.cur = n }
 fn main() ? {
     ws Box& = Box()
     for i in range 3 {
-        bi Cursor& = Cursor(ws)
-        n Node& = Node(i)
+        bi mut Cursor& = Cursor(ws)
+        n mut Node& = Node(i)
         bi.Set(n)
     }
 }

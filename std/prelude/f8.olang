@@ -50,7 +50,7 @@ fn f8Decode(b I32, mant I32, bias I32) F64 {
 }
 
 type F8E4M3 struct(value F64) {
-    Bits mut U8 = f8E4M3Bits(value)
+    Bits U8 = f8E4M3Bits(value)
 }
 
 # the sign bit of x - set for -0.0 too, which "x < 0" is not, so a negative zero keeps its sign
@@ -79,7 +79,7 @@ fn (f F8E4M3) Str() String { return $f.F64() }
 fn (a F8E4M3) Eq(b F8E4M3) Bool { return a.F64() == b.F64() }
 
 type F8E5M2 struct(value F64) {
-    Bits mut U8 = f8E5M2Bits(value)
+    Bits U8 = f8E5M2Bits(value)
 }
 
 fn f8E5M2Bits(x F64) U8 {

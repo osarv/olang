@@ -306,7 +306,11 @@ struct var {
     struct str name;
     struct type type;
     struct token tok;
-    bool mut; //local variables are mutable by default
+    bool mut; //a global: assignable (D11). A local or a parameter's copy in its body: always. A parameter, field or
+              //trait method in a signature: declared "mut" - a writable reference (T25b), or a writable receiver (T30)
+    bool paramWritten; //D9b: a signature parameter its body writes, or makes a writable reference to - a by-value array
+                       //it is bound to is then the callee's own copy
+    bool permByType;   //B11: a local whose written reference type, without "mut", made it read-only (T25b)
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
@@ -346,6 +350,7 @@ struct var {
     struct var* paramOf;      //O23a: a parameter's copy in its function's body - that function (NULL for every other var)
     struct var* derivedFrom;  //O23a: a derived scope variable - the struct derivedScope's param, so it can be told apart
     bool isCapture;           //D16: a lambda's own copy of a variable it captured
+    struct var* capturedFrom; //D16c: ...the variable it copies (B11: a diagnostic about its permission names that one)
     bool isBorrowedCapture;   //D16c: ...a read-only borrow of a captured value array
     bool isCaptureScope;      //D16: the scope variable of a captured reference, bound when the lambda is made
     struct var* lambdaHost;   //D16: the function the lambda is written in, NULL in a test or a global initializer
@@ -613,9 +618,6 @@ struct operand {
                      //an unsigned type (0xFFFFFFFFFFFFFFFF a U64's maximum) and its I64 reading otherwise (-1)
     double floatLiteralVal; //valid for float literals only
     struct str memberName; //valid for OPERATION_MEMBER
-    bool memberMut;        //valid for OPERATION_MEMBER: the FIELD's own mutability (C3), separate from
-                            //whether the base is mutable - a constructor field is mutable only if declared
-                            //"mut", while a plain (T13) struct's fields are always mutable
     bool noZeroFill; //D15b: OPERATION_SIZED_ARRAY_ALLOC only - allocate the storage and leave it as it
                       //comes. Set for a local "T[expr]" declaration, which is uninitialized like any
                       //other declared-size array; a D14a constructor field still zero-fills.

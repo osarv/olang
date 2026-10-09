@@ -1,0 +1,6 @@
+# check: fail error[D11a]: a local is always writable - 'mut' is for a reference, and I32 is none
+# D11a: "mut" on a local belongs to its type - before a value type it says nothing
+fn main() ? {
+    k mut I32 = 3
+    k = 4
+}

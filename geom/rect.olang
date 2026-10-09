@@ -5,8 +5,8 @@
 import "measure"
 
 type Rect struct(W I32, H I32) {
-    W mut
-    H mut
+    W
+    H
 }
 
 fn Square(side I32) Rect {

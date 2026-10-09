@@ -1,7 +1,7 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
 # O4b/O14c: the same through a generic instantiated at a struct holding a reference
 type Node struct(v I32) {
-    v mut
+    v
 }
 type Holder struct(n Node&) {
     n

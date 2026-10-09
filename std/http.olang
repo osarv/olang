@@ -155,7 +155,7 @@ fn response(dump String&, body String&) Response ? HttpError {
         if line.Trim().Len() == 0 { break }
         n++
     }
-    fields Array<Header>&return = Array<Header>(n)
+    fields mut Array<Header>&return = Array<Header>(n)
     k I64 = 0
     for line in lines[start + 1:start + 1 + n] {
         colon := try line.FindByte(':') catch { continue }

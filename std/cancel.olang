@@ -34,7 +34,7 @@ fn wallNs() I64 {
 # atomically (P9), since Cancel() runs on one thread while the tasks read it on others; the deadline is fixed
 # at construction, before any task can see it.
 type Token struct(deadlineNs I64 = 0) {
-    flag mut I32 = 0
+    flag I32 = 0
     deadline I64 = deadlineNs
 }
 
@@ -82,7 +82,7 @@ fn (t Token&) WakeAt(ts mut Array<I64, 2>&) {
 }
 
 test "a token fires on Cancel, and not before" {
-    t Token& = Token()
+    t mut Token& = Token()
     assert not t.Cancelled()
     t.Cancel()
     assert t.Cancelled()
@@ -107,15 +107,15 @@ fn spin(t Token&, n mut spinCount&) {
 }
 
 type spinCount struct() {
-    v mut I64 = 0
+    v I64 = 0
 }
 
 # the Cancel waits until the task has done some work: a task need not have started by any particular time, and one
 # cancelled before its first look at the token rightly does nothing - which, waited for only by a clock, made this
 # test fail whenever the machine was busy enough to keep the task off a core for those milliseconds
 test "a busy task stops when the token is cancelled" {
-    t Token& = Token()
-    n spinCount& = spinCount()
+    t mut Token& = Token()
+    n mut spinCount& = spinCount()
     join {
         spawn spin(t, n)
         for n.v.AtomicLoad() < 1000 { }
@@ -131,8 +131,8 @@ error stepFailed {
     BAD
 }
 type stopCount struct() {
-    v mut I64 = 0
-    why mut I32 = 0
+    v I64 = 0
+    why I32 = 0
 }
 fn spinRecord(t Token&, n mut stopCount&) {
     for not t.Cancelled() { n.v++ }
@@ -148,10 +148,10 @@ fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
 }
 
 test "a deferred Cancel lets a join block's tasks stop, on an error too" {
-    n stopCount& = stopCount()
+    n mut stopCount& = stopCount()
     try cancelOnExit(false, n) catch { fail }
     assert n.why == 1
-    m stopCount& = stopCount()
+    m mut stopCount& = stopCount()
     try cancelOnExit(true, m) catch stepFailed { }
     assert m.why == 1
 }

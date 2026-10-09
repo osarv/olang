@@ -15,7 +15,7 @@ fn listShow(l List<I64>&) String& {
 
 # 0, 1, ... n - 1
 fn listUpTo(n I64) List<I64>& {
-    l List<I64>&return = List<I64>()
+    l mut List<I64>&return = List<I64>()
     for i in range n { l.Push(i) }
     return l
 }
@@ -174,8 +174,8 @@ test "reshaping a List, evaluated while compiling as at run time" {
 
 # elements that are references to what can be stored through - each a node with a mutable link - reordered and taken
 # out by every new operation, and still the same instances afterwards
-type listNode struct(v mut I64) {
-    v mut
+type listNode struct(v I64) {
+    v
     next mut listNode& = null
 }
 

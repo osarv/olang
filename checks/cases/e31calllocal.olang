@@ -2,14 +2,14 @@
 # E31/O14: an instance whose type declares Call, given as a function value, is the instance itself - returning a local
 # one hands out storage the function's own scope reclaims
 type Counter struct(start I64) {
-    n mut I64 = start
+    n I64 = start
 }
 fn (c mut Counter&) Call() I64 {
     c.n++
     return c.n
 }
 fn mkF() fn() I64 {
-    c Counter& = Counter(41)
+    c mut Counter& = Counter(41)
     return c
 }
 fn main() ? {

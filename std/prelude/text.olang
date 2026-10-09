@@ -126,7 +126,7 @@ fn (a String&) findFrom(sub String&, from I64) I64 ? {
 # plain loop over the bytes, which the optimizer turns into vector compares
 fn (t String&) Split(sep String&) mut Array<String&>&t {
     if sep.Len() == 0 {
-        bytes Array<String&>&t = Array<String&>(t.Len())
+        bytes mut Array<String&>&t = Array<String&>(t.Len())
         for i in range t.Len() {
             bytes[i] = t[i:i + 1]
         }
@@ -138,7 +138,7 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         for x in t {
             if x == c { n++ }
         }
-        pieces Array<String&>&t = Array<String&>(n)
+        pieces mut Array<String&>&t = Array<String&>(n)
         k I64 = 0
         start I64 = 0
         for i in range t.Len() {
@@ -158,7 +158,7 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         n++
         from = at + sep.Len()
     }
-    pieces Array<String&>&t = Array<String&>(n)
+    pieces mut Array<String&>&t = Array<String&>(n)
     from = 0
     for i in range n - 1 {
         at := try t.findFrom(sep, from) catch { unreachable }
@@ -248,7 +248,7 @@ fn (t String&) Lines() LineIter { return LineIter(t) }
 # a position in a text's lines - handed out fresh by Lines(), so every loop gets its own
 type LineIter struct(of String&) {
     text String&of = of
-    at mut I64 = 0                   # where the next line starts
+    at I64 = 0                       # where the next line starts
 }
 
 fn (it mut LineIter&) Next() String&it ? Exhausted {
@@ -469,7 +469,7 @@ fn mul128(a U64, b U64) (U64, U64) {
 }
 
 # how many of x's top bits are zero
-fn leadingZeros(x mut U64) I64 {
+fn leadingZeros(x U64) I64 {
     if x == 0 { return 64 }
     n I64 = 0
     if x >> 32 == 0 {
@@ -499,7 +499,7 @@ fn leadingZeros(x mut U64) I64 {
 # the bits of the F64 nearest man * 10^exp10 (man not 0), by Eisel and Lemire's algorithm as Go's strconv has it -
 # failing, with the default error, where the bits it keeps cannot settle the rounding, or the value is subnormal or
 # too large
-fn eiselLemire(man mut U64, exp10 I64) U64 ? {
+fn eiselLemire(man U64, exp10 I64) U64 ? {
     if exp10 < -348 or exp10 > 347 { error }
     clz := leadingZeros(man)
     man <<= U64(clz)
@@ -542,9 +542,9 @@ fn slowF64(text String&, neg Bool) F64 ? {
 type decimal struct() {
     d mut Array<U8>& = Array<U8>(800)       # digit values, the most significant first
     tmp mut Array<U8>& = Array<U8>(820)
-    nd mut I64 = 0                          # digits used
-    dp mut I64 = 0                          # the decimal point: the value is 0.d[0]d[1]... * 10^dp
-    trunc mut Bool = false                  # a nonzero digit was dropped past the 800th
+    nd I64 = 0                              # digits used
+    dp I64 = 0                              # the decimal point: the value is 0.d[0]d[1]... * 10^dp
+    trunc Bool = false                      # a nonzero digit was dropped past the 800th
 }
 
 # the number s writes - digits with an optional '.', then an optional exponent - with no sign before it
@@ -666,7 +666,7 @@ fn (a mut decimal&) leftShift(k U64) {
     a.trim()
 }
 
-fn (a mut decimal&) shift(k mut I64) {
+fn (a mut decimal&) shift(k I64) {
     if a.nd == 0 { return }
     for k > 60 {
         a.leftShift(60)
@@ -845,7 +845,7 @@ fn (x F64) ShortestDecimal() (U64, I64) ? {
 # than writing into a preallocated array would, and copied into one String, once, by ToString. Numbers and other
 # values go in as their renderings: "b.Push($n)".
 type StringBuilder struct() {
-    chars mut List<Char> = List<Char>()
+    chars List<Char> = List<Char>()
 }
 
 # adds t at the end

@@ -1,7 +1,7 @@
 # check: fail error[T25c]: a read-only reference cannot become writable
 # T25c: 'as' on a read-only payload cannot be passed for a writable parameter
 type Node struct(v I32) {
-    v mut
+    v
 }
 type Box enum {
     R(n Node&)

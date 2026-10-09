@@ -7,7 +7,7 @@ type Node struct(v I64) {
 }
 GA mut Node& = null
 fn setIt(n I64) {
-    x Node& = Node(n)
+    x mut Node& = Node(n)
     GA = x
 }
 fn main() ? {

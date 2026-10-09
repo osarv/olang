@@ -12,7 +12,7 @@ fn (s mut Store&) put(k String&s, v String&s) {
 }
 fn mk(n I64) String& { return $n "x" }
 fn load(n I64) Store& {
-    st Store&return = Store()
+    st mut Store&return = Store()
     text := mk(n)
     st.put(text[:1], text[1:])
     return st

@@ -1,6 +1,6 @@
 # check: fail error[E12]: expected Array<mut P&>&, found Array<P&>&
 # T25c: inner levels must agree exactly - an array of read-only references is not one of writable ones
-type P struct(x I32) { x mut }
+type P struct(x I32) { x }
 error E { X }
 fn main() ? E {
     r Array<P&>& = Array<P&>(1)

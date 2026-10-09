@@ -37,8 +37,8 @@ fn BaseSecretOf(t BaseThing&) I32 {
 # walk a chain of any length (TypeNameLookup's own interface changed from one flat alias string to a
 # struct list of them) - see the report.
 type BasePoint struct(X I32, Y I32) {
-    X mut
-    Y mut
+    X
+    Y
 }
 
 error BaseError {
@@ -85,7 +85,7 @@ type BaseSized trait {
 }
 
 type BaseBox struct(size I32) {
-    n mut I32 = size
+    n I32 = size
 }
 fn (b BaseBox&) Size() I32 { return b.n }
 

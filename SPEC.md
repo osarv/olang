@@ -218,11 +218,8 @@ tokenizer under L18.
 
 ```
 IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, NULL_LIT,
-++, --, ), ], return, done, fail, error, break, continue, abort, unreachable, mut
+++, --, ), ], return, done, fail, error, break, continue, abort, unreachable
 ```
-
-(`mut` is there for a mutable bare-pun field, `x mut` (C4), which ends at the line's end like any
-other field.)
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
 implicit end-of-statement token before continuing - except inside brackets (L18a). This token has no literal spelling; it exists
@@ -275,7 +272,7 @@ type Point struct(x I32) { x }
 if n > 3 { n = 3 }
 ```
 
-**L20a.** Four further, narrower positions accept a statement's end with no `STMNT_END` token at all,
+**L20a.** Three further, narrower positions accept a statement's end with no `STMNT_END` token at all,
 because the grammar never expects one there and L18 never produces one there either:
 - immediately after a `}` that closes a block, or a constructor, enum or error body;
 - immediately after the `&` of a bare reference marker (§8),
@@ -284,13 +281,11 @@ because the grammar never expects one there and L18 never produces one there eit
   followed by an operand; the two are therefore never ambiguous in this position. A marker naming a
   variable (`&x`) ends in an identifier, which does trigger a synthesized `STMNT_END` under L18, so this
   exception concerns the bare form only.);
-- immediately after the `mut` of a constructor's bare-pun field (§9.1 C2, `open mut`) — the only
-  statement-shaped form in the language whose last token is that keyword;
 - immediately after the `>` closing a type's argument list that ends a declaration with no initializer
   (`q Pair<I32, I64>`). A `>` used as "greater than" is always followed by its right operand, so it is never a
   complete statement's last token.
 
-Each of the last three applies only where its token is the last on its line (or of the file): a token after it
+Each of the last two applies only where its token is the last on its line (or of the file): a token after it
 on the same line continues the statement, so `s Array<I32>(4)` is a syntax error at the `(`, not a declaration
 followed by a parenthesized expression.
 
@@ -315,8 +310,9 @@ a parameter's type, a return type, an array's element type) — is one of:
 type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | type-var )
 ```
 
-A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type, on a type
-variable (which then stands for a writable reference when bound to one), and at the top of a declaration.
+A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
+variable (which then stands for a writable reference when bound to one). Written at the top of a **global**, it also
+makes the global assignable (D11); everywhere else it says nothing about a binding.
 
 `enum-body`, `struct-body`, `trait-body`, and `func-type` are anonymous type *shapes*,
 constructible inline anywhere a type expression is expected (§2.4, §2.5, §2.7, §2.11). `type-ref`
@@ -535,8 +531,8 @@ agree on reference-shapedness (T25a), and either neither has a length in its typ
 **T13.** Every struct type is declared with a constructor (§9): `type Name struct( params ) [ error-list ]
 { ctor-body } [ destruct-block ]`. Its fields are the ones its `ctor-body` declares (§9.1 C2), and every
 instance is built by calling it (§9.3 C6). There is no field-list form and no struct literal. A struct
-whose fields are meant to be set by its user declares an empty parameter list and mutable fields, which
-take their zero values (D13) — `type P struct() { x mut I32 }`, built as `P()`.
+whose fields are meant to be set by its user declares an empty parameter list and fields that take their zero
+values (D13) — `type P struct() { x I32 }`, built as `P()` - and sets them through a writable instance (C3).
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -742,7 +738,7 @@ a `mut` one may be assigned another - a named function's value, or a lambda's ca
 whole program and so lives in the program's scope (O1b).
 
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
-parameter's type and `mut` in order, presence and identity of a return type, and their error lists - the
+parameter's type, permission included (T25b), in order, presence and identity of a return type, and their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
 callee's own list (§7).
 
@@ -818,15 +814,19 @@ fn grab(l mut List&) mut Node&l    a writable one
 ```
 
 It is **shallow**: a reference stored inside a referent keeps the permission its own type gives, whichever
-reference it was reached through. `mut` before a type that is not reference-shaped is a compile-time error,
-except at the top of a declaration (below).
+reference it was reached through.
 
-At the **top of a declaration**, `mut` belongs to both the binding and, for a reference, its permission: a
-parameter (D9), global (D11) or field (C3) written `mut` may be assigned and, if a reference, written through -
-a writable global reference is `v mut Point&` - and one written without it may be neither. A **local** takes
-no `mut` (D11a): its own top-level reference is writable unless what initializes it is read-only, in which case
-the local is read-only too (writing through it is the error, where it is written); `x := e` gives it `e`'s type,
-permission included. A function's **built** result (§8 O13, a reference type naming no parameter) is writable,
+**`mut` speaks only about what a reference reaches**, in every position: a type argument or element, a field, a
+local, a parameter, a receiver, a result. Whether a **binding** may be assigned is never written: a local (D11) and a
+parameter or receiver (D9) always may be, and a field may be wherever its instance is reached writably (C3). So `mut`
+before a type that is not reference-shaped (a number, a struct or enum held by value, an array value, a function
+value) is a compile-time error everywhere but one place: the **top of a global**, where `mut` is the binding's and,
+for a reference, also its permission (D11) - `X mut I32` may be assigned and `X I32` not, and `v mut Point&` is a
+writable global reference. A global that may be assigned while holding a read-only reference cannot be written.
+
+A local's **written type** says what its reference permits: `x T& = e` is read-only and `x mut T& = e` writable, which
+`e` must then be (T25c); one declared with no initializer is null, read-only or writable as written. `x := e` gives it
+`e`'s type, permission included. A function's **built** result (§8 O13, a reference type naming no parameter) is writable,
 since it is new storage only the caller holds; a result **borrowed** from a parameter (`T&p`) is read-only
 unless written `mut T&p`. A result written as a **type variable** (`U`) is neither: it may hand back existing
 storage (O14b), so it has the permission its type argument has - in a function type too, a callback's
@@ -839,16 +839,17 @@ error - so nothing read-only can be written by being passed to something that wr
 outermost level only: inner levels (`Array<mut T&>` against `Array<T&>`) must agree exactly, since letting
 them differ would let a read-only reference be stored where a writable one is later read back out.
 A value **borrowed** into a reference (E12c) gives a writable one only if the value may itself be written - a
-local, a `mut` global, a `mut` parameter's copy - and a read-only one otherwise. A slice (E16a) has its base's
+local, a parameter's copy (D9), a `mut` global, or a field or element of one of these or of a writable reference - and
+a read-only one otherwise. A slice (E16a) has its base's
 permission; a conditional or a match value (E28, S12b) is writable only when every value it can give is; `as` (E32)
 gives the payload's own permission, and a checked index (`try c[i]`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
-compiling - text, or an array of constants - that reaches one (a parameter without `mut`, a read-only field or
-element) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
-plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
-parameter or field - gets a copy of its own. Which happens is not observable except as speed, and as identity:
+compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element)
+is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
+plain data an immutable global holds is read-only data the same way. Any other target - a value, which is
+storage of its own, or a writable reference - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
 site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data. An
 element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
@@ -894,7 +895,7 @@ destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a
 struct holding it as a field is the way to name one.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
-constructor, written after the type on the same line: `type Percent I32(v mut I32) [? errors] { ... }`.
+constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] { ... }`.
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
@@ -908,7 +909,7 @@ makes that a compile-time error at the literal - there is no `try` to write on a
 it.
 
 ```
-type Percent I32(v mut I32) {
+type Percent I32(v I32) {
     if v > 100 { v = 100 }        # Percent(150) is 100
 }
 type Checked I32(v I32) ? RangeError {
@@ -1022,9 +1023,8 @@ of several types is an enum of them (T17); one thing that can be called is a fun
 **T31.** A type `T` **satisfies** a trait `R` when, for every method signature in `R`, `T` has a method (§4.4 M19)
 of that name whose
 
-- receiver's type is `T` up to reference-shape (`T`, `mut T`, `T&` or `mut T&` — the latitude E12 gives any
-  argument),
-- receiver is `mut` if and only if the signature is declared `mut`,
+- receiver's type is `T` up to reference-shape (`T`, `T&` or `mut T&` — the latitude E12 gives any argument),
+- receiver is a writable reference (`mut T&`) if and only if the signature is declared `mut`,
 - remaining parameters agree in count, order and type (T27), a parameter differing only in reference-shape
   included, since the call is a direct one and E12 borrows - and in each parameter's `mut` and a reference's
   permission (T25b), so a method never writes through what its trait only lets it read,
@@ -1159,7 +1159,7 @@ a method, whatever its first parameter's type.
 
 ```
 param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L18a allows)
-param           ::= IDEN [ "mut" ] type-expr [ "=" expr ]
+param           ::= IDEN type-expr [ "=" expr ]
 ret-type        ::= type-expr | "(" type-expr "," type-expr { "," type-expr } ")"
 error-list      ::= error-list-item { "+" error-list-item }
 error-list-item ::= alias-chain IDEN
@@ -1221,8 +1221,8 @@ constructor's own `param-list` (§9.1 C1).
 
 **D9a.** A parameter whose type is an **array** must carry a reference marker (T24) on the array itself:
 a by-value array parameter is a compile-time error. Passing an array by value copies it, silently and in
-time proportional to its length, at every call — and a `mut` one would then be written by the callee where
-the caller can never see it — the hazard the `&` marker exists to prevent, arising here from its absence
+time proportional to its length, at every call — and the callee's writes to it would then land where the caller
+can never see them — the hazard the `&` marker exists to prevent, arising here from its absence
 rather than its presence. Requiring the marker also means one rule covers both length kinds: what
 makes a parameter alias the caller's array is `&`, never how the array's length happens to be known.
 
@@ -1231,27 +1231,28 @@ value and is rejected; `Array<Handle&>&` is a reference to it and is accepted. I
 as to any other: a parameter takes `Array<F32, 3>&`, never `Array<F32, 3>` (T7c). It does not apply to an `extern-param`
 (§11 X3), which marshals to a raw pointer and so never copies anything to begin with.
 
-**D9b.** Nor does it apply to a generic's by-value parameter (`x <T>`, `x mut <T>`) instantiated with an array: the
-declaration does not say array, and its meaning is the by-value parameter's, as for a struct. Without `mut` the callee
-reads the caller's array itself - storage that outlives the call, so it may be borrowed like any value the callee holds
-(passed to a `T&` parameter, compared by `Eq`); with `mut` the callee gets its own copy of the elements, which it may
-write without the caller seeing it. The compile-time evaluator (K1) gives both the same meaning.
+**D9b.** Nor does it apply to a generic's by-value parameter (`x <T>`) instantiated with an array: the declaration
+does not say array, and its meaning is the by-value parameter's, as for a struct - the callee's own (D9). The callee
+gets its own copy of the elements exactly when its body may write the parameter: assigns it or one of its elements,
+or makes a writable reference to its storage (a slice of it, a borrow into a `mut` reference parameter). Otherwise it
+reads the caller's array itself - storage that outlives the call, so it may be borrowed like any value the callee
+holds (passed to a `T&` parameter, compared by `Eq`) - and sees a write another reference to that array makes during
+the call. The compile-time evaluator (K1) gives both the same meaning.
 
-**D9.** A parameter is immutable unless declared with `mut` (D8); see D11 for how this differs from
-a local variable. `mut` carries its ordinary meaning — this can be assigned to — and combines with the
-parameter's type rather than modifying it: for a value parameter it makes the callee's own copy
-writable, leaving the caller unaffected either way; for a reference parameter (T24) it makes the
-**caller's own instance** writable, so the caller observes the write - the parameter's type is then a writable
-reference (T25b), and only a writable argument may be passed to it (T25c). Whether a call writes to the
-caller's value is therefore readable from the signature alone: `&` says whose instance it is, `mut`
-says whether it may be written, and the two are independent. A parameter's reference marker may
+**D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
+without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
+reference parameter names - the **caller's own instance** - may be written only when its type is a writable
+reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
+parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing. Whether
+a call writes to the caller's value is therefore readable from the signature alone: `&` says whose instance it is,
+`mut` says whether it may be written, and the two are independent. A parameter's reference marker may
 name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```
 lambda       ::= "fn" "(" [ lambda-param { "," lambda-param } ] ")" [ ret-type ] [ "?" [ error-list ] ] block
-lambda-param ::= IDEN [ "mut" ] [ type-expr ]
+lambda-param ::= IDEN [ type-expr ]
 ```
 
 Its value has the function type its signature describes (T21), and it is checked and behaves as a function
@@ -1275,10 +1276,10 @@ fail with the default error alone (§7.6).
 written in. Each one it uses is **captured** when the lambda is made, as though passed to a parameter of its
 own type:
 
-- a **value** is copied, and the lambda's copy is **read-only** - changing the variable afterwards does not
-  change the lambda, and writing to the copy is a compile-time error;
+- a **value** is copied, and the lambda's copy is **read-only**, unlike a parameter's - changing the variable
+  afterwards does not change the lambda, and writing to the copy is a compile-time error;
 - a **reference** keeps naming the very instance it names (the copy is of the reference), and may be written
-  through exactly when the variable may be (D9) - this is how a lambda changes state outside itself;
+  through exactly when its type is writable (T25b) - this is how a lambda changes state outside itself;
 - a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
   the lambda holds a read-only reference to the variable's own storage, sees later writes to it, and lives no
   longer than it (D16d);
@@ -1331,13 +1332,15 @@ var-decl ::= IDEN [ "mut" ] type-expr [ "=" expr ] STMNT_END
            | IDEN [ "mut" ] ":=" expr STMNT_END
 ```
 
-The `mut` keyword is meaningful only for a **global**: a global declared without `mut` is immutable
-(assignment to it is a compile-time error, and a reference global is read-only, T25b); a global declared with
-`mut` is mutable, and a reference one writable. A **local** (including a `for`-loop's own init variable, §6.3)
-is always mutable, and its own top-level reference writable, so there is nothing to declare.
+At the top of a **global**, `mut` is the binding's: a global declared without `mut` is immutable (assignment to it
+is a compile-time error, and a reference global is read-only, T25b); a global declared with `mut` is mutable, and a
+reference one writable. A **local** - a `for` loop's own variable (§6.3), a pattern's binding (S13b) and a
+constructor's field (C2a) included - may always be assigned, so there is nothing to declare about it; a `mut` written
+on it belongs to its type, `x mut T&` a writable reference and `x T&` a read-only one (T25b).
 
-**D11a.** Writing `mut` on a local is a compile-time error: it would state nothing, and its absence
-elsewhere would read as immutability that does not exist.
+**D11a.** `mut` before a local's value type (`x mut I32`), or before `:=` (`x mut := e`, which gives the local `e`'s
+permission already), is a compile-time error: it would state nothing, and its absence elsewhere would read as
+immutability that does not exist.
 
 **D12.** In the first form (explicit type), `= expr` is **optional for every declared type**: a
 declaration with no initializer is D13's zero value. When present, `expr`'s type must fit the declared type
@@ -1348,7 +1351,7 @@ names with one type: it is one declaration per name, in the order written, each 
 taking the i-th value - so each initializer sees the names declared before it, as in C. There is one value per name,
 or none (each then its zero value, D13); any other count is a compile-time error. It is valid wherever a declaration
 of that kind is - a local, a global (`X, Y mut I32 = 0, 0`) - and as constructor fields (C2), where the names may
-also be puns (`x, y mut`) or inferred (`p, q := a, b`).
+also be puns (`x, y`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
 `0`/`0.0` for numeric types, `null` (T2a) for anything nullable, an empty array for `Array<T>`, `N` elements each
@@ -2728,11 +2731,9 @@ operand-type requirements, except that the place is evaluated **once**: `a[next(
 element, and stores to it. The result of `lvalue X expr` must fit `lvalue` as any assigned value does (E12): with `b`
 a `U8` and `x` an `I32`, `b += x` is an error, since `b + x` is an `I32` (T6b) - `b = U8(b + x)` says what is meant.
 
-**S6.** The target `lvalue` must be mutable: a local variable (always mutable,
-§3 D11), a mutable global, a mutable parameter, or a mutable
-constructor field (§9), or an
-index/member chain whose own base is one of these. Assigning to an immutable target is a
-compile-time error.
+**S6.** The target `lvalue` must be assignable: a local (D11) or a parameter (D9) - never a lambda's copy of a
+captured value (D16c) - a `mut` global, or a field or element reached through one of these or through a writable
+reference (T25b, C3). Assigning to anything else is a compile-time error.
 
 **S7.** The assigned value (for `=`, `expr` directly; for a compound form, the binary operation's
 result) must fit (§5.3 E12) the target's declared type.
@@ -2964,8 +2965,9 @@ sense when `true` and `false` are both covered - not required of a statement, bu
 **S13b (patterns).** A pattern names a case of the enum at its position: `Type.Case` matches that case whatever its
 payload holds, and `Type.Case(p, ...)` matches it when each position of its payload matches, in declaration order,
 naming every field. A position is one of:
-- a **name**: a fresh local bound to that field, visible to the clause's guard and body only - an identifier there
-  is always a binding, never a value read, so the form never means "compare against a variable";
+- a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
+  assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
+  means "compare against a variable";
 - `_`: the field, ignored;
 - a nested **pattern**, naming a case of the enum that field holds (S13d);
 - a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
@@ -3914,11 +3916,11 @@ value where it dangles. Accordingly:
 - **O25f.** A derived obligation (O22) recorded for a value through which something can be stored (O25g) is one
   of equality, discharged only by the same scope.
 - **O25g (what a narrowed scope can misplace).** Something **can be stored through** a reference when a write
-  through it can store a reference: assigning a `mut` field (C3) through a writable reference (T25b), an element
-  through a writable array reference, or either through a writable reference reached from it at any depth - the
-  value assigned holding a reference. An enum's payload is never assigned (T17), and nothing is written through a
-  read-only reference, so through a reference to an enum whose payloads hold only read-only references, or to a struct
-  none of whose `mut` fields holds a reference, nothing can be stored. Exactness protects exactly those stores - what
+  through it can store a reference: assigning a field (C3) or an element through a writable reference (T25b), or
+  either through a writable reference reached from it at any depth - the value assigned holding a reference. An enum's
+  payload is never assigned (T17), and nothing is written through a read-only reference, so through a read-only
+  reference, or a reference to an enum whose payloads hold only read-only references, or to a struct none of whose
+  fields holds a reference, nothing can be stored. Exactness protects exactly those stores - what
   one builds is built in the reference's scope and kept where the referent really is - so where none can happen, a
   reference held somewhere it merely outlives misplaces nothing, and O25c, O25e, O25f, O14 and C2d ask only that it
   outlive. A reference to plain data is the simplest such case.
@@ -4192,13 +4194,13 @@ same, so that one spelling of an error set holds everywhere in the language.
 **C2.** `ctor-body ::= { ctor-field STMNT_END | stmnt }` — a constructor's body is an ordinary
 statement block (§6) in which a field declaration is one more kind of statement, so fields and
 statements interleave freely in textual order. Fields are separated by statement ends like any statement; a comma
-between two is a compile-time error (several names sharing one declaration, `x, y mut`, are D12b's). A `ctor-field`
+between two is a compile-time error (several names sharing one declaration, `x, y`, are D12b's). A `ctor-field`
 is exactly one of:
 
 ```
 IDEN [ "mut" ] ":=" expr           # inferred: type read from expr, as D15 reads it
-IDEN [ "mut" ] type-expr [ "=" expr ]   # explicit type, optional initializer
-IDEN [ "mut" ]                     # bare pun (§9.2) — valid only when no type/initializer follows
+IDEN type-expr [ "=" expr ]        # explicit type, optional initializer
+IDEN                               # bare pun (§9.2) — valid only when no type/initializer follows
 ```
 
 A field's declared type (explicit, or inferred by `:=`) may carry a reference marker (T24): bare, or
@@ -4264,7 +4266,7 @@ type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shor
 ```
 
 **C2e (superseded by T7c).** An array stored in the instance itself is a field of a fixed-length array type,
-`m mut Array<F32, 16>` or `blob Array<I64, MutexWords>` - its length any constant argument (§12.7 G21), and in a
+`m Array<F32, 16>` or `blob Array<I64, MutexWords>` - its length any constant argument (§12.7 G21), and in a
 generic type one its arguments compute (`Array<T, N * 2>`). Copying an array into one is T7d's checked copy. An
 `Array<T>` value field is T7a's error whatever initializes it - `m Array<F32> = Array<F32>(16)` is written
 `m Array<F32, 16>`.
@@ -4274,17 +4276,21 @@ produces no value of its own to return: the instance is assembled by the languag
 bindings (C6), and the way to end a construction early is `error` (§7.2 R3), which produces no
 instance at all.
 
-**C3.** A field is mutable only if declared with `mut` (D9's own rule for parameters applies
-identically here); otherwise it is immutable. This governs the constructed instance's own field; the
-local a `ctor-field` declares (C2a) is writable inside the `ctor-body` regardless, exactly as any
-other local is, and the instance is assembled from whatever value that local holds at the end (C6).
+**C3.** A field may be assigned exactly where its instance is reached writably - through a local, a parameter, a
+`mut` global or a writable reference (S6) - whatever its type: there is no per-field immutability. A field holding a
+reference says with `mut` only what its referent permits, `next mut Node&` a writable reference and `name String&` a
+read-only one, both assignable through a writable instance; `mut` before a field's value type is a compile-time
+error. A `:=` field's `mut` says the same of the reference it infers, and is the same error where it infers a value.
+A field nothing outside the type's module should write is kept private (M6a). The local a `ctor-field` declares (C2a)
+is writable inside the `ctor-body`, exactly as any other local is, and the instance is assembled from whatever value
+that local holds at the end (C6).
 
 ### 9.2 Bare-pun fields
 
 **C4.** A `ctor-field` written as a bare name (with no type, no `:=`, no `=`) must match, by name,
 one of the constructor's own declared parameters exactly; the field's type is that parameter's own
-type, and the field's value, for any given constructed instance, is exactly the value passed for
-that parameter at the call that constructed it. A bare name that does not match any parameter of
+type, a reference's permission included, and the field's value, for any given constructed instance, is exactly the
+value passed for that parameter at the call that constructed it. A bare name that does not match any parameter of
 the same constructor is a compile-time error.
 
 **C5.** A `ctor-field` with an explicit type and no `=` initializer takes its type's zero value (D13) —
@@ -4752,9 +4758,10 @@ sound, and only the first is about `N`:
   needs and divide the reservation by its size; `U8` is the wrong choice for almost every foreign type, and is right
   only for one that really is a byte buffer. The largest alignment this expresses is a primitive's largest,
   currently 8. A foreign type needing more (a long double, a vector type) has no sound spelling here.
-- **It is declared without `mut`.** Its bytes belong to the foreign side, so no olang code should write
-  them, and omitting `mut` is what says so. This does not restrict the foreign function at all: X2 gives
-  an `extern-param` no mutability of its own, and X3 hands over a bare pointer, so the callee writes
+- **It is private (M6a).** Its bytes belong to the foreign side, so no code outside the module declaring it
+  should write them, and a lowercase field name is what keeps it there: no other module can name it. Inside its
+  module it is written only by the foreign calls it is handed to. This does not restrict the foreign function at
+  all: X2 gives an `extern-param` no mutability of its own, and X3 hands over a bare pointer, so the callee writes
   through it exactly as it must. Reading such a blob from olang stays legal and is merely meaningless.
 
 **X3b (a foreign call is opaque).** A call to an external function may read and write any storage
@@ -5057,7 +5064,7 @@ its parameter list with the parameter's type (G6):
 
 ```
 type Matrix<T, R I64, C I64> struct() {
-    data mut Array<T, R * C>
+    data Array<T, R * C>
 }
 type Ring<T, N I64> struct() { ... }
 type Grid<T, L Layout> struct() { ... }      # Layout an enum whose cases carry no payload
@@ -5178,8 +5185,8 @@ function's body, for every instantiation of the function. There is no other synt
 ```
 type Ring<T, N I64> struct() {
     assert N > 0 and (N & (N - 1)) == 0       # Ring<I32, 6> is a compile-time error here
-    items mut Array<T, N>
-    head mut I64
+    items Array<T, N>
+    head I64
 }
 ```
 
@@ -5201,8 +5208,8 @@ error as they would at run time. It is **not** possible when evaluation would:
 - read a mutable global, whose value is the running program's, or write any global or what one holds (its
   fields, the elements of its arrays, what its references name) - skipping the computation at run time would skip
   the write;
-- read an immutable global whose value reaches storage a writable reference can change (T25b) - a `mut` field's
-  referent, say - since the running program may have changed it by then;
+- read an immutable global whose value reaches storage a writable reference can change (T25b) - the referent of
+  a field written `mut T&`, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
 - call an `extern` function other than the C math library's (X8) - or, building for another machine (B12a), one of

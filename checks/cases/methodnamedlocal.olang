@@ -3,7 +3,7 @@
 # looked the callee up among the locals by name and called the local as a function value - garbage, or a crash
 import "std/os"
 type box struct(n I64) {
-    n mut
+    n
 }
 fn (a box&) count() I64 { return a.n + 1 }
 fn main() ? {
