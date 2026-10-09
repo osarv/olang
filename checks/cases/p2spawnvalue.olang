@@ -1,0 +1,20 @@
+# check: fail does not outlive the enclosing 'join' block
+# P2: a by-value argument is copied to the task, but what it refers to is the loop body's
+type W struct(a Array<I64>&) {
+    a
+}
+fn total(w W) I64 {
+    t I64 = 0
+    for x in w.a { t += x }
+    return t
+}
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            wv := W(a)
+            spawn out[i] = total(wv)
+        }
+    }
+}

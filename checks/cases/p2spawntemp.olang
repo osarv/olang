@@ -1,0 +1,20 @@
+# check: fail does not outlive the enclosing 'join' block
+# P2: a temporary argument is built in the join block, but it holds a reference to a loop body's array, which closes
+# while the task may still read it
+type W struct(a Array<I64>&) {
+    a
+}
+fn total(w W&) I64 {
+    t I64 = 0
+    for x in w.a { t += x }
+    return t
+}
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn out[i] = total(W(a))
+        }
+    }
+}

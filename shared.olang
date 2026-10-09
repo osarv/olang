@@ -9924,3 +9924,247 @@ test "T7b/R9a: the same results computed while compiling and at run time" {
     assert WlBaked == 30 + 3 + 6 + 7
     assert wlBakeSum(wlRun - 2) == WlBaked
 }
+
+# ---- the statements/scopes review (2026-10-09): where a value read out of, or built beside, a call lands ----
+# Each value is read back after churning the arena; the calls are given a mutable global so they run rather than
+# being decided while compiling (S18c), and a baked global at the end checks the evaluator agrees.
+type SfNode struct(v I64) {
+    v mut
+}
+type SfBox struct(n mut SfNode&) {
+    n mut
+}
+type SfPk enum {
+    Has(n SfNode&)
+    No
+}
+sfRun mut I64 = 5
+
+error SfErr {
+    BAD
+}
+fn sfMk(k I64) mut SfNode& ? SfErr {
+    if k > -100 { error SfErr.BAD }
+    return SfNode(k)
+}
+fn sfTwo(k I64) (mut SfNode&, mut SfNode&) ? SfErr {
+    if k > -100 { error SfErr.BAD }
+    return SfNode(k), SfNode(k + 1)
+}
+fn sfFallback(a mut SfNode&) mut SfNode&a { return try sfMk(1) catch default a }
+
+test "R9a: a reference default is judged where the call's result lands, not where the try is written" {
+    outer SfNode& = SfNode(sfRun)
+    keep SfNode& = SfNode(0)
+    a SfNode& = keep
+    b SfNode& = keep
+    for i in range 2 {
+        scratch := Array<I64>(8, 9)
+        keep = try sfMk(i) catch default outer          # outer lives where keep does
+        a, b = try sfTwo(i) catch default outer, outer
+        scratch[0] = 1
+    }
+    obChurn()
+    assert keep.v == 5 and a.v == 5 and b.v == 5 and sfFallback(outer).v == 5
+}
+
+fn sfMkBox(v I64) SfBox& { return SfBox(SfNode(v)) }
+fn sfMkNodes(v I64) Array<mut SfNode&>& {
+    n SfNode&return = SfNode(v)
+    return Array<mut SfNode&>(2, n)
+}
+fn sfMkArr(v I64) Array<I64>& { return Array<I64>(4, v) }
+fn sfMkPk(v I64) SfPk& { return SfPk.Has(SfNode(v)) }
+
+test "O18a: a field, an element, a slice or a payload of a call's built result lands where it is put" {
+    f SfNode& = SfNode(0)
+    e SfNode& = f
+    s Array<I64>& = Array<I64>(1)
+    p SfNode& = sfMkPk(0) as SfPk.Has         # a payload is read-only, so p is
+    for i in range 2 {
+        f = sfMkBox(sfRun + 40).n
+        e = sfMkNodes(sfRun + 41)[0]
+        s = sfMkArr(sfRun + 42)[0:2]
+        p = sfMkPk(sfRun + 43) as SfPk.Has
+    }
+    obChurn()
+    assert f.v == 45 and e.v == 46 and s[1] == 47 and s.Len() == 2 and p.v == 48
+}
+
+fn sfLit(v I64) Array<mut SfNode&>& { return SfNode&[SfNode(v)] }
+fn sfCond(v I64, c Bool) SfBox& { return SfBox(SfNode(v)) if c else SfBox(SfNode(1)) }
+fn sfPayload(v I64) SfPk { return SfPk.Has(SfNode(v)) }
+fn sfMatch(v I64) SfBox& { return match v { case 1 => SfBox(SfNode(1))  nomatch => SfBox(SfNode(v)) } }
+fn sfFillBoxes(v I64) Array<mut SfBox&>& { return Array<mut SfBox&>(1, SfBox(SfNode(v))) }
+fn sfFillNodes(v I64) Array<mut SfNode&>& { return Array<mut SfNode&>(2, SfNode(v)) }
+
+test "T7/O18a: an array literal or fill built from temporaries, returned, holds them where the array lands" {
+    x1 := sfLit(sfRun + 36)
+    x2 := sfCond(sfRun + 37, true)
+    x3 := sfPayload(sfRun + 38)
+    x4 := sfMatch(sfRun + 39)
+    x5 := sfFillBoxes(sfRun + 40)
+    x6 := sfFillNodes(sfRun + 41)
+    obChurn()
+    assert x1[0].v == 41 and x2.n.v == 42 and (x3 as SfPk.Has).v == 43 and x4.n.v == 44
+    assert x5[0].n.v == 45 and x6[1].v == 46
+    x6[1].v = 7
+    assert x6[0].v == 7                     # a fill copies one value: both elements are one node
+}
+
+fn sfPair(k I64) (mut SfNode&, mut SfNode&) { return SfNode(k + 40), SfNode(k + 2) }
+
+test "D8c/O18a: results destructured into existing variables land where those variables live" {
+    a SfNode& = SfNode(0)
+    b SfNode& = a
+    for i in range 2 {
+        a, b = sfPair(sfRun + i)
+    }
+    obChurn()
+    assert a.v == 46 and b.v == 8
+}
+
+fn sfPick(n SfNode&, c Bool) SfNode&n { return n if c else SfNode(9) }
+
+test "E28/S12b: a conditional or match of a reference and a new value is a reference, the new one built where it lands" {
+    n SfNode& = SfNode(sfRun)
+    c Bool = n.v > 3
+    k SfNode& = n if c else SfNode(1)
+    j SfNode& = SfNode(1) if c else n
+    m SfNode& = n
+    for i in range 2 {
+        m = SfNode(i + 40) if i > 0 else n
+        q SfNode& = match i { case 0 => n  nomatch => SfNode(7) }
+        assert q.v == 5 or q.v == 7
+    }
+    p := sfPick(n, false)
+    obChurn()
+    assert k.v == 5 and j.v == 1 and m.v == 41 and p.v == 9
+}
+
+type SfWrap struct(n SfNode&) {
+    n
+}
+type SfWorld struct() {
+    items mut List<SfNode&>& = List<SfNode&>()
+}
+fn sfShow(n SfNode&) I64 { return n.v }
+fn sfFirstTwice(w SfWorld&) I64 ? {
+    x := sfShow(try w.items[0])
+    y := try w.items[0]
+    return x + y.v
+}
+
+test "C2d/E31: a constructor call pushed lands with the list, and a checked index reads through a field" {
+    outer SfNode& = SfNode(sfRun)
+    l List<SfWrap&>& = List<SfWrap&>()
+    for i in range 2 {
+        l.Push(SfWrap(outer))                       # outer lives where l does
+        l.Push(SfWrap(SfNode(i + 50)))
+    }
+    w SfWorld& = SfWorld()
+    w.items.Push(SfNode(sfRun + 1))
+    obChurn()
+    assert l[0].n.v == 5 and l[3].n.v == 51 and (try sfFirstTwice(w) catch default 0) == 12
+}
+
+test "O4b/G11: a list of pairs holding text references, built in a loop over another list" {
+    names List<String&>& = List<String&>()
+    names.Push("ann")
+    names.Push("bobby")
+    l List<Pair<String&, I64>>& = List<Pair<String&, I64>>()
+    for n in names { l.Push(Pair(n, n.Len())) }
+    obChurn()
+    assert l[1].First == "bobby" and l[1].Second == 5 and l[0].Second == 3
+}
+
+type SfHolder struct(n SfNode&) {
+    n
+}
+fn sfIdHolder(x SfHolder) SfHolder { return x }
+fn sfIdRef(h SfHolder&) SfHolder&h { return h }
+
+test "O4b/O14c: a by-value parameter holding references returns them to a caller that keeps them no further out" {
+    outer SfNode& = SfNode(sfRun)
+    keep SfHolder = SfHolder(outer)
+    for i in range 2 {
+        keep = sfIdHolder(SfHolder(outer))
+    }
+    h := SfHolder(outer)
+    r SfHolder& = sfIdRef(h)
+    obChurn()
+    assert keep.n.v == 5 and r.n.v == 5
+}
+
+type SfCounter struct(start I64) {
+    n mut I64 = start
+}
+fn (c mut SfCounter&) Call() I64 {
+    c.n++
+    return c.n
+}
+fn sfForward(c mut SfCounter&) fn() I64 { return c }
+fn sfTwice(f fn() I64) I64 { return f() + f() }
+
+test "E31/O14a: an instance whose type declares Call, passed in, is returned as a function value" {
+    c SfCounter& = SfCounter(sfRun + 36)
+    g := sfForward(c)
+    x := sfTwice(c)                     # 42 + 43
+    assert g() == 44 and x == 85 and c.n == 44
+}
+
+SfGL mut List<SfWrap&>& = List<SfWrap&>()
+SfGN mut SfNode& = SfNode(7)
+SfGR List<I64>& = sfReadOnlyList()
+fn sfReadOnlyList() List<I64>& {
+    l List<I64>&return = List<I64>()
+    l.Push(5)
+    return l
+}
+fn sfLink(a mut SfBox&, b mut SfNode&a) { a.n = b }
+fn sfCount(l List<I64>&) I64 { return l.Len() }
+fn sfFillGlobals(n I64) {
+    for i in range n {
+        SfGL.Push(SfWrap(SfNode(i + 40)))           # built in the program's scope, where SfGL lives (O18b, O1b)
+        scratch := Array<I64>(8, 9)
+        scratch[0] = 1
+    }
+    SfGN = SfNode(n + 90)
+}
+
+test "O1b/O25e: a global argument binds the callee's scope to the program's, read through a read-only receiver or built into" {
+    sfFillGlobals(sfRun - 2)
+    obChurn()
+    assert SfGL[0].n.v == 40 and SfGL[2].n.v == 42 and SfGN.v == 93
+    assert sfCount(SfGR) == 1 and SfGR.Len() == 1 and SfGR[0] == 5 and 5 in SfGR
+}
+
+test "T25d: constant text elements read through a for-in are static, and may be stored anywhere" {
+    l List<String&>& = List<String&>()
+    if sfRun > 0 {
+        for nm in String&["x", "yy"] { l.Push(nm) }
+    }
+    obChurn()
+    assert l[1] == "yy" and l.Len() == 2
+}
+
+# the same computed while compiling (K2) and at run time
+fn sfBakeSum(n I64) I64 {
+    a SfNode& = SfNode(0)
+    b SfNode& = a
+    for i in range 2 { a, b = sfPair(n + i) }
+    f SfNode& = sfMkBox(n).n
+    e := sfMkNodes(n + 1)[0]
+    k SfNode& = a if n > 3 else SfNode(1)
+    l List<String&>& = List<String&>()
+    for nm in String&["x", "yy"] { l.Push(nm) }
+    pl List<Pair<String&, I64>>& = List<Pair<String&, I64>>()
+    for s in l { pl.Push(Pair(s, s.Len())) }
+    return a.v + b.v + f.v + e.v + k.v + pl[1].Second
+}
+SfBaked := sfBakeSum(5)
+
+test "O18a/T25d: the same results computed while compiling and at run time" {
+    assert SfBaked == 46 + 8 + 5 + 6 + 46 + 2
+    assert sfBakeSum(sfRun) == SfBaked
+}
