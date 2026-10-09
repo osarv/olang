@@ -643,6 +643,23 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
 
 // ---- operators ----
 
+//an operand evaluating which does nothing but read - a variable, a field or element of one, at a literal or variable
+//index - so skipping it changes nothing
+static bool ctReadsOnly(struct operand* op) {
+    for (int depth = 0; depth < 64; depth++) {
+        if (op->opType == OPERATION_READ_VAR) return true;
+        if (op->opType == OPERATION_NONE) return op->isLiteral;
+        if (op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) return false;
+        if (op->isAtCall || op->catchClauses.len || op->checkRoot) return false;
+        if (op->opType == OPERATION_INDEX) {
+            struct operand* idx = *(struct operand**)ListGetIdx(&op->args, 1);
+            if (!(idx->isLiteral || idx->opType == OPERATION_READ_VAR)) return false;
+        }
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    }
+    return false;
+}
+
 static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
     struct operand* aOp = *(struct operand**)ListGetIdx(&op->args, 0);
     struct operand* bOp = *(struct operand**)ListGetIdx(&op->args, 1);
@@ -1791,7 +1808,12 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return r;
         }
         case OPERATION_LEN: {
-            struct ctVal* a = ctDeref(ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0)));
+            //K1/T7c: an Array<T, N>'s length is N whatever holds it - read off its type, where reading what holds it would
+            //do nothing (a variable, a field, an element): it need not be known
+            struct operand* arr = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (arr->type.bType == BASETYPE_ARRAY && !arr->type.arrMalloc && arr->type.arrLen && ctReadsOnly(arr))
+                return ctInt(op->type, arr->type.arrLen->intLiteralVal);
+            struct ctVal* a = ctDeref(ctEval(st, arr));
             if (!a) return NULL;
             if (a->kind == CT_NULL) return ctInt(op->type, 0);
             return ctInt(op->type, a->n);

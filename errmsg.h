@@ -149,6 +149,9 @@ struct type;
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
     X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
+    X(ERR_CONST_VAR_BARE,               "G23",   "%S is a constant variable - write it as a value '<%S>'") \
+    X(ERR_CONST_VAR_AFTER_SHIFT,        "G23",   "'<<' is a shift - a comparison before a constant variable is written with a space, 'i < <%S>', not 'i <<%S>'") \
+    X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
     X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "<%S> is a type variable, so its cases are types") \
     X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \

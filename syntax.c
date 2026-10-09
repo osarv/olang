@@ -4448,6 +4448,18 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);
         return true;
     }
+    //G23: "i <<N> {" - "<<" is a shift, so "i < <N>" needs its space
+    if (prev.type == TOK_GRT && TokenBefore(prev).type == TOK_IDEN && TokenBefore(TokenBefore(prev)).type == TOK_BTSFT_L
+            && TokenBefore(prev).lineNr == found.lineNr) {
+        ErrSyntax(TokenBefore(TokenBefore(prev)), ERR_CONST_VAR_AFTER_SHIFT, TokenBefore(prev).str, TokenBefore(prev).str);
+        return true;
+    }
+    //G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
+    if ((found.type == TOK_BTSFT_L || found.type == TOK_LST || found.type == TOK_LSE || found.type == TOK_GRE
+            || found.type == TOK_BTSFT_R || found.type == TOK_GRT) && expected && !strcmp(expected, TokenStrFromType(TOK_GRT))) {
+        ErrSyntax(found, ERR_CONST_ARG_PAREN, found);
+        return true;
+    }
     //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
         ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);

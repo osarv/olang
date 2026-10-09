@@ -2115,11 +2115,15 @@ static void collectTypeVarNames(struct syntax* node, struct list* out) {
     if (!node) return;
     if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) { //G22: "<N>" in a constant argument too
         struct token t = firstTokOfType(node, TOK_IDEN);
+        bool seen = false;
         if (t.type != TOK_NONE) {
             struct str n = strFromTok(t);
-            for (int i = 0; i < out->len; i++) if (StrCmp(*(struct str*)ListGetIdx(out, i), n)) return;
-            ListAdd(out, &n);
+            for (int i = 0; i < out->len; i++) if (StrCmp(*(struct str*)ListGetIdx(out, i), n)) seen = true;
+            if (!seen) ListAdd(out, &n);
         }
+        //G19/G28: a constraint's own variables - "<V Shaped<<R>, <C>>>" - are the signature's too
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR);
+        if (c) collectTypeVarNames(c, out);
         return;
     }
     for (int i = 0; i < node->parts.len; i++) {
@@ -2132,10 +2136,13 @@ static void collectTypeVarToks(struct syntax* node, struct list* out) {
     if (!node) return;
     if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
         struct token t = firstTokOfType(node, TOK_IDEN);
+        bool seen = false;
         if (t.type != TOK_NONE) {
-            for (int i = 0; i < out->len; i++) if (StrCmp(strFromTok(*(struct token*)ListGetIdx(out, i)), strFromTok(t))) return;
-            ListAdd(out, &t);
+            for (int i = 0; i < out->len; i++) if (StrCmp(strFromTok(*(struct token*)ListGetIdx(out, i)), strFromTok(t))) seen = true;
+            if (!seen) ListAdd(out, &t);
         }
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR);
+        if (c) collectTypeVarToks(c, out);
         return;
     }
     for (int i = 0; i < node->parts.len; i++) {
@@ -3217,6 +3224,12 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
     }
     struct token unknownVar = constArgUnknownVar(node);
     if (unknownVar.type != TOK_NONE) { Err(unknownVar, ERR_CONST_VAR_UNKNOWN, strFromTok(unknownVar)); return bad; }
+    //a type's name, where a value belongs - "Ring<I32, I32>"
+    if (ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 && partSntx(ref, 0)->type == SNTX_NAME
+            && partSntx(ref, 0)->parts.len == 1 && nameIsAType(mod, strFromTok(partAt(partSntx(ref, 0), 0)->tok))) {
+        Err(firstTokAnywhere(node), ERR_CONST_ARG_IS_TYPE, genericName, paramName, genericName);
+        return bad;
+    }
     struct cfCtx c = (struct cfCtx){0};
     c.mod = mod;
     struct cfVal v = (struct cfVal){0};
@@ -5450,6 +5463,13 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
+    //G23: a constant variable is written "<N>" as a value too - and "i <<N>" is a shift by a name, not "i < <N>"
+    struct type* cb = !v && currentBindings ? bindingGet(currentBindings, name) : NULL;
+    if (cb && cb->bType == BASETYPE_CONST) {
+        bool shifted = TokenBefore(tok).type == TOK_BTSFT_L;
+        Err(tok, shifted ? ERR_CONST_VAR_AFTER_SHIFT : ERR_CONST_VAR_BARE, name, name);
+        return NULL;
+    }
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
