@@ -15023,6 +15023,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
 //cursor declared in an inner block over an outer structure ("for c mut N& = a, ...") is exactly as scoped
 //as what it walks. Returns whether it adopted; a temporary, null or no initializer adopts nothing and is
 //allocated where the declaration is. A written "&name" is not overridden - it must already be exact.
+static bool inferredInResult; //O26a: the ":=" local being declared was put in the result scope (B11's wording)
 static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, struct operand* rhs, bool* unnamed) {
     *unnamed = false;
     declType->scopeUnknown = false;
@@ -15042,7 +15043,8 @@ static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, s
             return false;
         }
         if (un || !sameExactScope(canonicalVar(declType->scopeParam), dd, sv, sd)) {
-            Err(rhs->tok, ERR_REFERENCE_NARROWED);
+            //B11: a ":=" local O26a put in the result scope - no ':=' to suggest, it is one
+            Err(rhs->tok, inferredInResult ? ERR_REFERENCE_NARROWED_RETURNED : ERR_REFERENCE_NARROWED);
         }
         return false;
     }
@@ -15634,6 +15636,19 @@ static bool flowMentionsName(struct flowScan* fs, struct syntax* e, struct str n
             }
             break;
         }
+        //a receiver of a method whose result can hold it - "line.Split(" ")", borrowed from line - carries it as an
+        //argument would (calleeMayKeepArg); one whose result cannot ("line.Len()") does not
+        if (known && j >= 2 && j < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_PAREN_O
+                && ((struct token*)ListGetIdx(&toks, j - 2))->type == TOK_DOT) {
+            struct type rt;
+            if (flowChainType(nt, &toks, i + 1, j - 2, &rt) && !rt.unknown) {
+                struct type recv = rt;
+                recv.structMAlloc = false;
+                struct var* m = VarGetMethod(recv.owner, strFromTok(*(struct token*)ListGetIdx(&toks, j - 1)), recv);
+                if (m && m->type.bType == BASETYPE_FUNC && calleeMayKeepArg(m, 0)) { found = true; break; }
+            }
+            continue;
+        }
         if (!(j >= toks.len || tokEndsWhole(((struct token*)ListGetIdx(&toks, j))->type))) continue;
         struct type ct;
         if (known && flowChainType(nt, &toks, i + 1, j, &ct) && !flowTypeCarries(ct)) continue; //a number read out of it
@@ -16024,6 +16039,8 @@ static bool refLocalLivesInResult(struct checkCtx* ctx, struct str name, struct 
     if (!resultScopeHere(ctx)) return false;
     if (!t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || t.unknown) return false;
     if (rhs && !rhs->isNullLiteral && !operandIsTemporary(ctx, rhs)) return false;
+    //a call's result borrowed from an argument ("line.Split(" ")", "&t") lives where that argument does - nothing to move
+    if (rhs && rhs->opType == OPERATION_FUNCCALL && rhs->type.scopeParam && !callIsLanding(rhs)) return false;
     return localFlowsToResult(ctx, name, t);
 }
 
@@ -16065,6 +16082,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* rhs;
     struct operand* fillValue = NULL;
     bool landedByOblig = false;
+    inferredInResult = false;
     bool inResult = false; //O26a: a value the function returns, living where its result is put
     if (!exprNode) {
         //D13: no initializer - the type's zero value, which for anything reference-shaped is null (T2a)
@@ -16112,6 +16130,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, rhs); //O26a: it lands in the result scope
             if (!inResult && refLocalLivesInResult(ctx, strFromTok(nameTok), declType, rhs)) {
                 declType.scopeParam = resultHome(ctx->func); //O26a: a reference local as "&return"
+                inferredInResult = true;
                 if (callIsLanding(rhs)) landCall(rhs, declType.scopeParam, 0);
             } else if (!inResult) landedByOblig = landDeclByObligations(ctx, rhs); //O18c
         }
@@ -16135,6 +16154,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!homeChecked && (fillValue || !adoptInitializerScope(ctx, &declType, rhs, &unnamedScope))
             && !declType.scopeWritten)
         declType.scopeDepth = ctx->blockDepth;
+    inferredInResult = false;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     v->scopeUnnamed = unnamedScope;
     v->permByType = permByType;

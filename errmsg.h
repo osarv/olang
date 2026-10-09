@@ -268,6 +268,7 @@ struct type;
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
+    X(ERR_REFERENCE_NARROWED_RETURNED,  "O25, O26a", "this local flows into what the function returns, so it lives where the result goes - and its value lives elsewhere: make it here, or keep it out of the result") \
     X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '%S&' - only a struct, an enum or an array can") \
     X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
     X(ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, "G10c",  "the type arguments of %S cannot be inferred from these arguments - write them: %S<...>(...)") \
