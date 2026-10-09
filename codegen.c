@@ -2809,7 +2809,10 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 //hidden first argument every function reached through a value takes
 static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOut) {
     *closureOut = NULL;
-    struct cgLocal* local = cgFindLocal(ctx, func->name);
+    //only a local or parameter - a var with no owner - is looked up among the locals: a method or another module's
+    //function may share a local's name (methods live in their own namespace, M19; D3a is per module), and finding
+    //that local called it as a function value
+    struct cgLocal* local = func->owner ? NULL : cgFindLocal(ctx, func->name);
     if (local || func->isGlobalVar) { //a function-typed global: the function value it holds, called as a local's is
         char g[256];
         if (!local) mangleGlobal(func->owner, func->name, g, sizeof(g));
