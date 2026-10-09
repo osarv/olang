@@ -143,14 +143,28 @@ fn (it mut ListIter<<T>>&) Next() <T> ? Exhausted {
         it.k++
         it.i = 0
     }
-    v := it.chunk[it.i]
     it.i++
     it.at++
-    return v
+    return it.chunk[it.i - 1]
 }
 
-# the elements in the order they were pushed - what "for x in l" walks (S9c)
+# the elements in the order they were pushed, through an iterator (S9c) - what generic code over Iterator<T> takes
 fn (l List<<T>>&) Iter() ListIter<<T>> { return ListIter<<T>>(l) }
+
+# the elements stored next to each other from position at: a read-only slice of the chunk holding at, from at to that
+# chunk's end or the list's - failing with Exhausted when at is the list's length. What "for x in l" walks (S9f): a loop
+# over the runs, and within each a counted loop over a slice, which the optimizer vectorizes as it does a loop over an
+# array. The loop asks for the next run where the last one ended, so an element pushed while it runs is walked too, as
+# the iterator would give it.
+fn (l List<<T>>&) RunFrom(at I64) Array<<T>>&l ? Exhausted {
+    if at >= l.count or at < 0 { error Exhausted.END }
+    p I64 = at + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    from I64 = p - (firstChunk << k)
+    to I64 = l.chunks[k].Len()
+    if k == l.nChunks - 1 { to = l.used }
+    return l.chunks[k][from:to]
+}
 
 # the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
 # independent of the list, which may be discarded, or keep growing, without affecting it
