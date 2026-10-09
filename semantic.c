@@ -2390,6 +2390,19 @@ void refreshStructSnapshots(struct type* t) {
     }
 }
 
+//an instantiation made while a type its arguments name was still being resolved - "kids List<mut Widget&>&" inside
+//Widget - holds a snapshot of that type in its type arguments, its fields and its constructor, taken with only the
+//fields declared before that point; and a method of it is instantiated from those arguments (G8a), so
+//"root.kids[0].tag" was an unknown member where ".id" worked. Run once every declaration is finished. A type argument
+//is refreshed in place, in the list every copy of the instantiation shares.
+static void refreshInstantiationSnapshots(void) {
+    for (int i = 0; i < typeInstantiations.len; i++) {
+        struct type* inst = *(struct type**)ListGetIdx(&typeInstantiations, i);
+        for (int k = 0; k < inst->typeArgs.len; k++) refreshTypeSnapshot(ListGetIdx(&inst->typeArgs, k));
+        refreshStructSnapshots(inst);
+    }
+}
+
 //T17/T13: whether a value of type t holds a value of the declaration `target` - by value, never through a reference
 //(or an array, whose elements are held through a pointer)
 static bool typeHoldsByValue(struct type t, struct type* target, int depth) {
@@ -4500,6 +4513,8 @@ struct checkCtx {
     bool inDefer; //S19b: checking deferred code, which runs while its block is being left and may only reach its
                   //own end - so no return, no error statement, no error a try lets through, and (with inLoop
                   //reset at the defer) no break or continue but those of a loop written inside it
+    struct syntax* expectNode; //G10c: an expression being built where a type is already expected - a declaration's
+    struct type expectType;    //written type, a parameter's, an assignment's target, a return's - see buildExpecting
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -9703,14 +9718,71 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
-struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
+//G10c: the node an expression's value is - through the single-part wrappers the parser puts around a primary
+static struct syntax* exprCoreOf(struct syntax* e) {
+    while (e && e->parts.len == 1 && !partAt(e, 0)->isToken
+           && (e->type == SNTX_EXPR || e->type == SNTX_EXPR_BINARY || e->type == SNTX_EXPR_UNARY
+               || e->type == SNTX_EXPR_POSTFIX)) e = partSntx(e, 0);
+    return e;
+}
+
+//G10c: builds an expression where a type is already expected, so a generic constructor call that is the whole of it
+//takes its type arguments from that type instead of inferring them from its arguments (see buildPrimary)
+static struct operand* buildExpecting(struct checkCtx* ctx, struct syntax* node, struct type* expected) {
+    struct syntax* prevNode = ctx->expectNode;
+    struct type prevType = ctx->expectType;
+    ctx->expectNode = expected ? node : NULL;
+    if (expected) ctx->expectType = *expected;
+    struct operand* op = buildExprFromSyntax(ctx, node);
+    ctx->expectNode = prevNode;
+    ctx->expectType = prevType;
+    return op;
+}
+
+//G10c: the instantiation of a generic constructor's type that the expected type is, when the call is all of the
+//expression a type is expected for - then that is the constructor called, as if its type arguments were written
+static struct var* expectedCtorFor(struct checkCtx* ctx, struct syntax* primary, struct var* func) {
+    if (!ctx->expectNode || exprCoreOf(ctx->expectNode) != primary) return NULL;
+    if (!func || !func->type.typeParams.len || !func->type.hasRetType || func->type.retType->ctorFunc != func) return NULL;
+    struct type exp = ctx->expectType;
+    struct type* g = func->type.retType;
+    if (exp.bType != BASETYPE_STRUCT || exp.unknown || !exp.genericOrigin || TypeIsGeneric(exp)) return NULL;
+    if (exp.genericOrigin->owner != g->owner || !StrCmp(exp.genericOrigin->name, g->name)) return NULL;
+    struct type* inst = canonicalStructOf(exp);
+    return inst && inst->typeParams.len == 0 && inst->ctorFunc ? inst->ctorFunc : NULL;
+}
+
+//G10c: what each argument of a call is expected to be before it is built - its parameter's type, with what a
+//receiver binds substituted (G9b); none where that is still a variable
+static bool argExpected(struct var* func, struct type* recv, int argIdx, struct type* out) {
+    if (!func || func->type.bType != BASETYPE_FUNC) return false;
+    int pi = argIdx + (recv ? 1 : 0);
+    if (pi >= func->type.vars.len) return false;
+    struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, pi)).type;
+    if (TypeIsGeneric(pt)) {
+        if (!recv || !func->type.vars.len) return false;
+        struct list bindings = ListInit(sizeof(struct typeBinding));
+        if (!TypeUnify((*(struct var*)ListGetIdx(&func->type.vars, 0)).type, *recv, &bindings)) return false;
+        pt = TypeSubstitute(pt, &bindings);
+        if (TypeIsGeneric(pt)) return false;
+    }
+    *out = pt;
+    return true;
+}
+
+static struct list buildArgsFor(struct checkCtx* ctx, struct syntax* argsNode, struct var* func, struct type* recv);
+struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) { return buildArgsFor(ctx, argsNode, NULL, NULL); }
+
+//the arguments of a call to func (NULL when it is not known yet), recv the receiver's type for a method
+static struct list buildArgsFor(struct checkCtx* ctx, struct syntax* argsNode, struct var* func, struct type* recv) {
     struct list result = ListInit(sizeof(struct operand*));
     struct list exprs = allPartsOfType(argsNode, SNTX_EXPR);
     for (int i = 0; i < exprs.len; i++) {
         struct syntax* e = *(struct syntax**)ListGetIdx(&exprs, i);
         bool prevChecking = ctx->checkingTry; //a written call's arguments are not what its "try" checks (R20)
         ctx->checkingTry = false;
-        struct operand* op = buildExprFromSyntax(ctx, e);
+        struct type expected;
+        struct operand* op = buildExpecting(ctx, e, argExpected(func, recv, i, &expected) ? &expected : NULL);
         ctx->checkingTry = prevChecking;
         //D8d: a call returning several values, as the only argument, is its results as the arguments - "f(g())".
         //Each argument reads one result of the one evaluation, in order
@@ -10450,7 +10522,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     }
     bool allowedM = ctx->allowFallibleCall;
     ctx->allowFallibleCall = false;
-    struct list mArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode); //E29
+    struct list mArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgsFor(ctx, argsNode, m, &recvType); //E29, G10c
     ctx->allowFallibleCall = allowedM;
     struct list withRecv = ListInit(sizeof(struct operand*));
     ListAdd(&withRecv, &recvOp);
@@ -10716,10 +10788,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             return alloc;
         }
         struct var* func = resolveCallTarget(ctx, nameNode, firstPartOfType(callNode, SNTX_TYPE_ARGS));
+        struct var* expectedCtor = expectedCtorFor(ctx, s, func); //G10c: the type it is expected to build
+        if (expectedCtor) func = expectedCtor;
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
         bool allowed = ctx->allowFallibleCall;
         ctx->allowFallibleCall = false;
-        struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+        struct list args = buildArgsFor(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS), func, NULL);
         if (!func) return unknownPlaceholder(nameTok); //reported - and nothing after says so again
         if (func->type.bType != BASETYPE_FUNC) {
             //E31: "next()" on a variable whose type declares Call
@@ -11560,11 +11634,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (TypeIsPermRef(declType)) declType.refMut = true; //T25b: a local's own reference is writable
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
     } else {
-        rhs = buildExprFromSyntax(ctx, exprNode);
         if (typeExprNode) {
             scopeTagBody = ctx; //O3c
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
             scopeTagBody = NULL;
+            rhs = buildExpecting(ctx, exprNode, &declType); //G10c
             bareLocalLivesInBlock(ctx, &declType);
             //T25b: a local's own reference is writable - unless what initializes it is read-only, which it then is
             if (TypeIsPermRef(declType)) declType.refMut = OperandGivesWritable(rhs);
@@ -11575,6 +11649,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
                 landCall(rhs, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
             reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok, rhs, declType);
         } else { // ":=" - type read straight off the initializer (D15)
+            rhs = buildExprFromSyntax(ctx, exprNode);
             declType = inferredDeclType(ctx->func, rhs);
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
             //scope (O25a) - the initializer's own tag may be a callee's scope variable, meaningless here
@@ -11695,7 +11770,8 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->checkingTry = prevChecking;
     struct syntax* opNode = firstPartOfType(s, SNTX_ASSIGN_OP);
     struct token opTok = partAt(opNode, 0)->tok;
-    struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    //G10c: a plain "=" expects the target's type
+    struct operand* rhs = buildExpecting(ctx, firstPartOfType(s, SNTX_EXPR), opTok.type == TOK_ASS ? &target->type : NULL);
     return buildAssignCore(ctx, target, rhs, opTok);
 }
 
@@ -13795,7 +13871,9 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
     struct syntax* exprNode = exprNodes.len > 0 ? *(struct syntax**)ListGetIdx(&exprNodes, 0) : NULL;
-    struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
+    struct type* retExpect = exprNodes.len == 1 && ctx->func && ctx->func->type.hasRetType && !ctx->func->inferRet
+                             ? ctx->func->type.retType : NULL;
+    struct operand* val = exprNode ? buildExpecting(ctx, exprNode, retExpect) : NULL; //G10c
     struct token tok = firstTokOfType(s, TOK_RET);
     //D8c: "return a, b" builds the function's several results - as the struct literal of its result tuple,
     //so each value is fit-checked against its own result type exactly as a field is. "return f()" of a call
@@ -15651,6 +15729,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) refreshStructSnapshots(ListGetIdx(&m->types, j));
     }
+    refreshInstantiationSnapshots();
     for (int i = 0; i < allModules.len; i++) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) checkHoldsItself(ListGetIdx(&m->types, j));
