@@ -1,0 +1,69 @@
+# gemm: C = A B for square matrices through std/linalg's Gemm, timed inside the program (the best of several runs, since
+# the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/gemm.sh, against bench/c/gemm.c (naive,
+# blocked and OpenBLAS). Arguments: f32|f64, n, threads, repetitions, and "mv" for the matrix-vector product
+# instead: y = x W^T, a 1 x n row times an n x n matrix's transpose (a dense layer at batch 1), 1000 times a run
+import "std/io"
+import "std/os"
+import "std/time"
+import "std/linalg"
+
+fn conv(x F64, like <T>) <T> {
+    return match <T> {
+        case F32 => F32(x)
+        case F64 => x
+    }
+}
+
+fn run(n I64, threads I64, reps I64, mv Bool, like <T>) ? io.IoError {
+    a := linalg.Matrix<<T>>(n, n)
+    b := linalg.Matrix<<T>>(n, n)
+    c := linalg.Matrix<<T>>(n, n)
+    s I64 = 1
+    for i in range n * n {
+        s = (s * 1103515245 + 12345) % 2147483648
+        a.Data[i] = conv(F64(s % 1000) / 1000.0, like)
+        s = (s * 1103515245 + 12345) % 2147483648
+        b.Data[i] = conv(F64(s % 1000) / 1000.0, like)
+    }
+    if mv {
+        x := a.RowRange(0, 1)
+        y := c.RowRange(0, 1)
+        fastest I64 = 0
+        for r in range reps {
+            t0 := time.Now()
+            for i in range 1000 { linalg.Gemm(y, x, false, b, true) }
+            t := time.Since(t0)
+            if r == 0 or t < fastest { fastest = t }
+        }
+        per F64 = F64(fastest) / 1000.0
+        rate := (2.0 * F64(n) * F64(n) / per).Fixed(2)
+        perText := per.Fixed(1)
+        try io.Print($n " mv " $perText "ns " $rate " GFLOPS check " $y.Sum() "\n")
+        return
+    }
+    best I64 = 0
+    for r in range reps {
+        t0 := time.Now()
+        linalg.Gemm(c, a, false, b, false, 1, 0, threads)
+        t := time.Since(t0)
+        if r == 0 or t < best { best = t }
+    }
+    flops F64 = 2.0 * F64(n) * F64(n) * F64(n)
+    secs := (F64(best) * 1e-9).Fixed(6)
+    rate := (flops / F64(best)).Fixed(2)
+    try io.Print($n " " $threads " " $secs "s " $rate " GFLOPS check " $c.Sum() "\n")
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 5 { error }
+    n := try args[2].ParseInt()
+    threads := try args[3].ParseInt()
+    reps := try args[4].ParseInt()
+    mv Bool = args.Len() > 5 and args[5] == "mv"
+    if args[1] == "f64" {
+        try run(n, threads, reps, mv, F64(0))
+    } else {
+        try run(n, threads, reps, mv, F32(0))
+    }
+}
