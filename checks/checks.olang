@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag"]
+                     "nestdeep", "nestparse", "diag", "linalg"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -236,6 +236,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "cgreview" { try cgreview(r) }
         case "typereview" { try typereview(r) }
         case "agree" { try agree(r) }
+        case "linalg" { try linalg(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -951,6 +952,23 @@ fn callShape(t String&, open I64) (I64, I64, I64) {
 fn literalAfter(t String&, from I64) (I64, I64) {
     open I64 = from + (try t[from:].FindByte('"') catch default -1)
     return open + 1, cLiteralEnd(t, open)
+}
+
+# std/linalg: a shape that does not fit aborts as a failed assert does - built and interpreted - and is
+# ShapeError.MISMATCH under try
+test "a matrix shape that does not fit aborts, or is an error under try" { assert passed("linalg") }
+
+fn linalg(r mut report&) ? Failed {
+    dir := fresh("linalg")
+    os.Run("cp checks/fixtures/linalg/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b shapes.olang > out.txt 2>&1") == 0, "shapes.olang did not build", dir)
+    for which in String&["add", "matmul", "gemm"] {
+        try r.expect(sh(dir, "./build/shapes " $which " > out.txt 2>&1") == 134, $which " did not abort", dir)
+        out := outOf(dir)
+        try r.expect(out.Contains("assertion failed") and not out.Contains("not reached"), $which " printed", dir)
+    }
+    try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i shapes.olang gemm > out.txt 2>&1") == 134, "-i gemm did not abort", dir)
 }
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {

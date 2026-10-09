@@ -3592,6 +3592,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   the program shows it. **Not done**: r14's permission inference (a local's writable reference binds a type variable
   writable) is the type checker's. Study: every scope workaround reverts and the programs give the same output;
   report's `sum.biggest = s.item` is left by T25b (a `mut` field of a reference type is a writable reference).
+- **`std/linalg`: `Matrix<T>`, the operand of numeric code, and `std/rand` (2026-10-09; the user: the matrix library
+  "should work as the base for all operations and operands", efficiency first, a 2-D `Matrix` rather than a tensor).**
+  `Matrix<T>` is row-major with a row stride and is a **view** - shape, stride and a reference to storage - so a copy
+  shares the elements (`Clone` copies them) and `View`, `RowRange`, `ColRange`, `Block`, `Reshape`, `Row` and `m.T()`
+  allocate nothing. Rows are a batch, columns features; more dimensions belong to the operation (a convolution as
+  im2col into a workspace and one product, attention's heads as column blocks). **Two kinds of operation**: destination
+  forms write into the caller's storage and allocate nothing - `Gemm(c, a, transA, b, transB, alpha, beta, threads)`,
+  `Gemv`, `Ger`/`Ger2`, `Map`/`Map2`/`Map3` (a lambda, inlined), `Add`, `Scale`, `AddScaled`, `AddRow`, `Clamp`,
+  `AddScaledMasked`, `AddOuterDifference` (the free/nudged-phase update of settling networks, factored so two close
+  phases do not cancel), `Copy`, `Convert`, row and column reductions into a caller's array, `RowSoftmax`, the random
+  fills; operators (`+ - * / @`, `a.T() @ b`, `Exp`, `Clone`) build a new matrix, for scripts. Shapes are checked
+  once per operation - an assert, or `ShapeError.MISMATCH` under `try` through the Try forms - all in one section, so
+  `Matrix<T, R, C>` will move them in one place. **Decided (mine)**: the BLAS-level calls take `alpha`/`beta` as `F64`
+  with BLAS's defaults (`Gemm` 1/0, `Ger` 1/1), converted once, so a literal reads the same whatever the element
+  type - while element-wise scalars are of the element type; the thread count is a
+  parameter (default 1, `Cores()` the machine's), never a global, so a small product stays evaluable while compiling
+  (K1); F16/BF16/F8 are stored as they are and accumulated in F32; no general broadcasting, only explicit row
+  operations; `FastExp`/`FastTanh`/`FastSigmoid` are olang arithmetic that vectorizes, with stated errors (relative
+  3e-7 / 6e-16 for exp, absolute 2e-7 / 3e-16 for the others, in F32 / F64), beside `std/math`'s exact library
+  calls; `std/rand` is oann's xoshiro256** seeded by splitmix64, so one seed decides a whole run. **GEMM** is Goto's
+  algorithm (BLIS's) in olang: packed panels (kc 256, mc 128, nc 2040), a 4 x 12 micro-kernel for 4-byte elements and
+  4 x 6 for 8-byte ones with every accumulator at a constant index (so they live in registers) and the tile sizes
+  written as literals; a direct loop below 64^3, and a matrix-vector path for one to four rows or one column.
+  **Measured** (bench/README.md): single-threaded F32 14-17 GFLOPS and F64 7.5-8, level with or above the same
+  algorithm in C and 70-75% of the default target's SSE2 peak; four tasks 3.8x at 1024 when cores are free; OpenBLAS
+  5-7x ahead single-threaded, by its instruction set (AVX-512 with FMA) - olang builds for baseline x86-64 and never
+  contracts `a*b + c`, so closing the gap is a compiler direction (a native target, contraction), not a library one.
+  Batch-1 `Gemv` 3-5x a plain C dot loop; a 784-128-10 training step 2.4 ms against OpenBLAS's 0.4-0.8 and naive C's
+  10-13. libmvec would vectorize `expf` but needs errno-free calls and gives up to 4 ulp, against X8's agreement
+  between the evaluator and the run time; the olang approximations are the route taken.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

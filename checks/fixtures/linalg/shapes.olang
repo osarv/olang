@@ -1,0 +1,26 @@
+# std/linalg's shapes: a mismatch aborts as a failed assert does, and under try it is ShapeError.MISMATCH
+import "std/os"
+import "std/io"
+import "std/linalg"
+
+fn main() ? {
+    which := os.Args()[1]
+    a := linalg.Matrix<F32>(2, 3)
+    b := linalg.Matrix<F32>(3, 2)
+    if which == "add" {
+        c := a + b
+        try io.Print($c.Rows)
+    } else if which == "matmul" {
+        c := a @ a
+        try io.Print($c.Rows)
+    } else if which == "gemm" {
+        linalg.Gemm(a, a, false, b, false)
+    } else if which == "caught" {
+        c := try (a @ a) catch linalg.ShapeError.MISMATCH {
+            try io.Print("caught\n")
+            return
+        }
+        try io.Print($c.Rows)
+    }
+    try io.Print("not reached\n")
+}
