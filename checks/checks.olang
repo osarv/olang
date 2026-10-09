@@ -194,10 +194,10 @@ test "a -D value rebuilds only the modules that mention it" {
     dir := fresh("stale")
     os.Run("cp checks/fixtures/stale/* " $os.Quote(dir))
     assert sh(dir, "\"$OLANG\" -b -D Level=1 -D Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0 or failed("first build", dir)
-    assert sh(dir, "stat -c %Y.%N build/plain.o > before.txt && ls build/uses.d*.main.o | wc -l > first.txt") == 0
+    assert sh(dir, "stat -c %Y.%N build/plain.*.o > before.txt && ls build/uses.*.d*.main.o | wc -l > first.txt") == 0
     assert sh(dir, "sleep 1 && \"$OLANG\" -b -D Level=5 -D Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0
-    assert sh(dir, "stat -c %Y.%N build/plain.o | cmp -s - before.txt") == 0     # plain.o untouched
-    assert sh(dir, "test $(ls build/uses.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
+    assert sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0     # plain's object untouched
+    assert sh(dir, "test $(ls build/uses.*.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

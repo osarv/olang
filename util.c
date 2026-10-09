@@ -1,7 +1,16 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <spawn.h>
+#include <ftw.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include "util.h"
 #include "token.h"
 
@@ -57,6 +66,108 @@ void* ReallocOrCrash(void* oldPtr, size_t size) {
     void* ptr = realloc(oldPtr, size);
     CheckAllocPtr(ptr);
     return ptr;
+}
+
+char* StrFmt(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0) ErrorBugFound();
+    char* out = MallocOrCrash((size_t)n + 1);
+    va_start(ap, fmt);
+    vsnprintf(out, (size_t)n + 1, fmt, ap);
+    va_end(ap);
+    return out;
+}
+
+char* StrDupStr(struct str s) {
+    char* out = MallocOrCrash((size_t)s.len + 1);
+    memcpy(out, s.ptr, (size_t)s.len);
+    out[s.len] = '\0';
+    return out;
+}
+
+// ---- running another program ----
+
+extern char** environ;
+
+//the spawn and the wait RunProgram and RunProgramCapture share. With a pipe (pipeFds not NULL), the child's standard
+//output is its write end, which this process closes once the child holds it, and what the child writes is read into
+//buf (n - 1 bytes kept, NUL-terminated, the rest drained) while it runs
+static int spawnAndWait(char* const argv[], posix_spawn_file_actions_t* fa, int* pipeFds, char* buf, size_t n) {
+    fflush(NULL); //what this process has written comes before what the child writes
+    pid_t pid;
+    int rc = posix_spawnp(&pid, argv[0], fa, NULL, argv, environ);
+    posix_spawn_file_actions_destroy(fa);
+    if (pipeFds) {
+        close(pipeFds[1]);
+        size_t got = 0;
+        char drop[512];
+        while (rc == 0) {
+            ssize_t r = got + 1 < n ? read(pipeFds[0], buf + got, n - 1 - got) : read(pipeFds[0], drop, sizeof(drop));
+            if (r < 0 && errno == EINTR) continue;
+            if (r <= 0) break;
+            if (got + 1 < n) got += (size_t)r;
+        }
+        close(pipeFds[0]);
+        if (n) buf[got] = '\0';
+    }
+    if (rc != 0) return -1;
+    int st;
+    while (waitpid(pid, &st, 0) < 0) if (errno != EINTR) return -1;
+    if (WIFEXITED(st)) return WEXITSTATUS(st);
+    if (WIFSIGNALED(st)) return 128 + WTERMSIG(st);
+    return -1;
+}
+
+int RunProgram(char* const argv[], bool quiet) {
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    if (quiet) {
+        posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+        posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+    }
+    return spawnAndWait(argv, &fa, NULL, NULL, 0);
+}
+
+int RunProgramCapture(char* const argv[], char* out, size_t n) {
+    int p[2];
+    if (n) out[0] = '\0';
+    if (pipe(p) != 0) return -1;
+    fcntl(p[0], F_SETFD, FD_CLOEXEC);
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_adddup2(&fa, p[1], 1);
+    posix_spawn_file_actions_addclose(&fa, p[1]);
+    posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+    return spawnAndWait(argv, &fa, p, out, n);
+}
+
+static int removeOne(const char* path, const struct stat* st, int flag, struct FTW* ftw) {
+    (void)st; (void)flag; (void)ftw;
+    return remove(path) != 0 && errno != ENOENT ? -1 : 0;
+}
+
+int RemoveTree(const char* path) {
+    struct stat st;
+    if (lstat(path, &st) != 0) return errno == ENOENT ? 0 : -1;
+    return nftw(path, removeOne, 64, FTW_DEPTH | FTW_PHYS);
+}
+
+int MakeDirs(const char* path) {
+    char* p = StrFmt("%s", path);
+    for (char* c = p + 1; ; c++) {
+        if (*c != '/' && *c != '\0') continue;
+        char was = *c;
+        *c = '\0';
+        if (mkdir(p, 0755) != 0 && errno != EEXIST) { free(p); return -1; }
+        *c = was;
+        if (!was) break;
+    }
+    free(p);
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode) ? 0 : -1;
 }
 
 void ErrorBugFound() {

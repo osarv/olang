@@ -885,90 +885,118 @@ static void lockSet(const char* key, const char* commit) {
     fclose(f);
 }
 
+//M23b: a commit as git names one - 40 hexadecimal digits (64 in a repository using SHA-256). Anything else in a lock
+//line is no commit, and is never handed to git.
+static bool isCommitName(const char* c) {
+    size_t n = strlen(c);
+    if (n != 40 && n != 64) return false;
+    for (size_t i = 0; i < n; i++) if (!((c[i] >= '0' && c[i] <= '9') || (c[i] >= 'a' && c[i] <= 'f'))) return false;
+    return true;
+}
+
+//M23a: the host, owner, repository and ref of a remote import are handed to git and become cache directories, so
+//each holds only what such names hold - letters, digits, '.', '_' and '-' - and none begins with '.' or '-' (no
+//option, no hidden or parent directory) or holds "..". The rest is refused before anything runs.
+static bool isRemoteNamePart(const char* s) {
+    if (!*s || *s == '.' || *s == '-' || strstr(s, "..")) return false;
+    for (const char* c = s; *c; c++) {
+        if (!((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9') || *c == '.' || *c == '_'
+              || *c == '-')) return false;
+    }
+    return true;
+}
+
 //the commit a checked-out repository is at, or "" when it cannot be read
 static void gitHead(const char* dir, char* out, size_t n) {
-    out[0] = '\0';
-    char cmd[PATH_MAX * 2 + 64];
-    snprintf(cmd, sizeof(cmd), "git -C '%s' rev-parse HEAD 2>/dev/null", dir);
-    FILE* p = popen(cmd, "r");
-    if (!p) return;
-    if (!fgets(out, (int)n, p)) out[0] = '\0';
-    pclose(p);
+    char* argv[] = { "git", "-C", (char*)dir, "rev-parse", "HEAD", NULL };
+    if (RunProgramCapture(argv, out, n) != 0) out[0] = '\0';
     out[strcspn(out, "\n")] = '\0';
+    if (!isCommitName(out)) out[0] = '\0';
+}
+
+//git, run quietly - never through a shell (M23a): an argument is only ever an argument
+static bool git(char** argv) {
+    return RunProgram(argv, true) == 0;
 }
 
 //M23a/M23b: host/owner/repo[@ref] at the commit the lock file names - or, with no line for it, at its ref's current
 //commit, which is then locked. Kept in the cache by commit (OLANG_CACHE/host/owner/repo/<commit>), fetched once and
 //read from there from then on, so a locked build needs no network. Returns the local repository directory.
+//Every fetch is made into a temporary directory and renamed into place only once it holds the commit it should, so a
+//fetch that is interrupted or fails leaves nothing a later build would take for a fetched repository.
 static char* fetchRemote(const char* host, const char* owner, const char* repoAt, struct token tok) {
-    char repo[256], ref[256] = "";
-    snprintf(repo, sizeof(repo), "%s", repoAt);
+    char* repo = heapCopy(repoAt);
+    char* ref = NULL;
     char* at = strchr(repo, '@');
-    if (at) { snprintf(ref, sizeof(ref), "%s", at + 1); *at = '\0'; }
-    char cache[PATH_MAX];
+    if (at) { *at = '\0'; ref = at + 1; }
+    if (!isRemoteNamePart(host) || !isRemoteNamePart(owner) || !isRemoteNamePart(repo) || (ref && !isRemoteNamePart(ref))) {
+        ErrMsgSemantic(tok, IMPORT_REMOTE_BAD_NAME);
+        return NULL;
+    }
     char* env = getenv("OLANG_CACHE");
-    if (env && *env) snprintf(cache, sizeof(cache), "%s", env);
-    else snprintf(cache, sizeof(cache), "%s/.cache/olang", getenv("HOME") ? getenv("HOME") : ".");
+    char* cache = env && *env ? heapCopy(env) : StrFmt("%s/.cache/olang", getenv("HOME") ? getenv("HOME") : ".");
     //OLANG_GIT_BASE replaces "https://" - for a mirror, or a local repository in tests
     char* base = getenv("OLANG_GIT_BASE");
     if (!base || !*base) base = "https://";
-    char key[PATH_MAX], url[PATH_MAX], parent[PATH_MAX], dir[PATH_MAX], cmd[PATH_MAX * 16];
-    bool fits = true; //a path too long to build is a fetch that cannot be made
-    fits = fits && (size_t)snprintf(key, sizeof(key), "%s/%s/%s", host, owner, repoAt) < sizeof(key);
-    fits = fits && (size_t)snprintf(url, sizeof(url), "%s%s/%s/%s", base, host, owner, repo) < sizeof(url);
-    fits = fits && (size_t)snprintf(parent, sizeof(parent), "%s/%s/%s/%s", cache, host, owner, repo) < sizeof(parent);
-    if (!fits) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
+    char* key = StrFmt("%s/%s/%s", host, owner, repoAt);
+    char* url = StrFmt("%s%s/%s/%s", base, host, owner, repo);
+    char* parent = StrFmt("%s/%s/%s/%s", cache, host, owner, repo);
+    char* tmp = StrFmt("%s/.fetch-%d", parent, (int)getpid());
     const char* locked = lockFind(key);
     //M23c: under -u a locked line is set aside the first time its repository is reached
-    char was[128] = "";
+    char* was = NULL;
     if (locked && updateLocks && !lockUpdatedNow(key, false)) {
-        snprintf(was, sizeof(was), "%s", locked);
+        was = heapCopy(isCommitName(locked) ? locked : "");
         locked = NULL;
     }
+    if (locked && !isCommitName(locked)) { ErrMsgSemantic(tok, IMPORT_LOCK_NOT_A_COMMIT); return NULL; }
+    char head[128] = "";
+    char* dir = locked ? StrFmt("%s/%s", parent, locked) : NULL;
+    if (dir && pathIsDir(dir)) return dir;
+    if (MakeDirs(parent) != 0 || RemoveTree(tmp) != 0) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
     if (locked) {
-        fits = fits && (size_t)snprintf(dir, sizeof(dir), "%s/%s", parent, locked) < sizeof(dir);
-        if (pathIsDir(dir)) return heapCopy(dir);
         fprintf(stderr, "olang: fetching %s into %s at %.12s, as olang.lock says\n", key, cache, locked);
         //a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
-        fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "mkdir -p '%s' && (git init -q '%s' && git -C '%s' fetch -q --depth 1 '%s' '%s' "
-                 "&& git -C '%s' checkout -q FETCH_HEAD || (rm -rf '%s' && git clone -q '%s' '%s' && git -C '%s' "
-                 "checkout -q '%s')) >/dev/null 2>&1", parent, dir, dir, url, locked, dir, dir, url, dir, dir, locked) < sizeof(cmd);
-        char head[128];
-        if (fits && system(cmd) == 0) gitHead(dir, head, sizeof(head));
-        else head[0] = '\0';
-        if (strcmp(head, locked) != 0) {
-            fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dir) < sizeof(cmd);
-            if (system(cmd) != 0) { /* nothing more to undo */ }
+        char* init[] = { "git", "init", "-q", tmp, NULL };
+        char* fetch[] = { "git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, (char*)locked, NULL };
+        char* checkoutFetched[] = { "git", "-C", tmp, "checkout", "-q", "FETCH_HEAD", NULL };
+        char* clone[] = { "git", "clone", "-q", "--", url, tmp, NULL };
+        char* checkout[] = { "git", "-C", tmp, "checkout", "-q", (char*)locked, NULL };
+        if (!(git(init) && git(fetch) && git(checkoutFetched))) {
+            if (RemoveTree(tmp) == 0 && git(clone)) (void)git(checkout);
+        }
+        gitHead(tmp, head, sizeof(head));
+        if (strcmp(head, locked) != 0 || (!pathIsDir(dir) && rename(tmp, dir) != 0)) {
+            (void)RemoveTree(tmp);
             ErrMsgSemantic(tok, IMPORT_LOCKED_FETCH_FAILED);
             return NULL;
         }
-        return heapCopy(dir);
+        (void)RemoveTree(tmp); //another build placed it first
+        return dir;
     }
-    char tmp[PATH_MAX];
-    fits = fits && (size_t)snprintf(tmp, sizeof(tmp), "%s/.fetch-%d", parent, (int)getpid()) < sizeof(tmp);
-    fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "mkdir -p '%s' && rm -rf '%s' && git clone --quiet --depth 1 %s%s%s '%s' '%s' 2>/dev/null",
-             parent, tmp, ref[0] ? "--branch '" : "", ref, ref[0] ? "'" : "", url, tmp) < sizeof(cmd);
     fprintf(stderr, "olang: fetching %s into %s\n", key, cache);
-    char head[128] = "";
-    if (fits && system(cmd) == 0) gitHead(tmp, head, sizeof(head));
+    char* branch = ref ? StrFmt("--branch=%s", ref) : NULL;
+    char* clone[] = { "git", "clone", "--quiet", "--depth", "1", branch ? branch : "--quiet", "--", url, tmp, NULL };
+    if (git(clone)) gitHead(tmp, head, sizeof(head));
     if (!head[0]) {
+        (void)RemoveTree(tmp);
         ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
         return NULL;
     }
-    fits = fits && (size_t)snprintf(dir, sizeof(dir), "%s/%s", parent, head) < sizeof(dir);
-    if (pathIsDir(dir)) snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tmp);
-    else snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", tmp, dir);
-    if (!fits || system(cmd) != 0 || !pathIsDir(dir)) {
+    dir = StrFmt("%s/%s", parent, head);
+    if (pathIsDir(dir)) (void)RemoveTree(tmp); //fetched before, under another ref
+    else if (rename(tmp, dir) != 0) {
+        (void)RemoveTree(tmp);
         ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
         return NULL;
     }
     lockSet(key, head);
     if (updateLocks) {
         lockUpdatedNow(key, true);
-        if (was[0] && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
-        else if (was[0]) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
+        if (was && was[0] && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
+        else if (was) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
     }
-    return heapCopy(dir);
+    return dir;
 }
 
 //collapses "." and ".." elements lexically, so one directory reached by two spellings prints one way

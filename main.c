@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <sys/utsname.h>
 #include <ctype.h>
 #include <pthread.h>
@@ -25,25 +25,52 @@ static bool gTestBuild = false;
 //asked otherwise, so this is the exception rather than one end of a spectrum of levels.
 static bool gDebug = false;
 
+//an argument list for RunProgram (util.h), as it is built
+static void argAdd(struct list* args, char* a) { ListAdd(args, &a); }
+static char** argEnd(struct list* args) {
+    char* end = NULL;
+    ListAdd(args, &end);
+    return args->ptr;
+}
+
 //the optimization and debug flags for the current mode, shared by the compile and link steps so the two
 //can never disagree - linking -O3 objects with -O0 ones is not an error, merely silently not what was
 //asked for.
-static const char* modeFlags(void) {
-    if (gDebug && gRace) return "-O0 -g -fsanitize=thread";
-    if (gDebug) return "-O0 -g";
+static void addModeFlags(struct list* args) {
+    if (gDebug) {
+        argAdd(args, "-O0");
+        argAdd(args, "-g");
+        if (gRace) argAdd(args, "-fsanitize=thread");
+        return;
+    }
     //-O1 under -r: TSan reports name the function a race is in, and -O3 inlines enough of the small
     //accessors that the name is regularly the caller's rather than the culprit's
-    if (gRace) return "-O1 -fsanitize=thread";
+    if (gRace) { argAdd(args, "-O1"); argAdd(args, "-fsanitize=thread"); return; }
     //B2d: "-flto" puts the optimizer over the whole program at the link, so a cross-module call inlines
     //like a same-module one. Not thin LTO: measured indistinguishable at run time here and slower to
     //build, since its parallel machinery has a fixed cost and a handful of modules has nothing to
     //parallelize. Left out of -r above for the same reason that path is -O1.
-    return "-O3 -flto";
+    argAdd(args, "-O3");
+    argAdd(args, "-flto");
 }
 
+//the first of clang-20 and clang found on PATH - looked up here rather than through a shell
 char* findClang() {
-    if (system("which clang-20 > /dev/null 2>&1") == 0) return "clang-20";
-    if (system("which clang > /dev/null 2>&1") == 0) return "clang";
+    char* names[] = { "clang-20", "clang" };
+    char* path = getenv("PATH");
+    if (!path || !*path) path = "/usr/local/bin:/usr/bin:/bin";
+    for (int k = 0; k < 2; k++) {
+        for (char* p = path; ; ) {
+            char* colon = strchr(p, ':');
+            size_t n = colon ? (size_t)(colon - p) : strlen(p);
+            char* cand = StrFmt("%.*s%s%s", (int)n, p, n ? "/" : "", names[k]);
+            bool ok = access(cand, X_OK) == 0;
+            free(cand);
+            if (ok) return names[k];
+            if (!colon) break;
+            p = colon + 1;
+        }
+    }
     return NULL;
 }
 
@@ -51,8 +78,9 @@ void ensureBuildDir() {
     (void)mkdir("build", 0755); //already existing is fine
 }
 
-//M22a: an object is named after its module's identity, sanitized as a symbol prefix is - so "std/list" is
-//build/std_list.o and cannot overwrite a local list.olang's build/list.o
+//a module's identity made readable for a file name: every character but a letter, a digit, '_' or '-' becomes '_',
+//so "std/list" reads std_list. Not injective - "geom/rect" and "geom_rect" read alike - which is why an object's name
+//also carries objectHash below; the binary of a program, and the IR written for a module, are named by this alone.
 char* moduleObjectBase(struct semaModule* mod) {
     char* out = MallocOrCrash((size_t)mod->identity.len + 1);
     for (int i = 0; i < mod->identity.len; i++) {
@@ -61,6 +89,46 @@ char* moduleObjectBase(struct semaModule* mod) {
     }
     out[mod->identity.len] = '\0';
     return out;
+}
+
+//the modules an object is compiled against: its own, every module it transitively imports, and the prelude's
+static void collectCompiledAgainst(struct semaModule* mod, struct list* seen) {
+    for (int i = 0; i < seen->len; i++) if (*(struct semaModule**)ListGetIdx(seen, i) == mod) return;
+    ListAdd(seen, &mod);
+    for (int i = 0; i < mod->imports.len; i++) collectCompiledAgainst(((struct semaImport*)ListGetIdx(&mod->imports, i))->mod, seen);
+}
+
+static int cmpCStrPtr(const void* a, const void* b) { return strcmp(*(char* const*)a, *(char* const*)b); }
+
+//B3/M22a: what makes an object the object it is, beyond its readable name - the identity and the real source path of
+//every module it is compiled against (its own and its imports', transitively, and the prelude's), hashed. Two modules
+//whose readable names coincide ("geom/rect" and "geom_rect", or two roots named main.olang outside the working
+//directory) therefore have different objects; and so does one module compiled against different files - a remote
+//import locked to another commit (whose checkout is another directory, M23a), or another standard library - so an
+//object built against one is never taken for one built against the other, whatever the files' times say.
+static char* objectHash(struct semaModule* mod) {
+    struct list seen = ListInit(sizeof(struct semaModule*));
+    collectCompiledAgainst(mod, &seen);
+    struct list* prelude = SemanticPreludeModules();
+    for (int i = 0; i < prelude->len; i++) collectCompiledAgainst(*(struct semaModule**)ListGetIdx(prelude, i), &seen);
+    char** keys = MallocOrCrash(sizeof(char*) * (size_t)(seen.len + 1));
+    for (int i = 0; i < seen.len; i++) {
+        struct semaModule* m = *(struct semaModule**)ListGetIdx(&seen, i);
+        keys[i] = StrFmt("%.*s\1%.*s", m->identity.len, m->identity.ptr, m->canonical.len, m->canonical.ptr);
+    }
+    qsort(keys, (size_t)seen.len, sizeof(char*), cmpCStrPtr);
+    //FNV-1a over the module's own identity first, then every key in order, each ended by a byte no path holds
+    unsigned long long h = 14695981039346656037ULL;
+    char* self = StrFmt("%.*s\1%.*s", mod->identity.len, mod->identity.ptr, mod->canonical.len, mod->canonical.ptr);
+    for (int i = -1; i < seen.len; i++) {
+        char* k = i < 0 ? self : keys[i];
+        for (char* c = k; *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
+        h = (h ^ 0xFFu) * 1099511628211ULL;
+        free(k);
+    }
+    free(keys);
+    ListDestroy(seen);
+    return StrFmt("%016llx", h);
 }
 
 void requireClangOrExplain(char* clang, char* irPath) {
@@ -153,8 +221,6 @@ static void collectBuildRefs(struct semaModule* mod, struct list* seen, struct l
 //Returns the object path.
 char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) {
     char* base = moduleObjectBase(mod);
-    char* irPath = MallocOrCrash(512);
-    char* objPath = MallocOrCrash(512);
     //a root module's object carries "main" (or the test harness) on top of its own code, so it is a
     //DIFFERENT artifact from the same module's plain object and gets its own name. Without that the two
     //would overwrite each other, and a plain object left by "-c" would look current to "-b" while
@@ -189,23 +255,45 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
         h = (h ^ (unsigned)b->kind ^ ';') * 16777619u;
     }
     if (userDefs) snprintf(cfg, sizeof(cfg), ".d%08x", h);
-    char suffix[64];
-    snprintf(suffix, sizeof(suffix), "%s%s%s%s", cfg,
+    char* suffix = StrFmt("%s%s%s%s", cfg,
              entry == CG_ENTRY_MAIN ? ".main"
                  : entry == CG_ENTRY_TESTS ? ".test"     //the root, carrying the harness
                  : gTestBuild ? ".tmod"                  //a plain module built WITH the unwind chain
                  : "",
              gRace ? ".race" : "", gDebug ? ".debug" : "");
-    snprintf(irPath, 512, "build/%s%s.ll", base, suffix);
-    snprintf(objPath, 512, "build/%s%s.o", base, suffix);
+    //the IR is an intermediate, written afresh just before each compile, so it keeps the readable name alone
+    char* irPath = StrFmt("build/%s%s.ll", base, suffix);
+    char* objPath = StrFmt("build/%s.%s%s.o", base, objectHash(mod), suffix);
     if (!moduleIsStale(mod, objPath)) return objPath;
 
     CodegenModule(mod, irPath, entry, gRace, gTestBuild, gDebug);
     requireClangOrExplain(clang, irPath);
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "%s %s -c -o %s %s", clang, modeFlags(), objPath, irPath);
-    if (system(cmd) != 0) { fprintf(stderr, "native compilation failed for %s\n", irPath); exit(EXIT_FAILURE); }
+    struct list args = ListInit(sizeof(char*));
+    argAdd(&args, clang);
+    addModeFlags(&args);
+    argAdd(&args, "-c");
+    argAdd(&args, "-o");
+    argAdd(&args, objPath);
+    argAdd(&args, irPath);
+    if (RunProgram(argEnd(&args), false) != 0) ErrMsgFatal(StrFmt("native compilation failed for %s", irPath));
+    ListDestroy(args);
     return objPath;
+}
+
+//links objs (char*) into binPath - the argument list is built, never a command line, so nothing is cut short however
+//many objects there are or however long their names
+static int linkProgram(char* clang, struct list* objs, char* binPath) {
+    struct list args = ListInit(sizeof(char*));
+    argAdd(&args, clang);
+    addModeFlags(&args);
+    argAdd(&args, "-o");
+    argAdd(&args, binPath);
+    for (int i = 0; i < objs->len; i++) argAdd(&args, *(char**)ListGetIdx(objs, i));
+    argAdd(&args, "-lm");
+    argAdd(&args, "-lpthread");
+    int rc = RunProgram(argEnd(&args), false);
+    ListDestroy(args);
+    return rc;
 }
 
 //"-c": one module to one object, nothing linked (B2)
@@ -229,21 +317,16 @@ void buildProgram(char* file) {
 
     ensureBuildDir();
     char* clang = findClang();
-    char objs[8192] = "";
+    struct list objs = ListInit(sizeof(char*));
     struct list* all = SemanticAllModules();
     for (int i = 0; i < all->len; i++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
         char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_MAIN : CG_ENTRY_NONE);
-        strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
-        strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
+        ListAdd(&objs, &objPath);
     }
 
-    char* base = moduleObjectBase(root);
-    char binPath[512];
-    snprintf(binPath, sizeof(binPath), "build/%s%s%s", base, gRace ? ".race" : "", gDebug ? ".debug" : "");
-    char cmd[16384];
-    snprintf(cmd, sizeof(cmd), "%s %s -o %s%s -lm -lpthread", clang, modeFlags(), binPath, objs);
-    if (system(cmd) != 0) { fprintf(stderr, "link failed\n"); exit(EXIT_FAILURE); }
+    char* binPath = StrFmt("build/%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "");
+    if (linkProgram(clang, &objs, binPath) != 0) ErrMsgFatal(StrFmt("linking %s failed", binPath));
     printf(COLOR_FG_GREEN "built ./%s\n" COLOR_RESET, binPath);
 }
 
@@ -267,6 +350,17 @@ int interpretProgram(char* file, int argc, char** argv) {
 //returns 0 if this file's tests all passed, nonzero otherwise - never exits the process, so the rest of
 //an -t file list still runs even if this one has semantic errors, fails to build, or fails a test
 int runTestFile(char* file, char* clang) {
+    //B3a: a listed file that is no file to build is reported, and the others still run
+    struct stat st;
+    char* unusable = stat(file, &st) != 0 ? "unable to open this file"
+                   : S_ISDIR(st.st_mode) ? "a module is a file, never a directory (M1) - name the .olang file"
+                   : !S_ISREG(st.st_mode) ? NOT_A_REGULAR_FILE : NULL;
+    if (unusable) {
+        ErrMsgFile(StrFromCStr(file), unusable);
+        ErrMsgFlush();
+        printf(COLOR_FG_RED "%s: cannot be built, skipping\n" COLOR_RESET, file);
+        return 1;
+    }
     int before = ErrMsgGetNErrors();
     struct semaModule* root = SemanticAnalyzeFile(file, false);
     CodegenCheckModuleNames();
@@ -279,48 +373,36 @@ int runTestFile(char* file, char* clang) {
 
     ensureBuildDir();
     requireClangOrExplain(clang, "build");
-    char* base = moduleObjectBase(root);
-    char binPath[512];
-    snprintf(binPath, sizeof(binPath), "build/%s_test%s%s", base, gRace ? ".race" : "", gDebug ? ".debug" : "");
+    char* binPath = StrFmt("build/%s_test%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "");
 
     //one object per module, exactly as under -b; only the root differs, carrying the test harness
     //instead of main - and it is a distinct artifact from that module's plain object, so both can be
     //current at once and neither forces the other to rebuild
-    char objs[8192] = "";
+    struct list objs = ListInit(sizeof(char*));
     struct list* all = SemanticAllModules();
     for (int i = 0; i < all->len; i++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(all, i);
         char* objPath = emitModuleObject(mod, clang, mod == root ? CG_ENTRY_TESTS : CG_ENTRY_NONE);
-        strncat(objs, " ", sizeof(objs) - strlen(objs) -1);
-        strncat(objs, objPath, sizeof(objs) - strlen(objs) -1);
+        ListAdd(&objs, &objPath);
     }
-    char cmd[16384];
-    snprintf(cmd, sizeof(cmd), "%s %s -o %s%s -lm -lpthread", clang, modeFlags(), binPath, objs);
-    int rc = system(cmd);
-    if (rc != 0) {
+    if (linkProgram(clang, &objs, binPath) != 0) {
         printf(COLOR_FG_RED "%s: native compilation failed\n" COLOR_RESET, file);
         return 1;
     }
 
     printf(COLOR_FG_CYAN "== %s ==\n" COLOR_RESET, file);
-    fflush(stdout);
-    char runCmd[600];
-    snprintf(runCmd, sizeof(runCmd), "./%s", binPath);
-    int runRc = system(runCmd);
-    if (runRc == -1) return 1;
-    return WIFEXITED(runRc) ? WEXITSTATUS(runRc) : 1;
+    char* run[] = { StrFmt("./%s", binPath), NULL };
+    int runRc = RunProgram(run, false);
+    return runRc == 0 ? 0 : 1;
 }
 
 //B10: "-D Name=value" (or "-DName=value") - one build constant
 static void defineFromArg(char* arg) {
     char* eq = strchr(arg, '=');
-    if (!eq) { fprintf(stderr, "olang: -D takes Name=value, got '%s'\n", arg); exit(EXIT_FAILURE); }
+    if (!eq) ErrMsgFatal(StrFmt("-D takes Name=value, got '%s' (B10)", arg));
     *eq = '\0';
     char* err = SyntaxDefineBuildConst(arg, eq + 1, false);
-    if (err) {
-        fprintf(stderr, "olang: -D %s=%s: %s (B10)\n", arg, eq + 1, err);
-        exit(EXIT_FAILURE);
-    }
+    if (err) ErrMsgFatal(StrFmt("-D %s=%s: %s (B10)", arg, eq + 1, err));
 }
 
 //B10a: the constants every build defines. The target is the host, since olang does not cross-compile yet.
@@ -380,7 +462,7 @@ static int compilerMain(int argc, char** argv) {
         if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
         if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
         if (!strcmp(argv[i], "-D")) {
-            if (i + 1 >= argc) { fprintf(stderr, "olang: -D takes Name=value\n"); return EXIT_FAILURE; }
+            if (i + 1 >= argc) ErrMsgFatal("-D takes Name=value (B10)");
             defineFromArg(argv[++i]);
             continue;
         }
@@ -388,8 +470,7 @@ static int compilerMain(int argc, char** argv) {
         //B1: every flag is one character; anything else beginning with "-" is a mistake, not a file name
         if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")
             && strcmp(argv[i], "-i")) {
-            fprintf(stderr, "olang: %s: ", argv[i]);
-            ErrMsgFatal(UNKNOWN_FLAG);
+            ErrMsgFatal(StrFmt("%s: " UNKNOWN_FLAG, argv[i]));
         }
         argv[outp++] = argv[i];
     }
@@ -401,7 +482,7 @@ static int compilerMain(int argc, char** argv) {
     struct list* bcs = SyntaxBuildConsts();
     int builtins = 0;
     for (int i = 0; i < bcs->len; i++) builtins += ((struct buildConst*)ListGetIdx(bcs, i))->builtin;
-    if (builtins != 5) { fprintf(stderr, "olang: -D may not redefine a built-in constant (B10a)\n"); return EXIT_FAILURE; }
+    if (builtins != 5) ErrMsgFatal("-D may not redefine a built-in constant (B10a)");
 
     if (!strcmp(argv[1], "-c")) {
         if (argc != 3) ErrMsgFatal(EXPECTED_ONE_COMPILE_FILE);
