@@ -1,0 +1,20 @@
+# check: fail error[O26]: this value refers to this function's own storage
+# O13a/O25h: a value built here is judged at a return by what its constructor bound - until something is stored into it,
+# which puts references where its own are (its block): here text that dies at the return. A local the function returns
+# itself lives in the result scope (O26a, o13afieldstore.olang); one returned inside another value does not
+type H struct(r mut String&) {
+    r
+}
+type W struct(h H) {
+    h
+}
+fn mk(n I64, s mut String&) W {
+    e := H(s)
+    e.r = $n $n
+    return W(e)
+}
+fn main() ? {
+    q mut String& = "x"
+    w := mk(12, q)
+    assert w.h.r.Len() == 4
+}

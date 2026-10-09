@@ -1,0 +1,2 @@
+import "../x"
+fn main() ? { println($x.X()) }

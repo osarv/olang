@@ -1,0 +1,10 @@
+# check: run
+# L18b: inside brackets a line may begin with "if" - a conditional over several lines is written in parentheses
+fn pick(n I64) I64 {
+    return (n * 2
+            if n < 10 else n)
+}
+fn main() ? {
+    f := fn() I64 { return 1 }
+    if f() == 1 { println($pick(3)) }
+}

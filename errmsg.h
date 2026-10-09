@@ -319,6 +319,7 @@ struct type;
     X(ERR_MEMBERSHIP_NEEDS_TRY,         "E29",   "%s can fail here - write 'try (x in c)'") \
     X(ERR_INCDEC_IN_EXPRESSION,         "S3a",   "%n is a statement of its own, never part of an expression") \
     X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
+    X(ERR_JOIN_PIECE_CALLED,            "E11b",  "'(' after a piece of text calls it - to join the value inside, write '$(...)'") \
     X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \
     X(ERR_IS_NOT_REFERENCES,            "E10c",  "'a is b' asks whether two references name one instance, and %t and %t are not both references") \
     X(ERR_IS_NOT_ONE_TYPE,              "E10c",  "%t and %t are different types, so they never name one instance") \
@@ -375,7 +376,7 @@ struct type;
     X(ERR_ELEM_OUTLIVED,                "O25c",  "the array outlives what this element refers to - build the element where the array goes") \
     X(ERR_PAYLOAD_OUTLIVED,             "T17c",  "this value's payload refers to storage the value would outlive - build it where that storage lives ('v E&x')") \
     X(ERR_INSTANCE_OUTLIVES_REFERENT,   "C2d",   "this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')") \
-    X(ERR_INSTANCE_OUTLIVES_ARG,        "C2d",   "this instance holds a reference to an argument it would outlive - build it where the argument lives ('T&x(...)')") \
+    X(ERR_INSTANCE_OUTLIVES_ARG,        "C2d",   "this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')") \
     X(ERR_GLOBAL_HOLDS_SHORTER,         "O1b",   "a global holds only what lives as long as the program - store something built here, or another global's") \
     X(ERR_VALUE_REFS_OUTLIVED,          "O25h",  "this value holds references into a scope the target outlives - build it where the target is") \
     X(ERR_CONTAINER_SCOPE_UNBUILDABLE,  "O25a",  "this container's scope cannot be built into from here - write through the global itself") \

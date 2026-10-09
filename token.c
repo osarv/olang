@@ -143,6 +143,7 @@ struct tokenContext {
     struct list edits;          //the splits made by TokenSplitShiftRight/Left, undone by TokenEditRewind
     int version;                //changes whenever the token list does - see TokenListVersion
     struct list brackets;       //L18a: the brackets open here, innermost last - '(' '[' '{' - see insideBrackets
+    struct list lineIfs;        //L18b: where each "if" beginning a line outside brackets is (char*, in order)
 };
 
 //the byte at idx, or '\0' past the end - the cursor may step past the terminating '\0' and back
@@ -649,6 +650,8 @@ void tokenizeTokensFromChars(TokenCtx tc) {
         if (tok.type != TOK_NONE) closeBracketsBeforeDecl(tc, tok);
         if (endHere && !insideBrackets(tc)) ListAdd(&tc->tokens, &stmntEnd);
         if (tok.type == TOK_NONE) continue; //reported and dropped - see tokenizeOperator
+        //L18b: such an "if" begins a statement - it never continues a conditional on the line before
+        if (tok.type == TOK_IF && tc->sawNewline && !insideBrackets(tc)) ListAdd(&tc->lineIfs, &tok.str.ptr);
         trackBracket(tc, tok.type);
         tc->lastTokType = tok.type;
         tc->lastTokEnd = tok.str.ptr + tok.str.len;
@@ -673,12 +676,26 @@ TokenCtx TokenizeFile(char* fileName) {
     tc->tokens = ListInit(sizeof(struct token));
     tc->edits = ListInit(sizeof(struct tokenEdit));
     tc->brackets = ListInit(sizeof(char));
+    tc->lineIfs = ListInit(sizeof(char*));
     tc->tokIdx = 0;
     tc->fileName = StrFromCStr(fileName);
 
     readChars(tc);
     tokenizeTokensFromChars(tc);
     return tc;
+}
+
+//L18b: whether t is an "if" beginning a line outside brackets - a statement's, never a conditional's
+bool TokenIfBeginsLine(TokenCtx tc, struct token t) {
+    if (!tc || t.type != TOK_IF) return false;
+    int lo = 0, hi = tc->lineIfs.len - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        char* p = *(char**)ListGetIdx(&tc->lineIfs, mid);
+        if (p == t.str.ptr) return true;
+        if (p < t.str.ptr) lo = mid + 1; else hi = mid - 1;
+    }
+    return false;
 }
 
 struct str TokenGetFileName(TokenCtx tc) {

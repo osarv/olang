@@ -1,6 +1,7 @@
-# check: fail error[O17]: this value's references live where its own storage does not
-# O17/O25h: a value built in the result scope keeps its storage in this block - lending it to a callee that can store
-# through it would put what that builds in the block, under a value claiming the result scope. A read-only lend is fine
+# check: run
+# O26a: a local the function returns lives in the result scope, its storage too, so lending it to a callee that can store
+# through it is fine - what that builds is built there. This was O17's error while the storage stayed in the block;
+# o17borrowsplitwrap.olang keeps it where the local is not what is returned
 type Box struct(n I64) {
     Data mut Array<I64>& = Array<I64>(n)
 }
@@ -14,7 +15,16 @@ fn make(n I64) Box {
     b.regrow(7)
     return b
 }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
 fn main() ? {
     b := make(3)
-    assert b.Data[0] == 7
+    churn()
+    assert b.Data[0] == 7 and b.Data.Len() == 8
 }

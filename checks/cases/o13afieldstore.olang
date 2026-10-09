@@ -1,7 +1,7 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# O13a/O25h: a value built here is judged at a return by what its constructor bound - until something is stored into it,
-# which puts references where its own are (its block): here text that dies at the return. It used to be judged by the
-# constructor's binding alone, and returned freed storage
+# check: run
+# O26a: a returned local lives in the result scope, so the text stored into it is built there and outlives the call. This
+# was an error (O13a/O25h - the text was built in the block, which O13a did not see until it judged the stored binding);
+# o13afieldstorewrap.olang keeps that error where the local is not what is returned
 type H struct(r mut String&) {
     r
 }
@@ -10,8 +10,17 @@ fn mk(n I64, s mut String&) H {
     e.r = $n $n
     return e
 }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
 fn main() ? {
     q mut String& = "x"
     w := mk(12, q)
-    assert w.r.Len() == 4
+    churn()
+    assert w.r.Len() == 4 and w.r == "1212"
 }

@@ -1,0 +1,17 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O26a/O13a: a value built with no constructor arguments, then given this function's own text in a field, returned by
+# value - the returned local lives in the result scope, so text that dies at the return may not be put in it (it was
+# accepted, and the caller read reused arena bytes)
+type Holder struct() {
+    name mut String& = null
+}
+fn make() Holder {
+    a := "alpha" $3
+    h := Holder()
+    h.name = a
+    return h
+}
+fn main() ? {
+    h := make()
+    println($h.name)
+}

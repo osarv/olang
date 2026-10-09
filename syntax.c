@@ -1088,6 +1088,27 @@ static struct syntax* salvageFuncDecl(SyntaxCtx sc, int start) {
     return top;
 }
 
+//a type declaration that did not parse, as the declaration of its name it still is: "type NAME [<params>]" with its
+//body marked unparsed (SNTX_BODY_UNPARSED), so a use of the type is not reported again as an unknown type - its error
+//is already reported. NULL unless the item begins "type NAME". The cursor is left where it was.
+static struct syntax* salvageTypeDecl(SyntaxCtx sc, int start) {
+    int resume = TokenGetCursor(sc->tc);
+    TokenSetCursor(sc->tc, start);
+    struct token kw = acceptTok(sc, TOK_TYPE);
+    struct token name = kw.type != TOK_NONE ? acceptTok(sc, TOK_IDEN) : (struct token){0};
+    struct syntax* typeParams = name.type != TOK_NONE ? parseTypeArgsInto(sc, SNTX_TYPE_PARAMS) : NULL;
+    TokenSetCursor(sc->tc, resume);
+    if (name.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_TYPE_DECL);
+    addTok(s, kw);
+    addTok(s, name);
+    if (typeParams) addSntx(s, typeParams);
+    addSntx(s, newNode(SNTX_BODY_UNPARSED));
+    struct syntax* top = newNode(SNTX_TOP_DECL);
+    addSntx(top, s);
+    return top;
+}
+
 //"IDEN type-expr" - unlike parseParam, never accepts "mut" (see the report on §11 X2) - reuses the
 //ordinary type-expr grammar for the type itself; the restriction to a numeric-primitive-or-array-of-
 //them type is checked semantically (resolveExternParamList in semantic.c), not by a separate grammar
@@ -3266,6 +3287,11 @@ struct syntax* parseExpr(SyntaxCtx sc) {
     if (!inner) return NULL;
     int before = TokenGetCursor(sc->tc);
     struct token ifKw = acceptTok(sc, TOK_IF);
+    //L18b: an "if" beginning a line outside brackets begins a statement, never continuing a value before it
+    if (ifKw.type != TOK_NONE && TokenIfBeginsLine(sc->tc, ifKw)) {
+        TokenSetCursor(sc->tc, before);
+        ifKw.type = TOK_NONE;
+    }
     if (ifKw.type != TOK_NONE) {
         struct syntax* cond = parseBinaryExpr(sc, 1);
         struct token elseKw = cond ? acceptTok(sc, TOK_ELSE) : (struct token){0};
@@ -4623,6 +4649,7 @@ static void parseTopItem(SyntaxCtx sc, struct list* out) {
         if (sc->unclosedOpen.type != TOK_NONE && !sc->tooDeep) TokenSetCursor(sc->tc, sc->unclosedPos); //the next item
         else skipTopItem(sc, start);
         struct syntax* salvaged = salvageFuncDecl(sc, start);
+        if (!salvaged) salvaged = salvageTypeDecl(sc, start);
         if (salvaged) ListAdd(out, salvaged);
         return;
     }

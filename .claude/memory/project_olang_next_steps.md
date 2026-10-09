@@ -358,6 +358,17 @@ because what it finds about structure feeds the refactor.
   poolfix lands (same file); (3) oann features once its catch-up lands (settling phase 3 fixed-point simulation for the
   PYNQ-Z2, implicit GEMM convolution, BF16 training); (4) QUEUED small: D13c's List<Ticket> error located at the
   user's type argument.
+- 18:35 CEST: oann catch-up pushed (e076ae4): migrated to bare type variables and Array<A, N>, kernels.olang's copy
+  replaced by linalg.GemmWorkspace - MNIST epoch 2.39 -> 0.69 s (C+OpenBLAS 0.93), transformer step 512 -> ~200 ms,
+  75 tests pass. Next oann lever: attention through a Gemm per head (now 1.3-2x faster than its dot-product loops).
+  New compiler bug from it: oann repro/genericctor.olang (a non-generic struct's constructor naming a type variable is
+  accepted, every call then fails printing `<<T>>`) -> next small checker batch, with D13c's List<Ticket> location.
+  Port design doc done (wt-portdesign 53672f2, compiler/DESIGN.md: scanner + Pratt parser, demand-driven checker,
+  sec.8 as its own pass owning placement, typed MIR, Miri-style evaluator for comptime and -i, runtime.ll linked once,
+  hash-named objects, bootstrap stages 0-3). Its P0 gaps to close in std/runtime BEFORE the port: S1 os.RunOnStack,
+  S2 os.OnCrash, S3 __olang_dyncall over libffi, S4 os.RemoveAll/MkTemp/streaming Exec, S5 struct/enum allocations not
+  rounded to the SIMD class (halves AST memory), S6 integer formatting in a base. Direction questions QA/QB in the
+  ledger. chk3 being merged (wt-merge).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
