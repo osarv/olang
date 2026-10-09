@@ -2683,7 +2683,9 @@ A type declaring only the checked form of an operation (`TryAt` and no `At`) has
 `x[i]` without it is an error. A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
-result and errors are exactly the function type's (and a generic function type's variables are inferred from them):
+result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
+parameter where the type passes a writable one, or a writable result where it gives a read-only one), and a generic
+function type's variables are inferred from them:
 the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would -
 passed, stored or returned (O14: a function's own instance is not a value it may hand back) - and
 state `Call` changes is visible through the instance afterwards. A temporary is built where the function value lands. The
@@ -2707,7 +2709,8 @@ value a call returned. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
-`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
+`Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`, the place evaluated once as
+a compound assignment's is (S5): `a[next()]++` calls `next` once. A type with neither is an
 error, as for any other non-numeric type. An element of a type indexed through `At` and `SetAt` is incremented as it
 is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once), and `try x[i]++` checks
 the store and the element's addition as `try x[i] += 1` does (R21).
@@ -2838,6 +2841,17 @@ An assignment is evaluated **left to right**: first the target's **place** - the
 written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
 the index is the first call and the value the second, and a value whose evaluation changes what the target's base
 refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+
+**S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
+(S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
+of storage within it (a field, or an element - any element of an array standing for any other, their indexes not
+compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
+where a temporary in that position would be (O18a), and the borrow names the copy. It applies where what the value
+builds can keep the borrow - an enum case's payload, a constructor field holding the argument (C2d), an array literal's
+element, the result of a call whose body can hand the argument back in it (O14c, O10b) - so `x = E.Neg(x)` is the
+negation of the old `x`, `n = Node(n)` puts the old node behind the new one, and no assignment makes a value hold its
+own storage. The same holds for the targets of a parallel assignment (S4c) and of a spawn (P1g). A reference written in
+the value is the program's own: with `r` a reference to `x`, `x = E.Neg(r)` makes the cycle it says.
 
 **S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
@@ -3336,7 +3350,8 @@ the `join` block, on precisely the terms P2 states for an argument: one declared
 the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2): a result
 built where it lands (§8 O18a) is built where the target is - several targets sharing one result scope must all be in
 one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
-value would (§8 O25, O1b).
+value would (§8 O25, O1b). With several targets each is judged as the assignment of its own result, as a
+destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
 
 The target's address is taken **at the `spawn`**, not when the task runs, which is what makes
 `spawn out[i] = f(i)` inside a loop mean slot `i`. Reading the target before the `join` is a data race
@@ -3350,7 +3365,9 @@ block *inside* the join does not. Such a spawn is rejected. The same holds for a
 call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
 through it is rejected. A spawned lambda (D16e), called where it is written or not, is instead built to last until the join, and the
 references it captured must outlive the join block on the same terms as an argument. A function value computed for the
-call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise. The same holds for everything an argument
+call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise, and one read out of
+storage (`spawn h.f()`, `spawn fs[i]()`) is held there - its closure lives no shorter than that storage (D16d) - so the
+storage must last until the join, as an argument's would. The same holds for everything an argument
 **holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
 built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
 last until the join. Each task gets its own scope, as any
@@ -4334,11 +4351,15 @@ a value claiming the other: a compile-time error naming the fix, to declare it a
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
 a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
-value's slots when its body assigns into the value's region a reference or a value holding references (a field, an
-element, through any depth), when it returns a reference into that region that can be stored through (the caller could
-then build through it), or when it passes the region on to a call that does either - a fixed point over the program's
-calls, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is not known keeps
-everything. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+value's slots when its body stores into the value's region a reference or a value holding references (a field, an
+element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
+that region that can be stored through (the caller could then build through it), or when it passes the region on to a
+call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
+checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
+not known keeps everything. Only what is read out of the region by following a reference from the parameter brings in
+nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
+storage it is - its inline fields and elements, a view of them (`b`, `b.data`) - are the lent value, which may live
+elsewhere than its references, so storing one of them into the region is a store like any other. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
 count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is

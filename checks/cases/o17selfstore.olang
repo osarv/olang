@@ -1,0 +1,38 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O17: a callee storing its parameter itself into the region its references lead to ("b.head.owner = b") stores the lent
+# value's own storage there - which, for a copy of src.b, is bump's block, while the node lives where src's references
+# do. Only what is read out of the region by following a reference brings in nothing new; this was taken for that, and
+# the node kept a reference into a closed block
+type Node struct() {
+    owner mut Box& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn tie(b mut Box&) {
+    b.head.owner = b
+}
+fn bump(src mut W&) {
+    b := src.b
+    b.tag = 42
+    tie(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.owner.tag)
+}
