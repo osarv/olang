@@ -1,0 +1,9 @@
+# check: fail (T6b)
+# S5: "b += x" is "b = b + x", and with b a U8 and x an I32 the sum is an I32, which does not fit b
+error E { X }
+fn main() ? E {
+    b U8 = 1
+    x I32 = 5
+    b += x
+    assert b > 0
+}

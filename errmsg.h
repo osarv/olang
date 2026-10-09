@@ -259,6 +259,7 @@ declared fields when the body completes; use 'error' to fail out of one instead"
 #define UNKNOWN_CHOICE_CASE "unknown enum case"
 #define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"
 #define LITERAL_NOT_REPRESENTABLE "this literal's value can't be represented in the target's type - an integer literal fits any integer type whose range contains it ('U8' is unsigned: 0-255) and any float type it does not overflow (F16's largest value is 65504), and a float literal fits a float type it does not overflow (F32's largest is about 3.4e38) - a value too small for it rounds to zero, and fits; use an explicit conversion (U8(x), I32(x), F32(x), ...) if a real, possibly lossy conversion is what you meant (T6)"
+#define INT_LITERAL_TOO_LARGE "this integer literal is beyond 64 bits: the largest a decimal literal can write is U64's maximum, 18446744073709551615, and I64's is 9223372036854775807 (a hex literal writes any 64-bit pattern) (L10)"
 #define FLOAT_LITERAL_OUT_OF_RANGE "this float literal is beyond F64's range (its largest finite value is about 1.8e308), so it could only be an infinity - which no literal is (L12b)"
 #define DEFAULT_NOT_COMPUTABLE "a parameter's default value must be computable at compile time - it is \
 evaluated on behalf of callers you cannot see, so it must have a value and no other behaviour"
@@ -289,6 +290,7 @@ constructor, in a position whose parameter declares a default value"
 
 // ---- statements and control flow ----
 
+#define RETURN_IN_TEST "a test is not a function: it has no caller to return to and no result - 'done' ends a test early as passed, 'fail' as failed (S15, S16a)"
 #define RETURN_VALUE_IN_VOID_FUNC "this function has no declared return type - a return statement must not have a value here"
 #define RETURN_MISSING_VALUE "this function's declared return type requires a return value"
 #define RETURN_TYPE_MISMATCH "return value's type doesn't match the function's declared return type"

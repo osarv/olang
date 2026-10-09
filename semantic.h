@@ -551,6 +551,10 @@ struct operand {
                                 //the comparisons on either side of it
     char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand
     void* ctCached;             //the evaluator's same (a struct ctVal*)
+    struct operand* placeOf;    //S4: a compound assignment's read of its own target - the place the statement computed
+                                //once, before the value, and stores to after it
+    char* cgPlace;              //S4: on an assignment's target, while its value is being computed: the place's address
+    void* ctPlace;              //the evaluator's same (a struct ctVal*, the node)
     struct list comprBody;      //E27: OPERATION_COMPREHENSION only - struct statement, the loop that fills it
     struct list catchClauses;   //R9b: a try in value position with catch clauses - struct catchClause, in
                                 //order. Empty for a plain propagating try.
@@ -647,6 +651,8 @@ struct semaModule {
 };
 
 long long TypeGetSize(struct type t);
+//D14b: the largest length an array of elements this size may have - its byte count must fit an I64
+long long ArrayLengthLimit(long long elemSize);
 long long TypeGetAlign(struct type t);
 struct type TypeVanilla(enum baseType bType);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);

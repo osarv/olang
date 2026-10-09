@@ -3020,6 +3020,7 @@ struct list* SyntaxBuildConsts(void) { buildConstsInit(); return &buildConsts; }
 void SyntaxResetBuildConsts(void) { buildConstsReady = false; buildConstsInit(); }
 
 long long parseIntLiteralText(char* buf); //semantic.c - the one reading of an integer literal (L10)
+long long parseIntLiteralChecked(char* buf, bool* tooLarge);
 
 static bool isIdentText(const char* p) {
     if (!*p || !((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_')) return false;
@@ -3068,8 +3069,11 @@ bool SyntaxDefineBuildConst(char* name, char* value, bool builtin) {
         b.text = StrFromCStr(clean);
         char* tmp = MallocOrCrash(strlen(digits) + 1);
         strcpy(tmp, digits);
-        b.i = parseIntLiteralText(tmp);
-        if (clean[0] == '-') b.i = -b.i;
+        bool tooLarge;
+        b.i = parseIntLiteralChecked(tmp, &tooLarge);
+        //beyond 64 bits, or a negative value below I64's minimum: no integer type holds it (L10)
+        if (tooLarge || (clean[0] == '-' && b.i < 0 && (unsigned long long)b.i != 9223372036854775808ULL)) return false;
+        if (clean[0] == '-') b.i = (long long)(0ULL - (unsigned long long)b.i);
     } else if (isFloat) {
         b.kind = BUILD_FLOAT;
         b.text = StrFromCStr(clean);
@@ -3196,6 +3200,13 @@ static struct str condDecodeStr(struct token t) {
     return Str(out, n);
 }
 
+//L10: a decimal integer's text whose value is above I64's maximum - a U64, which this evaluator's I64 arithmetic
+//cannot hold (a hex or binary literal is a bit pattern, read as an I64, and a negative -D value fits one)
+static bool condIsU64Only(struct str text, long long v) {
+    if (v >= 0 || (text.len > 0 && text.ptr[0] == '-')) return false;
+    return !(text.len > 1 && text.ptr[0] == '0' && strchr("xXbB", text.ptr[1]));
+}
+
 static struct condVal condPrimary(struct condCtx* c) {
     struct condVal v = (struct condVal){0};
     struct token t = TokenFeed(c->tc);
@@ -3205,11 +3216,19 @@ static struct condVal condPrimary(struct condCtx* c) {
             v.kind = BUILD_BOOL;
             v.i = t.str.len == 4 && !strncmp(t.str.ptr, "true", 4);
             return v;
-        case TOK_INT_LIT:
+        case TOK_INT_LIT: {
             snprintf(buf, sizeof(buf), "%.*s", t.str.len, t.str.ptr);
             v.kind = BUILD_INT;
-            v.i = parseIntLiteralText(buf);
+            bool tooLarge;
+            v.i = parseIntLiteralChecked(buf, &tooLarge);
+            //a decimal value above I64's maximum is a U64 (L10), which this evaluator's I64 arithmetic cannot hold:
+            //compile-time evaluation decides such a condition (B9c), and reports one beyond 64 bits
+            if (tooLarge || condIsU64Only(t.str, v.i)) {
+                condFail(c, t, BUILD_COND_NAME);
+                c->deferrable = true;
+            }
             return v;
+        }
         case TOK_FLOAT_LIT: {
             int w = 0;
             for (int i = 0; i < t.str.len && w < 127; i++) if (t.str.ptr[i] != '_') buf[w++] = t.str.ptr[i];
@@ -3236,6 +3255,11 @@ static struct condVal condPrimary(struct condCtx* c) {
             for (int i = 0; i < bcs->len; i++) {
                 struct buildConst* b = ListGetIdx(bcs, i);
                 if (b->name.len != t.str.len || strncmp(b->name.ptr, t.str.ptr, (size_t)t.str.len)) continue;
+                if (b->kind == BUILD_INT && condIsU64Only(b->text, b->i)) {
+                    condFail(c, t, BUILD_COND_NAME); //a U64 constant: compile-time evaluation decides (B9c)
+                    c->deferrable = true;
+                    return v;
+                }
                 v.kind = b->kind;
                 v.i = b->i;
                 v.f = b->f;

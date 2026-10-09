@@ -8539,3 +8539,110 @@ from their original form.
   `t17payloadscopes`, `t24primref`, and `t17enumref` turned from "must fail" into "runs"; the `-i` fixture prints a
   folded tree identically interpreted and built. `-r` could not be checked: the container has no ThreadSanitizer
   runtime to link.
+- **A review of the code generator, and its fixes (2026-10-09).** Part of the overnight plan: five read-only review
+  agents, one per area, each reporting only what it reproduced with a small program. This batch is codegen.c's,
+  minus the findings about where a value lands (which scope a temporary is built in), which belong to the scope work
+  running beside it. Every fix has a regression test that fails on the previous compiler; the corpus ones are at the
+  end of shared.olang ("codegen review fixes"), the whole-build ones in checks.olang's "the code generator's review
+  fixes" scenario and three checks/cases.
+  **Assignment order (S4), decided here.** `a[next()] = next() * 10` stored 10 into `a[2]` at run time - the value was
+  computed first, then the target's index - while the compile-time evaluator took the target first, so a global baked
+  from such a function disagreed with the same function run (the review's c3 baked 20 and ran 10). Left to right was
+  the coordinator's call: the target's place - its base, then its index, as written - then the value, then the store,
+  which is what Java and C# do and what reading the line suggests. Codegen moved its `cgAddr` before the value; the
+  evaluator already had that order. Parallel assignment (S4c) keeps "every value before any target is written" and now
+  says how the two compose: the values first, then each target's place and store in order, each by S4.
+  **A compound assignment read its place twice, and could crash the compiler.** `a[next()] += 5` built `a[next()] + 5`
+  out of the very target operand, so the index was evaluated for the read and again for the store (next called twice,
+  the sum landing in the wrong element). And T6b's meeting rule rewrites a narrower operand *in place* into a widening
+  conversion - so `b += x` with `b` a `U8` and `x` an `I32` turned the statement's own target into a conversion node and
+  codegen crashed on it (`ErrorBugFound` in `cgAddr`); nothing ever checked that a compound's result fits its target.
+  The read is now a copy of the target marked `placeOf`; the statement records the place it computed on the target
+  (`cgPlace` in codegen, `ctPlace` in the evaluator, saved and restored so a recursive run of the same statement keeps
+  its own), and a `placeOf` read answers from it - so the base and index run once, in both, and the rewrite touches only
+  the copy. The sum is fitted to the target like any assigned value, which makes `b += x` the T6b error it is. `++`
+  and `--` already computed their place once.
+  **Spawn had its own copy of the call lowering, and it had drifted.** `cgSpawnTask` marshalled a task's arguments
+  with code duplicated from `cgCallTargetAndArgs` years ago. It never learned about a constructor's hidden `%here`, so
+  `spawn r = Node(5)` passed the arguments one register early and the field read 0; and it ignored E13b's computed
+  callee, so `spawn r = pick()(5)` crashed the compiler. The two now share one routine, which builds a list of
+  `(type, value)` arguments instead of a fixed text buffer: an ordinary call joins them into the call instruction, a
+  task stores them into its environment. The task-specific part is a hook - each scope argument, and a constructor's
+  `%here`, becomes a private sub-arena folded back at the join (P2) - and the parent each sub-arena stands in for is
+  picked exactly as before (`cgSpawnScopeParent`), since that choice is the scope work's. A destination's place is
+  now evaluated before the arguments, left to right as S4 says.
+  **An unsigned narrow index was sign-extended.** A GEP sign-extends a narrow index, so `t[b]` with `b U8 = 200` read
+  `t[-56]`. Zero-extended to `I64` first now (signed indices are emitted as before). The checked index's own compare
+  already zero-extended, which is why `try t[b]` was right and `t[b]` was not.
+  **A checked index evaluated its base twice** - once for the length, once for the data pointer - so `try mk()[1]`
+  called `mk` twice. Evaluated once, before the index.
+  **D14b now covers overflow, and the allocator's NULL is checked (D14c).** `Array<I64>(2^61 + 1)` multiplied to a byte
+  count of 8 and the array then ran past its 8 bytes. A length is out of range when negative or when its byte count
+  exceeds `I64`'s maximum; both are one unsigned compare (`icmp ugt count, INT64_MAX / elemSize`), since a negative
+  length reads as a huge one. The word under `try` stays `OUT_OF_BOUNDS` (my call: the length is outside what a length
+  can be, and the checker's error set needed no change); the abort message became `array length out of range`, and
+  `-i` and the evaluator check the same bound (`ArrayLengthLimit`, shared). A comprehension's growth checks it too,
+  since a range's count is reserved up front. `aligned_alloc` and the worker's `malloc` returning NULL used to be
+  written through; they now abort with `out of memory` through the same path as P1c's `could not start task` - a
+  guarantee the system declined, never an error a program handles.
+  **A struct fill stored an address as an aggregate.** `Array<P>(3, P(1, 2))`, and `Array<Q>(3)` where Q's zero value
+  (D13c) is not zero bits, emitted `store %P %addr` - invalid IR. A by-ref element is now copied with `memcpy`; a
+  scalar fill's stores carry the element TBAA tag, as indexed accesses do.
+  **`return` in a test body is an error (S15)**, naming `done`. It compiled to `ret void` inside the harness's
+  `i32 @main` - invalid IR. Making it end the test as passed was the alternative; a test is not a function and `done`
+  already says that, so the error is the one rule rather than a second spelling of `done`.
+  **A decimal literal above `I64`'s maximum is a `U64`, and one beyond 64 bits an error (L10/T6a).** `strtoll`
+  saturated silently, so `99999999999999999999999` was `I64`'s maximum and `9223372036854775808` was too. E4a's fold
+  already typed a literal-only expression above `I64`'s maximum as `U64` and the spec mentioned `U64` in one place and
+  not in L10, so a single decimal literal now follows it: `y U64 = 18446744073709551615` is writable directly, and
+  negating a `U64` literal gives the `I64` it then is (`-9223372036854775808` is `I64`'s minimum). Hex and binary stay
+  bit patterns read as `I64`, and more than 64 bits of them is an error too. The token evaluator (B9a) defers a
+  condition holding such a literal, or a `-D` constant with such a value, to compile-time evaluation (B9c), whose
+  arithmetic knows the type; `-D N=99999999999999999999999` is refused at the command line.
+  **A fresh array is adopted by its declaration.** `a := Array<I32>(n)` built the array in the declaration's scope and
+  then copied it element by element into a second allocation of the same size. An `Array<T>(n)` or a comprehension
+  initializing a run-time-length declaration is now its storage. Only directly: through a conditional or a match one
+  branch may be an existing array, which a value declaration must copy.
+  **Blocks inside a match value had no arena.** Each block depth's scope header was alloca'd up front from a count
+  made by `cgMaxBlockDepth`/`cgMaxOperandDepth`, a walker kept in step by hand with every construct that opens a block,
+  and it did not descend into a match used as a value - its case values, guards and pattern tests. A block there got
+  no slot, so `cgScopeSlotAt` fell back to the function's own scope: the review's loop building text in a comprehension
+  in a case value grew to 966MB. The walker is gone: `cgEnsureBlockSlot` makes a depth's scope header, join head and
+  unwind node (its static fields stored in the entry block) the first time a block at that depth is emitted, so a slot
+  exists for every block emitted, whatever holds it. The same program runs in 2MB. The corpus test for it is a build
+  run under `ulimit -v`, since a destructor's timing did not tell the two apart (a constructor's temporary lands at
+  its binding's depth, which had a slot).
+  **Big structs go through memory, and that was the compile-time explosion.** A struct holding an inline
+  `Array<F32>(16384)` passed by value took the build 83 seconds; `clang -O3 -c` alone took 116. The IR moved the
+  struct as one first-class value - `load %M`, passed as an argument, returned with `ret %M` - and LLVM splits such a
+  value into its 16384 elements in every one of those places. Hand-editing the IR to pass a pointer and `memcpy` took
+  the same compile to 1.5s, so that is what was built: a struct (`typeIsByRef`) over 128 bytes is passed as a pointer
+  to the callee's own copy - made by the caller at the call, so a later argument cannot change it, skipped for a
+  call's own result, and made in the join block's arena for a task - and returned through a hidden first parameter
+  `ptr %out`, the function returning `void` or its bare error code. Copies of such values (`cgStoreInto`, captures)
+  are `memcpy`. Every call path takes the convention: direct calls, methods and their receivers, function values and
+  the adapters behind them (`.fvt`, `Call`'s `.callfv`), lambdas, `try`/`catch` statements, defaults, tasks and their
+  destinations, `Str` called by `$`. The build is 3s, the program prints the same, and a struct of 128 bytes or less
+  is passed and returned exactly as before. 128 is my call: well above anything the corpus moves by value, and where C has long
+  since gone to memory (16 bytes). Not done: an enum with a payload is not by-ref and a huge payload would still be one
+  value; nothing moves one.
+  **A BF16 result read 0 under `-d`.** Bisected to plain LLVM IR: at `-O0`, an aggregate returned by a call and read in
+  another basic block (the success branch of a `try`) had its `bfloat` element carried across the branch as the raw
+  16 bits in a register the reading block treats as an `f32` it then truncates - LLVM 18's x86 back end, not olang.
+  `half` and every wider type are unaffected, and the same IR with the aggregate consumed in its own block is right.
+  So a fallible call's result is stored in the call's block and its payload loaded (or, by-ref, addressed) from that
+  slot in the success block; `-O3` removes the slot again. The by-memory work above was suspected to be the fix and was
+  not needed for it.
+  **Fixed buffers.** A text literal's decoder held 4096 bytes and cut longer literals short (a 5001-character literal
+  had `Len()` 5001 and garbage after 4096). The call argument lists, closure and task environment types, the `.fvt`
+  and `Call` adapters' argument lists, the rendering helpers' keys and a payload's spelling were fixed buffers that
+  `strncat` truncated; all are growable now (`cgBuf`). Type spellings (`llvmType`, `structAggSpelling`) are built
+  growably and copied into the caller's buffer, and one that does not fit is reported and stops the compiler instead of
+  becoming a shorter, different type.
+  **`linkonce_odr` helper names follow from structure.** A rendering helper for an anonymous struct (a tuple) was named
+  by the struct's heap address (`anon%p`) and an anonymous enum's equality by a per-object counter. Two objects of one
+  program each name their helpers, and the linker keeps one body per name, so two different types could share a name
+  across objects - unlikely under ASLR, and likely without it (a debugger, a deterministic allocator). `rdKey` is now a
+  pure function of the type - an anonymous struct by its fields' keys, length-prefixed so no two structures spell one
+  key - and serves both; a function type's key is its full spelling, which a 1200-byte buffer could also cut. The check
+  builds a program twice from clean and compares the helper names.

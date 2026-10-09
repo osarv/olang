@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <math.h>
+#include <errno.h>
 #include <stdint.h>
 #include "util.h"
 #include "token.h"
@@ -169,6 +170,8 @@ long long getStructSize(struct type t) {
     }
     return (offset + structAlign - 1) / structAlign * structAlign;
 }
+
+long long ArrayLengthLimit(long long elemSize) { return elemSize > 0 ? LLONG_MAX / elemSize : LLONG_MAX; }
 
 long long TypeGetSize(struct type t) {
     switch (t.bType) {
@@ -2531,11 +2534,36 @@ void stripDigitSeparators(char* buf) {
     *w = '\0';
 }
 
-long long parseIntLiteralText(char* buf) {
+//L10: a decimal literal is read as the unsigned value it writes, so one above I64's maximum is the bit pattern of a U64
+//(T6a gives it that type); one beyond 64 bits sets *tooLarge rather than saturating, as strtoll did - which made
+//"99999999999999999999999" quietly I64's maximum. A leading "-" (only a -D value has one, B10) reads a negative value.
+long long parseIntLiteralChecked(char* buf, bool* tooLarge) {
     stripDigitSeparators(buf);
-    if (buf[0] == '0' && (buf[1] == 'x' || buf[1] == 'X')) return (long long)strtoull(buf + 2, NULL, 16);
-    if (buf[0] == '0' && (buf[1] == 'b' || buf[1] == 'B')) return (long long)strtoull(buf + 2, NULL, 2);
-    return strtoll(buf, NULL, 10);
+    *tooLarge = false;
+    bool neg = buf[0] == '-';
+    char* d = neg ? buf + 1 : buf;
+    int base = 10;
+    if (d[0] == '0' && (d[1] == 'x' || d[1] == 'X')) { base = 16; d += 2; }
+    else if (d[0] == '0' && (d[1] == 'b' || d[1] == 'B')) { base = 2; d += 2; }
+    errno = 0;
+    unsigned long long u = strtoull(d, NULL, base);
+    if (errno == ERANGE) *tooLarge = true;
+    if (neg) {
+        if (u > 9223372036854775808ULL) *tooLarge = true;
+        return (long long)(0 - u);
+    }
+    return (long long)u;
+}
+
+long long parseIntLiteralText(char* buf) {
+    bool tooLarge;
+    return parseIntLiteralChecked(buf, &tooLarge);
+}
+
+//L10: is this literal's text decimal - not a hex or binary bit pattern (L10a/L10c)
+static bool intLiteralIsDecimal(struct str text) {
+    return !(text.len > 1 && text.ptr[0] == '0' && (text.ptr[1] == 'x' || text.ptr[1] == 'X' || text.ptr[1] == 'b'
+                                                    || text.ptr[1] == 'B'));
 }
 
 //attempts to evaluate exprNode as a compile-time-constant integer literal (a bare TOK_INT_LIT, optionally
@@ -6804,7 +6832,13 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
                 struct operand* op = operandNew(tok, OPERATION_NONE, in->type);
                 op->isLiteral = true;
                 if (TypeIsFloat(in->type)) op->floatLiteralVal = -in->floatLiteralVal;
-                else op->intLiteralVal = -in->intLiteralVal;
+                else if (in->type.bType == BASETYPE_U64) {
+                    //a U64 literal (above I64's maximum, L10) negated: I64's minimum is the one such value with a negative
+                    litWide v = -intLiteralExact(in);
+                    if (!intLiteralFitsIntType(v, TypeVanilla(BASETYPE_INT64))) ErrMsgSemantic(tok, INT_LITERAL_TOO_LARGE);
+                    op->type = TypeVanilla(BASETYPE_INT64);
+                    op->intLiteralVal = (long long)v;
+                } else op->intLiteralVal = (long long)(0ULL - (unsigned long long)in->intLiteralVal);
                 return op;
             }
             struct unOpRule rule = unOpRules[opType];
@@ -7079,8 +7113,14 @@ struct operand* OperandIntLiteral(struct token tok) {
     char buf[tok.str.len +1];
     memcpy(buf, tok.str.ptr, (size_t)tok.str.len);
     buf[tok.str.len] = '\0';
-    op->intLiteralVal = parseIntLiteralText(buf);
-    if (!intLiteralFitsIntType(op->intLiteralVal, TypeVanilla(BASETYPE_INT32))) {
+    bool tooLarge;
+    op->intLiteralVal = parseIntLiteralChecked(buf, &tooLarge);
+    //L10/T6a: a decimal literal beyond 64 bits is an error, and one above I64's maximum is a U64 - the type E4a already
+    //gives a literal-only expression folding to such a value. A hex or binary literal is a bit pattern (L10a): its
+    //64 bits read as an I64, so 0xFFFFFFFFFFFFFFFF is -1
+    if (tooLarge) ErrMsgSemantic(tok, INT_LITERAL_TOO_LARGE);
+    else if (op->intLiteralVal < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str)) op->type = TypeVanilla(BASETYPE_U64);
+    else if (!intLiteralFitsIntType(op->intLiteralVal, TypeVanilla(BASETYPE_INT32))) {
         op->type = TypeVanilla(BASETYPE_INT64);
     }
     return op;
@@ -10184,9 +10224,24 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             case OPERATION_BTSFT_R: cap = "ShiftRight"; break;
             default: break;
         }
+        //S4: the place is evaluated once - the read inside the value is a copy of the target that reads the place the
+        //statement computed, rather than the target itself, which evaluated its index twice and which the meeting rule
+        //(T6b) could rewrite into a conversion in place, leaving the statement storing through a non-place
+        struct operand* cur = operandNew(target->tok, OPERATION_NONE, target->type);
+        *cur = *target;
+        //its own lists, so nothing done to one reaches the other
+        if (target->args.elemSize) { cur->args = ListInit(target->args.elemSize); ListAddList(&cur->args, target->args); }
+        if (target->scopeBindings.elemSize) {
+            cur->scopeBindings = ListInit(target->scopeBindings.elemSize);
+            ListAddList(&cur->scopeBindings, target->scopeBindings);
+        }
+        cur->placeOf = target;
         const char* nm = cap ? operatorFor(ctx, target->type, cap, opTok) : NULL;
-        if (nm) value = operatorCall(ctx, target, rhs, nm, opTok);
-        else value = OperandBinary(target, rhs, compoundOp, opTok);
+        if (nm) value = operatorCall(ctx, cur, rhs, nm, opTok);
+        else value = OperandBinary(cur, rhs, compoundOp, opTok);
+        //"b += x" is "b = b + x", so the sum must fit b as an assignment's value does - with "x" an I32 and "b" a U8
+        //the sum is an I32 (T6b) and does not
+        reportTypeFit(OperandFitsType(ctx->func, value, target->type), opTok);
     }
     else {
         //a target's own "&name" tag may name a scope variable of the TYPE it is a field of, never anything
@@ -12087,6 +12142,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
 
     if (ctx->inCtor) ErrMsgSemantic(tok, RETURN_IN_CTOR);
+    else if (ctx->inTest && !ctx->func) ErrMsgSemantic(tok, RETURN_IN_TEST); //S15: a test is not a function
     else if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
     else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_MISSING_VALUE);
     else if (val && ctx->func && ctx->func->type.hasRetType) {

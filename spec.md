@@ -115,7 +115,9 @@ keyword either, for the same reason: it is `NULL_LIT` (L11a).
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `I32` where it fits one, `I64` otherwise (T6a).
+written value: `I32` where it fits one, `I64` where it fits that, and `U64` for a decimal value above `I64`'s maximum
+(T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
+saturated or wrapped - and so is a hexadecimal or binary one needing more than 64 bits.
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
@@ -375,8 +377,9 @@ base, an integer and a float - do not meet, and that is a compile-time error. A 
 to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
 own type (E6d).
 
-**T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
-not representable in `I32` and `I32` for every other integer literal, `F64` for a float literal,
+**T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
+`I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
+hexadecimal or binary literal is a bit pattern, read as an `I64`, L10a), `F64` for a float literal,
 `Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it - a type variable only
 literals reach (G9a), a `-D` build constant (B10). It follows that an
@@ -1189,13 +1192,19 @@ whatever it lands in (§8 E12c): a local's block, a reference's tagged scope, th
 field belongs to (C2d). Every element is `T`'s zero value, or `v`. A global's initializer builds into the
 program's own scope, which is never closed (§8 O1b).
 
-**D14b.** `n` must evaluate to a **non-negative** length. A negative one aborts the program, the same hard
-abort an out-of-range slice bound produces (§5.9 E16b); a length of `0` is valid and produces a genuinely
-empty array.
+**D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
+count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
+out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`; under `try` (R20) it
+fails with `BuiltinError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
-unsigned comparison would read as an enormous free capacity.
+unsigned comparison would read as an enormous free capacity, and a too-large one wraps to a small byte count
+the array would then run past.
+
+**D14c.** Storage the system declines to provide - the allocator returning nothing - aborts the program with the
+message `out of memory`, as a task the system declines to start does (P1c). It is never an error a program
+handles: no `try` reaches it.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
@@ -1560,7 +1569,8 @@ type, where it names the instantiation whose constructor is being called (G10a).
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
 when it is one of these token literals, an array literal (§5.7), or a
 numeric (`INT_LIT`/`FLOAT_LIT`) token literal negated by a single leading unary `-` (§5.2 E11) — the
-sign folds into the literal's own value at that point, the same way T8's compile-time-constant array
+sign folds into the literal's own value at that point (a negated `U64` literal is the `I64` it then is, so
+`-9223372036854775808` is `I64`'s minimum, and one below that minimum is an error), the same way T8's compile-time-constant array
 size already treats this one shape as effectively still a literal - recursively including one whose
 own sub-expressions (array elements) are themselves literal expressions where
 required. A parenthesized literal, a variable read, and a function call are never literal
@@ -1918,7 +1928,7 @@ calling its checked form (E31a), whose own errors the tried expression then can 
 | float to integer `T(f)` | `INVALID` for a NaN or infinity, `OVERFLOW` out of range (E26a) |
 | `F32(f)` from `F64` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
-| `Array<T>(n)` | `OUT_OF_BOUNDS` for a negative `n` (D14b) |
+| `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
 
 `try` binds as tightly as a unary operator, so a checked computation is parenthesized: `try a + b` is
 `(try a) + b`. A `try` whose operand holds nothing that can fail is a compile-time error. The words a tried
@@ -2315,10 +2325,17 @@ Copying a reference's contents is written explicitly, field by field.
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
 anything else on the left of an assignment operator is a compile-time error.
 
+An assignment is evaluated **left to right**: first the target's **place** - the subexpressions of `lvalue` as
+written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
+the index is the first call and the value the second, and a value whose evaluation changes what the target's base
+refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+
 **S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
-corresponding binary operator (§5.2) and its own operand-type requirements; `X`'s left operand and
-the assignment's own target must be the same type both ways.
+corresponding binary operator (§5.2) - or the operator method the target's type declares for it (E31) - and its own
+operand-type requirements, except that the place is evaluated **once**: `a[next()] += 5` calls `next` once, reads that
+element, and stores to it. The result of `lvalue X expr` must fit `lvalue` as any assigned value does (E12): with `b`
+a `U8` and `x` an `I32`, `b += x` is an error, since `b + x` is an `I32` (T6b) - `b = U8(b + x)` says what is meant.
 
 **S6.** The target `lvalue` must be mutable: a local variable (always mutable,
 §3 D11), a mutable global, a mutable parameter, or a mutable
@@ -2338,7 +2355,9 @@ target written `_` discards its result. The call is evaluated once, before any t
 
 **S4c.** The value side may instead be a list of one value per target, `target "," target ... ( ":=" | "=" ) expr
 "," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
-`a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4. With `:=` each name is
+`a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
+evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
+the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. With `:=` each name is
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
@@ -2580,7 +2599,9 @@ rule).
 must fit (E12) it; if it declares several results (D8c), there is one `expr` per result, each fitting its
 own result type, or a single call returning exactly those results. If the enclosing function declares no `ret-type`, `expr` must be absent — a bare
 `return` (or falling off the end of the function's block) is the only valid way to end it. A
-`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b).
+`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b), and so is a `return` in a
+`test` body (outside a function written inside it): a test is not a function, with no caller to return to - `done`
+ends it early as passed and `fail` as failed (S16a).
 
 ### 6.6 `done` and `fail`
 
@@ -2632,7 +2653,7 @@ only inside `test { }` blocks.
   aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
   broken guarantee from the orderly `fail` (S16b).
 
-**S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and a negative array length (§3.5
+**S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and an array length out of range (§3.5
 D14b) each print a message naming what failed, to standard error.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
@@ -2746,7 +2767,8 @@ save; an ordinary parallel workload never reaches it.
 **P1g.** `spawn TARGET = CALL` binds what the call returns; for a call returning several values (D8c),
 `spawn T1, T2 = CALL` binds one target per result, `_` discarding one, each on the terms below. `TARGET` is an lvalue, written with plain `=`
 and no compound form — a compound assignment reads the target on the task's own thread, which is a data
-race written by accident. The plain `spawn CALL` form is unchanged and discards the result (P4).
+race written by accident. The plain `spawn CALL` form is unchanged and discards the result (P4). The target's place
+is evaluated at the `spawn`, in the spawner, before the call's arguments - left to right, as an assignment's is (S4).
 
 The store happens **on the task's thread, the instant its call returns** — somewhere between the `spawn`
 and the `join`. Two things follow. The target's type must be **exactly** the call's return type, since
@@ -3834,7 +3856,7 @@ nothing is generated, nothing is linked and no file is written. It behaves as th
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `done` and `fail` end it with status 0 and 1, an error escaping `main` is reported as B5
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
-`unreachable`, a slice out of range (E16b), a negative array length (D14b), an `as` that does not hold (E32) -
+`unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
 out of range, reading through a null reference, dividing by zero, a shift or conversion out of range - the
 interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
