@@ -69,6 +69,7 @@
 #define CHOICE_CASE_IS_PRIVATE "this enum case is private - only a capitalized name is visible outside the module its enum type was declared in (M6a)"
 #define ERROR_WORD_IS_PRIVATE "this error word is private - only a capitalized name is visible outside the module its error type was declared in (M6a)"
 #define METHOD_SHADOWS_FIELD "this type already has a field of this name, so 'x.f' would mean two things - a method may not share a name with a field of the type it is declared on"
+#define METHOD_IS_PRIVATE "this method is private - only a capitalized method is callable outside the module that declared it (M6)"
 #define VAR_IS_PRIVATE "this variable is private - only a capitalized name is visible outside its own module"
 #define IMPORT_IS_PRIVATE "this import is private - only a capitalized alias is visible through re-export (e.g. 'import Sh \"shared\"', not 'import sh \"shared\"')"
 #define INVALID_IMPLICIT_IMPORT_ALIAS "this file's name isn't a valid identifier, so it can't be used as an implicit import alias ('import \"path\"' derives its alias from the file name) - give this import an explicit alias instead"

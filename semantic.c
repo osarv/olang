@@ -2558,12 +2558,12 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         }
     } else {
         struct semaModule* target = resolveAliasChain(mod, idens, 1);
-        if (!target) return TypeVanilla(BASETYPE_INT32); //error already reported
+        if (!target) return unknownTypeStandIn(); //error already reported
         nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
-        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
+        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return unknownTypeStandIn(); } //one error
     }
 
     //eager resolution is skipped only when found is ALREADY mid-resolution right now (found->resolving) -
@@ -2841,12 +2841,12 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
         }
     } else {
         struct semaModule* target = resolveAliasChain(mod, idens, 1);
-        if (!target) return TypeVanilla(BASETYPE_INT32); //error already reported
+        if (!target) return unknownTypeStandIn(); //error already reported
         struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
-        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return TypeVanilla(BASETYPE_INT32); }
+        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return unknownTypeStandIn(); } //one error
     }
     resolveTypeDecl(found);
     return *found;
@@ -7753,6 +7753,13 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         return operandNew(tok, opType, TypeVanilla(BASETYPE_INT32));
     }
     struct binOpRule rule = binOpRules[opType];
+    //an operand whose type is unknown was reported where it was written: what it is combined with is not also wrong
+    if (a->type.unknown || b->type.unknown) {
+        struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : unknownTypeStandIn());
+        ListAdd(&op->args, &a);
+        ListAdd(&op->args, &b);
+        return op;
+    }
     //a numeric literal on either side adapts to its non-literal sibling's type (numericLiteralFits -
     //the same rule already applied at an assignment-context target, OperandFitsType) before the sameType
     //check below ever runs. A real, pre-existing gap found while testing this: E6 already documented "an
@@ -8936,6 +8943,37 @@ static struct token markerNameIn(struct syntax* t) {
     return (struct token){0};
 }
 
+//M12/M6a/E32/S13b: "[alias.]Type.Case" naming a case of xt's enum - the alias chain resolved and the type found as any
+//qualified name is, the type and the case each visible from here, and the type the very enum xt is (owner and name, not
+//a same-named enum of another module). The case's index, or -1 once reported (mismatch the message when the type is
+//another one)
+static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt, char* mismatch) {
+    if (idens.len < 2) {
+        if (idens.len) ErrMsgSemantic(*(struct token*)ListGetIdx(&idens, 0), mismatch);
+        return -1;
+    }
+    struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+    struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
+    struct semaModule* target = resolveAliasChain(ctx->mod, idens, 2);
+    if (!target) return -1; //reported
+    struct type* t = target != ctx->mod ? TypeGetList(&target->types, strFromTok(typeTok)) : typeNamed(ctx->mod, strFromTok(typeTok));
+    if (!t) { reportUnknownType(target, typeTok); return -1; }
+    if (t->owner && t->owner != ctx->mod && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); return -1; }
+    resolveTypeDecl(t);
+    if (t->bType != BASETYPE_CHOICE || t->owner != xt.owner || !StrCmp(t->name, xt.name)) {
+        ErrMsgSemantic(typeTok, mismatch);
+        return -1;
+    }
+    for (int i = 0; i < xt.vars.len; i++) {
+        struct var* v = ListGetIdx(&xt.vars, i);
+        if (!StrCmp(v->name, strFromTok(caseTok))) continue;
+        if (t->owner != ctx->mod && !isPublic(strFromTok(caseTok))) { ErrMsgSemantic(caseTok, CHOICE_CASE_IS_PRIVATE); return -1; }
+        return i;
+    }
+    ErrMsgSemantic(caseTok, UNKNOWN_CHOICE_CASE);
+    return -1;
+}
+
 struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     bool isAs = s->type == SNTX_EXPR_AS;
     struct token kw = firstTokOfType(s, isAs ? TOK_AS : TOK_IS);
@@ -8960,16 +8998,9 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     if (xt.bType == BASETYPE_CHOICE) {
         struct list idens = allTokOfTypeDeep(tNode, TOK_IDEN);
         struct var* c = NULL;
-        if (idens.len >= 2) {
-            struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
-            struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
-            for (int i = 0; StrCmp(strFromTok(typeTok), xt.name) && i < xt.vars.len; i++) {
-                struct var* v = ListGetIdx(&xt.vars, i);
-                if (StrCmp(v->name, strFromTok(caseTok))) { op->castTag = i; c = v; }
-            }
-        }
+        int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, AS_ENUM_CASE);
+        if (tag >= 0) { op->castTag = tag; c = ListGetIdx(&xt.vars, tag); }
         if (!c) {
-            ErrMsgSemantic(firstTokAnywhere(tNode), AS_ENUM_CASE);
             if (isAs) op->type = unknownTypeStandIn();
             return op;
         }
@@ -9756,26 +9787,26 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
     //M12: everything before the type is an alias chain, resolved exactly as it is for a cross-module error
     //type or struct literal - two trailing identifiers here (the type and its word) rather than one
     struct semaModule* target = resolveAliasChain(ctx->mod, idens, 2);
-    if (!target) return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    if (!target) return unknownPlaceholder(wordTok);
     bool crossModule = target != ctx->mod;
     struct type* t = TypeGetList(&target->types, strFromTok(typeTok));
     if (!t) {
         reportUnknownType(target, typeTok);
-        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+        return unknownPlaceholder(wordTok);
     }
     if (crossModule && !isPublic(strFromTok(typeTok))) {
         ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
-        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+        return unknownPlaceholder(wordTok);
     }
     //M6a: and the WORD's own capitalization decides its visibility, as for a struct member or error word
     if (crossModule && !isPublic(strFromTok(wordTok))) {
         ErrMsgSemantic(wordTok, CHOICE_CASE_IS_PRIVATE);
-        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+        return unknownPlaceholder(wordTok);
     }
     resolveTypeDecl(t);
     if (t->bType != BASETYPE_CHOICE) {
         ErrMsgSemantic(typeTok, INVALID_CHOICE_VALUE_TYPE);
-        return operandNew(wordTok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+        return unknownPlaceholder(wordTok);
     }
     return OperandChoiceValue(ctx, *t, wordTok, firstPartOfType(s, SNTX_EXPR_ARGS),
                               allPartsOfType(s, SNTX_SCOPE_ARG));
@@ -9900,8 +9931,8 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     if (!viaInterface && !MethodReceiverAccepts(p0, recvType)) return NULL;
     *reported = true;
     if (m->owner != ctx->mod && !isPublic(mName)) {
-        ErrMsgSemantic(mTok, VAR_IS_PRIVATE);
-        return OperandIntLiteral(mTok);
+        ErrMsgSemantic(mTok, METHOD_IS_PRIVATE);
+        return unknownPlaceholder(mTok);
     }
     bool allowedM = ctx->allowFallibleCall;
     ctx->allowFallibleCall = false;
@@ -12712,14 +12743,11 @@ static bool buildPatternAt(struct checkCtx* ctx, struct syntax* p, struct operan
     struct var* c = NULL;
     int tag = -1;
     if (at && !t.unknown) {
-        if (t.bType != BASETYPE_CHOICE || !StrCmp(strFromTok(typeTok), t.name)) ErrMsgSemantic(typeTok, PATTERN_TYPE_MISMATCH);
+        if (t.bType != BASETYPE_CHOICE) ErrMsgSemantic(typeTok, PATTERN_TYPE_MISMATCH);
         else {
-            for (int i = 0; i < t.vars.len && !c; i++) {
-                struct var* v = ListGetIdx(&t.vars, i);
-                if (StrCmp(v->name, strFromTok(caseTok))) { c = v; tag = i; }
-            }
-            if (!c) ErrMsgSemantic(caseTok, UNKNOWN_CHOICE_CASE);
-            else if (hasList && subs.len != c->type.vars.len) { ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY); c = NULL; }
+            tag = resolveCaseOf(ctx, idens, t, PATTERN_TYPE_MISMATCH);
+            if (tag >= 0) c = ListGetIdx(&t.vars, tag);
+            if (c && hasList && subs.len != c->type.vars.len) { ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY); c = NULL; }
         }
     }
     if (c) *test = patAnd(*test, enumIsAs(at, tag, false, caseTok), caseTok);
@@ -13841,6 +13869,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     for (int p = 0; p < L->type.vars.len; p++) {
         struct var* param = ListGetIdx(&L->type.vars, p);
         rejectShadowing(octx->mod, param->name, param->tok); //D3a
+        checkNoAliasClash(octx->mod, param->name, param->tok); //M20: as any parameter's
         struct var* local = VarAllocSetOrigin();
         *local = *param;
         local->origin = param;
@@ -14023,12 +14052,10 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
         struct type* errType = crossModule ? TypeGetList(&target->types, strFromTok(typeTok))
                                            : typeNamed(target, strFromTok(typeTok));
         if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(typeTok, UNKNOWN_ERROR); continue; }
-        if (crossModule && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); continue; }
+        //reported, and still taken as caught - the one error is the name, not also what is left uncaught
+        if (crossModule && !isPublic(strFromTok(typeTok))) ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
         //M6a, same as the "error T.word" statement above: a lowercase word is the declaring module's own
-        if (crossModule && hasWordTok && !isPublic(strFromTok(wordTok))) {
-            ErrMsgSemantic(wordTok, ERROR_WORD_IS_PRIVATE);
-            continue;
-        }
+        else if (crossModule && hasWordTok && !isPublic(strFromTok(wordTok))) ErrMsgSemantic(wordTok, ERROR_WORD_IS_PRIVATE);
         resolveTypeDecl(errType);
 
         bool produces = false;
@@ -14065,6 +14092,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         if (StatementCatchCoversType(matches, *e)) continue;
         if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return; } //S19b
         if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
+        if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;
         for (int j = 0; j < ctx->func->type.errors.len; j++) {
             struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);

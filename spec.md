@@ -1499,7 +1499,9 @@ array literal construction (§5.6, §5.7).
 identifiers before the trailing case name are an alias chain (M8) followed by the enum type's own name, so
 `Lib.Dir.North` names a word of an imported type to any chain depth. Both the type and the word are subject
 to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public.
-A private word's *value* still crosses the boundary normally; only its name does not.
+A private word's *value* still crosses the boundary normally; only its name does not. The same holds wherever a case
+is named - after `is` or `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
+the very enum of the value (its module and name), so another module's same-named enum is a different one.
 
 **M13.** Within one module, resolving *any* multi-hop alias chain (M8) requires that every
 intermediate module's own set of imports already be fully known. For two modules in a raw import
