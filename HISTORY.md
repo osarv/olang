@@ -10497,7 +10497,9 @@ which are reported after checking, by capturing the use when the zero value is r
 zero value, so a `List<Item>` where `Item`'s constructor reads through a reference parameter (oann's layer registering
 its parameters with a graph) could not be written, although List never reads a slot before writing it. A new chunk is
 now filled with the element being pushed (`grow(fill <T>)`), and `ToArray`, `Array.Map` and `Array.Filter` fill with an
-element, returning an array's zero value - empty, whatever `T` is - when there is none. Doing it exposed an
+element, and return `Array<T>(0)` when there is none - which needs no zero value now, having no element (D13c). A first
+version returned an array value's zero value instead, and the suite caught it: that is a null array reference, and `==`
+through a `String&` treats a null as equal only to a null (E10), so `StringBuilder().ToString() == ""` was false. Doing it exposed an
 over-rejection in the checker: an array filled from a by-value parameter holding references was judged by the
 parameter's own slot instead of where its references live (O4b/O25h, `valueRefsScope`), and the exactness O25c asks of
 an element stored through was an error between two scope variables of the function where it is an equality obligation

@@ -3739,7 +3739,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   naming the function and stream; reached by bare name everywhere, the one exception to M6, and no module may declare
   those names (all mine). **oann's bugs**: a default naming a global (D8a - defaults were built before globals had
   types; now built on first need, after global initializers) and a `List` of a type with no zero value (D13c - a new
-  chunk is filled with the pushed element, `ToArray`/`Map`/`Filter` with an element). **B11 (mine)**: an error met in
+  chunk is filled with the pushed element, `ToArray`/`Map`/`Filter` with an element, and `Array<T>(0)` needs no zero value). **B11 (mine)**: an error met in
   the standard library's code while checked for the program's use (an instantiation) is reported at that use, with a
   note at the library's line. **Found on the way**: an array filled from a by-value parameter holding references was
   judged by the parameter's slot, and O25c's exactness between two of a function's scope variables was an error, not an
