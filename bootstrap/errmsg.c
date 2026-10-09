@@ -697,7 +697,7 @@ int ErrMsgExplain(char* rule) {
     bool in = false, found = false;
     int blanks = 0;
     while (getline(&line, &cap, f) > 0) {
-        const char* id;
+        const char* id = ""; //set by ruleIdAt only where it finds a rule
         int idLen = ruleIdAt(line, &id);
         bool head = line[0] == '#';
         if (in && (idLen || head)) break;

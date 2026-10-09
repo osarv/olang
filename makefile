@@ -8,7 +8,10 @@ CFLAGS = -Wall -Werror -Wextra -Wpedantic -g -MMD -MP
 # the C compiler - stage 0 of the bootstrap (bootstrap/README.md) - is bootstrap/*.c, built to build/out
 SRC = $(wildcard bootstrap/*.c)
 OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
-DEP = $(OBJ:.o=.d)
+# the same sources built optimized, as the compiler a bootstrap starts from (make bootstrap)
+STAGE0_CFLAGS = -O2 -Wall -Werror -Wextra -Wpedantic -MMD -MP
+STAGE0_OBJ = $(addprefix build/stage0.obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
+DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
 # tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
 # the prelude),
@@ -29,6 +32,22 @@ build/out: $(OBJ)
 	$(CC) $(CFLAGS) $^ -o build/out -lm -lffi -ldl -lpthread
 
 build: build/out
+
+build/stage0.obj/%.o: bootstrap/%.c
+	mkdir -p build/stage0.obj
+	$(CC) $(STAGE0_CFLAGS) -c $< -o $@
+
+build/stage0: $(STAGE0_OBJ)
+	$(CC) $(STAGE0_CFLAGS) $^ -o build/stage0 -lm -lffi -ldl -lpthread
+
+# rebuilds the compiler from nothing but the repository (bootstrap/README.md, compiler/DESIGN.md section 5): stage 0,
+# the C compiler in bootstrap/, needs only gcc. No binary is committed, so this is also how a lost compiler comes back.
+# TODO once compiler/ holds the olang compiler: walk bootstrap/CHAIN (each entry's compiler/ and std/ extracted with
+# git archive and built at -d by the compiler before it), build stage 1 from compiler/ with the last of them at -d,
+# stage 2 with stage 1 and stage 3 with stage 2, compare every .ll of stages 2 and 3 byte for byte and then the
+# binaries, and install stage 2 as build/olang.
+bootstrap: build/stage0
+	@echo "bootstrap: stage 0 is build/stage0 - compiler/ holds no olang compiler yet, so there are no later stages"
 
 run: build/out
 	build/out -b runner.olang
@@ -97,7 +116,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build run test usertest verify checkir race fuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir race fuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
