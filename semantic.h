@@ -284,8 +284,8 @@ struct var {
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
     bool inProgram;    //O1b: a local whose referent - or, for a value, whose references - live in the program's scope
-    //O25a: a value local holding references, declared with ":=", lives where its initializer built them - a
-    //scope variable, or a block (valueHome NULL, at valueHomeDepth)
+    //O25a: a value local holding references, declared with ":=", has them where its initializer built them - a
+    //scope variable, or a block (valueHome NULL, at valueHomeDepth). Its own storage is its block regardless (O17)
     bool valueHomeSet;
     struct var* valueHome;
     int valueHomeDepth;

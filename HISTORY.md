@@ -10011,11 +10011,21 @@ from their original form.
   always - which made a real hazard visible: a callee able to store through the borrowed value (`b.regrow()` assigning
   a new array to `b.Data`) builds in the block under a value claiming the result scope (reproduced: the array read
   back as another loop's data). That lend is refused with the fix named (O17, `b Box&return = Box(n)`), a read-only one
-  or a field passed on is fine; and a value local whose result scope its callee's obligations only require to be
-  outlived lands in its own block, so the for-in's hidden iterator is lent as before. (3) `Box&return(n)` with a
+  or a field passed on is fine. The check counts only slots a callee can keep a build in: a field it may assign a
+  reference to, or one referring to something that can be stored through - never a field written `&p`, whose referent a
+  callee is held to by derived obligations. An iterator holds only such fields, so the for-in's hidden iterator is lent
+  to `Next` as before. (A first version instead landed a value local whose result scope was only required to be
+  outlived in its own block; it lost where a walked Map's entries live - `e := it.Next()` landed in the loop body and the
+  word counter broke - and was taken back.) (3) `Box&return(n)` with a
   constructor parameter defaulting to `null` was O10d at the default - the default, typed as its parameter, went through
   the scope check as existing storage; `null` refers to nothing. And `alpha <T> = 1` could not be declared - a literal
   default for a type-variable parameter is fitted at each call now, each call its own copy (G18, D8a).
+  **After the merge with checker batch 2** the study's JSON reader stopped compiling, on master as well: inside
+  `List.Push` instantiated at `Pair<String&, Json&>`, O25h asked the stored value's references be exactly the list's
+  scope - right, a `Json` node can be stored through - but compared two scope variables directly where it should record
+  the equality as an obligation for `Push`'s callers, as C2d's single binding now does. Fixed the same way; the program
+  shows it (its fields and keys live where the object does), and a node from a loop body pushed into an outer list is
+  rejected at the call.
   **Study, after**: every scope workaround in graph, inventory, lru, pipeline, report, widgets and wordfreq reverts and
   the program prints what it printed before; report's `sum.biggest = s.item` stays a copy for a T25b reason (a `mut`
   field of reference type is a writable reference, and the item text is read-only).

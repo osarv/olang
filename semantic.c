@@ -5760,9 +5760,9 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
                    bool* unnamed);
 
 //O18c/O25h: where the references held by a value - a value local, or a value field of one - were put, when that is not
-//its own block: its ":=" call landed by its obligations in a scope variable, it is a copy of a value whose references
-//live elsewhere, or a value parameter's (struct var.refsHome). *depth is the block a NULL home means, *unnamed the
-//program's scope; either may be NULL
+//simply its own block: where its initializer built them (valueHome), where its ":=" call landed by its obligations, a
+//copy's source's, a value parameter's scope (refsHome), or the program's for a global's. *depth is the block a NULL home
+//means, *unnamed the program's scope; either may be NULL
 static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool* unnamed) {
     while (op->opType == OPERATION_MEMBER && !op->type.structMAlloc) op = *(struct operand**)ListGetIdx(&op->args, 0);
     if (op->opType != OPERATION_READ_VAR || !op->readVar || op->type.structMAlloc) return false;
@@ -6920,11 +6920,6 @@ static void noteResultBindings(struct checkCtx* ctx, struct operand* val) {
         f->type.resultViaSeen = true;
     }
     struct list vars = perInstanceVars(val->type);
-    for (int k = 0; getenv("DBGRB") && k < val->scopeBindings.len; k++) {
-        struct scopeBinding* b = ListGetIdx(&val->scopeBindings, k);
-        fprintf(stderr, "DBG %.*s binding %.*s -> %s land=%d path=%d\n", f->name.len, f->name.ptr, b->typeParam->name.len, b->typeParam->name.ptr,
-                b->boundTo == SCOPE_AMBIGUOUS ? "AMB" : b->boundTo ? b->boundTo->name.ptr : "block", b->landing, b->viaPath.len);
-    }
     struct list now = ListInit(sizeof(struct scopeBinding));
     for (int i = 0; i < vars.len; i++) {
         struct var* V = canonicalVar(*(struct var**)ListGetIdx(&vars, i));
@@ -7382,11 +7377,9 @@ static struct var* madeAsLocal(struct checkCtx* ctx, struct operand* op) {
 }
 
 //B11: the variable a value lives with, to name in a marker ("&x") - its root local or parameter, never a global
-static struct var* livesWithVar(struct checkCtx* ctx, struct operand* op) {
+static struct var* livesWithVar(struct operand* op) {
     struct var* r = lvalueRootVar(op);
-    if (!r || r->owner || r->isFuncDecl) return NULL;
-    (void)ctx;
-    return r;
+    return r && !r->owner && !r->isFuncDecl ? r : NULL;
 }
 
 //B11: what to change where an argument lives too briefly for another one it must live with (O25e) or outlive (O10c): it is
@@ -7394,7 +7387,7 @@ static struct var* livesWithVar(struct checkCtx* ctx, struct operand* op) {
 static void noteMakeWhere(struct checkCtx* ctx, struct operand* shortArg, struct operand* longArg) {
     if (!ctx || !ctx->hasOwnScope || !shortArg || !longArg) return;
     struct var* made = madeAsLocal(ctx, shortArg);
-    struct var* with = livesWithVar(ctx, longArg);
+    struct var* with = livesWithVar(longArg);
     if (!made || !with || canonicalVar(made) == canonicalVar(with) || !made->tok.owner) return;
     struct str withName = canonicalVar(with)->name;
     //a name the compiler made, which the program cannot write

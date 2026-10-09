@@ -3539,10 +3539,13 @@ Go through this for every change to what olang means - a rule added, revised or 
   of its elements. **From the matrix library (the coordinator's batch)**: an ordinary call's result no longer carries
   its arguments' bindings (only a constructor's does), so `return copyOf(id.Data)` / `return x + x` is not O26; a value
   local's own storage is its block wherever its references were built (`valueHome` is their home only), so `b :=
-  Box&return(n); b.size()` and `f(b.Data)` work, and a lend through which the callee could store is refused with the
-  fix named (O17 - before, it bound the callee to the result scope while the value sat in the block); a typed `null`
+  Box&return(n); b.size()` and `f(b.Data)` work, and a lend through which the callee could keep what it builds in the
+  value's own slots (not its `&p` fields) is refused with the fix named (O17 - before, it bound the callee to the result
+  scope while the value sat in the block, a use-after-free the other way round); a typed `null`
   default fits any scope (`Box&return(n)`); and a literal default for a type-variable parameter is fitted per call
-  (G18). **Not done**: r14's permission inference (a local's writable reference binds a type variable writable) is the
+  (G18). **Found after the merge with checker batch 2**: the study's JSON reader no longer compiled - O25h's exactness
+  inside `List.Push` (a `Pair<String&, Json&>` element) was an error between two scope variables where it is an equality
+  obligation (as C2d's now is), and the program shows it. **Not done**: r14's permission inference (a local's writable reference binds a type variable writable) is the
   type checker's. Study: every scope workaround reverts and the programs give the same output; report's `sum.biggest =
   s.item` is left by T25b (a `mut` field of a reference type is a writable reference).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,

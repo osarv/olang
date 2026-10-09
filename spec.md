@@ -3714,7 +3714,9 @@ value where it dangles. Accordingly:
   copy of a global's - while the local's own storage is its block. That is a claim, as a reference local's scope is:
   assigning such a value from one that already lives somewhere requires the source's references to outlive the
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
-  one of them (O25g); a temporary assigned to it, or into a field or element of it, is built where its references are.
+  one of them (O25g), which between two of the function's scope variables is an equality its callers show (O10c:
+  `List.Push` of a value holding such a reference asks the list and the value's references be one scope); a temporary
+  assigned to it, or into a field or element of it, is built where its references are.
   So a value built in a loop body is reclaimed with the iteration, keeping it past the body means building it where it
   is kept, and `t := a[i]; a[i] = a[j]; a[j] = t` swaps two elements of a parameter's array. Returning such a value (O14c)
   whose references live in one of the function's own blocks is a compile-time error - a copy, an array or anything read
@@ -3873,9 +3875,11 @@ is a compile-time error.
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
 so it binds the variable to where that storage is - a value local's block, wherever its references were built. Where
 those live elsewhere (a value built in the result scope by a scope argument, `b := Box&return(n)`, or a copy of an
-element, O25h) and something can be stored through the parameter (O25g), what the callee built and stored would be in the
-storage's scope under a value claiming the other - a compile-time error naming the fix, to declare it a reference where
-its references live (`b Box&return = Box(n)`); lent read-only, or for its fields' referents, it is fine.
+element, O25h) and the callee can keep something it builds in the value's own slots - a field it may assign a reference
+to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
+a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
+(`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
+a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
@@ -3920,9 +3924,7 @@ determined scope is the program's (a global argument, O25e), the temporary is bu
 **O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
 where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
-value holding references, as O18a says). A value local whose result scope those obligations only require to be outlived
-- never to outlive anything - lands in its own block instead, which they outlive in turn: its references then live where
-its storage does. `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
+value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
 not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
