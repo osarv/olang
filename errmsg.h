@@ -349,7 +349,7 @@ struct type;
     X(ERR_TYPE_MATCH_UNCOVERED,         "G15",   "no case covers %t, which this generic is instantiated with - add one, or 'nomatch'") \
     X(ERR_MATCH_VALUE_TYPES,            "S12b",  "every value of this match is %t, found %t") \
     X(ERR_MATCH_NOT_EXHAUSTIVE,         "S13a",  "case %S of %t is not covered - add it, or 'nomatch { }'") \
-    X(ERR_MATCH_VALUE_NEEDS_NOMATCH,    "S12b",  "a match over %t gives a value only with 'nomatch => v'") \
+    X(ERR_MATCH_VALUE_NEEDS_NOMATCH,    "S12b",  "a match over %t gives a value only when its cases cover every value - add 'nomatch => v'") \
     /* ---- return and error ---- */ \
     X(ERR_RETURN_BORROW_AS_BUILT,       "O14",   "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") \
     X(ERR_RETURN_OWN_STORAGE,           "O26",   "this value refers to this function's own storage, which dies at the return - build it in '&return'") \

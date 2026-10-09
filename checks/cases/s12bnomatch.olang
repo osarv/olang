@@ -1,5 +1,5 @@
-# check: fail error[S12b]: a match over I32 gives a value only with 'nomatch => v'
-# S12b: only an enum's cases can be known to be covered
+# check: fail error[S12b]: a match over I32 gives a value only when its cases cover every value - add 'nomatch => v'
+# S12b: only an enum's cases, or a Bool's, can be known to be covered
 fn f(n I32) I32 {
     return match n { case 1 => 2 }
 }

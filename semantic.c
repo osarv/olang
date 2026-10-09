@@ -13732,6 +13732,146 @@ struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
     return op;
 }
 
+//S13a: a pattern as exhaustiveness sees it - what it matches, read off its syntax: anything (a name, "_"), one Bool, one
+//case of an enum with its payload's patterns, or a value no set of values exhausts (a number, text, null)
+enum patKind { PAT_ANY, PAT_BOOL, PAT_CASE, PAT_VALUE };
+struct pat { enum patKind kind; bool b; int tag; struct list subs; /* struct pat* */ };
+
+static struct pat* patAnyNew(void) { struct pat* p = MallocOrCrash(sizeof(struct pat)); *p = (struct pat){0}; return p; }
+
+static struct pat* patOfValue(struct syntax* expr) {
+    struct pat* p = patAnyNew();
+    p->kind = PAT_VALUE;
+    struct syntax* core = exprCoreOf(expr);
+    if (core && core->type == SNTX_EXPR_PRIMARY && core->parts.len == 1 && partAt(core, 0)->isToken
+            && partAt(core, 0)->tok.type == TOK_BOOL_LIT) {
+        p->kind = PAT_BOOL;
+        p->b = partAt(core, 0)->tok.str.ptr[0] == 't';
+    }
+    return p;
+}
+
+static struct pat* patOfSyntax(struct syntax* sx, struct type t) {
+    if (sx->type == SNTX_PAT_BIND) return patAnyNew();
+    if (sx->type == SNTX_PAT_VALUE) return patOfValue(firstPartOfType(sx, SNTX_EXPR));
+    if (sx->type != SNTX_CASE_PATTERN) return patOfValue(sx);
+    struct pat* p = patAnyNew();
+    p->kind = PAT_VALUE; //a case of another type, or none: reported where it was built, and it covers nothing
+    struct list idens = allTokOfType(firstPartOfType(sx, SNTX_NAME), TOK_IDEN);
+    if (t.bType != BASETYPE_CHOICE || !idens.len) return p;
+    struct str caseName = strFromTok(*(struct token*)ListGetIdx(&idens, idens.len - 1));
+    struct var* c = NULL;
+    for (int i = 0; i < t.vars.len && !c; i++) {
+        struct var* v = ListGetIdx(&t.vars, i);
+        if (StrCmp(v->name, caseName)) { c = v; p->tag = i; }
+    }
+    if (!c) return p;
+    p->kind = PAT_CASE;
+    p->subs = ListInit(sizeof(struct pat*));
+    int k = 0;
+    for (int i = 0; i < sx->parts.len; i++) {
+        struct syntaxPart* part = partAt(sx, i);
+        if (part->isToken || part->sntx->type == SNTX_NAME) continue;
+        if (k >= c->type.vars.len) { p->kind = PAT_VALUE; return p; } //arity, reported where it was built
+        struct pat* sub = patOfSyntax(part->sntx, ((struct var*)ListGetIdx(&c->type.vars, k))->type);
+        ListAdd(&p->subs, &sub);
+        k++;
+    }
+    if (k && k != c->type.vars.len) p->kind = PAT_VALUE;
+    return p; //no list at all ("E.C") matches whatever the payload holds - an empty subs stands for that
+}
+
+//one row per unguarded alternative of a match: the alternative's pattern, as a vector of one
+static struct list matchPatternRows(struct syntax* matchNode, struct type t) {
+    struct list rows = ListInit(sizeof(struct list));
+    struct list cases = allPartsOfType(matchNode, SNTX_STMNT_CASE);
+    for (int i = 0; i < cases.len; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        if (firstPartOfType(c, SNTX_CASE_GUARD)) continue;
+        for (int j = 0; j < c->parts.len; j++) {
+            struct syntaxPart* part = partAt(c, j);
+            if (part->isToken || (part->sntx->type != SNTX_CASE_PATTERN && part->sntx->type != SNTX_EXPR)) continue;
+            struct list row = ListInit(sizeof(struct pat*));
+            struct pat* p = patOfSyntax(part->sntx, t);
+            ListAdd(&row, &p);
+            ListAdd(&rows, &row);
+        }
+    }
+    return rows;
+}
+
+static bool patRowsCover(struct list* rows, struct type* types, int ntypes, int depth);
+static bool patBoolCovered(struct list* rows, bool b, struct type* rest, int nrest, int depth);
+static bool patCaseCoveredAt(struct list* rows, struct type t, int tag, struct type* rest, int nrest, int depth);
+
+//the rows that let the first position be the constructor (a Bool's value b, or an enum's case tag), each with that
+//position replaced by the constructor's own positions (none for a Bool, the payload's fields for a case)
+static struct list patSpecialize(struct list* rows, enum patKind kind, bool b, int tag, int arity) {
+    struct list out = ListInit(sizeof(struct list));
+    for (int i = 0; i < rows->len; i++) {
+        struct list* row = ListGetIdx(rows, i);
+        struct pat* p0 = *(struct pat**)ListGetIdx(row, 0);
+        bool takes = p0->kind == PAT_ANY || (kind == PAT_BOOL && p0->kind == PAT_BOOL && p0->b == b)
+                     || (kind == PAT_CASE && p0->kind == PAT_CASE && p0->tag == tag);
+        if (!takes) continue;
+        struct list nr = ListInit(sizeof(struct pat*));
+        for (int k = 0; k < arity; k++) {
+            struct pat* sub = p0->kind == PAT_CASE && p0->subs.len ? *(struct pat**)ListGetIdx(&p0->subs, k) : patAnyNew();
+            ListAdd(&nr, &sub);
+        }
+        for (int k = 1; k < row->len; k++) ListAdd(&nr, ListGetIdx(row, k));
+        ListAdd(&out, &nr);
+    }
+    return out;
+}
+
+//S13a: whether the rows cover every value of the positions' types (Maranget's exhaustiveness: a constructor is
+//expanded only when every one of its type's constructors is written at the first position - otherwise only the rows
+//matching anything there can cover what is not written, so a recursive enum is never unfolded past its patterns)
+static bool patRowsCover(struct list* rows, struct type* types, int ntypes, int depth) {
+    if (ntypes == 0) return rows->len > 0;
+    if (!rows->len || depth > 64) return false;
+    struct type t0 = types[0];
+    bool complete = t0.bType == BASETYPE_BOOL || t0.bType == BASETYPE_CHOICE;
+    int n = t0.bType == BASETYPE_BOOL ? 2 : t0.bType == BASETYPE_CHOICE ? t0.vars.len : 0;
+    for (int c = 0; c < n && complete; c++) {
+        bool seen = false;
+        for (int i = 0; i < rows->len && !seen; i++) {
+            struct pat* p0 = *(struct pat**)ListGetIdx((struct list*)ListGetIdx(rows, i), 0);
+            seen = t0.bType == BASETYPE_BOOL ? p0->kind == PAT_BOOL && p0->b == (c == 1) : p0->kind == PAT_CASE && p0->tag == c;
+        }
+        complete = seen;
+    }
+    if (!complete || n == 0) { //only what matches anything at the first position covers it
+        struct list rest = patSpecialize(rows, PAT_ANY, false, -1, 0);
+        return patRowsCover(&rest, types + 1, ntypes - 1, depth + 1);
+    }
+    for (int c = 0; c < n; c++) {
+        bool ok = t0.bType == BASETYPE_BOOL ? patBoolCovered(rows, c == 1, types + 1, ntypes - 1, depth)
+                                           : patCaseCoveredAt(rows, t0, c, types + 1, ntypes - 1, depth);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+static bool patBoolCovered(struct list* rows, bool b, struct type* rest, int nrest, int depth) {
+    struct list sp = patSpecialize(rows, PAT_BOOL, b, -1, 0);
+    return patRowsCover(&sp, rest, nrest, depth + 1);
+}
+
+static bool patCaseCoveredAt(struct list* rows, struct type t, int tag, struct type* rest, int nrest, int depth) {
+    struct var* c = ListGetIdx(&t.vars, tag);
+    int arity = c->type.vars.len;
+    struct list sp = patSpecialize(rows, PAT_CASE, false, tag, arity);
+    struct type* ts = MallocOrCrash(sizeof(struct type) * (size_t)(arity + nrest + 1));
+    for (int k = 0; k < arity; k++) ts[k] = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+    for (int k = 0; k < nrest; k++) ts[arity + k] = rest[k];
+    return patRowsCover(&sp, ts, arity + nrest, depth + 1);
+}
+
+//whether the rows cover case tag of the matched enum t, whatever its payload holds
+static bool patCaseCovered(struct list* rows, struct type t, int tag) { return patCaseCoveredAt(rows, t, tag, NULL, 0, 0); }
+
 static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
     if (varNode) return buildTypeMatchStmnt(ctx, s, varNode, asValue);
@@ -13785,23 +13925,37 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
     //where exhaustiveness is decidable and worth deciding: the set of cases is closed and written in one declaration,
     //so the compiler can read it - unlike an integer, whose "cases" are not enumerable in any useful sense. It is what
     //makes adding a case to an enum tell you every place that now has to handle it, which is most of the reason to
-    //declare one. A case covers what it matches whatever the payload holds, and only when it has no guard (S13e):
-    //a nested pattern, a value in the payload or a guard may let the value through to the next case.
-    if (matched->type.bType == BASETYPE_CHOICE && !stmt.hasNomatch) {
-        for (int i = 0; i < matched->type.vars.len; i++) {
-            bool covered = false;
-            for (int j = 0; j < stmt.matchCases.len && !covered; j++) {
-                struct statement* cs = ListGetIdx(&stmt.matchCases, j);
-                for (int k = 0; !cs->caseGuard && k < cs->caseAlts.len && !covered; k++) {
-                    covered = ((struct caseAlt*)ListGetIdx(&cs->caseAlts, k))->coversTag == i;
-                }
+    //declare one. Its unguarded patterns cover it together (S13e: a guard may let the value through): a case named
+    //bare or with names covers it whatever the payload holds, and payload patterns covering every value at each
+    //position cover it too - "Service(true)" and "Service(false)", or every case of an enum in the payload. A Bool
+    //is covered by "true" and "false" as an enum is by its cases.
+    bool covers = false;
+    if ((matched->type.bType == BASETYPE_CHOICE || matched->type.bType == BASETYPE_BOOL) && !stmt.hasNomatch
+            && !matched->type.unknown) {
+        struct list rows = matchPatternRows(s, matched->type);
+        if (matched->type.bType == BASETYPE_BOOL) covers = patRowsCover(&rows, &matched->type, 1, 0);
+        else {
+            covers = true;
+            for (int i = 0; i < matched->type.vars.len && covers; i++) {
+                if (patCaseCovered(&rows, matched->type, i)) continue;
+                Err(matched->tok, ERR_MATCH_NOT_EXHAUSTIVE, ((struct var*)ListGetIdx(&matched->type.vars, i))->name, &matched->type);
+                covers = false;
             }
-            if (!covered) { Err(matched->tok, ERR_MATCH_NOT_EXHAUSTIVE, ((struct var*)ListGetIdx(&matched->type.vars, i))->name, &matched->type); break; }
         }
     }
-    //S12b: a match used as a value gives one on every path - only an enum's cases can be known to be covered
-    if (asValue && !stmt.hasNomatch && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
+    //S12b: a match used as a value gives one on every path - only an enum's cases, or a Bool's, can be known covered
+    if (asValue && !stmt.hasNomatch && !covers && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
         Err(firstTokOfType(s, TOK_MATCH), ERR_MATCH_VALUE_NEEDS_NOMATCH, &matched->type);
+    }
+    //S13a: what a match covering every case lets through - a null reference, which no case pattern matches - is
+    //unreachable, in a statement as in a value: a statement every clause of which leaves leaves (D10a), and it may not
+    //fall through instead, its function returning nothing
+    if (covers && !asValue) {
+        stmt.hasNomatch = true;
+        struct statement u = (struct statement){0};
+        u.sType = STATEMENT_UNREACHABLE;
+        stmt.nomatchBlock = ListInit(sizeof(struct statement));
+        ListAdd(&stmt.nomatchBlock, &u);
     }
     //beyond that, this checker doesn't attempt exhaustiveness analysis, so "no case matched" is always
     //folded in as a live possibility (via merged's own initial "unchanged" value) - conservative, never
