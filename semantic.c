@@ -5626,7 +5626,7 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
     //then carries. A call returning nothing has no type to give.
     if (op->opType == OPERATION_FUNCCALL) return op->type.bType != BASETYPE_VOID;
     //...and the calls the compiler supplies: an array's "Len()" (E23), a float's "Bits()" and its reverse (E33), and
-    //the atomic builtins that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
+    //the atomic methods that give a value (P9), written as calls and typed as plainly - "n := a.Len()" was rejected
     //while "n := l.Len()" on a List compiled
     if (op->opType == OPERATION_LEN || op->opType == OPERATION_BITCAST) return true;
     if (op->opType >= OPERATION_ATOMIC_LOAD && op->opType <= OPERATION_ATOMIC_CAS) return op->type.bType != BASETYPE_VOID;
@@ -11231,9 +11231,9 @@ static bool exprCanStandAsStatement(struct operand* op) {
         case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
             return true;
         case OPERATION_SEQ: return op->isIncDec; //E31: an increment a type declares
-        //P9: every atomic builtin writes its target, which is exactly S3's own criterion. "atomicStore"
-        //has no value at all, and the other four are routinely wanted for the write rather than the value
-        //they return - a discarded "atomicAdd" is a counter bump, not dead code.
+        //P9: every atomic method but AtomicLoad writes its place, which is exactly S3's own criterion.
+        //"AtomicStore" has no value at all, and the other three are routinely wanted for the write rather than
+        //the value they return - a discarded "AtomicAdd" is a counter bump, not dead code.
         case OPERATION_ATOMIC_LOAD: //...except this one, which only reads
             return false;
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:

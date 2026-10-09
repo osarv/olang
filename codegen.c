@@ -3019,7 +3019,7 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
 //"len(arr)" - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
 //anything more than a bare variable read, e.g. a function call producing the array) even when the
 //dimension turns out to be compile-time-known and the loaded value itself goes unused.
-//P9: one atomic builtin, one LLVM atomic instruction, always sequentially consistent. The address comes
+//P9: one atomic method, one LLVM atomic instruction, always sequentially consistent. The address comes
 //from cgAddr, so a local, a field and an array element all work; natural alignment is what LLVM's own
 //layout already gives every integer (TypeGetAlign), which is exactly what an atomic instruction requires.
 char* cgAtomic(struct cgCtx* ctx, struct operand* op) {
