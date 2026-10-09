@@ -6839,6 +6839,21 @@ test "K1: compile-time evaluation keeps a parameter's repoint local and an argum
     assert (try ktOuterArg() catch default 9) == 9
 }
 
+# K1/R10: the same through the statement form - "try ktTake(try ktRaise()) catch { ... }" handles ktTake's errors only;
+# ktRaise's leaves the function through the argument's own try. The evaluator let the statement's clauses take it, so
+# a baked global and an assert said 3 where the program said 9 (found by the fuzzer, seed 551)
+fn ktOuterStmt() I32 ? MathError {
+    x I32 = 1
+    try ktTake(try ktRaise()) catch MathError.DIV_BY_ZERO { x = 2 } catch { x = 3 }
+    return x
+}
+KtBypassStmt I32 = try ktOuterStmt() catch default 9
+
+test "K1: an argument's own try leaves the function past a try statement's clauses, while compiling too" {
+    assert KtBypassStmt == 9
+    assert (try ktOuterStmt() catch default 9) == 9
+}
+
 # B9c: a top-level condition the token evaluator cannot decide - a call, a global computed by one - is
 # decided by compile-time evaluation, and a branch it chooses may hold another such condition
 fn ccPage() I32 {
