@@ -390,6 +390,14 @@ static void reportUnknownName(struct semaModule* mod, struct token tok, enum dia
 }
 
 static struct type unknownTypeStandIn(void) { struct type t = TypeVanilla(BASETYPE_INT32); t.unknown = true; return t; }
+//a type an unknown type was written in - "List<Itm>", "Array<Itm&>" - is unknown too: its uses say nothing more
+static bool typeHasUnknown(struct type t, int depth) {
+    if (t.unknown) return true;
+    if (depth > 16) return false;
+    if (t.bType == BASETYPE_ARRAY && t.arrElem && typeHasUnknown(*t.arrElem, depth + 1)) return true;
+    for (int i = 0; i < t.typeArgs.len; i++) if (typeHasUnknown(*(struct type*)ListGetIdx(&t.typeArgs, i), depth + 1)) return true;
+    return false;
+}
 static struct operand* unknownPlaceholder(struct token tok);
 
 static void reportUnknownType(struct semaModule* mod, struct token nameTok) {
@@ -2281,6 +2289,19 @@ static void reportUnbounded(struct token tok) {
     Err(tok, ERR_UNBOUNDED_INSTANTIATION);
 }
 
+//G19: the instantiations of a generic type whose constraints were not met, and whether a type reaches one
+static struct list unmetTypeInsts; //struct type*
+static struct type* canonicalStructOf(struct type t);
+static bool typeReachesUnmet(struct type t, int depth) {
+    if (depth > 16 || !unmetTypeInsts.len) return false;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && typeReachesUnmet(*t.arrElem, depth + 1);
+    if (t.bType != BASETYPE_STRUCT) return false;
+    struct type* c = canonicalStructOf(t);
+    for (int i = 0; c && i < unmetTypeInsts.len; i++) if (*(struct type**)ListGetIdx(&unmetTypeInsts, i) == c) return true;
+    for (int i = 0; i < t.typeArgs.len; i++) if (typeReachesUnmet(*(struct type*)ListGetIdx(&t.typeArgs, i), depth + 1)) return true;
+    return false;
+}
+
 struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i < instantiations.len; i++) {
         struct instantiation* inst = ListGetIdx(&instantiations, i);
@@ -2313,7 +2334,13 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.site = instSite;
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
-    if (!tooDeep) ListAdd(&pendingInstances, &idx); //G17: its body would only instantiate a deeper one
+    //G17: its body would only instantiate a deeper one. G19: nor is the body of a method of an instantiation whose
+    //constraints were not met checked - it would only repeat that one error inside the generic's own code
+    bool unmet = false;
+    for (int i = 0; i < spec->type.vars.len && !unmet; i++)
+        unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
+    if (unmet) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
+    else if (!tooDeep) ListAdd(&pendingInstances, &idx);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -2523,6 +2550,7 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //known, and each instantiation of it is checked for its own
     bool met = argsStillGeneric
         || checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+    if (!met) ListAdd(&unmetTypeInsts, &spec);
     if (spec->ctorFunc && !argsStillGeneric && met) {
         struct pendingTypeInst p = (struct pendingTypeInst){0};
         p.spec = spec;
@@ -2714,6 +2742,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         //cannot see it (O11) - rejected as written, and the argument resolved with that marker's own
         //diagnostics muted, so the one real error stands alone
         b.type = resolveTypeArg(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
+        if (typeHasUnknown(b.type, 0)) return unknownTypeStandIn(); //reported - one error, not one per use of it
         ListAdd(&bindings, &b);
     }
     return *instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -2754,6 +2783,7 @@ struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list
     //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
             && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE && t.bType != BASETYPE_CHOICE) {
+        if (t.unknown) return t; //reported where it was written - one error, not also this one
         Err(firstTokOfType(markerNode, TOK_BTWSE_AND), ERR_INVALID_REFERENCE_TARGET, &t);
         return t;
     }
@@ -4279,6 +4309,7 @@ void checkMethodOverloads(struct semaModule* mod) {
     for (int i = 0; i < mod->vars.len; i++) {
         struct var* a = ListGetIdx(&mod->vars, i);
         struct type* ra = SemanticMethodReceiver(a);
+        if (a->isMethod && ra && ra->unknown) continue; //reported where its type was written
         if (a->isMethod && ra) {
             //M19e: a default is declared in its trait's own module, and may not reuse a name the trait requires
             struct type* tr = traitOfDefault(a);
@@ -8351,6 +8382,7 @@ struct operand* OperandIntLiteralValue(struct token tok, long long value, bool u
 static struct operand* unknownPlaceholder(struct token tok) {
     struct operand* op = OperandIntLiteralValue(tok, 0, false);
     op->type = unknownTypeStandIn();
+    op->isLiteral = false; //no value: nothing - a fixed local's condition, say (S8a) - is decided from it
     return op;
 }
 
@@ -10239,6 +10271,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
         struct typeBinding b = (struct typeBinding){0};
         b.name = *(struct str*)ListGetIdx(&found->typeParams, i);
         b.type = resolveTypeArg(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams); //G11, as above
+        if (typeHasUnknown(b.type, 0)) return NULL; //reported where it was written
         ListAdd(&bindings, &b);
     }
     return instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -10440,6 +10473,8 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct str mName = strFromTok(mTok);
     //T30: a value of a trait's type was already reported where the type was written - nothing more to say here
     if (recvType.bType == BASETYPE_INTERFACE) { *reported = true; if (argsNode) buildArgs(ctx, argsNode); return OperandIntLiteral(mTok); }
+    //...nor on a value of a type that was unknown where it was written: whatever it calls is unknown too
+    if (recvType.unknown) { *reported = true; if (argsNode) buildArgs(ctx, argsNode); return unknownPlaceholder(mTok); }
 
     //T10: every array has "Len()", supplied by the compiler
     if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("Len"))) {
@@ -13114,7 +13149,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             ok = TypeSatisfiesInterface(concrete, *iterT, NULL);
         }
         if (!ok) {
-            Err(src->tok, ERR_NOT_ITERABLE, &src->type);
+            if (!src->type.unknown) Err(src->tok, ERR_NOT_ITERABLE, &src->type); //an unknown one was reported
             return (struct statement){0};
         }
         struct statement d = buildVarDeclFromOperand(&wctx, forInHiddenTok(kw, "It"), itOp);
@@ -15689,6 +15724,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
+    unmetTypeInsts = ListInit(sizeof(struct type*));
     unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
