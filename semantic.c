@@ -5258,14 +5258,19 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     bool recvWrites = recv->mut && recv->type.structMAlloc;
     if (recvWrites != m->mut) return NULL;
     for (int i = 0; i < m->type.vars.len; i++) {
-        struct type want = (*(struct var*)ListGetIdx(&m->type.vars, i)).type;
-        struct type got = (*(struct var*)ListGetIdx(&f->type.vars, i +1)).type;
+        struct var* wv = ListGetIdx(&m->type.vars, i);
+        struct var* gv = ListGetIdx(&f->type.vars, i +1);
+        struct type want = wv->type;
+        struct type got = gv->type;
         //the method is called directly, so an argument of the wanted type reaching a reference parameter is borrowed
-        //as at any call (E12) - only the reference-shape may differ
+        //as at any call (E12) - only the reference-shape may differ. A parameter's "mut" and a reference's permission
+        //may not (T22, T25b): a method writing through what the trait only lets it read would meet the trait and then
+        //fail inside the generic code calling it
         if (!TypeIsSame(want, got) && !typeIsSameModuloRefShape(want, got)) return NULL;
+        if (wv->mut != gv->mut || (TypeIsPermRef(want) && TypeIsPermRef(got) && want.refMut != got.refMut)) return NULL;
     }
     if (f->type.hasRetType != m->type.hasRetType) return NULL;
-    if (m->type.hasRetType && !TypeIsSame(*f->type.retType, *m->type.retType)) return NULL;
+    if (m->type.hasRetType && !TypeIsSameStrict(*f->type.retType, *m->type.retType)) return NULL;
     //the error lists must agree in order, as T31 states
     if (f->type.errors.len != m->type.errors.len) return NULL;
     for (int i = 0; i < m->type.errors.len; i++) {

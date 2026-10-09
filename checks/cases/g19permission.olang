@@ -1,0 +1,13 @@
+# check: fail S does not satisfy the constraint Filler on T: it has no method Fill that fits
+# G19/T25b: a method writing through a parameter its trait only lets it read does not meet the trait - said where the
+# type is bound, not inside the generic code calling it
+type Node struct(v I32) { v mut }
+type Filler trait {
+  Fill(n Node&)
+}
+type S struct() { k I32 = 0 }
+fn (s S&) Fill(n mut Node&) { n.v = 1 }
+fn g(s <T Filler>&, n Node&) { s.Fill(n) }
+fn main() ? {
+  g(S(), Node(0))
+}

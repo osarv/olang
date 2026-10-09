@@ -907,8 +907,9 @@ of that name whose
   argument),
 - receiver is `mut` if and only if the signature is declared `mut`,
 - remaining parameters agree in count, order and type (T27), a parameter differing only in reference-shape
-  included, since the call is a direct one and E12 borrows,
-- return type agrees — both absent, or both present and the same type,
+  included, since the call is a direct one and E12 borrows - and in each parameter's `mut` and a reference's
+  permission (T25b), so a method never writes through what its trait only lets it read,
+- return type agrees — both absent, or both present and the same type, a reference's permission included,
 - declared error list (§7.1) agrees exactly, in the same order.
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
