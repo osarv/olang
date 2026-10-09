@@ -7602,7 +7602,10 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
 //copy's source's, a value parameter's scope (refsHome), or the program's for a global's. *depth is the block a NULL home
 //means, *unnamed the program's scope; either may be NULL
 static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool* unnamed) {
-    while (op->opType == OPERATION_MEMBER && !op->type.structMAlloc) op = *(struct operand**)ListGetIdx(&op->args, 0);
+    //...a payload read out of an enum value by "match" or "as" holds what the enum does, where its references are (O4b)
+    while ((op->opType == OPERATION_MEMBER || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len
+           && !op->type.structMAlloc)
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
     if (op->opType != OPERATION_READ_VAR || !op->readVar || op->type.structMAlloc) return false;
     struct var* v = canonicalVar(op->readVar);
     if (!v->refsHomeSet && v->valueHomeSet) { //O25a: built where its initializer put it - a scope argument's, say
@@ -7662,6 +7665,91 @@ static bool valueRefsScope(struct checkCtx* ctx, struct operand* op, struct var*
     *u = false;
     if (valueRefsHome(op, v, d, u)) return true;
     return RefExactScope(ctx, op, false, v, d, u);
+}
+
+//O25h: whether a value copied from op holds references that already live somewhere, whatever expression gave it - a
+//value lvalue or a slice (a copy of existing storage), a payload read out of one by "as", anything reference-shaped
+//that names existing storage (a reference read, a call's borrowed result: a copy out of a reference, E12, its references
+//where the referent is, O20), or a conditional or match any of whose values is one of those. False for a temporary,
+//built where it lands
+static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct var** hv, int* hd, bool* hu);
+bool callIsLanding(struct operand* op);
+static bool argIsFreshTemp(struct operand* op);
+static bool copiesExistingRefs(struct checkCtx* ctx, struct operand* op) {
+    if (!op || op->isNullLiteral) return false;
+    if (heldResult(op)) return copiesExistingRefs(ctx, heldResult(op));
+    if (OperandNamesExistingStorage(op)) return true;
+    if (op->opType == OPERATION_COND && op->args.len == 3)
+        return copiesExistingRefs(ctx, *(struct operand**)ListGetIdx(&op->args, 1))
+            || copiesExistingRefs(ctx, *(struct operand**)ListGetIdx(&op->args, 2));
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (copiesExistingRefs(ctx, *(struct operand**)ListGetIdx(&vs, i))) return true;
+        return false;
+    }
+    if (op->opType == OPERATION_AS && op->castEnum && op->args.len && !op->type.structMAlloc)
+        return copiesExistingRefs(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
+    if (!op->type.structMAlloc || op->type.bType == BASETYPE_FUNC || callIsLanding(op) || argIsFreshTemp(op)) return false;
+    struct var* v;
+    int d;
+    bool u;
+    return RefExactScope(ctx, op, true, &v, &d, &u);
+}
+
+//O25h: where the references a value copied from rhs live (copiesExistingRefs) - a value's where its references are, a
+//reference's where its referent is (O20); for a conditional or a match, where the values that already live somewhere
+//share - the others are built there (landCopyOut) - and, where they share none, a scope not known here (O12): read,
+//never built into or stored through. False for a temporary
+static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct var** hv, int* hd, bool* hu) {
+    *hv = NULL;
+    *hd = 0;
+    *hu = false;
+    if (!rhs) return false;
+    if (heldResult(rhs)) return copiedRefsScope(ctx, heldResult(rhs), hv, hd, hu);
+    if ((rhs->opType == OPERATION_COND && rhs->args.len == 3) || rhs->opType == OPERATION_MATCH) {
+        struct list vs = ListInit(sizeof(struct operand*));
+        if (rhs->opType == OPERATION_COND) {
+            ListAdd(&vs, ListGetIdx(&rhs->args, 1));
+            ListAdd(&vs, ListGetIdx(&rhs->args, 2));
+        } else vs = SemanticMatchValues(rhs);
+        bool any = false;
+        for (int i = 0; i < vs.len; i++) {
+            struct var* xv;
+            int xd;
+            bool xu;
+            if (!copiedRefsScope(ctx, *(struct operand**)ListGetIdx(&vs, i), &xv, &xd, &xu)) continue;
+            if (!any) {
+                *hv = xv;
+                *hd = xd;
+                *hu = xu;
+                any = true;
+            } else if (xu != *hu || (!xu && !sameExactScope(xv, xd, *hv, *hd))) {
+                *hv = SCOPE_AMBIGUOUS;
+                *hd = 0;
+                *hu = false;
+            }
+        }
+        return any;
+    }
+    if (!copiesExistingRefs(ctx, rhs)) return false;
+    if (rhs->type.structMAlloc) return RefExactScope(ctx, rhs, true, hv, hd, hu);
+    return valueRefsScope(ctx, rhs, hv, hd, hu);
+}
+
+//O25h/E28/S12b: a conditional or a match copied into a value whose other values already live somewhere - what it builds
+//for its values is built where those live, which is where the copy's references are (copyRefsHome). Returns whether it
+//landed it there
+static void landCallIn(struct operand* op, struct var* dst, int depth, bool program);
+static bool landCopyOut(struct checkCtx* ctx, struct operand* rhs) {
+    if (!rhs || !ctx->hasOwnScope || !callIsLanding(rhs)) return false;
+    struct operand* x = heldResult(rhs) ? heldResult(rhs) : rhs;
+    if (!((x->opType == OPERATION_COND && x->args.len == 3) || x->opType == OPERATION_MATCH)) return false;
+    struct var* hv;
+    int hd;
+    bool hu;
+    if (!copiedRefsScope(ctx, x, &hv, &hd, &hu) || hv == SCOPE_AMBIGUOUS) return false;
+    landCallIn(x, hu ? NULL : hv, hu ? 0 : hd, hu);
+    return true;
 }
 
 //T29d: a literal whose constructor runs while compiling, and the call that runs it
@@ -9296,11 +9384,12 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             //O4b: a value holding references, passed by value, binds the variable to where its references live; a
             //temporary one is built where the variable is bound, as any temporary is
             if (!(pt.structMAlloc || (pt.bType == BASETYPE_ARRAY && pt.arrMalloc))) {
-                if (!ctx || !ctx->hasOwnScope || arg->isNullLiteral || !OperandNamesExistingStorage(arg)) continue;
+                //(a reference passed for one is a copy out of it, E12: its references are where the referent is, O25h)
+                if (!ctx || !ctx->hasOwnScope || !copiesExistingRefs(ctx, arg)) continue;
                 struct var* vv;
                 int vd;
                 bool vu;
-                if (!valueRefsScope(ctx, arg, &vv, &vd, &vu)) continue;
+                if (!copiedRefsScope(ctx, arg, &vv, &vd, &vu)) continue;
                 if (determined && (!sameExactScope(vv, vd, boundTo, boundDepth) || vu != unnamed)) {
                     Err(tok, ERR_SCOPE_ARGS_DISAGREE);
                     noteArgsDisagree(ctx, arg, vv, vd, vu, detArg, boundTo, boundDepth, unnamed);
@@ -10435,6 +10524,14 @@ struct operand* OperandSlice(struct operand* base, struct operand* lo, struct op
         lo->intLiteralVal = 0;
     }
     if (!hi) hi = OperandLen(base, tok);
+    //O17a: a slice or a view is a reference made from its base - of a value whose references live where its own storage
+    //does not, it would take the elements' referents to live where that storage is (O20), so it is not made where
+    //something can be stored through them; the value itself is indexed, or lent whole to a call (O17)
+    struct var* shv;
+    int shd;
+    bool shu;
+    if (!base->type.structMAlloc && valueRefsAdmitStores(base->type) && splitValueHome(base, &shv, &shd, &shu))
+        Err(tok, ERR_SLICE_SPLIT_VALUE);
     if (!TypeIsInt(lo->type)) Err(lo->tok, ERR_SLICE_BOUND_NOT_INT, &lo->type);
     if (!TypeIsInt(hi->type)) Err(hi->tok, ERR_SLICE_BOUND_NOT_INT, &hi->type);
 
@@ -15159,11 +15256,14 @@ static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var*
             continue;
         struct operand* arg = *(struct operand**)ListGetIdx(&call->args, j);
         bool asRef = arg->type.structMAlloc;
-        if (!asRef && !OperandNamesExistingStorage(arg)) continue; //a temporary: built where the instance lands
+        //a temporary: built where the instance lands. A reference passed for a by-value parameter is a copy out of it
+        //(E12), whose references are where the referent's are (O25h)
+        if (!asRef && !OperandNamesExistingStorage(arg)) continue;
+        if (valueRefs && !copiesExistingRefs(ctx, arg)) continue;
         struct var* sv;
         int sd;
         bool su;
-        if (valueRefs ? !valueRefsScope(ctx, arg, &sv, &sd, &su) : !RefExactScope(ctx, arg, asRef, &sv, &sd, &su)) continue;
+        if (valueRefs ? !copiedRefsScope(ctx, arg, &sv, &sd, &su) : !RefExactScope(ctx, arg, asRef, &sv, &sd, &su)) continue;
         allViaField = allViaField && viaField;
         if (determined && (su != bu || (!su && !sameExactScope(sv, sd, bv, bd)))) {
             //neither stored reference needs its exact scope (O25): the instance must merely outlive neither, so the
@@ -15418,12 +15518,8 @@ static void refsHomeOf(struct operand* rhs, struct var* v) {
 //field, an element - keeps its references where the source's are, whether the declaration writes its type or not; its
 //own storage is still its block. Where the source's are is not known here, neither is where the copy's are (O12). A
 //copy out of a reference (E12) has them where the referent does (O20)
-static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct var** hv, int* hd, bool* hu) {
-    if (rhs->type.structMAlloc) return RefExactScope(ctx, rhs, true, hv, hd, hu);
-    return valueRefsScope(ctx, rhs, hv, hd, hu);
-}
 static void copyRefsHome(struct checkCtx* ctx, struct operand* rhs, struct var* v) {
-    if (!rhs || !ctx->hasOwnScope || v->type.structMAlloc || !TypeHoldsReferences(v->type) || !OperandIsLvalue(rhs)
+    if (!rhs || !ctx->hasOwnScope || v->type.structMAlloc || !TypeHoldsReferences(v->type) || !copiesExistingRefs(ctx, rhs)
             || v->valueHomeSet || v->refsHomeSet)
         return;
     struct var* hv = NULL;
@@ -15917,7 +16013,7 @@ static bool localLivesInResult(struct checkCtx* ctx, struct str name, struct typ
     bool refResult = rt.structMAlloc && rt.scopeParam && canonicalVar(rt.scopeParam) == canonicalVar(home);
     bool holds = TypeHoldsReferences(t);
     if (!holds && !refResult) return false;
-    if (rhs && OperandNamesExistingStorage(rhs)) return false;
+    if (rhs && copiesExistingRefs(ctx, rhs)) return false;
     for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
         struct syntax* st = *(struct syntax**)ListGetIdx(&ctx->blockStmts, i);
         if (syntaxReturnsName(st, name)) return true;
@@ -16046,8 +16142,9 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     //O18a: a by-value result holding references, landing in a value local, is built in the local's own block - as the
     //local is - so a loop body's value is reclaimed with the iteration; a copy of it out of that block is checked
     //where it is made (O25h)
+    //...unless its other values already live somewhere: a conditional's new values are built where those are (O25h)
     if (rhs && !declType.structMAlloc && TypeHoldsReferences(declType) && callIsLanding(rhs) && ctx->hasOwnScope
-            && !landedByOblig)
+            && !landedByOblig && (inResult || !landCopyOut(ctx, rhs)))
         landCall(rhs, inResult ? resultHome(ctx->func) : NULL, inResult ? 0 : normDepth(ctx->blockDepth));
     bool unnamedScope = false;
     if (!homeChecked && (fillValue || !adoptInitializerScope(ctx, &declType, rhs, &unnamedScope))
@@ -16408,9 +16505,12 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             struct var* dv;
             int dd;
             bool du;
-            if (targetRefsScope(ctx, target, &dv, &dd, &du) && !du && scopeIsDerived(dv)
-                    && operandIsTemporary(ctx, rhs))
-                Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
+            if (targetRefsScope(ctx, target, &dv, &dd, &du) && !du && operandIsTemporary(ctx, rhs) && !rhs->isNullLiteral) {
+                if (scopeIsDerived(dv)) Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
+                //O12: a place whose references live where this function cannot say - a copy of values from several scopes
+                //- is read, never built into: the new value would be built somewhere and kept where the place really is
+                else if (dv == SCOPE_AMBIGUOUS) Err(opTok, ERR_STORE_INTO_UNKNOWN_SCOPE);
+            }
         }
         //O18a: a call whose result's scope follows the result is built where the target's referent lives
         //- or, for a value holding references, where the target's own storage is (O18a)
@@ -16521,7 +16621,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         //O25h: a value holding references keeps them where it was built, so a copy of one goes only where that outlives
         //- and exactly there where a store through one of them could misplace what it builds (O25g)
         if (ctx->hasOwnScope && !target->type.structMAlloc && TypeHoldsReferences(target->type)
-                && OperandIsLvalue(rhs) && !intoGlobal && !hereReported) {
+                && copiesExistingRefs(ctx, rhs) && !intoGlobal && !hereReported) {
             struct var* hv = NULL;
             struct var* tv = NULL;
             int hd = 0, td = 0;
@@ -18193,16 +18293,24 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
         declType = inferredDeclType(ctx->func, initVal);
         declType.scopeParam = NULL; //as in buildVarDeclStmnt's ":="
     }
+    //O18a/O25h: a value holding references lands in the loop's block as any local's does - or, copied from what already
+    //lives somewhere, keeps its references where those are
+    bool valueRefs = !declType.structMAlloc && TypeHoldsReferences(declType) && innerCtx.hasOwnScope;
+    if (valueRefs && callIsLanding(initVal) && !landCopyOut(&innerCtx, initVal)) landCall(initVal, NULL, normDepth(innerCtx.blockDepth));
     bool loopUnnamed = false;
     if (!adoptInitializerScope(&innerCtx, &declType, initVal, &loopUnnamed)) declType.scopeDepth = innerCtx.blockDepth;
     struct var* loopVar = scopeDeclare(innerCtx.mod, innerCtx.scope, strFromTok(nameTok), nameTok, declType, mut);
     loopVar->scopeUnnamed = loopUnnamed;
     loopVar->permByType = permByType;
+    loopVar->declInit = initVal;
     if (!typeExprNode) { //T25b: as ":=" anywhere - its permission is its initializer's
         loopVar->roFrom = initVal;
         if (TypeIsPermRef(loopVar->type) && loopVar->type.refMut && roRefOf(initVal, NULL, 0)) loopVar->type.refMut = false;
     }
+    if (valueRefs && !typeExprNode) valueHomeOf(&innerCtx, initVal, loopVar);
+    copyRefsHome(&innerCtx, initVal, loopVar); //O25h
     loopVar->scopeBindings = initVal->scopeBindings; //see buildVarDeclStmnt's identical propagation
+    checkCtorHereFits(&innerCtx, initVal, declType.scopeParam, declType.scopeDepth, nameTok); //C2d
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
     struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
@@ -18338,6 +18446,8 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
         if (at) {
             v->roFrom = at;
             if (t.structMAlloc && t.refMut && roRefOf(at, NULL, 0)) v->type.refMut = false;
+            //O25h/O4b: a payload holding references copied out by value keeps them where the matched value's are
+            if (!refLike && ctx->hasOwnScope) copyRefsHome(ctx, at, v);
         }
         ListAdd(&clause->caseBindings, &v);
     } else {
@@ -18359,6 +18469,19 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
             if (ro && TypeIsPermRef(v->type)) v->type.refMut = false;
             else if (ro) v->roCopy = true;
             else roMarkParams(&ps);
+            //O25h/S13c: a payload copied out by value keeps its references where its matched value's are - where two
+            //alternatives give two places, in one not known here (O12): read, never built into or stored through
+            if (!refLike && ctx->hasOwnScope && v->refsHomeSet && v->refsHome != SCOPE_AMBIGUOUS) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (!copiesExistingRefs(ctx, at) || !copiedRefsScope(ctx, at, &hv, &hd, &hu) || hu != v->refsHomeUnnamed
+                        || (!hu && !sameExactScope(hv, hd, v->refsHome, v->refsHomeDepth)))
+                    v->refsHome = SCOPE_AMBIGUOUS;
+            } else if (!refLike && ctx->hasOwnScope && !v->refsHomeSet && copiesExistingRefs(ctx, at)) {
+                v->refsHomeSet = true;
+                v->refsHome = SCOPE_AMBIGUOUS;
+            }
         }
         if (refLike) {
             v->type.refMut = v->type.refMut && t.refMut;
@@ -19144,7 +19267,7 @@ static void checkValueResult(struct checkCtx* ctx, struct operand* v, struct typ
         return;
     }
     struct var* rs = ctx->func ? ctx->func->type.resultScope : NULL;
-    if (!rs || et.structMAlloc || !TypeHoldsReferences(et) || !OperandNamesExistingStorage(v)) return;
+    if (!rs || et.structMAlloc || !TypeHoldsReferences(et) || !copiesExistingRefs(ctx, v)) return;
     struct var* hv;
     int hd;
     bool hu;
