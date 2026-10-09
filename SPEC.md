@@ -116,6 +116,11 @@ extern    default
 `true` and `false` are not keywords; they are the two spellings of `BOOL_LIT` (L11). `null` is not a
 keyword either, for the same reason: it is `NULL_LIT` (L11a).
 
+**L9a (a method's name).** A method is reached only through its receiver (M19), so where a method's name is written -
+after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and any of the
+words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`. Anywhere else,
+a field's name included (a constructor's fields are its locals, C2a), they stay reserved.
+
 ### 1.5 Literals
 
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
@@ -346,8 +351,9 @@ pointer; for the two-word shapes it is each word zeroed, so a null `Array<T>` is
 it is `0` and it reads as genuinely empty.
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
-scope without a containment check. `==`/`!=` against it are the ordinary reference comparisons (E10,
-pointer identity), so `p == null` needs no operator of its own.
+scope without a containment check. `==`/`!=` against it are the ordinary reference comparisons (E10: a null
+reference equals only a null), so `p == null` needs no operator of its own - for an array reference too, which is
+null only when it has no storage, and so differs from an empty array that has.
 
 **T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
 Reading a field or element through a null reference, or calling through a null function value, is
@@ -514,7 +520,10 @@ direction is implicit; the other is a claim about a length, checked once where i
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative
-`n` aborts the program (D14b). An `Array<T, N>` is built by `Array<T, N>()` - `N` elements, each `T`'s zero value,
+`n` aborts the program (D14b). The fill is **one value copied into every element**: an element type whose value holds
+a reference - a `List` or `Map` (a handle to its storage, §11), a struct holding a `&` field - gives every element the
+same reference, so `Array<Map<K, V>>(n, Map<K, V>())` is `n` names for one map; elements meant to be separate are built
+one by one. An `Array<T, N>` is built by `Array<T, N>()` - `N` elements, each `T`'s zero value,
 as a declaration of one with no initializer is (D13) - by a literal, or by copying an array into one (T7d).
 
 **T10.** Every array has a length, queryable at run time via `....Len()` (§5.9); where it is known while
@@ -523,7 +532,8 @@ error.
 
 **T11.** **Whether an array is reference-shaped is decided by its reference marker (T24) and by nothing
 else.** `Array<T>` is a value: `==` compares element-wise (E10) and assignment gives the target its own copy
-of the elements. `Array<T>&` is a reference: `==` is identity and assignment repoints. The same holds for
+of the elements. `Array<T>&` is a reference: assignment repoints, and `==` compares the elements it names, as it
+does through any array (E10) - `a is b` asks whether two name the same storage (E10c). The same holds for
 `Array<T, N>` and `Array<T, N>&` (T7c). How an `Array<T>` is stored - a length paired with storage elsewhere, or,
 for a literal, the elements in place with their length known while compiling - is a difference in *representation*
 only and never in behaviour.
@@ -1655,6 +1665,12 @@ program, checked once per call, and stops it as an `assert` does. `Reverse()` re
 `Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. A `List` of texts has
 `Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
 leaves which elements the rest of the walk gives unspecified.
+A `List` is a **handle**: its chunks and its counts are one record, made where the `List` is constructed (C2d), and
+a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
+a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
+two references (and as with a Go map). `Clone()` gives a new `List` with the same elements in the same order and
+storage of its own, built where its result lands; elements are copied as values, so a list of references clones to
+a list of the same references.
 
 The prelude declares `type Map<K Hashable<K>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with the
@@ -1666,12 +1682,15 @@ goes on, and any other change to the map during a walk leaves which entries the 
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
 put - so a map whose keys come and go stays the size of what it holds. `Keys()` and `Values()` hand out iterators over
 one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
-key, keeping the slots and buckets for the keys put next.
+key, keeping the slots and buckets for the keys put next. A `Map` is a **handle**, as a `List` is: a copy of a `Map`
+value is a second name for the same map, and `Clone()` is a new one with the same keys and values (walked in the same
+order) and storage of its own, built where its result lands.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
 new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
-`b.Push($n)`.
+`b.Push($n)`. It holds its text in a `List`, so a copy of a `StringBuilder` value names the same text, as a copy of a
+`List` names the same list.
 
 Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, counted from the start without overlapping
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
@@ -2081,21 +2100,28 @@ the type, and a type may say it itself:
 - for a struct or array **value**: member-wise/element-wise structural equality, applying this same rule to every
   field or element - so a part whose type declares `Eq` is compared by it, however deep it sits. Arrays must agree
   on length first;
-- for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
-  they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
-  is both: the same storage, from the same element, and the same length - so `a[1:3]` is not `a[1:2]`. Storage is
-  made afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of
-  no elements, no fields) included, so two of them are never the same; a slice is part of its base's storage
-  (E16a); a static literal site is one instance (T25d). An array with **no storage** - an array value's zero
-  value, whose bits a null array reference has too - is the same as any other with none.
+- for a **reference to an array** (`Array<T>&`, `Array<T, N>&`, or a declared array type with no `Eq` of its own):
+  the arrays the two name, compared as values are - lengths first, then each element by this same rule - except
+  that a null equals only a null. A null array reference is one with **no storage**, as an array value's zero value
+  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null. Two
+  references to arrays are compared for what they hold however they were made, so `l.ToArray() == m.ToArray()` asks
+  whether two lists hold the same elements; whether they are one array is `a is b` (E10c).
+- for any other **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly
+  when they name the same storage. Storage is made afresh by every constructor call and every reference built, so two
+  of them are never the same.
 - a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `a is b` (E10c).
 
 **E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
-same instance - for a reference to an array, the same storage and the same length - whatever `Eq` says, and
+same instance - for a reference to an array, whose value is a length paired with a pointer, the same storage from the
+same element and the same length, so `a[1:3]` is not `a[1:2]` - whatever `Eq` says, or `==` on arrays, and
 `a is not b` is `not (a is b)`. Either side may be `null`, which adapts to the other's type as beside `==` (a null is
-the same instance as another null and nothing else); both may not, having no type between them. An `Array<T, N>&` and
+the same instance as another null and nothing else); both may not, having no type between them. Storage is made
+afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of no
+elements, no fields) included, so two of them are never the same; a slice is part of its base's storage (E16a); a
+static literal site is one instance (T25d). An array with no storage - an array value's zero value, whose bits a null
+array reference has too - is the same as any other with none. An `Array<T, N>&` and
 an `Array<T>&` meet as `Array<T>&`s, as beside `==` (T7d): one instance when they name the same storage over the same
 length. Any other operand - a value of any type, two references of different types - is a compile-time error: `==` is
 what compares values.
@@ -2128,11 +2154,11 @@ compiler supplies one for a **struct, enum or array value** whose type declares 
 part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
 prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type and `String`; a float has none,
-so neither does a value holding one. A **reference** part has a hash only where its type declares `Eq` and `Hash` -
-where `==` compares what it names; one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null
-reference is `0`. A supplied `Hash` is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key - so a
-type declaring a method named `Hash` (or `hash`) of another shape, an ordinary method (E31) holding the name, has none
-supplied.
+so neither does a value holding one. A **reference** has a hash exactly where `==` compares what it names: one to an
+array whose elements have one (its elements' hashes, as an array value's), or one whose type declares `Eq` and `Hash`;
+one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null reference is `0`. A supplied `Hash`
+is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key - so a type declaring a method named `Hash`
+(or `hash`) of another shape, an ordinary method (E31) holding the name, has none supplied.
 
 There is no expression that produces a value of an error type (§2.6): an error word is never a
 first-class comparable value, only a function's own result (§7).
@@ -2984,7 +3010,7 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { "," case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | binary
+case-alt       ::= pattern | "_" | binary
 nomatch-clause ::= "nomatch" case-body
 case-body      ::= block | "=>" expr [ STMNT_END ]
 pattern        ::= alias-chain IDEN "." IDEN [ "(" [ sub-pattern { "," sub-pattern } ] ")" ]
@@ -2992,8 +3018,9 @@ sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
-one, followed by `,`, `if`, `{` or `=>`; anything else is a value, a `binary` expression (E1) - so the `if` of a guard
-is never read as a conditional (E28). In a match statement every `case-body` is a block; `=>` is an error there.
+one, followed by `,`, `if`, `{` or `=>`; `_` alone takes every value (S13f); anything else is a value, a `binary`
+expression (E1) - so the `if` of a guard is never read as a conditional (E28). In a match statement every `case-body`
+is a block; `=>` is an error there.
 
 **S12b (a match used as a value).** `match-expr ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"` in
 expression position (E1) evaluates to the value of the clause that is selected. Each clause either gives its value,
@@ -3001,7 +3028,7 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 `return`, `error`, `break`, `continue`, `done`, `fail`, `abort` or `unreachable`, as D10a decides it with `break`
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
 error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
-has a `nomatch`; over any other type it has a `nomatch`. Every value has one type: the first value that is not a literal,
+has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - values that are all numeric literals take
 the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
@@ -3038,7 +3065,8 @@ payload list, or one whose every position is a name or `_`, covers it alone; pat
 in the payload cover it when, position by position, they leave no value out - `Service(true)` and `Service(false)`
 for a `Bool` field, `Paint(Color.Red, n)` and `Paint(Color.Green, _)` for an enum field with those two cases. A
 guard may let a value through to the next clause, so a guarded clause covers nothing; a literal of any type other
-than `Bool` never completes a position (its values cannot be listed). A `match` over a `Bool` is exhaustive in the same
+than `Bool` never completes a position (its values cannot be listed). A `case _` with no guard covers every case
+(S13f). A `match` over a `Bool` is exhaustive in the same
 sense when `true` and `false` are both covered - not required of a statement, but it is what lets one used as a value
 (S12b) do without a `nomatch`.
 
@@ -3080,6 +3108,26 @@ Nested patterns and literals are refutable, so a clause holding one covers nothi
 expression, which may read them) is evaluated; when it is false the match goes on to the next clause, as though the
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
 guarded clause covers nothing for S13a. A type match (G13) takes no guard: its arm is chosen while compiling.
+
+**S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
+`case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the
+matched value already being named where it was written:
+
+```
+label := match x {
+    case 0.0 => "zero"
+    case _ if x >= 32767.0 => "saturated"
+    case _ if x != x => "NaN"
+    nomatch => "other"
+}
+```
+
+With no guard, `case _` is selected by any value that reaches it, as `nomatch` is: it covers every value (S13a, S12b),
+and a clause or `nomatch` after it is never reached, which is a compile-time error. A name at the top of a clause is
+always a value compared by `==` (S13) - never a binding, since the matched value is in hand already - so a lone name
+that is not declared is an error naming `case _ if ...`, and so is the matched local itself, which would compare a
+value with itself (true but for a NaN). A `match` over a constant variable (G26) takes `case _` too - the arm
+chosen when no earlier case's value is the instantiation's constant.
 
 **S14.** A `match` may be used on a value of any type that supports `==` (E10) — numeric, `Bool`,
 enum, or any struct/array type (compared structurally or by reference identity per E10's own
@@ -3148,12 +3196,14 @@ are paid only then: `assert n < cap, "n is " $n ", cap " $cap`.
   aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
   broken guarantee from the orderly `fail` (S16b).
 
-**S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and an array length out of range (§3.5
-D14b) each print a message naming what failed - to standard error, or while a test is running to standard output,
-before the test's `FAIL` line. A failed `assert`, `abort` (S16c) or `unreachable` (S16d), and a value `match` no
-clause selects (S12b), also say **where** it is written, as `FILE:LINE: assertion failed`, `FILE:LINE: aborted` and
-`FILE:LINE: reached unreachable code`; an assert's message (S17) follows, after `: `. A program run with `-i` (B3e)
-prints the same.
+**S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
+array length out of range (§3.5 D14b), an `as` that does not hold (E32), a copy into fixed storage of another length
+(T7d) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
+error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
+`FILE:LINE: aborted` (S16c), `FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
+S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
+value is not`, `FILE:LINE: array length does not match its fixed storage`. An assert's message (S17) follows, after
+`: `. A program run with `-i` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
 values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, which

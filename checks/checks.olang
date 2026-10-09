@@ -643,6 +643,17 @@ fn assertloc(r mut report&) ? Failed {
                  and outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "-i: an assert's location and message", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i located.olang a b > out.txt 2>&1") == 134
                  and outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
+    # and a check the language guarantees - a slice, an array length, an 'as', a copy into fixed storage
+    try r.expect(sh(dir, "\"$OLANG\" -b guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
+    wants := String&["guaranteed.olang:12: slice bounds out of range\n", "guaranteed.olang:13: array length out of range\n",
+                     "guaranteed.olang:15: 'as' named what the value is not\n",
+                     "guaranteed.olang:17: array length does not match its fixed storage\n"]
+    args := String&["", " a", " a b", " a b c"]
+    for i, w in wants {
+        try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
+        try r.expect(sh(dir, "\"$OLANG\" -i guaranteed.olang" $args[i] " > out.txt 2>&1") == 134
+                     and outOf(dir).StartsWith(w), "-i: " $w, dir)
+    }
     try r.expect(sh(dir, "\"$OLANG\" -t tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)

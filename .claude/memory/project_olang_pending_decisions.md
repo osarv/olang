@@ -168,6 +168,11 @@ rule and where it is recorded; the morning report lists them all, then they move
    Not built (deferred): raw/multi-line text literals (#35) - candidate Go-style backtick raw strings, to raise with the
    user; comprehensions of text (#34, user-deferred relaxation); lambdas capturing a List (#28); deep permission (#33,
    the user chose shallow).
+25. (wt-s3std, details of 21/22/24) a null array reference equals only null; a struct value's array-reference field
+   compares by contents (E10 field by field); an array reference hashes by its elements; an unguarded `case _` covers
+   every value and anything after it is dead code; `case v` naming the subject or an unknown name says `case _ if`;
+   keywords (not true/false/null) as method names (L9a); a List's zero value runs its constructor per declaration, so
+   `Array<List<T>>(n)` with no fill is D13c's "no zero value".
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

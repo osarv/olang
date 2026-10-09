@@ -417,6 +417,11 @@ struct type;
     X(ERR_MATCH_VALUE_TYPES,            "S12b",  "every value of this match is %t, found %t") \
     X(ERR_MATCH_NOT_EXHAUSTIVE,         "S13a",  "case %S of %t is not covered - add it, or 'nomatch { }'") \
     X(ERR_MATCH_VALUE_NEEDS_NOMATCH,    "S12b",  "a match over %t gives a value only when its cases cover every value - add 'nomatch => v'") \
+    X(ERR_MATCH_VALUE_ONE,              "S12b, D8c", "a match gives one value - to give several, return them from each case of a match statement: 'case P { return a, b }'") \
+    X(ERR_WILDCARD_NOT_ALONE,           "S13f",  "'_' matches every value, so it is its case's only alternative") \
+    X(ERR_CASE_AFTER_WILDCARD,          "S13f",  "no value reaches this - an earlier 'case _' with no guard takes every one") \
+    X(ERR_CASE_UNKNOWN_NAME,            "S13f",  "unknown name %n - a name in a case is a value compared by '=='; to take any value and test it, write 'case _ if ...'") \
+    X(ERR_CASE_IS_SUBJECT,              "S13f",  "%n is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'") \
     /* ---- return and error ---- */ \
     X(ERR_RETURN_BORROW_AS_BUILT,       "O14",   "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") \
     X(ERR_RETURN_OWN_STORAGE,           "O26",   "this value refers to this function's own storage, which dies at the return - build it in '&return'") \

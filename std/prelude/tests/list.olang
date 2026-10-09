@@ -194,3 +194,69 @@ test "a List of mutable references, reordered and emptied" {
     l.Clear()
     assert l.Len() == 0 and x.next.v == 2
 }
+
+# a List is a handle: its chunks and its counts are one record, so a copy of a List value is another name for the same
+# list - a Push through either is seen through both, where the copy used to keep counts of its own beside the shared
+# chunks and the two overwrote each other's elements. Clone() is the copy with storage of its own
+type listHolder struct() {
+    items List<I64>
+}
+
+fn listCopies() I64 {
+    a := List<I64>()
+    a.Push(1)
+    b := a                                       # the same list
+    b.Push(2)
+    a.Push(3)
+    assert b.Len() == 3 and a.Len() == 3 and b[1] == 2 and a[2] == 3
+    c := a.Clone()                               # a list of its own
+    c.Push(4)
+    a[0] = 10
+    assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
+    h := listHolder()
+    for i in range 20 { h.items.Push(i) }
+    g := h                                       # a struct holding a List copies the handle with it
+    g.items.Push(99)
+    assert h.items.Len() == 21 and h.items[20] == 99
+    shared := Array<List<I64>>(3, List<I64>())   # a fill copies one value: three names for one list (T8)
+    shared[0].Push(5)
+    assert shared[2].Len() == 1 and shared[2][0] == 5
+    s I64 = 0
+    for x in a { s += x }
+    for x in c { s += x }
+    return s * 1000 + h.items.Len() + shared[1].Len()
+}
+listCopiesBaked := listCopies()
+
+test "a copy of a List value names the same list, and Clone makes another" {
+    assert listCopiesBaked == (15 + 10) * 1000 + 22
+    assert listCopies() == listCopiesBaked
+}
+
+# Clone copies every chunk, walked in order, and builds where its result lands - here past the block of the list it
+# copies, read back after the arena that list lived in was reused
+fn listChurnArena() I64 {
+    t I64 = 0
+    for i in range 500 {
+        p := Array<I64>(64, I64(i))
+        t += p[63]
+    }
+    return t
+}
+
+test "a List's Clone outlives the list it copies, across chunk boundaries" {
+    kept := List<I64>()
+    if kept.Len() == 0 {
+        src := listUpTo(100)                      # chunks of 8, 16, 32 and 64
+        kept = src.Clone()
+        src.Push(100)
+        src[0] = -1
+    }
+    assert listChurnArena() > 0
+    assert kept.Len() == 100 and kept[0] == 0 and kept[99] == 99
+    words := List<String&>()
+    line String& = "a bb ccc"
+    for w in line.Split(" ") { words.Push(w) }
+    copy := words.Clone()                         # a List of references clones to the same references
+    assert copy.Len() == 3 and copy[2] is words[2]
+}
