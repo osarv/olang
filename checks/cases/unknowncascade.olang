@@ -1,0 +1,13 @@
+# check: fail unknown name 'nope'
+# also: compilation failed with 4 error(s)
+# never: same type
+# never: must be a boolean
+# an unknown name stands for whatever it is used as, so each misspelling is one error - not also a mismatched
+# comparison or a non-boolean operand
+fn main() ? {
+    s String& = "a"
+    assert s == nope
+    assert nope + 1 == 2
+    assert not nope2
+    assert nope3 < 3.5
+}

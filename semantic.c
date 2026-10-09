@@ -7229,6 +7229,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
 enum operandReq { REQ_NONE, REQ_BOOL, REQ_INT, REQ_NUMERIC };
 
 bool operandMeetsReq(struct operand* op, enum operandReq req) {
+    if (op->type.unknown) return true; //an unknown name, already reported, is whatever it is asked to be
     switch (req) {
         case REQ_BOOL: return OperandIsBool(op);
         case REQ_INT: return OperandIsInt(op);
@@ -7624,7 +7625,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     bool bOk = operandMeetsReq(b, rule.require);
     if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
     if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
-    if (rule.sameType && aOk && bOk && !unfit && !TypeIsSame(a->type, b->type))
+    if (rule.sameType && aOk && bOk && !unfit && !a->type.unknown && !b->type.unknown && !TypeIsSame(a->type, b->type))
         ErrMsgSemantic(tok, TypeIsNumeric(a->type) && TypeIsNumeric(b->type) ? NUMBERS_DO_NOT_MEET : OPERANDS_NOT_SAME_TYPE);
     return op;
 }

@@ -1,0 +1,6 @@
+# check: fail private
+# the standard library's test-only globals are its own, not part of its interface
+import "std/map"
+fn main() ? {
+    assert map.lookupBaked == 41
+}

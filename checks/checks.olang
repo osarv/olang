@@ -3,6 +3,7 @@
 # ordinary olang program whose first lines say what it must do:
 #     # check: fail <text>    it must fail to build, with <text> in the diagnostics
 #     # also: <text>          and with <text> too - any number of these lines, each checked
+#     # never: <text>         and without <text> anywhere in them - any number, each checked
 #     # check: build          it must build
 #     # check: run            it must build, and the program must exit 0
 #     # flags: <arguments>    passed to the compiler (a -D value, say)
@@ -72,6 +73,17 @@ fn runCase(dir String&, name String&) Bool {
             if end < 0 { end = line.Len() }
             also := line[:end]
             if not outOf(dir).Contains(also) { return failed($name ": expected '" $also "'", dir) }
+            rest = line[end:]
+        }
+        rest = src[:]
+        for {
+            at := rest.Find("# never: ")
+            if at < 0 { break }
+            line := rest[at + 9:]
+            end := line.FindByte('\n')
+            if end < 0 { end = line.Len() }
+            never := line[:end]
+            if outOf(dir).Contains(never) { return failed($name ": did not expect '" $never "'", dir) }
             rest = line[end:]
         }
         return true
