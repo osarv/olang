@@ -795,8 +795,11 @@ fn gemm(transA Bool, transB Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&, l
 # The panels a product packs its operands into, kept from one product to the next: ws.Gemm(...) is Gemm packing into
 # ws rather than into storage of its own, so a loop of products - a training step's - allocates nothing once ws has
 # grown to the largest of them. GemmWorkspace<F32>() is empty; it grows where it lives, to what the largest product
-# given needs, and never shrinks. It holds no result, so one workspace serves products of any shapes, one at a time -
-# two at once on one workspace, from two tasks, write the same panels (a data race, P8b)
+# given needs, and never shrinks. A panel that is too small is replaced by one at least twice its size, so products
+# growing a step at a time (attention over a growing context) replace it a logarithmic number of times, and all the
+# panels a workspace ever made - each superseded one stays where the workspace lives until that closes - come to
+# less than four times what the largest product needs. It holds no result, so one workspace serves products of any
+# shapes, one at a time - two at once on one workspace, from two tasks, write the same panels (a data race, P8b)
 type GemmWorkspace<T> struct() {
     a mut Array<T>&             # A's panels, one per task, for element types computed in themselves
     b mut Array<T>&             # B's panel
@@ -804,15 +807,16 @@ type GemmWorkspace<T> struct() {
     wideB mut Array<F32>&
 }
 
-# B's panel, with room for at least n elements of accumulation type A - made larger, where ws lives, when it has less
+# B's panel, with room for at least n elements of accumulation type A - made larger, where ws lives, when it has less:
+# n elements, or twice what it had when that is more
 fn (ws mut GemmWorkspace<<T>>&) panelB(n I64, z <A>) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
-            if ws.wideB == null or ws.wideB.Len() < n { ws.wideB = Array<F32>(n) }
+            if ws.wideB == null { ws.wideB = Array<F32>(n) } else if ws.wideB.Len() < n { ws.wideB = Array<F32>(grown(ws.wideB.Len(), n)) }
             return ws.wideB
         }
         nomatch {
-            if ws.b == null or ws.b.Len() < n { ws.b = Array<T>(n) }
+            if ws.b == null { ws.b = Array<T>(n) } else if ws.b.Len() < n { ws.b = Array<T>(grown(ws.b.Len(), n)) }
             return ws.b
         }
     }
@@ -822,15 +826,19 @@ fn (ws mut GemmWorkspace<<T>>&) panelB(n I64, z <A>) mut Array<A>&ws {
 fn (ws mut GemmWorkspace<<T>>&) panelsA(n I64, z <A>) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
-            if ws.wideA == null or ws.wideA.Len() < n { ws.wideA = Array<F32>(n) }
+            if ws.wideA == null { ws.wideA = Array<F32>(n) } else if ws.wideA.Len() < n { ws.wideA = Array<F32>(grown(ws.wideA.Len(), n)) }
             return ws.wideA
         }
         nomatch {
-            if ws.a == null or ws.a.Len() < n { ws.a = Array<T>(n) }
+            if ws.a == null { ws.a = Array<T>(n) } else if ws.a.Len() < n { ws.a = Array<T>(grown(ws.a.Len(), n)) }
             return ws.a
         }
     }
 }
+
+# the length a panel holding have elements is replaced by when a product needs n: n, or twice have when that is more -
+# so the panels a workspace makes at least double each time, and the superseded ones add up to less than the last
+fn grown(have I64, n I64) I64 { return n if n > have * 2 else have * 2 }
 
 # ---- products of matrices and vectors ----
 
@@ -1890,6 +1898,28 @@ if TestBuild {
         ws.Gemm(z, x, false, y, false)
         wide.Gemm(Matrix<F16>(300, 270), x.ToF16(), false, y.ToF16(), false)
         assert ws.b is big and wide.wideB is bigWide and ws.wideB == null and wide.b == null
+    }
+
+    test "a workspace's panels at least double as its products grow, so a growing product replaces them rarely" {
+        # attention over a growing context: the product's columns grow a step at a time, and so does B's panel - every
+        # superseded panel stays where the workspace lives, so it must be replaced a logarithmic number of times, not
+        # once a step (the panel grows from 64 x 64 to 64 x 1600 here: five replacements, where it was one for every tile
+        # of columns the product gained - 49 with AVX-512's tile)
+        ws := GemmWorkspace<F32>()
+        q := Matrix<F32>(64, 64)
+        q.Fill(1.0)
+        replaced I64 = 0
+        for t in range 64, 1600, 16 {
+            k := Matrix<F32>(t, 64)
+            k.Fill(0.5)
+            s := Matrix<F32>(64, t)
+            before := ws.b
+            ws.Gemm(s, q, false, k, true)
+            assert s.Get(63, t - 1) == 32.0
+            if not (ws.b is before) { replaced++ }
+        }
+        assert replaced <= 7, $replaced " replacements"
+        assert ws.b.Len() >= 64 * 1600 and ws.b.Len() < 2 * 64 * (1600 + 64)
     }
 
     test "the product operators, and products of views" {

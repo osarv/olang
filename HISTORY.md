@@ -11332,3 +11332,77 @@ a churn), and each has a `...wrap`/`...slice` twin keeping its error where the l
 result - `return a[0:1]`, a slice of a local array of text - was never judged at all (`checkValueResult` stopped at
 anything reference-shaped), so the text was returned from the dying block. It is judged now by where the referent's
 references live: the block's is an error, a parameter's an obligation (O14c).
+
+### Parked workers share what their tasks gave back; a growing `GemmWorkspace` doubles (O8b, P2a, P1e/P1f, P7, std/linalg, 2026-10-09)
+
+Two findings of the review of that day's code (`review/today/pool`), both about memory the arena kept where it could
+not be reused.
+
+**Finding 13 - an idle worker held its pool where nothing else could reach it.** O8b had just made a thread's pool
+generous (an eighth of physical memory, since faulting fresh pages costs ~1ms/MB here), and a cached worker (P1e) keeps
+its pool while parked so the next task on it reuses it (P2a). Together: up to 64 parked workers (P1f), each holding up
+to RAM/8 that only the next task to run on that very worker could take. `pool/01.olang` - four tasks filling 200MB
+each, joined, then the main thread doing the same work - stayed at 783MB after the join and grew to 978MB: the main
+thread mapped a fifth 200MB while four sat idle in the workers.
+
+**The design (mine), and the alternatives.** Trimming a parked worker's pool and returning the rest to the system would
+bound it, but at the price O8b exists to avoid: a program running rounds of the same parallel work would re-fault every
+round. So what a parked worker gives up goes **where every thread can take it** - one pool all threads share, the same
+shape as a thread's own (`%olang.pool`: a list per size class, the mask, the byte count, the bound, the clock), so the
+same functions serve both (`__olang_pool_take/put/keep/unlink/oldest/make_room` now take the pool), and bounded the same
+way: RAM/8, least recently given back first to the system. This is the central free list of tcmalloc and jemalloc
+beside their thread caches, with a thread cache flushed when its thread goes idle.
+- **What a parked worker keeps**: a *batch* - 1MB, or a sixty-fourth of the bound where that is less (machines under
+  512MB) - its newest chunks; the rest moves to the shared pool, oldest first, under one lock. A task that allocated
+  less (the fan-out's) takes no lock at all: one thread-local load and a compare.
+- **Before the task is reported done**, not after: the first version shared after the done flag, and a join that woke
+  at once spawned the next round before the previous round's chunks had arrived - new chunks mapped, peak and faults up
+  (smallrounds 27MB, 9,856 faults, against 23MB and 5,631 after the move).
+- **Taking**: a thread whose own pool has nothing that fits looks in the shared pool before mapping - only when a
+  relaxed atomic mirror of its byte count says it holds something, so a program that never spawns never takes the lock
+  - and takes the chunk plus up to a batch more of the same class into its own pool, so a task making thousands of 4KB
+  chunks takes the lock once a megabyte. Without the batch, keeping 0 cost 1.66x CPU and keeping 1MB 1.43x on rounds
+  of four tasks building 4MB of 512-byte arrays each; with both it is 0.91x.
+- **A retiring worker** (P1f, more than 64 parked) still returns its pool to the system: the load that made it has
+  passed. Which it will do is decided under the free-list lock after the task; the share step guesses from an atomic
+  read of the idle count beforehand, and a wrong guess only moves a little memory to the other place. The idle count is
+  therefore atomic (relaxed) everywhere, always under the lock but for that read.
+- **Nothing on the fast paths changed**: `__olang_scope_alloc`'s bump and spare, `__olang_scope_close`'s inline spare -
+  still thread-local and atomic-free. ThreadSanitizer needs no annotation: the shared pool is behind a `pthread` mutex,
+  which it intercepts, so storage one thread reclaimed and another reuses is ordered for the detector as for the program
+  (P7 said a shared pool "must annotate itself" - true of a lock-free one; reworded).
+
+**Measured** (interleaved medians on the shared machine, wall and CPU, `b` = before, `n` = after):
+
+| program | before | after |
+|---|---|---|
+| `pool/01`: RSS after the join / after the main thread's own 200MB | 783MB / 978MB | 783MB / 783MB |
+| 100,000 tasks of 128 bytes in one join (15 runs) | 0.85s, CPU 1.17s, 11MB | 0.82s, CPU 1.09s, 12MB |
+| 100,000 tasks of 40KB (15 runs) | 0.89s, CPU 1.10s, 13MB | 0.81s, CPU 0.98s, 14MB |
+| 400 joins of 4 tasks, 4MB of 512-byte arrays each (9) | 2.03s, CPU 1.80s, 27MB | 1.63s, CPU 1.64s, 23MB |
+| 300 joins of 8 tasks, 8MB arrays and 2,000 small ones (9) | 2.80s, CPU 2.48s, 92MB | 2.46s, CPU 2.24s, 43MB |
+| 500 joins of 4 tasks filling 64KB-1MB arrays (7) | 3.89s, CPU 3.55s, 35MB | 1.65s, CPU 1.70s, 20MB |
+| the same, one task a join (5) | 0.70s, 18MB | 0.28s, 7MB |
+| the same on the main thread, no tasks (5) | 0.42s, 7MB | 0.40s, 7MB |
+| P1f's burst: 300 concurrent tasks of 200KB, then a tail | tail 15.5MB | tail 15.3MB |
+
+The last joins' 2x is not the lock or the allocator - with no tasks the two are level - but the working set: before,
+each round's tasks landed on whichever workers the free list handed out (six of them, since a join can wake before its
+workers park), each with a pool of its own, so the rounds cycled through 6 x 11MB; after, chunks go back to one pool
+and the working set is what is live at once, which fits the cache. Not coverable by timing in a test; what is
+observable is: `checks/cases/parkedpool.olang` (four tasks of 16MB, then the main thread's own 16MB grows its resident
+set by 8kB, where it grew 16,396kB), and the `chunkpool` scenario's fixture, run as a machine of 8MB (a 1MB bound, a
+16KB batch), now also has four tasks hold 768KB each: the resident set after the join grows 1,132kB (the shared pool's
+bound and the threads' stacks), where it grew 3,516kB. ThreadSanitizer is silent on those, on the review's own stress
+(`pool/04`: tasks allocating into scopes they were handed, the spawner closing what they filled) and on the rounds
+programs above, and `make race` still reports only the intentional race.
+
+**Finding 14 - `GemmWorkspace` kept every panel it outgrew.** A workspace grows its packing panels to the largest
+product given, in the workspace's own scope, so a superseded panel stays until that scope closes. Products growing a
+step at a time - attention over a context that grows by a token - replaced the B panel once per tile of columns gained:
+`pool/03.olang` (64 x t products, t from 64 to 1,584 by 16) ended at 17.5MB, against 9.8MB for the same loop through
+`Gemm`, which packs into a scope of its own each call. A panel too small is now replaced by one of at least twice its
+length (`grown(have, n)`), so the panels a workspace ever made sum to less than twice the last, and the last is under
+twice the largest need - under 4x in all, replaced a logarithmic number of times. `pool/03` ends at 8.1MB. The linalg
+test that pins it counts replacements by identity (`ws.b is before`): 5 now, 49 with AVX-512's 32-column tile before.
+No rule changed; the workspace's comment says so.

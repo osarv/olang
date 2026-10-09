@@ -1066,7 +1066,8 @@ fn linalg(r mut report&) ? Failed {
 
 # O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -
 # run with sysconf answering a machine of 8MB (a preloaded sysconf.c), so the bound is 1MB and a 16MB phase is far past
-# it. (That the pool finds any chunk big enough is a case, checks/cases/chunkpool.olang)
+# it; so is the pool every thread shares, which parked workers fill. (That the pool finds any chunk big enough is a
+# case, checks/cases/chunkpool.olang, and that a parked worker's chunks reach another thread checks/cases/parkedpool)
 test "the arena's chunk pool gives memory back beyond its bound" { assert passed("chunkpool") }
 
 fn chunkpool(r mut report&) ? Failed {

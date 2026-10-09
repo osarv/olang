@@ -1,0 +1,35 @@
+# check: run
+# O8b/P1e: what a finished task gave back is not left with its parked worker. Four tasks fill 16MB each and end; their
+# workers park keeping at most 1MB, the rest in the pool every thread shares - so the main thread, doing the same work
+# after the join, takes one of those chunks instead of mapping 16MB more (it did, when a parked worker's pool was its own)
+import "std/os"
+
+# the resident set, in kB
+fn rssKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmRSS:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+# 16MB, filled so its pages are resident, gone at the return
+fn work(seed I64) I64 {
+    a := Array<I64>(2097152, seed)
+    s I64 = 0
+    for i in range 0, 2097152, 4096 { s = s + a[i] }
+    return s
+}
+
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for t in range 4 { spawn out[t] = work(t + 1) }
+    }
+    afterJoin := rssKb()
+    again := work(5)
+    afterMain := rssKb()
+    assert out[0] + out[1] + out[2] + out[3] == 10 * 512 and again == 5 * 512
+    assert afterJoin > 0 and afterMain - afterJoin < 4096, "the main thread grew by " $(afterMain - afterJoin) "kB"
+}
