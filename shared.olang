@@ -11357,6 +11357,42 @@ test "E33: the bits of one 16-bit float made into the other are read as the othe
     assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
 }
 
+# T4: an F32 narrowed to a BF16 - "BF16(x)", and every BF16 operation, which is computed in F32 and narrowed once - is
+# integer arithmetic on the F32's bits, inline, where it was a call of __truncsfbf2 per element (with AVX512-BF16 off,
+# B12c, LLVM 18 has no other lowering): to nearest, ties to even, through the subnormals and into infinity, a NaN kept
+# and made quiet. Decided while compiling (an assert, a baked global) and computed at run time, the same bits
+fn bfNarrowRight(one U32) Bool {
+    ins := U32[0x3F808000, 0x3F818000, 0x3F80FFFF, 0x3F808001, 0x00008000, 0x00018000, 0x007FFFFF, 0x00000001,
+               0x7F7F7FFF, 0x7F7F8000, 0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0x80000000, 0xBF808000, 0x80018000]
+    want := U16[0x3F80, 0x3F82, 0x3F81, 0x3F81, 0x0000, 0x0002, 0x0080, 0x0000,
+                0x7F7F, 0x7F80, 0x7F80, 0xFF80, 0x7F80, 0x8000, 0xBF80, 0x8002]
+    for i, u in ins {
+        if BF16((u * one).F32FromBits()).Bits() != want[i] { return false }
+    }
+    a := BF16(1.0 * F32(one)) + BF16(0.00390625)    # 1 + 2^-8, exact in F32: a tie, to even
+    b := BF16(1.0078125 * F32(one)) + BF16(0.00390625)
+    c := BF16(3.0 * F32(one)) / BF16(7.0)
+    d := -BF16(2.5 * F32(one))
+    e := BF16(255.0 * F32(one))
+    e++
+    f := BF16(F16(0.333251953125) * F16(one))       # an F16 narrowed through F32
+    return (a.Bits() == 0x3F80 and b.Bits() == 0x3F82 and c.Bits() == 0x3EDB and d.Bits() == 0xC020
+        and e.Bits() == 0x4380 and f.Bits() == 0x3EAB)
+}
+BfNarrowBaked := bfNarrowRight(1)
+
+test "T4: an F32 narrows to a BF16 inline, rounded once, ties to even" {
+    assert bfNarrowRight(1)
+    assert BfNarrowBaked and bfNarrowRight(U32(fzRun))
+    one U32 = U32(fzRun)
+    # a NaN stays a NaN - one whose payload is all in the bits narrowing drops included; which NaN is unspecified
+    # (E33a), and the code generator keeps the top of the payload and makes it quiet, as __truncsfbf2 did
+    for u in U32[0x7F800001, 0xFFC12345, 0x7FA00000, 0x7FFFFFFF] {
+        b := BF16((u * one).F32FromBits())
+        assert b != b
+    }
+}
+
 # T4/T6b: a BF16 widened, computed on and narrowed to F16 is computed as written - at -O3 LLVM 18 narrowed the BF16
 # straight to F16 for the computation, as though only its precision mattered: 2^-126, a BF16 below F16's range, became 0
 # and 2^-126 / 2^-126 a NaN (fuzz/repro/bf16shrink.olang, .ll)
