@@ -3605,8 +3605,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   fills; operators (`+ - * / @`, `a.T() @ b`, `Exp`, `Clone`) build a new matrix, for scripts. Shapes are checked
   once per operation - an assert, or `ShapeError.MISMATCH` under `try` through the Try forms - all in one section, so
   `Matrix<T, R, C>` will move them in one place. **Decided (mine)**: the BLAS-level calls take `alpha`/`beta` as `F64`
-  with BLAS's defaults (`Gemm` 1/0, `Ger` 1/1), converted once - a type variable's default does not adapt
-  (bench/repro/linalg_generic_default) - while element-wise scalars are of the element type; the thread count is a
+  with BLAS's defaults (`Gemm` 1/0, `Ger` 1/1), converted once, so a literal reads the same whatever the element
+  type - while element-wise scalars are of the element type; the thread count is a
   parameter (default 1, `Cores()` the machine's), never a global, so a small product stays evaluable while compiling
   (K1); F16/BF16/F8 are stored as they are and accumulated in F32; no general broadcasting, only explicit row
   operations; `FastExp`/`FastTanh`/`FastSigmoid` are olang arithmetic that vectorizes, with stated errors (relative

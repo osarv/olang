@@ -10164,20 +10164,21 @@ from their original form.
   element; 8-wide with AVX2) only for calls that may not set errno, which X8 deliberately does not declare, its results
   are within 4 ulp rather than the scalar function's, so the evaluator would compute a different number than the
   program, and clang 18 maps no `tanhf` at all. It would suit an opt-in fast-math mode, if the language ever wants one.
-  **Found while building it, with reproducers in `bench/repro/linalg_*.olang`** (all reproduced at 589aa8e, routed to
-  the scope work, worked around in the module): a value built in the result scope cannot be passed to a `mut` receiver
-  whose type has a `mut` reference field, nor borrowed for a read-only method call, error[O10d] (`linalg_borrow_return`,
-  `linalg_borrow_return_value`) - which is why linalg's receivers are read-only `Matrix<T>&` even where they write
-  elements, legal by T25b's shallow permission but saying less than a `mut` would; `null` passed for a constructor's
-  reference parameter makes a function returning a new instance look as if it returned its own storage, error[O26]
-  (`linalg_null_ctor_arg`) - so `return x + x` failed, and every allocating function builds its result in a reference
-  local in the result scope; a constructor reference parameter defaulting to `null` is error[O10d] at the default when
-  built with `&return` (`linalg_nulldefault_return`); a type variable's default does not adapt (`alpha <T> = 1` is
-  error[E12], `linalg_generic_default`), hence `F64` alpha and beta; an immutable global is a mutable LLVM global
-  (`linalg_global_constant`). Friction, not bugs: no message on an `assert`, so a shape mismatch aborts with "assertion
-  failed" only; `Cast` had to be written as a `match <D>` over every numeric type, there being no generic conversion; a
-  literal does not adapt through an operator's generic operand, so an F32 matrix is scaled by `m * F32(0.5)`. **Tests**:
-  twenty corpus tests (every product shape and transpose against a plain sum, views, every element type, reductions, the
-  activations' error bounds, Solve and Inverse, ParallelRows), three globals baked while compiling and compared with the
-  run time, all under `if TestBuild` so a program importing the module compiles none of them; a checks scenario
-  (`linalg`) for the shape-mismatch abort, built and interpreted, and the `try` form.
+  **Found while building it** (all reproduced at the batch's base, e563dc7, and worked around in the module; four were
+  fixed by the scope batch merged before this one, 0d5162d, and their reproducers dropped): a value built in the result
+  scope could not be borrowed for a read-only method call, error[O10d]; `null` passed for a constructor's reference
+  parameter made a function returning a new instance look as if it returned its own storage, error[O26] - so `return x +
+  x` failed, and every allocating function builds its result in a reference local in the result scope (`out
+  Matrix<T>&return = ...`, which can now be simplified); a constructor reference parameter defaulting to `null` was
+  error[O10d] at the default when built with `&return`; a type variable's default did not adapt (`alpha <T> = 1` was
+  error[E12]). A fifth is now a rule rather than a bug: passing such a result-scope value to a `mut` receiver whose type
+  has a `mut` reference field is error[O17], since the callee could store through it into the wrong scope - which is why
+  linalg's receivers are read-only `Matrix<T>&` even where they write elements, legal by T25b's shallow permission but
+  saying less than a `mut` would. Still open: an immutable global is emitted as a mutable LLVM global
+  (`bench/repro/linalg_global_constant.olang`). Friction, not bugs: no message on an `assert`, so a shape mismatch
+  aborts with "assertion failed" only; `Cast` had to be written as a `match <D>` over every numeric type, there being no
+  generic conversion; a literal does not adapt through an operator's generic operand, so an F32 matrix is scaled by `m *
+  F32(0.5)`. **Tests**: twenty corpus tests (every product shape and transpose against a plain sum, views, every element
+  type, reductions, the activations' error bounds, Solve and Inverse, ParallelRows), three globals baked while compiling
+  and compared with the run time, all under `if TestBuild` so a program importing the module compiles none of them; a
+  checks scenario (`linalg`) for the shape-mismatch abort, built and interpreted, and the `try` form.
