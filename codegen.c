@@ -3204,6 +3204,19 @@ static char* cgConvertValue(struct cgCtx* ctx, struct type from, struct type to,
         fprintf(ctx->fnOut, "  %s = call bfloat @__olang_int_bf16(i64 %s, i1 %s)\n", r, mag, neg);
         return r;
     }
+    else if (toF && to.bType == BASETYPE_F16) {
+        //T4/E26: through a double, which holds every integer that does not overflow F16 exactly, so this rounds once. Not
+        //"sitofp ... to half": LLVM 18 folds "fpext (sitofp x to half)" - which every use of an F16 makes - into "sitofp
+        //x to double" whenever x has at most 11 significant bits, losing F16's overflow to infinity (65536 printed as
+        //65536). The fence keeps it from folding the double back into the half (found by the fuzzer, fuzz/repro/f16fold.ll)
+        char* d = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = %s %s %s to double\n", d, TypeIsUnsigned(from) ? "uitofp" : "sitofp", fromTy, val);
+        char* fenced = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call double @llvm.arithmetic.fence.f64(double %s)\n", fenced, d);
+        char* r = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = fptrunc double %s to half\n", r, fenced);
+        return r;
+    }
     else if (toF) instr = TypeIsUnsigned(from) ? "uitofp" : "sitofp";
     else if (tb == fb) return val;
     else instr = tb > fb ? (TypeIsUnsigned(from) ? "zext" : "sext") : "trunc";
@@ -6107,6 +6120,7 @@ void emitRuntimeDecls(FILE* out) {
         "declare void @free(ptr)\n"
         "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
         "declare i64 @llvm.ctlz.i64(i64, i1)\n"
+        "declare double @llvm.arithmetic.fence.f64(double)\n"
         "declare i32 @pthread_create(ptr, ptr, ptr, ptr)\n"
         "declare i32 @pthread_detach(i64)\n"
         //no pthread_mutex_init/pthread_cond_init here on purpose: a program may declare either as an

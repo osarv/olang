@@ -10892,6 +10892,16 @@ test "T8: an array filled with a reference names one instance in every element" 
     assert fzFill(fzRun + 2) == want
 }
 
+# T4/E26: an integer converted to F16 rounds once, overflowing to infinity past 65504 - at -O3 LLVM 18 folded the F16
+# away whenever the integer had few significant bits ("x << 24"), and the program printed 1644167168 where the evaluator
+# said inf (fuzz/repro/f16fold.olang, f16fold.ll)
+fn fzF16Of(x I32) String { return $F16(x << 24) " " $F16(U64(x) << 40) " " $(F16(x << 24) * 0.5) " " $F16(x << 15) }
+FzF16OfBaked String = fzF16Of(98)
+test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
+    assert FzF16OfBaked == "inf inf inf inf" and fzF16Of(98) == FzF16OfBaked
+    assert fzF16Of(I32(fzRun) + 97) == FzF16OfBaked and F16(I32(fzRun) << 15) == 32768.0
+}
+
 # K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
 # evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
 type fzCtr struct(n I32) {
