@@ -14837,7 +14837,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         //a value local's own storage is its block, wherever its references were built (valueHome) - which is what a
         //borrow of it hands over (O17) - or the result scope, for one the function returns (O26a)
         //(a value array's elements too, though read as a reference - its run-time length is a {len, ptr} pair, T11)
-        if ((!asRef || !op->type.structMAlloc) && v->storeInResult && ctx && ctx->func) { *outVar = v->valueHome; return true; }
+        if ((!asRef || !op->type.structMAlloc) && v->storeInResult && v->valueHome) { *outVar = v->valueHome; return true; }
         if (!asRef) { *outDepth = isParam ? 1 : op->type.scopeDepth; return true; } //a by-value slot is ours
         if (op->type.scopeUnknown) { *outVar = SCOPE_AMBIGUOUS; return true; } //O11/O12: not known here
         //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
@@ -15865,14 +15865,17 @@ static bool localLivesInResult(struct checkCtx* ctx, struct str name, struct typ
     struct type rt = *f->type.retType;
     bool refResult = rt.structMAlloc && rt.scopeParam && canonicalVar(rt.scopeParam) == canonicalVar(home);
     bool holds = TypeHoldsReferences(t);
-    if (!holds && !refResult) return false;
+    //...and a value whose own storage a reference can name - text, an array, a struct - that a returned value borrows:
+    //"note := ""; if c { note = "big: " $n }; return R(n, note)" hands back R's reference to note itself
+    bool borrowable = t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE;
+    if (!holds && !refResult && !borrowable) return false;
     if (rhs && OperandNamesExistingStorage(rhs)) return false;
     for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
         struct syntax* st = *(struct syntax**)ListGetIdx(&ctx->blockStmts, i);
-        if (syntaxReturnsName(st, name)) return true;
-        if (holds && syntaxReturnReadsName(ctx, st, name, t)) return true;
+        if ((holds || refResult) && syntaxReturnsName(st, name)) return true;
+        if ((holds || borrowable) && syntaxReturnReadsName(ctx, st, name, t)) return true;
     }
-    return localFlowsToResult(ctx, name, t);
+    return (holds || refResult) && localFlowsToResult(ctx, name, t);
 }
 
 //O26a: a reference local the function returns - or one flowing into what it returns, a parser's right operand built
