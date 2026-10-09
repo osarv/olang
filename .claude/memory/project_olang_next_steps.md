@@ -377,6 +377,13 @@ because what it finds about structure feeds the refactor.
   GEMM convolution, BF16 training, attention through per-head Gemm); port P0 gaps agent (DESIGN.md S1-S4, S6; S5 after
   poolfix - both touch the allocator); linalg attention kernels once poolfix lands; after perm merges, a small checker
   batch (oann repro/genericctor, D13c List<Ticket> location, `return Node.Many(l.ToArray())` still O26).
+- 18:55 CEST: poolfix merged and pushed (edf8238, verified): a parked worker keeps a 1MB batch and shares the rest
+  through one locked pool; GemmWorkspace panels double. oann's compiler worktree /home/user/wt/oannc2 moved to edf8238
+  (oann's make test passes on it). 19:00 CEST, started: wt-portgaps (DESIGN.md S1-S6), wt-linalg2 (batched causal Gemm,
+  epilogue, implicit-GEMM conv), oann wt-oann-mixed (attention via per-head Gemm, BF16 mixed precision, Loader on a
+  task), oann wt-oann-settle3 (settling phase 3: fixed-point board engine, sparse-code store, readout groups, CSR).
+  Still running: wt-perm. When linalg2 lands, tell oann-mixed to switch attention to the batched causal Gemm. Next
+  after perm: the small checker batch (above). Then the bootstrap/ move + modest refactor when no compiler agent runs.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
