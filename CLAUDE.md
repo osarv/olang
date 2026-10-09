@@ -3477,6 +3477,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   (`e Entry = Entry(k, v)`) was checked against whatever was being built when the pending checks next ran - it lands in
   the instance now (C2d). Decided (mine): the API names (`Update`, `RunFrom`, `Fixed`, `Now`/`Since`/`Wall`), and that
   `RunFrom` is a protocol method the compiler recognises by shape, as `Len` and `At` are.
+- **Checker batch 2: the usage study's checker and syntax findings (G8a, G10c, G19, S13a/S12b, L18a, S1a, D10a, E8b,
+  E11b, L9, C7, C2a, D3a, 2026-10-09; the coordinator's calls under the user's delegation, details mine).** **Syntax**:
+  a newline inside `(` or `[` ends nothing (L18a, tracked by the tokenizer, a `{` inside holding statements again), so
+  a list, a literal, a comprehension or a parenthesized join runs over several lines with its closing bracket on a line
+  of its own; a trailing comma before such a bracket is allowed, and on one line it is an error (my call: one way per
+  layout); a declaration keyword starting a line outside every block ends a bracket left open, so one missing `)` is
+  one error. A bare `{ }` is a statement - a scope ending early (S1a, built as the `if true` S8b already makes). `for
+  { }` with no `break` of its own leaves (D10a). **E8b**: a shift of a literal by a value takes the type it lands in or
+  the other operand's, through arithmetic with literals (`mask I64 = (1 << s) - 1`) - Go's untyped-constant rule;
+  `x I64 = 1 << s` shifted an `I32` before. A shift amount of any integer type already worked (E8). **G10c**: a generic
+  constructor where a type is expected (a declaration's, a parameter's - receiver-bound - an assignment's, a return's)
+  takes that type's arguments (`l.Push(Pair(k, 3))` into `List<Pair<String&, I64>>`); with none expected a reference
+  binds read-only, as an array value already did (my call - `q := Pair(k, 4); l.Push(q)` was the study's case).
+  **S13a**: unguarded clauses cover a case together (Maranget's exhaustiveness over the patterns' syntax) - `Service(true)`
+  and `Service(false)`, every case of an enum in a payload, a `Bool` subject's `true` and `false` (so a `Bool` match
+  gives a value without `nomatch`). **Decided (mine)**: what an exhaustive statement match lets through (a null
+  reference) is `unreachable`, as the value form already was - it used to fall through, so a function ending in one
+  (D10a: it leaves) returned a **silent zero**, reproduced. **One error per cause**: a generic applied to an unknown type
+  is unknown (no "expected List<I32>", no member cascade, no for-in error); a receiver or reference of an unknown type
+  adds no T24/M19d errors and a call on it gives no value S8a could decide; a method or function instantiated for an
+  instantiation whose G19 constraints failed is not checked (a second error inside the prelude Map). **G8a fix**: an
+  instantiation made while a type it names was mid-resolution (`kids List<mut Widget&>` inside `Widget`) kept that
+  snapshot in its type arguments, so `root.kids[0].tag` was unknown; every instantiation's arguments, fields and
+  constructor are refreshed once all types are. **Diagnostics**: a join piece that is neither text nor a rendering says
+  `write '$pretty(t)'`, text on a line of its own says a join continues only inside parentheses, a keyword where a name
+  goes says so (L9), `destruct` inside a constructor body says it follows the body (C7), a field named like its
+  constructor's parameter says to write it bare (C2a), and a parameter named like a function names it, both with a
+  `note:` at the other declaration. Found already working: `x := "abc" if c else "no"` (E28/D15, pinned by a test).
+  **Not fixed (the scope agent's)**: `for w in root.kids` over `List<mut Widget&>` with `Widget` holding a `mut`
+  reference field still fails inside `ListIter.Next` (C2d, the recorded `At`/element limit).
 - **What realistic programs wrote first, accepted - and five use-after-frees closed (O25h, O25a, O18c, O13a, D16d, C2d,
   O25c, T25b, B11, 2026-10-09).** From a study that wrote 15 programs and marked every workaround. **Copies (O25h)**: a
   value holding references copied from existing storage keeps them where the source's are, typed or `:=` (it was the

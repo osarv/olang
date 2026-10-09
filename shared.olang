@@ -11046,6 +11046,187 @@ test "E31: a Call adapter, evaluated while compiling as at run time" {
     assert evAdapters(I32(evRun) + 1) == EvAdaptersBaked
 }
 
+# ---- checker batch 2 (2026-10-09): what the usage study found, and the syntax it asked for ----
+
+# G8a: a field declared after one whose type is an instantiation naming this very type ("List<mut Widget&>") is seen
+# through that instantiation's elements - the instantiation held a snapshot of the type taken mid-resolution
+type cbWidget struct(id I32) {
+    id
+    kids mut List<mut cbWidget&>& = List<mut cbWidget&>()
+    tag mut I32 = 0
+}
+test "G8a: a field after a generic self-reference is reached through the instantiation's elements" {
+    root cbWidget& = cbWidget(1)
+    root.kids.Push(cbWidget(2))
+    k := root.kids[0]
+    k.tag = 7
+    assert k.tag == 7 and k.id == 2 and root.kids[0].tag == 7
+}
+
+# G10c: a generic constructor called where a type is expected - a declaration's, a parameter's, an assignment's, a
+# return's - takes that type's arguments, as if they were written; with none expected a reference reaches it read-only
+type cbNode struct(v I32) {
+    v mut
+}
+fn cbPairOf(k String&) Pair<String&, I64> { return Pair(k, 7) }
+test "G10c: a generic constructor takes its expected type's arguments" {
+    l := List<Pair<String&, I64>>()
+    k String& = "abc"
+    l.Push(Pair(k, 3))
+    p Pair<String&, I64> = Pair(k, I64(4))
+    n cbNode& = cbNode(1)
+    q Pair<mut cbNode&, I32> = Pair(n, 1)
+    q.First.v = 5
+    q = Pair(n, 2)
+    r := Pair(k, I64(5))
+    l.Push(r)
+    assert l.Len() == 2 and p.Second == 4 and n.v == 5 and q.Second == 2 and cbPairOf(k).Second == 7
+    assert l[0].Second == 3 and l[1].First == "abc"
+}
+
+# S13a: a match's patterns cover a case together - a Bool payload by true and false, an enum in a payload by its cases
+type cbSvc enum {
+    Service(on Bool)
+    Off
+}
+type cbColor enum {
+    Red
+    Green
+}
+type cbPaint enum {
+    Paint(c cbColor, n I32)
+    None
+}
+fn cbSvcCode(x cbSvc) I32 {
+    match x {
+        case cbSvc.Service(true) { return 1 }
+        case cbSvc.Service(false) { return 2 }
+        case cbSvc.Off { return 3 }
+    }
+}
+fn cbPaintCode(y cbPaint) I32 {
+    return match y {
+        case cbPaint.Paint(cbColor.Red, n) => n
+        case cbPaint.Paint(cbColor.Green, _) => 0
+        case cbPaint.None => -1
+    }
+}
+fn cbBoolCode(b Bool) I32 {
+    return match b {
+        case true => 1
+        case false => 0
+    }
+}
+CbMatchBaked I32 = cbSvcCode(cbSvc.Service(false)) * 100 + cbPaintCode(cbPaint.Paint(cbColor.Red, 4)) * 10 + cbBoolCode(true)
+test "S13a: patterns cover a case together, a Bool's values cover it, evaluated while compiling as at run time" {
+    assert CbMatchBaked == 241
+    assert cbSvcCode(cbSvc.Service(evRun == 1)) == 1 and cbSvcCode(cbSvc.Off) == 3
+    assert cbPaintCode(cbPaint.Paint(cbColor.Green, I32(evRun))) == 0 and cbPaintCode(cbPaint.None) == -1
+    assert cbBoolCode(evRun == 2) == 0
+}
+
+# L18a: a newline inside parentheses or square brackets ends nothing - a list may run over several lines, its closing
+# bracket on a line of its own, with a comma after its last entry; a block opened inside holds statements again
+fn cbAdd(
+    a I32,
+    b I32,
+) I32 {
+    return a + b
+}
+CbListsBaked I32 = cbAdd(
+    1,
+    2,
+)
+test "L18a: lists, literals, comprehensions and joins run over several lines inside brackets" {
+    xs := I32[
+        1,
+        2,
+        3,
+    ]
+    ys := I32[x * 2
+              for x in xs
+              if x > 1
+    ]
+    s := cbAdd(1,
+               2)
+    t I32 = (1
+             + 2)
+    w := xs.Fold(0, fn(acc I32, x I32) I32 {
+        return acc + x
+    })
+    text := ("s=" $s
+             " t=" $t)
+    assert xs.Len() == 3 and ys.Len() == 2 and ys[1] == 6 and s == 3 and t == 3 and w == 6 and CbListsBaked == 3
+    assert text == "s=3 t=3"
+}
+
+# S1a: a block written as a statement is a scope of its own - what it allocates and its destructors end at its "}"
+cbClosed mut I32 = 0
+type cbHandle struct(n I32) {
+    n
+} destruct { cbClosed = cbClosed + n }
+fn cbBlocks() I32 {
+    {
+        h cbHandle& = cbHandle(5)
+        {
+            g cbHandle& = cbHandle(2)
+        }
+        assert cbClosed == 2
+    }
+    assert cbClosed == 7
+    {
+        return 1
+    }
+}
+test "S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)" {
+    cbClosed = 0
+    assert cbBlocks() == 1
+    x := 1
+    {
+        y I32 = x + 1
+        x = y
+    }
+    assert x == 2
+}
+
+# D10a: "for { }" with no break of its own leaves only as its body does - no "unreachable" after it
+fn cbFind(a Array<I32>&, x I32) I64 {
+    i I64 = 0
+    for {
+        if a[i] == x { return i }
+        i++
+        for j in range 3 {
+            if j == 1 { break } # the inner loop's own
+        }
+    }
+}
+CbFindBaked I64 = cbFind(I32[4, 5, 6], 6)
+test "D10a: a loop with no condition and no break of its own never falls through" {
+    assert CbFindBaked == 2 and cbFind(I32[4, 5, 6], I32(evRun) + 4) == 1
+}
+
+# E8b: a shift of a literal takes the type it lands in, as its literal would - so "x I64 = 1 << s" shifts an I64
+fn cbMask(s I32) I64 { return (1 << s) - 1 }
+CbMaskBaked I64 = cbMask(40)
+test "E8b: a shift of a literal by a value takes its target's type, or the other operand's" {
+    s I64 = 40 + evRun - 1
+    y I64 = 1 << s
+    assert y == 1099511627776 and CbMaskBaked == 1099511627775 and cbMask(I32(s)) == CbMaskBaked
+    v I64 = 7
+    assert v + (1 << s) == 1099511627783 and (1 << s) > v and y == 1 << s
+    x I32 = 11
+    b U8 = U8(128) >> (x % 8) # E8: the amount is a count, of any integer type
+    assert b == 16
+}
+
+# E28/D15: a conditional choosing between two text literals of different lengths names its type (String) in each value
+test "E28: ':=' from a conditional of text, and of numbers of one type" {
+    x := "abc" if evRun == 1 else "no"
+    y := "abc" if evRun == 2 else "no"
+    n := 3 if evRun == 1 else 4
+    assert x == "abc" and x.Len() == 3 and y == "no" and y.Len() == 2 and n == 3
+}
+
 # E10/E10b/T29e/G19, from the prelude Map's tests: keys that rely on the hash the compiler supplies, or that a type
 # inherits through extends - here rather than in std/prelude/map.olang, whose tests every test build compiles
 test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {

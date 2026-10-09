@@ -1,5 +1,5 @@
 # check: fail error[S13a]: case A of S is not covered
-# S13a: a case with a value or another case inside its payload may let a value through, so it covers nothing
+# S13a: patterns inside a payload cover a case only together - here T.Q is never matched
 type T enum {
     P
     Q
@@ -11,7 +11,6 @@ type S enum {
 fn f(s S) I32 {
     match s {
         case S.A(T.P) { return 1 }
-        case S.A(T.Q) { return 2 }
         case S.B { return 0 }
     }
     return -1

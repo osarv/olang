@@ -390,6 +390,14 @@ static void reportUnknownName(struct semaModule* mod, struct token tok, enum dia
 }
 
 static struct type unknownTypeStandIn(void) { struct type t = TypeVanilla(BASETYPE_INT32); t.unknown = true; return t; }
+//a type an unknown type was written in - "List<Itm>", "Array<Itm&>" - is unknown too: its uses say nothing more
+static bool typeHasUnknown(struct type t, int depth) {
+    if (t.unknown) return true;
+    if (depth > 16) return false;
+    if (t.bType == BASETYPE_ARRAY && t.arrElem && typeHasUnknown(*t.arrElem, depth + 1)) return true;
+    for (int i = 0; i < t.typeArgs.len; i++) if (typeHasUnknown(*(struct type*)ListGetIdx(&t.typeArgs, i), depth + 1)) return true;
+    return false;
+}
 static struct operand* unknownPlaceholder(struct token tok);
 
 static void reportUnknownType(struct semaModule* mod, struct token nameTok) {
@@ -2298,6 +2306,19 @@ static void reportUnbounded(struct token tok) {
     Err(tok, ERR_UNBOUNDED_INSTANTIATION);
 }
 
+//G19: the instantiations of a generic type whose constraints were not met, and whether a type reaches one
+static struct list unmetTypeInsts; //struct type*
+static struct type* canonicalStructOf(struct type t);
+static bool typeReachesUnmet(struct type t, int depth) {
+    if (depth > 16 || !unmetTypeInsts.len) return false;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && typeReachesUnmet(*t.arrElem, depth + 1);
+    if (t.bType != BASETYPE_STRUCT) return false;
+    struct type* c = canonicalStructOf(t);
+    for (int i = 0; c && i < unmetTypeInsts.len; i++) if (*(struct type**)ListGetIdx(&unmetTypeInsts, i) == c) return true;
+    for (int i = 0; i < t.typeArgs.len; i++) if (typeReachesUnmet(*(struct type*)ListGetIdx(&t.typeArgs, i), depth + 1)) return true;
+    return false;
+}
+
 struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i < instantiations.len; i++) {
         struct instantiation* inst = ListGetIdx(&instantiations, i);
@@ -2330,7 +2351,13 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     inst.site = instSite;
     ListAdd(&instantiations, &inst);
     int idx = instantiations.len -1;
-    if (!tooDeep) ListAdd(&pendingInstances, &idx); //G17: its body would only instantiate a deeper one
+    //G17: its body would only instantiate a deeper one. G19: nor is the body of a method of an instantiation whose
+    //constraints were not met checked - it would only repeat that one error inside the generic's own code
+    bool unmet = false;
+    for (int i = 0; i < spec->type.vars.len && !unmet; i++)
+        unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
+    if (unmet) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
+    else if (!tooDeep) ListAdd(&pendingInstances, &idx);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -2404,6 +2431,19 @@ void refreshStructSnapshots(struct type* t) {
         for (int i = 0; i < t->ctorFunc->type.vars.len; i++) {
             refreshTypeSnapshot(&((struct var*)ListGetIdx(&t->ctorFunc->type.vars, i))->type);
         }
+    }
+}
+
+//an instantiation made while a type its arguments name was still being resolved - "kids List<mut Widget&>&" inside
+//Widget - holds a snapshot of that type in its type arguments, its fields and its constructor, taken with only the
+//fields declared before that point; and a method of it is instantiated from those arguments (G8a), so
+//"root.kids[0].tag" was an unknown member where ".id" worked. Run once every declaration is finished. A type argument
+//is refreshed in place, in the list every copy of the instantiation shares.
+static void refreshInstantiationSnapshots(void) {
+    for (int i = 0; i < typeInstantiations.len; i++) {
+        struct type* inst = *(struct type**)ListGetIdx(&typeInstantiations, i);
+        for (int k = 0; k < inst->typeArgs.len; k++) refreshTypeSnapshot(ListGetIdx(&inst->typeArgs, k));
+        refreshStructSnapshots(inst);
     }
 }
 
@@ -2538,6 +2578,7 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         met = true;
     } else if (!met) {
         met = checkTypeConstraints(&generic->typeConstraints, bindings, instSite.type != TOK_NONE ? instSite : generic->tok);
+        if (!met) ListAdd(&unmetTypeInsts, &spec); //its methods' bodies are not checked either (instantiateFunc)
     }
     if (spec->ctorFunc && !argsStillGeneric && met) {
         struct pendingTypeInst p = (struct pendingTypeInst){0};
@@ -2730,6 +2771,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         //cannot see it (O11) - rejected as written, and the argument resolved with that marker's own
         //diagnostics muted, so the one real error stands alone
         b.type = resolveTypeArg(mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams);
+        if (typeHasUnknown(b.type, 0)) return unknownTypeStandIn(); //reported - one error, not one per use of it
         ListAdd(&bindings, &b);
     }
     return *instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -2770,6 +2812,7 @@ struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list
     //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
             && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE && t.bType != BASETYPE_CHOICE) {
+        if (t.unknown) return t; //reported where it was written - one error, not also this one
         Err(firstTokOfType(markerNode, TOK_BTWSE_AND), ERR_INVALID_REFERENCE_TARGET, &t);
         return t;
     }
@@ -4321,6 +4364,7 @@ void checkMethodOverloads(struct semaModule* mod) {
     for (int i = 0; i < mod->vars.len; i++) {
         struct var* a = ListGetIdx(&mod->vars, i);
         struct type* ra = SemanticMethodReceiver(a);
+        if (a->isMethod && ra && ra->unknown) continue; //reported where its type was written
         if (a->isMethod && ra) {
             //M19e: a default is declared in its trait's own module, and may not reuse a name the trait requires
             struct type* tr = traitOfDefault(a);
@@ -4555,6 +4599,9 @@ struct checkCtx {
     bool inDefer; //S19b: checking deferred code, which runs while its block is being left and may only reach its
                   //own end - so no return, no error statement, no error a try lets through, and (with inLoop
                   //reset at the defer) no break or continue but those of a loop written inside it
+    struct syntax* expectNode; //G10c: an expression being built where a type is already expected - a declaration's
+    struct type expectType;    //written type, a parameter's, an assignment's target, a return's - see buildExpecting
+    bool* loopBreak; //D10a: set by a "break" of the innermost loop being checked - every loop points it at its own flag
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -4603,7 +4650,12 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
 //name in a condition knowing whether it is a local or a global without knowing the scopes.
 static void rejectShadowing(struct semaModule* mod, struct str name, struct token tok) {
     if (!mod || (name.len && name.ptr[0] == '$')) return;
-    if (VarGetList(&mod->vars, name)) Err(tok, ERR_SHADOWS_GLOBAL, tok);
+    struct var* g = VarGetList(&mod->vars, name);
+    if (g) {
+        if (g->isFuncDecl) Err(tok, ERR_SHADOWS_FUNCTION, tok);
+        else Err(tok, ERR_SHADOWS_GLOBAL, tok);
+        if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
+    }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
 }
@@ -5284,6 +5336,61 @@ static bool operandAdaptLiteral(struct operand* op, struct type to) {
     return true;
 }
 
+//E8b: a shift of a literal by an amount that is not one ("1 << s"), and arithmetic of such with literals ("(1 << s) -
+//1"): an integer expression whose type its literal still decides. Its literals take the type it lands in - a target's,
+//or the other operand's - as a literal does, so "x I64 = 1 << s" shifts an I64 (as Go's untyped constants do)
+static bool operandShiftOfLiteral(struct operand* op, int depth) {
+    if (depth > 64 || op->isLiteral || op->isTried || op->checkRoot || op->catchClauses.len || !TypeIsInt(op->type)) return false;
+    if (operandOnlyNumericLiterals(op)) return false; //E4a's own
+    struct operand* a0 = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+    switch (op->opType) {
+        case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+            return a0 && (operandOnlyNumericLiterals(a0) || operandShiftOfLiteral(a0, depth + 1));
+        case OPERATION_MINUS: case OPERATION_BTWSE_INV: return a0 && operandShiftOfLiteral(a0, depth + 1);
+        case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV: case OPERATION_MOD:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR: {
+            if (op->args.len != 2) return false;
+            struct operand* a1 = *(struct operand**)ListGetIdx(&op->args, 1);
+            bool l0 = operandOnlyNumericLiterals(a0), l1 = operandOnlyNumericLiterals(a1);
+            bool s0 = !l0 && operandShiftOfLiteral(a0, depth + 1), s1 = !l1 && operandShiftOfLiteral(a1, depth + 1);
+            return (s0 || l0) && (s1 || l1) && (s0 || s1);
+        }
+        default: return false;
+    }
+}
+
+//E8b: whether every literal of such an expression holds a value of integer type `to`
+static bool shiftOfLiteralFits(struct operand* op, struct type to) {
+    if (operandOnlyNumericLiterals(op)) {
+        struct litValue v;
+        return literalExprValue(op, &v) == LIT_VALUE_OK && !v.isFloat && intLiteralFitsIntType(v.i, to);
+    }
+    for (int i = 0; i < op->args.len; i++) {
+        if ((op->opType == OPERATION_BTSFT_L || op->opType == OPERATION_BTSFT_R) && i == 1) break; //an amount is its own
+        if (!shiftOfLiteralFits(*(struct operand**)ListGetIdx(&op->args, i), to)) return false;
+    }
+    return true;
+}
+
+static bool operandAdaptLiteral(struct operand* op, struct type to);
+//E8b: such an expression retyped to `to`, in place - its literals adapted, a shift's amount left as it is
+static void shiftOfLiteralRetype(struct operand* op, struct type to) {
+    if (operandOnlyNumericLiterals(op)) { operandAdaptLiteral(op, to); return; }
+    for (int i = 0; i < op->args.len; i++) {
+        if ((op->opType == OPERATION_BTSFT_L || op->opType == OPERATION_BTSFT_R) && i == 1) break;
+        shiftOfLiteralRetype(*(struct operand**)ListGetIdx(&op->args, i), to);
+    }
+    op->type = to;
+}
+
+//E8b: adapts op to the primitive integer type `to` where it is such an expression and its literals fit
+static bool adaptShiftOfLiteral(struct operand* op, struct type to) {
+    if (!TypeIsInt(to) || to.owner || TypeIsSame(op->type, to) || !operandShiftOfLiteral(op, 0) || !shiftOfLiteralFits(op, to))
+        return false;
+    shiftOfLiteralRetype(op, to);
+    return true;
+}
+
 //T6's ordering for the both-operands-are-literals case below: the narrower of two literal types adapts to
 //the wider, so "'a' + 1" is int32 arithmetic rather than byte arithmetic that could wrap.
 //every integer below every float; within each by width, a signed type above the unsigned one of its width
@@ -5710,6 +5817,7 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         return TYPE_FIT_OK;
     }
     FinalizeLambda(op, &target); //D16a: a lambda is checked against what it is written for
+    adaptShiftOfLiteral(op, target); //E8b: "x I64 = 1 << s" shifts an I64
     //E4a: a literal-only expression is computed here, exactly, and then fits as the one literal holding its value
     //would - "b U8 = 1 + 2", "f F32 = 0.5 * 2.0"; it is an error only where that value does not fit (or has none)
     if (!op->isLiteral && TypeIsNumeric(target) && operandOnlyNumericLiterals(op)) {
@@ -7486,6 +7594,9 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             //to it, and "Pair(1, "x")" is a Pair<I32, String&>, its text built where the Pair lands
             for (int i = 0; i < bindings.len; i++) {
                 struct typeBinding* b = ListGetIdx(&bindings, i);
+                //...and a reference reaches it read-only, as that array does: "Pair(k, 3)" is a Pair<String&, I32> whatever
+                //k's permission - a writable one is asked for by its expected type or its written arguments (T25b)
+                if (b->type.structMAlloc && b->type.refMut && TypeIsPermRef(b->type)) b->type.refMut = false;
                 if (b->type.bType == BASETYPE_ARRAY && !b->type.structMAlloc) {
                     b->type.arrMalloc = true; //T11a: a reference's type has no length
                     b->type.arrLen = NULL;
@@ -8448,6 +8559,12 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         struct operand* other = lit == a ? b : a;
         operandAdaptLiteral(lit, other->type);
     }
+    //E8b: a shift of a literal beside a value takes the value's type, as its literal would - "i64 + (1 << s)"
+    if (rule.sameType && !aLit && !bLit && !TypeIsSame(a->type, b->type)) {
+        bool sa = operandShiftOfLiteral(a, 0), sb = operandShiftOfLiteral(b, 0);
+        if (sa && !sb) adaptShiftOfLiteral(a, b->type);
+        else if (sb && !sa) adaptShiftOfLiteral(b, a->type);
+    }
     //T6b: two numeric values of one family meet at the wider - the narrower widened, losing nothing, so an Int32 and
     //an Int64 add as Int64s; a declared type meets its base as the base. Two that neither flows into stay an error.
     if (rule.sameType && !aLit && !bLit && !TypeIsSame(a->type, b->type)) {
@@ -8554,6 +8671,7 @@ struct operand* OperandIntLiteralValue(struct token tok, long long value, bool u
 static struct operand* unknownPlaceholder(struct token tok) {
     struct operand* op = OperandIntLiteralValue(tok, 0, false);
     op->type = unknownTypeStandIn();
+    op->isLiteral = false; //no value: nothing - a fixed local's condition, say (S8a) - is decided from it
     return op;
 }
 
@@ -9927,14 +10045,71 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
-struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
+//G10c: the node an expression's value is - through the single-part wrappers the parser puts around a primary
+static struct syntax* exprCoreOf(struct syntax* e) {
+    while (e && e->parts.len == 1 && !partAt(e, 0)->isToken
+           && (e->type == SNTX_EXPR || e->type == SNTX_EXPR_BINARY || e->type == SNTX_EXPR_UNARY
+               || e->type == SNTX_EXPR_POSTFIX)) e = partSntx(e, 0);
+    return e;
+}
+
+//G10c: builds an expression where a type is already expected, so a generic constructor call that is the whole of it
+//takes its type arguments from that type instead of inferring them from its arguments (see buildPrimary)
+static struct operand* buildExpecting(struct checkCtx* ctx, struct syntax* node, struct type* expected) {
+    struct syntax* prevNode = ctx->expectNode;
+    struct type prevType = ctx->expectType;
+    ctx->expectNode = expected ? node : NULL;
+    if (expected) ctx->expectType = *expected;
+    struct operand* op = buildExprFromSyntax(ctx, node);
+    ctx->expectNode = prevNode;
+    ctx->expectType = prevType;
+    return op;
+}
+
+//G10c: the instantiation of a generic constructor's type that the expected type is, when the call is all of the
+//expression a type is expected for - then that is the constructor called, as if its type arguments were written
+static struct var* expectedCtorFor(struct checkCtx* ctx, struct syntax* primary, struct var* func) {
+    if (!ctx->expectNode || exprCoreOf(ctx->expectNode) != primary) return NULL;
+    if (!func || !func->type.typeParams.len || !func->type.hasRetType || func->type.retType->ctorFunc != func) return NULL;
+    struct type exp = ctx->expectType;
+    struct type* g = func->type.retType;
+    if (exp.bType != BASETYPE_STRUCT || exp.unknown || !exp.genericOrigin || TypeIsGeneric(exp)) return NULL;
+    if (exp.genericOrigin->owner != g->owner || !StrCmp(exp.genericOrigin->name, g->name)) return NULL;
+    struct type* inst = canonicalStructOf(exp);
+    return inst && inst->typeParams.len == 0 && inst->ctorFunc ? inst->ctorFunc : NULL;
+}
+
+//G10c: what each argument of a call is expected to be before it is built - its parameter's type, with what a
+//receiver binds substituted (G9b); none where that is still a variable
+static bool argExpected(struct var* func, struct type* recv, int argIdx, struct type* out) {
+    if (!func || func->type.bType != BASETYPE_FUNC) return false;
+    int pi = argIdx + (recv ? 1 : 0);
+    if (pi >= func->type.vars.len) return false;
+    struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, pi)).type;
+    if (TypeIsGeneric(pt)) {
+        if (!recv || !func->type.vars.len) return false;
+        struct list bindings = ListInit(sizeof(struct typeBinding));
+        if (!TypeUnify((*(struct var*)ListGetIdx(&func->type.vars, 0)).type, *recv, &bindings)) return false;
+        pt = TypeSubstitute(pt, &bindings);
+        if (TypeIsGeneric(pt)) return false;
+    }
+    *out = pt;
+    return true;
+}
+
+static struct list buildArgsFor(struct checkCtx* ctx, struct syntax* argsNode, struct var* func, struct type* recv);
+struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) { return buildArgsFor(ctx, argsNode, NULL, NULL); }
+
+//the arguments of a call to func (NULL when it is not known yet), recv the receiver's type for a method
+static struct list buildArgsFor(struct checkCtx* ctx, struct syntax* argsNode, struct var* func, struct type* recv) {
     struct list result = ListInit(sizeof(struct operand*));
     struct list exprs = allPartsOfType(argsNode, SNTX_EXPR);
     for (int i = 0; i < exprs.len; i++) {
         struct syntax* e = *(struct syntax**)ListGetIdx(&exprs, i);
         bool prevChecking = ctx->checkingTry; //a written call's arguments are not what its "try" checks (R20)
         ctx->checkingTry = false;
-        struct operand* op = buildExprFromSyntax(ctx, e);
+        struct type expected;
+        struct operand* op = buildExpecting(ctx, e, argExpected(func, recv, i, &expected) ? &expected : NULL);
         ctx->checkingTry = prevChecking;
         //D8d: a call returning several values, as the only argument, is its results as the arguments - "f(g())".
         //Each argument reads one result of the one evaluation, in order
@@ -10391,6 +10566,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
         struct typeBinding b = (struct typeBinding){0};
         b.name = *(struct str*)ListGetIdx(&found->typeParams, i);
         b.type = resolveTypeArg(ctx->mod, *(struct syntax**)ListGetIdx(&argNodes, i), scopeParams); //G11, as above
+        if (typeHasUnknown(b.type, 0)) return NULL; //reported where it was written
         ListAdd(&bindings, &b);
     }
     return instantiateTypeAt(found, &bindings, firstTokAnywhere(argsNode)); //G19, G16
@@ -10592,6 +10768,8 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct str mName = strFromTok(mTok);
     //T30: a value of a trait's type was already reported where the type was written - nothing more to say here
     if (recvType.bType == BASETYPE_INTERFACE) { *reported = true; if (argsNode) buildArgs(ctx, argsNode); return OperandIntLiteral(mTok); }
+    //...nor on a value of a type that was unknown where it was written: whatever it calls is unknown too
+    if (recvType.unknown) { *reported = true; if (argsNode) buildArgs(ctx, argsNode); return unknownPlaceholder(mTok); }
 
     //T10: every array has "Len()", supplied by the compiler
     if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("Len"))) {
@@ -10674,7 +10852,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     }
     bool allowedM = ctx->allowFallibleCall;
     ctx->allowFallibleCall = false;
-    struct list mArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode); //E29
+    struct list mArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgsFor(ctx, argsNode, m, &recvType); //E29, G10c
     ctx->allowFallibleCall = allowedM;
     struct list withRecv = ListInit(sizeof(struct operand*));
     ListAdd(&withRecv, &recvOp);
@@ -10950,10 +11128,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             return alloc;
         }
         struct var* func = resolveCallTarget(ctx, nameNode, firstPartOfType(callNode, SNTX_TYPE_ARGS));
+        struct var* expectedCtor = expectedCtorFor(ctx, s, func); //G10c: the type it is expected to build
+        if (expectedCtor) func = expectedCtor;
         //only the one primary directly under a `try` is allowed to be a fallible call - see buildTryExpr
         bool allowed = ctx->allowFallibleCall;
         ctx->allowFallibleCall = false;
-        struct list args = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+        struct list args = buildArgsFor(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS), func, NULL);
         if (!func) return unknownPlaceholder(nameTok); //reported - and nothing after says so again
         if (func->type.bType != BASETYPE_FUNC) {
             //E31: "next()" on a variable whose type declares Call
@@ -11860,11 +12040,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (TypeIsPermRef(declType)) declType.refMut = true; //T25b: a local's own reference is writable
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
     } else {
-        rhs = buildExprFromSyntax(ctx, exprNode);
         if (typeExprNode) {
             scopeTagBody = ctx; //O3c
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
             scopeTagBody = NULL;
+            rhs = buildExpecting(ctx, exprNode, &declType); //G10c
             if (typeExprIsBareTypeVar(typeExprNode)) { //...writes no scope, whatever the binding's type carried
                 declType.scopeParam = NULL;
                 declType.scopeWritten = false;
@@ -11878,6 +12058,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
                 landCall(rhs, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
             reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok, rhs, declType);
         } else { // ":=" - type read straight off the initializer (D15)
+            rhs = buildExprFromSyntax(ctx, exprNode);
             declType = inferredDeclType(ctx->func, rhs);
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
             //scope (O25a) - the initializer's own tag may be a callee's scope variable, meaningless here
@@ -11989,7 +12170,8 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->checkingTry = prevChecking;
     struct syntax* opNode = firstPartOfType(s, SNTX_ASSIGN_OP);
     struct token opTok = partAt(opNode, 0)->tok;
-    struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    //G10c: a plain "=" expects the target's type
+    struct operand* rhs = buildExpecting(ctx, firstPartOfType(s, SNTX_EXPR), opTok.type == TOK_ASS ? &target->type : NULL);
     return buildAssignCore(ctx, target, rhs, opTok);
 }
 
@@ -12423,7 +12605,11 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (!exprCanStandAsStatement(op) && !op->type.unknown) Err(op->tok, ERR_NOT_A_STATEMENT);
+    //...text on a line of its own most often meant to continue the join on the line before (E11b)
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) {
+        if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
+        else Err(op->tok, ERR_NOT_A_STATEMENT);
+    }
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;
@@ -12946,12 +13132,17 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     struct list baseline = snapshotScopeBindings(innerCtx->scope);
     struct loopMark mark = loopMarkAt(innerCtx); //O13a
     innerCtx->inLoop = true;
+    bool broken = false;
+    innerCtx->loopBreak = &broken;
     if (condNode) {
         stmt.op = buildExprFromSyntax(innerCtx, condNode);
         if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     }
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
     recheckLoopReturns(mark);
+    innerCtx->loopBreak = NULL;
+    //D10a: "for { }" with no break of its own leaves only by a return, an error or an ending - never by falling through
+    stmt.leavesOnlyByJump = !condNode && !broken;
     struct list after = snapshotScopeBindings(innerCtx->scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -13164,6 +13355,8 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct list baseline = snapshotScopeBindings(l.scope);
     struct loopMark mark = loopMarkAt(ctx); //O13a
     l.inLoop = true;
+    bool rangeBroken = false;
+    l.loopBreak = &rangeBroken; //D10a: its own breaks, not an outer loop's
     struct list body = ListInit(sizeof(struct statement));
     if (idxTok) { struct statement d = buildVarDeclFromOperand(&l, *idxTok, rangeRead(vC, kw)); ListAdd(&body, &d); }
     struct operand* stepped = OperandBinary(rangeRead(vStep, kw), rangeRead(vC, kw), OPERATION_MUL, kw);
@@ -13261,7 +13454,10 @@ static void forInTryFinish(struct forInTry* ft) {
         //built once per call, each in its own place - a clause's block is code, emitted where the call is; reported once
         if (c > 0) ErrMsgMuteStart();
         cctx->inLoop = true;
+        bool clauseBroken = false;
+        cctx->loopBreak = &clauseBroken; //D10a: the loop it ends is the for-in's
         buildCatchClauses(cctx, ft->s, call, &ft->errors, false, NULL, ft->kw, &call->catchClauses);
+        cctx->loopBreak = NULL;
         if (c > 0) ErrMsgMuteEnd();
         for (int k = 0; k < call->catchClauses.len; k++) {
             struct catchClause* cc = ListGetIdx(&call->catchClauses, k);
@@ -13607,7 +13803,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             ok = TypeSatisfiesInterface(concrete, *iterT, NULL);
         }
         if (!ok) {
-            Err(src->tok, ERR_NOT_ITERABLE, &src->type);
+            if (!src->type.unknown) Err(src->tok, ERR_NOT_ITERABLE, &src->type); //an unknown one was reported
             return (struct statement){0};
         }
         struct statement d = buildVarDeclFromOperand(&wctx, forInHiddenTok(kw, "It"), itOp);
@@ -13650,6 +13846,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list baseline = snapshotScopeBindings(lctx.scope);
     struct loopMark mark = loopMarkAt(ctx); //O13a
     lctx.inLoop = true;
+    bool inBroken = false;
+    lctx.loopBreak = &inBroken; //D10a: its own breaks, not an outer loop's
     //the body starts with what the loop hands it; the program's own statements follow
     struct list body = ListInit(sizeof(struct statement));
     if (isArray || indexable) {
@@ -13772,6 +13970,8 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list baseline = snapshotScopeBindings(innerCtx.scope);
     struct loopMark mark = loopMarkAt(&innerCtx); //O13a
     innerCtx.inLoop = true; //S11
+    bool forBroken = false;
+    innerCtx.loopBreak = &forBroken; //D10a: its own breaks, not an outer loop's
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
     //the post clause runs after the body, so it is checked after it - which also puts a reassignment it
     //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own
@@ -13793,6 +13993,8 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct checkCtx loopCtx = *ctx;
     struct loopMark mark = loopMarkAt(ctx); //O13a
     loopCtx.inLoop = true; //S11
+    bool doBroken = false;
+    loopCtx.loopBreak = &doBroken; //D10a: its own breaks, not an outer loop's
     stmt.block = buildBlock(&loopCtx, firstPartOfType(s, SNTX_BLOCK));
     recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(ctx->scope);
@@ -14197,6 +14399,146 @@ struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
     return op;
 }
 
+//S13a: a pattern as exhaustiveness sees it - what it matches, read off its syntax: anything (a name, "_"), one Bool, one
+//case of an enum with its payload's patterns, or a value no set of values exhausts (a number, text, null)
+enum patKind { PAT_ANY, PAT_BOOL, PAT_CASE, PAT_VALUE };
+struct pat { enum patKind kind; bool b; int tag; struct list subs; /* struct pat* */ };
+
+static struct pat* patAnyNew(void) { struct pat* p = MallocOrCrash(sizeof(struct pat)); *p = (struct pat){0}; return p; }
+
+static struct pat* patOfValue(struct syntax* expr) {
+    struct pat* p = patAnyNew();
+    p->kind = PAT_VALUE;
+    struct syntax* core = exprCoreOf(expr);
+    if (core && core->type == SNTX_EXPR_PRIMARY && core->parts.len == 1 && partAt(core, 0)->isToken
+            && partAt(core, 0)->tok.type == TOK_BOOL_LIT) {
+        p->kind = PAT_BOOL;
+        p->b = partAt(core, 0)->tok.str.ptr[0] == 't';
+    }
+    return p;
+}
+
+static struct pat* patOfSyntax(struct syntax* sx, struct type t) {
+    if (sx->type == SNTX_PAT_BIND) return patAnyNew();
+    if (sx->type == SNTX_PAT_VALUE) return patOfValue(firstPartOfType(sx, SNTX_EXPR));
+    if (sx->type != SNTX_CASE_PATTERN) return patOfValue(sx);
+    struct pat* p = patAnyNew();
+    p->kind = PAT_VALUE; //a case of another type, or none: reported where it was built, and it covers nothing
+    struct list idens = allTokOfType(firstPartOfType(sx, SNTX_NAME), TOK_IDEN);
+    if (t.bType != BASETYPE_CHOICE || !idens.len) return p;
+    struct str caseName = strFromTok(*(struct token*)ListGetIdx(&idens, idens.len - 1));
+    struct var* c = NULL;
+    for (int i = 0; i < t.vars.len && !c; i++) {
+        struct var* v = ListGetIdx(&t.vars, i);
+        if (StrCmp(v->name, caseName)) { c = v; p->tag = i; }
+    }
+    if (!c) return p;
+    p->kind = PAT_CASE;
+    p->subs = ListInit(sizeof(struct pat*));
+    int k = 0;
+    for (int i = 0; i < sx->parts.len; i++) {
+        struct syntaxPart* part = partAt(sx, i);
+        if (part->isToken || part->sntx->type == SNTX_NAME) continue;
+        if (k >= c->type.vars.len) { p->kind = PAT_VALUE; return p; } //arity, reported where it was built
+        struct pat* sub = patOfSyntax(part->sntx, ((struct var*)ListGetIdx(&c->type.vars, k))->type);
+        ListAdd(&p->subs, &sub);
+        k++;
+    }
+    if (k && k != c->type.vars.len) p->kind = PAT_VALUE;
+    return p; //no list at all ("E.C") matches whatever the payload holds - an empty subs stands for that
+}
+
+//one row per unguarded alternative of a match: the alternative's pattern, as a vector of one
+static struct list matchPatternRows(struct syntax* matchNode, struct type t) {
+    struct list rows = ListInit(sizeof(struct list));
+    struct list cases = allPartsOfType(matchNode, SNTX_STMNT_CASE);
+    for (int i = 0; i < cases.len; i++) {
+        struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
+        if (firstPartOfType(c, SNTX_CASE_GUARD)) continue;
+        for (int j = 0; j < c->parts.len; j++) {
+            struct syntaxPart* part = partAt(c, j);
+            if (part->isToken || (part->sntx->type != SNTX_CASE_PATTERN && part->sntx->type != SNTX_EXPR)) continue;
+            struct list row = ListInit(sizeof(struct pat*));
+            struct pat* p = patOfSyntax(part->sntx, t);
+            ListAdd(&row, &p);
+            ListAdd(&rows, &row);
+        }
+    }
+    return rows;
+}
+
+static bool patRowsCover(struct list* rows, struct type* types, int ntypes, int depth);
+static bool patBoolCovered(struct list* rows, bool b, struct type* rest, int nrest, int depth);
+static bool patCaseCoveredAt(struct list* rows, struct type t, int tag, struct type* rest, int nrest, int depth);
+
+//the rows that let the first position be the constructor (a Bool's value b, or an enum's case tag), each with that
+//position replaced by the constructor's own positions (none for a Bool, the payload's fields for a case)
+static struct list patSpecialize(struct list* rows, enum patKind kind, bool b, int tag, int arity) {
+    struct list out = ListInit(sizeof(struct list));
+    for (int i = 0; i < rows->len; i++) {
+        struct list* row = ListGetIdx(rows, i);
+        struct pat* p0 = *(struct pat**)ListGetIdx(row, 0);
+        bool takes = p0->kind == PAT_ANY || (kind == PAT_BOOL && p0->kind == PAT_BOOL && p0->b == b)
+                     || (kind == PAT_CASE && p0->kind == PAT_CASE && p0->tag == tag);
+        if (!takes) continue;
+        struct list nr = ListInit(sizeof(struct pat*));
+        for (int k = 0; k < arity; k++) {
+            struct pat* sub = p0->kind == PAT_CASE && p0->subs.len ? *(struct pat**)ListGetIdx(&p0->subs, k) : patAnyNew();
+            ListAdd(&nr, &sub);
+        }
+        for (int k = 1; k < row->len; k++) ListAdd(&nr, ListGetIdx(row, k));
+        ListAdd(&out, &nr);
+    }
+    return out;
+}
+
+//S13a: whether the rows cover every value of the positions' types (Maranget's exhaustiveness: a constructor is
+//expanded only when every one of its type's constructors is written at the first position - otherwise only the rows
+//matching anything there can cover what is not written, so a recursive enum is never unfolded past its patterns)
+static bool patRowsCover(struct list* rows, struct type* types, int ntypes, int depth) {
+    if (ntypes == 0) return rows->len > 0;
+    if (!rows->len || depth > 64) return false;
+    struct type t0 = types[0];
+    bool complete = t0.bType == BASETYPE_BOOL || t0.bType == BASETYPE_CHOICE;
+    int n = t0.bType == BASETYPE_BOOL ? 2 : t0.bType == BASETYPE_CHOICE ? t0.vars.len : 0;
+    for (int c = 0; c < n && complete; c++) {
+        bool seen = false;
+        for (int i = 0; i < rows->len && !seen; i++) {
+            struct pat* p0 = *(struct pat**)ListGetIdx((struct list*)ListGetIdx(rows, i), 0);
+            seen = t0.bType == BASETYPE_BOOL ? p0->kind == PAT_BOOL && p0->b == (c == 1) : p0->kind == PAT_CASE && p0->tag == c;
+        }
+        complete = seen;
+    }
+    if (!complete || n == 0) { //only what matches anything at the first position covers it
+        struct list rest = patSpecialize(rows, PAT_ANY, false, -1, 0);
+        return patRowsCover(&rest, types + 1, ntypes - 1, depth + 1);
+    }
+    for (int c = 0; c < n; c++) {
+        bool ok = t0.bType == BASETYPE_BOOL ? patBoolCovered(rows, c == 1, types + 1, ntypes - 1, depth)
+                                           : patCaseCoveredAt(rows, t0, c, types + 1, ntypes - 1, depth);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+static bool patBoolCovered(struct list* rows, bool b, struct type* rest, int nrest, int depth) {
+    struct list sp = patSpecialize(rows, PAT_BOOL, b, -1, 0);
+    return patRowsCover(&sp, rest, nrest, depth + 1);
+}
+
+static bool patCaseCoveredAt(struct list* rows, struct type t, int tag, struct type* rest, int nrest, int depth) {
+    struct var* c = ListGetIdx(&t.vars, tag);
+    int arity = c->type.vars.len;
+    struct list sp = patSpecialize(rows, PAT_CASE, false, tag, arity);
+    struct type* ts = MallocOrCrash(sizeof(struct type) * (size_t)(arity + nrest + 1));
+    for (int k = 0; k < arity; k++) ts[k] = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+    for (int k = 0; k < nrest; k++) ts[arity + k] = rest[k];
+    return patRowsCover(&sp, ts, arity + nrest, depth + 1);
+}
+
+//whether the rows cover case tag of the matched enum t, whatever its payload holds
+static bool patCaseCovered(struct list* rows, struct type t, int tag) { return patCaseCoveredAt(rows, t, tag, NULL, 0, 0); }
+
 static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
     if (varNode) return buildTypeMatchStmnt(ctx, s, varNode, asValue);
@@ -14250,23 +14592,37 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
     //where exhaustiveness is decidable and worth deciding: the set of cases is closed and written in one declaration,
     //so the compiler can read it - unlike an integer, whose "cases" are not enumerable in any useful sense. It is what
     //makes adding a case to an enum tell you every place that now has to handle it, which is most of the reason to
-    //declare one. A case covers what it matches whatever the payload holds, and only when it has no guard (S13e):
-    //a nested pattern, a value in the payload or a guard may let the value through to the next case.
-    if (matched->type.bType == BASETYPE_CHOICE && !stmt.hasNomatch) {
-        for (int i = 0; i < matched->type.vars.len; i++) {
-            bool covered = false;
-            for (int j = 0; j < stmt.matchCases.len && !covered; j++) {
-                struct statement* cs = ListGetIdx(&stmt.matchCases, j);
-                for (int k = 0; !cs->caseGuard && k < cs->caseAlts.len && !covered; k++) {
-                    covered = ((struct caseAlt*)ListGetIdx(&cs->caseAlts, k))->coversTag == i;
-                }
+    //declare one. Its unguarded patterns cover it together (S13e: a guard may let the value through): a case named
+    //bare or with names covers it whatever the payload holds, and payload patterns covering every value at each
+    //position cover it too - "Service(true)" and "Service(false)", or every case of an enum in the payload. A Bool
+    //is covered by "true" and "false" as an enum is by its cases.
+    bool covers = false;
+    if ((matched->type.bType == BASETYPE_CHOICE || matched->type.bType == BASETYPE_BOOL) && !stmt.hasNomatch
+            && !matched->type.unknown) {
+        struct list rows = matchPatternRows(s, matched->type);
+        if (matched->type.bType == BASETYPE_BOOL) covers = patRowsCover(&rows, &matched->type, 1, 0);
+        else {
+            covers = true;
+            for (int i = 0; i < matched->type.vars.len && covers; i++) {
+                if (patCaseCovered(&rows, matched->type, i)) continue;
+                Err(matched->tok, ERR_MATCH_NOT_EXHAUSTIVE, ((struct var*)ListGetIdx(&matched->type.vars, i))->name, &matched->type);
+                covers = false;
             }
-            if (!covered) { Err(matched->tok, ERR_MATCH_NOT_EXHAUSTIVE, ((struct var*)ListGetIdx(&matched->type.vars, i))->name, &matched->type); break; }
         }
     }
-    //S12b: a match used as a value gives one on every path - only an enum's cases can be known to be covered
-    if (asValue && !stmt.hasNomatch && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
+    //S12b: a match used as a value gives one on every path - only an enum's cases, or a Bool's, can be known covered
+    if (asValue && !stmt.hasNomatch && !covers && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
         Err(firstTokOfType(s, TOK_MATCH), ERR_MATCH_VALUE_NEEDS_NOMATCH, &matched->type);
+    }
+    //S13a: what a match covering every case lets through - a null reference, which no case pattern matches - is
+    //unreachable, in a statement as in a value: a statement every clause of which leaves leaves (D10a), and it may not
+    //fall through instead, its function returning nothing
+    if (covers && !asValue) {
+        stmt.hasNomatch = true;
+        struct statement u = (struct statement){0};
+        u.sType = STATEMENT_UNREACHABLE;
+        stmt.nomatchBlock = ListInit(sizeof(struct statement));
+        ListAdd(&stmt.nomatchBlock, &u);
     }
     //beyond that, this checker doesn't attempt exhaustiveness analysis, so "no case matched" is always
     //folded in as a live possibility (via merged's own initial "unchanged" value) - conservative, never
@@ -14395,7 +14751,9 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
     struct syntax* exprNode = exprNodes.len > 0 ? *(struct syntax**)ListGetIdx(&exprNodes, 0) : NULL;
-    struct operand* val = exprNode ? buildExprFromSyntax(ctx, exprNode) : NULL;
+    struct type* retExpect = exprNodes.len == 1 && ctx->func && ctx->func->type.hasRetType && !ctx->func->inferRet
+                             ? ctx->func->type.retType : NULL;
+    struct operand* val = exprNode ? buildExpecting(ctx, exprNode, retExpect) : NULL; //G10c
     struct token tok = firstTokOfType(s, TOK_RET);
     //D8c: "return a, b" builds the function's several results - as the struct literal of its result tuple,
     //so each value is fit-checked against its own result type exactly as a field is. "return f()" of a call
@@ -14652,6 +15010,7 @@ struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct checkCtx dctx = *ctx;
     dctx.inDefer = true;
     dctx.inLoop = false;
+    dctx.loopBreak = NULL;
     dctx.joinHasSpawn = NULL;
     stmt.block = buildBlock(&dctx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
@@ -14916,9 +15275,11 @@ static bool stmntAlwaysExits(struct statement* s) {
             //every case - which is the fact this rule needs and which nothing used before
             return s->op && s->op->type.bType == BASETYPE_CHOICE;
         }
-        //a loop is never counted, even a "do" whose body always returns: with break (S11) the body
+        //D10a: "for { }" with no break of its own never falls through - it leaves only by what leaves its function
+        case STATEMENT_FOR: return s->leavesOnlyByJump;
+        //any other loop is never counted, even a "do" whose body always returns: with break (S11) the body
         //exiting is not the same as the loop exiting, and proving otherwise needs a reachability pass
-        //this rule deliberately does not have. Write "unreachable" after an infinite loop.
+        //this rule deliberately does not have
         default: return false;
     }
 }
@@ -15320,6 +15681,7 @@ static bool blockLeavesValue(struct list* block) {
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
     if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b
+    if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
 
@@ -15596,6 +15958,11 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_MATCH: return buildMatchStmnt(ctx, actual);
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_JOIN: return buildJoinStmnt(ctx, actual);
+        case SNTX_STMNT_BLOCK: { //S1a: a block of its own - built as the "if true" a chosen branch already is (S8b)
+            struct statement stmt = buildEmptyIfStmnt(ctx, firstTokAnywhere(actual));
+            stmt.block = buildBlock(ctx, firstPartOfType(actual, SNTX_BLOCK));
+            return stmt;
+        }
         case SNTX_STMNT_SPAWN: return buildSpawnStmnt(ctx, actual);
         case SNTX_STMNT_DEFER: return buildDeferStmnt(ctx, actual);
         case SNTX_STMNT_BREAK: return buildBreakStmnt(ctx, actual, STATEMENT_BREAK);
@@ -15863,7 +16230,12 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         }
         //a bare pun declares no local of its own: the same-named parameter already carries both the name
         //and the value, and re-declaring it would collide with it (VAR_NAME_IN_USE) for no gain
-        if (!isPun) {
+        //C2a: a field with a parameter's name - the parameter's value is taken by writing the field bare
+        struct var* clash = !isPun ? scopeFindLocal(&ctorScope, field->name) : NULL;
+        if (clash) {
+            Err(field->tok, ERR_FIELD_HAS_PARAM_NAME, field->tok);
+            Note(clash->tok, NOTE_DECLARED_HERE, clash->tok);
+        } else if (!isPun) {
             struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, field->type, true);
             local->scopeBindings = field->scopeBindings;
             struct statement decl = (struct statement){0};
@@ -16245,6 +16617,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
+    unmetTypeInsts = ListInit(sizeof(struct type*));
     unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
@@ -16289,6 +16662,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     for (int i = 0; i < deferredConstraints.len; i++) {
         struct deferredConstraint* dc = ListGetIdx(&deferredConstraints, i);
         if (checkTypeConstraints(&dc->generic->typeConstraints, &dc->bindings, dc->site)) continue;
+        ListAdd(&unmetTypeInsts, &dc->spec); //nor its methods' (instantiateFunc)
         for (int k = 0; k < pendingTypeInsts.len; k++) {
             if (((struct pendingTypeInst*)ListGetIdx(&pendingTypeInsts, k))->spec != dc->spec) continue;
             ListRemoveIdx(&pendingTypeInsts, k);
@@ -16299,6 +16673,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) refreshStructSnapshots(ListGetIdx(&m->types, j));
     }
+    refreshInstantiationSnapshots();
     for (int i = 0; i < allModules.len; i++) {
         struct semaModule* m = *(struct semaModule**)ListGetIdx(&allModules, i);
         for (int j = 0; j < m->types.len; j++) checkHoldsItself(ListGetIdx(&m->types, j));
