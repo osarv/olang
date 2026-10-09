@@ -78,6 +78,35 @@ test "Clear empties a list and keeps its chunks for the Pushes that follow" {
     assert e.Len() == 1 and e[0] == 1
 }
 
+# an iterator over a List that shrinks under it - Clear, or Pop below its position - ends at the list's new end (it
+# went on through the chunks past it, reading what is no element), and one grown past its position again goes on with
+# what the list holds there: -1, 0 and 14, as one number so a global can bake it
+fn listIterShrunk() I64 {
+    l := listUpTo(20)
+    it := l.Iter()
+    for j in range 15 { x := try it.Next() catch Exhausted { unreachable } }
+    l.Clear()
+    l.Push(100)
+    a := try it.Next() catch default -1
+    b := it.Count(fn(x) { return true })
+    for i in range 30 { l.Push(i) }                     # position 15 holds 14 now
+    c := try it.Next() catch default -1
+    p := listUpTo(20)
+    pt := p.Iter()
+    for j in range 12 { x := try pt.Next() catch Exhausted { unreachable } }
+    for j in range 10 { x := try p.Pop() catch { unreachable } }
+    d := try pt.Next() catch default -1
+    e := pt.Any(fn(x) { return true })
+    return a * 1000000 + b * 10000 + c * 100 + d * 10 + (1 if e else 0)
+}
+
+listIterShrunkBaked := listIterShrunk()
+
+test "an iterator over a List ends where the list now ends after Clear or Pop" {
+    assert listIterShrunk() == listIterShrunkBaked
+    assert listIterShrunkBaked == -1000000 + 1400 - 10
+}
+
 test "RemoveAt and Insert move the elements after the position, across chunk boundaries" {
     l := listUpTo(60)
     model := I64[x for x in range 60].ToList()

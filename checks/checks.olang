@@ -185,7 +185,12 @@ fn runCase(name String&) String& {
         return ""
     }
     if status != 0 { return failure($name " did not build", dir) }
-    if check.Eq("run") and sh(dir, "./build/" $base " > out.txt 2>&1") != 0 {
+    bin := base
+    for f in flags.Split(" ") {                 # -d and -r name their binary for what it was built as (B2c, P7)
+        if f == "-d" { bin = $base ".debug" }
+        if f == "-r" { bin = $base ".race" }
+    }
+    if check.Eq("run") and sh(dir, "./build/" $bin " > out.txt 2>&1") != 0 {
         return failure($name " built but did not run cleanly", dir)
     }
     return ""
@@ -554,6 +559,9 @@ fn interp(r mut report&) ? Failed {
                  "-i prog.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
+    try r.expect(outOf(dir).Contains("cyclic.olang:8: the comparison recurses deeper than -i allows"),
+                 "-i cyclic.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 1, "-i tasks.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("tasks.olang:5: it starts tasks, which -i does not run yet"),
                  "-i tasks.olang output", dir)

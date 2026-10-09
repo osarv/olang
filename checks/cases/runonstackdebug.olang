@@ -1,0 +1,13 @@
+# check: run
+# flags: -d
+# os.RunOnStack raises a stack below the least a thread may have to that least - which counts the thread's static TLS,
+# as glibc's own answer (__pthread_get_minstack) does. Sizes of 20000 bytes and below aborted in a -d build, whose link
+# kept every object's copy of the runtime's thread-local storage (0x4680 bytes) before those globals went in comdats (B3)
+import "std/os"
+fn main() ? {
+    x mut Array<I64>& = Array<I64>(1)
+    for sz in I64[65536, 20000, 16384, 4096, 0] {
+        os.RunOnStack(sz, fn() { x[0] = x[0] + 1 })
+    }
+    assert x[0] == 5
+}
