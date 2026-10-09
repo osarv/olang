@@ -64,6 +64,11 @@ parameters ... Expand it across arrays too ... Array<T, size>. Then re-evaluate 
 Being designed (wt-constgen, phase 1 spec only until the checker agents merge); my re-evaluation: Matrix<T, R, C> with
 each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choice gets stronger, not weaker. Note:
 `Array<T, N>` partly revisits the user's earlier T11a ("make the size in the type irrelevant") - their call now.
+9. (asked 2026-10-09, oann) static graph only (record once, replay with no allocation), or also an eager mode
+   later for models whose structure depends on their data? Default: static only. Rec: static only for now.
+10. (asked 2026-10-09, oann) after the MNIST MLP, which first: convolutions, transformers (attention, layer norm,
+   BF16), or spiking networks (the FPGA direction)? Default: none chosen. Rec: transformers (the widest use), unless
+   SNNs are the near-term goal.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

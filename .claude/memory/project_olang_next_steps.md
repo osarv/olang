@@ -205,6 +205,13 @@ because what it finds about structure feeds the refactor.
 - 10:30: Matrix decided (linalg agent and oann agent told: Matrix<T> with runtime dims now, shape checks in one place,
   kernels on (rows, cols, stride) so dims can move into the type). Const generics + Array<T, N>: wt-constgen phase 1
   (spec design, no code) running; phase 2 implementation after chk2scope/chk2syn merge (they edit generics).
+- 10:45: oann phase 1 pushed (osarv/oann claude/github-environment-setup-ftu9va, 53fbb25): DESIGN.md (recorded graph
+  replayed with zero allocation, one planned arena, closed op enum + Custom), MNIST pipeline in olang, rand/clock.
+  Decided by me: one std/rand (oann's xoshiro moves there, via the linalg agent); a small C trainer over OpenBLAS as
+  the benchmark reference (old C oann does not compile); PyTorch CPU via pip if the network allows; oann laid out as
+  an importable package. Queued small language items from it: `x[i, j]` -> At(i, j)/SetAt(i, j, v) (E31 multi-index);
+  a hex/binary literal with the top bit set fits U64 (L10a); a failed test assert prints its file:line. Phase 2 waits
+  for the matrix library (then update /home/user/wt/oannc and resume it).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
