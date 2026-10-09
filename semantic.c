@@ -18654,6 +18654,19 @@ static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
         struct operand* v = *(struct operand**)ListGetIdx(vals, i);
         if (!(operandAdaptsAsLiteral(v) && TypeIsNumeric(v->type))) numLits = false;
     }
+    //E28: array literals of one element type are arrays of it, whatever their lengths - the length is no part of an
+    //array's type (T7), so they give an Array<T>
+    bool arrLits = vals->len > 1;
+    for (int i = 0; arrLits && i < vals->len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+        arrLits = v->isLiteral && v->type.bType == BASETYPE_ARRAY && !v->type.structMAlloc && v->type.arrElem
+                  && anchor->type.bType == BASETYPE_ARRAY && anchor->type.arrElem && TypeIsSame(*v->type.arrElem, *anchor->type.arrElem);
+    }
+    if (arrLits && !allText) {
+        t = anchor->type;
+        t.arrMalloc = true;
+        t.arrLen = NULL;
+    }
     for (int i = 0; numLits && i < vals->len; i++) { //only literals: the widest, as two literals in "a if c else b"
         struct type vt = (*(struct operand**)ListGetIdx(vals, i))->type;
         if (numericTypeRank(vt) > numericTypeRank(t)) t = vt;
@@ -18672,7 +18685,7 @@ static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
         FinalizeLambda(v, &t);
         if (v->type.unknown || t.unknown || TypeIsSame(v->type, t)) continue;
         if (t.structMAlloc && valueBuiltHere(v) && typeConvertsBetweenValueAndReference(v->type, t)) continue;
-        if ((condAdapts(v) || numLits || allText) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
+        if ((condAdapts(v) || numLits || allText || arrLits) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
         Err(v->tok, ERR_MATCH_VALUE_TYPES, &t, &v->type);
         bad = true;
     }

@@ -3078,7 +3078,9 @@ error. The match must give a value whatever the matched value is: over an enum o
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
 counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
-values that are all numeric literals (or such) take the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
+values that are all numeric literals (or such) take the widest, values that are all written text are a `String` (T29c),
+and values that are all array literals of one element type are an array of it whatever their lengths (`case 1 =>
+I64[1, 2, 3]` beside `nomatch => I64[4, 5]` is an `Array<I64>`), as in `a if c else b`. Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
