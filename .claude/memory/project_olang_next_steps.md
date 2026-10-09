@@ -319,6 +319,14 @@ because what it finds about structure feeds the refactor.
   path helpers, padded formatting, isatty, radix/unsigned ParseInt) -> a std batch after tbare. `-i` cannot run the
   parser (3 GB on 30 KB): -i stage 2 matters for the port's testing. Clean builds of a 25k-line port would take
   minutes (22 IR lines per source line; clang 2.8 s per 1.5 MB IR).
+- 17:30 CEST (15:30 UTC): tbare merged and pushed (6999023): G8b is the introduction rule for type variables and
+  constants; tools/bare_typevars.py migrates (idempotent); oann needs it run once its compiler moves (324 occurrences).
+  Usage at 15:13 UTC: five-hour 0.61, weekly 0.38 (five-hour ~19%/h, weekly ~4.7%/h, ratio ~4). Started wt-perm (the
+  permissions batch, its own migration script for oann) and wt-stdport (buffered writer, path helpers, padding,
+  IsTerminal, radix/unsigned parsing). Running: review (today's code), oann 3b, settle phase 2, chk3, perm, stdport.
+  OANN CATCH-UP once 3b and settle-2 finish: move oannc2 to master; merge wt-settle into oann's branch; run
+  tools/bare_typevars.py and the perm script on oann; replace kernels.olang by linalg.GemmWorkspace in the same step
+  (native is 3x slower with the copy); fix C2e inline arrays (now Array<T, N>); make test; push.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
