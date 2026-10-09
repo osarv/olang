@@ -151,12 +151,13 @@ struct type;
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
     X(ERR_CONST_VAR_BARE,               "G23",   "%S is a constant variable - write it as a value '<%S>'") \
     X(ERR_CONST_VAR_AFTER_SHIFT,        "G23",   "'<<' is a shift - a comparison before a constant variable is written with a space, 'i < <%S>', not 'i <<%S>'") \
+    X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is constant variable <%S> of this declaration - a name means one thing, so name this apart") \
     X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
     X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "<%S> is a type variable, so its cases are types") \
     X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
-    X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a",   "an array inside an array or a struct is held by reference - write %t&") \
+    X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
     X(ERR_TYPE_VAR_WRITTEN_BARE,        "G8b",   "type variable %n is written in angle brackets everywhere: '<%S>'") \
     X(ERR_TYPE_ARG_NAMED_SCOPE,         "G11",   "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") \

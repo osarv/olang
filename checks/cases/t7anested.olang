@@ -1,4 +1,4 @@
-# check: fail error[T7a]: an array inside an array or a struct is held by reference - write Array<I32>&
+# check: fail error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length
 # an array held inside a struct shares its storage when the struct is copied, so one whose length is not its type's
 # must be written as a reference - a fixed-length one (T7c) holds its elements in the value instead
 type W struct(n I32) { a mut Array<I32> = Array<I32>(n) }

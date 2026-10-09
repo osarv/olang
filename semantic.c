@@ -2699,6 +2699,7 @@ static struct type* instantiateTypeAt(struct type* found, struct list* bindings,
 
 static bool typeDeclaresEq(struct type v);
 static bool nameIsAType(struct semaModule* mod, struct str name);
+static void rejectConstVarClash(struct semaModule* mod, struct str name, struct token tok);
 static bool intLiteralIsDecimal(struct str text);
 bool ChoiceHasPayload(struct type t);
 long long decodeCharBody(char* ptr, int len);
@@ -4396,10 +4397,13 @@ static bool strListHas(struct list* l, struct str n) {
     return false;
 }
 //G22: a name is a type variable or a constant variable, never both, and every constant parameter one constant variable
-//fills has one type. G4: a constant variable is inferred only where a parameter's type holds it as a whole argument.
-//Names reported here are added to `reported`, so the ordinary G4 check on the result does not report them again
-static void checkSigConstVars(struct type* ft, struct list* enclosing, struct list* reported) {
+//fills has one type; and a constant variable is named apart from the module's globals, functions and build constants
+//and from the signature's parameters (D3a). G4: a constant variable is inferred only where a parameter's type holds it
+//as a whole argument. Names reported here are added to `reported`, so the ordinary G4 check on the result does not
+//report them again
+static void checkSigConstVars(struct semaModule* mod, struct type* ft, struct list* enclosing, struct list* reported) {
     struct list uses = ListInit(sizeof(struct sigVarUse));
+    struct list named = ListInit(sizeof(struct str));
     collectSigVarUses(*ft, &uses, 0);
     for (int i = 0; i < uses.len; i++) {
         struct sigVarUse* u = ListGetIdx(&uses, i);
@@ -4415,7 +4419,14 @@ static void checkSigConstVars(struct type* ft, struct list* enclosing, struct li
             }
         }
         if (!bad && !strListHas(&ft->typeParams, u->name)) { Err(u->tok, ERR_CONST_VAR_ONLY_IN_EXPR, u->name); bad = true; }
-        if (bad) ListAdd(reported, &u->name);
+        if (bad) { ListAdd(reported, &u->name); continue; }
+        if (strListHas(&named, u->name)) continue;
+        ListAdd(&named, &u->name);
+        rejectConstVarClash(mod, u->name, u->tok);
+        for (int j = 0; j < ft->vars.len; j++) {
+            struct var* param = ListGetIdx(&ft->vars, j);
+            if (StrCmp(param->name, u->name)) Err(param->tok, ERR_CONST_VAR_SHADOWED, param->tok, u->name);
+        }
     }
 }
 
@@ -4501,7 +4512,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         //inference matches arguments against parameters and nothing else. Reported here, at the
         //declaration, rather than at every call that fails to resolve it.
         struct list constReported = ListInit(sizeof(struct str));
-        checkSigConstVars(&t, prevTPN, &constReported); //G22, and G4 for a constant variable
+        checkSigConstVars(mod, &t, prevTPN, &constReported); //G22, and G4 for a constant variable
         if (constReported.len) *t.retType = unknownTypeStandIn();
         struct list retVars = ListInit(sizeof(struct str));
         TypeCollectVars(*t.retType, &retVars);
@@ -4526,7 +4537,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         finishResultScope(&t, firstTokAnywhere(retTypeNode));
     } else {
         struct list constReported = ListInit(sizeof(struct str));
-        checkSigConstVars(&t, prevTPN, &constReported);
+        checkSigConstVars(mod, &t, prevTPN, &constReported);
     }
     declareScopeVarsCheck(scopeDeclNodes, &t.scopeVars, &t.vars, NULL, t.hasRetType ? t.retType : NULL);
     //G19: the constraints written on the signature's type variables
@@ -4734,6 +4745,7 @@ void resolveTypeDecl(struct type* t) {
         //not. Captured before the body is resolved, so the body's own "<T>" references have something to
         //be checked against.
         struct list declaredParams = ListInit(sizeof(struct str));
+        struct list declaredToks = ListInit(sizeof(struct token));
         struct syntax* paramsNode = firstPartOfType(actual, SNTX_TYPE_PARAMS);
         struct list declaredConstraints = ListInit(sizeof(struct type));
         struct list constraintNodes = ListInit(sizeof(struct syntax*));
@@ -4754,6 +4766,7 @@ void resolveTypeDecl(struct type* t) {
                 if (dup) { Err(nameTok, ERR_DECLARED_TWICE, nameTok); continue; }
                 if (nameIsAType(owner, pname)) Err(nameTok, ERR_TYPE_VAR_NAMES_TYPE, nameTok); //G1
                 ListAdd(&declaredParams, &pname);
+                ListAdd(&declaredToks, &nameTok);
             }
         }
 
@@ -4790,6 +4803,7 @@ void resolveTypeDecl(struct type* t) {
                     anyConst = true;
                     struct typeBinding cb = { *(struct str*)ListGetIdx(&declaredParams, i), ct };
                     ListAdd(&constVars, &cb);
+                    rejectConstVarClash(owner, cb.name, *(struct token*)ListGetIdx(&declaredToks, i)); //G22, D3a
                 }
             }
             ListAdd(&constParams, &slot);
@@ -5425,6 +5439,25 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
     if (StrCmp(name, StrFromCStr("_"))) Err(tok, ERR_UNDERSCORE_DECLARED);
 }
 
+//G22: whether a constant variable of the declaration being checked is named so - a struct's or trait's own parameter
+//while it is resolved, or one an instantiation binds while its body is checked
+static bool constVarNamed(struct str name) {
+    if (currentConstVars && bindingGet(currentConstVars, name)) return true;
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    return b && (b->bType == BASETYPE_CONST || b->isConstVar);
+}
+//G22, D3a: a constant variable may not be named as a global, a function or a build constant of its module. A type's
+//name is G1's to report, where any variable of the declaration is written
+static void rejectConstVarClash(struct semaModule* mod, struct str name, struct token tok) {
+    if (!mod || nameIsAType(mod, name)) return;
+    struct var* g = VarGetList(&mod->vars, name);
+    if (g) {
+        Err(tok, g->isFuncDecl ? ERR_SHADOWS_FUNCTION : ERR_SHADOWS_GLOBAL, tok);
+        if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
+    }
+    else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+}
+
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
 //global or a function), a build constant (B10), or the name of a type it sees - its own, the prelude's or a built-in
 //one, so that what follows "is" is a type exactly when it is a type's name (E10c, E32). A module is the unit that keeps a namespace small enough
@@ -5440,6 +5473,7 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
+    else if (constVarNamed(name)) Err(tok, ERR_CONST_VAR_SHADOWED, tok, name); //G22
 }
 
 struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str name, struct token tok, struct type type, bool mut) {
