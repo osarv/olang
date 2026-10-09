@@ -99,6 +99,11 @@ Go's single bytes; pushing to a List during a loop over it is specified as built
 `-i`'s next stage, when -i matters, is the redesign (compact values, scope-mirroring freeing, destructors) - in
 next-steps.
 
+**DECIDED OVERNIGHT 2026-10-09/10, FOR THE USER'S REVIEW** (the user: "make some hard decisions yourself ... record
+them and tell me tomorrow/tonight"): append each hard decision here as it is made, numbered, one or two lines with the
+rule and where it is recorded; the morning report lists them all, then they move out of the ledger.
+(none yet)
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
