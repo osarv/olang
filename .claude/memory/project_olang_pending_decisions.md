@@ -98,6 +98,16 @@ literature (equilibrium propagation, centered EP, Hopfield relaxation, TD(lambda
 rules, delta-rule associative memory, complementary learning systems), oann's own constants and API. RULE for every
 future agent implementing settling networks: work only from docs/settling.md and the papers - never open the original
 repository or its code. Not legal advice; told the user so.
+**Decided 2026-10-09 (the user): "18. Do that yes. We want spiking set up."** The settling networks' neuron model is
+a pluggable enum from the start - continuous neurons first, leaky integrate-and-fire (LIF) neurons learning from
+spike-count differences between the free and nudged phases set up as a real variant, aimed at the PYNQ-Z2. "We don't
+license either Oann or Olang" (may change; no licence files for now).
+Licence workaround (the user: "I really don't want to make myself forced to license"): clean room - copyright covers
+code, not ideas, equations or dynamics. docs/settling.md is the spec: dynamics only, each mechanism cited to the public
+literature (equilibrium propagation, centered EP, Hopfield relaxation, TD(lambda)/eligibility traces, three-factor
+rules, delta-rule associative memory, complementary learning systems), oann's own constants and API. RULE for every
+future agent implementing settling networks: work only from docs/settling.md and the papers - never open the original
+repository or its code. Not legal advice; told the user so.
 18. (asked 2026-10-09, re-explained when the user asked "what is 18?") spiking: should the settling networks' neuron
    be pluggable so a spiking neuron (leaky integrate-and-fire, learning from spike-count differences between the free
    and nudged phases) can replace the continuous one later - and is that the spiking direction meant for the FPGA?
