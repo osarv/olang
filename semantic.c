@@ -5934,6 +5934,9 @@ static bool opIsArrayLiteral(struct operand* op) {
 }
 
 bool callIsLanding(struct operand* op) {
+    //T29a: a conversion between a declared type and its representation is its argument, so it lands where that does -
+    //"return String(b.chars.ToArray())" built the array in the function's own scope, closed by the return
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) return callIsLanding(*(struct operand**)ListGetIdx(&op->args, 0));
     if (opIsArrayLiteral(op)) {
         for (int i = 0; i < op->args.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&op->args, i))) return true;
         return false;
@@ -5962,6 +5965,10 @@ static void landCallIn(struct operand* op, struct var* dst, int depth, bool prog
     if (dst && dst != SCOPE_AMBIGUOUS && dst->derivedFrom) { //O23a: nothing is built in a derived scope - where it is read
         dst = SemanticRuntimeScope(dst, &depth);                //through is where it would really be built
         if (dst) depth = 0;
+    }
+    if (op && op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) { //T29a: as callIsLanding says
+        landCallIn(*(struct operand**)ListGetIdx(&op->args, 0), dst, depth, program);
+        return;
     }
     if (op && opIsArrayLiteral(op)) {
         for (int i = 0; i < op->args.len; i++) landCallIn(*(struct operand**)ListGetIdx(&op->args, i), dst, depth, program);
