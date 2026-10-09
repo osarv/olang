@@ -9342,3 +9342,72 @@ from their original form.
   **Flaky, not fixed**: std/cancel's "a busy task stops when the token is cancelled" asserts the task counted at least
   once in the 5ms before `Cancel()`; under three concurrent verifies the task can start after it, and the test failed
   once in four full runs here (it passed three times alone).
+
+- **Benchmarks against C (2026-10-09).** Asked whether olang delivers its second principle, "C-like performance", I
+  wrote `bench/`: ten classic programs each written twice, as a good olang programmer would write them and as plain
+  C - nbody, spectral-norm, mandelbrot, fannkuch-redux, binary-trees (against malloc/free and against a hand-written
+  C arena), k-nucleotide (a `Map` keyed by slices of a generated sequence), an F32 matrix multiply, a `List` built by
+  `Push` and summed four ways, a four-task Collatz search (`join`/`spawn` against pthreads), and a text round trip
+  (`$n` into a `StringBuilder`, `Split`, `ParseInt` against snprintf and strtoll). Same algorithm and sizes, and the
+  outputs are compared byte for byte at the timed size - floats included, since the C side prints them with a copy of
+  util.c's `FloatShortest`, so a single differing bit fails the check. The C is built with exactly the flags
+  `addModeFlags` gives olang's output (`-O3 -flto`, default target); `run.sh -n` adds a `-march=native` column built
+  from olang's own IR, with `-ffp-contract=off` on the C side because clang would otherwise fuse multiply-adds into
+  FMAs and change the results (olang never contracts, and cannot ask for an FMA - a gap of its own on FMA hardware).
+  Timings are medians of interleaved repetitions under `/home/user/verify.lock`; the machine was shared with other
+  agents' builds throughout (load average 2-6), so two full runs were made and differences under ~10% are noise.
+  **The result: the code generator is at C's level for loops over arrays and numbers** (nbody, mandelbrot, fannkuch,
+  matmul, array sums and the parallel fan-out all within 10% either way, matmul ahead in both runs) **and ahead of it
+  for allocation** (binary-trees 5x faster than malloc/free, in 54% of the peak memory). The gaps are all in the
+  abstractions above that, and every one was read off the whole-program optimized IR (`bench/ir.sh` keeps LTO's
+  `save-temps` output), confirmed by editing that IR by hand or making the C do what olang does, and given a
+  reproducer in `bench/repro/`:
+  **Capturing lambdas (Fold 10-13x).** The deepest one. A function value is a pointer to a closure object whose first
+  word is the code. Once `Fold` is inlined, its loop loads that word before each indirect call - and because an
+  unknown call may write anything, LLVM can neither forward the store that built the closure nor hoist the capture,
+  so the call is never devirtualized, the iterator's fields go back to memory every step and nothing vectorizes. A
+  capture-free lambda is a constant global and inlines, which is why the 2026-10-07 "hand-loop speed" measurement of
+  `Count` did not see it; `Count` whose predicate reads one captured value is 2.2x its hand loop. Tagging the two
+  loads `!invariant.load` by hand took an Array's `Fold` from 1.93s to 0.19s (the hand loop is 0.17s), and
+  `!invariant.group` on the code pointer gave 0.33s - closures are immutable once built (D16c), so the fix is to say
+  so in the IR (invariant groups with a launder where arena memory is reused, as clang does for vtable pointers), or
+  to make a function value a `{code, env}` pair whose code pointer is an SSA value.
+  **A fresh array stored into a reference slot is built twice (List push 3.2x).** `l.chunks[k] = Array<T>(size)`
+  allocated and zero-filled the chunk where it landed, then `cgStoreInto`'s value-to-reference array branch copied it
+  into a second allocation - the bug the codegen review fixed for `:=` alone. `List.grow` and `Map.grow` pay it on
+  every growth. Removing the copy by hand: 20M pushes 0.53s to 0.29s (C 0.16s); the rest is D13c's zero-fill of each
+  chunk (a C copy of olang's List: 0.26s with the memset, 0.17s without), which a runtime that knows fresh mmap'd
+  memory is zero could skip without giving up "nothing uninitialized".
+  **`for x in List` (4.8x)** stays scalar because `ListIter.Next` checks for the next chunk on every element; the same
+  loop over `ToArray()` is at C's speed. A chunk-wise lowering (outer loop over chunks, counted inner loop) is the fix.
+  **Text (2.3-2.5x).** Every `$n` calls its rendering helper twice, measuring with a null buffer and then writing, so
+  two snprintf calls where C makes one (5M: 0.79s against 0.42s; C making two: 0.81s); `Split` runs `Find` twice over
+  the text and `Find` builds a bounds-checked slice and calls `Eq` at every position.
+  **Wrapping arithmetic (spectral-norm 1.37-1.44x)** is the one that is not a bug. E6c makes overflow defined, so
+  `(i + j) * (i + j + 1) / 2` carries no `nsw` and LLVM keeps the signed division as shift-add-shift; adding `nsw`
+  to the four operations by hand ran 0.54s against 0.83s (C 0.52s), and writing `>> 1` 0.57s. Rust and Go wrap and
+  pay the same; C and Zig's release mode make overflow undefined to avoid it. Whether olang should is a direction
+  question - recorded here, not decided. The same missing fact keeps `Find`'s per-position bounds check in its loop.
+  **Map (k-nucleotide 1.36-1.49x)** is an API gap: counting is `Get` then `Put`, two hashes and two chain walks; the C
+  rewritten the same way went from 0.83s to 1.03s, most of the distance to olang.
+  **binary-trees against a C arena (1.27-1.32x)** took three tries to explain. Arena chunk size (4KB against the C
+  arena's 64KB) measured as nothing in either direction. Cachegrind then showed `tree` executing 44% more
+  instructions than the C arena's (615M against 427M at depth 16) - the fast path rounds the cursor twice and jumps
+  into the block it shares with the slow path - but a hand-patched fast path that removed 15% of them changed the
+  time by nothing measurable. What did measure was layout: a constructor's arguments are evaluated before its instance
+  is allocated, so `Node(tree(d - 1), tree(d - 1))` lays the tree out in post-order and the pre-order `check` walks
+  against memory order. The C arena reordered to allocate children first went from 0.38s to 0.47s; olang written
+  parent-first went from 0.49s to 0.43s. Bump-allocating a constructor's instance before its arguments when it is
+  built into a reference would give the C layout invisibly.
+  **Where olang won, and why**: binary-trees against malloc/free is the arena doing what principle 1 promised; matmul
+  is ahead by 6-14% because the arena aligns a large array to 64 bytes (O8a) where glibc's mmap'd blocks get 16 (C
+  with `aligned_alloc(64)` caught up, in noisy measurements); nbody was level, LLVM fully unrolling olang's pair loop
+  where it SLP-vectorized C's - and under `-march=native` the same heuristics put C 1.33x ahead, C's body count being
+  a constant where olang's is an array length.
+  **Friction met writing the olang side** (README lists ten): a multi-line array literal cannot close with `]` on its
+  own line; there is no bare block to end a scope early (`if true` is rejected by S8a), so binary-trees drops its
+  stretch tree through a helper function; `x := a - b` is rejected, so nbody writes `F64` on ten temporaries;
+  `x I64 = 1 << s` shifts an `I32` (E8a - 256 for `s = 40`, silently) while `x I64 = 1 << 40` works, the opposite of
+  what adapting literals teach; `Map` lives in `std/map` while `List` is in the prelude; std has no clock, so the
+  runner is a shell script; and there is no fixed-precision float formatting, so the Benchmarks Game's `%.9f`
+  outputs cannot be produced. No compiler change was made - the fixes are for the agents working on the compiler.

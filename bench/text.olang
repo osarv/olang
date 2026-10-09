@@ -1,0 +1,21 @@
+# text: n numbers rendered with "$" into a StringBuilder, space-separated; the text split back into words and each
+# word parsed - the scripting path: rendering, building text, Split and ParseInt
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 1000
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    b := StringBuilder()
+    for i in range n {
+        b.Push($(i * 7919 % 1000003 - 500000))
+        b.PushChar(' ')
+    }
+    t := b.ToString()
+    total I64 = 0
+    for w in t.Split(" ") {
+        if w.Len() > 0 { total += try w.ParseInt() }
+    }
+    try io.Print($t.Len() " " $total "\n")
+}
