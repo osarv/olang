@@ -1500,6 +1500,8 @@ void collectType(struct semaModule* mod, struct token nameTok, enum baseType bTy
 //rest once every signature is known.
 static void rejectUnderscoreName(struct str name, struct token tok);
 static struct var* buildConstVar(struct str name);
+static bool isPreludeWord(struct str name);
+static struct var* preludeWordVar(struct str name);
 static struct semaModule* buildModule;
 void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isFuncDecl, bool isMethod) {
     struct str name = strFromTok(nameTok);
@@ -1509,6 +1511,7 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     //reported, and then declared anyway: later passes look the declaration up, and the module's own
     //name shadows the constant for the rest of the check, so nothing downstream trips over a missing var
     if (!isMethod && mod != buildModule && buildConstVar(name)) Err(nameTok, ERR_BUILD_CONST_REDECLARED, nameTok);
+    if (!isMethod && !isPreludeModule(mod) && isPreludeWord(name)) Err(nameTok, ERR_PRELUDE_WORD_REDECLARED, nameTok); //M19f
     if (!isMethod) {
         struct var* prev = VarGetList(&mod->vars, name);
         if (prev && !(isFuncDecl && prev->isFuncDecl)) { Err(nameTok, ERR_NAME_IN_USE, nameTok); return; }
@@ -4658,6 +4661,7 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (isPreludeWord(name)) Err(tok, ERR_PRELUDE_WORD_REDECLARED, tok); //M19f
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
 }
 
@@ -4682,6 +4686,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
+    if (!v) v = preludeWordVar(name); //M19f: so are the prelude's words for writing text
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
@@ -4712,6 +4717,7 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
         struct var* v = scopeFindUse(ctx->scope, name, tok);
         if (v) return v;
         v = VarGetList(&ctx->mod->vars, name);
+        if (!v) v = preludeWordVar(name); //M19f
         if (v) return v;
         //not a var at all - "Type(args)" is legal exactly when Type declares a constructor; the synthetic
         //ctorFunc reuses every bit of ordinary call-site machinery from here on (arg checking, try/catch
@@ -16675,6 +16681,25 @@ int SemanticBuiltinErrorWord(char* word) {
     return 0;
 }
 
+
+//M19f: the prelude's words for writing text - print, println, eprint, eprintln - the functions every module reaches by
+//bare name, as it reaches a build constant. Lowercase as the language's own words are; the prelude's other lowercase
+//names stay its own (M6)
+static const char* preludeWords[] = {"print", "println", "eprint", "eprintln"};
+static bool isPreludeWord(struct str name) {
+    for (size_t i = 0; i < sizeof(preludeWords) / sizeof(preludeWords[0]); i++) {
+        if (StrCmp(name, StrFromCStr((char*)preludeWords[i]))) return true;
+    }
+    return false;
+}
+static struct var* preludeWordVar(struct str name) {
+    if (!isPreludeWord(name)) return NULL;
+    for (int i = 0; i < preludeModules.len; i++) {
+        struct var* v = VarGetList(&(*(struct semaModule**)ListGetIdx(&preludeModules, i))->vars, name);
+        if (v && v->isFuncDecl && !v->isMethod) return v;
+    }
+    return NULL;
+}
 
 static struct var* buildConstVar(struct str name) {
     return buildModule ? VarGetList(&buildModule->vars, name) : NULL;

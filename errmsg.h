@@ -118,6 +118,7 @@ struct type;
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
     X(ERR_NAME_IS_TYPE,                 "D2",    "%n is already a type's name in this module - choose another") \
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
+    X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
     X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \

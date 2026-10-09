@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg"]
+                     "nestdeep", "nestparse", "diag", "linalg", "print"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -221,6 +221,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
+        case "print" { try printing(r) }
         case "s18c" { try s18c(r) }
         case "static" { try static(r) }
         case "k2" { try k2(r) }
@@ -579,6 +580,26 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i osexit.olang > out.txt 2>&1") == 42, "osexit -i", dir)
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
+}
+
+# M19f: print, println, eprint and eprintln write to the standard output and error with no try, built and interpreted
+# alike - and a write that fails ends the program as a failed check does, saying which function and stream
+test "print and println write without try, and abort when the write fails" { assert passed("print") }
+
+fn printing(r mut report&) ? Failed {
+    dir := fresh("print")
+    os.Run("cp checks/fixtures/print/* " $os.Quote(dir))
+    out := "n is 42\njoined 42 and 43\n\nthrough a value\n"
+    try r.expect(sh(dir, "\"$OLANG\" -b print.olang > out.txt 2>&1 && ./build/print > out.txt 2> err.txt") == 0,
+                 "print", dir)
+    try r.expect(outOf(dir) == out, "print: the standard output", dir)
+    try r.expect((try os.ReadFile($dir "/err.txt") catch default "") == "to the standard error\n",
+                 "print: the standard error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
+    try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
+    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 134, "print to a closed output does not abort", dir)
+    try r.expect(outOf(dir).StartsWith("print could not write to the standard output\n"),
+                 "print to a closed output: the message", dir)
 }
 
 # S18c: an assert the compiler proves emits no run-time check at all

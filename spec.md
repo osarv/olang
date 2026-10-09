@@ -1051,8 +1051,9 @@ function's own parameters) — that is a compile-time error, not shadowing.
 
 **D3a.** There is **no shadowing** at all: a local declaration or a parameter may not reuse a name its
 module declares in its `vars` set (a global, a function or an external function), the name of a build
-constant (B10), or the name of a type it sees - one its module declares, one of the prelude's (§4 M19d), or a built-in
-one (a primitive, `Bool`, `Array`); each is a compile-time error. A module is what keeps a namespace small enough to manage,
+constant (B10), the name of one of the prelude's functions for writing text (§4 M19f), or the name of a type it sees -
+one its module declares, one of the prelude's (§4 M19d), or a built-in one (a primitive, `Bool`, `Array`); each is a
+compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
 scopes are known (S8b), and what follows `is` be told apart as a type or a value (E10c). Names another module declares are reached only through an import alias, so they
 never collide with a local.
@@ -1574,6 +1575,26 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 `0`), rounded to the nearest such number, a tie to the even one - exactly, as C's `"%.*f"` rounds - with a `-` where
 `x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
 (E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
+
+**M19f (writing text).** The prelude declares four functions for writing text, which every module reaches by its
+bare name, with no import, as it reaches a build constant (B10):
+
+```
+fn print(t String&)          # t, to the standard output
+fn println(t String& = "")   # t and a line end, to the standard output
+fn eprint(t String&)         # t, to the standard error
+fn eprintln(t String& = "")  # t and a line end, to the standard error
+```
+
+Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `println("n is " $n)`.
+`println` and `eprintln` write the text and its line end as one write. None of them can fail: a write the system does
+not complete ends the program as a failed check does (S18) - aborting, or failing the test that is running - with a
+line on the standard error naming the function and the stream (`print could not write to the standard output`). So a
+program writing its output needs no `try` and no error set for it; `io.Print` and `io.PrintErr` are the forms that hand
+the failure back. A write is an effect, so a call of one is never evaluated while compiling (K1) and is performed under
+`-i` (B3e). They are lowercase, as the language's keywords are, and are the one exception to M6: the prelude's other
+lowercase names are its own. No module may declare a function or global of one of these names, and no local or
+parameter may take one (D3a).
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
